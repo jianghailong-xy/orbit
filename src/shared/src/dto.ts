@@ -36,6 +36,48 @@ export interface RunnerRegisterResponse {
   name: string;
 }
 
+// ── Device-login flow (`orbit register` with no token, approved in the browser) ──
+
+export interface DeviceStartRequest {
+  name: string;
+  hostname?: string;
+  labels?: string[];
+  maxConcurrent?: number;
+  version?: string;
+}
+
+export interface DeviceStartResponse {
+  /** Secret the CLI polls with — never shown to the user. */
+  deviceCode: string;
+  /** Short, human-typable code the user confirms in the browser. */
+  userCode: string;
+  /** Seconds the CLI should wait between polls. */
+  interval: number;
+  /** Seconds until the session expires. */
+  expiresIn: number;
+}
+
+export interface DevicePollRequest {
+  deviceCode: string;
+}
+
+export type DevicePollResponse =
+  | { status: 'pending' }
+  | { status: 'expired' }
+  | { status: 'approved'; runnerId: string; runnerToken: string; name: string };
+
+/** A runner's own status, returned by `GET /api/runner/me` (used by `orbit status`). */
+export interface RunnerMeResponse {
+  id: string;
+  name: string;
+  status: RunnerStatus;
+  online: boolean;
+  lastHeartbeatAt: string | null;
+  version: string | null;
+  labels: string[];
+  maxConcurrent: number;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more concurrent jobs the runner can accept right now. */

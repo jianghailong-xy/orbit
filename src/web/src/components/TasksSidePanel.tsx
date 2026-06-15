@@ -7,9 +7,12 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
-import { useState } from 'react';
-import { clearToken } from '../api';
+import { useEffect, useState } from 'react';
+import { api, clearToken } from '../api';
+
+const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 
 // Static Feishu-style left navigation for the Tasks page. These entries are a
 // visual scaffold — they are not wired to Orbit data yet, so selecting one only
@@ -21,13 +24,6 @@ const TOP = [
   { key: 'activities', icon: <ClockCircleOutlined />, label: 'Activities' },
 ];
 
-const QUICK = [
-  { key: 'agent1', label: 'Agent 1' },
-  { key: 'agent2', label: 'Agent 2' },
-  { key: 'agent3', label: 'Agent 3' },
-  { key: 'agent4', label: 'Agent 4' },
-];
-
 const LISTS = [
   { key: 'l1', label: '#1 TEA - Migration build engine to tea-cli' },
   { key: 'l3', label: '#3 Dorado 项目152 psm 改为 data.tea.build_compliance' },
@@ -36,16 +32,58 @@ const LISTS = [
   { key: 'l8', label: '#8 importer not-ready sg 2026-06-13' },
 ];
 
+interface Runner {
+  id: string;
+  name: string;
+  online?: boolean;
+}
+
 function logout() {
   clearToken();
   location.href = '/login';
 }
 
-export function TasksSidePanel() {
+interface Props {
+  /** Show the “add a runner” guide in the right pane. */
+  onShowRegister: () => void;
+  /** Return the right pane to the task list. */
+  onShowTasks: () => void;
+}
+
+export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
   const [sel, setSel] = useState('running');
   const [quickOpen, setQuickOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
+
+  // The "Agents" list is the user's actually-registered runners; it refreshes so
+  // online/offline tracks the runner's 30s heartbeat.
+  const runners = useQuery({
+    queryKey: ['runners'],
+    queryFn: () => api<Runner[]>('/runners'),
+    refetchInterval: 15_000,
+  });
+
+  const pick = (key: string) => {
+    setSel(key);
+    onShowTasks();
+  };
+
+  // ⌘1 / ⌘2 / … (Ctrl on non-Mac) select the Nth runner under "Agents".
+  const list = runners.data ?? [];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+      if (e.key < '1' || e.key > '9') return;
+      const idx = Number(e.key) - 1;
+      if (idx >= list.length) return;
+      e.preventDefault();
+      setSel(list[idx].id);
+      onShowTasks();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [list, onShowTasks]);
 
   return (
     <aside className="tasks-panel">
@@ -60,7 +98,7 @@ export function TasksSidePanel() {
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
-              onClick={() => setSel(t.key)}
+              onClick={() => pick(t.key)}
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
@@ -76,16 +114,43 @@ export function TasksSidePanel() {
             <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Agents</span>
           </div>
-          {quickOpen &&
-            QUICK.map((q) => (
+          {quickOpen && (
+            <>
+              {list.map((r, idx) => (
+                <div
+                  key={r.id}
+                  className={`tp-item inset ${sel === r.id ? 'active' : ''}`}
+                  onClick={() => pick(r.id)}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: r.online ? '#2ea121' : '#c0c4cc',
+                      flex: 'none',
+                      marginRight: 8,
+                    }}
+                    title={r.online ? 'Online' : 'Offline'}
+                  />
+                  <span className="tp-label">{r.name}</span>
+                  {idx < 9 && <span className="tp-count">{isMac ? '⌘' : 'Ctrl+'}{idx + 1}</span>}
+                </div>
+              ))}
               <div
-                key={q.key}
-                className={`tp-item inset ${sel === q.key ? 'active' : ''}`}
-                onClick={() => setSel(q.key)}
+                className="tp-item inset"
+                onClick={() => {
+                  setSel('runner-new');
+                  onShowRegister();
+                }}
               >
-                <span className="tp-label">{q.label}</span>
+                <span className="tp-ico">
+                  <PlusOutlined />
+                </span>
+                <span className="tp-label">Add</span>
               </div>
-            ))}
+            </>
+          )}
         </div>
 
         <div className="tp-divider" />
@@ -100,7 +165,7 @@ export function TasksSidePanel() {
               <div
                 key={l.key}
                 className={`tp-item inset ${sel === l.key ? 'active' : ''}`}
-                onClick={() => setSel(l.key)}
+                onClick={() => pick(l.key)}
               >
                 <span className="tp-label">{l.label}</span>
               </div>

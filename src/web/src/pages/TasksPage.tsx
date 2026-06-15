@@ -24,6 +24,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
 import { TasksSidePanel } from '../components/TasksSidePanel';
 
 const SOURCES = [
@@ -92,6 +93,7 @@ export function TasksPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('ALL');
+  const [view, setView] = useState<'tasks' | 'register'>('tasks');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
@@ -190,8 +192,15 @@ export function TasksPage() {
 
   return (
     <div className="tasks-layout">
-      <TasksSidePanel />
+      <TasksSidePanel
+        onShowRegister={() => setView('register')}
+        onShowTasks={() => setView('tasks')}
+      />
       <main className="tasks-main">
+        {view === 'register' ? (
+          <RunnerRegisterGuide onClose={() => setView('tasks')} />
+        ) : (
+          <>
         <h1 className="page-title">Running</h1>
 
         <div className="tasks-toolbar">
@@ -244,6 +253,8 @@ export function TasksPage() {
           })}
         </div>
       )}
+          </>
+        )}
       </main>
 
       <Modal

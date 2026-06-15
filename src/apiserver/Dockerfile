@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY src/shared/package.json ./src/shared/
 COPY src/apiserver/package.json ./src/apiserver/
-COPY src/runner/package.json ./src/runner/
 COPY src/web/package.json ./src/web/
 RUN npm ci --omit=optional
 

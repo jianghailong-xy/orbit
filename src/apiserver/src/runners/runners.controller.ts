@@ -32,6 +32,16 @@ export class RunnersController {
     return this.runners.listEnrollmentTokens(user.userId);
   }
 
+  @Get('device/:userCode')
+  deviceInfo(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
+    return this.runners.getDeviceEnrollment(user.userId, userCode);
+  }
+
+  @Post('device/:userCode/approve')
+  approveDevice(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
+    return this.runners.approveDeviceEnrollment(user.userId, userCode);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.runners.removeRunner(user.userId, id);

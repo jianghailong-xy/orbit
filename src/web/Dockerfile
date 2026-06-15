@@ -8,7 +8,6 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY src/shared/package.json ./src/shared/
 COPY src/apiserver/package.json ./src/apiserver/
-COPY src/runner/package.json ./src/runner/
 COPY src/web/package.json ./src/web/
 # NOTE: plain `npm ci` (no --omit=optional) — Vite/rollup need their platform-native
 # optional package (e.g. @rollup/rollup-linux-*-musl), which --omit=optional would drop.
@@ -17,8 +16,19 @@ RUN npm ci
 COPY src/web ./src/web
 RUN npm run build -w @orbit/web
 
+# ───────────────────────── runner binaries (Go, static) ─────────────────────────
+# Standalone ~6 MB `orbit` executables served at /dl, consumed by /install.sh and
+# the runner's self-update. Go cross-compiles trivially with no external deps.
+FROM golang:1.23 AS binbuild
+WORKDIR /app
+COPY src/runner-go ./src/runner-go
+COPY package.json ./package.json
+COPY scripts ./scripts
+RUN bash scripts/build-binaries.sh dist-bin
+
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM nginx:alpine AS runtime
 COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/src/web/dist /usr/share/nginx/html
+COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
 EXPOSE 80

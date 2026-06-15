@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Post,
   UnauthorizedException,
@@ -12,6 +14,10 @@ import {
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
   ClaimedJob,
+  DevicePollRequest,
+  DevicePollResponse,
+  DeviceStartRequest,
+  DeviceStartResponse,
   RunCompleteRequest,
   RunEventBatch,
   RunEventType,
@@ -20,7 +26,7 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
 } from '@orbit/shared';
-import { generateToken, sha256 } from '../common/crypto.util';
+import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -28,6 +34,10 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
 const LONG_POLL_MS = 25_000;
+const DEVICE_TTL_MS = 10 * 60 * 1000;
+const DEVICE_POLL_INTERVAL_S = 3;
+// Three missed 30s heartbeats — must match RunnersService's offline window.
+const OFFLINE_AFTER_MS = 90_000;
 
 @Controller('runner')
 export class RunnerApiController {
@@ -72,6 +82,114 @@ export class RunnerApiController {
     });
 
     return { runnerId: runner.id, runnerToken, name: runner.name };
+  }
+
+  /** `orbit register` (no token) — open a device-login session for browser approval. */
+  @Post('device/start')
+  async deviceStart(@Body() dto: DeviceStartRequest): Promise<DeviceStartResponse> {
+    if (!dto?.name) throw new BadRequestException('name is required');
+    const deviceCode = generateToken(32);
+    const userCode = await this.createDeviceSession(dto, deviceCode);
+    return {
+      deviceCode,
+      userCode,
+      interval: DEVICE_POLL_INTERVAL_S,
+      expiresIn: DEVICE_TTL_MS / 1000,
+    };
+  }
+
+  /** The CLI polls this until the user approves the session in the browser. */
+  @Post('device/poll')
+  @HttpCode(200)
+  async devicePoll(@Body() dto: DevicePollRequest): Promise<DevicePollResponse> {
+    if (!dto?.deviceCode) throw new BadRequestException('deviceCode is required');
+    const session = await this.prisma.deviceEnrollment.findUnique({
+      where: { deviceCodeHash: sha256(dto.deviceCode) },
+    });
+    if (!session) throw new NotFoundException('unknown device code');
+    if (session.expiresAt < new Date()) return { status: 'expired' };
+    if (session.status !== 'APPROVED' || !session.runnerId || !session.runnerToken) {
+      return { status: 'pending' };
+    }
+    // Approved — hand the credential to the CLI exactly once, then wipe it.
+    await this.prisma.deviceEnrollment.update({
+      where: { id: session.id },
+      data: { runnerToken: null },
+    });
+    return {
+      status: 'approved',
+      runnerId: session.runnerId,
+      runnerToken: session.runnerToken,
+      name: session.name,
+    };
+  }
+
+  /** Insert a device session, regenerating the short code on the rare collision. */
+  private async createDeviceSession(
+    dto: DeviceStartRequest,
+    deviceCode: string,
+  ): Promise<string> {
+    const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const userCode = generateUserCode();
+      try {
+        await this.prisma.deviceEnrollment.create({
+          data: {
+            deviceCodeHash: sha256(deviceCode),
+            userCode,
+            name: dto.name,
+            hostname: dto.hostname,
+            labels: dto.labels ?? [],
+            maxConcurrent: dto.maxConcurrent ?? 1,
+            version: dto.version,
+            expiresAt,
+          },
+        });
+        return userCode;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') continue;
+        throw e;
+      }
+    }
+    throw new Error('could not allocate a unique user code');
+  }
+
+  /** `orbit status` — the runner's own record + derived online flag. */
+  @UseGuards(RunnerAuthGuard)
+  @Get('me')
+  me(
+    @CurrentRunner()
+    runner: {
+      id: string;
+      name: string;
+      status: string;
+      lastHeartbeatAt: Date | null;
+      version: string | null;
+      labels: string[];
+      maxConcurrent: number;
+    },
+  ) {
+    const fresh =
+      !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
+    return {
+      id: runner.id,
+      name: runner.name,
+      status: runner.status,
+      online: runner.status !== 'OFFLINE' && fresh,
+      lastHeartbeatAt: runner.lastHeartbeatAt,
+      version: runner.version,
+      labels: runner.labels,
+      maxConcurrent: runner.maxConcurrent,
+    };
+  }
+
+  /** `orbit unregister` — the runner deletes itself from the control plane. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('deregister')
+  @HttpCode(200)
+  async deregister(@CurrentRunner() runner: { id: string }) {
+    await this.prisma.runner.delete({ where: { id: runner.id } });
+    return { ok: true };
   }
 
   @UseGuards(RunnerAuthGuard)

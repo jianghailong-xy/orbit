@@ -87,6 +87,27 @@ model EnrollmentToken {
   createdAt DateTime  @default(now())
 }
 
+// A pending `orbit register` device-login session (RFC 8628-style browser flow).
+// The CLI polls with the secret deviceCode; a logged-in user approves the machine
+// in the browser by the short, human-typable userCode.
+model DeviceEnrollment {
+  id             String    @id @default(uuid())
+  deviceCodeHash String    @unique // hash of the secret the CLI polls with
+  userCode       String    @unique // short code shown in the browser + terminal
+  name           String
+  hostname       String?
+  labels         String[]  @default([])
+  maxConcurrent  Int       @default(1)
+  version        String?
+  status         String    @default("PENDING") // PENDING | APPROVED
+  runnerId       String? // set once approved -> a Runner is created
+  runnerToken    String? // raw runner credential, delivered to the CLI once then cleared
+  approvedById   String?
+  approvedAt     DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+}
+
 // An agent definition: how to drive Claude Code for a class of tasks.
 model Agent {
   id                 String   @id @default(uuid())

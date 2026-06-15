@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { getToken } from './api';
+import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 import { TasksPage } from './pages/TasksPage';
@@ -23,6 +24,19 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={authed ? <Navigate to="/tasks" /> : <LoginPage />} />
+      <Route
+        path="/enroll"
+        element={
+          authed ? (
+            <EnrollPage />
+          ) : (
+            <Navigate
+              to={`/login?next=${encodeURIComponent('/enroll' + window.location.search)}`}
+              replace
+            />
+          )
+        }
+      />
       {!authed ? (
         <Route path="*" element={<Navigate to="/login" replace />} />
       ) : (

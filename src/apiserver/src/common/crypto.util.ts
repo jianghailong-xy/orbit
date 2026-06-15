@@ -24,3 +24,16 @@ export function generateToken(bytes = 32): string {
 export function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
 }
+
+// Crockford-ish alphabet with no easily confused glyphs (0/O, 1/I/L).
+const USER_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** Short, human-typable code for device-login approval (e.g. `WXYZ-4821`). */
+export function generateUserCode(): string {
+  const bytes = randomBytes(8);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) {
+    s += USER_CODE_ALPHABET[bytes[i] % USER_CODE_ALPHABET.length];
+  }
+  return `${s.slice(0, 4)}-${s.slice(4)}`;
+}

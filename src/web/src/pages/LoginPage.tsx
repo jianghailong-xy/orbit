@@ -12,7 +12,8 @@ export function LoginPage() {
     try {
       const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: values });
       setToken(res.accessToken);
-      location.href = '/tasks';
+      const next = new URLSearchParams(window.location.search).get('next');
+      location.href = next && next.startsWith('/') ? next : '/tasks';
     } catch (err) {
       message.error((err as Error).message);
     }
