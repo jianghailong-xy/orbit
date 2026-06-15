@@ -1,0 +1,248 @@
+// Orbit control-plane data model. See packages/shared/src/enums.ts for the
+// TypeScript mirrors of these enums (kept in sync by string value).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  DRAFT
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum TaskSource {
+  AGENT
+  MANUAL
+  EXTERNAL
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum RunnerStatus {
+  ONLINE
+  OFFLINE
+  DRAINING
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  agents           Agent[]
+  runners          Runner[]
+  enrollmentTokens EnrollmentToken[]
+  createdTasks     Task[]              @relation("TaskCreator")
+  ownedTasks       Task[]              @relation("TaskOwner")
+  subscriptions    TaskSubscription[]
+}
+
+// A machine the user registered via `orbit register`. Claude Code runs here.
+model Runner {
+  id              String       @id @default(uuid())
+  name            String
+  hostname        String?
+  ownerId         String
+  owner           User         @relation(fields: [ownerId], references: [id])
+  labels          String[]     @default([])
+  status          RunnerStatus @default(OFFLINE)
+  maxConcurrent   Int          @default(1)
+  version         String?
+  tokenHash       String // hash of the long-lived runner credential
+  lastHeartbeatAt DateTime?
+  enrolledAt      DateTime     @default(now())
+
+  tasks Task[]
+  runs  TaskRun[]
+
+  @@index([ownerId])
+}
+
+// One-time token a user generates in the UI and passes to `orbit register`.
+model EnrollmentToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  ownerId   String
+  owner     User      @relation(fields: [ownerId], references: [id])
+  label     String?
+  expiresAt DateTime?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+// An agent definition: how to drive Claude Code for a class of tasks.
+model Agent {
+  id                 String   @id @default(uuid())
+  name               String
+  description        String?
+  model              String   @default("claude-sonnet-4-6")
+  appendSystemPrompt String?
+  systemPrompt       String?
+  allowedTools       Json     @default("[]")
+  disallowedTools    Json     @default("[]")
+  permissionMode     String   @default("dontAsk")
+  maxTurns           Int?
+  maxBudgetUsd       Float?
+  mcpConfig          Json?
+  // routing: bind to a specific runner and/or match runner labels
+  targetRunnerId     String?
+  targetLabels       String[] @default([])
+  enabled            Boolean  @default(true)
+  ownerId            String
+  owner              User     @relation(fields: [ownerId], references: [id])
+  createdAt          DateTime @default(now())
+
+  tasks Task[]
+  runs  TaskRun[]
+
+  @@index([ownerId])
+}
+
+// A task — also the queue row. `status = QUEUED` rows are claimable by runners.
+model Task {
+  id               String     @id @default(uuid())
+  title            String
+  input            Json       @default("{}")
+  prompt           String // instruction handed to Claude Code
+  source           TaskSource @default(MANUAL)
+  type             String?
+  status           TaskStatus @default(DRAFT)
+  priority         Int        @default(0)
+  agentId          String?
+  agent            Agent?     @relation(fields: [agentId], references: [id])
+  assignedRunnerId String?
+  assignedRunner   Runner?    @relation(fields: [assignedRunnerId], references: [id])
+  creatorId        String
+  creator          User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  ownerId          String
+  owner            User       @relation("TaskOwner", fields: [ownerId], references: [id])
+  estimates        String?
+  startTime        DateTime?
+  dueDate          DateTime?
+  scheduledAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  runs          TaskRun[]
+  subscriptions TaskSubscription[]
+
+  @@index([status, priority, scheduledAt, createdAt])
+  @@index([assignedRunnerId])
+  @@index([ownerId])
+  @@index([source])
+}
+
+// One execution attempt of a task on a runner.
+model TaskRun {
+  id              String    @id @default(uuid())
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  runnerId        String?
+  runner          Runner?   @relation(fields: [runnerId], references: [id])
+  agentId         String?
+  agent           Agent?    @relation(fields: [agentId], references: [id])
+  status          RunStatus @default(PENDING)
+  claudeSessionId String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  error           String?
+  result          String?
+  subtype         String?
+  sumInputTokens  Int       @default(0)
+  sumOutputTokens Int       @default(0)
+  sumCacheRead    Int       @default(0)
+  sumCacheWrite   Int       @default(0)
+  numTurns        Int       @default(0)
+  costUsd         Float     @default(0)
+  createdAt       DateTime  @default(now())
+
+  events    RunEvent[]
+  toolCalls ToolCall[]
+  llmUsage  LlmUsage[]
+
+  @@index([taskId])
+}
+
+// Normalized streamed events for a run (replay + live SSE).
+model RunEvent {
+  id        String   @id @default(uuid())
+  runId     String
+  run       TaskRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+}
+
+// Audit of every tool the agent invoked during a run.
+model ToolCall {
+  id         String    @id @default(uuid())
+  runId      String
+  run        TaskRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name       String
+  input      Json?
+  output     Json?
+  isError    Boolean   @default(false)
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([runId])
+}
+
+// Per-model token/cost detail for billing rollups.
+model LlmUsage {
+  id                       String   @id @default(uuid())
+  runId                    String
+  run                      TaskRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  model                    String
+  inputTokens              Int      @default(0)
+  outputTokens             Int      @default(0)
+  cacheCreationInputTokens Int      @default(0)
+  cacheReadInputTokens     Int      @default(0)
+  costUsd                  Float    @default(0)
+  createdAt                DateTime @default(now())
+
+  @@index([runId])
+}
+
+model TaskSubscription {
+  userId    String
+  taskId    String
+  user      User     @relation(fields: [userId], references: [id])
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, taskId])
+}
+
+// Lightweight activity feed (no FKs, append-only).
+model Activity {
+  id        String   @id @default(uuid())
+  actorId   String?
+  taskId    String?
+  type      String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}

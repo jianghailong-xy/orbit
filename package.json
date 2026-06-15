@@ -1,0 +1,26 @@
+{
+  "name": "orbit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orbit — AI Agent task scheduling platform (control plane + distributed Claude Code runners)",
+  "license": "MIT",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/runner",
+    "packages/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @orbit/shared && npm run build -w @orbit/server && npm run build -w @orbit/runner && npm run build -w @orbit/web",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "prisma:generate": "npm run prisma:generate -w @orbit/server",
+    "prisma:migrate": "npm run prisma:migrate -w @orbit/server",
+    "dev:server": "npm run build -w @orbit/shared && npm run start:dev -w @orbit/server",
+    "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web",
+    "runner": "npm run build -w @orbit/shared && npm run start -w @orbit/runner --"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

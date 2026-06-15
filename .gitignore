@@ -1,0 +1,20 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# env
+.env
+.env.local
+.env.*.local
+
+# runner local state
+.orbit/
+
+# prisma local db
+*.db
+
+# os
+.DS_Store
+Thumbs.db
