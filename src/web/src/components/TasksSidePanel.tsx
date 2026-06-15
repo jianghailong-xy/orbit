@@ -1,5 +1,4 @@
 import {
-  AppstoreFilled,
   BookOutlined,
   CaretDownOutlined,
   CheckSquareOutlined,
@@ -16,17 +15,16 @@ import { useState } from 'react';
 // visual scaffold — they are not wired to Orbit data yet, so selecting one only
 // moves the highlight (it does not filter the list on the right).
 const TOP = [
-  { key: 'owned', icon: <UserOutlined />, label: 'Owned', count: 385 },
-  { key: 'subscribed', icon: <BookOutlined />, label: 'Subscribed' },
+  { key: 'running', icon: <UserOutlined />, label: 'Running', count: 385 },
+  { key: 'schedule', icon: <BookOutlined />, label: 'Schedule' },
   { key: 'activities', icon: <ClockCircleOutlined />, label: 'Activities' },
-  { key: 'feishu', icon: <AppstoreFilled style={{ color: '#3370ff' }} />, label: 'From Feishu Project' },
 ];
 
 const QUICK = [
-  { key: 'all', label: 'All Tasks' },
-  { key: 'created', label: 'Created' },
-  { key: 'assigned', label: 'Assigned' },
-  { key: 'completed', label: 'Completed' },
+  { key: 'agent1', label: 'Agent 1' },
+  { key: 'agent2', label: 'Agent 2' },
+  { key: 'agent3', label: 'Agent 3' },
+  { key: 'agent4', label: 'Agent 4' },
 ];
 
 const LISTS = [
@@ -38,7 +36,7 @@ const LISTS = [
 ];
 
 export function TasksSidePanel() {
-  const [sel, setSel] = useState('owned');
+  const [sel, setSel] = useState('running');
   const [quickOpen, setQuickOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
 
@@ -69,7 +67,7 @@ export function TasksSidePanel() {
       <div className="tp-group">
         <div className="tp-group-head" onClick={() => setQuickOpen((o) => !o)}>
           <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
-          <span className="tp-group-name">Quick Access</span>
+          <span className="tp-group-name">Agents</span>
         </div>
         {quickOpen &&
           QUICK.map((q) => (

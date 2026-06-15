@@ -1,27 +1,12 @@
-import {
-  ApartmentOutlined,
-  DashboardOutlined,
-  DesktopOutlined,
-  LogoutOutlined,
-  UnorderedListOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { LogoutOutlined, UnorderedListOutlined, UserOutlined } from '@ant-design/icons';
 import { Avatar, Dropdown, Tooltip } from 'antd';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { clearToken, getToken } from './api';
-import { AgentsPage } from './pages/AgentsPage';
-import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
-import { RunnersPage } from './pages/RunnersPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 import { TasksPage } from './pages/TasksPage';
 
-const NAV = [
-  { key: '/tasks', icon: <UnorderedListOutlined />, label: 'Tasks' },
-  { key: '/agents', icon: <ApartmentOutlined />, label: 'Agents' },
-  { key: '/runners', icon: <DesktopOutlined />, label: 'Runners' },
-  { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
-];
+const NAV = [{ key: '/tasks', icon: <UnorderedListOutlined />, label: 'Tasks' }];
 
 function logout() {
   clearToken();
@@ -90,9 +75,6 @@ export function App() {
           <Route path="/" element={<Navigate to="/tasks" replace />} />
           <Route path="/tasks" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks/:id" element={<Shell><TaskDetailPage /></Shell>} />
-          <Route path="/agents" element={<Shell><AgentsPage /></Shell>} />
-          <Route path="/runners" element={<Shell><RunnersPage /></Shell>} />
-          <Route path="/dashboard" element={<Shell><DashboardPage /></Shell>} />
         </>
       )}
     </Routes>

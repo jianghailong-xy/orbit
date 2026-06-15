@@ -192,7 +192,7 @@ export function TasksPage() {
     <div className="tasks-layout">
       <TasksSidePanel />
       <main className="tasks-main">
-        <h1 className="page-title">Owned</h1>
+        <h1 className="page-title">Running</h1>
 
         <div className="tasks-toolbar">
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>

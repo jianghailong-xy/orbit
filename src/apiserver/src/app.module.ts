@@ -10,7 +10,6 @@ import { TasksModule } from './tasks/tasks.module';
 import { RunsModule } from './runs/runs.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
-import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -25,7 +24,6 @@ import { DashboardModule } from './dashboard/dashboard.module';
     RunsModule,
     RunnersModule,
     RunnerApiModule,
-    DashboardModule,
   ],
 })
 export class AppModule {}
