@@ -55,6 +55,10 @@ export class QueueService {
         SELECT t.id FROM "Task" t
         WHERE t.status = 'QUEUED'
           AND (t."scheduledAt" IS NULL OR t."scheduledAt" <= now())
+          -- A runner may only ever claim tasks owned by the runner's own owner.
+          -- This single top-level guard covers BOTH the assigned-runner branch
+          -- and the agent/unassigned branch below (prevents cross-tenant exec).
+          AND t."ownerId" = (SELECT r."ownerId" FROM "Runner" r WHERE r.id = ${runner.id})
           AND (
             t."assignedRunnerId" = ${runner.id}
             OR (

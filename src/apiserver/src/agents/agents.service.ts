@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
@@ -7,7 +7,22 @@ import { CreateAgentDto, UpdateAgentDto } from './dto';
 export class AgentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(ownerId: string, dto: CreateAgentDto) {
+  /**
+   * An agent may only be pinned to a runner the same owner controls. Without
+   * this, a user could point their own agent at another tenant's runner and
+   * route tasks there (cross-tenant execution via the agent-routing path).
+   */
+  private async assertOwnedRunner(ownerId: string, runnerId?: string): Promise<void> {
+    if (!runnerId) return;
+    const runner = await this.prisma.runner.findFirst({
+      where: { id: runnerId, ownerId },
+      select: { id: true },
+    });
+    if (!runner) throw new ForbiddenException('runner not found');
+  }
+
+  async create(ownerId: string, dto: CreateAgentDto) {
+    await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     return this.prisma.agent.create({
       data: {
         ownerId,
@@ -44,6 +59,7 @@ export class AgentsService {
 
   async update(ownerId: string, id: string, dto: UpdateAgentDto) {
     await this.get(ownerId, id);
+    await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     const data: Prisma.AgentUpdateInput = {
       name: dto.name,
       description: dto.description,

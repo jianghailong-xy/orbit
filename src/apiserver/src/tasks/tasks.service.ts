@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, TaskSource, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -15,7 +20,36 @@ export class TasksService {
     private readonly realtime: RealtimeService,
   ) {}
 
+  /**
+   * Ensure any agent/runner a task references belongs to the caller. Without
+   * this, a user could pin a task to another tenant's runner and have Claude
+   * Code execute on a machine they don't own (cross-tenant RCE).
+   */
+  private async assertOwnedRefs(
+    ownerId: string,
+    refs: { agentId?: string; assignedRunnerId?: string },
+  ): Promise<void> {
+    if (refs.assignedRunnerId) {
+      const runner = await this.prisma.runner.findFirst({
+        where: { id: refs.assignedRunnerId, ownerId },
+        select: { id: true },
+      });
+      if (!runner) throw new ForbiddenException('runner not found');
+    }
+    if (refs.agentId) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: refs.agentId, ownerId },
+        select: { id: true },
+      });
+      if (!agent) throw new ForbiddenException('agent not found');
+    }
+  }
+
   async create(ownerId: string, dto: CreateTaskDto) {
+    await this.assertOwnedRefs(ownerId, {
+      agentId: dto.agentId,
+      assignedRunnerId: dto.assignedRunnerId,
+    });
     const enqueue = dto.enqueue ?? false;
     const task = await this.prisma.task.create({
       data: {
@@ -76,6 +110,7 @@ export class TasksService {
 
   async update(ownerId: string, id: string, dto: UpdateTaskDto) {
     await this.get(ownerId, id);
+    await this.assertOwnedRefs(ownerId, { assignedRunnerId: dto.assignedRunnerId });
     return this.prisma.task.update({
       where: { id },
       data: {
