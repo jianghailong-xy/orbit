@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { App as AntApp, Button, Card, Descriptions, Space, Tag, Typography } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { api, runEventsUrl } from '../api';
 import { StatusTag } from '../components/StatusTag';
 
@@ -54,6 +54,9 @@ export function TaskDetailPage() {
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="large">
+      <Link to="/tasks" style={{ color: '#646a73' }}>
+        ← Back to Tasks
+      </Link>
       <Space style={{ justifyContent: 'space-between', width: '100%' }}>
         <Typography.Title level={3} style={{ margin: 0 }}>
           {t.title}

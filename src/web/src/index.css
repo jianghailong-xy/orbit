@@ -30,7 +30,7 @@ body {
   background: #c9cdd4;
 }
 
-/* ---- App shell: thin icon rail + content ---- */
+/* ---- App shell: content wrapper ---- */
 .orbit-shell {
   display: flex;
   min-height: 100vh;
@@ -41,59 +41,6 @@ body {
 }
 .orbit-page-pad {
   padding: 24px 32px;
-}
-
-.orbit-rail {
-  width: 56px;
-  flex: none;
-  border-right: 1px solid #eceef1;
-  background: #fff;
-}
-.rail-inner {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 0;
-  gap: 8px;
-}
-.rail-logo {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  font-size: 20px;
-}
-.rail-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-}
-.rail-item {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  color: #646a73;
-  cursor: pointer;
-}
-.rail-item:hover {
-  background: #f2f3f5;
-  color: #1f2329;
-}
-.rail-item.active {
-  background: #eaf1ff;
-  color: #3370ff;
-}
-.rail-footer {
-  margin-top: auto;
 }
 
 /* ---- Tasks two-pane layout ---- */
@@ -114,32 +61,33 @@ body {
   width: 264px;
   flex: none;
   height: 100vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid #eceef1;
   background: #fff;
-  padding-bottom: 12px;
 }
-.tp-header {
+.tp-brand {
   display: flex;
   align-items: center;
   gap: 10px;
   height: 52px;
+  flex: none;
   padding: 0 16px;
 }
-.tp-head-ico {
-  color: #646a73;
-  font-size: 16px;
+.tp-brand-logo {
+  font-size: 22px;
+  line-height: 1;
 }
-.tp-head-title {
-  flex: 1;
+.tp-brand-name {
   font-size: 18px;
   font-weight: 600;
   color: #1f2329;
 }
-.tp-head-more {
-  color: #8f959e;
-  font-size: 16px;
-  cursor: pointer;
+.tp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 12px;
 }
 .tp-section {
   padding: 0 8px;
@@ -245,6 +193,23 @@ body {
 }
 .tp-newgroup:hover {
   color: #3370ff;
+}
+.tp-user {
+  flex: none;
+  border-top: 1px solid #eceef1;
+  padding: 8px;
+}
+.tp-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tp-user-trigger:hover {
+  background: #f2f3f5;
 }
 
 /* ---- Tasks page ---- */
