@@ -19,9 +19,28 @@ export interface ExecResult {
 export type EmitFn = (type: RunEventType, payload: Record<string, unknown>) => void;
 
 /**
- * Drive Claude Code for one job. Prefers the Agent SDK (`query()`); falls back to
- * the `claude -p --output-format stream-json` CLI when the SDK isn't installed or
- * `ORBIT_CLAUDE_MODE=cli` is set. Both paths normalize into the same event stream.
+ * True when an env credential is present that the Agent SDK can authenticate with.
+ * The SDK does NOT inherit the machine's interactive `claude /login` — only the
+ * `claude -p` CLI path does. So when none of these are set we run via the CLI.
+ */
+export function hasExplicitClaudeAuth(): boolean {
+  return Boolean(
+    process.env.ANTHROPIC_API_KEY ||
+      process.env.ANTHROPIC_AUTH_TOKEN ||
+      process.env.CLAUDE_CODE_OAUTH_TOKEN,
+  );
+}
+
+/**
+ * Drive Claude Code for one job.
+ *
+ * Path selection (auth-aware):
+ *   - `ORBIT_CLAUDE_MODE=sdk|cli` forces a path.
+ *   - else if an API key / OAuth token is in the env → Agent SDK `query()`
+ *     (native streaming + cost; falls back to CLI if the package is missing).
+ *   - else → `claude -p --output-format stream-json`, which uses the machine's
+ *     interactive Claude Code login (subscription).
+ * Both paths normalize into the same event stream.
  */
 export async function executeJob(
   job: ClaimedJob,
@@ -29,7 +48,9 @@ export async function executeJob(
   signal: AbortSignal,
   workdir: string,
 ): Promise<ExecResult> {
-  if (process.env.ORBIT_CLAUDE_MODE !== 'cli') {
+  const mode = process.env.ORBIT_CLAUDE_MODE;
+  const useSdk = mode === 'sdk' || (mode !== 'cli' && hasExplicitClaudeAuth());
+  if (useSdk) {
     const sdk = await loadSdk();
     if (sdk) return runWithSdk(sdk, job, emit, signal, workdir);
     emit(RunEventType.SYSTEM, {

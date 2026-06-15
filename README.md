@@ -46,8 +46,10 @@ Highlights:
 
 - Node.js ≥ 20 (uses global `fetch`)
 - Docker (for local Postgres) — or any reachable PostgreSQL 16
-- On each runner machine: **Claude Code** + an `ANTHROPIC_API_KEY` (or a configured
-  cloud provider). This is never sent to the control plane.
+- On each runner machine: **Claude Code**, authenticated. Either log in interactively
+  (run `claude`, then `/login` — uses your Claude subscription; the runner drives it via
+  `claude -p`), **or** set `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` to use the Agent
+  SDK path. Auth never leaves the runner machine. `orbit run` preflights this at startup.
 
 ## Quickstart
 
@@ -74,7 +76,8 @@ Open the UI, create an account, define an **Agent** (model + allowed tools), the
 ### Run a runner (on the machine that should execute tasks)
 
 ```bash
-# from a checkout of this repo, with Claude Code installed and ANTHROPIC_API_KEY set:
+# from a checkout of this repo, on a machine with Claude Code installed & authenticated
+# (logged in via `/login`, or ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN set):
 npm run build -w @orbit/shared && npm run build -w @orbit/runner
 
 node packages/runner/dist/index.js register \

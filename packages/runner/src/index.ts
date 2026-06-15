@@ -3,6 +3,7 @@ import { hostname } from 'os';
 import { RunnerRegisterRequest } from '@orbit/shared';
 import { list, num, parseFlags, str } from './args';
 import { loadConfig, RunnerConfig, saveConfig } from './config';
+import { preflightClaudeAuth } from './preflight';
 import { runLoop } from './run-loop';
 import { Transport } from './transport';
 
@@ -93,6 +94,9 @@ async function run(): Promise<void> {
     process.stderr.write('no runner config found — run `orbit register` first\n');
     process.exit(1);
   }
+  const pf = preflightClaudeAuth();
+  process.stdout.write(`preflight: ${pf.message}\n`);
+  if (!pf.ok) process.exit(1);
   await runLoop(cfg);
 }
 

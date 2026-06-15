@@ -16,5 +16,31 @@ services:
       timeout: 5s
       retries: 10
 
+  server:
+    build:
+      context: .
+      dockerfile: packages/server/Dockerfile
+    container_name: orbit-server
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-prod}"
+      PORT: "3000"
+      CORS_ORIGINS: "http://localhost:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: orbit-web
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+
 volumes:
   orbit_pg:

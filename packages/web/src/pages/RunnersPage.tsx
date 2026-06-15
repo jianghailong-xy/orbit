@@ -113,7 +113,10 @@ export function RunnersPage() {
             <Typography.Paragraph copyable code>
               {token}
             </Typography.Paragraph>
-            <Typography.Text strong>On the target machine (with Claude Code installed):</Typography.Text>
+            <Typography.Text strong>
+              On the target machine (Claude Code installed &amp; logged in via{' '}
+              <code>/login</code>, or <code>ANTHROPIC_API_KEY</code> set):
+            </Typography.Text>
             <Typography.Paragraph copyable code style={{ whiteSpace: 'pre-wrap' }}>
               {`orbit register --server ${location.origin} --token ${token} --name my-runner --labels sg\norbit run`}
             </Typography.Paragraph>

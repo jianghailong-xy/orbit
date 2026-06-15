@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.git
+.git
+*.log
+.env
+.env.local
+.env.*.local
+.orbit
+.claude
+coverage
