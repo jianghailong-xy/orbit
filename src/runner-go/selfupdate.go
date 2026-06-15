@@ -54,6 +54,23 @@ func isNewer(remote, local string) bool {
 	return false
 }
 
+// elevateUpgrade re-runs `orbit upgrade` under sudo (which prompts for the
+// password) and exits with its status.
+func elevateUpgrade(exe string) {
+	sudo, err := exec.LookPath("sudo")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot write to the install directory; re-run orbit upgrade as root.")
+		os.Exit(1)
+	}
+	fmt.Println("Updating orbit needs elevated permissions — you may be prompted for your password.")
+	cmd := exec.Command(sudo, append([]string{exe}, os.Args[1:]...)...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 // writable reports whether we can create files in dir (i.e. swap the binary there).
 func writable(dir string) bool {
 	f, err := os.CreateTemp(dir, ".orbit-wtest-")
@@ -183,6 +200,18 @@ func upgrade(server string) {
 		os.Exit(1)
 	}
 	server = strings.TrimRight(server, "/")
+
+	// If the binary lives in a root-owned dir, re-run under sudo (prompts for the
+	// password). Only when interactive — a service/script falls through to the
+	// plain "re-run with sudo" hint instead of hanging on a password prompt.
+	if exe, err := os.Executable(); err == nil {
+		if resolved, e := filepath.EvalSymlinks(exe); e == nil {
+			exe = resolved
+		}
+		if os.Geteuid() != 0 && !writable(filepath.Dir(exe)) && interactive() {
+			elevateUpgrade(exe)
+		}
+	}
 
 	fmt.Printf("checking %s for updates...\n", server)
 	client := &http.Client{Timeout: 8 * time.Second}
