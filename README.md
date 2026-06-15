@@ -82,9 +82,12 @@ On a machine with Claude Code installed & authenticated (logged in via `/login`,
 # 1. install the static `orbit` binary (no Node needed)
 curl -fsSL https://orbit.wikova.com/install.sh | bash
 
-# 2. register this machine (opens your browser to approve), then run it
+# 2. register this machine (opens your browser to approve)
+#    this auto-installs + starts a background service (systemd / launchd)
 orbit register --labels sg,hdfs --max-concurrent 2
-orbit run               # or: sudo orbit service   (systemd / launchd)
+
+#    ...or run it in the foreground instead of installing a service:
+orbit register --foreground --labels sg,hdfs
 ```
 
 The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the runner

@@ -113,9 +113,6 @@ body {
 .tp-item.inset {
   padding-left: 30px;
 }
-.tp-item.tp-sub {
-  padding-left: 14px;
-}
 .tp-ico {
   display: flex;
   font-size: 16px;
@@ -161,10 +158,6 @@ body {
 }
 .tp-caret.collapsed {
   transform: rotate(-90deg);
-}
-.tp-group-ico {
-  font-size: 14px;
-  color: #646a73;
 }
 .tp-group-name {
   flex: 1;

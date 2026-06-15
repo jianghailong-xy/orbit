@@ -81,6 +81,10 @@ func (t *Transport) register(b RegisterRequest) (*RegisterResponse, error) {
 	return &r, nil
 }
 
+func (t *Transport) deregister() error {
+	return t.do(nil, "POST", "/runner/deregister", nil, nil, 15*time.Second)
+}
+
 func (t *Transport) heartbeat(b HeartbeatRequest) (*HeartbeatResponse, error) {
 	var r HeartbeatResponse
 	if err := t.do(nil, "POST", "/runner/heartbeat", b, &r, 15*time.Second); err != nil {

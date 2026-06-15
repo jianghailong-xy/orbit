@@ -27,12 +27,6 @@ type ExecResult struct {
 
 type emitFn func(eventType string, payload map[string]interface{})
 
-func hasExplicitClaudeAuth() bool {
-	return os.Getenv("ANTHROPIC_API_KEY") != "" ||
-		os.Getenv("ANTHROPIC_AUTH_TOKEN") != "" ||
-		os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != ""
-}
-
 // executeJob drives `claude -p --output-format stream-json` for one job and
 // normalizes its message stream into run events. The compiled runner only uses
 // this CLI path (no in-process Agent SDK).

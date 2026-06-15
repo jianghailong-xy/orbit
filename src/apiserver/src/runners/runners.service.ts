@@ -56,11 +56,15 @@ export class RunnersService {
   }
 
   /** Details shown on the browser approval page for an `orbit register` session. */
-  async getDeviceEnrollment(_ownerId: string, userCode: string) {
+  async getDeviceEnrollment(ownerId: string, userCode: string) {
     const s = await this.prisma.deviceEnrollment.findUnique({ where: { userCode } });
     if (!s || s.expiresAt < new Date()) {
       throw new NotFoundException('enrollment request not found or expired');
     }
+    // Warn (don't block) if this user already runs a runner by the same name, so
+    // they don't unknowingly register a duplicate.
+    const nameConflict =
+      (await this.prisma.runner.count({ where: { ownerId, name: s.name } })) > 0;
     return {
       userCode: s.userCode,
       name: s.name,
@@ -68,6 +72,7 @@ export class RunnersService {
       labels: s.labels,
       maxConcurrent: s.maxConcurrent,
       status: s.status,
+      nameConflict,
       createdAt: s.createdAt,
     };
   }
@@ -78,22 +83,29 @@ export class RunnersService {
     if (!s || s.expiresAt < new Date()) {
       throw new NotFoundException('enrollment request not found or expired');
     }
-    if (s.status === 'APPROVED') return { ok: true, name: s.name };
+    if (s.status === 'APPROVED') return { ok: true, name: s.name, replaced: false };
 
     const runnerToken = generateToken(32);
-    const runner = await this.prisma.runner.create({
-      data: {
-        name: s.name,
-        hostname: s.hostname,
-        ownerId,
-        labels: s.labels,
-        maxConcurrent: s.maxConcurrent,
-        version: s.version,
-        tokenHash: sha256(runnerToken),
-        status: 'ONLINE',
-        lastHeartbeatAt: new Date(),
-      },
+    const data = {
+      hostname: s.hostname,
+      labels: s.labels,
+      maxConcurrent: s.maxConcurrent,
+      version: s.version,
+      tokenHash: sha256(runnerToken),
+      status: 'ONLINE' as const,
+      lastHeartbeatAt: new Date(),
+    };
+    // A runner of the same name for this user is replaced (its credential is
+    // reissued) rather than duplicated, so re-registering a machine reuses its
+    // identity and keeps its run history.
+    const existing = await this.prisma.runner.findFirst({
+      where: { ownerId, name: s.name },
+      orderBy: { enrolledAt: 'desc' },
     });
+    const runner = existing
+      ? await this.prisma.runner.update({ where: { id: existing.id }, data })
+      : await this.prisma.runner.create({ data: { ...data, name: s.name, ownerId } });
+
     await this.prisma.deviceEnrollment.update({
       where: { id: s.id },
       data: {
@@ -104,7 +116,7 @@ export class RunnersService {
         approvedAt: new Date(),
       },
     });
-    return { ok: true, name: runner.name };
+    return { ok: true, name: runner.name, replaced: !!existing };
   }
 
   async removeRunner(ownerId: string, id: string) {

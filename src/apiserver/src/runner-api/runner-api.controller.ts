@@ -183,6 +183,15 @@ export class RunnerApiController {
     };
   }
 
+  /** `orbit unregister` — the runner deletes itself from the control plane. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('deregister')
+  @HttpCode(200)
+  async deregister(@CurrentRunner() runner: { id: string }) {
+    await this.prisma.runner.delete({ where: { id: runner.id } });
+    return { ok: true };
+  }
+
   @UseGuards(RunnerAuthGuard)
   @Post('heartbeat')
   async heartbeat(

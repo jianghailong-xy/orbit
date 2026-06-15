@@ -2,56 +2,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
 
 const heartbeatInterval = 30 * time.Second
-
-// PreflightResult mirrors the TS preflight contract.
-type PreflightResult struct {
-	OK      bool
-	Message string
-}
-
-var unauthRe = regexp.MustCompile(`not.*(logged|authenticat)|unauthenticated|run .*login|please log in`)
-
-// preflightClaudeAuth verifies the runner can authenticate to Claude before
-// accepting jobs. Set ORBIT_SKIP_PREFLIGHT=1 to bypass.
-func preflightClaudeAuth() PreflightResult {
-	if os.Getenv("ORBIT_SKIP_PREFLIGHT") != "" {
-		return PreflightResult{true, "preflight skipped (ORBIT_SKIP_PREFLIGHT)"}
-	}
-	if hasExplicitClaudeAuth() {
-		return PreflightResult{true, "auth via env (ANTHROPIC_API_KEY / OAuth token)"}
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "claude", "auth", "status").CombinedOutput()
-	if err == nil {
-		return PreflightResult{true, "Claude Code is logged in (subscription)"}
-	}
-	var execErr *exec.Error
-	if errors.As(err, &execErr) {
-		return PreflightResult{false,
-			"Claude Code (`claude`) was not found on PATH. Install Claude Code and run `claude` then `/login`."}
-	}
-	if unauthRe.MatchString(strings.ToLower(string(out))) {
-		return PreflightResult{false,
-			"Claude Code is not logged in. Run `claude` then `/login` (uses your Claude subscription)."}
-	}
-	return PreflightResult{true, "could not verify Claude Code auth via `claude auth status`; proceeding"}
-}
 
 func runLoop(cfg *RunnerConfig) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)

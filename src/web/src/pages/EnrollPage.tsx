@@ -1,4 +1,4 @@
-import { App as AntApp, Button, Card, Descriptions, Result, Spin, Tag } from 'antd';
+import { Alert, App as AntApp, Button, Card, Descriptions, Result, Spin, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 
@@ -9,6 +9,7 @@ interface DeviceInfo {
   labels: string[];
   maxConcurrent: number;
   status: string;
+  nameConflict?: boolean;
 }
 
 /** Browser approval page for `orbit register` (reached via /enroll?code=XXXX-XXXX). */
@@ -77,8 +78,23 @@ export function EnrollPage() {
               </Descriptions.Item>
               <Descriptions.Item label="Code">{info?.userCode}</Descriptions.Item>
             </Descriptions>
-            <Button type="primary" block loading={submitting} onClick={approve}>
-              Approve
+            {info?.nameConflict && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message={`A runner named "${info.name}" already exists on your account.`}
+                description="Approving replaces it: this machine takes over that runner's identity and the old credential stops working. No duplicate is created."
+              />
+            )}
+            <Button
+              type="primary"
+              danger={!!info?.nameConflict}
+              block
+              loading={submitting}
+              onClick={approve}
+            >
+              {info?.nameConflict ? 'Replace existing runner' : 'Approve'}
             </Button>
           </>
         )}

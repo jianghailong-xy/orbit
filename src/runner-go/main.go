@@ -32,7 +32,7 @@ var usage = `orbit — register a machine and run Claude Code tasks for an Orbit
 Usage:
   orbit register [options]          Register this machine + install the service (approve in the browser)
   orbit run                         Start the runner loop in the foreground
-  orbit service                     Install + start a background service (systemd / launchd)
+  orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
@@ -43,7 +43,8 @@ register options:
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
   --max-concurrent <n>     Max concurrent jobs (default: 1)
   --force                  Re-register even if this directory already has a runner
-  --no-service             Don't auto-install/start the background service
+  --no-service             Register only; don't install/start the background service
+  --foreground             Register and run in the foreground now (implies --no-service)
 
 The runner drives the machine's local Claude Code login (run 'claude' then '/login');
 no API key is required.
@@ -66,8 +67,8 @@ func main() {
 		cmdRegister(flags, bools)
 	case "run":
 		cmdRun()
-	case "service":
-		installService()
+	case "unregister":
+		cmdUnregister(bools)
 	case "status":
 		cmdStatus()
 	case "upgrade":
@@ -105,7 +106,9 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	labels := parseLabels(flags["labels"])
 	maxConcurrent := getInt(flags, "max-concurrent", 1)
 	token := flags["token"]
-	withService := !bools["no-service"]
+	foreground := bools["foreground"]
+	// --foreground (and --no-service) skip installing the background service.
+	withService := !bools["no-service"] && !foreground
 	t := NewTransport(server, "")
 
 	// Legacy path: an explicit enrollment token skips browser approval.
@@ -118,7 +121,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			fmt.Fprintln(os.Stderr, "registration failed:", err)
 			os.Exit(1)
 		}
-		finishRegister(res.RunnerID, res.RunnerToken, res.Name, server, labels, maxConcurrent, withService)
+		finishRegister(res.RunnerID, res.RunnerToken, res.Name, server, labels, maxConcurrent, withService, foreground)
 		return
 	}
 
@@ -145,7 +148,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			continue // transient — keep waiting until the deadline
 		}
 		if poll.Status == "approved" {
-			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name, server, labels, maxConcurrent, withService)
+			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name, server, labels, maxConcurrent, withService, foreground)
 			return
 		}
 		if poll.Status == "expired" {
@@ -156,7 +159,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	os.Exit(1)
 }
 
-func finishRegister(runnerID, runnerToken, name, server string, labels []string, maxConcurrent int, withService bool) {
+func finishRegister(runnerID, runnerToken, name, server string, labels []string, maxConcurrent int, withService, foreground bool) {
 	cfg := &RunnerConfig{
 		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
 		Name: name, Labels: labels, MaxConcurrent: maxConcurrent,
@@ -167,6 +170,11 @@ func finishRegister(runnerID, runnerToken, name, server string, labels []string,
 	}
 	fmt.Printf("\n✓ registered runner %q (%s).\n", name, runnerID)
 
+	if foreground {
+		fmt.Println("running in the foreground — Ctrl-C to stop")
+		runLoop(cfg)
+		return
+	}
 	if !withService {
 		fmt.Println("  Start it with:  orbit run")
 		return
@@ -174,12 +182,41 @@ func finishRegister(runnerID, runnerToken, name, server string, labels []string,
 	// Auto-install the background service so the machine starts working immediately.
 	if err := setupService(); err != nil {
 		fmt.Fprintf(os.Stderr, "\nnote: could not auto-install the service (%s)\n", firstLine(err.Error()))
-		hint := "  start it manually:  orbit service   (or: orbit run)"
-		if runtime.GOOS == "linux" {
-			hint = "  start it manually:  sudo orbit service   (or: orbit run)"
-		}
-		fmt.Fprintln(os.Stderr, hint)
+		fmt.Fprintln(os.Stderr, "  you can run it in the foreground instead:  orbit run")
 	}
+}
+
+// cmdUnregister tears down this directory's runner: stops/removes the service,
+// deletes the runner from the control plane, and drops the local config.
+func cmdUnregister(bools map[string]bool) {
+	cfg := loadConfig()
+	if cfg == nil {
+		cwd, _ := os.Getwd()
+		fmt.Printf("no runner registered in %s\n", cwd)
+		return
+	}
+	if !bools["yes"] && !bools["force"] {
+		if !confirm(fmt.Sprintf(
+			"Unregister runner %q — stop its service, delete it from %s, and remove local config? [y/N] ",
+			cfg.Name, cfg.ServerURL), false) {
+			fmt.Println("aborted")
+			return
+		}
+	}
+
+	uninstallService() // stop + remove the background service first
+
+	if err := NewTransport(cfg.ServerURL, cfg.RunnerToken).deregister(); err != nil {
+		fmt.Fprintf(os.Stderr, "note: could not delete the runner from the control plane (%s)\n", firstLine(err.Error()))
+	} else {
+		fmt.Println("✓ deleted from the control plane")
+	}
+
+	if err := os.Remove(configPath()); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintln(os.Stderr, "failed to remove config:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ unregistered %q\n", cfg.Name)
 }
 
 func cmdRun() {
@@ -189,11 +226,6 @@ func cmdRun() {
 		os.Exit(1)
 	}
 	selfUpdate(cfg.ServerURL) // pull a newer orbit before settling into the loop
-	pf := preflightClaudeAuth()
-	fmt.Println("preflight:", pf.Message)
-	if !pf.OK {
-		os.Exit(1)
-	}
 	runLoop(cfg)
 }
 
