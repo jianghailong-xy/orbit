@@ -4,12 +4,13 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateEnrollmentTokenDto } from './dto';
+import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
 import { RunnersService } from './runners.service';
 
 @UseGuards(JwtAuthGuard)
@@ -40,6 +41,11 @@ export class RunnersController {
   @Post('device/:userCode/approve')
   approveDevice(@CurrentUser() user: AuthUser, @Param('userCode') userCode: string) {
     return this.runners.approveDeviceEnrollment(user.userId, userCode);
+  }
+
+  @Patch(':id')
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateRunnerDto) {
+    return this.runners.updateRunner(user.userId, id, dto);
   }
 
   @Delete(':id')

@@ -135,6 +135,35 @@ body {
 .tp-item.active .tp-count {
   color: #3370ff;
 }
+/* Per-runner "more actions" trigger: hidden until the row is hovered or its
+   menu is open, where it swaps in for the ⌘N shortcut hint. */
+.tp-kebab {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: -2px;
+  border-radius: 4px;
+  color: #8f959e;
+  font-size: 15px;
+  flex: none;
+}
+.tp-kebab:hover {
+  background: #e3e6eb;
+  color: #1f2329;
+}
+.tp-item.inset:hover .tp-count,
+.tp-item.inset.menu-open .tp-count {
+  display: none;
+}
+.tp-item.inset:hover .tp-kebab,
+.tp-item.inset.menu-open .tp-kebab {
+  display: flex;
+}
+.tp-item.active .tp-kebab {
+  color: #3370ff;
+}
 .tp-divider {
   height: 1px;
   background: #eceef1;

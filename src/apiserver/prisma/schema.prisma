@@ -58,6 +58,9 @@ model User {
 model Runner {
   id              String       @id @default(uuid())
   name            String
+  // User-set friendly name shown in the UI. `name` stays the machine-reported
+  // identity used to match re-registrations, so renaming never creates a dup.
+  displayName     String?
   hostname        String?
   ownerId         String
   owner           User         @relation(fields: [ownerId], references: [id])

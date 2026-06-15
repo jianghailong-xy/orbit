@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateEnrollmentTokenDto } from './dto';
+import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
@@ -17,6 +17,7 @@ export class RunnersService {
       select: {
         id: true,
         name: true,
+        displayName: true,
         hostname: true,
         labels: true,
         status: true,
@@ -117,6 +118,22 @@ export class RunnersService {
       },
     });
     return { ok: true, name: runner.name, replaced: !!existing };
+  }
+
+  async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const data: { displayName?: string | null } = {};
+    if (dto.displayName !== undefined) {
+      const trimmed = dto.displayName.trim();
+      data.displayName = trimmed.length ? trimmed : null;
+    }
+    // Never echo back tokenHash.
+    return this.prisma.runner.update({
+      where: { id },
+      data,
+      select: { id: true, name: true, displayName: true },
+    });
   }
 
   async removeRunner(ownerId: string, id: string) {
