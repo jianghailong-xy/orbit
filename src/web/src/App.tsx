@@ -11,7 +11,7 @@ const FULL_HEIGHT = ['/', '/tasks', '/running', '/skills', '/schedule', '/activi
 
 function Shell({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
-  const isTasksList = FULL_HEIGHT.includes(loc.pathname);
+  const isTasksList = FULL_HEIGHT.includes(loc.pathname) || loc.pathname.startsWith('/agents/');
   return (
     <div className="orbit-shell">
       <div className="orbit-main">
@@ -48,6 +48,7 @@ export function App() {
           <Route path="/skills" element={<Shell><TasksPage /></Shell>} />
           <Route path="/schedule" element={<Shell><TasksPage /></Shell>} />
           <Route path="/activities" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/agents/:id" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks/:id" element={<Shell><TaskDetailPage /></Shell>} />
         </>

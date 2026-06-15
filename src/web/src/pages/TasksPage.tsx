@@ -22,11 +22,11 @@ import {
   Typography,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useMatch } from 'react-router-dom';
 import { api } from '../api';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
-import { TasksSidePanel, type Runner } from '../components/TasksSidePanel';
+import { TasksSidePanel } from '../components/TasksSidePanel';
 
 const SOURCES = [
   { key: 'AGENT', label: 'Agents' },
@@ -107,10 +107,9 @@ export function TasksPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('ALL');
-  const [view, setView] = useState<'tasks' | 'register' | 'agent'>(() =>
+  const [view, setView] = useState<'tasks' | 'register'>(() =>
     sessionStorage.getItem(REGISTER_VIEW_KEY) === '1' ? 'register' : 'tasks',
   );
-  const [selectedRunner, setSelectedRunner] = useState<Runner | null>(null);
   useEffect(() => {
     if (view === 'register') sessionStorage.setItem(REGISTER_VIEW_KEY, '1');
     else sessionStorage.removeItem(REGISTER_VIEW_KEY);
@@ -121,6 +120,10 @@ export function TasksPage() {
   const tasks = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
+
+  // A selected agent lives in its own URL (/agents/:id) so a refresh restores it.
+  const agentId = useMatch('/agents/:id')?.params.id ?? null;
+  const selectedRunner = (runners.data ?? []).find((r: any) => r.id === agentId) ?? null;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
 
@@ -216,16 +219,18 @@ export function TasksPage() {
       <TasksSidePanel
         onShowRegister={() => setView('register')}
         onShowTasks={() => setView('tasks')}
-        onSelectAgent={(r) => {
-          setSelectedRunner(r);
-          setView('agent');
-        }}
       />
       <main className="tasks-main">
         {view === 'register' ? (
           <RunnerRegisterGuide onClose={() => setView('tasks')} />
-        ) : view === 'agent' && selectedRunner ? (
-          <AgentView runner={selectedRunner} />
+        ) : agentId ? (
+          selectedRunner ? (
+            <AgentView runner={selectedRunner} />
+          ) : (
+            <div style={{ padding: 48, textAlign: 'center' }}>
+              <Spin />
+            </div>
+          )
         ) : (
           <>
         <h1 className="page-title">{pageTitle}</h1>

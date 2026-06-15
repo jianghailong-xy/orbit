@@ -49,18 +49,20 @@ interface Props {
   onShowRegister: () => void;
   /** Return the right pane to the task list. */
   onShowTasks: () => void;
-  /** Show the selected agent's detail view in the right pane. */
-  onSelectAgent: (runner: Runner) => void;
 }
 
-export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: Props) {
+export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
   const loc = useLocation();
   const navigate = useNavigate();
 
   // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
   // to Running); clicking an agent/list item below overrides it locally.
   const routeKey =
-    loc.pathname === '/' || loc.pathname === '/tasks' ? 'running' : loc.pathname.slice(1);
+    loc.pathname === '/' || loc.pathname === '/tasks'
+      ? 'running'
+      : loc.pathname.startsWith('/agents/')
+        ? loc.pathname.slice('/agents/'.length)
+        : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
@@ -91,11 +93,12 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
       if (idx >= list.length) return;
       e.preventDefault();
       setSel(list[idx].id);
-      onSelectAgent(list[idx]);
+      onShowTasks();
+      navigate(`/agents/${list[idx].id}`);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [list, onSelectAgent]);
+  }, [list, onShowTasks, navigate]);
 
   return (
     <aside className="tasks-panel">
@@ -137,7 +140,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
                   className={`tp-item inset ${sel === r.id ? 'active' : ''}`}
                   onClick={() => {
                     setSel(r.id);
-                    onSelectAgent(r);
+                    onShowTasks();
+                    navigate(`/agents/${r.id}`);
                   }}
                 >
                   <span
