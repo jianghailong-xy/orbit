@@ -41,7 +41,7 @@ const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
 
-interface Runner {
+export interface Runner {
   id: string;
   name: string;
   online?: boolean;
@@ -66,7 +66,13 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
   // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
   // to Running); clicking an agent/list item below overrides it locally.
   const routeKey =
-    loc.pathname === '/' || loc.pathname === '/tasks' ? 'running' : loc.pathname.slice(1);
+    loc.pathname === '/' || loc.pathname === '/tasks'
+      ? 'running'
+      : loc.pathname.startsWith('/agents/')
+        ? loc.pathname.slice('/agents/'.length)
+        : loc.pathname.startsWith('/lists/')
+          ? loc.pathname.slice('/lists/'.length)
+          : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
@@ -109,11 +115,6 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
     refetchInterval: 15_000,
   });
 
-  const pick = (key: string) => {
-    setSel(key);
-    onShowTasks();
-  };
-
   // ⌘1 / ⌘2 / … (Ctrl on non-Mac) select the Nth runner under "Agents".
   const list = runners.data ?? [];
   useEffect(() => {
@@ -125,10 +126,11 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
       e.preventDefault();
       setSel(list[idx].id);
       onShowTasks();
+      navigate(`/agents/${list[idx].id}`);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [list, onShowTasks]);
+  }, [list, onShowTasks, navigate]);
 
   return (
     <aside className="tasks-panel" style={{ width: sidebarWidth }}>
@@ -168,7 +170,11 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
                 <div
                   key={r.id}
                   className={`tp-item inset ${sel === r.id ? 'active' : ''}`}
-                  onClick={() => pick(r.id)}
+                  onClick={() => {
+                    setSel(r.id);
+                    onShowTasks();
+                    navigate(`/agents/${r.id}`);
+                  }}
                 >
                   <span
                     style={{
@@ -213,7 +219,11 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
               <div
                 key={l.key}
                 className={`tp-item inset ${sel === l.key ? 'active' : ''}`}
-                onClick={() => pick(l.key)}
+                onClick={() => {
+                  setSel(l.key);
+                  onShowTasks();
+                  navigate(`/lists/${l.key}`);
+                }}
               >
                 <span
                   style={{

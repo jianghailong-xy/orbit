@@ -388,6 +388,100 @@ body {
   border-color: #dee0e3;
 }
 
+/* ---- Agent detail view (selected runner) ---- */
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eceef1;
+}
+.agent-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  flex: none;
+}
+.agent-status-dot.online {
+  background: #2ea121;
+}
+.agent-header-main {
+  min-width: 0;
+}
+.agent-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.agent-sub {
+  font-size: 12.5px;
+  color: #8f959e;
+  margin-top: 2px;
+}
+.agent-header-spacer {
+  flex: 1;
+}
+.agent-header-count {
+  font-size: 13px;
+  color: #646a73;
+  flex: none;
+}
+.session-head {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2329;
+  margin: 20px 0 4px;
+}
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 8px;
+  border-bottom: 1px solid #f2f3f5;
+  cursor: pointer;
+}
+.session-row:hover {
+  background: #f5f6f7;
+}
+.session-icon {
+  display: flex;
+  width: 16px;
+  flex: none;
+}
+.session-main {
+  flex: 1;
+  min-width: 0;
+}
+.session-title {
+  font-size: 14px;
+  color: #1f2329;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-meta {
+  font-size: 12.5px;
+  color: #8f959e;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-right {
+  text-align: right;
+  flex: none;
+}
+.session-status {
+  font-size: 12.5px;
+}
+.session-time {
+  font-size: 12px;
+  color: #8f959e;
+  margin-top: 3px;
+}
+
 /* ---- Add a runner (Option A) ---- */
 .runner-guide {
   position: relative;
