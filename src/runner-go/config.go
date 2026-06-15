@@ -14,6 +14,9 @@ type RunnerConfig struct {
 	Name          string   `json:"name"`
 	Labels        []string `json:"labels"`
 	MaxConcurrent int      `json:"maxConcurrent"`
+	// Agents installed on this machine that the user chose to register
+	// (stable keys, e.g. "claude", "codex"). Selected at `orbit register`.
+	Agents []string `json:"agents,omitempty"`
 }
 
 // Config is per working directory (so one machine can host several runners);
