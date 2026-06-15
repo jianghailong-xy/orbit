@@ -1,4 +1,6 @@
-import { CheckCircleFilled, CloseCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { ArrowUpOutlined, CheckCircleFilled, CloseCircleFilled, LoadingOutlined } from '@ant-design/icons';
+import { Button, Input, Segmented, Select } from 'antd';
+import { useState } from 'react';
 import type { Runner } from './TasksSidePanel';
 
 // Visual scaffold for a selected agent's detail view. Like the rest of the side
@@ -56,6 +58,13 @@ const STATUS_LABEL: Record<Session['status'], { text: string; color: string }> =
   FAILED: { text: 'Failed', color: '#f54a45' },
 };
 
+const MODE_OPTIONS = ['Plan', 'Accept Edits', 'Default'];
+const MODEL_OPTIONS = [
+  { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
+  { value: 'claude-opus-4-8', label: 'claude-opus-4-8' },
+  { value: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+];
+
 function SessionIcon({ status }: { status: Session['status'] }) {
   if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 16 }} />;
   if (status === 'SUCCEEDED') return <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
@@ -63,6 +72,12 @@ function SessionIcon({ status }: { status: Session['status'] }) {
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
+  // Composer state is local and visual only — sending a task, choosing a mode or
+  // a model is not wired to Orbit yet (frontend scaffold).
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState('Plan');
+  const [model, setModel] = useState('claude-sonnet-4-6');
+
   return (
     <div className="agent-view">
       <div className="agent-header">
@@ -76,7 +91,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       </div>
 
       <div className="session-head">Sessions</div>
-      <div>
+      <div className="agent-sessions">
         {SESSIONS.map((s) => {
           const label = STATUS_LABEL[s.status];
           return (
@@ -97,6 +112,36 @@ export function AgentView({ runner }: { runner: Runner }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="agent-composer">
+        <div className="composer-box">
+          <Input.TextArea
+            variant="borderless"
+            autoSize={{ minRows: 1, maxRows: 6 }}
+            placeholder="给这个 Agent 发一个任务…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <Button type="primary" icon={<ArrowUpOutlined />} disabled={!text.trim()} />
+        </div>
+        <div className="composer-controls">
+          <span className="composer-label">Mode</span>
+          <Segmented
+            size="small"
+            options={MODE_OPTIONS}
+            value={mode}
+            onChange={(v) => setMode(v as string)}
+          />
+          <span className="composer-label">Model</span>
+          <Select
+            size="small"
+            value={model}
+            onChange={setModel}
+            options={MODEL_OPTIONS}
+            style={{ minWidth: 180 }}
+          />
+        </div>
       </div>
     </div>
   );

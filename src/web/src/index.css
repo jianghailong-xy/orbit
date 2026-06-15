@@ -375,10 +375,16 @@ body {
 }
 
 /* ---- Agent detail view (selected runner) ---- */
+.agent-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 .agent-header {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: none;
   padding-bottom: 16px;
   border-bottom: 1px solid #eceef1;
 }
@@ -417,7 +423,13 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: #1f2329;
+  flex: none;
   margin: 20px 0 4px;
+}
+.agent-sessions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .session-row {
   display: flex;
@@ -681,4 +693,31 @@ body {
 }
 .runner-done-btn:hover {
   background: #000;
+}
+.agent-composer {
+  flex: none;
+  border-top: 1px solid #eceef1;
+  padding-top: 12px;
+  margin-top: 8px;
+}
+.composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border: 1px solid #dee0e3;
+  border-radius: 10px;
+  padding: 6px 6px 6px 12px;
+}
+.composer-box:focus-within {
+  border-color: #3370ff;
+}
+.composer-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.composer-label {
+  font-size: 13px;
+  color: #646a73;
 }
