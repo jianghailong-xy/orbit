@@ -4,9 +4,104 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Orbit</title>
+    <style>
+      /* First-paint boot splash: rendered before the JS bundle loads and removed
+         by the app once the first-screen data (tasks + runners) has resolved, so
+         the UI appears in one shot instead of filling in piecemeal. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 30px;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        transition: opacity 0.3s ease;
+      }
+      #boot.hide {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #boot .boot-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #boot .boot-logo {
+        font-size: 44px;
+        line-height: 1;
+      }
+      #boot .boot-name {
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        color: #1f2329;
+      }
+      #boot .boot-progress {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      #boot .boot-bar {
+        width: 320px;
+        height: 6px;
+        border-radius: 999px;
+        background: #f2f3f5;
+        overflow: hidden;
+      }
+      #boot .boot-fill {
+        height: 100%;
+        width: 8%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #5b8bff, #3370ff);
+        transition: width 0.3s ease;
+      }
+      #boot .boot-cap {
+        font-size: 13px;
+        color: #8f959e;
+      }
+    </style>
   </head>
   <body>
+    <div id="boot">
+      <div class="boot-brand">
+        <span class="boot-logo">🛰</span>
+        <span class="boot-name">Orbit</span>
+      </div>
+      <div class="boot-progress">
+        <div class="boot-bar"><div id="boot-fill" class="boot-fill"></div></div>
+        <div class="boot-cap">Loading your workspace…</div>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      // Determinate progress: the bar only ever moves forward as the app reports
+      // real milestones via window.__bootProgress(pct); window.__bootDone() snaps
+      // it to 100% and fades the splash out.
+      (function () {
+        var fill = document.getElementById('boot-fill');
+        var shown = 8;
+        var set = function (pct) {
+          if (pct > shown) shown = pct; // monotonic — never step backwards
+          fill.style.width = shown + '%';
+        };
+        window.__bootProgress = set;
+        window.__bootDone = function () {
+          set(100);
+          var boot = document.getElementById('boot');
+          if (!boot) return;
+          boot.classList.add('hide');
+          setTimeout(function () {
+            boot.remove();
+          }, 320);
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

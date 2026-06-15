@@ -33,6 +33,14 @@ const LISTS = [
   { key: 'l8', label: '#8 importer not-ready sg 2026-06-13' },
 ];
 
+// The left sidebar is user-resizable; the chosen width persists across refreshes.
+const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
+const DEFAULT_SIDEBAR_WIDTH = 264;
+const MIN_SIDEBAR_WIDTH = 200;
+const MAX_SIDEBAR_WIDTH = 480;
+const clampWidth = (w: number): number =>
+  Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+
 export interface Runner {
   id: string;
   name: string;
@@ -72,6 +80,33 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
   const [listOpen, setListOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
 
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
+  });
+
+  // Drag the right-edge handle to resize; the final width is saved on release.
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // The panel hugs the viewport's left edge, so clientX is the target width.
+    let next = sidebarWidth;
+    const onMove = (ev: MouseEvent) => {
+      next = clampWidth(ev.clientX);
+      setSidebarWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   // The "Agents" list is the user's actually-registered runners; it refreshes so
   // online/offline tracks the runner's 30s heartbeat.
   const runners = useQuery({
@@ -98,7 +133,7 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
   }, [list, onShowTasks, navigate]);
 
   return (
-    <aside className="tasks-panel">
+    <aside className="tasks-panel" style={{ width: sidebarWidth }}>
       <div className="tp-brand">
         <span className="tp-brand-logo">🛰</span>
         <span className="tp-brand-name">Orbit</span>
@@ -234,6 +269,13 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
           </div>
         </Dropdown>
       </div>
+
+      <div
+        className="tp-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={startResize}
+      />
     </aside>
   );
 }
