@@ -10,13 +10,14 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, clearToken } from '../api';
 
 const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 
-// Static Feishu-style left navigation for the Tasks page. These entries are a
-// visual scaffold — they are not wired to Orbit data yet, so selecting one only
-// moves the highlight (it does not filter the list on the right).
+// Feishu-style top navigation. Each entry routes to "/<key>" (they all share the
+// Tasks view for now — only the heading differs). The lists below are still a
+// visual scaffold whose selection just moves the highlight.
 const TOP = [
   { key: 'running', icon: <UserOutlined />, label: 'Running', count: 385 },
   { key: 'skills', icon: <ThunderboltOutlined />, label: 'Skills' },
@@ -53,7 +54,16 @@ interface Props {
 }
 
 export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: Props) {
-  const [sel, setSel] = useState('running');
+  const loc = useLocation();
+  const navigate = useNavigate();
+
+  // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
+  // to Running); clicking an agent/list item below overrides it locally.
+  const routeKey =
+    loc.pathname === '/' || loc.pathname === '/tasks' ? 'running' : loc.pathname.slice(1);
+  const [sel, setSel] = useState(routeKey);
+  useEffect(() => setSel(routeKey), [routeKey]);
+
   const [quickOpen, setQuickOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
@@ -100,7 +110,10 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
-              onClick={() => pick(t.key)}
+              onClick={() => {
+                navigate(`/${t.key}`);
+                onShowTasks();
+              }}
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
@@ -113,8 +126,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setQuickOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Agents</span>
+            <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
           </div>
           {quickOpen && (
             <>
@@ -162,8 +175,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Task List</span>
+            <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
           {listOpen &&
             LISTS.map((l) => (
@@ -172,6 +185,16 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
                 className={`tp-item inset ${sel === l.key ? 'active' : ''}`}
                 onClick={() => pick(l.key)}
               >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#c0c4cc',
+                    flex: 'none',
+                    marginRight: 8,
+                  }}
+                />
                 <span className="tp-label">{l.label}</span>
               </div>
             ))}
@@ -179,8 +202,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks, onSelectAgent }: P
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setArchOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${archOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Archived</span>
+            <CaretDownOutlined className={`tp-caret ${archOpen ? '' : 'collapsed'}`} />
           </div>
         </div>
 

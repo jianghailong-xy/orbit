@@ -5,11 +5,13 @@ import { LoginPage } from './pages/LoginPage';
 import { TaskDetailPage } from './pages/TaskDetailPage';
 import { TasksPage } from './pages/TasksPage';
 
+// Paths whose page renders its own full-height two-pane layout (the top-nav
+// sections all share the Tasks view). Everything else gets content padding.
+const FULL_HEIGHT = ['/', '/tasks', '/running', '/skills', '/schedule', '/activities'];
+
 function Shell({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
-  // The Tasks list page renders its own full-height two-pane layout; every
-  // other page gets standard content padding.
-  const isTasksList = loc.pathname === '/tasks';
+  const isTasksList = FULL_HEIGHT.includes(loc.pathname);
   return (
     <div className="orbit-shell">
       <div className="orbit-main">
@@ -41,7 +43,11 @@ export function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       ) : (
         <>
-          <Route path="/" element={<Navigate to="/tasks" replace />} />
+          <Route path="/" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/running" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/skills" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/schedule" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/activities" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks/:id" element={<Shell><TaskDetailPage /></Shell>} />
         </>

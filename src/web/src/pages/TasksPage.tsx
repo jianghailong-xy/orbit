@@ -21,8 +21,8 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
@@ -49,6 +49,17 @@ const matchesFilter = (status: string, f: string): boolean => {
 };
 
 const cap = (s: string): string => s.charAt(0) + s.slice(1).toLowerCase();
+
+// Top-nav sections share this view; only the heading differs (default: Running).
+const SECTION_TITLES: Record<string, string> = {
+  '/skills': 'Skills',
+  '/schedule': 'Schedule',
+  '/activities': 'Activities',
+};
+
+// The "Add a runner" view isn't URL-routed (it adds no path), so remember it
+// per-tab — a refresh restores it instead of snapping back to the task list.
+const REGISTER_VIEW_KEY = 'orbit:tasks-register-view';
 
 const fmtDate = (d?: string): string =>
   d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
@@ -90,12 +101,20 @@ function StatusCircle({ status }: { status: string }) {
 }
 
 export function TasksPage() {
+  const loc = useLocation();
+  const pageTitle = SECTION_TITLES[loc.pathname] ?? 'Running';
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('ALL');
-  const [view, setView] = useState<'tasks' | 'register' | 'agent'>('tasks');
+  const [view, setView] = useState<'tasks' | 'register' | 'agent'>(() =>
+    sessionStorage.getItem(REGISTER_VIEW_KEY) === '1' ? 'register' : 'tasks',
+  );
   const [selectedRunner, setSelectedRunner] = useState<Runner | null>(null);
+  useEffect(() => {
+    if (view === 'register') sessionStorage.setItem(REGISTER_VIEW_KEY, '1');
+    else sessionStorage.removeItem(REGISTER_VIEW_KEY);
+  }, [view]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
@@ -209,7 +228,7 @@ export function TasksPage() {
           <AgentView runner={selectedRunner} />
         ) : (
           <>
-        <h1 className="page-title">Running</h1>
+        <h1 className="page-title">{pageTitle}</h1>
 
         <div className="tasks-toolbar">
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>

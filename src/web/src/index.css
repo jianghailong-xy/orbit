@@ -154,7 +154,11 @@ body {
 .tp-caret {
   font-size: 12px;
   color: #8f959e;
-  transition: transform 0.15s ease;
+  opacity: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.tp-group-head:hover .tp-caret {
+  opacity: 1;
 }
 .tp-caret.collapsed {
   transform: rotate(-90deg);
@@ -462,4 +466,219 @@ body {
   font-size: 12px;
   color: #8f959e;
   margin-top: 3px;
+}
+
+/* ---- Add a runner (Option A) ---- */
+.runner-guide {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.runner-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding-left: 0;
+}
+.runner-center {
+  width: 100%;
+  max-width: 640px;
+  padding: 48px 0;
+}
+.runner-center .page-title {
+  margin-bottom: 8px;
+}
+.runner-sub {
+  color: #646a73;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 20px;
+}
+.runner-os {
+  margin-bottom: 28px;
+}
+
+/* vertical stepper: numbered dot + connector line, green check when complete */
+.runner-step {
+  display: flex;
+  gap: 14px;
+}
+.runner-step-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+.runner-step-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8f959e;
+  background: #fff;
+  border: 1.5px solid #dee0e3;
+}
+.runner-step-dot.done {
+  color: #fff;
+  background: #2ea121;
+  border-color: #2ea121;
+}
+.runner-step-line {
+  flex: 1;
+  width: 2px;
+  min-height: 24px;
+  margin: 4px 0;
+  background: #dee0e3;
+}
+.runner-step-line.done {
+  background: #2ea121;
+}
+.runner-step-body {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 24px;
+}
+.runner-step-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.runner-step-desc {
+  margin: 2px 0 12px;
+  font-size: 13px;
+  color: #646a73;
+}
+
+/* command box: monospace on light grey + an explicit Copy button */
+.runner-cmd {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  background: #f5f6f7;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+}
+.runner-cmd-text {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: #1f2329;
+}
+.runner-cmd-prompt {
+  margin-right: 8px;
+  color: #8f959e;
+  user-select: none;
+}
+.runner-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2329;
+  background: #fff;
+  border: 1px solid #dee0e3;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.runner-copy:hover {
+  color: #3370ff;
+  border-color: #3370ff;
+}
+.runner-copy.copied {
+  color: #2ea121;
+  border-color: #2ea121;
+}
+
+/* live status bar: waiting (blue) ↔ connected (green) */
+.runner-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border-radius: 10px;
+}
+.runner-status.waiting {
+  background: rgba(51, 112, 255, 0.07);
+  border: 1px solid rgba(51, 112, 255, 0.18);
+}
+.runner-status.connected {
+  background: rgba(46, 161, 33, 0.09);
+  border: 1px solid rgba(46, 161, 33, 0.22);
+}
+.runner-spinner {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(51, 112, 255, 0.22);
+  border-top-color: #3370ff;
+  animation: runner-spin 0.7s linear infinite;
+}
+@keyframes runner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.runner-status-icon {
+  display: flex;
+  flex: none;
+  font-size: 24px;
+  color: #2ea121;
+}
+.runner-status-text {
+  flex: 1;
+  min-width: 0;
+}
+.runner-status-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.runner-status.connected .runner-status-title {
+  color: #2ea121;
+}
+.runner-status-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #646a73;
+}
+.runner-help-link {
+  flex: none;
+  font-size: 13px;
+  color: #3370ff;
+  cursor: pointer;
+}
+.runner-help-link:hover {
+  text-decoration: underline;
+}
+.runner-done-btn {
+  flex: none;
+  height: 34px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: #1f2329;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.runner-done-btn:hover {
+  background: #000;
 }
