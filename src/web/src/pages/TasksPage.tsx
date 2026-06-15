@@ -21,7 +21,7 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
@@ -48,6 +48,10 @@ const matchesFilter = (status: string, f: string): boolean => {
 };
 
 const cap = (s: string): string => s.charAt(0) + s.slice(1).toLowerCase();
+
+// The "Add a runner" view isn't URL-routed (it adds no path), so remember it
+// per-tab — a refresh restores it instead of snapping back to the task list.
+const REGISTER_VIEW_KEY = 'orbit:tasks-register-view';
 
 const fmtDate = (d?: string): string =>
   d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
@@ -93,7 +97,13 @@ export function TasksPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('ALL');
-  const [view, setView] = useState<'tasks' | 'register'>('tasks');
+  const [view, setView] = useState<'tasks' | 'register'>(() =>
+    sessionStorage.getItem(REGISTER_VIEW_KEY) === '1' ? 'register' : 'tasks',
+  );
+  useEffect(() => {
+    if (view === 'register') sessionStorage.setItem(REGISTER_VIEW_KEY, '1');
+    else sessionStorage.removeItem(REGISTER_VIEW_KEY);
+  }, [view]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
