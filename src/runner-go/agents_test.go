@@ -8,6 +8,41 @@ import (
 	"testing"
 )
 
+func TestAgentPathFallsBackToLocalBin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PATH executable-bit lookup is unix-specific")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir()) // nothing relevant on PATH
+
+	if _, ok := agentPath("claude"); ok {
+		t.Fatal("claude should not resolve before it exists")
+	}
+	bin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := agentPath("claude")
+	if !ok || got != filepath.Join(bin, "claude") {
+		t.Fatalf("agentPath = %q, %v; want the ~/.local/bin path", got, ok)
+	}
+}
+
+func TestClaudeAuthedHonorsEnvTokens(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+	// A token in the environment counts as authenticated without invoking the CLI,
+	// so a non-existent binary path still reports authed.
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "tok")
+	if !claudeAuthed("/nonexistent/claude") {
+		t.Fatal("env token should satisfy auth without running the CLI")
+	}
+}
+
 func TestDetectAgents(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("PATH executable-bit lookup is unix-specific")

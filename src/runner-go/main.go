@@ -106,8 +106,12 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	labels := parseLabels(flags["labels"])
 	maxConcurrent := getInt(flags, "max-concurrent", 1)
 	// Detect the coding agents installed here (Claude Code, Codex) and let the
-	// user pick which to register; the default is all of them.
-	agents := selectAgents()
+	// user pick which to register; the default is all of them. Then make the
+	// chosen agents usable — install any that are missing, and confirm Claude
+	// Code is logged in — before registering this machine.
+	selected := selectAgents()
+	ensureAgentsReady(selected)
+	agents := agentKeys(selected)
 	token := flags["token"]
 	foreground := bools["foreground"]
 	// --foreground (and --no-service) skip installing the background service.
