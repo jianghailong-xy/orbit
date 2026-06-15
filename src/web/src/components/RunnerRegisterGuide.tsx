@@ -117,7 +117,7 @@ export function RunnerRegisterGuide({ onClose }: { onClose: () => void }) {
       </Button>
 
       <div className="runner-center">
-        <h1 className="page-title">Add a runner</h1>
+        <h1 className="page-title">Add Agent</h1>
         <p className="runner-sub">
           A runner is a machine that runs Claude Code tasks for you. Run these on the machine you
           want to add — it appears in the list on the left once it comes online.

@@ -44,14 +44,7 @@ function logout() {
   location.href = '/login';
 }
 
-interface Props {
-  /** Show the “add a runner” guide in the right pane. */
-  onShowRegister: () => void;
-  /** Return the right pane to the task list. */
-  onShowTasks: () => void;
-}
-
-export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
+export function TasksSidePanel() {
   const loc = useLocation();
   const navigate = useNavigate();
 
@@ -90,12 +83,11 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
       if (idx >= list.length) return;
       e.preventDefault();
       setSel(list[idx].id);
-      onShowTasks();
       navigate(`/agents/${list[idx].id}`);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [list, onShowTasks, navigate]);
+  }, [list, navigate]);
 
   return (
     <aside className="tasks-panel">
@@ -110,10 +102,7 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
             <div
               key={t.key}
               className={`tp-item ${sel === t.key ? 'active' : ''}`}
-              onClick={() => {
-                navigate(`/${t.key}`);
-                onShowTasks();
-              }}
+              onClick={() => navigate(`/${t.key}`)}
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
@@ -137,7 +126,6 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
                   className={`tp-item inset ${sel === r.id ? 'active' : ''}`}
                   onClick={() => {
                     setSel(r.id);
-                    onShowTasks();
                     navigate(`/agents/${r.id}`);
                   }}
                 >
@@ -156,13 +144,7 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
                   {idx < 9 && <span className="tp-count">{isMac ? '⌘' : 'Ctrl+'}{idx + 1}</span>}
                 </div>
               ))}
-              <div
-                className="tp-item inset"
-                onClick={() => {
-                  setSel('runner-new');
-                  onShowRegister();
-                }}
-              >
+              <div className="tp-item inset" onClick={() => navigate('/agents')}>
                 <span className="tp-ico">
                   <PlusOutlined />
                 </span>
@@ -186,7 +168,6 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
                 className={`tp-item inset ${sel === l.key ? 'active' : ''}`}
                 onClick={() => {
                   setSel(l.key);
-                  onShowTasks();
                   navigate(`/lists/${l.key}`);
                 }}
               >

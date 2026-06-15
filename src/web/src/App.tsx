@@ -7,7 +7,7 @@ import { TasksPage } from './pages/TasksPage';
 
 // Paths whose page renders its own full-height two-pane layout (the top-nav
 // sections all share the Tasks view). Everything else gets content padding.
-const FULL_HEIGHT = ['/', '/tasks', '/running', '/skills', '/schedule', '/activities'];
+const FULL_HEIGHT = ['/', '/tasks', '/running', '/skills', '/schedule', '/activities', '/agents'];
 
 function Shell({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -51,6 +51,7 @@ export function App() {
           <Route path="/skills" element={<Shell><TasksPage /></Shell>} />
           <Route path="/schedule" element={<Shell><TasksPage /></Shell>} />
           <Route path="/activities" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/agents" element={<Shell><TasksPage /></Shell>} />
           <Route path="/agents/:id" element={<Shell><TasksPage /></Shell>} />
           <Route path="/lists/:key" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks" element={<Shell><TasksPage /></Shell>} />

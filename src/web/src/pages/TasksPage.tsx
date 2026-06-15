@@ -21,8 +21,8 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useMatch } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
@@ -56,10 +56,6 @@ const SECTION_TITLES: Record<string, string> = {
   '/schedule': 'Schedule',
   '/activities': 'Activities',
 };
-
-// The "Add a runner" view isn't URL-routed (it adds no path), so remember it
-// per-tab — a refresh restores it instead of snapping back to the task list.
-const REGISTER_VIEW_KEY = 'orbit:tasks-register-view';
 
 const fmtDate = (d?: string): string =>
   d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
@@ -102,18 +98,14 @@ function StatusCircle({ status }: { status: string }) {
 
 export function TasksPage() {
   const loc = useLocation();
+  const navigate = useNavigate();
   const pageTitle = SECTION_TITLES[loc.pathname] ?? 'Running';
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('ALL');
-  const [view, setView] = useState<'tasks' | 'register'>(() =>
-    sessionStorage.getItem(REGISTER_VIEW_KEY) === '1' ? 'register' : 'tasks',
-  );
-  useEffect(() => {
-    if (view === 'register') sessionStorage.setItem(REGISTER_VIEW_KEY, '1');
-    else sessionStorage.removeItem(REGISTER_VIEW_KEY);
-  }, [view]);
+  // The "Add Agent" guide is its own route (/agents) so a refresh restores it.
+  const showRegister = loc.pathname === '/agents';
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
@@ -216,13 +208,10 @@ export function TasksPage() {
 
   return (
     <div className="tasks-layout">
-      <TasksSidePanel
-        onShowRegister={() => setView('register')}
-        onShowTasks={() => setView('tasks')}
-      />
+      <TasksSidePanel />
       <main className="tasks-main">
-        {view === 'register' ? (
-          <RunnerRegisterGuide onClose={() => setView('tasks')} />
+        {showRegister ? (
+          <RunnerRegisterGuide onClose={() => navigate('/tasks')} />
         ) : agentId ? (
           selectedRunner ? (
             <AgentView runner={selectedRunner} />
