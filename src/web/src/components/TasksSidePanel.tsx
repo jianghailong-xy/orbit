@@ -124,8 +124,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setQuickOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Agents</span>
+            <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
           </div>
           {quickOpen && (
             <>
@@ -170,8 +170,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Task List</span>
+            <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
           {listOpen &&
             LISTS.map((l) => (
@@ -197,8 +197,8 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setArchOpen((o) => !o)}>
-            <CaretDownOutlined className={`tp-caret ${archOpen ? '' : 'collapsed'}`} />
             <span className="tp-group-name">Archived</span>
+            <CaretDownOutlined className={`tp-caret ${archOpen ? '' : 'collapsed'}`} />
           </div>
         </div>
 

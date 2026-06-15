@@ -154,7 +154,11 @@ body {
 .tp-caret {
   font-size: 12px;
   color: #8f959e;
-  transition: transform 0.15s ease;
+  opacity: 0;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.tp-group-head:hover .tp-caret {
+  opacity: 1;
 }
 .tp-caret.collapsed {
   transform: rotate(-90deg);
