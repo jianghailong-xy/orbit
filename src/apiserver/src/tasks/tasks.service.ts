@@ -96,7 +96,7 @@ export class TasksService {
         runs: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { id: true, status: true, costUsd: true, finishedAt: true },
+          select: { id: true, status: true, costUsd: true, numTurns: true, finishedAt: true },
         },
       },
     });

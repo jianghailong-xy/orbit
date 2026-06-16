@@ -113,8 +113,14 @@ export function TaskDetailPage() {
 function EventLine({ ev }: { ev: RunEvent }) {
   const p = ev.payload ?? {};
   switch (ev.type) {
+    case 'user':
+      return <div style={{ margin: '4px 0' }}>🧑 {p.text}</div>;
     case 'assistant':
       return <div style={{ margin: '4px 0' }}>🤖 {p.text}</div>;
+    case 'turn_end':
+      return <div style={{ color: '#999' }}>— turn end —</div>;
+    case 'interrupt':
+      return <div style={{ color: '#999' }}>⊘ interrupted</div>;
     case 'text_delta':
       return <span>{p.text}</span>;
     case 'tool_use':
