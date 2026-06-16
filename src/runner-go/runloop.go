@@ -85,7 +85,11 @@ func runLoop(cfg *RunnerConfig) {
 		active[job.RunID] = cancel
 		mu.Unlock()
 		go func(j *ClaimedJob) {
-			executeAndReport(t, j, jobCtx)
+			if j.Interactive {
+				runInteractiveSession(t, j, jobCtx)
+			} else {
+				executeAndReport(t, j, jobCtx)
+			}
 			mu.Lock()
 			delete(active, j.RunID)
 			mu.Unlock()

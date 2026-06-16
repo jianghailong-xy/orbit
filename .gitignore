@@ -20,3 +20,6 @@ coverage/
 # os
 .DS_Store
 Thumbs.db
+
+# go build artifact (a bare `go build` in src/runner-go; real builds -> dist-bin/)
+/src/runner-go/orbit

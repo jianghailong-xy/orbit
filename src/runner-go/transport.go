@@ -120,3 +120,20 @@ func (t *Transport) postEvents(runID string, batch RunEventBatch) error {
 func (t *Transport) complete(runID string, b CompleteRequest) error {
 	return t.do(nil, "POST", "/runner/runs/"+runID+"/complete", b, nil, 35*time.Second)
 }
+
+// inbox long-polls for the next user turn of an interactive session; returns nil
+// when the server holds then yields nothing (turnId == "").
+func (t *Transport) inbox(ctx context.Context, runID string) (*RunInboxResponse, error) {
+	var r RunInboxResponse
+	if err := t.do(ctx, "GET", "/runner/runs/"+runID+"/inbox", nil, &r, 35*time.Second); err != nil {
+		return nil, err
+	}
+	if r.TurnID == "" {
+		return nil, nil
+	}
+	return &r, nil
+}
+
+func (t *Transport) turnComplete(runID string, b TurnCompleteRequest) error {
+	return t.do(nil, "POST", "/runner/runs/"+runID+"/turn-complete", b, nil, 35*time.Second)
+}

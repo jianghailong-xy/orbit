@@ -45,7 +45,7 @@ const DEVICE_POLL_INTERVAL_S = 3;
 const OFFLINE_AFTER_MS = 90_000;
 // Interactive sessions (Route B): per-run input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
-const INBOX_LEASE_MS = 60_000;
+const INBOX_LEASE_MS = 300_000;
 
 @Controller('runner')
 export class RunnerApiController {
@@ -425,10 +425,16 @@ export class RunnerApiController {
       throw new BadRequestException('completion status must be terminal');
     }
     const usage = dto.usage;
+    // If the user requested cancel/end, finalize as CANCELLED regardless of what
+    // the runner reports — the graceful-end 'end' turn often wins the race over the
+    // heartbeat cancel and would otherwise land the run SUCCEEDED.
+    const effectiveStatus: RunStatus = run.cancelRequestedAt
+      ? RunStatus.CANCELLED
+      : (dto.status as RunStatus);
     const taskStatus: TaskStatus =
-      dto.status === RunStatus.SUCCEEDED
+      effectiveStatus === RunStatus.SUCCEEDED
         ? TaskStatus.SUCCEEDED
-        : dto.status === RunStatus.CANCELLED
+        : effectiveStatus === RunStatus.CANCELLED
           ? TaskStatus.CANCELLED
           : TaskStatus.FAILED;
 
@@ -444,7 +450,7 @@ export class RunnerApiController {
           status: { in: [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
         },
         data: {
-          status: dto.status as RunStatus,
+          status: effectiveStatus,
           result: dto.result,
           subtype: dto.subtype,
           error: dto.error,
