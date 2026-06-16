@@ -85,6 +85,10 @@ type ClaimedJob struct {
 	Interactive bool   `json:"interactive"`
 	SessionUUID string `json:"sessionUuid"`
 	MaxSeq      int    `json:"maxSeq"`
+	// Reclaimed marks a session re-attached after a runner restart: the claude
+	// session already exists, so the first spawn must --resume, not --session-id.
+	// Runner-internal (never sent by the server).
+	Reclaimed bool `json:"-"`
 }
 
 // Interactive sessions (Route B) — wire DTOs mirroring @orbit/shared.
@@ -99,9 +103,12 @@ type RunInboxResponse struct {
 }
 
 type ReclaimRun struct {
-	RunID       string `json:"runId"`
-	SessionUUID string `json:"sessionUuid"`
-	MaxSeq      int    `json:"maxSeq"`
+	RunID       string          `json:"runId"`
+	TaskID      string          `json:"taskId"`
+	Title       string          `json:"title"`
+	SessionUUID string          `json:"sessionUuid"`
+	MaxSeq      int             `json:"maxSeq"`
+	Agent       AgentExecConfig `json:"agent"`
 }
 
 type ReclaimResponse struct {

@@ -13,12 +13,14 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
+  AgentExecConfig,
   ClaimedJob,
   ConversationTurnKind,
   DevicePollRequest,
   DevicePollResponse,
   DeviceStartRequest,
   DeviceStartResponse,
+  PermissionMode,
   ReclaimResponse,
   ReclaimRun,
   RunCompleteRequest,
@@ -242,14 +244,46 @@ export class RunnerApiController {
         interactive: true,
         status: { in: [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
       },
-      select: { id: true, claudeSessionId: true, task: { select: { sessionUuid: true } } },
+      select: {
+        id: true,
+        claudeSessionId: true,
+        task: {
+          select: { id: true, title: true, sessionUuid: true, model: true, permissionMode: true, agent: true },
+        },
+      },
     });
     const out: ReclaimRun[] = [];
     for (const r of runs) {
-      const sessionUuid = r.claudeSessionId ?? r.task?.sessionUuid;
-      if (!sessionUuid) continue;
+      const task = r.task;
+      const sessionUuid = r.claudeSessionId ?? task?.sessionUuid;
+      if (!task || !sessionUuid) continue;
       const agg = await this.prisma.runEvent.aggregate({ where: { runId: r.id }, _max: { seq: true } });
-      out.push({ runId: r.id, sessionUuid, maxSeq: agg._max.seq ?? 0 });
+      const agent = task.agent;
+      // Mirror QueueService.buildJob's agent assembly: per-session override wins
+      // over the agent, then a server default — so a resumed process keeps the
+      // model/permission-mode/tools the session was created with.
+      const agentCfg: AgentExecConfig = {
+        model: task.model ?? agent?.model ?? 'claude-sonnet-4-6',
+        appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
+        systemPrompt: agent?.systemPrompt ?? undefined,
+        allowedTools: (agent?.allowedTools as string[] | null) ?? [],
+        disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
+        permissionMode:
+          (task.permissionMode as PermissionMode) ??
+          (agent?.permissionMode as PermissionMode) ??
+          PermissionMode.DONT_ASK,
+        maxTurns: agent?.maxTurns ?? undefined,
+        maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
+        mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
+      };
+      out.push({
+        runId: r.id,
+        taskId: task.id,
+        title: task.title,
+        sessionUuid,
+        maxSeq: agg._max.seq ?? 0,
+        agent: agentCfg,
+      });
     }
     return { runs: out };
   }

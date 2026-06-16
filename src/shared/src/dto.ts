@@ -156,9 +156,14 @@ export interface RunInboxResponse {
 /** One interactive run a restarted runner can re-attach to and --resume. */
 export interface ReclaimRun {
   runId: string;
+  taskId: string;
+  title: string;
   sessionUuid: string;
   /** Highest persisted RunEvent.seq, so the runner continues the seq counter. */
   maxSeq: number;
+  /** How to re-drive `claude` — same shape a fresh claim hands the runner, so the
+   *  resumed process keeps the session's model/permission-mode/tools. */
+  agent: AgentExecConfig;
 }
 
 /** Control plane → runner response for GET /runner/runs/reclaim. */

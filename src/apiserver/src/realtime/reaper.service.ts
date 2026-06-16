@@ -8,6 +8,11 @@ import { RealtimeService } from './realtime.service';
 const REAP_INTERVAL_MS = 30_000;
 const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
 const IDLE_AFTER_MS = 30 * 60_000; // gracefully end a session idle this long
+// A cancel/end a live (online) runner hasn't honored within this window means the
+// run is wedged — e.g. the runner restarted and never re-attached (no reclaim), so
+// it can't see the inbox 'end' or the heartbeat cancel. Force-finalize it so the
+// leaked AWAITING_INPUT run can't hold a concurrency slot forever.
+const CANCEL_GRACE_MS = 2 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
@@ -59,6 +64,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const offline = !r.runner || r.runner.status === 'OFFLINE' || now - hb > OFFLINE_AFTER_MS;
         if (offline) {
           await this.forceFail(r.id, r.taskId, r.runnerId, 'runner offline');
+          continue;
+        }
+        // Online runner that hasn't honored a cancel/end in time: the run is wedged
+        // (e.g. a restarted runner that never re-attached). Force-finalize so the
+        // slot is freed; without this both branches below skip it forever.
+        const cancelAt = r.cancelRequestedAt?.getTime() ?? 0;
+        if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
+          await this.forceFail(r.id, r.taskId, r.runnerId, 'cancel not honored');
           continue;
         }
         const lastTurn = r.lastTurnAt?.getTime() ?? 0;

@@ -89,7 +89,9 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, e
 		if ctx.Err() != nil {
 			break
 		}
-		st, ended := runSessionProcess(ctx, t, job, execDir, scratch, emit, attempt == 0)
+		// A reclaimed session's claude session already exists, so even its first
+		// spawn must --resume (firstSpawn=false), not --session-id.
+		st, ended := runSessionProcess(ctx, t, job, execDir, scratch, emit, attempt == 0 && !job.Reclaimed)
 		if ended {
 			status = st
 			break

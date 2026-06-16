@@ -69,6 +69,48 @@ func runLoop(cfg *RunnerConfig) {
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
 
+	// startJob registers a job in `active` and drives it in its own goroutine,
+	// removing it on exit. Shared by fresh claims and reclaimed sessions.
+	startJob := func(job *ClaimedJob) {
+		jobCtx, cancel := context.WithCancel(context.Background())
+		mu.Lock()
+		active[job.RunID] = cancel
+		mu.Unlock()
+		go func(j *ClaimedJob) {
+			if j.Interactive {
+				runInteractiveSession(t, j, jobCtx, execDir)
+			} else {
+				executeAndReport(t, j, jobCtx, execDir)
+			}
+			mu.Lock()
+			delete(active, j.RunID)
+			mu.Unlock()
+		}(job)
+	}
+
+	// Re-attach to still-live interactive sessions from a previous process: without
+	// this a restart orphans them (they stay AWAITING_INPUT, leaking a concurrency
+	// slot and never seeing their inbox 'end'/cancel). Resume each before claiming
+	// new work so the slot accounting is correct from the first heartbeat.
+	if rec, err := t.reclaim(); err != nil {
+		logln("reclaim failed:", err)
+	} else {
+		for i := range rec.Runs {
+			r := rec.Runs[i]
+			logln(fmt.Sprintf("reclaiming interactive run %s — %s", r.RunID, r.Title))
+			startJob(&ClaimedJob{
+				RunID:       r.RunID,
+				TaskID:      r.TaskID,
+				Title:       r.Title,
+				Agent:       r.Agent,
+				Interactive: true,
+				Reclaimed:   true,
+				SessionUUID: r.SessionUUID,
+				MaxSeq:      r.MaxSeq,
+			})
+		}
+	}
+
 	for loopCtx.Err() == nil {
 		mu.Lock()
 		n := len(active)
@@ -89,20 +131,7 @@ func runLoop(cfg *RunnerConfig) {
 		if job == nil {
 			continue
 		}
-		jobCtx, cancel := context.WithCancel(context.Background())
-		mu.Lock()
-		active[job.RunID] = cancel
-		mu.Unlock()
-		go func(j *ClaimedJob) {
-			if j.Interactive {
-				runInteractiveSession(t, j, jobCtx, execDir)
-			} else {
-				executeAndReport(t, j, jobCtx, execDir)
-			}
-			mu.Lock()
-			delete(active, j.RunID)
-			mu.Unlock()
-		}(job)
+		startJob(job)
 	}
 
 	close(hbStop)
