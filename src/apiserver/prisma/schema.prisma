@@ -167,6 +167,9 @@ model Task {
   interactive      Boolean    @default(false)
   sessionUuid      String? // pre-generated Claude session id for --session-id/--resume
   activeRunId      String? // the current live TaskRun the UI subscribes to
+  // Per-session overrides; null falls back to the agent, then a server default.
+  model            String?
+  permissionMode   String?
 
   runs          TaskRun[]
   subscriptions TaskSubscription[]

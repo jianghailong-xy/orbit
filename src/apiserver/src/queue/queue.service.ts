@@ -132,12 +132,16 @@ export class QueueService {
       input: (task.input as Record<string, unknown>) ?? {},
       prompt: task.prompt,
       agent: {
-        model: agent?.model ?? 'claude-sonnet-4-6',
+        // Per-session override (interactive) wins over the agent, then a default.
+        model: task.model ?? agent?.model ?? 'claude-sonnet-4-6',
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
-        permissionMode: (agent?.permissionMode as PermissionMode) ?? PermissionMode.DONT_ASK,
+        permissionMode:
+          (task.permissionMode as PermissionMode) ??
+          (agent?.permissionMode as PermissionMode) ??
+          PermissionMode.DONT_ASK,
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,

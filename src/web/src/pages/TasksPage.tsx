@@ -121,8 +121,9 @@ export function TasksPage() {
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 
-  // A selected agent lives in its own URL (/agents/:id) so a refresh restores it.
-  const agentId = useMatch('/agents/:id')?.params.id ?? null;
+  // A selected agent lives in its own URL (/agents/:id, plus /sessions/:sessionId
+  // for a picked session) so a refresh restores it. The splat matches both.
+  const agentId = useMatch('/agents/:id/*')?.params.id ?? null;
   const selectedRunner = (runners.data ?? []).find((r: any) => r.id === agentId) ?? null;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });

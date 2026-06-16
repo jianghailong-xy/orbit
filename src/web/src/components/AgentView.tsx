@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Input, Segmented, Select, Tag, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMatch, useNavigate } from 'react-router-dom';
 import {
   api,
   createInteractiveSession,
@@ -27,6 +28,18 @@ interface RunEvent {
 
 const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
 const MODE_OPTIONS = ['Plan', 'Accept Edits', 'Default'];
+// UI label <-> claude --permission-mode. "Default" maps to dontAsk: a web session
+// has no TTY to answer permission prompts, so a prompting mode would hang the turn.
+const MODE_TO_PERMISSION: Record<string, string> = {
+  Plan: 'plan',
+  'Accept Edits': 'acceptEdits',
+  Default: 'dontAsk',
+};
+const PERMISSION_TO_MODE: Record<string, string> = {
+  plan: 'Plan',
+  acceptEdits: 'Accept Edits',
+  dontAsk: 'Default',
+};
 const MODEL_OPTIONS = [
   { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
   { value: 'claude-opus-4-8', label: 'claude-opus-4-8' },
@@ -48,9 +61,12 @@ function StatusIcon({ status }: { status: string }) {
 export function AgentView({ runner }: { runner: Runner }) {
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  // The picked session lives in the URL (/agents/:id/sessions/:sessionId) so it
+  // deep-links and survives a refresh; selecting a session = navigation.
+  const selectedId = useMatch('/agents/:id/sessions/:sessionId')?.params.sessionId ?? null;
   const [text, setText] = useState('');
-  const [mode, setMode] = useState('Plan');
+  const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [idle, setIdle] = useState(false); // run is AWAITING_INPUT (a new turn is accepted)
@@ -143,11 +159,16 @@ export function AgentView({ runner }: { runner: Runner }) {
         await sendTurn(selected.id, content);
         return selected.id;
       }
-      const created = await createInteractiveSession({ prompt: content, assignedRunnerId: runner.id });
+      const created = await createInteractiveSession({
+        prompt: content,
+        assignedRunnerId: runner.id,
+        model,
+        permissionMode: MODE_TO_PERMISSION[mode],
+      });
       return created.id;
     },
     onSuccess: (id) => {
-      setSelectedId(id);
+      navigate(`/agents/${runner.id}/sessions/${id}`);
       setText('');
       setIdle(false); // a turn is now starting
       qc.invalidateQueries({ queryKey: ['tasks'] });
@@ -171,6 +192,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   const loadingSession = !!selectedId && !selected;
   const canSend =
     !!text.trim() && !send.isPending && runner.online && !loadingSession && (live ? idle : true);
+  // While a LIVE session is selected the selectors are read-only and show that
+  // session's stored choice; otherwise (no selection, or an ended one whose next
+  // message starts a fresh session) they're editable and reflect the local state.
+  const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
+  const shownMode: string = live
+    ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
+    : mode;
 
   return (
     <div className="agent-view">
@@ -189,7 +217,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             size="small"
             icon={<PlusOutlined />}
             onClick={() => {
-              setSelectedId(null);
+              navigate(`/agents/${runner.id}`);
               setText('');
             }}
           >
@@ -217,7 +245,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               <div className="chat-note">No sessions yet — send a message below to start one.</div>
             )}
             {sessions.map((s) => (
-              <div className="session-row" key={s.id} onClick={() => setSelectedId(s.id)}>
+              <div className="session-row" key={s.id} onClick={() => navigate(`/agents/${runner.id}/sessions/${s.id}`)}>
                 <span className="session-icon">
                   <StatusIcon status={s.status} />
                 </span>
@@ -276,24 +304,24 @@ export function AgentView({ runner }: { runner: Runner }) {
             onClick={onSend}
           />
         </div>
-        <Tooltip title="Mode & Model are configured per agent, not per session (UI preview)">
+        <Tooltip title="Mode & Model are chosen per session before it starts, and stay fixed for the session's life.">
           <div className="composer-controls">
             <span className="composer-label">Mode</span>
             <Segmented
               size="small"
               options={MODE_OPTIONS}
-              value={mode}
+              value={shownMode}
               onChange={(v) => setMode(v as string)}
-              disabled={!!selectedId}
+              disabled={live}
             />
             <span className="composer-label">Model</span>
             <Select
               size="small"
-              value={model}
+              value={shownModel}
               onChange={setModel}
               options={MODEL_OPTIONS}
               style={{ minWidth: 180 }}
-              disabled={!!selectedId}
+              disabled={live}
             />
           </div>
         </Tooltip>

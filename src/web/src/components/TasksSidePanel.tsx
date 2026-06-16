@@ -69,7 +69,7 @@ export function TasksSidePanel({ onShowRegister, onShowTasks }: Props) {
     loc.pathname === '/' || loc.pathname === '/tasks'
       ? 'running'
       : loc.pathname.startsWith('/agents/')
-        ? loc.pathname.slice('/agents/'.length)
+        ? loc.pathname.slice('/agents/'.length).split('/')[0]
         : loc.pathname.startsWith('/lists/')
           ? loc.pathname.slice('/lists/'.length)
           : loc.pathname.slice(1);

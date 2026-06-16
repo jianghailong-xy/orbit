@@ -52,6 +52,7 @@ export function App() {
           <Route path="/schedule" element={<Shell><TasksPage /></Shell>} />
           <Route path="/activities" element={<Shell><TasksPage /></Shell>} />
           <Route path="/agents/:id" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/agents/:id/sessions/:sessionId" element={<Shell><TasksPage /></Shell>} />
           <Route path="/lists/:key" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks" element={<Shell><TasksPage /></Shell>} />
           <Route path="/tasks/:id" element={<Shell><TaskDetailPage /></Shell>} />

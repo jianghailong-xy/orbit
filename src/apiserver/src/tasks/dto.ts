@@ -27,6 +27,9 @@ export class CreateTaskDto {
   @IsOptional() @IsBoolean() enqueue?: boolean;
   /** Start a long-lived interactive session (Route B) instead of a one-shot run. */
   @IsOptional() @IsBoolean() interactive?: boolean;
+  /** Per-session overrides; null falls back to the agent, then a server default. */
+  @IsOptional() @IsString() model?: string;
+  @IsOptional() @IsString() permissionMode?: string;
 }
 
 /** Body of POST /tasks/:id/turns — a user message for a live interactive session. */

@@ -70,6 +70,8 @@ export class TasksService {
         assignedRunnerId: dto.assignedRunnerId,
         interactive,
         sessionUuid: interactive ? randomUUID() : undefined,
+        model: dto.model,
+        permissionMode: dto.permissionMode,
         startTime: toDate(dto.startTime),
         dueDate: toDate(dto.dueDate),
         scheduledAt: toDate(dto.scheduledAt),
