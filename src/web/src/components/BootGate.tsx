@@ -30,9 +30,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const [gated] = useState(() => !!getToken() && !BYPASS.includes(loc.pathname));
   const [booted, setBooted] = useState(() => !gated);
 
-  const tasks = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => api<unknown[]>('/tasks'),
+  const sessions = useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => api<unknown[]>('/sessions'),
     enabled: gated,
   });
   const runners = useQuery({
@@ -42,7 +42,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   });
 
   // Three milestones: the mounted app, then each settled critical query.
-  const settled = (tasks.isFetched ? 1 : 0) + (runners.isFetched ? 1 : 0);
+  const settled = (sessions.isFetched ? 1 : 0) + (runners.isFetched ? 1 : 0);
   const ready = settled === 2;
 
   // Push real progress to the splash as each milestone completes (33 → 67 → 100%).

@@ -47,7 +47,7 @@ type HeartbeatRequest struct {
 }
 
 type HeartbeatResponse struct {
-	CancelRunIDs []string `json:"cancelRunIds"`
+	CancelSessionIDs []string `json:"cancelSessionIds"`
 }
 
 type MeResponse struct {
@@ -73,18 +73,14 @@ type AgentExecConfig struct {
 	McpConfig          map[string]interface{} `json:"mcpConfig"`
 }
 
-type ClaimedJob struct {
-	RunID           string                 `json:"runId"`
-	TaskID          string                 `json:"taskId"`
-	Title           string                 `json:"title"`
-	Input           map[string]interface{} `json:"input"`
-	Prompt          string                 `json:"prompt"`
-	Agent           AgentExecConfig        `json:"agent"`
-	ResumeSessionID string                 `json:"resumeSessionId"`
-	// Interactive sessions (Route B)
-	Interactive bool   `json:"interactive"`
-	SessionUUID string `json:"sessionUuid"`
-	MaxSeq      int    `json:"maxSeq"`
+// ClaimedSession is one interactive session a runner has claimed (or reclaimed).
+type ClaimedSession struct {
+	SessionID   string          `json:"sessionId"`
+	Title       string          `json:"title"`
+	Prompt      string          `json:"prompt"`
+	Agent       AgentExecConfig `json:"agent"`
+	SessionUUID string          `json:"sessionUuid"`
+	MaxSeq      int             `json:"maxSeq"`
 	// Reclaimed marks a session re-attached after a runner restart: the claude
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
@@ -102,9 +98,8 @@ type RunInboxResponse struct {
 	Content string `json:"content,omitempty"`
 }
 
-type ReclaimRun struct {
-	RunID       string          `json:"runId"`
-	TaskID      string          `json:"taskId"`
+type ReclaimSession struct {
+	SessionID   string          `json:"sessionId"`
 	Title       string          `json:"title"`
 	SessionUUID string          `json:"sessionUuid"`
 	MaxSeq      int             `json:"maxSeq"`
@@ -112,7 +107,7 @@ type ReclaimRun struct {
 }
 
 type ReclaimResponse struct {
-	Runs []ReclaimRun `json:"runs"`
+	Sessions []ReclaimSession `json:"sessions"`
 }
 
 type TurnCompleteRequest struct {

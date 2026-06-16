@@ -10,21 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum TaskStatus {
-  DRAFT
-  QUEUED
-  RUNNING
-  SUCCEEDED
-  FAILED
-  CANCELLED
-}
-
-enum TaskSource {
-  AGENT
-  MANUAL
-  EXTERNAL
-}
-
 enum RunStatus {
   PENDING
   RUNNING
@@ -52,9 +37,8 @@ model User {
   agents           Agent[]
   runners          Runner[]
   enrollmentTokens EnrollmentToken[]
-  createdTasks     Task[]              @relation("TaskCreator")
-  ownedTasks       Task[]              @relation("TaskOwner")
-  subscriptions    TaskSubscription[]
+  ownedSessions    Session[]         @relation("SessionOwner")
+  createdSessions  Session[]         @relation("SessionCreator")
 }
 
 // A machine the user registered via `orbit register`. Claude Code runs here.
@@ -75,8 +59,7 @@ model Runner {
   lastHeartbeatAt DateTime?
   enrolledAt      DateTime     @default(now())
 
-  tasks Task[]
-  runs  TaskRun[]
+  sessions Session[]
 
   @@index([ownerId])
 }
@@ -114,7 +97,7 @@ model DeviceEnrollment {
   createdAt      DateTime  @default(now())
 }
 
-// An agent definition: how to drive Claude Code for a class of tasks.
+// An agent definition: how to drive Claude Code for a class of sessions.
 model Agent {
   id                 String   @id @default(uuid())
   name               String
@@ -136,110 +119,78 @@ model Agent {
   owner              User     @relation(fields: [ownerId], references: [id])
   createdAt          DateTime @default(now())
 
-  tasks Task[]
-  runs  TaskRun[]
+  sessions Session[]
 
   @@index([ownerId])
 }
 
-// A task — also the queue row. `status = QUEUED` rows are claimable by runners.
-model Task {
-  id               String     @id @default(uuid())
+// A first-class interactive chat session (Route B): a long-lived conversation
+// driven by one claude process on a runner. Chat events, user-input turns, tool
+// calls, and llm usage hang directly off the Session.
+model Session {
+  id               String  @id @default(uuid())
   title            String
-  input            Json       @default("{}")
-  prompt           String // instruction handed to Claude Code
-  source           TaskSource @default(MANUAL)
-  type             String?
-  status           TaskStatus @default(DRAFT)
-  priority         Int        @default(0)
-  agentId          String?
-  agent            Agent?     @relation(fields: [agentId], references: [id])
-  assignedRunnerId String?
-  assignedRunner   Runner?    @relation(fields: [assignedRunnerId], references: [id])
-  creatorId        String
-  creator          User       @relation("TaskCreator", fields: [creatorId], references: [id])
+  prompt           String // first-turn seed
   ownerId          String
-  owner            User       @relation("TaskOwner", fields: [ownerId], references: [id])
-  estimates        String?
-  startTime        DateTime?
-  dueDate          DateTime?
-  scheduledAt      DateTime?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  // Interactive session (Route B): a long-lived conversation backed by one run.
-  interactive      Boolean    @default(false)
-  sessionUuid      String? // pre-generated Claude session id for --session-id/--resume
-  activeRunId      String? // the current live TaskRun the UI subscribes to
-  // Per-session overrides; null falls back to the agent, then a server default.
-  model            String?
+  owner            User    @relation("SessionOwner", fields: [ownerId], references: [id])
+  creatorId        String
+  creator          User    @relation("SessionCreator", fields: [creatorId], references: [id])
+  assignedRunnerId String?
+  assignedRunner   Runner? @relation(fields: [assignedRunnerId], references: [id])
+  agentId          String?
+  agent            Agent?  @relation(fields: [agentId], references: [id])
+  // Pre-generated Claude session id: --session-id on first spawn, --resume on
+  // reclaim/respawn.
+  claudeSessionId  String?
+  model            String? // per-session override; null -> agent -> server default
   permissionMode   String?
-
-  runs          TaskRun[]
-  subscriptions TaskSubscription[]
-
-  @@index([status, priority, scheduledAt, createdAt])
-  @@index([assignedRunnerId])
-  @@index([ownerId])
-  @@index([source])
-}
-
-// One execution attempt of a task on a runner.
-model TaskRun {
-  id              String    @id @default(uuid())
-  taskId          String
-  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  runnerId        String?
-  runner          Runner?   @relation(fields: [runnerId], references: [id])
-  agentId         String?
-  agent           Agent?    @relation(fields: [agentId], references: [id])
-  status          RunStatus @default(PENDING)
-  claudeSessionId String?
-  startedAt       DateTime?
-  finishedAt      DateTime?
-  error           String?
-  result          String?
-  subtype         String?
-  sumInputTokens  Int       @default(0)
-  sumOutputTokens Int       @default(0)
-  sumCacheRead    Int       @default(0)
-  sumCacheWrite   Int       @default(0)
-  numTurns        Int       @default(0)
-  costUsd         Float     @default(0)
-  createdAt       DateTime  @default(now())
-  // Interactive session (Route B)
-  interactive       Boolean   @default(false)
+  // PENDING = created, claimable by its assigned runner.
+  status            RunStatus @default(PENDING)
+  // billing, accrued per turn
+  sumInputTokens    Int       @default(0)
+  sumOutputTokens   Int       @default(0)
+  sumCacheRead      Int       @default(0)
+  sumCacheWrite     Int       @default(0)
+  numTurns          Int       @default(0)
+  costUsd           Float     @default(0)
   lastTurnAt        DateTime?
-  idleDeadlineAt    DateTime?
   cancelRequestedAt DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  error             String?
+  result            String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  events            RunEvent[]
-  toolCalls         ToolCall[]
-  llmUsage          LlmUsage[]
-  conversationTurns ConversationTurn[]
+  events    RunEvent[]
+  turns     ConversationTurn[]
+  toolCalls ToolCall[]
+  llmUsage  LlmUsage[]
 
-  @@index([taskId])
-  @@index([runnerId, status])
+  @@index([assignedRunnerId, status])
+  @@index([ownerId])
+  @@index([status])
 }
 
-// Normalized streamed events for a run (replay + live SSE).
+// Normalized streamed events for a session (replay + live SSE).
 model RunEvent {
   id        String   @id @default(uuid())
-  runId     String
-  run       TaskRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   seq       Int
   type      String
   payload   Json
   createdAt DateTime @default(now())
 
-  @@unique([runId, seq])
-  @@index([runId, seq])
+  @@unique([sessionId, seq])
+  @@index([sessionId, seq])
 }
 
-// Audit of every tool the agent invoked during a run.
+// Audit of every tool the agent invoked during a session.
 model ToolCall {
   id         String    @id @default(uuid())
-  runId      String
-  run        TaskRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sessionId  String
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   name       String
   input      Json?
   output     Json?
@@ -247,14 +198,14 @@ model ToolCall {
   startedAt  DateTime?
   finishedAt DateTime?
 
-  @@index([runId])
+  @@index([sessionId])
 }
 
 // Per-model token/cost detail for billing rollups.
 model LlmUsage {
   id                       String   @id @default(uuid())
-  runId                    String
-  run                      TaskRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sessionId                String
+  session                  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   model                    String
   inputTokens              Int      @default(0)
   outputTokens             Int      @default(0)
@@ -263,17 +214,17 @@ model LlmUsage {
   costUsd                  Float    @default(0)
   createdAt                DateTime @default(now())
 
-  @@index([runId])
+  @@index([sessionId])
 }
 
 // Durable, server-owned queue of user inputs for an interactive session (Route B).
-// The runner long-polls these via GET /runner/runs/:id/inbox; delivery is
-// at-least-once with a lease + idempotency on (runId, clientTurnId).
+// The runner long-polls these via GET /runner/sessions/:id/inbox; delivery is
+// at-least-once with a lease + idempotency on (sessionId, clientTurnId).
 model ConversationTurn {
   id              String    @id @default(uuid())
-  runId           String
-  run             TaskRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
-  seq             Int // server-assigned, per-run delivery ordering
+  sessionId       String
+  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  seq             Int // server-assigned, per-session delivery ordering
   clientTurnId    String // client-supplied idempotency key
   kind            String    @default("message") // message | interrupt | end
   content         String? // user message text (null for interrupt/end)
@@ -283,29 +234,16 @@ model ConversationTurn {
   answeredAt      DateTime?
   createdAt       DateTime  @default(now())
 
-  @@unique([runId, clientTurnId])
-  @@unique([runId, seq])
-  @@index([runId, status])
-}
-
-model TaskSubscription {
-  userId    String
-  taskId    String
-  user      User     @relation(fields: [userId], references: [id])
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@id([userId, taskId])
+  @@unique([sessionId, clientTurnId])
+  @@unique([sessionId, seq])
+  @@index([sessionId, status])
 }
 
 // Lightweight activity feed (no FKs, append-only).
 model Activity {
   id        String   @id @default(uuid())
   actorId   String?
-  taskId    String?
   type      String
   payload   Json?
   createdAt DateTime @default(now())
-
-  @@index([taskId])
 }

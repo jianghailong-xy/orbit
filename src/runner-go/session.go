@@ -28,8 +28,8 @@ func nextReqID() string {
 // session (Route B): it pulls user turns from the per-run inbox, feeds them over
 // stdin as stream-json, streams events back, acks each turn via /turn-complete,
 // and respawns with --resume on an unexpected crash. It finalizes the run on exit.
-func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, execDir string) {
-	scratch := filepath.Join(runsDir(), job.RunID)
+func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, execDir string) {
+	scratch := filepath.Join(runsDir(), job.SessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 
 	// Session-scoped, monotonic event seq that survives respawn. Continues from the
@@ -48,8 +48,8 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, e
 		events := buf
 		buf = nil
 		bufMu.Unlock()
-		if err := t.postEvents(job.RunID, RunEventBatch{Events: events}); err != nil {
-			logln("event flush failed for", job.RunID+":", err)
+		if err := t.postEvents(job.SessionID, RunEventBatch{Events: events}); err != nil {
+			logln("event flush failed for", job.SessionID+":", err)
 		}
 	}
 	emit := func(eventType string, payload map[string]interface{}) {
@@ -83,7 +83,7 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, e
 		}
 	}()
 
-	logln(fmt.Sprintf("> interactive run %s — %s", job.RunID, job.Title))
+	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
 	for attempt := 0; attempt <= maxRespawns; attempt++ {
 		if ctx.Err() != nil {
@@ -98,7 +98,7 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, e
 		}
 		if attempt < maxRespawns {
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "attempt": attempt + 1})
-			logln(fmt.Sprintf("interactive run %s — claude exited unexpectedly; resuming (attempt %d)", job.RunID, attempt+1))
+			logln(fmt.Sprintf("interactive run %s — claude exited unexpectedly; resuming (attempt %d)", job.SessionID, attempt+1))
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 		} else {
 			status = stFailed
@@ -112,17 +112,17 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, e
 	flushWg.Wait()
 	flush()
 
-	if err := t.complete(job.RunID, CompleteRequest{Status: status}); err != nil {
-		logln("complete failed for", job.RunID+":", err)
+	if err := t.complete(job.SessionID, CompleteRequest{Status: status}); err != nil {
+		logln("complete failed for", job.SessionID+":", err)
 	} else {
-		logln(fmt.Sprintf("■ interactive run %s → %s", job.RunID, status))
+		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
 	}
 }
 
 // runSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
 // ended=false means an unexpected crash that the caller should --resume.
-func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execDir, scratchDir string, emit emitFn, firstSpawn bool) (string, bool) {
+func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, firstSpawn bool) (string, bool) {
 	a := job.Agent
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
@@ -200,12 +200,12 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execD
 	go func() {
 		defer close(pollDone)
 		for procCtx.Err() == nil {
-			resp, err := t.inbox(procCtx, job.RunID)
+			resp, err := t.inbox(procCtx, job.SessionID)
 			if err != nil {
 				if procCtx.Err() != nil {
 					return
 				}
-				logln("inbox poll failed for", job.RunID+":", err)
+				logln("inbox poll failed for", job.SessionID+":", err)
 				time.Sleep(time.Second)
 				continue
 			}
@@ -239,7 +239,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execD
 					},
 				})
 				if err := writeStdin(string(line) + "\n"); err != nil {
-					logln("stdin write failed for", job.RunID+":", err)
+					logln("stdin write failed for", job.SessionID+":", err)
 					return
 				}
 			case "interrupt":
@@ -290,7 +290,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execD
 			default:
 			}
 			if turnID != "" {
-				if err := t.turnComplete(job.RunID, TurnCompleteRequest{
+				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 					TurnID:     turnID,
 					Status:     turnStatus,
 					Result:     r.Result,
@@ -300,7 +300,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execD
 					Usage:      r.Usage,
 					ModelUsage: r.ModelUsage,
 				}); err != nil {
-					logln("turn-complete failed for", job.RunID+":", err)
+					logln("turn-complete failed for", job.SessionID+":", err)
 				}
 				inflightMu.Lock()
 				delete(inflight, turnID)

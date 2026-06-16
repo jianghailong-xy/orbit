@@ -1,9 +1,12 @@
 import {
+  Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   MessageEvent,
   Param,
+  Post,
   Query,
   Sse,
   UseGuards,
@@ -14,31 +17,54 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { CreateSessionDto, SessionTurnDto } from './dto';
+import { SessionsService } from './sessions.service';
 
 @UseGuards(JwtAuthGuard)
-@Controller('runs')
-export class RunsController {
+@Controller('sessions')
+export class SessionsController {
   constructor(
+    private readonly sessions: SessionsService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
   ) {}
 
-  @Get(':id')
-  async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    const run = await this.prisma.taskRun.findFirst({
-      where: { id, task: { ownerId: user.userId } },
-      include: {
-        toolCalls: { orderBy: { startedAt: 'asc' } },
-        llmUsage: true,
-        task: { select: { id: true, title: true } },
-        runner: { select: { id: true, name: true } },
-      },
-    });
-    if (!run) throw new ForbiddenException('run not found');
-    return run;
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateSessionDto) {
+    return this.sessions.create(user.userId, dto);
   }
 
-  /** Replays historical run events, then streams live ones over SSE. */
+  @Get()
+  list(@CurrentUser() user: AuthUser, @Query('runnerId') runnerId?: string) {
+    return this.sessions.list(user.userId, { runnerId });
+  }
+
+  @Get(':id')
+  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.sessions.get(user.userId, id);
+  }
+
+  @Post(':id/turns')
+  turn(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: SessionTurnDto) {
+    return this.sessions.createTurn(user.userId, id, dto);
+  }
+
+  @Post(':id/interrupt')
+  interrupt(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.sessions.interrupt(user.userId, id);
+  }
+
+  @Post(':id/end')
+  end(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.sessions.end(user.userId, id);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.sessions.remove(user.userId, id);
+  }
+
+  /** Replays a session's persisted events, then streams live ones over SSE. */
   @AllowQueryToken()
   @Sse(':id/events')
   events(
@@ -47,23 +73,22 @@ export class RunsController {
     @Query('sinceSeq') sinceSeq?: string,
   ): Observable<MessageEvent> {
     // On reconnect, replay only events after sinceSeq (the client also dedups by
-    // seq, but this avoids re-sending a long interactive transcript every time).
+    // seq, but this avoids re-sending a long transcript every time).
     const since = Number(sinceSeq);
     const seqFilter = Number.isFinite(since) && since > 0 ? { gt: since } : undefined;
     // Gate the stream on ownership BEFORE any event is read or the live hub is
-    // subscribed, so a non-owner can never see another user's transcript
-    // (assistant text, tool inputs, shell output, secrets surfaced by tools).
+    // subscribed, so a non-owner can never see another user's transcript.
     return from(
-      this.prisma.taskRun.findFirst({
-        where: { id, task: { ownerId: user.userId } },
+      this.prisma.session.findFirst({
+        where: { id, ownerId: user.userId },
         select: { id: true },
       }),
     ).pipe(
-      switchMap((run) => {
-        if (!run) return throwError(() => new ForbiddenException('run not found'));
+      switchMap((session) => {
+        if (!session) return throwError(() => new ForbiddenException('session not found'));
         const history$ = from(
           this.prisma.runEvent.findMany({
-            where: { runId: id, ...(seqFilter ? { seq: seqFilter } : {}) },
+            where: { sessionId: id, ...(seqFilter ? { seq: seqFilter } : {}) },
             orderBy: { seq: 'asc' },
           }),
         ).pipe(concatMap((rows) => from(rows)));

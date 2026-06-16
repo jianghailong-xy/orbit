@@ -2,7 +2,7 @@ import { PermissionMode, RunnerStatus, RunStatus } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 
 /**
- * Everything a runner needs to drive Claude Code for one task. Mirrors the
+ * Everything a runner needs to drive Claude Code for one session. Mirrors the
  * relevant `@anthropic-ai/claude-agent-sdk` `query()` options.
  */
 export interface AgentExecConfig {
@@ -80,61 +80,39 @@ export interface RunnerMeResponse {
 
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
-  /** How many more concurrent jobs the runner can accept right now. */
+  /** How many more concurrent sessions the runner can accept right now. */
   idleCapacity: number;
   version?: string;
 }
 
 export interface RunnerHeartbeatResponse {
-  /** Run IDs the control plane wants the runner to interrupt. */
-  cancelRunIds: string[];
+  /** Session IDs the control plane wants the runner to interrupt / end. */
+  cancelSessionIds: string[];
 }
 
-/** A task atomically claimed by a runner via long-poll. */
-export interface ClaimedJob {
-  runId: string;
-  taskId: string;
+// ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
+
+/** An interactive session atomically claimed by its assigned runner via long-poll. */
+export interface ClaimedSession {
+  sessionId: string;
   title: string;
-  input: Record<string, unknown>;
+  /** First-turn seed (the prompt the session was created with). */
   prompt: string;
   agent: AgentExecConfig;
-  /** Resume an earlier Claude Code session for multi-turn tasks. */
-  resumeSessionId?: string;
-  // ── Interactive sessions (Route B) ──
-  /** When true the runner keeps a long-lived `claude` process and pulls turns
-   *  from GET /runner/runs/:id/inbox instead of running one-shot. */
-  interactive?: boolean;
   /** Pre-generated Claude session id to pass via --session-id (and --resume on respawn). */
-  sessionUuid?: string;
+  sessionUuid: string;
   /** Highest RunEvent.seq already persisted, so a respawned runner continues the
    *  monotonic counter instead of colliding (events use skipDuplicates). */
-  maxSeq?: number;
+  maxSeq: number;
 }
 
 export interface RunEventBatch {
   events: NormalizedRunEvent[];
 }
 
-export interface RunCompleteRequest {
-  status: RunStatus;
-  /** Claude Code `result` text. */
-  result?: string;
-  /** Claude Code result `subtype` (success | error_max_turns | error_max_budget_usd | ...). */
-  subtype?: string;
-  error?: string;
-  claudeSessionId?: string;
-  numTurns?: number;
-  durationMs?: number;
-  costUsd?: number;
-  usage?: TokenUsage;
-  modelUsage?: Record<string, ModelUsage>;
-}
-
-// ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
-
 export type ConversationTurnKind = 'message' | 'interrupt' | 'end';
 
-/** Browser → control plane: enqueue a user turn for a live interactive run. */
+/** Browser → control plane: enqueue a user turn for a live interactive session. */
 export interface RunTurnRequest {
   /** Client-supplied idempotency key (UUID); dedups double-clicks / cross-tab sends. */
   clientTurnId: string;
@@ -143,8 +121,8 @@ export interface RunTurnRequest {
 
 /**
  * Control plane → runner: the next turn to feed the live `claude` process, returned
- * by the per-run inbox long-poll. `turnId === ''` means "nothing available" (mirrors
- * the empty-runId convention of the jobs claim poll).
+ * by the per-session inbox long-poll. `turnId === ''` means "nothing available"
+ * (mirrors the empty-id convention of the session claim poll).
  */
 export interface RunInboxResponse {
   turnId: string;
@@ -153,10 +131,9 @@ export interface RunInboxResponse {
   content?: string;
 }
 
-/** One interactive run a restarted runner can re-attach to and --resume. */
-export interface ReclaimRun {
-  runId: string;
-  taskId: string;
+/** One interactive session a restarted runner can re-attach to and --resume. */
+export interface ReclaimSession {
+  sessionId: string;
   title: string;
   sessionUuid: string;
   /** Highest persisted RunEvent.seq, so the runner continues the seq counter. */
@@ -166,9 +143,9 @@ export interface ReclaimRun {
   agent: AgentExecConfig;
 }
 
-/** Control plane → runner response for GET /runner/runs/reclaim. */
+/** Control plane → runner response for GET /runner/sessions/reclaim. */
 export interface ReclaimResponse {
-  runs: ReclaimRun[];
+  sessions: ReclaimSession[];
 }
 
 /**
@@ -182,6 +159,25 @@ export interface TurnCompleteRequest {
   result?: string;
   subtype?: string;
   numTurns?: number;
+  costUsd?: number;
+  usage?: TokenUsage;
+  modelUsage?: Record<string, ModelUsage>;
+}
+
+/**
+ * Runner → control plane: finalize the whole session to a terminal status,
+ * distinct from per-turn /turn-complete.
+ */
+export interface SessionCompleteRequest {
+  status: RunStatus;
+  /** Claude Code `result` text. */
+  result?: string;
+  /** Claude Code result `subtype`. */
+  subtype?: string;
+  error?: string;
+  claudeSessionId?: string;
+  numTurns?: number;
+  durationMs?: number;
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;

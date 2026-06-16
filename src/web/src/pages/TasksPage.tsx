@@ -50,6 +50,15 @@ const matchesFilter = (status: string, f: string): boolean => {
 
 const cap = (s: string): string => s.charAt(0) + s.slice(1).toLowerCase();
 
+// Task is not implemented yet — the list is mock data so the screen still renders.
+// (Interactive Agent sessions are the real, live feature; see AgentView.)
+const MOCK_TASKS = [
+  { id: 'mock-agent-001', source: 'AGENT', status: 'RUNNING', title: 'Migrate build engine to tea-cli', estimates: '3d', startTime: null, dueDate: null, createdAt: '2026-06-16T01:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-agent-002', source: 'AGENT', status: 'SUCCEEDED', title: 'Dorado 项目152 psm 改为 data.tea.build_compliance', estimates: '1d', startTime: null, dueDate: null, createdAt: '2026-06-15T08:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-manual-001', source: 'MANUAL', status: 'QUEUED', title: 'importer not-ready sg 2026-06-13', estimates: null, startTime: null, dueDate: null, createdAt: '2026-06-14T03:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-ext-001', source: 'EXTERNAL', status: 'FAILED', title: 'External webhook backfill', estimates: null, startTime: null, dueDate: null, createdAt: '2026-06-12T10:00:00.000Z', creator: { name: 'system' } },
+];
+
 // Top-nav sections share this view; only the heading differs (default: Running).
 const SECTION_TITLES: Record<string, string> = {
   '/skills': 'Skills',
@@ -117,7 +126,7 @@ export function TasksPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
-  const tasks = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
+  const tasks = useQuery({ queryKey: ['tasks-mock'], queryFn: async () => MOCK_TASKS });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 

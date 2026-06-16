@@ -1,13 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -26,85 +20,6 @@ type ExecResult struct {
 }
 
 type emitFn func(eventType string, payload map[string]interface{})
-
-// executeJob drives `claude -p --output-format stream-json` for one job and
-// normalizes its message stream into run events. The compiled runner only uses
-// this CLI path (no in-process Agent SDK).
-func executeJob(ctx context.Context, job *ClaimedJob, emit emitFn, execDir, scratchDir string) ExecResult {
-	a := job.Agent
-	args := []string{
-		"-p", job.Prompt,
-		"--output-format", "stream-json",
-		"--verbose",
-		"--model", a.Model,
-		"--permission-mode", a.PermissionMode,
-	}
-	if len(a.AllowedTools) > 0 {
-		args = append(args, "--allowedTools", strings.Join(a.AllowedTools, ","))
-	}
-	if len(a.DisallowedTools) > 0 {
-		args = append(args, "--disallowedTools", strings.Join(a.DisallowedTools, ","))
-	}
-	if a.MaxTurns != nil {
-		args = append(args, "--max-turns", strconv.Itoa(*a.MaxTurns))
-	}
-	if a.MaxBudgetUsd != nil {
-		args = append(args, "--max-budget-usd", strconv.FormatFloat(*a.MaxBudgetUsd, 'f', -1, 64))
-	}
-	if job.ResumeSessionID != "" {
-		args = append(args, "--resume", job.ResumeSessionID)
-	}
-	if a.McpConfig != nil {
-		mcpPath := filepath.Join(scratchDir, "mcp.json")
-		b, _ := json.Marshal(map[string]interface{}{"mcpServers": a.McpConfig})
-		_ = os.WriteFile(mcpPath, b, 0o644)
-		args = append(args, "--mcp-config", mcpPath)
-	}
-
-	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = execDir
-	cmd.Env = os.Environ()
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	if err := cmd.Start(); err != nil {
-		msg := "failed to spawn claude: " + err.Error()
-		emit(evError, map[string]interface{}{"message": msg})
-		return ExecResult{Status: stFailed, ErrorMsg: msg}
-	}
-
-	go func() {
-		s := bufio.NewScanner(stderr)
-		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-		for s.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": s.Text() + "\n"})
-		}
-	}()
-
-	final := ExecResult{Status: stFailed, ErrorMsg: "claude produced no result"}
-	sc := bufio.NewScanner(stdout)
-	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
-		}
-		var msg map[string]interface{}
-		if json.Unmarshal([]byte(line), &msg) != nil {
-			continue
-		}
-		handleMessage(msg, emit)
-		if msg["type"] == "result" {
-			final = resultFrom(msg, ctx)
-		}
-	}
-	_ = cmd.Wait()
-
-	if ctx.Err() != nil {
-		final.Status = stCancelled
-	}
-	return final
-}
 
 func handleMessage(msg map[string]interface{}, emit emitFn) {
 	switch msg["type"] {

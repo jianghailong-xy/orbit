@@ -117,7 +117,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       } else if (typeof m.s === 'number') {
         // Oversized event was sent as a signal — fetch it from the durable log.
         this.prisma.runEvent
-          .findUnique({ where: { runId_seq: { runId: m.r, seq: m.s } } })
+          .findUnique({ where: { sessionId_seq: { sessionId: m.r, seq: m.s } } })
           .then((row) => {
             if (row) {
               this.hub.next({
@@ -211,14 +211,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const now = Date.now();
     const recentlyRequested = new Date(now - CANCEL_MAX_AGE_MS);
     const recentlyFinished = new Date(now - 5 * 60_000);
-    const runs = await this.prisma.taskRun.findMany({
+    const sessions = await this.prisma.session.findMany({
       where: {
-        runnerId,
+        assignedRunnerId: runnerId,
         cancelRequestedAt: { gt: recentlyRequested },
         OR: [{ finishedAt: null }, { finishedAt: { gt: recentlyFinished } }],
       },
       select: { id: true },
     });
-    return runs.map((r) => r.id);
+    return sessions.map((s) => s.id);
   }
 }

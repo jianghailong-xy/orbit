@@ -1,24 +1,7 @@
 // Enum values are kept in sync (by string) with the Prisma schema enums in
 // src/apiserver/prisma/schema.prisma. Changing a value here means updating both.
 
-/** Lifecycle of a task in the queue. */
-export enum TaskStatus {
-  DRAFT = 'DRAFT',
-  QUEUED = 'QUEUED',
-  RUNNING = 'RUNNING',
-  SUCCEEDED = 'SUCCEEDED',
-  FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
-}
-
-/** Where a task originated — drives the screenshot's grouping. */
-export enum TaskSource {
-  AGENT = 'AGENT',
-  MANUAL = 'MANUAL',
-  EXTERNAL = 'EXTERNAL',
-}
-
-/** Lifecycle of a single execution attempt of a task. */
+/** Lifecycle of an interactive session (and its run on a runner). */
 export enum RunStatus {
   PENDING = 'PENDING',
   RUNNING = 'RUNNING',

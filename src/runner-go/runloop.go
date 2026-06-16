@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -58,7 +57,7 @@ func runLoop(cfg *RunnerConfig) {
 					logln("heartbeat failed:", err)
 					continue
 				}
-				for _, id := range resp.CancelRunIDs {
+				for _, id := range resp.CancelSessionIDs {
 					if c, ok := cancels[id]; ok {
 						c()
 					}
@@ -69,21 +68,17 @@ func runLoop(cfg *RunnerConfig) {
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
 
-	// startJob registers a job in `active` and drives it in its own goroutine,
-	// removing it on exit. Shared by fresh claims and reclaimed sessions.
-	startJob := func(job *ClaimedJob) {
+	// startSession registers a session in `active` and drives it in its own
+	// goroutine, removing it on exit. Shared by fresh claims and reclaimed sessions.
+	startSession := func(job *ClaimedSession) {
 		jobCtx, cancel := context.WithCancel(context.Background())
 		mu.Lock()
-		active[job.RunID] = cancel
+		active[job.SessionID] = cancel
 		mu.Unlock()
-		go func(j *ClaimedJob) {
-			if j.Interactive {
-				runInteractiveSession(t, j, jobCtx, execDir)
-			} else {
-				executeAndReport(t, j, jobCtx, execDir)
-			}
+		go func(j *ClaimedSession) {
+			runInteractiveSession(t, j, jobCtx, execDir)
 			mu.Lock()
-			delete(active, j.RunID)
+			delete(active, j.SessionID)
 			mu.Unlock()
 		}(job)
 	}
@@ -95,15 +90,13 @@ func runLoop(cfg *RunnerConfig) {
 	if rec, err := t.reclaim(); err != nil {
 		logln("reclaim failed:", err)
 	} else {
-		for i := range rec.Runs {
-			r := rec.Runs[i]
-			logln(fmt.Sprintf("reclaiming interactive run %s — %s", r.RunID, r.Title))
-			startJob(&ClaimedJob{
-				RunID:       r.RunID,
-				TaskID:      r.TaskID,
+		for i := range rec.Sessions {
+			r := rec.Sessions[i]
+			logln(fmt.Sprintf("reclaiming session %s — %s", r.SessionID, r.Title))
+			startSession(&ClaimedSession{
+				SessionID:   r.SessionID,
 				Title:       r.Title,
 				Agent:       r.Agent,
-				Interactive: true,
 				Reclaimed:   true,
 				SessionUUID: r.SessionUUID,
 				MaxSeq:      r.MaxSeq,
@@ -119,7 +112,7 @@ func runLoop(cfg *RunnerConfig) {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		job, err := t.claimJob(loopCtx)
+		job, err := t.claimSession(loopCtx)
 		if err != nil {
 			if loopCtx.Err() != nil {
 				break
@@ -131,7 +124,7 @@ func runLoop(cfg *RunnerConfig) {
 		if job == nil {
 			continue
 		}
-		startJob(job)
+		startSession(job)
 	}
 
 	close(hbStop)
@@ -144,76 +137,6 @@ func runLoop(cfg *RunnerConfig) {
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
-	}
-}
-
-func executeAndReport(t *Transport, job *ClaimedJob, ctx context.Context, execDir string) {
-	var bufMu sync.Mutex
-	var buf []RunEvent
-	seq := 0
-
-	flush := func() {
-		bufMu.Lock()
-		if len(buf) == 0 {
-			bufMu.Unlock()
-			return
-		}
-		events := buf
-		buf = nil
-		bufMu.Unlock()
-		if err := t.postEvents(job.RunID, RunEventBatch{Events: events}); err != nil {
-			logln("event flush failed for", job.RunID+":", err)
-		}
-	}
-	emit := func(eventType string, payload map[string]interface{}) {
-		bufMu.Lock()
-		buf = append(buf, RunEvent{Seq: seq, Type: eventType, TS: nowISO(), Payload: payload})
-		seq++
-		full := len(buf) >= 25
-		bufMu.Unlock()
-		if full {
-			flush()
-		}
-	}
-
-	stopFlush := make(chan struct{})
-	go func() {
-		tk := time.NewTicker(120 * time.Millisecond)
-		defer tk.Stop()
-		for {
-			select {
-			case <-stopFlush:
-				return
-			case <-tk.C:
-				flush()
-			}
-		}
-	}()
-
-	logln(fmt.Sprintf("> run %s — %s", job.RunID, job.Title))
-	scratch := filepath.Join(runsDir(), job.RunID)
-	_ = os.MkdirAll(scratch, 0o755)
-	res := executeJob(ctx, job, emit, execDir, scratch)
-
-	close(stopFlush)
-	flush()
-
-	err := t.complete(job.RunID, CompleteRequest{
-		Status:          res.Status,
-		Result:          res.Result,
-		Subtype:         res.Subtype,
-		Error:           res.ErrorMsg,
-		ClaudeSessionID: res.ClaudeSessionID,
-		NumTurns:        res.NumTurns,
-		DurationMs:      res.DurationMs,
-		CostUsd:         res.CostUsd,
-		Usage:           res.Usage,
-		ModelUsage:      res.ModelUsage,
-	})
-	if err != nil {
-		logln("complete failed for", job.RunID+":", err)
-	} else {
-		logln(fmt.Sprintf("■ run %s → %s ($%.4f)", job.RunID, res.Status, res.CostUsd))
 	}
 }
 
