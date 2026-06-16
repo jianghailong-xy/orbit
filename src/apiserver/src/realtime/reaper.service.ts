@@ -83,7 +83,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.taskRun.updateMany({
         where: { id: runId, status: { in: LIVE } },
-        data: { status: RunStatus.FAILED, error: reason, finishedAt: new Date() },
+        // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
+        // recovering from a partition to stop (the run is already finalized here).
+        data: {
+          status: RunStatus.FAILED,
+          error: reason,
+          finishedAt: new Date(),
+          cancelRequestedAt: new Date(),
+        },
       });
       if (res.count === 0) return false;
       await tx.task.updateMany({

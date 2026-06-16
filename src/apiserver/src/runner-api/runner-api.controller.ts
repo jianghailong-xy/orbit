@@ -214,7 +214,13 @@ export class RunnerApiController {
         lastHeartbeatAt: new Date(),
       },
     });
-    return { cancelRunIds: this.realtime.drainCancellations(runner.id) };
+    let cancelRunIds: string[] = [];
+    try {
+      cancelRunIds = await this.realtime.drainCancellations(runner.id);
+    } catch {
+      // A transient DB hiccup shouldn't fail the heartbeat; cancels arrive next cycle.
+    }
+    return { cancelRunIds };
   }
 
   /** Long-poll: returns one claimed job, or null when nothing is available. */
