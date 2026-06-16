@@ -178,7 +178,7 @@ func executeAndReport(t *Transport, job *ClaimedJob, ctx context.Context, execDi
 
 	stopFlush := make(chan struct{})
 	go func() {
-		tk := time.NewTicker(1 * time.Second)
+		tk := time.NewTicker(120 * time.Millisecond)
 		defer tk.Stop()
 		for {
 			select {
