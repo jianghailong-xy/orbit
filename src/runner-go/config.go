@@ -14,6 +14,9 @@ type RunnerConfig struct {
 	Name          string   `json:"name"`
 	Labels        []string `json:"labels"`
 	MaxConcurrent int      `json:"maxConcurrent"`
+	// Directory Claude Code runs in (the project to work on). Defaults to the cwd
+	// at `orbit register`; jobs cd here, not into a per-run scratch dir.
+	WorkDir string `json:"workDir,omitempty"`
 }
 
 // Config is per working directory (so one machine can host several runners);

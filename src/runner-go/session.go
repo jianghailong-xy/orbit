@@ -28,9 +28,9 @@ func nextReqID() string {
 // session (Route B): it pulls user turns from the per-run inbox, feeds them over
 // stdin as stream-json, streams events back, acks each turn via /turn-complete,
 // and respawns with --resume on an unexpected crash. It finalizes the run on exit.
-func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context) {
-	workdir := filepath.Join(runsDir(), job.RunID)
-	_ = os.MkdirAll(workdir, 0o755)
+func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context, execDir string) {
+	scratch := filepath.Join(runsDir(), job.RunID)
+	_ = os.MkdirAll(scratch, 0o755)
 
 	// Session-scoped, monotonic event seq that survives respawn. Continues from the
 	// server's high-water mark so post-respawn events don't collide (skipDuplicates).
@@ -89,7 +89,7 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
-		st, ended := runSessionProcess(ctx, t, job, workdir, emit, attempt == 0)
+		st, ended := runSessionProcess(ctx, t, job, execDir, scratch, emit, attempt == 0)
 		if ended {
 			status = st
 			break
@@ -120,7 +120,7 @@ func runInteractiveSession(t *Transport, job *ClaimedJob, ctx context.Context) {
 // runSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
 // ended=false means an unexpected crash that the caller should --resume.
-func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, workdir string, emit emitFn, firstSpawn bool) (string, bool) {
+func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, execDir, scratchDir string, emit emitFn, firstSpawn bool) (string, bool) {
 	a := job.Agent
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
@@ -141,7 +141,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, workd
 		args = append(args, "--disallowedTools", strings.Join(a.DisallowedTools, ","))
 	}
 	if a.McpConfig != nil {
-		mcpPath := filepath.Join(workdir, "mcp.json")
+		mcpPath := filepath.Join(scratchDir, "mcp.json")
 		b, _ := json.Marshal(map[string]interface{}{"mcpServers": a.McpConfig})
 		_ = os.WriteFile(mcpPath, b, 0o644)
 		args = append(args, "--mcp-config", mcpPath)
@@ -155,7 +155,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedJob, workd
 	procCtx, procCancel := context.WithCancel(ctx)
 	defer procCancel()
 	cmd := exec.CommandContext(procCtx, "claude", args...)
-	cmd.Dir = workdir
+	cmd.Dir = execDir
 	cmd.Env = os.Environ()
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()

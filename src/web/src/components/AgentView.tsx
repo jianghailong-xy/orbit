@@ -137,7 +137,9 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const send = useMutation({
     mutationFn: async (content: string): Promise<string> => {
-      if (selected) {
+      // Continue a live session; otherwise (no selection, or the selected one has
+      // ended) start a fresh session so the composer never dead-locks.
+      if (selected && live) {
         await sendTurn(selected.id, content);
         return selected.id;
       }
@@ -164,7 +166,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (!c || send.isPending) return;
     send.mutate(c);
   };
-  const canSend = !!text.trim() && !send.isPending && runner.online && (!selectedId || idle);
+  // While the selected session is still loading we can't tell if it's live yet;
+  // block send to avoid accidentally creating a duplicate session.
+  const loadingSession = !!selectedId && !selected;
+  const canSend =
+    !!text.trim() && !send.isPending && runner.online && !loadingSession && (live ? idle : true);
 
   return (
     <div className="agent-view">
@@ -239,7 +245,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               !runner.online ? 'Runner offline' : selectedId ? 'Reply…' : '给这个 Agent 发一个任务…'
             }
             value={text}
-            disabled={!runner.online || (!!selectedId && !idle)}
+            disabled={!runner.online}
             onChange={(e) => setText(e.target.value)}
             onPressEnter={(e) => {
               if (!e.shiftKey) {

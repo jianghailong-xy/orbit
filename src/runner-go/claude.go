@@ -30,7 +30,7 @@ type emitFn func(eventType string, payload map[string]interface{})
 // executeJob drives `claude -p --output-format stream-json` for one job and
 // normalizes its message stream into run events. The compiled runner only uses
 // this CLI path (no in-process Agent SDK).
-func executeJob(ctx context.Context, job *ClaimedJob, emit emitFn, workdir string) ExecResult {
+func executeJob(ctx context.Context, job *ClaimedJob, emit emitFn, execDir, scratchDir string) ExecResult {
 	a := job.Agent
 	args := []string{
 		"-p", job.Prompt,
@@ -55,14 +55,14 @@ func executeJob(ctx context.Context, job *ClaimedJob, emit emitFn, workdir strin
 		args = append(args, "--resume", job.ResumeSessionID)
 	}
 	if a.McpConfig != nil {
-		mcpPath := filepath.Join(workdir, "mcp.json")
+		mcpPath := filepath.Join(scratchDir, "mcp.json")
 		b, _ := json.Marshal(map[string]interface{}{"mcpServers": a.McpConfig})
 		_ = os.WriteFile(mcpPath, b, 0o644)
 		args = append(args, "--mcp-config", mcpPath)
 	}
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
-	cmd.Dir = workdir
+	cmd.Dir = execDir
 	cmd.Env = os.Environ()
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
