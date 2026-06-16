@@ -36,16 +36,7 @@ Usage:
   orbit status                      Show this directory's runner and its control-plane status
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
-register options:
-  --server <url>           Control plane base URL (default: ` + defaultServer + `)
-  --token <token>          Optional one-time enrollment token (skips browser approval)
-  --name <name>            Base runner name (default: "<dir>@<hostname>"); each agent registers as "<name>/<agentkey>"
-  --labels a,b,c           Routing labels (e.g. sg,hdfs)
-  --max-concurrent <n>     Max concurrent jobs (default: 16)
-  --workdir <path>         Project directory Claude Code runs in (default: current dir)
-  --force                  Re-register even if this directory already has a runner
-  --no-service             Register only; don't install/start the background service
-  --foreground             Register and run in the foreground now (implies --no-service)
+Run 'orbit <command> --help' for command-specific options.
 
 The runner drives the machine's local Claude Code login (run 'claude' then '/login');
 no API key is required.
@@ -55,6 +46,68 @@ Env:
   ORBIT_NO_SELFUPDATE      Disable the startup auto-update
 `
 
+// Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
+var cmdHelp = map[string]string{
+	"register": `orbit register — register this machine and install the background service
+
+Usage:
+  orbit register [options]
+
+Approve the machine in the browser (device-login), or pass --token to skip approval.
+Detects the coding agents installed here and registers one runner per agent.
+
+Options:
+  --server <url>           Control plane base URL (default: ` + defaultServer + `)
+  --token <token>          Optional one-time enrollment token (skips browser approval)
+  --name <name>            Base runner name (default: "<dir>@<hostname>"); each agent registers as "<name>/<agentkey>"
+  --labels a,b,c           Routing labels (e.g. sg,hdfs)
+  --max-concurrent <n>     Max concurrent jobs (default: 16)
+  --workdir <path>         Project directory Claude Code runs in (default: current dir)
+  --force                  Re-register even if this directory already has a runner
+  --no-service             Register only; don't install/start the background service
+  --foreground             Register and run in the foreground now (implies --no-service)
+`,
+	"run": `orbit run — start the runner loop in the foreground
+
+Usage:
+  orbit run
+
+Runs the runner registered in this directory. If several agents are registered
+here, pick one with ORBIT_HOME (e.g. ORBIT_HOME=./.orbit/claude orbit run).
+`,
+	"unregister": `orbit unregister — remove this directory's runner(s)
+
+Usage:
+  orbit unregister [--yes]
+
+Stops the background service, deletes the runner from the control plane, and
+removes the local config.
+
+Options:
+  --yes, --force           Skip the confirmation prompt
+`,
+	"status": `orbit status — show this directory's runner and its control-plane status
+
+Usage:
+  orbit status
+`,
+	"upgrade": `orbit upgrade — force-reinstall the latest orbit binary
+
+Usage:
+  orbit upgrade
+
+Use this if the startup auto-update isn't working.
+`,
+}
+
+// helpFor returns the help text for a subcommand, or the global usage as a fallback.
+func helpFor(cmd string) string {
+	if h, ok := cmdHelp[cmd]; ok {
+		return h
+	}
+	return usage
+}
+
 func main() {
 	args := os.Args[1:]
 	cmd := ""
@@ -62,6 +115,22 @@ func main() {
 		cmd = args[0]
 	}
 	flags, bools := parseFlags(args)
+
+	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
+	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
+		if len(args) > 1 {
+			fmt.Print(helpFor(args[1]))
+		} else {
+			fmt.Print(usage)
+		}
+		return
+	}
+	// Per-subcommand help: `orbit <cmd> --help|-h` prints that command's help
+	// instead of running it.
+	if wantsHelp(args[1:]) {
+		fmt.Print(helpFor(cmd))
+		return
+	}
 
 	switch cmd {
 	case "register":
@@ -76,8 +145,6 @@ func main() {
 		cmdUpgrade()
 	case "version", "--version", "-v":
 		fmt.Println(version)
-	case "", "help", "--help", "-h":
-		fmt.Print(usage)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n%s", cmd, usage)
 		os.Exit(1)
@@ -346,6 +413,17 @@ func cmdUpgrade() {
 }
 
 // ── small helpers ─────────────────────────────────────────────────────────
+
+// wantsHelp reports whether a help flag appears in argv. It scans the raw args
+// because parseFlags only recognizes `--`-prefixed flags and would miss `-h`.
+func wantsHelp(argv []string) bool {
+	for _, a := range argv {
+		if a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
+}
 
 // parseFlags supports `--key value`, `--key=value`, and boolean `--flag`.
 func parseFlags(argv []string) (map[string]string, map[string]bool) {
