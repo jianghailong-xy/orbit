@@ -137,8 +137,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private notifyRaw(channel: string, payload: string): void {
+    // executeRaw (not queryRaw): pg_notify returns void, which Prisma's queryRaw
+    // can't deserialize ("Failed to deserialize column of type 'void'"). executeRaw
+    // runs the statement — firing the NOTIFY — and returns an affected-row count
+    // instead of reading result columns.
     this.prisma
-      .$queryRawUnsafe('SELECT pg_notify($1, $2)', channel, payload)
+      .$executeRawUnsafe('SELECT pg_notify($1, $2)', channel, payload)
       .catch((e) => this.log.warn('pg_notify failed: ' + (e as Error).message));
   }
 

@@ -759,6 +759,17 @@ body {
 .chat-assistant {
   background: #f5f6f7;
 }
+.chat-streaming::after {
+  content: '▋';
+  margin-left: 1px;
+  color: #8f959e;
+  animation: chat-caret-blink 1s steps(1) infinite;
+}
+@keyframes chat-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
 .chat-tool {
   font-size: 12.5px;
   color: #646a73;

@@ -45,6 +45,7 @@ export interface Runner {
   id: string;
   name: string;
   online?: boolean;
+  maxConcurrent?: number;
 }
 
 function logout() {

@@ -79,7 +79,7 @@ export class RunnerApiController {
         hostname: dto.hostname,
         ownerId: enrollment.ownerId,
         labels: dto.labels ?? [],
-        maxConcurrent: dto.maxConcurrent ?? 1,
+        maxConcurrent: dto.maxConcurrent ?? 16,
         version: dto.version,
         tokenHash: sha256(runnerToken),
         status: 'ONLINE',
@@ -150,7 +150,7 @@ export class RunnerApiController {
             name: dto.name,
             hostname: dto.hostname,
             labels: dto.labels ?? [],
-            maxConcurrent: dto.maxConcurrent ?? 1,
+            maxConcurrent: dto.maxConcurrent ?? 16,
             version: dto.version,
             expiresAt,
           },
@@ -417,16 +417,23 @@ export class RunnerApiController {
 
     // Persist idempotently — RunEvent has @@unique([runId, seq]) + skipDuplicates,
     // so a run's OWN final batch is never lost even if it races with complete().
-    await this.prisma.runEvent.createMany({
-      data: events.map((e) => ({
-        runId,
-        seq: e.seq,
-        type: e.type,
-        payload: e.payload as Prisma.InputJsonValue,
-        createdAt: new Date(e.ts),
-      })),
-      skipDuplicates: true,
-    });
+    // text_delta is the streaming-animation increment: broadcast it live (below) but
+    // DON'T persist it — the full reply is durably saved as the trailing `assistant`
+    // event, so replay/refresh still shows complete text, and a long turn doesn't
+    // pile up hundreds of token-chunk rows.
+    const durable = events.filter((e) => e.type !== RunEventType.TEXT_DELTA);
+    if (durable.length > 0) {
+      await this.prisma.runEvent.createMany({
+        data: durable.map((e) => ({
+          runId,
+          seq: e.seq,
+          type: e.type,
+          payload: e.payload as Prisma.InputJsonValue,
+          createdAt: new Date(e.ts),
+        })),
+        skipDuplicates: true,
+      });
+    }
 
     const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
     if (toolUses.length > 0) {

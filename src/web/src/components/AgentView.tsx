@@ -27,6 +27,8 @@ interface RunEvent {
 }
 
 const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
+// Run statuses that occupy one of the runner's maxConcurrent slots.
+const SLOT_HELD = ['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'];
 const MODE_OPTIONS = ['Plan', 'Accept Edits', 'Default'];
 // UI label <-> claude --permission-mode. "Default" maps to dontAsk: a web session
 // has no TTY to answer permission prompts, so a prompting mode would hang the turn.
@@ -69,6 +71,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [events, setEvents] = useState<RunEvent[]>([]);
+  const [streamingText, setStreamingText] = useState(''); // live assistant text accumulated from text_delta
   const [idle, setIdle] = useState(false); // run is AWAITING_INPUT (a new turn is accepted)
   const seen = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -90,9 +93,20 @@ export function AgentView({ runner }: { runner: Runner }) {
   const activeRunId: string | null = selected?.activeRunId ?? null;
   const live = selected ? !TERMINAL.includes(selected.status) : false;
 
+  // Slot accounting: a runner hosts at most maxConcurrent live runs. When it's full,
+  // a newly created session sits QUEUED with no run instead of starting — surface
+  // that as an explicit concurrency wait rather than a silent "Starting…".
+  const liveSlots = useMemo(
+    () => sessions.filter((s) => SLOT_HELD.includes(s.runs?.[0]?.status)).length,
+    [sessions],
+  );
+  const atCapacity = typeof runner.maxConcurrent === 'number' && liveSlots >= runner.maxConcurrent;
+  const queuedForSlot = !!selected && selected.status === 'QUEUED' && !activeRunId && atCapacity;
+
   // Subscribe to the conversation's single live run; reset only when it changes.
   useEffect(() => {
     setEvents([]);
+    setStreamingText('');
     seen.current = new Set();
     setIdle(false);
     if (!activeRunId) return;
@@ -118,9 +132,20 @@ export function AgentView({ runner }: { runner: Runner }) {
           stop();
           return; // run finalized — nothing more to stream
         }
+        // Streaming increment: append to the in-progress assistant bubble. Don't
+        // dedup or store it — it's pure animation; the trailing `assistant` event
+        // carries the authoritative full text and finalizes the bubble.
+        if (ev.type === 'text_delta') {
+          const chunk = ev.payload?.text;
+          if (typeof chunk === 'string') setStreamingText((p) => p + chunk);
+          return;
+        }
         if (seen.current.has(ev.seq)) return;
         seen.current.add(ev.seq);
         setEvents((prev) => [...prev, ev]);
+        // The authoritative full text (or a turn/user/interrupt boundary) supersedes
+        // the live draft — clear it so the streamed text isn't rendered twice.
+        if (['assistant', 'turn_end', 'user', 'interrupt'].includes(ev.type)) setStreamingText('');
         // Track turn boundaries live so the composer re-enables the instant a turn
         // ends, rather than waiting for the 4s task poll.
         if (ev.type === 'turn_end') setIdle(true);
@@ -149,7 +174,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [events]);
+  }, [events, streamingText]);
 
   const send = useMutation({
     mutationFn: async (content: string): Promise<string> => {
@@ -228,11 +253,21 @@ export function AgentView({ runner }: { runner: Runner }) {
 
       {selectedId ? (
         <div className="agent-sessions" ref={scrollRef}>
-          {!activeRunId && <div className="chat-note">Starting session…</div>}
+          {!activeRunId &&
+            (queuedForSlot ? (
+              <div className="chat-note">
+                排队中 · 运行器并发已满（{liveSlots}/{runner.maxConcurrent}），正在等待空闲槽位…
+              </div>
+            ) : (
+              <div className="chat-note">Starting session…</div>
+            ))}
           {events.map((e, i) => (
             <ChatEvent key={i} ev={e} />
           ))}
-          {activeRunId && events.length === 0 && <div className="chat-note">Waiting for the agent…</div>}
+          {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
+          {activeRunId && events.length === 0 && !streamingText && (
+            <div className="chat-note">Waiting for the agent…</div>
+          )}
           {selected && TERMINAL.includes(selected.status) && (
             <div className="chat-note">Session {selected.status.toLowerCase()}.</div>
           )}

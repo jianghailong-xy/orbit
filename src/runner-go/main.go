@@ -41,7 +41,7 @@ register options:
   --token <token>          Optional one-time enrollment token (skips browser approval)
   --name <name>            Runner name (default: "<dir> @ <hostname>")
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
-  --max-concurrent <n>     Max concurrent jobs (default: 1)
+  --max-concurrent <n>     Max concurrent jobs (default: 16)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)
   --force                  Re-register even if this directory already has a runner
   --no-service             Register only; don't install/start the background service
@@ -105,7 +105,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		name = promptName(defaultAgentName())
 	}
 	labels := parseLabels(flags["labels"])
-	maxConcurrent := getInt(flags, "max-concurrent", 1)
+	maxConcurrent := getInt(flags, "max-concurrent", 16)
 	// Detect the coding agents installed here (Claude Code, Codex) and let the
 	// user pick which to register; the default is all of them. Then make the
 	// chosen agents usable — install any that are missing, and confirm Claude
