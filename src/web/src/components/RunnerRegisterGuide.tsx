@@ -165,7 +165,7 @@ export function RunnerRegisterGuide({ onClose }: { onClose: () => void }) {
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connectedName}” is ready</div>
               <div className="runner-status-sub">
-                It's now in the sidebar under Agents. You can close this page.
+                It's now in the sidebar under Runners. You can close this page.
               </div>
             </div>
             <button className="runner-done-btn" onClick={onClose} type="button">

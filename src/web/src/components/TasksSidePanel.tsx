@@ -49,6 +49,11 @@ export interface Runner {
   maxConcurrent?: number;
 }
 
+interface Agent {
+  id: string;
+  name: string;
+}
+
 function logout() {
   clearToken();
   location.href = '/login';
@@ -77,7 +82,8 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
-  const [quickOpen, setQuickOpen] = useState(true);
+  const [runnersOpen, setRunnersOpen] = useState(true);
+  const [agentsOpen, setAgentsOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
 
@@ -108,13 +114,16 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
     window.addEventListener('mouseup', onUp);
   };
 
-  // The "Agents" list is the user's actually-registered runners; it refreshes so
+  // The "Runners" list is the user's actually-registered runners; it refreshes so
   // online/offline tracks the runner's 30s heartbeat.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
     refetchInterval: 15_000,
   });
+
+  // The "Agents" list is the user's agent definitions (model + tools).
+  const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
 
   // Per-row "⋮" menu: Rename / Delete. `menuOpenId` keeps the trigger visible
   // (the kebab is hover-only) while its dropdown is open.
@@ -123,6 +132,8 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<Runner | null>(null);
   const [renameVal, setRenameVal] = useState('');
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [agentName, setAgentName] = useState('');
 
   const renameMut = useMutation({
     mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
@@ -140,8 +151,23 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
 
+  const createAgentMut = useMutation({
+    mutationFn: (name: string) => api('/agents', { method: 'POST', body: { name } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['agents'] });
+      setCreatingAgent(false);
+      setAgentName('');
+    },
+    onError: (e: Error) => message.error(e.message || 'Create failed'),
+  });
+
   const submitRename = () => {
     if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
+  };
+
+  const submitAgent = () => {
+    const name = agentName.trim();
+    if (name) createAgentMut.mutate(name);
   };
 
   const runnerMenu = (r: Runner): MenuProps['items'] => [
@@ -176,7 +202,7 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
     },
   ];
 
-  // ⌘1 / ⌘2 / … (Ctrl on non-Mac) select the Nth runner under "Agents".
+  // ⌘1 / ⌘2 / … (Ctrl on non-Mac) select the Nth runner under "Runners".
   const list = runners.data ?? [];
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -217,11 +243,11 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
         <div className="tp-divider" />
 
         <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setQuickOpen((o) => !o)}>
-            <span className="tp-group-name">Agents</span>
-            <CaretDownOutlined className={`tp-caret ${quickOpen ? '' : 'collapsed'}`} />
+          <div className="tp-group-head" onClick={() => setRunnersOpen((o) => !o)}>
+            <span className="tp-group-name">Runners</span>
+            <CaretDownOutlined className={`tp-caret ${runnersOpen ? '' : 'collapsed'}`} />
           </div>
-          {quickOpen && (
+          {runnersOpen && (
             <>
               {list.map((r, idx) => (
                 <div
@@ -268,6 +294,38 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
                 className="tp-item inset"
                 onClick={() => navigate('/runner')}
               >
+                <span className="tp-ico">
+                  <PlusOutlined />
+                </span>
+                <span className="tp-label">Add</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="tp-group">
+          <div className="tp-group-head" onClick={() => setAgentsOpen((o) => !o)}>
+            <span className="tp-group-name">Agents</span>
+            <CaretDownOutlined className={`tp-caret ${agentsOpen ? '' : 'collapsed'}`} />
+          </div>
+          {agentsOpen && (
+            <>
+              {(agents.data ?? []).map((a) => (
+                <div key={a.id} className="tp-item inset">
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: '#c0c4cc',
+                      flex: 'none',
+                      marginRight: 8,
+                    }}
+                  />
+                  <span className="tp-label">{a.name}</span>
+                </div>
+              ))}
+              <div className="tp-item inset" onClick={() => setCreatingAgent(true)}>
                 <span className="tp-ico">
                   <PlusOutlined />
                 </span>
@@ -367,6 +425,30 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
         <div style={{ marginTop: 8, color: '#8f959e', fontSize: 12 }}>
           Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
         </div>
+      </Modal>
+
+      <Modal
+        title="New agent"
+        open={creatingAgent}
+        okText="Create"
+        cancelText="Cancel"
+        okButtonProps={{ disabled: !agentName.trim() }}
+        confirmLoading={createAgentMut.isPending}
+        onOk={submitAgent}
+        onCancel={() => {
+          setCreatingAgent(false);
+          setAgentName('');
+        }}
+        destroyOnClose
+      >
+        <Input
+          value={agentName}
+          onChange={(e) => setAgentName(e.target.value)}
+          onPressEnter={submitAgent}
+          placeholder="Agent name"
+          maxLength={60}
+          autoFocus
+        />
       </Modal>
     </aside>
   );
