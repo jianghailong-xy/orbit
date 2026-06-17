@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AgentsModule } from './agents/agents.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { TasksModule } from './tasks/tasks.module';
+import { TaskListsModule } from './task-lists/task-lists.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 
@@ -22,6 +23,7 @@ import { RunnerApiModule } from './runner-api/runner-api.module';
     AgentsModule,
     SessionsModule,
     TasksModule,
+    TaskListsModule,
     RunnersModule,
     RunnerApiModule,
   ],

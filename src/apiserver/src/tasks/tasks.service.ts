@@ -26,9 +26,20 @@ export class TasksService {
     if (!agent) throw new ForbiddenException('agent not found');
   }
 
+  /** A task may only be filed under a list the same user owns (cf. assertOwnedAgent). */
+  private async assertOwnedList(ownerId: string, listId?: string | null): Promise<void> {
+    if (!listId) return;
+    const list = await this.prisma.taskList.findFirst({
+      where: { id: listId, ownerId },
+      select: { id: true },
+    });
+    if (!list) throw new ForbiddenException('task list not found');
+  }
+
   async create(ownerId: string, dto: CreateTaskDto) {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedAgent(ownerId, dto.assigneeId);
+    await this.assertOwnedList(ownerId, dto.listId);
     return this.prisma.task.create({
       data: {
         title: dto.title,
@@ -38,6 +49,7 @@ export class TasksService {
         creatorType: CreatorType.USER,
         creatorId: ownerId,
         assigneeId: dto.assigneeId,
+        listId: dto.listId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
     });
@@ -73,6 +85,7 @@ export class TasksService {
   async update(ownerId: string, id: string, dto: UpdateTaskDto) {
     await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedAgent(ownerId, dto.assigneeId);
+    if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     const data: Prisma.TaskUpdateInput = {
       title: dto.title,
       description: dto.description,
@@ -82,6 +95,10 @@ export class TasksService {
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };
+    }
+    // listId is a relation FK: connect to (re)assign, disconnect to detach.
+    if (dto.listId !== undefined) {
+      data.list = dto.listId ? { connect: { id: dto.listId } } : { disconnect: true };
     }
     return this.prisma.task.update({ where: { id }, data });
   }

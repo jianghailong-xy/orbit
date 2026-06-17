@@ -66,6 +66,7 @@ model User {
   ownedSessions    Session[]         @relation("SessionOwner")
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
+  taskLists        TaskList[] // task lists this user owns (tenant scope)
   taskComments     TaskComment[]
 
   @@map("user")
@@ -320,6 +321,23 @@ model Activity {
   @@map("activity")
 }
 
+// A user-created grouping of Tasks. Minimal: just a title + tenant scope.
+// Deleting a list detaches its tasks (Task.listId -> null), never deletes them.
+model TaskList {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  title     String
+  // Tenant scope: list/authorization always filter by this column (like tasks).
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tasks Task[]
+
+  @@index([ownerId])
+  @@map("task_list")
+}
+
 // A human-facing work item (unrelated to the old execution-Task dropped in 0006).
 // Created by a user or an agent, optionally assigned to an agent to execute; the
 // agent's runs hang off it as Sessions.
@@ -337,6 +355,9 @@ model Task {
   // The agent assigned to execute it (real FK, optional).
   assigneeId  String?     @map("assignee_id") @db.Uuid
   assignee    Agent?      @relation(fields: [assigneeId], references: [id])
+  // Optional parent list grouping; deleting the list detaches but keeps the task.
+  listId      String?     @map("list_id") @db.Uuid
+  list        TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
   dueDate     DateTime?   @map("due_date")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
@@ -346,6 +367,7 @@ model Task {
 
   @@index([ownerId])
   @@index([assigneeId])
+  @@index([listId])
   @@index([status])
   @@index([creatorType, creatorId])
   @@map("task")

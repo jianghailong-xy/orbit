@@ -15,20 +15,11 @@ import { decodeId, encodeId } from '../lib/idCodec';
 
 // Feishu-style top navigation. Each entry routes to "/<key>" (they all share the
 // Tasks view for now — only the heading differs). "Runners" opens the runners
-// page; the lists below are still a visual scaffold whose selection just moves
-// the highlight.
+// page.
 const TOP = [
   { key: 'active', icon: <UserOutlined />, label: 'Active', count: 385 },
   { key: 'skills', icon: <ThunderboltOutlined />, label: 'Skills' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
-];
-
-const LISTS = [
-  { key: 'l1', label: '#1 TEA - Migration build engine to tea-cli' },
-  { key: 'l3', label: '#3 Dorado 项目152 psm 改为 data.tea.build_compliance' },
-  { key: 'l4', label: '#4 Dorado 项目152 owner 变更为 jianghailong.rd' },
-  { key: 'l7', label: '#7 importer not-ready sg 2026-06-12' },
-  { key: 'l8', label: '#8 importer not-ready sg 2026-06-13' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -61,6 +52,12 @@ interface Agent {
   // with no runner has no console to open.
   runnerId?: string | null;
   runner?: { id: string } | null;
+}
+
+interface TaskList {
+  id: string;
+  title: string;
+  _count?: { tasks: number };
 }
 
 function logout() {
@@ -136,6 +133,12 @@ export function TasksSidePanel() {
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
 
+  // User-created task lists shown in the "Task List" group below.
+  const taskLists = useQuery({
+    queryKey: ['task-lists'],
+    queryFn: () => api<TaskList[]>('/task-lists'),
+  });
+
   // Runners carry the computed `online` flag (set when their heartbeat is fresh).
   // An agent's dot turns green when its machine is online; poll on the same 15s
   // cadence as the Runners page so the status stays live while the sidebar is up.
@@ -196,6 +199,25 @@ export function TasksSidePanel() {
   const submitAgent = () => {
     const name = agentName.trim();
     if (name) createAgentMut.mutate(name);
+  };
+
+  const [creatingList, setCreatingList] = useState(false);
+  const [listTitle, setListTitle] = useState('');
+
+  const createListMut = useMutation({
+    mutationFn: (title: string) => api<TaskList>('/task-lists', { method: 'POST', body: { title } }),
+    onSuccess: (created) => {
+      void qc.invalidateQueries({ queryKey: ['task-lists'] });
+      setCreatingList(false);
+      setListTitle('');
+      navigate(`/lists/${encodeId(created.id)}`);
+    },
+    onError: (e: Error) => message.error(e.message || 'Create failed'),
+  });
+
+  const submitList = () => {
+    const t = listTitle.trim();
+    if (t) createListMut.mutate(t);
   };
 
   return (
@@ -270,28 +292,31 @@ export function TasksSidePanel() {
             <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
           {listOpen &&
-            LISTS.map((l) => (
-              <div
-                key={l.key}
-                className={`tp-item inset ${sel === l.key ? 'active' : ''}`}
-                onClick={() => {
-                  setSel(l.key);
-                  navigate(`/lists/${l.key}`);
-                }}
-              >
-                <span
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: '#c0c4cc',
-                    flex: 'none',
-                    marginRight: 8,
+            (taskLists.data ?? []).map((l) => {
+              const key = encodeId(l.id);
+              return (
+                <div
+                  key={l.id}
+                  className={`tp-item inset ${sel === key ? 'active' : ''}`}
+                  onClick={() => {
+                    setSel(key);
+                    navigate(`/lists/${key}`);
                   }}
-                />
-                <span className="tp-label">{l.label}</span>
-              </div>
-            ))}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: '#c0c4cc',
+                      flex: 'none',
+                      marginRight: 8,
+                    }}
+                  />
+                  <span className="tp-label">{l.title}</span>
+                </div>
+              );
+            })}
         </div>
 
         <div className="tp-group">
@@ -301,7 +326,7 @@ export function TasksSidePanel() {
           </div>
         </div>
 
-        <div className="tp-newgroup">
+        <div className="tp-newgroup" onClick={() => setCreatingList(true)}>
           <PlusOutlined />
           <span>New Group</span>
         </div>
@@ -351,6 +376,30 @@ export function TasksSidePanel() {
           onPressEnter={submitAgent}
           placeholder="Agent name"
           maxLength={60}
+          autoFocus
+        />
+      </Modal>
+
+      <Modal
+        title="New list"
+        open={creatingList}
+        okText="Create"
+        cancelText="Cancel"
+        okButtonProps={{ disabled: !listTitle.trim() }}
+        confirmLoading={createListMut.isPending}
+        onOk={submitList}
+        onCancel={() => {
+          setCreatingList(false);
+          setListTitle('');
+        }}
+        destroyOnClose
+      >
+        <Input
+          value={listTitle}
+          onChange={(e) => setListTitle(e.target.value)}
+          onPressEnter={submitList}
+          placeholder="List title"
+          maxLength={120}
           autoFocus
         />
       </Modal>
