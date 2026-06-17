@@ -316,11 +316,6 @@ body {
   color: #8f959e;
   margin-top: 2px;
 }
-.runner-kbd {
-  color: #8f959e;
-  font-size: 13px;
-  flex: none;
-}
 .runner-kebab {
   display: none;
   align-items: center;
@@ -335,10 +330,6 @@ body {
 .runner-kebab:hover {
   background: #e3e6eb;
   color: #1f2329;
-}
-.runner-card:hover .runner-kbd,
-.runner-card.menu-open .runner-kbd {
-  display: none;
 }
 .runner-card:hover .runner-kebab,
 .runner-card.menu-open .runner-kebab {

@@ -1,13 +1,11 @@
 import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } from 'antd';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
-
-const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 
 // The runner list used to live in the left sidebar; it now has its own page so
 // "Runners" can sit in the top nav alongside Active/Skills. Selecting a runner
@@ -49,20 +47,6 @@ export function RunnersPage() {
   };
 
   const open = (r: Runner) => navigate(`/agents/${encodeId(r.id)}`);
-
-  // ⌘1 / ⌘2 / … (Ctrl on non-Mac) opens the Nth runner.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      if (e.key < '1' || e.key > '9') return;
-      const idx = Number(e.key) - 1;
-      if (idx >= list.length) return;
-      e.preventDefault();
-      navigate(`/agents/${encodeId(list[idx].id)}`);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [list, navigate]);
 
   const menu = (r: Runner): MenuProps['items'] => [
     {
@@ -108,7 +92,7 @@ export function RunnersPage() {
         <div className="runners-empty">No runners yet — register a machine to get started.</div>
       ) : (
         <div className="runners-list">
-          {list.map((r, idx) => (
+          {list.map((r) => (
             <div
               key={r.id}
               className={`runner-card ${menuOpenId === r.id ? 'menu-open' : ''}`}
@@ -126,12 +110,6 @@ export function RunnersPage() {
                   {typeof r.maxConcurrent === 'number' ? ` · ${r.maxConcurrent} slots` : ''}
                 </div>
               </div>
-              {idx < 9 && (
-                <span className="runner-kbd">
-                  {isMac ? '⌘' : 'Ctrl+'}
-                  {idx + 1}
-                </span>
-              )}
               <Dropdown
                 trigger={['click']}
                 placement="bottomRight"
