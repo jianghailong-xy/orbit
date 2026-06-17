@@ -21,7 +21,7 @@ function LegacySessionRedirect() {
 
 // Paths whose page renders its own full-height two-pane layout (the top-nav
 // sections all share the Tasks view). Everything else gets content padding.
-const FULL_HEIGHT = ['/', '/tasks', '/active', '/skills'];
+const FULL_HEIGHT = ['/', '/tasks', '/active', '/skills', '/runner'];
 
 function Shell({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
@@ -64,6 +64,7 @@ export function App() {
           <Route path="/" element={<Shell><TasksPage /></Shell>} />
           <Route path="/active" element={<Shell><TasksPage /></Shell>} />
           <Route path="/skills" element={<Shell><TasksPage /></Shell>} />
+          <Route path="/runner" element={<Shell><TasksPage /></Shell>} />
           <Route path="/agents/:id" element={<Shell><TasksPage /></Shell>} />
           <Route path="/sessions/:id" element={<Shell><TasksPage /></Shell>} />
           <Route path="/agents/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
