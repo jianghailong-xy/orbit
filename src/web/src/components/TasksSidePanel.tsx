@@ -136,6 +136,16 @@ export function TasksSidePanel() {
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
 
+  // Runners carry the computed `online` flag (set when their heartbeat is fresh).
+  // An agent's dot turns green when its machine is online; poll on the same 15s
+  // cadence as the Runners page so the status stays live while the sidebar is up.
+  const runners = useQuery({
+    queryKey: ['runners'],
+    queryFn: () => api<Runner[]>('/runners'),
+    refetchInterval: 15_000,
+  });
+  const onlineRunnerIds = new Set((runners.data ?? []).filter((r) => r.online).map((r) => r.id));
+
   // Open an agent's console — the same destination the runner detail page uses.
   // Config-only agents (no runner) have no console to open.
   const openAgent = useCallback(
@@ -219,26 +229,29 @@ export function TasksSidePanel() {
           </div>
           {agentsOpen && (
             <>
-              {(agents.data ?? []).map((a, i) => (
-                <div
-                  key={a.id}
-                  className={`tp-item inset ${a.id === activeAgentId ? 'active' : ''}`}
-                  onClick={() => openAgent(a)}
-                >
-                  <span
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: '#c0c4cc',
-                      flex: 'none',
-                      marginRight: 8,
-                    }}
-                  />
-                  <span className="tp-label">{a.name}</span>
-                  {i < 9 && <span className="tp-count">⌘{i + 1}</span>}
-                </div>
-              ))}
+              {(agents.data ?? []).map((a, i) => {
+                const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
+                return (
+                  <div
+                    key={a.id}
+                    className={`tp-item inset ${a.id === activeAgentId ? 'active' : ''}`}
+                    onClick={() => openAgent(a)}
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: online ? '#2ea121' : '#c0c4cc',
+                        flex: 'none',
+                        marginRight: 8,
+                      }}
+                    />
+                    <span className="tp-label">{a.name}</span>
+                    {i < 9 && <span className="tp-count">⌘{i + 1}</span>}
+                  </div>
+                );
+              })}
               <div className="tp-item inset" onClick={() => setCreatingAgent(true)}>
                 <span className="tp-ico">
                   <PlusOutlined />
