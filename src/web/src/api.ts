@@ -85,4 +85,6 @@ export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to
  *  resolve the runner behind a `/sessions/:id` deep link. */
 export const getSession = (idOrPublicId: string) =>
-  api<{ id: string; assignedRunnerId: string | null }>(`/sessions/${idOrPublicId}`);
+  api<{ id: string; assignedRunnerId: string | null; agent: { id: string } | null }>(
+    `/sessions/${idOrPublicId}`,
+  );

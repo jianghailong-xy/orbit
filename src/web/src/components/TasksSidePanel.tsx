@@ -10,7 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Avatar, Dropdown, Input, Modal } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
-import { api, clearToken } from '../api';
+import { api, clearToken, getSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 
 // Feishu-style top navigation. Each entry routes to "/<key>" (they all share the
@@ -72,9 +72,17 @@ export function TasksSidePanel() {
   const loc = useLocation();
   const navigate = useNavigate();
 
-  // The agent console is /agents/<id>; when one is open, highlight that agent's
-  // row below rather than a top-nav item.
+  // The open agent comes from /agents/<id>; behind a /sessions/<id> link, resolve
+  // it from that session so its row highlights there too. The session query reuses
+  // TasksPage's cache (same key), so it adds no extra request.
   const openAgentId = decodeId(useMatch('/agents/:id')?.params.id);
+  const sessionId = decodeId(useMatch('/sessions/:id')?.params.id);
+  const sessionQ = useQuery({
+    queryKey: ['session', sessionId],
+    queryFn: () => getSession(sessionId!),
+    enabled: !!sessionId,
+  });
+  const activeAgentId = openAgentId ?? sessionQ.data?.agent?.id ?? null;
 
   // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
   // to Active); the runner-centric routes (/runners, /runner, /agents, /sessions)
@@ -82,7 +90,7 @@ export function TasksSidePanel() {
   const routeKey =
     loc.pathname === '/' || loc.pathname === '/tasks'
       ? 'active'
-      : openAgentId
+      : activeAgentId
         ? '' // scoped to one agent — its row highlights below, no top item
         : loc.pathname.startsWith('/agents/') ||
             loc.pathname.startsWith('/sessions/') ||
@@ -214,7 +222,7 @@ export function TasksSidePanel() {
               {(agents.data ?? []).map((a, i) => (
                 <div
                   key={a.id}
-                  className={`tp-item inset ${a.id === openAgentId ? 'active' : ''}`}
+                  className={`tp-item inset ${a.id === activeAgentId ? 'active' : ''}`}
                   onClick={() => openAgent(a)}
                 >
                   <span
