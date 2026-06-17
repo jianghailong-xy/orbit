@@ -531,12 +531,6 @@ body {
   align-items: center;
   justify-content: center;
 }
-.runner-back {
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding-left: 0;
-}
 .runner-center {
   width: 100%;
   max-width: 640px;
