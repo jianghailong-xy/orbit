@@ -178,12 +178,14 @@ type Manifest struct {
 
 // Run-event type strings — mirror RunEventType in @orbit/shared.
 const (
-	evSystem     = "system"
-	evAssistant  = "assistant"
-	evTextDelta  = "text_delta"
-	evToolUse    = "tool_use"
-	evToolResult = "tool_result"
-	evError      = "error"
+	evSystem        = "system"
+	evAssistant     = "assistant"
+	evTextDelta     = "text_delta"
+	evThinking      = "thinking"
+	evThinkingDelta = "thinking_delta"
+	evToolUse       = "tool_use"
+	evToolResult    = "tool_result"
+	evError         = "error"
 	// Interactive sessions (Route B)
 	evUser      = "user"
 	evTurnEnd   = "turn_end"

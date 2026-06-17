@@ -10,7 +10,7 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Input, Select, Tag, Tooltip } from 'antd';
+import { App as AntApp, Button, Input, Select, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
@@ -22,6 +22,7 @@ import {
   sendTurn,
   sessionEventsUrl,
 } from '../api';
+import { Transcript } from './Transcript';
 import type { Runner } from './TasksSidePanel';
 
 interface RunEvent {
@@ -62,7 +63,6 @@ const EFFORT_OPTIONS = [
   { value: 'max', label: 'Max' },
 ];
 
-const trunc = (s: string, n = 600): string => (s && s.length > n ? s.slice(0, n) + '…' : s);
 const fmtTime = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
 
@@ -92,6 +92,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
+  const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const seen = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -152,6 +153,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     setEvents([]);
     setStreamingText('');
+    setStreamingThink('');
     seen.current = new Set();
     setIdle(false);
     if (!selectedId) return;
@@ -185,12 +187,30 @@ export function AgentView({ runner }: { runner: Runner }) {
           if (typeof chunk === 'string') setStreamingText((p) => p + chunk);
           return;
         }
+        if (ev.type === 'thinking_delta') {
+          const chunk = ev.payload?.text;
+          if (typeof chunk === 'string') setStreamingThink((p) => p + chunk);
+          return;
+        }
         if (seen.current.has(ev.seq)) return;
         seen.current.add(ev.seq);
         setEvents((prev) => [...prev, ev]);
         // The authoritative full text (or a turn/user/interrupt boundary) supersedes
-        // the live draft — clear it so the streamed text isn't rendered twice.
-        if (['assistant', 'turn_end', 'user', 'interrupt'].includes(ev.type)) setStreamingText('');
+        // the live drafts — clear them so streamed text isn't rendered twice. Text
+        // implies thinking is done, so a text/turn boundary clears both; the durable
+        // `thinking` block clears only its own draft. A mid-turn crash skips turn_end
+        // and re-spawns with a `resumed` system event — clear there too so a partial
+        // bubble can't outlive its turn. (Don't clear on every system event: claude's
+        // stderr also arrives as `system` and would wipe an in-progress bubble.)
+        if (['assistant', 'turn_end', 'user', 'interrupt', 'error'].includes(ev.type)) {
+          setStreamingText('');
+          setStreamingThink('');
+        } else if (ev.type === 'thinking') {
+          setStreamingThink('');
+        } else if (ev.type === 'system' && ev.payload?.subtype === 'resumed') {
+          setStreamingText('');
+          setStreamingThink('');
+        }
         // Track turn boundaries live so the composer re-enables the instant a turn
         // ends, rather than waiting for the 4s session poll.
         if (ev.type === 'turn_end') setIdle(true);
@@ -218,7 +238,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [events, streamingText]);
+  }, [events, streamingText, streamingThink]);
 
   const send = useMutation({
     mutationFn: async (content: string): Promise<string> => {
@@ -317,15 +337,15 @@ export function AgentView({ runner }: { runner: Runner }) {
             ) : (
               <div className="chat-note">Starting session…</div>
             ))}
-          {events.map((e, i) => (
-            <ChatEvent key={i} ev={e} />
-          ))}
+          <Transcript events={events} />
+          {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
           {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
           {selected &&
             !TERMINAL.includes(selected.status) &&
             selected.status !== 'PENDING' &&
             events.length === 0 &&
-            !streamingText && <div className="chat-note">Waiting for the agent…</div>}
+            !streamingText &&
+            !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
           {selected && TERMINAL.includes(selected.status) && (
             <div className="chat-note">Session {selected.status.toLowerCase()}.</div>
           )}
@@ -453,34 +473,4 @@ export function AgentView({ runner }: { runner: Runner }) {
       </div>
     </div>
   );
-}
-
-function ChatEvent({ ev }: { ev: RunEvent }) {
-  const p = ev.payload ?? {};
-  switch (ev.type) {
-    case 'user':
-      return <div className="chat-msg chat-user">{p.text}</div>;
-    case 'assistant':
-      return p.text ? <div className="chat-msg chat-assistant">{p.text}</div> : null;
-    case 'tool_use':
-      return (
-        <div className="chat-tool">
-          🔧 <Tag>{p.name}</Tag> <code>{trunc(JSON.stringify(p.input))}</code>
-        </div>
-      );
-    case 'tool_result':
-      return (
-        <div className="chat-tool-result">
-          ↳ {trunc(typeof p.content === 'string' ? p.content : JSON.stringify(p.content))}
-        </div>
-      );
-    case 'turn_end':
-      return <div className="chat-turn-divider" />;
-    case 'interrupt':
-      return <div className="chat-note">⊘ interrupted</div>;
-    case 'error':
-      return <div className="chat-error">✖ {String(p.message)}</div>;
-    default:
-      return null; // system / status / text_delta are not rendered in the chat
-  }
 }

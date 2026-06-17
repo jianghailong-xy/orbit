@@ -22,6 +22,16 @@ type ExecResult struct {
 type emitFn func(eventType string, payload map[string]interface{})
 
 func handleMessage(msg map[string]interface{}, emit emitFn) {
+	// A sub-agent's messages (spawned by the Task tool) carry the spawning Task's
+	// tool_use id here; stamp it onto every event so the UI can nest the sub-agent's
+	// transcript under that call. "" for the top-level agent.
+	parentID, _ := msg["parent_tool_use_id"].(string)
+	withParent := func(p map[string]interface{}) map[string]interface{} {
+		if parentID != "" {
+			p["parentToolUseId"] = parentID
+		}
+		return p
+	}
 	switch msg["type"] {
 	case "system":
 		emit(evSystem, map[string]interface{}{
@@ -36,18 +46,47 @@ func handleMessage(msg map[string]interface{}, emit emitFn) {
 			block, _ := c.(map[string]interface{})
 			switch block["type"] {
 			case "text":
-				emit(evAssistant, map[string]interface{}{"text": block["text"]})
+				emit(evAssistant, withParent(map[string]interface{}{"text": block["text"]}))
+			case "thinking":
+				emit(evThinking, withParent(map[string]interface{}{"text": block["thinking"]}))
+			case "redacted_thinking":
+				// Encrypted reasoning (block["data"]) the user can't read — surface a
+				// placeholder so the block isn't silently missing, like Claude Code Web.
+				emit(evThinking, withParent(map[string]interface{}{"text": "[redacted thinking]", "redacted": true}))
 			case "tool_use":
-				emit(evToolUse, map[string]interface{}{"name": block["name"], "input": block["input"]})
-			case "tool_result":
-				emit(evToolResult, map[string]interface{}{"content": block["content"], "isError": block["is_error"]})
+				emit(evToolUse, withParent(map[string]interface{}{
+					"id": block["id"], "name": block["name"], "input": block["input"],
+				}))
+			}
+		}
+	case "user":
+		// Tool results arrive as user-role messages (the Anthropic SSE protocol puts
+		// tool_result blocks in a `user` message, not an assistant one). Emit only
+		// those: the user's own typed turns are emitted from the inbox and echoed back
+		// here by --replay-user-messages, so re-emitting their text would double them.
+		message, _ := msg["message"].(map[string]interface{})
+		content, _ := message["content"].([]interface{})
+		for _, c := range content {
+			block, _ := c.(map[string]interface{})
+			if block["type"] == "tool_result" {
+				emit(evToolResult, withParent(map[string]interface{}{
+					"toolUseId": block["tool_use_id"],
+					"content":   block["content"],
+					"isError":   block["is_error"],
+				}))
 			}
 		}
 	case "stream_event":
+		// Partial-message deltas (--include-partial-messages) drive live typing. Only
+		// the text/thinking deltas are surfaced as streaming animation; the durable
+		// assistant/thinking events carry the authoritative full text.
 		event, _ := msg["event"].(map[string]interface{})
 		delta, _ := event["delta"].(map[string]interface{})
-		if delta["type"] == "text_delta" {
+		switch delta["type"] {
+		case "text_delta":
 			emit(evTextDelta, map[string]interface{}{"text": delta["text"]})
+		case "thinking_delta":
+			emit(evThinkingDelta, map[string]interface{}{"text": delta["thinking"]})
 		}
 	}
 }

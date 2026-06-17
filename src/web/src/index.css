@@ -1024,3 +1024,232 @@ body {
   font-size: 13px;
   margin: 6px 0;
 }
+
+/* ── rich transcript: Markdown + per-tool cards + sub-agent nesting ───────── */
+.md {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.md > *:first-child {
+  margin-top: 0;
+}
+.md > *:last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 6px 0;
+}
+.md ul,
+.md ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+.md li {
+  margin: 2px 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+}
+.md h1 {
+  font-size: 1.3em;
+}
+.md h2 {
+  font-size: 1.18em;
+}
+.md h3 {
+  font-size: 1.05em;
+}
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: #f0f1f2;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.md pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: #f6f8fa;
+  border: 1px solid #eceef1;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+  font-size: 12.5px;
+}
+.md table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.md th,
+.md td {
+  border: 1px solid #e3e5e8;
+  padding: 4px 8px;
+}
+.md blockquote {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 3px solid #e3e5e8;
+  color: #646a73;
+}
+.md a {
+  color: #3370ff;
+}
+
+/* thinking */
+.chat-think {
+  margin: 6px 0;
+  border-left: 2px solid #e3e5e8;
+  padding-left: 10px;
+}
+.chat-think-head {
+  font-size: 12.5px;
+  color: #8f959e;
+  cursor: pointer;
+  user-select: none;
+}
+.chat-think-body {
+  color: #646a73;
+  margin-top: 4px;
+}
+.chat-think-body .md {
+  font-size: 13px;
+  font-style: italic;
+}
+.chat-think-stream {
+  color: #8f959e;
+  font-style: italic;
+  font-size: 13px;
+  margin: 6px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* tool cards */
+.chat-tool-card {
+  margin: 8px 0;
+  border: 1px solid #eceef1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fcfcfd;
+}
+.chat-tool-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f7f8fa;
+  font-size: 12.5px;
+}
+.chat-tool-name {
+  font-weight: 600;
+  color: #1f2329;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chat-tool-summary {
+  color: #646a73;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.chat-tool-task .chat-tool-head {
+  background: #eef4ff;
+}
+.chat-tool-body {
+  padding: 8px 10px;
+}
+.chat-tool-prompt {
+  font-size: 13px;
+  color: #434956;
+}
+
+/* monospace blocks (commands, json, results) */
+.chat-pre-wrap.muted .chat-pre {
+  color: #646a73;
+  font-size: 12px;
+}
+.chat-pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #1f2329;
+}
+.chat-more {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  color: #3370ff;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* edit diff */
+.chat-diff {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.diff-del {
+  color: #b9322f;
+  background: #fdecea;
+}
+.diff-add {
+  color: #1a7f37;
+  background: #e6f6ec;
+}
+
+/* todos */
+.chat-todos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.todo {
+  display: flex;
+  gap: 8px;
+}
+.todo-mark {
+  width: 14px;
+  color: #8f959e;
+}
+.todo-completed {
+  color: #8f959e;
+  text-decoration: line-through;
+}
+.todo-in_progress .todo-mark {
+  color: #3370ff;
+}
+
+/* sub-agent (Task) transcript — nested under the spawning call */
+.chat-subagent {
+  margin: 6px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid #d7dbe0;
+}
+
+/* tool result */
+.chat-result {
+  border-top: 1px dashed #eceef1;
+  padding: 6px 10px;
+  background: #fbfbfc;
+}
+.chat-result.is-error {
+  background: #fdecea;
+}
+.chat-result-empty {
+  font-size: 12.5px;
+  color: #b9322f;
+}

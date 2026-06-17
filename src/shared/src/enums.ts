@@ -38,6 +38,9 @@ export enum RunEventType {
   SYSTEM = 'system',
   ASSISTANT = 'assistant',
   TEXT_DELTA = 'text_delta',
+  /** Extended-thinking block (durable) + its streaming increment (animation only). */
+  THINKING = 'thinking',
+  THINKING_DELTA = 'thinking_delta',
   TOOL_USE = 'tool_use',
   TOOL_RESULT = 'tool_result',
   STATUS = 'status',

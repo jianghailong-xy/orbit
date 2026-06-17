@@ -427,10 +427,13 @@ export class RunnerApiController {
     if (events.length === 0) return { ok: true };
 
     // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
-    // text_delta is the streaming-animation increment: broadcast it live (below) but
-    // DON'T persist it — the full reply is durably saved as the trailing `assistant`
-    // event, so replay/refresh still shows complete text without piling up rows.
-    const durable = events.filter((e) => e.type !== RunEventType.TEXT_DELTA);
+    // text_delta / thinking_delta are streaming-animation increments: broadcast them
+    // live (below) but DON'T persist them — the full reply is durably saved as the
+    // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
+    // text without piling up rows.
+    const durable = events.filter(
+      (e) => e.type !== RunEventType.TEXT_DELTA && e.type !== RunEventType.THINKING_DELTA,
+    );
     if (durable.length > 0) {
       await this.prisma.runEvent.createMany({
         data: durable.map((e) => ({
