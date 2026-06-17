@@ -114,6 +114,16 @@ export class SessionsService {
     RunStatus.INTERRUPTED,
   ];
 
+  private static readonly TERMINAL: RunStatus[] = [
+    RunStatus.SUCCEEDED,
+    RunStatus.FAILED,
+    RunStatus.CANCELLED,
+  ];
+
+  // A runner heartbeats every 30s; a missed window reads as offline. Resuming needs
+  // the original runner online — claude's transcript lives on that machine's disk.
+  private static readonly RUNNER_OFFLINE_AFTER_MS = 90_000;
+
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -204,6 +214,67 @@ export class SessionsService {
     if (session.assignedRunnerId) this.realtime.requestCancel(session.assignedRunnerId, session.id);
     this.realtime.notifyInbox(session.id);
     return { ok: true };
+  }
+
+  /**
+   * Revive an ended session with a new user message. The same Session row goes back
+   * to PENDING so its assigned runner re-claims it and --resumes claude's existing
+   * session (full prior context) rather than starting fresh. Requires that runner to
+   * be online: claude's transcript lives on its disk, so no other machine can resume.
+   */
+  async resume(ownerId: string, id: string, dto: SessionTurnDto) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    // Still live — a normal turn belongs on the running process, not a revive.
+    if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
+      return this.createTurn(ownerId, id, dto);
+    }
+    if (!SessionsService.TERMINAL.includes(session.status)) {
+      throw new ConflictException('the session has not started yet');
+    }
+    if (!session.startedAt || !session.claudeSessionId) {
+      throw new ConflictException('this session never ran and cannot be resumed');
+    }
+    // Idempotent: a retried send with the same clientTurnId returns the same turn.
+    const existing = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+    });
+    if (existing) return { turnId: existing.id, seq: existing.seq };
+    if (!session.assignedRunnerId) {
+      throw new ConflictException('the session has no runner to resume on');
+    }
+    const runner = await this.prisma.runner.findUnique({
+      where: { id: session.assignedRunnerId },
+      select: { status: true, lastHeartbeatAt: true },
+    });
+    const online =
+      !!runner &&
+      runner.status !== 'OFFLINE' &&
+      !!runner.lastHeartbeatAt &&
+      runner.lastHeartbeatAt.getTime() >= Date.now() - SessionsService.RUNNER_OFFLINE_AFTER_MS;
+    if (!online) {
+      throw new ConflictException('the runner is offline; it must be online to resume this session');
+    }
+    // Append the message, then flip the row back to PENDING so the runner re-claims
+    // it; buildSession sees the existing turns and re-spawns claude with --resume.
+    const turn = await this.insertTurn(id, {
+      kind: 'message',
+      content: dto.content,
+      clientTurnId: dto.clientTurnId,
+    });
+    await this.prisma.session.update({
+      where: { id },
+      data: {
+        status: RunStatus.PENDING,
+        cancelRequestedAt: null,
+        finishedAt: null,
+        error: null,
+        result: null,
+        lastTurnAt: new Date(),
+      },
+    });
+    this.queue.notifySessionQueued();
+    return { turnId: turn.id, seq: turn.seq };
   }
 
   async remove(ownerId: string, id: string) {

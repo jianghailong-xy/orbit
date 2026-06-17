@@ -54,6 +54,15 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
+  @Post(':id/resume')
+  resume(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Body() dto: SessionTurnDto,
+  ) {
+    return this.sessions.resume(user.userId, id, dto);
+  }
+
   @Post(':id/interrupt')
   interrupt(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.interrupt(user.userId, id);

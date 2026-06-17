@@ -134,6 +134,9 @@ export interface ClaimedSession {
   /** Highest RunEvent.seq already persisted, so a respawned runner continues the
    *  monotonic counter instead of colliding (events use skipDuplicates). */
   maxSeq: number;
+  /** True when reviving an ended session: claude's session already exists, so the
+   *  runner must --resume (not --session-id) even on its first spawn. */
+  resume?: boolean;
 }
 
 export interface RunEventBatch {

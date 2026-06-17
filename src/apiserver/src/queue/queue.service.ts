@@ -80,18 +80,34 @@ export class QueueService {
       where: { id: sessionId },
       include: { agent: true },
     });
-    // Seed the first turn from the session prompt so every turn (incl. the first)
-    // flows through the same inbox + turn-complete path on the runner.
-    await this.prisma.conversationTurn.create({
-      data: {
-        sessionId: session.id,
-        seq: 1,
-        clientTurnId: `initial-${session.id}`,
-        kind: 'message',
-        content: session.prompt,
-        status: 'PENDING',
-      },
+    // A session claimed before already has turns (drained, not deleted) and a claude
+    // session registered under claudeSessionId. Re-claiming it (revived from an ended
+    // state) must --resume that session, not seed a new first turn or re-use
+    // --session-id. A truly fresh session has no turns yet.
+    const priorTurns = await this.prisma.conversationTurn.count({
+      where: { sessionId: session.id },
     });
+    const resume = priorTurns > 0;
+    if (!resume) {
+      // Seed the first turn from the session prompt so every turn (incl. the first)
+      // flows through the same inbox + turn-complete path on the runner.
+      await this.prisma.conversationTurn.create({
+        data: {
+          sessionId: session.id,
+          seq: 1,
+          clientTurnId: `initial-${session.id}`,
+          kind: 'message',
+          content: session.prompt,
+          status: 'PENDING',
+        },
+      });
+    }
+    // Continue the monotonic event seq past whatever a prior run persisted, so a
+    // resumed session's new events never collide with its history (0 when fresh).
+    const maxSeq = resume
+      ? ((await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max
+          .seq ?? 0)
+      : 0;
     const agent = session.agent;
     return {
       sessionId: session.id,
@@ -101,7 +117,8 @@ export class QueueService {
       workDir: agent?.workDir ?? undefined,
       // We spawn claude with --session-id = claudeSessionId, so it's known up front.
       sessionUuid: session.claudeSessionId ?? session.id,
-      maxSeq: 0,
+      maxSeq,
+      resume,
       agent: {
         // Per-session override wins over the agent, then a server default.
         model: session.model ?? agent?.model ?? 'claude-sonnet-4-6',

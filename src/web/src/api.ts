@@ -77,6 +77,14 @@ export const sendTurn = (sessionId: string, content: string) =>
     body: { clientTurnId: uuid(), content },
   });
 
+/** Revive an ended session with a new message: the runner --resumes claude's
+ *  existing context. Requires the session's runner to be online. */
+export const resumeSession = (sessionId: string, content: string) =>
+  api(`/sessions/${sessionId}/resume`, {
+    method: 'POST',
+    body: { clientTurnId: uuid(), content },
+  });
+
 export const interruptSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/interrupt`, { method: 'POST' });
 

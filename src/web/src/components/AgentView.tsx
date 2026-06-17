@@ -19,6 +19,7 @@ import {
   createInteractiveSession,
   endSession,
   interruptSession,
+  resumeSession,
   sendTurn,
   sessionEventsUrl,
 } from '../api';
@@ -109,6 +110,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   );
   const selected = useMemo(() => sessions.find((s) => s.id === selectedId) ?? null, [sessions, selectedId]);
   const live = selected ? !TERMINAL.includes(selected.status) : false;
+  // An ended session can be revived (--resume claude's context) only if it actually
+  // ran and its runner is online — the transcript lives on that machine's disk.
+  const resumable = !!selected && !live && !!selected.startedAt && runner.online;
   // The session list is scoped to the locked agent when one is set, so the page
   // reads as a conversation with that agent rather than the whole runner.
   const visibleSessions = useMemo(
@@ -242,10 +246,15 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const send = useMutation({
     mutationFn: async (content: string): Promise<string> => {
-      // Continue a live session; otherwise (no selection, or the selected one has
-      // ended) start a fresh session so the composer never dead-locks.
+      // Continue a live session; revive an ended-but-resumable one (same row, claude
+      // --resumes its context); otherwise (no selection, or unresumable) start a
+      // fresh session so the composer never dead-locks.
       if (selected && live) {
         await sendTurn(selected.id, content);
+        return selected.id;
+      }
+      if (selected && resumable) {
+        await resumeSession(selected.id, content);
         return selected.id;
       }
       const created = await createInteractiveSession({
@@ -347,7 +356,14 @@ export function AgentView({ runner }: { runner: Runner }) {
             !streamingText &&
             !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
           {selected && TERMINAL.includes(selected.status) && (
-            <div className="chat-note">Session {selected.status.toLowerCase()}.</div>
+            <div className="chat-note">
+              Session {selected.status.toLowerCase()}.
+              {resumable
+                ? ' 发消息可续接这个会话。'
+                : runner.online
+                  ? ' 发消息将新开一个会话。'
+                  : ' 运行器离线，需上线后才能续接。'}
+            </div>
           )}
         </div>
       ) : (

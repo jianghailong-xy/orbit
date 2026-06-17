@@ -98,6 +98,9 @@ type ClaimedSession struct {
 	WorkDir     string `json:"workDir,omitempty"`
 	SessionUUID string `json:"sessionUuid"`
 	MaxSeq      int    `json:"maxSeq"`
+	// Resume marks a session revived from an ended state: like a reclaim, claude's
+	// session already exists, so even the first spawn must --resume. Server-set.
+	Resume bool `json:"resume"`
 	// Reclaimed marks a session re-attached after a runner restart: the claude
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
