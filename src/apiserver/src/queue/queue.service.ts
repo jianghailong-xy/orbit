@@ -95,6 +95,8 @@ export class QueueService {
       sessionId: session.id,
       title: session.title,
       prompt: session.prompt,
+      // The project directory claude runs in comes from the session's agent.
+      workDir: agent?.workDir ?? undefined,
       // We spawn claude with --session-id = claudeSessionId, so it's known up front.
       sessionUuid: session.claudeSessionId ?? session.id,
       maxSeq: 0,

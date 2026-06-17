@@ -2,7 +2,6 @@ package main
 
 import (
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -21,90 +20,57 @@ func TestDefaultAgentNameIsBase(t *testing.T) {
 	}
 }
 
-func TestAgentHome(t *testing.T) {
+func TestMachineHomeHonorsOrbitHome(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("ORBIT_HOME", tmp)
-
-	if got := rootDir(); got != tmp {
-		t.Fatalf("rootDir = %q, want %q (ORBIT_HOME)", got, tmp)
+	if got := machineHome(); got != tmp {
+		t.Fatalf("machineHome = %q, want %q (ORBIT_HOME)", got, tmp)
 	}
-	if got := agentHome(""); got != tmp {
-		t.Fatalf("agentHome(\"\") = %q, want rootDir %q", got, tmp)
-	}
-	if got, want := agentHome("claude"), filepath.Join(tmp, "claude"); got != want {
-		t.Fatalf("agentHome(claude) = %q, want %q", got, want)
+	if got, want := configPath(), filepath.Join(tmp, "config.json"); got != want {
+		t.Fatalf("configPath = %q, want %q", got, want)
 	}
 }
 
-func TestSaveLoadConfigAt(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "claude")
+func TestMachineHomeDefaultsToHomeOrbit(t *testing.T) {
+	t.Setenv("ORBIT_HOME", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got, want := machineHome(), filepath.Join(home, ".orbit"); got != want {
+		t.Fatalf("machineHome = %q, want %q", got, want)
+	}
+}
+
+func TestSaveLoadConfigRoundTrip(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	in := &RunnerConfig{
 		ServerURL: "https://example", RunnerID: "r1", RunnerToken: "tok",
-		Name: "proj@host/claude", AgentKey: "claude", Agents: []string{"claude"},
+		Name: "CPXG6GM7K4", Labels: []string{"sg"}, MaxConcurrent: 4, WorkDir: "/proj",
 	}
-	if err := saveConfigAt(dir, in); err != nil {
+	if err := saveConfig(in); err != nil {
 		t.Fatal(err)
 	}
-	out := loadConfigAt(dir)
+	out := loadConfig()
 	if out == nil {
-		t.Fatal("loadConfigAt returned nil")
+		t.Fatal("loadConfig returned nil")
 	}
-	if out.AgentKey != "claude" || out.Name != in.Name || out.RunnerID != "r1" {
+	if out.Name != in.Name || out.RunnerID != "r1" || out.WorkDir != "/proj" || out.MaxConcurrent != 4 {
 		t.Fatalf("round-trip mismatch: %+v", out)
 	}
 }
 
-func TestExistingConfigsFindsPerAgentAndLegacy(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("ORBIT_HOME", tmp)
-
-	// A legacy single-runner config at the root, plus a per-agent config.
-	if err := saveConfigAt(tmp, &RunnerConfig{Name: "legacy", RunnerID: "L"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := saveConfigAt(filepath.Join(tmp, "claude"), &RunnerConfig{Name: "proj@host/claude", AgentKey: "claude", RunnerID: "C"}); err != nil {
-		t.Fatal(err)
-	}
-
-	got := existingConfigs()
-	names := map[string]bool{}
-	for _, c := range got {
-		names[c.Name] = true
-	}
-	if !names["legacy"] || !names["proj@host/claude"] {
-		t.Fatalf("existingConfigs missing entries: got %v", names)
-	}
-	if len(got) != 2 {
-		t.Fatalf("want 2 configs, got %d", len(got))
+func TestLoadConfigMissingReturnsNil(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	if cfg := loadConfig(); cfg != nil {
+		t.Fatalf("want nil for a missing config, got %+v", cfg)
 	}
 }
 
-func TestServiceNameAndLabel(t *testing.T) {
-	cases := []struct{ key, svc, label string }{
-		{"", "orbit-runner", "com.orbit.runner"},
-		{"claude", "orbit-runner-claude", "com.orbit.runner.claude"},
-		{"codex", "orbit-runner-codex", "com.orbit.runner.codex"},
+func TestServiceNames(t *testing.T) {
+	// One runner per machine -> a single fixed service name (no per-agent suffix).
+	if systemdService != "orbit-runner" {
+		t.Errorf("systemdService = %q, want orbit-runner", systemdService)
 	}
-	for _, c := range cases {
-		if got := serviceName(c.key); got != c.svc {
-			t.Errorf("serviceName(%q) = %q, want %q", c.key, got, c.svc)
-		}
-		if got := launchdLabel(c.key); got != c.label {
-			t.Errorf("launchdLabel(%q) = %q, want %q", c.key, got, c.label)
-		}
-	}
-}
-
-func TestMintedFromFallback(t *testing.T) {
-	// When the server returns a runners list, use it verbatim.
-	list := []MintedRunner{{AgentKey: "claude", RunnerID: "r1", RunnerToken: "t1", Name: "n/claude"}}
-	if got := mintedFrom(list, "x", "y", "z"); !reflect.DeepEqual(got, list) {
-		t.Fatalf("want server list, got %+v", got)
-	}
-	// Older server (no runners): synthesize a single runner from the legacy fields.
-	got := mintedFrom(nil, "r1", "tok", "name")
-	want := []MintedRunner{{RunnerID: "r1", RunnerToken: "tok", Name: "name"}}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("fallback mismatch: got %+v, want %+v", got, want)
+	if launchdLabel != "com.orbit.runner" {
+		t.Errorf("launchdLabel = %q, want com.orbit.runner", launchdLabel)
 	}
 }

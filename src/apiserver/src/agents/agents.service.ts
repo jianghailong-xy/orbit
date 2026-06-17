@@ -48,11 +48,16 @@ export class AgentsService {
     return this.prisma.agent.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
+      // Expose the machine an agent belongs to so the UI can group/route by runner.
+      include: { runner: { select: { id: true, name: true, displayName: true } } },
     });
   }
 
   async get(ownerId: string, id: string) {
-    const agent = await this.prisma.agent.findFirst({ where: { id, ownerId } });
+    const agent = await this.prisma.agent.findFirst({
+      where: { id, ownerId },
+      include: { runner: { select: { id: true, name: true, displayName: true } } },
+    });
     if (!agent) throw new NotFoundException('agent not found');
     return agent;
   }

@@ -11,30 +11,18 @@ import (
 	"syscall"
 )
 
-// serviceName is the systemd unit name for an agent's runner. The legacy single
-// runner (empty key) keeps the bare "orbit-runner" name.
-func serviceName(key string) string {
-	if key == "" {
-		return "orbit-runner"
-	}
-	return "orbit-runner-" + key
-}
+// One runner per machine, so the background service has a single fixed name.
+const (
+	systemdService = "orbit-runner"
+	launchdLabel   = "com.orbit.runner"
+)
 
-// launchdLabel is the launchd LaunchAgent label for an agent's runner.
-func launchdLabel(key string) string {
-	if key == "" {
-		return "com.orbit.runner"
-	}
-	return "com.orbit.runner." + key
-}
-
-// setupServiceFor installs + starts a background service that runs `orbit run`
-// (with ORBIT_HOME=orbitHome) and restarts on failure, for the agent `key`.
-// Linux uses systemd; macOS uses a launchd LaunchAgent. Returns an error instead
-// of exiting, so `orbit register` can call it best-effort. The runner
-// authenticates through the machine's local Claude Code login, so no API key is
-// involved here.
-func setupServiceFor(key, orbitHome string) error {
+// setupService installs + starts a background service that runs `orbit run` (with
+// ORBIT_HOME=orbitHome) and restarts on failure. Linux uses systemd; macOS uses a
+// launchd LaunchAgent. Returns an error instead of exiting, so `orbit register` can
+// call it best-effort. The runner authenticates through the machine's local Claude
+// Code login, so no API key is involved here.
+func setupService(orbitHome string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot locate executable: %w", err)
@@ -45,20 +33,20 @@ func setupServiceFor(key, orbitHome string) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		return installSystemd(exe, orbitHome, serviceName(key))
+		return installSystemd(exe, orbitHome, systemdService)
 	case "darwin":
-		return installLaunchd(exe, orbitHome, launchdLabel(key))
+		return installLaunchd(exe, orbitHome, launchdLabel)
 	default:
 		return errors.New("background service is only supported on Linux (systemd) and macOS (launchd); run `orbit run` under your own supervisor")
 	}
 }
 
-// uninstallServiceFor stops and removes the background service for agent `key`,
-// for `orbit unregister`. Best-effort: it reports problems but never aborts.
-func uninstallServiceFor(key string) {
+// uninstallService stops and removes the machine's runner service, for
+// `orbit unregister`. Best-effort: it reports problems but never aborts.
+func uninstallService() {
 	switch runtime.GOOS {
 	case "linux":
-		svc := serviceName(key)
+		svc := systemdService
 		if os.Geteuid() != 0 {
 			fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
 			return
@@ -68,7 +56,7 @@ func uninstallServiceFor(key string) {
 		runQuiet("systemctl", "daemon-reload")
 		fmt.Printf("✓ removed the %s service\n", svc)
 	case "darwin":
-		label := launchdLabel(key)
+		label := launchdLabel
 		home := os.Getenv("HOME")
 		if home == "" {
 			if h, err := os.UserHomeDir(); err == nil {

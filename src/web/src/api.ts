@@ -39,10 +39,11 @@ export const sessionEventsUrl = (sessionId: string, sinceSeq?: number): string =
 
 // ── Interactive sessions (Route B) ──
 
-/** Start a long-lived interactive session pinned to a runner (first message = prompt). */
+/** Start a long-lived interactive session. Pick an agent (its machine + project dir
+ *  is derived server-side) and/or pin a runner; the first message seeds the prompt. */
 export const createInteractiveSession = (body: {
   prompt: string;
-  assignedRunnerId: string;
+  assignedRunnerId?: string;
   agentId?: string;
   model?: string;
   permissionMode?: string;

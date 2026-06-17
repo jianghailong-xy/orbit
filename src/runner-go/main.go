@@ -42,7 +42,7 @@ The runner drives the machine's local Claude Code login (run 'claude' then '/log
 no API key is required.
 
 Env:
-  ORBIT_HOME               Override config/runs dir (default: ./.orbit in the current directory)
+  ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
   ORBIT_NO_SELFUPDATE      Disable the startup auto-update
 `
 
@@ -54,16 +54,17 @@ Usage:
   orbit register [options]
 
 Approve the machine in the browser (device-login), or pass --token to skip approval.
-Detects the coding agents installed here and registers one runner per agent.
+This machine becomes one runner (named by hostname); each coding agent installed
+here is registered as an agent "<name>/<agentkey>" that runs in this directory.
 
 Options:
   --server <url>           Control plane base URL (default: ` + defaultServer + `)
   --token <token>          Optional one-time enrollment token (skips browser approval)
-  --name <name>            Base runner name (default: "<dir>@<hostname>"); each agent registers as "<name>/<agentkey>"
+  --name <name>            Base name for the agents (default: "<dir>@<hostname>"); the runner is named by hostname
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
   --max-concurrent <n>     Max concurrent jobs (default: 16)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)
-  --force                  Re-register even if this directory already has a runner
+  --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
 `,
@@ -72,16 +73,16 @@ Options:
 Usage:
   orbit run
 
-Runs the runner registered in this directory. If several agents are registered
-here, pick one with ORBIT_HOME (e.g. ORBIT_HOME=./.orbit/claude orbit run).
+Runs this machine's runner. It claims sessions for any of its agents and runs each
+in that agent's project directory.
 `,
-	"unregister": `orbit unregister — remove this directory's runner(s)
+	"unregister": `orbit unregister — remove this machine's runner
 
 Usage:
   orbit unregister [--yes]
 
-Stops the background service, deletes the runner from the control plane, and
-removes the local config.
+Stops the background service, deletes the runner (and its agents) from the control
+plane, and removes the local config.
 
 Options:
   --yes, --force           Skip the confirmation prompt
@@ -152,18 +153,14 @@ func main() {
 }
 
 func cmdRegister(flags map[string]string, bools map[string]bool) {
-	// A machine can host many runners — one per directory. Re-registering the
-	// same directory overwrites its configs, so confirm first.
-	if existing := existingConfigs(); len(existing) > 0 && !bools["force"] {
-		names := make([]string, len(existing))
-		for i, c := range existing {
-			names[i] = strconv.Quote(c.Name)
-		}
+	// One runner per machine. Re-registering re-issues its credential and
+	// adds/updates this directory's agent, so confirm before clobbering the config.
+	if existing := loadConfig(); existing != nil && !bools["force"] {
 		ok := confirm(fmt.Sprintf(
-			"This directory already has runner(s) %s registered.\nRegister again here (overwrites %s)? [Y/n] ",
-			strings.Join(names, ", "), rootDir()), true)
+			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential and adds this directory's agent)? [Y/n] ",
+			existing.Name, existing.ServerURL), true)
 		if !ok {
-			fmt.Println("aborted — use `orbit register` in another directory, or pass --force")
+			fmt.Println("aborted — pass --force to re-register without confirming")
 			os.Exit(0)
 		}
 	}
@@ -202,13 +199,13 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	if token != "" {
 		res, err := t.register(RegisterRequest{
 			EnrollmentToken: token, Name: name, Hostname: hostnameOr(),
-			Labels: labels, MaxConcurrent: maxConcurrent, Version: version, Agents: agents,
+			Labels: labels, MaxConcurrent: maxConcurrent, Version: version, Agents: agents, WorkDir: workDir,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "registration failed:", err)
 			os.Exit(1)
 		}
-		finishRegister(mintedFrom(res.Runners, res.RunnerID, res.RunnerToken, res.Name),
+		finishRegister(res.RunnerID, res.RunnerToken, res.Name, res.Agents,
 			server, labels, maxConcurrent, workDir, withService, foreground)
 		return
 	}
@@ -216,7 +213,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	// Device-login flow: approve this machine in the browser, like `claude` login.
 	start, err := t.deviceStart(DeviceStartRequest{
 		Name: name, Hostname: hostnameOr(), Labels: labels,
-		MaxConcurrent: maxConcurrent, Version: version, Agents: agents,
+		MaxConcurrent: maxConcurrent, Version: version, Agents: agents, WorkDir: workDir,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "registration failed:", err)
@@ -236,7 +233,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			continue // transient — keep waiting until the deadline
 		}
 		if poll.Status == "approved" {
-			finishRegister(mintedFrom(poll.Runners, poll.RunnerID, poll.RunnerToken, poll.Name),
+			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name, poll.Agents,
 				server, labels, maxConcurrent, workDir, withService, foreground)
 			return
 		}
@@ -248,166 +245,130 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	os.Exit(1)
 }
 
-// mintedFrom returns the runners to set up: the server's per-agent list, or a
-// single fallback synthesized from the legacy fields when talking to an older
-// server that doesn't send `runners`.
-func mintedFrom(runners []MintedRunner, id, token, name string) []MintedRunner {
-	if len(runners) > 0 {
-		return runners
+// finishRegister persists the machine runner credential, prints the agents it now
+// has, and installs the background service (unless running in the foreground).
+func finishRegister(runnerID, runnerToken, name string, agents []MintedAgent, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool) {
+	cfg := &RunnerConfig{
+		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
+		Name: name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
 	}
-	return []MintedRunner{{RunnerID: id, RunnerToken: token, Name: name}}
-}
-
-func finishRegister(minted []MintedRunner, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool) {
-	cfgs := make([]*RunnerConfig, 0, len(minted))
-	for _, m := range minted {
-		cfg := &RunnerConfig{
-			ServerURL: server, RunnerID: m.RunnerID, RunnerToken: m.RunnerToken,
-			Name: m.Name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
-			AgentKey: m.AgentKey,
+	if err := saveConfig(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to save config:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("\n✓ registered runner %q (%s).\n", cfg.Name, cfg.RunnerID)
+	for _, a := range agents {
+		dir := a.WorkDir
+		if dir == "" {
+			dir = workDir
 		}
-		if m.AgentKey != "" {
-			cfg.Agents = []string{m.AgentKey}
-		}
-		if err := saveConfigAt(agentHome(m.AgentKey), cfg); err != nil {
-			fmt.Fprintln(os.Stderr, "failed to save config:", err)
-			os.Exit(1)
-		}
-		cfgs = append(cfgs, cfg)
-		fmt.Printf("\n✓ registered runner %q (%s).\n", m.Name, m.RunnerID)
+		fmt.Printf("  • agent %q → %s\n", a.Name, dir)
 	}
 
 	if foreground {
-		// Foreground runs a single agent in this terminal; any others are
-		// registered and startable via their service or `orbit run`.
-		first := cfgs[0]
-		for _, c := range cfgs[1:] {
-			fmt.Printf("  also registered %q — start with:  ORBIT_HOME=%s orbit run\n", c.Name, agentHome(c.AgentKey))
-		}
-		os.Setenv("ORBIT_HOME", agentHome(first.AgentKey)) // align runsDir/baseDir with this agent's home
-		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", first.Name)
-		runLoop(first)
+		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
+		runLoop(cfg)
 		return
 	}
 	if !withService {
 		fmt.Println("  Start it with:  orbit run")
 		return
 	}
-	for _, c := range cfgs {
-		if err := setupServiceFor(c.AgentKey, agentHome(c.AgentKey)); err != nil {
-			fmt.Fprintf(os.Stderr, "\nnote: could not auto-install the %s service (%s)\n", serviceName(c.AgentKey), firstLine(err.Error()))
-			fmt.Fprintln(os.Stderr, "  you can run it in the foreground instead:  orbit run")
-		}
+	if err := setupService(machineHome()); err != nil {
+		fmt.Fprintf(os.Stderr, "\nnote: could not auto-install the background service (%s)\n", firstLine(err.Error()))
+		fmt.Fprintln(os.Stderr, "  you can run it in the foreground instead:  orbit run")
 	}
-	return
 }
 
-// cmdUnregister tears down this directory's runner: stops/removes the service,
-// deletes the runner from the control plane, and drops the local config.
+// cmdUnregister tears down this machine's runner: stops/removes the service,
+// deletes the runner (and its agents) from the control plane, and drops the config.
 func cmdUnregister(bools map[string]bool) {
-	cfgs := existingConfigs()
-	if len(cfgs) == 0 {
-		cwd, _ := os.Getwd()
-		fmt.Printf("no runner registered in %s\n", cwd)
+	cfg := loadConfig()
+	if cfg == nil {
+		fmt.Println("no runner registered on this machine")
 		return
 	}
 	if !bools["yes"] && !bools["force"] {
-		names := make([]string, len(cfgs))
-		for i, c := range cfgs {
-			names[i] = strconv.Quote(c.Name)
-		}
 		if !confirm(fmt.Sprintf(
-			"Unregister runner(s) %s — stop their service(s), delete them from %s, and remove local config? [y/N] ",
-			strings.Join(names, ", "), cfgs[0].ServerURL), false) {
+			"Unregister runner %q — stop its service, delete it (and its agents) from %s, and remove local config? [y/N] ",
+			cfg.Name, cfg.ServerURL), false) {
 			fmt.Println("aborted")
 			return
 		}
 	}
 
-	for _, cfg := range cfgs {
-		uninstallServiceFor(cfg.AgentKey) // stop + remove the background service first
+	uninstallService() // stop + remove the background service first
 
-		if err := NewTransport(cfg.ServerURL, cfg.RunnerToken).deregister(); err != nil {
-			fmt.Fprintf(os.Stderr, "note: could not delete %q from the control plane (%s)\n", cfg.Name, firstLine(err.Error()))
-		} else {
-			fmt.Printf("✓ deleted %q from the control plane\n", cfg.Name)
-		}
-
-		if err := os.Remove(filepath.Join(agentHome(cfg.AgentKey), "config.json")); err != nil && !os.IsNotExist(err) {
-			fmt.Fprintln(os.Stderr, "failed to remove config:", err)
-			os.Exit(1)
-		}
-		fmt.Printf("✓ unregistered %q\n", cfg.Name)
+	if err := NewTransport(cfg.ServerURL, cfg.RunnerToken).deregister(); err != nil {
+		fmt.Fprintf(os.Stderr, "note: could not delete %q from the control plane (%s)\n", cfg.Name, firstLine(err.Error()))
+	} else {
+		fmt.Printf("✓ deleted %q from the control plane\n", cfg.Name)
 	}
+
+	if err := os.Remove(configPath()); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintln(os.Stderr, "failed to remove config:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ unregistered %q\n", cfg.Name)
 }
 
 func cmdRun() {
-	// The service sets ORBIT_HOME to a per-agent home, so loadConfig finds that
-	// agent's config. For a manual `orbit run` with no ORBIT_HOME, fall back to the
-	// per-agent configs in this directory: run the only one, or ask which.
 	cfg := loadConfig()
 	if cfg == nil {
-		cfgs := existingConfigs()
-		switch len(cfgs) {
-		case 0:
-			fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
-			os.Exit(1)
-		case 1:
-			cfg = cfgs[0]
-			os.Setenv("ORBIT_HOME", agentHome(cfg.AgentKey)) // align runsDir/baseDir with this agent
-		default:
-			fmt.Fprintln(os.Stderr, "multiple agents are registered here — pick one with ORBIT_HOME, e.g.:")
-			for _, c := range cfgs {
-				fmt.Fprintf(os.Stderr, "  ORBIT_HOME=%s orbit run   # %s\n", agentHome(c.AgentKey), c.Name)
-			}
-			os.Exit(1)
-		}
+		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
+		os.Exit(1)
 	}
 	selfUpdate(cfg.ServerURL) // pull a newer orbit before settling into the loop
 	runLoop(cfg)
 }
 
 func cmdStatus() {
-	cfgs := existingConfigs()
-	if len(cfgs) == 0 {
-		cwd, _ := os.Getwd()
-		fmt.Printf("no runner registered in %s\nRun `orbit register` to add one.\n", cwd)
+	cfg := loadConfig()
+	if cfg == nil {
+		fmt.Printf("no runner registered on this machine\nRun `orbit register` to add one.\n")
 		return
 	}
 	fmt.Printf("orbit %s\n", version)
-	for _, cfg := range cfgs {
-		fmt.Printf("\nrunner:  %s (%s)\nserver:  %s\nlabels:  %s\nconfig:  %s\n",
-			cfg.Name, cfg.RunnerID, cfg.ServerURL, labelsOrDash(cfg.Labels),
-			filepath.Join(agentHome(cfg.AgentKey), "config.json"))
+	fmt.Printf("\nrunner:  %s (%s)\nserver:  %s\nlabels:  %s\nconfig:  %s\n",
+		cfg.Name, cfg.RunnerID, cfg.ServerURL, labelsOrDash(cfg.Labels), configPath())
 
-		me, err := NewTransport(cfg.ServerURL, cfg.RunnerToken).me()
-		if err != nil {
-			msg := firstLine(err.Error())
-			if strings.Contains(msg, "401") {
-				fmt.Println("status:  credential invalid — re-register with `orbit register --force`")
-			} else {
-				fmt.Printf("status:  control plane unreachable (%s)\n", msg)
+	me, err := NewTransport(cfg.ServerURL, cfg.RunnerToken).me()
+	if err != nil {
+		msg := firstLine(err.Error())
+		if strings.Contains(msg, "401") {
+			fmt.Println("status:  credential invalid — re-register with `orbit register --force`")
+		} else {
+			fmt.Printf("status:  control plane unreachable (%s)\n", msg)
+		}
+		return
+	}
+	ago := "never"
+	if me.LastHeartbeatAt != nil {
+		if ts, err := time.Parse(time.RFC3339, *me.LastHeartbeatAt); err == nil {
+			ago = fmt.Sprintf("%ds ago", int(time.Since(ts).Seconds()))
+		}
+	}
+	st := "offline"
+	if me.Online {
+		st = "online"
+	}
+	fmt.Printf("status:  %s (last heartbeat %s)\n", st, ago)
+	if len(me.Agents) > 0 {
+		fmt.Println("agents:")
+		for _, a := range me.Agents {
+			dir := a.WorkDir
+			if dir == "" {
+				dir = "—"
 			}
-			continue
+			fmt.Printf("  • %s → %s\n", a.Name, dir)
 		}
-		ago := "never"
-		if me.LastHeartbeatAt != nil {
-			if ts, err := time.Parse(time.RFC3339, *me.LastHeartbeatAt); err == nil {
-				ago = fmt.Sprintf("%ds ago", int(time.Since(ts).Seconds()))
-			}
-		}
-		st := "offline"
-		if me.Online {
-			st = "online"
-		}
-		fmt.Printf("status:  %s (last heartbeat %s)\n", st, ago)
 	}
 }
 
 func cmdUpgrade() {
 	server := defaultServer
-	if cfgs := existingConfigs(); len(cfgs) > 0 {
-		server = cfgs[0].ServerURL
+	if cfg := loadConfig(); cfg != nil {
+		server = cfg.ServerURL
 	}
 	upgrade(strings.TrimRight(server, "/"))
 }

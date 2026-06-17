@@ -72,6 +72,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [text, setText] = useState('');
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
+  const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
@@ -90,6 +91,20 @@ export function AgentView({ runner }: { runner: Runner }) {
   );
   const selected = useMemo(() => sessions.find((s) => s.id === selectedId) ?? null, [sessions, selectedId]);
   const live = selected ? !TERMINAL.includes(selected.status) : false;
+
+  // Agents belonging to this machine runner — each is a project dir + coding tool.
+  // Picking one tells the server where (which dir) to run a new session.
+  const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+  const agentsForRunner = useMemo(
+    () => (agentsQ.data ?? []).filter((a) => a.runnerId === runner.id),
+    [agentsQ.data, runner.id],
+  );
+  // Default to the runner's first agent; keep a still-valid pick, reset on runner switch.
+  useEffect(() => {
+    setAgentId((prev) =>
+      prev && agentsForRunner.some((a) => a.id === prev) ? prev : agentsForRunner[0]?.id,
+    );
+  }, [agentsForRunner]);
 
   // Slot accounting: a runner hosts at most maxConcurrent live sessions. When it's
   // full, a newly created session sits PENDING instead of starting — surface that
@@ -184,6 +199,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
+        agentId,
         model,
         permissionMode: MODE_TO_PERMISSION[mode],
       });
@@ -220,6 +236,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
+  // A live session's agent is fixed; otherwise reflect the local pick.
+  const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
 
   return (
     <div className="agent-view">
@@ -340,6 +358,16 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
         <Tooltip title="Mode & Model are chosen per session before it starts, and stay fixed for the session's life.">
           <div className="composer-controls">
+            <span className="composer-label">Agent</span>
+            <Select
+              size="small"
+              value={shownAgentId}
+              onChange={setAgentId}
+              options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+              placeholder="Default"
+              style={{ minWidth: 160, maxWidth: 240 }}
+              disabled={live}
+            />
             <span className="composer-label">Mode</span>
             <Segmented
               size="small"

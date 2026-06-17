@@ -4,13 +4,15 @@ package main
 // plane's ValidationPipe passes these plain objects through unchanged.
 
 type DeviceStartRequest struct {
-	Name          string   `json:"name"`
+	Name          string   `json:"name"` // base "<dir>@<hostname>" for naming agents
 	Hostname      string   `json:"hostname,omitempty"`
 	Labels        []string `json:"labels"`
 	MaxConcurrent int      `json:"maxConcurrent"`
 	Version       string   `json:"version,omitempty"`
-	// Agent keys to register — one runner per agent, named "<name>/<agentKey>".
+	// Coding-tool keys to register (e.g. ["claude"]); each becomes an agent "<name>/<key>".
 	Agents []string `json:"agents,omitempty"`
+	// Project directory the agents run claude in (claude's cwd).
+	WorkDir string `json:"workDir,omitempty"`
 }
 
 type DeviceStartResponse struct {
@@ -24,37 +26,38 @@ type DevicePollResponse struct {
 	Status      string `json:"status"`
 	RunnerID    string `json:"runnerId"`
 	RunnerToken string `json:"runnerToken"`
-	Name        string `json:"name"`
-	// Every runner minted by this approval (one per agent). Empty from older
-	// servers — the CLI then falls back to the single RunnerID/RunnerToken/Name.
-	Runners []MintedRunner `json:"runners,omitempty"`
+	Name        string `json:"name"` // the machine runner name (hostname)
+	// The agents minted under this runner (one per requested coding-tool).
+	Agents []MintedAgent `json:"agents,omitempty"`
 }
 
-// MintedRunner is one runner the control plane created during enrollment; the CLI
-// writes one local config + service per entry.
-type MintedRunner struct {
-	AgentKey    string `json:"agentKey"`
-	RunnerID    string `json:"runnerId"`
-	RunnerToken string `json:"runnerToken"`
-	Name        string `json:"name"`
+// MintedAgent is one agent the control plane created during enrollment, bound to
+// this machine's runner.
+type MintedAgent struct {
+	AgentKey string `json:"agentKey"`
+	AgentID  string `json:"agentId"`
+	Name     string `json:"name"` // "<dir>@<hostname>/<key>"
+	WorkDir  string `json:"workDir,omitempty"`
 }
 
 type RegisterRequest struct {
 	EnrollmentToken string   `json:"enrollmentToken"`
-	Name            string   `json:"name"`
+	Name            string   `json:"name"` // base "<dir>@<hostname>" for naming agents
 	Hostname        string   `json:"hostname,omitempty"`
 	Labels          []string `json:"labels"`
 	MaxConcurrent   int      `json:"maxConcurrent"`
 	Version         string   `json:"version,omitempty"`
-	// Agent keys to register — one runner per agent, named "<name>/<agentKey>".
+	// Coding-tool keys to register (e.g. ["claude"]); each becomes an agent "<name>/<key>".
 	Agents []string `json:"agents,omitempty"`
+	// Project directory the agents run claude in (claude's cwd).
+	WorkDir string `json:"workDir,omitempty"`
 }
 
 type RegisterResponse struct {
-	RunnerID    string         `json:"runnerId"`
-	RunnerToken string         `json:"runnerToken"`
-	Name        string         `json:"name"`
-	Runners     []MintedRunner `json:"runners,omitempty"`
+	RunnerID    string        `json:"runnerId"`
+	RunnerToken string        `json:"runnerToken"`
+	Name        string        `json:"name"` // the machine runner name (hostname)
+	Agents      []MintedAgent `json:"agents,omitempty"`
 }
 
 type HeartbeatRequest struct {
@@ -68,14 +71,24 @@ type HeartbeatResponse struct {
 }
 
 type MeResponse struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Status          string   `json:"status"`
-	Online          bool     `json:"online"`
-	LastHeartbeatAt *string  `json:"lastHeartbeatAt"`
-	Version         *string  `json:"version"`
-	Labels          []string `json:"labels"`
-	MaxConcurrent   int      `json:"maxConcurrent"`
+	ID              string        `json:"id"`
+	Name            string        `json:"name"`
+	Status          string        `json:"status"`
+	Online          bool          `json:"online"`
+	LastHeartbeatAt *string       `json:"lastHeartbeatAt"`
+	Version         *string       `json:"version"`
+	Labels          []string      `json:"labels"`
+	MaxConcurrent   int           `json:"maxConcurrent"`
+	Agents          []RunnerAgent `json:"agents"`
+}
+
+// RunnerAgent is one agent registered under this machine's runner, as reported by
+// `GET /runner/me` and shown by `orbit status`.
+type RunnerAgent struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	AgentKey string `json:"agentKey,omitempty"`
+	WorkDir  string `json:"workDir,omitempty"`
 }
 
 type AgentExecConfig struct {
@@ -92,12 +105,14 @@ type AgentExecConfig struct {
 
 // ClaimedSession is one interactive session a runner has claimed (or reclaimed).
 type ClaimedSession struct {
-	SessionID   string          `json:"sessionId"`
-	Title       string          `json:"title"`
-	Prompt      string          `json:"prompt"`
-	Agent       AgentExecConfig `json:"agent"`
-	SessionUUID string          `json:"sessionUuid"`
-	MaxSeq      int             `json:"maxSeq"`
+	SessionID string          `json:"sessionId"`
+	Title     string          `json:"title"`
+	Prompt    string          `json:"prompt"`
+	Agent     AgentExecConfig `json:"agent"`
+	// WorkDir is claude's cwd for this session, from the session's agent.
+	WorkDir     string `json:"workDir,omitempty"`
+	SessionUUID string `json:"sessionUuid"`
+	MaxSeq      int    `json:"maxSeq"`
 	// Reclaimed marks a session re-attached after a runner restart: the claude
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
@@ -121,6 +136,8 @@ type ReclaimSession struct {
 	SessionUUID string          `json:"sessionUuid"`
 	MaxSeq      int             `json:"maxSeq"`
 	Agent       AgentExecConfig `json:"agent"`
+	// WorkDir is claude's cwd for this session, from the session's agent.
+	WorkDir string `json:"workDir,omitempty"`
 }
 
 type ReclaimResponse struct {

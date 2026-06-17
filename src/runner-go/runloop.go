@@ -15,13 +15,18 @@ const heartbeatInterval = 30 * time.Second
 func runLoop(cfg *RunnerConfig) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
 
-	// Claude Code runs in the registered project directory (so it can work on that
-	// project), not a per-run scratch dir. Old configs without WorkDir fall back to
-	// the process cwd — re-register to set it explicitly (correct under the service).
-	execDir := cfg.WorkDir
-	if execDir == "" {
-		execDir, _ = os.Getwd()
-		logln("warning: no workDir in config — running tasks in", execDir, "(re-register to set the project directory)")
+	// Claude Code's cwd is per session: the server hands each claimed/reclaimed
+	// session the project directory of its agent. sessionExecDir resolves it, falling
+	// back to the config's workDir (the last dir registered) then the process cwd.
+	sessionExecDir := func(workDir string) string {
+		if workDir != "" {
+			return workDir
+		}
+		if cfg.WorkDir != "" {
+			return cfg.WorkDir
+		}
+		cwd, _ := os.Getwd()
+		return cwd
 	}
 
 	var mu sync.Mutex
@@ -71,16 +76,17 @@ func runLoop(cfg *RunnerConfig) {
 	// startSession registers a session in `active` and drives it in its own
 	// goroutine, removing it on exit. Shared by fresh claims and reclaimed sessions.
 	startSession := func(job *ClaimedSession) {
+		execDir := sessionExecDir(job.WorkDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		mu.Lock()
 		active[job.SessionID] = cancel
 		mu.Unlock()
-		go func(j *ClaimedSession) {
-			runInteractiveSession(t, j, jobCtx, execDir)
+		go func(j *ClaimedSession, dir string) {
+			runInteractiveSession(t, j, jobCtx, dir)
 			mu.Lock()
 			delete(active, j.SessionID)
 			mu.Unlock()
-		}(job)
+		}(job, execDir)
 	}
 
 	// Re-attach to still-live interactive sessions from a previous process: without
@@ -97,6 +103,7 @@ func runLoop(cfg *RunnerConfig) {
 				SessionID:   r.SessionID,
 				Title:       r.Title,
 				Agent:       r.Agent,
+				WorkDir:     r.WorkDir,
 				Reclaimed:   true,
 				SessionUUID: r.SessionUUID,
 				MaxSeq:      r.MaxSeq,

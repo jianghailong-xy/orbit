@@ -70,6 +70,8 @@ model Runner {
   enrolledAt      DateTime     @default(now()) @map("enrolled_at")
 
   sessions Session[]
+  // Agents `orbit register` minted for this machine (one per project dir + tool).
+  agents   Agent[]
 
   @@index([ownerId])
   @@map("runner")
@@ -102,14 +104,16 @@ model DeviceEnrollment {
   maxConcurrent  Int       @default(1) @map("max_concurrent")
   version        String?
   status         String    @default("PENDING") // PENDING | APPROVED
-  // Agent keys requested at device/start; approval mints one Runner per agent,
-  // each named `<name>/<agentKey>`. Empty -> a single Runner named `name`.
+  // Agent (coding-tool) keys requested at device/start; approval mints one Runner
+  // for the machine (named by hostname) and one Agent per key (named `<name>/<key>`).
   agents         String[]  @default([])
-  runnerId       String?   @map("runner_id") @db.Uuid // first minted runner — kept for older CLIs
+  // The project directory the minted agents run in (claude's cwd), from the CLI.
+  workDir        String?   @map("work_dir")
+  runnerId       String?   @map("runner_id") @db.Uuid // the machine runner minted on approval
   runnerToken    String?   @map("runner_token") // raw runner credential, delivered to the CLI once then cleared
-  // All minted runner credentials [{agentKey,runnerId,runnerToken,name}],
-  // delivered to the CLI once on poll then wiped (mirrors runnerToken above).
-  runners        Json?
+  // The minted agents [{agentKey,agentId,name,workDir}], delivered to the CLI once
+  // on poll then wiped (mirrors runnerToken above). Column kept named `runners`.
+  mintedAgents   Json?     @map("runners")
   approvedById   String?   @map("approved_by_id") @db.Uuid
   approvedAt     DateTime? @map("approved_at")
   expiresAt      DateTime  @map("expires_at")
@@ -135,6 +139,13 @@ model Agent {
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId     String?  @map("target_runner_id") @db.Uuid
   targetLabels       String[] @default([]) @map("target_labels")
+  // The machine (Runner) this agent belongs to, set when `orbit register` mints it;
+  // null for hand-made config agents. Cascade so unregistering a machine drops them.
+  runnerId           String?  @map("runner_id") @db.Uuid
+  runner             Runner?  @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  // The project directory claude runs in for this agent, and its coding-tool key.
+  workDir            String?  @map("work_dir")
+  agentKey           String?  @map("agent_key")
   enabled            Boolean  @default(true)
   ownerId            String   @map("owner_id") @db.Uuid
   owner              User     @relation(fields: [ownerId], references: [id])
@@ -143,6 +154,7 @@ model Agent {
   sessions Session[]
 
   @@index([ownerId])
+  @@index([runnerId])
   @@map("agent")
 }
 
@@ -240,7 +252,7 @@ model LlmUsage {
   createdAt                DateTime @default(now()) @map("created_at")
 
   @@index([sessionId])
-  @@map("llm_usage")
+  @@map("usage")
 }
 
 // Durable, server-owned queue of user inputs for an interactive session (Route B).

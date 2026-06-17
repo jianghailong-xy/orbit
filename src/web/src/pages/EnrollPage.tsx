@@ -62,7 +62,7 @@ export function EnrollPage() {
           <Result
             status="success"
             title="Machine approved"
-            subTitle={`"${info?.name}" is now registered. Return to your terminal — it will continue automatically.`}
+            subTitle={`"${info?.hostname || info?.name}" is now registered. Return to your terminal — it will continue automatically.`}
           />
         ) : (
           <>
@@ -71,8 +71,8 @@ export function EnrollPage() {
               just started <code>orbit register</code>.
             </p>
             <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="Name">{info?.name}</Descriptions.Item>
-              <Descriptions.Item label="Hostname">{info?.hostname || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Runner">{info?.hostname || info?.name}</Descriptions.Item>
+              <Descriptions.Item label="Agents">{info?.name}/…</Descriptions.Item>
               <Descriptions.Item label="Labels">
                 {info?.labels?.length ? info.labels.map((l) => <Tag key={l}>{l}</Tag>) : '—'}
               </Descriptions.Item>
@@ -83,8 +83,8 @@ export function EnrollPage() {
                 type="warning"
                 showIcon
                 style={{ marginBottom: 16 }}
-                message={`A runner named "${info.name}" already exists on your account.`}
-                description="Approving replaces it: this machine takes over that runner's identity and the old credential stops working. No duplicate is created."
+                message={`This machine ("${info.hostname || info.name}") is already registered on your account.`}
+                description="Approving re-issues its credential and adds/updates this directory's agent. The old credential stops working; no duplicate machine is created."
               />
             )}
             <Button
@@ -94,7 +94,7 @@ export function EnrollPage() {
               loading={submitting}
               onClick={approve}
             >
-              {info?.nameConflict ? 'Replace existing runner' : 'Approve'}
+              {info?.nameConflict ? 'Re-register machine' : 'Approve'}
             </Button>
           </>
         )}

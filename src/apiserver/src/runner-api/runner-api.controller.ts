@@ -20,7 +20,7 @@ import {
   DevicePollResponse,
   DeviceStartRequest,
   DeviceStartResponse,
-  MintedRunner,
+  MintedAgent,
   PermissionMode,
   ReclaimResponse,
   ReclaimSession,
@@ -74,39 +74,50 @@ export class RunnerApiController {
       throw new UnauthorizedException('enrollment token expired');
     }
 
-    // One runner per requested agent, named `<name>/<agentKey>`; no agents -> a
-    // single runner named `name`. The token is single-use regardless of count.
-    const keys = dto.agents?.length ? dto.agents : [''];
-    const minted: MintedRunner[] = [];
+    // One Runner for the machine (named by hostname), reused if it already exists,
+    // plus one Agent per requested coding-tool named `<name>/<key>`. The token is
+    // single-use regardless of how many agents are registered.
+    const ownerId = enrollment.ownerId;
+    const runnerName = dto.hostname || dto.name;
+    const runnerToken = generateToken(32);
+    const runnerData = {
+      hostname: dto.hostname,
+      labels: dto.labels ?? [],
+      maxConcurrent: dto.maxConcurrent ?? 16,
+      version: dto.version,
+      tokenHash: sha256(runnerToken),
+      status: 'ONLINE' as const,
+      lastHeartbeatAt: new Date(),
+    };
+    const existing = await this.prisma.runner.findFirst({
+      where: { ownerId, name: runnerName },
+      orderBy: { enrolledAt: 'desc' },
+    });
+    const runner = existing
+      ? await this.prisma.runner.update({ where: { id: existing.id }, data: runnerData })
+      : await this.prisma.runner.create({ data: { ...runnerData, name: runnerName, ownerId } });
+
+    const keys = dto.agents?.length ? dto.agents : ['claude'];
+    const minted: MintedAgent[] = [];
     for (const key of keys) {
-      const runnerName = key ? `${dto.name}/${key}` : dto.name;
-      const runnerToken = generateToken(32);
-      const runner = await this.prisma.runner.create({
-        data: {
-          name: runnerName,
-          hostname: dto.hostname,
-          ownerId: enrollment.ownerId,
-          labels: dto.labels ?? [],
-          maxConcurrent: dto.maxConcurrent ?? 16,
-          version: dto.version,
-          tokenHash: sha256(runnerToken),
-          status: 'ONLINE',
-          lastHeartbeatAt: new Date(),
-        },
-      });
-      minted.push({ agentKey: key, runnerId: runner.id, runnerToken, name: runnerName });
+      const name = `${dto.name}/${key}`;
+      const ex = await this.prisma.agent.findFirst({ where: { ownerId, runnerId: runner.id, name } });
+      const agent = ex
+        ? await this.prisma.agent.update({
+            where: { id: ex.id },
+            data: { agentKey: key, workDir: dto.workDir ?? ex.workDir, runnerId: runner.id, targetRunnerId: runner.id },
+          })
+        : await this.prisma.agent.create({
+            data: { ownerId, runnerId: runner.id, targetRunnerId: runner.id, name, agentKey: key, workDir: dto.workDir },
+          });
+      minted.push({ agentKey: key, agentId: agent.id, name: agent.name, workDir: agent.workDir ?? undefined });
     }
     await this.prisma.enrollmentToken.update({
       where: { id: enrollment.id },
       data: { usedAt: new Date() },
     });
 
-    return {
-      runnerId: minted[0].runnerId,
-      runnerToken: minted[0].runnerToken,
-      name: minted[0].name,
-      runners: minted,
-    };
+    return { runnerId: runner.id, runnerToken, name: runner.name, agents: minted };
   }
 
   /** `orbit register` (no token) — open a device-login session for browser approval. */
@@ -136,20 +147,19 @@ export class RunnerApiController {
     if (session.status !== 'APPROVED' || !session.runnerId || !session.runnerToken) {
       return { status: 'pending' };
     }
-    // Approved — hand the credentials to the CLI exactly once, then wipe them.
-    const minted = (session.runners as unknown as MintedRunner[] | null) ?? [
-      { agentKey: '', runnerId: session.runnerId, runnerToken: session.runnerToken, name: session.name },
-    ];
+    // Approved — hand the machine runner credential + its agents to the CLI exactly
+    // once, then wipe the secret.
+    const agents = (session.mintedAgents as unknown as MintedAgent[] | null) ?? [];
     await this.prisma.deviceEnrollment.update({
       where: { id: session.id },
-      data: { runnerToken: null, runners: Prisma.JsonNull },
+      data: { runnerToken: null, mintedAgents: Prisma.JsonNull },
     });
     return {
       status: 'approved',
-      runnerId: minted[0].runnerId,
-      runnerToken: minted[0].runnerToken,
-      name: minted[0].name,
-      runners: minted,
+      runnerId: session.runnerId,
+      runnerToken: session.runnerToken,
+      name: session.hostname || session.name,
+      agents,
     };
   }
 
@@ -172,6 +182,7 @@ export class RunnerApiController {
             maxConcurrent: dto.maxConcurrent ?? 16,
             version: dto.version,
             agents: dto.agents ?? [],
+            workDir: dto.workDir,
             expiresAt,
           },
         });
@@ -184,10 +195,10 @@ export class RunnerApiController {
     throw new Error('could not allocate a unique user code');
   }
 
-  /** `orbit status` — the runner's own record + derived online flag. */
+  /** `orbit status` — the runner's own record + derived online flag + its agents. */
   @UseGuards(RunnerAuthGuard)
   @Get('me')
-  me(
+  async me(
     @CurrentRunner()
     runner: {
       id: string;
@@ -201,6 +212,11 @@ export class RunnerApiController {
   ) {
     const fresh =
       !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
+    const agents = await this.prisma.agent.findMany({
+      where: { runnerId: runner.id },
+      select: { id: true, name: true, agentKey: true, workDir: true },
+      orderBy: { name: 'asc' },
+    });
     return {
       id: runner.id,
       name: runner.name,
@@ -210,6 +226,12 @@ export class RunnerApiController {
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,
+      agents: agents.map((a) => ({
+        id: a.id,
+        name: a.name,
+        agentKey: a.agentKey ?? undefined,
+        workDir: a.workDir ?? undefined,
+      })),
     };
   }
 
@@ -293,6 +315,7 @@ export class RunnerApiController {
         sessionUuid,
         maxSeq: agg._max.seq ?? 0,
         agent: agentCfg,
+        workDir: agent?.workDir ?? undefined,
       });
     }
     return { sessions: out };

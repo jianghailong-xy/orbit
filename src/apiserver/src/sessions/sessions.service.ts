@@ -46,12 +46,23 @@ export class SessionsService {
   }
 
   async create(ownerId: string, dto: CreateSessionDto) {
-    if (!dto.assignedRunnerId) throw new BadRequestException('assignedRunnerId is required');
     if (!dto.prompt) throw new BadRequestException('prompt is required');
-    await this.assertOwnedRefs(ownerId, {
-      agentId: dto.agentId,
-      assignedRunnerId: dto.assignedRunnerId,
-    });
+    // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
+    // the chosen agent's machine (agents belong to a runner) — picking an agent is
+    // enough to know which machine + project dir to run in.
+    let assignedRunnerId: string | undefined = dto.assignedRunnerId;
+    if (!assignedRunnerId && dto.agentId) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: dto.agentId, ownerId },
+        select: { runnerId: true },
+      });
+      if (!agent) throw new ForbiddenException('agent not found');
+      assignedRunnerId = agent.runnerId ?? undefined;
+    }
+    if (!assignedRunnerId) {
+      throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
+    }
+    await this.assertOwnedRefs(ownerId, { agentId: dto.agentId, assignedRunnerId });
     // PENDING so the assigned runner claims it and spawns the long-lived claude
     // process; it then awaits turns via the inbox.
     const session = await this.prisma.session.create({
@@ -64,7 +75,7 @@ export class SessionsService {
         model: dto.model,
         permissionMode: dto.permissionMode,
         agentId: dto.agentId,
-        assignedRunnerId: dto.assignedRunnerId,
+        assignedRunnerId,
         creatorId: ownerId,
         ownerId,
       },
