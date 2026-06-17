@@ -28,6 +28,7 @@ import { decodeId } from '../lib/idCodec';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
 import { TasksSidePanel } from '../components/TasksSidePanel';
+import { RunnersPage } from './RunnersPage';
 
 const SOURCES = [
   { key: 'AGENT', label: 'Agents' },
@@ -54,10 +55,19 @@ const cap = (s: string): string => s.charAt(0) + s.slice(1).toLowerCase();
 // Task is not implemented yet — the list is mock data so the screen still renders.
 // (Interactive Agent sessions are the real, live feature; see AgentView.)
 const MOCK_TASKS = [
-  { id: 'mock-agent-001', source: 'AGENT', status: 'RUNNING', title: 'Migrate build engine to tea-cli', estimates: '3d', startTime: null, dueDate: null, createdAt: '2026-06-16T01:00:00.000Z', creator: { name: 'Hailong' } },
-  { id: 'mock-agent-002', source: 'AGENT', status: 'SUCCEEDED', title: 'Dorado 项目152 psm 改为 data.tea.build_compliance', estimates: '1d', startTime: null, dueDate: null, createdAt: '2026-06-15T08:00:00.000Z', creator: { name: 'Hailong' } },
-  { id: 'mock-manual-001', source: 'MANUAL', status: 'QUEUED', title: 'importer not-ready sg 2026-06-13', estimates: null, startTime: null, dueDate: null, createdAt: '2026-06-14T03:00:00.000Z', creator: { name: 'Hailong' } },
-  { id: 'mock-ext-001', source: 'EXTERNAL', status: 'FAILED', title: 'External webhook backfill', estimates: null, startTime: null, dueDate: null, createdAt: '2026-06-12T10:00:00.000Z', creator: { name: 'system' } },
+  { id: 'mock-agent-001', source: 'AGENT', status: 'RUNNING', title: 'Migrate build engine to tea-cli', estimates: '3d', startTime: '2026-06-16T01:00:00.000Z', dueDate: '2026-06-19T00:00:00.000Z', createdAt: '2026-06-16T01:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-agent-002', source: 'AGENT', status: 'SUCCEEDED', title: 'Dorado 项目152 psm 改为 data.tea.build_compliance', estimates: '1d', startTime: '2026-06-15T08:00:00.000Z', dueDate: '2026-06-16T00:00:00.000Z', createdAt: '2026-06-15T08:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-agent-003', source: 'AGENT', status: 'QUEUED', title: 'Backfill user_events partitions for 2026-Q1', estimates: '2d', startTime: null, dueDate: '2026-06-20T00:00:00.000Z', createdAt: '2026-06-17T02:30:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-agent-004', source: 'AGENT', status: 'FAILED', title: 'Refactor ingestion DAG to incremental loads', estimates: '4d', startTime: '2026-06-13T09:00:00.000Z', dueDate: '2026-06-18T00:00:00.000Z', createdAt: '2026-06-13T09:00:00.000Z', creator: { name: 'Lin' } },
+  { id: 'mock-agent-005', source: 'AGENT', status: 'RUNNING', title: 'Generate weekly data-quality report', estimates: '6h', startTime: '2026-06-17T00:00:00.000Z', dueDate: '2026-06-17T00:00:00.000Z', createdAt: '2026-06-17T00:00:00.000Z', creator: { name: 'system' } },
+  { id: 'mock-agent-006', source: 'AGENT', status: 'SUCCEEDED', title: 'Optimize Spark shuffle config for nightly job', estimates: '2d', startTime: '2026-06-11T10:00:00.000Z', dueDate: '2026-06-13T00:00:00.000Z', createdAt: '2026-06-11T10:00:00.000Z', creator: { name: 'Wei' } },
+  { id: 'mock-manual-001', source: 'MANUAL', status: 'QUEUED', title: 'importer not-ready sg 2026-06-13', estimates: null, startTime: null, dueDate: '2026-06-18T00:00:00.000Z', createdAt: '2026-06-14T03:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-manual-002', source: 'MANUAL', status: 'SUCCEEDED', title: '运行命令 tea-cli-sg hdfs clean enable', estimates: '30m', startTime: '2026-06-14T05:00:00.000Z', dueDate: '2026-06-14T00:00:00.000Z', createdAt: '2026-06-14T04:30:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-manual-003', source: 'MANUAL', status: 'DRAFT', title: 'Draft runbook for cross-region failover', estimates: '1d', startTime: null, dueDate: '2026-06-22T00:00:00.000Z', createdAt: '2026-06-17T06:00:00.000Z', creator: { name: 'Mei' } },
+  { id: 'mock-manual-004', source: 'MANUAL', status: 'CANCELLED', title: 'Rotate service-account credentials (staging)', estimates: null, startTime: null, dueDate: null, createdAt: '2026-06-10T07:00:00.000Z', creator: { name: 'Hailong' } },
+  { id: 'mock-ext-001', source: 'EXTERNAL', status: 'FAILED', title: 'External webhook backfill', estimates: null, startTime: '2026-06-12T10:00:00.000Z', dueDate: null, createdAt: '2026-06-12T10:00:00.000Z', creator: { name: 'system' } },
+  { id: 'mock-ext-002', source: 'EXTERNAL', status: 'SUCCEEDED', title: 'Sync Salesforce accounts to warehouse', estimates: '1d', startTime: '2026-06-15T12:00:00.000Z', dueDate: '2026-06-16T00:00:00.000Z', createdAt: '2026-06-15T11:30:00.000Z', creator: { name: 'system' } },
+  { id: 'mock-ext-003', source: 'EXTERNAL', status: 'RUNNING', title: 'Stream Kafka topic orders.v2 to lakehouse', estimates: null, startTime: '2026-06-16T18:00:00.000Z', dueDate: '2026-06-18T00:00:00.000Z', createdAt: '2026-06-16T18:00:00.000Z', creator: { name: 'system' } },
 ];
 
 // Top-nav sections share this view; only the heading differs (default: Active).
@@ -114,6 +124,7 @@ export function TasksPage() {
   const [filter, setFilter] = useState('ALL');
   // The "Add a runner" guide is its own route; show it whenever we're on /runner.
   const showRegister = loc.pathname === '/runner';
+  const showRunners = loc.pathname === '/runners';
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [form] = Form.useForm();
 
@@ -229,10 +240,12 @@ export function TasksPage() {
 
   return (
     <div className="tasks-layout">
-      <TasksSidePanel activeRunnerId={runnerId} />
+      <TasksSidePanel />
       <main className="tasks-main">
         {showRegister ? (
           <RunnerRegisterGuide onClose={() => navigate('/tasks')} />
+        ) : showRunners ? (
+          <RunnersPage />
         ) : inAgentView ? (
           selectedRunner ? (
             <AgentView runner={selectedRunner} />

@@ -1,28 +1,25 @@
 import {
   CaretDownOutlined,
-  DeleteOutlined,
-  EditOutlined,
+  DesktopOutlined,
   LogoutOutlined,
-  MoreOutlined,
   PlusOutlined,
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Avatar, Dropdown, Input, Modal, type MenuProps } from 'antd';
+import { App as AntdApp, Avatar, Dropdown, Input, Modal } from 'antd';
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, clearToken } from '../api';
-import { encodeId } from '../lib/idCodec';
-
-const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform);
 
 // Feishu-style top navigation. Each entry routes to "/<key>" (they all share the
-// Tasks view for now — only the heading differs). The lists below are still a
-// visual scaffold whose selection just moves the highlight.
+// Tasks view for now — only the heading differs). "Runners" opens the runners
+// page; the lists below are still a visual scaffold whose selection just moves
+// the highlight.
 const TOP = [
   { key: 'active', icon: <UserOutlined />, label: 'Active', count: 385 },
   { key: 'skills', icon: <ThunderboltOutlined />, label: 'Skills' },
+  { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
 ];
 
 const LISTS = [
@@ -59,30 +56,26 @@ function logout() {
   location.href = '/login';
 }
 
-interface Props {
-  /** Runner the right pane is currently showing (resolved by the parent from
-   *  the /agents or /sessions URL), so the sidebar highlights it. */
-  activeRunnerId?: string | null;
-}
-
-export function TasksSidePanel({ activeRunnerId }: Props) {
+export function TasksSidePanel() {
   const loc = useLocation();
   const navigate = useNavigate();
 
   // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
-  // to Active); clicking an agent/list item below overrides it locally.
+  // to Active); the runner-centric routes (/runners, /runner, /agents, /sessions)
+  // keep "Runners" highlighted. Clicking a list item below overrides it locally.
   const routeKey =
     loc.pathname === '/' || loc.pathname === '/tasks'
       ? 'active'
-      : loc.pathname.startsWith('/agents/') || loc.pathname.startsWith('/sessions/')
-        ? (activeRunnerId ?? '')
+      : loc.pathname.startsWith('/agents/') ||
+          loc.pathname.startsWith('/sessions/') ||
+          loc.pathname.startsWith('/runner')
+        ? 'runners'
         : loc.pathname.startsWith('/lists/')
           ? loc.pathname.slice('/lists/'.length)
           : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
-  const [runnersOpen, setRunnersOpen] = useState(true);
   const [agentsOpen, setAgentsOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [archOpen, setArchOpen] = useState(false);
@@ -114,42 +107,13 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
     window.addEventListener('mouseup', onUp);
   };
 
-  // The "Runners" list is the user's actually-registered runners; it refreshes so
-  // online/offline tracks the runner's 30s heartbeat.
-  const runners = useQuery({
-    queryKey: ['runners'],
-    queryFn: () => api<Runner[]>('/runners'),
-    refetchInterval: 15_000,
-  });
-
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
 
-  // Per-row "⋮" menu: Rename / Delete. `menuOpenId` keeps the trigger visible
-  // (the kebab is hover-only) while its dropdown is open.
-  const { modal, message } = AntdApp.useApp();
+  const { message } = AntdApp.useApp();
   const qc = useQueryClient();
-  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<Runner | null>(null);
-  const [renameVal, setRenameVal] = useState('');
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [agentName, setAgentName] = useState('');
-
-  const renameMut = useMutation({
-    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
-      api(`/runners/${id}`, { method: 'PATCH', body: { displayName } }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['runners'] });
-      setRenaming(null);
-    },
-    onError: (e: Error) => message.error(e.message || 'Rename failed'),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => api(`/runners/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
-    onError: (e: Error) => message.error(e.message || 'Delete failed'),
-  });
 
   const createAgentMut = useMutation({
     mutationFn: (name: string) => api('/agents', { method: 'POST', body: { name } }),
@@ -161,62 +125,10 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
     onError: (e: Error) => message.error(e.message || 'Create failed'),
   });
 
-  const submitRename = () => {
-    if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
-  };
-
   const submitAgent = () => {
     const name = agentName.trim();
     if (name) createAgentMut.mutate(name);
   };
-
-  const runnerMenu = (r: Runner): MenuProps['items'] => [
-    {
-      key: 'rename',
-      icon: <EditOutlined />,
-      label: 'Rename',
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
-        setRenameVal(r.displayName || r.name);
-        setRenaming(r);
-      },
-    },
-    { type: 'divider' },
-    {
-      key: 'delete',
-      icon: <DeleteOutlined />,
-      label: 'Delete',
-      danger: true,
-      onClick: ({ domEvent }) => {
-        domEvent.stopPropagation();
-        modal.confirm({
-          title: `Delete “${r.displayName || r.name}”?`,
-          content:
-            'This removes the runner from your account. Re-register the machine to add it back.',
-          okText: 'Delete',
-          okButtonProps: { danger: true },
-          cancelText: 'Cancel',
-          onOk: () => deleteMut.mutateAsync(r.id),
-        });
-      },
-    },
-  ];
-
-  // ⌘1 / ⌘2 / … (Ctrl on non-Mac) select the Nth runner under "Runners".
-  const list = runners.data ?? [];
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
-      if (e.key < '1' || e.key > '9') return;
-      const idx = Number(e.key) - 1;
-      if (idx >= list.length) return;
-      e.preventDefault();
-      setSel(list[idx].id);
-      navigate(`/agents/${encodeId(list[idx].id)}`);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [list, navigate]);
 
   return (
     <aside className="tasks-panel" style={{ width: sidebarWidth }}>
@@ -241,67 +153,6 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
         </div>
 
         <div className="tp-divider" />
-
-        <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setRunnersOpen((o) => !o)}>
-            <span className="tp-group-name">Runners</span>
-            <CaretDownOutlined className={`tp-caret ${runnersOpen ? '' : 'collapsed'}`} />
-          </div>
-          {runnersOpen && (
-            <>
-              {list.map((r, idx) => (
-                <div
-                  key={r.id}
-                  className={`tp-item inset ${sel === r.id ? 'active' : ''} ${
-                    menuOpenId === r.id ? 'menu-open' : ''
-                  }`}
-                  onClick={() => {
-                    setSel(r.id);
-                    navigate(`/agents/${encodeId(r.id)}`);
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: '50%',
-                      background: r.online ? '#2ea121' : '#c0c4cc',
-                      flex: 'none',
-                      marginRight: 8,
-                    }}
-                    title={r.online ? 'Online' : 'Offline'}
-                  />
-                  <span className="tp-label">{r.displayName || r.name}</span>
-                  {idx < 9 && <span className="tp-count">{isMac ? '⌘' : 'Ctrl+'}{idx + 1}</span>}
-                  <Dropdown
-                    trigger={['click']}
-                    placement="bottomRight"
-                    open={menuOpenId === r.id}
-                    onOpenChange={(o) => setMenuOpenId(o ? r.id : null)}
-                    menu={{ items: runnerMenu(r) }}
-                  >
-                    <span
-                      className="tp-kebab"
-                      title="More actions"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreOutlined />
-                    </span>
-                  </Dropdown>
-                </div>
-              ))}
-              <div
-                className="tp-item inset"
-                onClick={() => navigate('/runner')}
-              >
-                <span className="tp-ico">
-                  <PlusOutlined />
-                </span>
-                <span className="tp-label">Add</span>
-              </div>
-            </>
-          )}
-        </div>
 
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setAgentsOpen((o) => !o)}>
@@ -403,29 +254,6 @@ export function TasksSidePanel({ activeRunnerId }: Props) {
         aria-orientation="vertical"
         onMouseDown={startResize}
       />
-
-      <Modal
-        title="Rename runner"
-        open={renaming !== null}
-        okText="Save"
-        cancelText="Cancel"
-        confirmLoading={renameMut.isPending}
-        onOk={submitRename}
-        onCancel={() => setRenaming(null)}
-        destroyOnClose
-      >
-        <Input
-          value={renameVal}
-          onChange={(e) => setRenameVal(e.target.value)}
-          onPressEnter={submitRename}
-          placeholder={renaming?.name}
-          maxLength={60}
-          autoFocus
-        />
-        <div style={{ marginTop: 8, color: '#8f959e', fontSize: 12 }}>
-          Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
-        </div>
-      </Modal>
 
       <Modal
         title="New agent"
