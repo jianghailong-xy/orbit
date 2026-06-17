@@ -22,16 +22,14 @@ export interface AgentExecConfig {
 
 export interface RunnerRegisterRequest {
   enrollmentToken: string;
-  /** Base name for the agents minted here: `<dir>@<hostname>`. */
+  /** The runner (machine) name; defaults to the hostname. */
   name: string;
-  /** The machine identity — the Runner is named by this (one Runner per machine). */
+  /** The machine identity — recorded on the Runner (one Runner per machine). */
   hostname?: string;
   labels?: string[];
   maxConcurrent?: number;
   version?: string;
-  /** Coding-tool keys to register (e.g. ["claude"]); each becomes an Agent named `<name>/<key>`. */
-  agents?: string[];
-  /** Project directory the minted agents run claude in (claude's cwd). */
+  /** Default project directory; agents (registered separately) run claude here. */
   workDir?: string;
 }
 
@@ -39,36 +37,21 @@ export interface RunnerRegisterResponse {
   runnerId: string;
   /** Long-lived credential the runner stores locally and sends on every call. */
   runnerToken: string;
-  /** The runner (machine) name — the hostname. */
+  /** The runner (machine) name. */
   name: string;
-  /** The agents minted under this runner (one per requested coding-tool). */
-  agents: MintedAgent[];
-}
-
-/** One agent minted during enrollment, bound to the machine runner. */
-export interface MintedAgent {
-  /** The coding tool this agent drives (e.g. "claude"). */
-  agentKey: string;
-  agentId: string;
-  /** Agent name `<dir>@<hostname>/<key>`, e.g. `tea-cli@CPXG6GM7K4/claude`. */
-  name: string;
-  /** Project directory claude runs in for this agent. */
-  workDir?: string;
 }
 
 // ── Device-login flow (`orbit register` with no token, approved in the browser) ──
 
 export interface DeviceStartRequest {
-  /** Base name for the agents minted here: `<dir>@<hostname>`. */
+  /** The runner (machine) name; defaults to the hostname. */
   name: string;
-  /** The machine identity — the Runner is named by this (one Runner per machine). */
+  /** The machine identity — recorded on the Runner (one Runner per machine). */
   hostname?: string;
   labels?: string[];
   maxConcurrent?: number;
   version?: string;
-  /** Coding-tool keys to register (e.g. ["claude"]); each becomes an Agent named `<name>/<key>`. */
-  agents?: string[];
-  /** Project directory the minted agents run claude in (claude's cwd). */
+  /** Default project directory; agents (registered separately) run claude here. */
   workDir?: string;
 }
 
@@ -95,10 +78,8 @@ export type DevicePollResponse =
       /** The machine runner credential the CLI stores and runs the loop with. */
       runnerId: string;
       runnerToken: string;
-      /** The runner (machine) name — the hostname. */
+      /** The runner (machine) name. */
       name: string;
-      /** The agents minted under this runner (one per requested coding-tool). */
-      agents: MintedAgent[];
     };
 
 /** A runner's own status, returned by `GET /api/runner/me` (used by `orbit status`). */

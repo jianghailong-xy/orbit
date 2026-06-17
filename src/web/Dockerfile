@@ -19,8 +19,9 @@ RUN npm run build -w @orbit/shared
 RUN npm run build -w @orbit/web
 
 # ───────────────────────── runner binaries (Go, static) ─────────────────────────
-# Standalone ~6 MB `orbit` executables served at /dl, consumed by /install.sh and
-# the runner's self-update. Go cross-compiles trivially with no external deps.
+# Standalone `orbit` executables (gzip-compressed, ~2.4 MB each) served at /dl,
+# consumed by /install.sh and the runner's self-update — both decompress with
+# stdlib gzip. Go cross-compiles trivially with no external deps.
 FROM golang:1.23 AS binbuild
 WORKDIR /app
 COPY src/runner-go ./src/runner-go

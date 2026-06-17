@@ -1,6 +1,4 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { MintedAgent } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
@@ -87,9 +85,9 @@ export class RunnersService {
     if (!s || s.expiresAt < new Date()) {
       throw new NotFoundException('enrollment request not found or expired');
     }
-    // Warn (don't block) if this machine (by hostname) is already registered, so the
+    // Warn (don't block) if a runner with this name is already registered, so the
     // user knows approving re-issues its credential rather than adding a 2nd machine.
-    const runnerName = s.hostname || s.name;
+    const runnerName = s.name;
     const nameConflict =
       (await this.prisma.runner.count({ where: { ownerId, name: runnerName } })) > 0;
     return {
@@ -105,8 +103,8 @@ export class RunnersService {
   }
 
   /**
-   * Approve a device session: mint one Runner for the machine (named by hostname)
-   * and one Agent per requested coding-tool, then stash the runner credential.
+   * Approve a device session: mint one Runner for the machine, then stash its
+   * credential. Agents are registered separately, not here.
    */
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);
@@ -114,14 +112,14 @@ export class RunnersService {
     if (!s || s.expiresAt < new Date()) {
       throw new NotFoundException('enrollment request not found or expired');
     }
-    const runnerName = s.hostname || s.name;
+    const runnerName = s.name;
     if (s.status === 'APPROVED') {
-      return { ok: true, name: runnerName, replaced: false, count: s.agents.length || 1 };
+      return { ok: true, name: runnerName, replaced: false };
     }
 
-    // One Runner per machine, named by hostname. Re-registering reuses the same
-    // runner (reissuing its credential) rather than duplicating, so the machine
-    // keeps its identity and run history.
+    // One Runner per machine. Re-registering reuses the same runner (reissuing its
+    // credential) rather than duplicating, so the machine keeps its identity and
+    // run history.
     const runnerToken = generateToken(32);
     const data = {
       hostname: s.hostname,
@@ -140,59 +138,17 @@ export class RunnersService {
       ? await this.prisma.runner.update({ where: { id: existing.id }, data })
       : await this.prisma.runner.create({ data: { ...data, name: runnerName, ownerId } });
 
-    // One Agent per requested coding-tool, named `<base>/<key>`, bound to the runner.
-    const keys = s.agents.length ? s.agents : ['claude'];
-    const minted: MintedAgent[] = [];
-    for (const key of keys) {
-      const agent = await this.upsertRunnerAgent(ownerId, runner.id, {
-        name: `${s.name}/${key}`,
-        agentKey: key,
-        workDir: s.workDir,
-      });
-      minted.push({ agentKey: key, agentId: agent.id, name: agent.name, workDir: agent.workDir ?? undefined });
-    }
-
     await this.prisma.deviceEnrollment.update({
       where: { id: s.id },
       data: {
         status: 'APPROVED',
         runnerId: runner.id,
         runnerToken,
-        mintedAgents: minted as unknown as Prisma.InputJsonValue,
         approvedById: ownerId,
         approvedAt: new Date(),
       },
     });
-    return { ok: true, name: runnerName, replaced: !!existing, count: minted.length };
-  }
-
-  /**
-   * Create or update the Agent a machine registers for one coding-tool. Deduped by
-   * (owner, runner, name) so re-registering the same dir refreshes it in place
-   * (and keeps any model/tool config the user later edited).
-   */
-  private async upsertRunnerAgent(
-    ownerId: string,
-    runnerId: string,
-    a: { name: string; agentKey: string; workDir: string | null },
-  ) {
-    const existing = await this.prisma.agent.findFirst({ where: { ownerId, runnerId, name: a.name } });
-    if (existing) {
-      return this.prisma.agent.update({
-        where: { id: existing.id },
-        data: { agentKey: a.agentKey, workDir: a.workDir ?? existing.workDir, runnerId, targetRunnerId: runnerId },
-      });
-    }
-    return this.prisma.agent.create({
-      data: {
-        ownerId,
-        runnerId,
-        targetRunnerId: runnerId,
-        name: a.name,
-        agentKey: a.agentKey,
-        workDir: a.workDir,
-      },
-    });
+    return { ok: true, name: runnerName, replaced: !!existing };
   }
 
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {

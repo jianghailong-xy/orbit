@@ -6,17 +6,14 @@ import (
 	"testing"
 )
 
-func TestDefaultAgentNameIsBase(t *testing.T) {
-	name := defaultAgentName()
-	// Base form "<dir>@<hostname>": one '@', no spaces, no per-agent '/' suffix.
-	if strings.Count(name, "@") != 1 {
-		t.Fatalf("want exactly one '@' in %q", name)
+func TestDefaultRunnerNameIsHostname(t *testing.T) {
+	// The runner defaults to the machine hostname — non-empty, no '/' suffix.
+	name := defaultRunnerName()
+	if got, want := name, hostnameOr(); got != want {
+		t.Fatalf("defaultRunnerName = %q, want %q (hostname)", got, want)
 	}
-	if strings.ContainsAny(name, " /") {
-		t.Fatalf("base name must not contain a space or '/': %q", name)
-	}
-	if strings.HasSuffix(name, "@") || strings.HasPrefix(name, "@") {
-		t.Fatalf("both sides of '@' must be non-empty: %q", name)
+	if name == "" || strings.ContainsAny(name, " /") {
+		t.Fatalf("runner name must be non-empty with no space or '/': %q", name)
 	}
 }
 

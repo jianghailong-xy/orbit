@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -153,11 +152,11 @@ func main() {
 }
 
 func cmdRegister(flags map[string]string, bools map[string]bool) {
-	// One runner per machine. Re-registering re-issues its credential and
-	// adds/updates this directory's agent, so confirm before clobbering the config.
+	// One runner per machine. Re-registering re-issues its credential, so confirm
+	// before clobbering the config.
 	if existing := loadConfig(); existing != nil && !bools["force"] {
 		ok := confirm(fmt.Sprintf(
-			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential and adds this directory's agent)? [Y/n] ",
+			"This machine is already registered as %q (%s).\nRegister again (re-issues its credential)? [Y/n] ",
 			existing.Name, existing.ServerURL), true)
 		if !ok {
 			fmt.Println("aborted — pass --force to re-register without confirming")
@@ -166,18 +165,12 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	}
 
 	server := strings.TrimRight(getStr(flags, "server", defaultServer), "/")
-	// Detect the coding agents installed here and let the user pick which to
-	// register; the default is all of them. Then make the chosen agents usable —
-	// install any that are missing, and confirm Claude Code is logged in — before
-	// registering. Selecting agents first lets the name reflect them.
-	selected := selectAgents()
-	ensureAgentsReady(selected)
-	agents := agentKeys(selected)
-	// Name defaults to the base "<dir>@<hostname>"; the server appends "/<agentkey>"
-	// per agent. Confirm/edit the base interactively unless --name was passed.
+	// Register just this machine as a runner; agents are registered separately.
+	// The name defaults to the hostname — confirm/edit it interactively unless
+	// --name was passed.
 	name := flags["name"]
 	if name == "" {
-		name = promptName(defaultAgentName())
+		name = promptName(defaultRunnerName())
 	}
 	labels := parseLabels(flags["labels"])
 	maxConcurrent := getInt(flags, "max-concurrent", 16)
@@ -199,13 +192,13 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	if token != "" {
 		res, err := t.register(RegisterRequest{
 			EnrollmentToken: token, Name: name, Hostname: hostnameOr(),
-			Labels: labels, MaxConcurrent: maxConcurrent, Version: version, Agents: agents, WorkDir: workDir,
+			Labels: labels, MaxConcurrent: maxConcurrent, Version: version, WorkDir: workDir,
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "registration failed:", err)
 			os.Exit(1)
 		}
-		finishRegister(res.RunnerID, res.RunnerToken, res.Name, res.Agents,
+		finishRegister(res.RunnerID, res.RunnerToken, res.Name,
 			server, labels, maxConcurrent, workDir, withService, foreground)
 		return
 	}
@@ -213,7 +206,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	// Device-login flow: approve this machine in the browser, like `claude` login.
 	start, err := t.deviceStart(DeviceStartRequest{
 		Name: name, Hostname: hostnameOr(), Labels: labels,
-		MaxConcurrent: maxConcurrent, Version: version, Agents: agents, WorkDir: workDir,
+		MaxConcurrent: maxConcurrent, Version: version, WorkDir: workDir,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "registration failed:", err)
@@ -233,7 +226,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			continue // transient — keep waiting until the deadline
 		}
 		if poll.Status == "approved" {
-			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name, poll.Agents,
+			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
 				server, labels, maxConcurrent, workDir, withService, foreground)
 			return
 		}
@@ -245,9 +238,9 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	os.Exit(1)
 }
 
-// finishRegister persists the machine runner credential, prints the agents it now
-// has, and installs the background service (unless running in the foreground).
-func finishRegister(runnerID, runnerToken, name string, agents []MintedAgent, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool) {
+// finishRegister persists the machine runner credential and installs the
+// background service (unless running in the foreground).
+func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool) {
 	cfg := &RunnerConfig{
 		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
 		Name: name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
@@ -257,13 +250,6 @@ func finishRegister(runnerID, runnerToken, name string, agents []MintedAgent, se
 		os.Exit(1)
 	}
 	fmt.Printf("\n✓ registered runner %q (%s).\n", cfg.Name, cfg.RunnerID)
-	for _, a := range agents {
-		dir := a.WorkDir
-		if dir == "" {
-			dir = workDir
-		}
-		fmt.Printf("  • agent %q → %s\n", a.Name, dir)
-	}
 
 	if foreground {
 		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
@@ -450,15 +436,9 @@ func hostnameOr() string {
 	return "runner"
 }
 
-// defaultAgentName is the base runner name "<current directory name>@<hostname>".
-// Each selected agent registers as "<base>/<agentkey>" (the suffix is appended
-// server-side, one runner per agent).
-func defaultAgentName() string {
-	dir := "runner"
-	if cwd, err := os.Getwd(); err == nil {
-		dir = filepath.Base(cwd)
-	}
-	return dir + "@" + hostnameOr()
+// defaultRunnerName is the machine's hostname, used as the default runner name.
+func defaultRunnerName() string {
+	return hostnameOr()
 }
 
 // promptName asks the user to confirm/edit the runner name; Enter keeps the
@@ -467,7 +447,7 @@ func promptName(def string) string {
 	if !interactive() {
 		return def
 	}
-	fmt.Printf("Agent name [%s]: ", def)
+	fmt.Printf("Runner name [%s]: ", def)
 	line, _ := stdinReader.ReadString('\n')
 	if s := strings.TrimSpace(line); s != "" {
 		return s

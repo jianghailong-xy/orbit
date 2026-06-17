@@ -2,8 +2,9 @@
 # Build standalone `orbit` runner binaries (Go, static, no runtime needed) for
 # each OS/arch, plus the version.json manifest the runner self-update checks.
 #
-# Output (default dist-bin/):
-#   orbit-linux-x64  orbit-linux-arm64  orbit-darwin-x64  orbit-darwin-arm64
+# Output (default dist-bin/), each runner binary gzip-compressed (~2.4 MB each;
+# install.sh and the Go self-updater fetch the .gz and decompress with stdlib gzip):
+#   orbit-linux-x64.gz  orbit-linux-arm64.gz  orbit-darwin-x64.gz  orbit-darwin-arm64.gz
 #   version.json
 #
 # Requires: the Go toolchain on PATH.
@@ -34,6 +35,8 @@ for t in "${TARGETS[@]}"; do
   echo ">> orbit-$suffix ($goos/$goarch) v$VER"
   (cd "$SRC" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
     go build -trimpath -ldflags "-s -w -X main.version=$VER" -o "$ROOT/$OUT/orbit-$suffix" .)
+  # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
+  gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done
 
 printf '{"version":"%s"}\n' "$VER" > "$OUT/version.json"

@@ -20,7 +20,6 @@ import {
   DevicePollResponse,
   DeviceStartRequest,
   DeviceStartResponse,
-  MintedAgent,
   PermissionMode,
   ReclaimResponse,
   ReclaimSession,
@@ -74,11 +73,10 @@ export class RunnerApiController {
       throw new UnauthorizedException('enrollment token expired');
     }
 
-    // One Runner for the machine (named by hostname), reused if it already exists,
-    // plus one Agent per requested coding-tool named `<name>/<key>`. The token is
-    // single-use regardless of how many agents are registered.
+    // One Runner for the machine, reused if it already exists. Agents are
+    // registered separately, not here. The token is single-use.
     const ownerId = enrollment.ownerId;
-    const runnerName = dto.hostname || dto.name;
+    const runnerName = dto.name;
     const runnerToken = generateToken(32);
     const runnerData = {
       hostname: dto.hostname,
@@ -97,27 +95,12 @@ export class RunnerApiController {
       ? await this.prisma.runner.update({ where: { id: existing.id }, data: runnerData })
       : await this.prisma.runner.create({ data: { ...runnerData, name: runnerName, ownerId } });
 
-    const keys = dto.agents?.length ? dto.agents : ['claude'];
-    const minted: MintedAgent[] = [];
-    for (const key of keys) {
-      const name = `${dto.name}/${key}`;
-      const ex = await this.prisma.agent.findFirst({ where: { ownerId, runnerId: runner.id, name } });
-      const agent = ex
-        ? await this.prisma.agent.update({
-            where: { id: ex.id },
-            data: { agentKey: key, workDir: dto.workDir ?? ex.workDir, runnerId: runner.id, targetRunnerId: runner.id },
-          })
-        : await this.prisma.agent.create({
-            data: { ownerId, runnerId: runner.id, targetRunnerId: runner.id, name, agentKey: key, workDir: dto.workDir },
-          });
-      minted.push({ agentKey: key, agentId: agent.id, name: agent.name, workDir: agent.workDir ?? undefined });
-    }
     await this.prisma.enrollmentToken.update({
       where: { id: enrollment.id },
       data: { usedAt: new Date() },
     });
 
-    return { runnerId: runner.id, runnerToken, name: runner.name, agents: minted };
+    return { runnerId: runner.id, runnerToken, name: runner.name };
   }
 
   /** `orbit register` (no token) — open a device-login session for browser approval. */
@@ -147,19 +130,17 @@ export class RunnerApiController {
     if (session.status !== 'APPROVED' || !session.runnerId || !session.runnerToken) {
       return { status: 'pending' };
     }
-    // Approved — hand the machine runner credential + its agents to the CLI exactly
-    // once, then wipe the secret.
-    const agents = (session.mintedAgents as unknown as MintedAgent[] | null) ?? [];
+    // Approved — hand the machine runner credential to the CLI exactly once, then
+    // wipe the secret.
     await this.prisma.deviceEnrollment.update({
       where: { id: session.id },
-      data: { runnerToken: null, mintedAgents: Prisma.JsonNull },
+      data: { runnerToken: null },
     });
     return {
       status: 'approved',
       runnerId: session.runnerId,
       runnerToken: session.runnerToken,
-      name: session.hostname || session.name,
-      agents,
+      name: session.name,
     };
   }
 
@@ -181,7 +162,7 @@ export class RunnerApiController {
             labels: dto.labels ?? [],
             maxConcurrent: dto.maxConcurrent ?? 16,
             version: dto.version,
-            agents: dto.agents ?? [],
+            agents: [],
             workDir: dto.workDir,
             expiresAt,
           },

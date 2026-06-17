@@ -18,15 +18,16 @@ case "$(uname -m)" in
 esac
 
 asset="orbit-${os}-${arch}"
-url="${BASE_URL}/dl/${asset}"
+url="${BASE_URL}/dl/${asset}.gz"
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp" "$tmp.gz"' EXIT
 
 echo "Downloading ${asset}..."
-if ! curl -fSL "$url" -o "$tmp"; then
+if ! curl -fSL "$url" -o "$tmp.gz"; then
   echo "orbit: download failed ($url)" >&2
   exit 1
 fi
+gzip -dc "$tmp.gz" > "$tmp"
 chmod +x "$tmp"
 
 target="${BIN_DIR}/${NAME}"

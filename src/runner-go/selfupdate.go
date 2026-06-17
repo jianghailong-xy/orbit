@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,7 +112,7 @@ func downloadAndSwap(server, key, ver string, logf func(string)) bool {
 	}
 
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Get(server + "/dl/orbit-" + key)
+	resp, err := client.Get(server + "/dl/orbit-" + key + ".gz")
 	if err != nil {
 		logf("download failed: " + err.Error() + "\n")
 		return false
@@ -121,7 +122,13 @@ func downloadAndSwap(server, key, ver string, logf func(string)) bool {
 		logf(fmt.Sprintf("download failed: HTTP %d\n", resp.StatusCode))
 		return false
 	}
-	data, _ := io.ReadAll(resp.Body)
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		logf("download failed: " + err.Error() + "\n")
+		return false
+	}
+	defer gz.Close()
+	data, _ := io.ReadAll(gz)
 	if len(data) < 1_000_000 {
 		logf("downloaded file is implausibly small; aborting\n")
 		return false

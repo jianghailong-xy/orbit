@@ -4,14 +4,12 @@ package main
 // plane's ValidationPipe passes these plain objects through unchanged.
 
 type DeviceStartRequest struct {
-	Name          string   `json:"name"` // base "<dir>@<hostname>" for naming agents
+	Name          string   `json:"name"` // the runner (machine) name; defaults to the hostname
 	Hostname      string   `json:"hostname,omitempty"`
 	Labels        []string `json:"labels"`
 	MaxConcurrent int      `json:"maxConcurrent"`
 	Version       string   `json:"version,omitempty"`
-	// Coding-tool keys to register (e.g. ["claude"]); each becomes an agent "<name>/<key>".
-	Agents []string `json:"agents,omitempty"`
-	// Project directory the agents run claude in (claude's cwd).
+	// Default project directory; agents (registered separately) run claude here.
 	WorkDir string `json:"workDir,omitempty"`
 }
 
@@ -26,38 +24,24 @@ type DevicePollResponse struct {
 	Status      string `json:"status"`
 	RunnerID    string `json:"runnerId"`
 	RunnerToken string `json:"runnerToken"`
-	Name        string `json:"name"` // the machine runner name (hostname)
-	// The agents minted under this runner (one per requested coding-tool).
-	Agents []MintedAgent `json:"agents,omitempty"`
-}
-
-// MintedAgent is one agent the control plane created during enrollment, bound to
-// this machine's runner.
-type MintedAgent struct {
-	AgentKey string `json:"agentKey"`
-	AgentID  string `json:"agentId"`
-	Name     string `json:"name"` // "<dir>@<hostname>/<key>"
-	WorkDir  string `json:"workDir,omitempty"`
+	Name        string `json:"name"` // the runner (machine) name
 }
 
 type RegisterRequest struct {
 	EnrollmentToken string   `json:"enrollmentToken"`
-	Name            string   `json:"name"` // base "<dir>@<hostname>" for naming agents
+	Name            string   `json:"name"` // the runner (machine) name; defaults to the hostname
 	Hostname        string   `json:"hostname,omitempty"`
 	Labels          []string `json:"labels"`
 	MaxConcurrent   int      `json:"maxConcurrent"`
 	Version         string   `json:"version,omitempty"`
-	// Coding-tool keys to register (e.g. ["claude"]); each becomes an agent "<name>/<key>".
-	Agents []string `json:"agents,omitempty"`
-	// Project directory the agents run claude in (claude's cwd).
+	// Default project directory; agents (registered separately) run claude here.
 	WorkDir string `json:"workDir,omitempty"`
 }
 
 type RegisterResponse struct {
-	RunnerID    string        `json:"runnerId"`
-	RunnerToken string        `json:"runnerToken"`
-	Name        string        `json:"name"` // the machine runner name (hostname)
-	Agents      []MintedAgent `json:"agents,omitempty"`
+	RunnerID    string `json:"runnerId"`
+	RunnerToken string `json:"runnerToken"`
+	Name        string `json:"name"` // the runner (machine) name
 }
 
 type HeartbeatRequest struct {
