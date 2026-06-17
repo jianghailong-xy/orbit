@@ -13,6 +13,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Input, Select, Tag, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { decodeId, encodeId } from '../lib/idCodec';
 import {
   api,
@@ -323,7 +325,11 @@ export function AgentView({ runner }: { runner: Runner }) {
           {events.map((e, i) => (
             <ChatEvent key={i} ev={e} />
           ))}
-          {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
+          {streamingText && (
+            <div className="chat-msg chat-assistant chat-streaming">
+              <Markdown text={streamingText} />
+            </div>
+          )}
           {selected &&
             !TERMINAL.includes(selected.status) &&
             selected.status !== 'PENDING' &&
@@ -458,13 +464,37 @@ export function AgentView({ runner }: { runner: Runner }) {
   );
 }
 
+// Assistant text is markdown. react-markdown renders without dangerouslySetInnerHTML
+// and ignores raw HTML by default, so this is XSS-safe without a separate sanitizer.
+// Links open in a new tab. User messages are left as plain text on purpose.
+function Markdown({ text }: { text: string }) {
+  return (
+    <div className="chat-markdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a({ node, ...props }) {
+            return <a {...props} target="_blank" rel="noopener noreferrer" />;
+          },
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 function ChatEvent({ ev }: { ev: RunEvent }) {
   const p = ev.payload ?? {};
   switch (ev.type) {
     case 'user':
       return <div className="chat-msg chat-user">{p.text}</div>;
     case 'assistant':
-      return p.text ? <div className="chat-msg chat-assistant">{p.text}</div> : null;
+      return p.text ? (
+        <div className="chat-msg chat-assistant">
+          <Markdown text={p.text} />
+        </div>
+      ) : null;
     case 'tool_use':
       return (
         <div className="chat-tool">
