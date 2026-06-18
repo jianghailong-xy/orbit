@@ -136,6 +136,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     () => (lockedAgentId ? (agentsForRunner.find((a) => a.id === lockedAgentId) ?? null) : null),
     [agentsForRunner, lockedAgentId],
   );
+  // The agent picked for a NEW session (a live session's agent/model are fixed).
+  const pickedAgent = useMemo(
+    () => agentsForRunner.find((a) => a.id === agentId) ?? null,
+    [agentsForRunner, agentId],
+  );
   // When scoped to a specific agent (/agents/<id>) lock the pick to it; otherwise
   // default to the runner's first agent, keeping a valid pick across runner switches.
   useEffect(() => {
@@ -159,6 +164,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     setEffort(selected.effort ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, live]);
+
+  // Composing a fresh session (no session selected): seed the model from the
+  // picked agent's configured default (set on the Runner page). A selected
+  // session instead seeds from its own stored config (effect above).
+  useEffect(() => {
+    if (selectedId || !pickedAgent?.model) return;
+    setModel(pickedAgent.model);
+  }, [selectedId, pickedAgent?.id, pickedAgent?.model]);
 
   // Slot accounting: a runner hosts at most maxConcurrent live sessions. When it's
   // full, a newly created session sits PENDING instead of starting — surface that
