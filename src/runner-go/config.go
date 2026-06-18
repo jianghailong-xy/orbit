@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 )
@@ -14,14 +15,29 @@ func expandTilde(p string) string {
 	if p != "~" && !strings.HasPrefix(p, "~/") {
 		return p
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	home := userHome()
+	if home == "" {
 		return p
 	}
 	if p == "~" {
 		return home
 	}
 	return filepath.Join(home, p[2:])
+}
+
+// userHome resolves the home dir even when $HOME is unset — e.g. a systemd service
+// with no User= and no Environment=HOME. os.UserHomeDir reads $HOME only, so fall
+// back to the account database (getpwuid) via os/user, matching how Node's
+// os.homedir() (which claude uses) behaves. Without this, a tilde workDir would
+// silently chdir to the literal "~/...", which fails ("no such file or directory").
+func userHome() string {
+	if h, err := os.UserHomeDir(); err == nil && h != "" {
+		return h
+	}
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		return u.HomeDir
+	}
+	return ""
 }
 
 // RunnerConfig is the persisted credential + identity for this machine's runner.
