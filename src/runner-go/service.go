@@ -8,6 +8,8 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -78,6 +80,26 @@ func uninstallService() {
 
 func installSystemd(exe, orbitHome, svc string) error {
 	unitPath := "/etc/systemd/system/" + svc + ".service"
+
+	// The runner — and the `claude` processes it spawns — should operate as the
+	// user who ran `orbit register`, not root, so files and git ops are owned by
+	// that user and claude reads that user's ~/.claude login.
+	u, err := registeringUser()
+	if err != nil {
+		return fmt.Errorf("cannot determine the user to run the service as: %w", err)
+	}
+	grp := primaryGroup(u)
+
+	// systemd gives services a minimal PATH and does not source the user's shell,
+	// so the `claude` CLI (installed in ~/.local/bin) isn't found. Bake in the
+	// user's login PATH at install time, mirroring the launchd path; ensure
+	// ~/.local/bin is on it since that's where the official installer puts claude.
+	pathEnv := userLoginPath(u, os.Getenv("PATH"))
+	localBin := filepath.Join(u.HomeDir, ".local", "bin")
+	if !pathContains(pathEnv, localBin) {
+		pathEnv = localBin + ":" + pathEnv
+	}
+
 	unit := fmt.Sprintf(`[Unit]
 Description=Orbit runner
 After=network-online.target
@@ -85,14 +107,18 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=%s
+Group=%s
 ExecStart=%s run
 Restart=always
 RestartSec=5
+Environment=HOME=%s
 Environment=ORBIT_HOME=%s
+Environment=PATH=%s
 
 [Install]
 WantedBy=multi-user.target
-`, exe, orbitHome)
+`, u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv)
 
 	// Writing the unit + enabling it needs root. When we aren't root, do just
 	// those steps via sudo (prompts once) so `orbit register` ends with a live
@@ -106,6 +132,11 @@ WantedBy=multi-user.target
 		}
 		if err := run("systemctl", "enable", "--now", svc); err != nil {
 			return errors.New("systemctl enable failed — is this a systemd host?")
+		}
+		// Dropping privileges to another user: hand them the runner's config + run
+		// scratch so the service (now that user) can read/write them.
+		if u.Uid != "0" {
+			_ = run("chown", "-R", u.Username+":"+grp, orbitHome)
 		}
 	} else {
 		sudo, err := exec.LookPath("sudo")
@@ -134,10 +165,56 @@ WantedBy=multi-user.target
 			return errors.New("systemctl enable failed")
 		}
 	}
-	fmt.Printf("\n✓ %s service installed and started.\n"+
+	fmt.Printf("\n✓ %s service installed and started as user %q.\n"+
 		"  Status:  systemctl status %s\n"+
-		"  Logs:    journalctl -u %s -f\n", svc, svc, svc)
+		"  Logs:    journalctl -u %s -f\n", svc, u.Username, svc, svc)
 	return nil
+}
+
+// registeringUser is the account the runner service should run as: the human who
+// ran `orbit register`. Under sudo that's $SUDO_USER; otherwise the current user.
+func registeringUser() (*user.User, error) {
+	if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
+		if u, err := user.Lookup(su); err == nil {
+			return u, nil
+		}
+	}
+	return user.Current()
+}
+
+// primaryGroup resolves a user's primary group name, falling back to the username
+// (the common user-private-group convention) when the group can't be looked up.
+func primaryGroup(u *user.User) string {
+	if g, err := user.LookupGroupId(u.Gid); err == nil {
+		return g.Name
+	}
+	return u.Username
+}
+
+// userLoginPath returns the target user's login PATH. When we're root dropping to
+// another user, the process PATH is root's (or sudo-sanitized), so query that
+// user's own login shell; otherwise the current PATH already is theirs.
+func userLoginPath(u *user.User, fallback string) string {
+	if u.Uid != strconv.Itoa(os.Getuid()) {
+		if out, err := exec.Command("su", "-", u.Username, "-c", "printenv PATH").Output(); err == nil {
+			if p := strings.TrimSpace(string(out)); p != "" {
+				return p
+			}
+		}
+	}
+	if fallback == "" {
+		return "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	return fallback
+}
+
+func pathContains(path, dir string) bool {
+	for _, p := range strings.Split(path, ":") {
+		if p == dir {
+			return true
+		}
+	}
+	return false
 }
 
 func installLaunchd(exe, orbitHome, label string) error {
