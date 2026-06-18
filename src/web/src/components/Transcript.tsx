@@ -215,13 +215,14 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => describeTool(node.name, node.input),
     [node.name, node.input],
   );
-  const isTask = node.name === 'Task';
+  const isSubAgent = node.name === 'Task' || node.name === 'Agent';
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
-  const [open, setOpen] = useState(!!node.result?.isError);
+  // A plan is the point of the turn — open it by default; errors also auto-open.
+  const [open, setOpen] = useState(!!node.result?.isError || node.name === 'ExitPlanMode');
   return (
     <div
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isTask ? ' chat-tool-task' : ''}${
+      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${
         hasDetail && open ? ' is-open' : ''
       }`}
     >
@@ -256,7 +257,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </div>
           )}
           {node.result && (
-            <ToolResult content={node.result.content} isError={node.result.isError} compact markdown={isTask} />
+            <ToolResult content={node.result.content} isError={node.result.isError} compact markdown={isSubAgent} />
           )}
         </div>
       )}
@@ -342,14 +343,28 @@ function describeTool(name: string, input: any): ToolDesc {
     case 'ToolSearch':
       return { label: 'ToolSearch', icon: <ApiOutlined />, tone: 'read', summary: i.query, summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
     case 'Task':
+    case 'Agent':
       return {
-        label: `Task${i.subagent_type ? ` · ${i.subagent_type}` : ''}`,
+        label: `${name}${i.subagent_type ? ` · ${i.subagent_type}` : ''}`,
         icon: <PartitionOutlined />,
         tone: 'agent',
         summary: i.description,
         body: i.prompt ? (
           <div className="chat-tool-prompt">
             <MD>{String(i.prompt)}</MD>
+          </div>
+        ) : undefined,
+      };
+    case 'ExitPlanMode':
+      // The plan is Markdown meant to be read — render it like Task's prompt,
+      // not as a raw key/value blob via the default branch.
+      return {
+        label: 'Plan',
+        icon: <FileTextOutlined />,
+        tone: 'agent',
+        body: i.plan ? (
+          <div className="chat-tool-prompt">
+            <MD>{String(i.plan)}</MD>
           </div>
         ) : undefined,
       };
