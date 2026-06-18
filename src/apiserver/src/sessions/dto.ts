@@ -21,3 +21,11 @@ export interface SessionTurnDto {
   clientTurnId: string;
   content: string;
 }
+
+export interface SessionResumeDto extends SessionTurnDto {
+  /** Per-session overrides re-applied on resume (the runner re-spawns claude, so a
+   *  new mode/model/effort takes effect). Omitted fields keep the session's prior value. */
+  model?: string;
+  permissionMode?: string;
+  effort?: string;
+}

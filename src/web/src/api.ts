@@ -78,11 +78,16 @@ export const sendTurn = (sessionId: string, content: string) =>
   });
 
 /** Revive an ended session with a new message: the runner --resumes claude's
- *  existing context. Requires the session's runner to be online. */
-export const resumeSession = (sessionId: string, content: string) =>
+ *  existing context. Requires the session's runner to be online. `config` re-applies
+ *  mode/model/effort changes made while ended (omitted fields keep the prior value). */
+export const resumeSession = (
+  sessionId: string,
+  content: string,
+  config?: { model?: string; permissionMode?: string; effort?: string },
+) =>
   api(`/sessions/${sessionId}/resume`, {
     method: 'POST',
-    body: { clientTurnId: uuid(), content },
+    body: { clientTurnId: uuid(), content, ...config },
   });
 
 export interface ApprovalInfo {

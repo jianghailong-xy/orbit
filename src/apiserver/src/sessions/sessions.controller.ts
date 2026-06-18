@@ -19,7 +19,7 @@ import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { CreateSessionDto, SessionTurnDto } from './dto';
+import { CreateSessionDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { SessionsService } from './sessions.service';
 
 @UseGuards(JwtAuthGuard)
@@ -59,7 +59,7 @@ export class SessionsController {
   resume(
     @CurrentUser() user: AuthUser,
     @Param('id', Base62UuidPipe) id: string,
-    @Body() dto: SessionTurnDto,
+    @Body() dto: SessionResumeDto,
   ) {
     return this.sessions.resume(user.userId, id, dto);
   }

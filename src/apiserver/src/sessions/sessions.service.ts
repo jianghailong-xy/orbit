@@ -11,7 +11,7 @@ import { ApprovalDecisionRequest, ApprovalInfo, ApprovalStatus, RunEventType } f
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { CreateSessionDto, SessionTurnDto } from './dto';
+import { CreateSessionDto, SessionResumeDto, SessionTurnDto } from './dto';
 
 @Injectable()
 export class SessionsService {
@@ -299,7 +299,7 @@ export class SessionsService {
     };
   }
 
-  async resume(ownerId: string, id: string, dto: SessionTurnDto) {
+  async resume(ownerId: string, id: string, dto: SessionResumeDto) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     // Still live — a normal turn belongs on the running process, not a revive.
@@ -348,6 +348,12 @@ export class SessionsService {
         error: null,
         result: null,
         lastTurnAt: new Date(),
+        // Re-apply any mode/model/effort changes made while the session was ended;
+        // buildSession reads these when the runner re-claims and re-spawns claude.
+        // Omitted fields keep their prior value (don't clobber to null).
+        ...(dto.model !== undefined ? { model: dto.model } : {}),
+        ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
+        ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
       },
     });
     this.queue.notifySessionQueued();

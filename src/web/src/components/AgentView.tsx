@@ -148,6 +148,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     );
   }, [agentsForRunner, lockedAgentId]);
 
+  // Seed the Mode/Model/Effort pills from a non-live (resumable) session's stored
+  // config, so they show that session's real settings and an edit before a resume
+  // carries through (resume re-spawns claude with the new value). Keyed on the id +
+  // liveness, not the polled object, so the 4s refetch can't clobber a user's edit.
+  useEffect(() => {
+    if (!selected || live) return;
+    setModel(selected.model ?? 'claude-sonnet-4-6');
+    setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
+    setEffort(selected.effort ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, live]);
+
   // Slot accounting: a runner hosts at most maxConcurrent live sessions. When it's
   // full, a newly created session sits PENDING instead of starting — surface that
   // as an explicit concurrency wait rather than a silent "Starting…".
@@ -299,7 +311,13 @@ export function AgentView({ runner }: { runner: Runner }) {
         return selected.id;
       }
       if (selected && resumable) {
-        await resumeSession(selected.id, content);
+        // The pills were seeded from this session's stored config, so an untouched
+        // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
+        await resumeSession(selected.id, content, {
+          model,
+          permissionMode: MODE_TO_PERMISSION[mode],
+          effort: effort || undefined,
+        });
         return selected.id;
       }
       const created = await createInteractiveSession({
@@ -481,7 +499,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             onClick={onSend}
           />
         </div>
-        <Tooltip title="Agent, Mode, Model & Effort are chosen per session before it starts, and stay fixed for the session's life.">
+        <Tooltip title="Agent is fixed once a session starts. Mode, Model & Effort are fixed while it runs, but can be changed before resuming an ended session.">
           <div className="composer-pills">
             <span className="composer-pill">
               <AppstoreOutlined className="composer-pill-icon" />
