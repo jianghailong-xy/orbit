@@ -80,17 +80,19 @@ export class QueueService {
       where: { id: sessionId },
       include: { agent: true },
     });
-    // A session claimed before already has turns (drained, not deleted) and a claude
-    // session registered under claudeSessionId. Re-claiming it (revived from an ended
-    // state) must --resume that session, not seed a new first turn or re-use
-    // --session-id. A truly fresh session has no turns yet.
-    const priorTurns = await this.prisma.conversationTurn.count({
+    // Resume claude only when it actually established its conversation — i.e. the
+    // session has at least one completed turn (numTurns > 0). A first spawn that
+    // died before claude ever ran (bad PATH, missing cwd, …) still leaves a seeded
+    // turn behind, so "has any turn" would wrongly --resume a claude session that
+    // was never created, failing forever with "No conversation found".
+    const turnCount = await this.prisma.conversationTurn.count({
       where: { sessionId: session.id },
     });
-    const resume = priorTurns > 0;
-    if (!resume) {
-      // Seed the first turn from the session prompt so every turn (incl. the first)
-      // flows through the same inbox + turn-complete path on the runner.
+    const resume = session.numTurns > 0;
+    if (turnCount === 0) {
+      // Truly fresh (first claim ever): seed the first turn from the session prompt
+      // so every turn (incl. the first) flows through the same inbox + turn-complete
+      // path on the runner.
       await this.prisma.conversationTurn.create({
         data: {
           sessionId: session.id,
@@ -102,12 +104,11 @@ export class QueueService {
         },
       });
     }
-    // Continue the monotonic event seq past whatever a prior run persisted, so a
-    // resumed session's new events never collide with its history (0 when fresh).
-    const maxSeq = resume
-      ? ((await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max
-          .seq ?? 0)
-      : 0;
+    // Continue the monotonic event seq past whatever a prior run persisted (incl. a
+    // failed first run's error events) so new events never collide; 0 when fresh.
+    const maxSeq =
+      (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
+      0;
     const agent = session.agent;
     return {
       sessionId: session.id,
