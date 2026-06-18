@@ -1137,10 +1137,17 @@ body {
   --tone: #d6d9de;
   --tone-bg: #eef0f3;
   margin: 6px 0;
+  border: none;
+  border-left: 3px solid var(--tone);
+  overflow: hidden;
+  background: transparent;
+}
+/* folded rows read as a flowing, rail-marked list; once expanded the card
+   regains a full border + surface so its detail body stays visually grouped. */
+.chat-tool-card.is-open {
   border: 1px solid #e7e9ec;
   border-left: 3px solid var(--tone);
   border-radius: 8px;
-  overflow: hidden;
   background: #fff;
 }
 /* per-tool colour family: drives the icon chip + the card's left rail */

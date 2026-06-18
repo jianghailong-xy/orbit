@@ -220,7 +220,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   const [open, setOpen] = useState(!!node.result?.isError);
   return (
-    <div className={`chat-tool-card chat-tone-${tone ?? 'default'}${isTask ? ' chat-tool-task' : ''}`}>
+    <div
+      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isTask ? ' chat-tool-task' : ''}${
+        hasDetail && open ? ' is-open' : ''
+      }`}
+    >
       <div
         className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
         onClick={hasDetail ? () => setOpen((o) => !o) : undefined}
