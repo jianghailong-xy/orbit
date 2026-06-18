@@ -45,8 +45,10 @@ const FILTERS = [
 ];
 
 const matchesFilter = (status: string, f: string): boolean => {
-  if (f === 'ONGOING') return status === 'QUEUED' || status === 'RUNNING';
-  if (f === 'DONE') return status === 'SUCCEEDED';
+  // Accepts both the mock run-statuses and the real TaskStatus enum
+  // (OPEN/IN_PROGRESS/DONE/CANCELLED) so list pages filter correctly too.
+  if (f === 'ONGOING') return ['QUEUED', 'RUNNING', 'OPEN', 'IN_PROGRESS'].includes(status);
+  if (f === 'DONE') return status === 'SUCCEEDED' || status === 'DONE';
   if (f === 'FAILED') return status === 'FAILED' || status === 'CANCELLED';
   return true;
 };
@@ -93,17 +95,22 @@ const fmtDateTime = (d?: string): string => {
 
 function StatusCircle({ status }: { status: string }) {
   let node: React.ReactNode;
+  // Real TaskStatus values (DONE/IN_PROGRESS/OPEN) are folded into the matching
+  // mock run-status so list pages render the same icons.
   switch (status) {
     case 'SUCCEEDED':
+    case 'DONE':
       node = <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
       break;
     case 'RUNNING':
+    case 'IN_PROGRESS':
       node = <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 15 }} />;
       break;
     case 'FAILED':
       node = <CloseCircleFilled style={{ color: '#f54a45', fontSize: 16 }} />;
       break;
     case 'QUEUED':
+    case 'OPEN':
       node = <span className="status-circle hollow blue" />;
       break;
     case 'CANCELLED':
@@ -118,7 +125,6 @@ function StatusCircle({ status }: { status: string }) {
 export function TasksPage() {
   const loc = useLocation();
   const navigate = useNavigate();
-  const pageTitle = SECTION_TITLES[loc.pathname] ?? 'Active';
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -136,6 +142,20 @@ export function TasksPage() {
   const tasks = useQuery({ queryKey: ['tasks-mock'], queryFn: async () => MOCK_TASKS });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
+
+  // /lists/<base62> is the only non-mock task view: fetch that list and render its
+  // real tasks (GET /task-lists/:id includes them). decodeId -> the UUID the API wants.
+  const listMatch = useMatch('/lists/:key');
+  const listId = listMatch ? decodeId(listMatch.params.key) : null;
+  const listQ = useQuery({
+    queryKey: ['task-list', listId],
+    queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
+    enabled: !!listId,
+  });
+  const isListView = !!listId;
+  const pageTitle = isListView
+    ? (listQ.data?.title ?? '')
+    : (SECTION_TITLES[loc.pathname] ?? 'Active');
 
   // The console is keyed by runner: /agents/<agent> names the agent (its runner is
   // derived below), or /sessions/<id> from which we resolve the runner behind it.
@@ -189,9 +209,20 @@ export function TasksPage() {
     return g;
   }, [tasks.data, filter]);
 
-  const renderRow = (r: any) => {
+  // A user list is a flat set of tasks (no AGENT/MANUAL/EXTERNAL source), so it
+  // renders as one filtered list rather than the grouped mock view.
+  const listRows = useMemo(
+    () => (listQ.data?.tasks ?? []).filter((t: any) => matchesFilter(t.status, filter)),
+    [listQ.data, filter],
+  );
+
+  const renderRow = (r: any, opts: { actions?: boolean } = {}) => {
+    // List pages render real tasks; their mutation endpoints (enqueue/cancel) don't
+    // exist yet, so actions are suppressed there until task mutations are wired up.
+    const showActions = opts.actions ?? true;
     const runnable = ['DRAFT', 'FAILED', 'CANCELLED'].includes(r.status);
     const cancellable = ['QUEUED', 'RUNNING'].includes(r.status);
+    const creatorName = r.creator?.name ?? r.creatorName ?? null;
     return (
       <div className="task-row" key={r.id}>
         <div className="task-title-cell">
@@ -208,40 +239,42 @@ export function TasksPage() {
             size={22}
             style={{ background: '#e1eaff', color: '#3370ff', fontSize: 11, flex: 'none' }}
           >
-            {(r.creator?.name ?? '?').trim().charAt(0).toUpperCase()}
+            {(creatorName ?? '?').trim().charAt(0).toUpperCase()}
           </Avatar>
-          <span className="task-cell">{r.creator?.name ?? '—'}</span>
+          <span className="task-cell">{creatorName ?? '—'}</span>
         </div>
         <div className="task-cell">{fmtDateTime(r.createdAt)}</div>
         <Typography.Text className="task-id" copyable={{ text: r.id, tooltips: ['Copy ID', 'Copied'] }}>
           {r.id.slice(0, 8)}
         </Typography.Text>
-        <div className="row-actions">
-          {runnable && (
-            <Button
-              size="small"
-              type="primary"
-              ghost
-              onClick={() => act.mutate({ id: r.id, action: 'enqueue' })}
-            >
-              Run
-            </Button>
-          )}
-          {cancellable && (
-            <Button size="small" danger onClick={() => act.mutate({ id: r.id, action: 'cancel' })}>
-              Cancel
-            </Button>
-          )}
-          <Tooltip title="Delete">
-            <Button
-              size="small"
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={() => remove.mutate(r.id)}
-            />
-          </Tooltip>
-        </div>
+        {showActions && (
+          <div className="row-actions">
+            {runnable && (
+              <Button
+                size="small"
+                type="primary"
+                ghost
+                onClick={() => act.mutate({ id: r.id, action: 'enqueue' })}
+              >
+                Run
+              </Button>
+            )}
+            {cancellable && (
+              <Button size="small" danger onClick={() => act.mutate({ id: r.id, action: 'cancel' })}>
+                Cancel
+              </Button>
+            )}
+            <Tooltip title="Delete">
+              <Button
+                size="small"
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => remove.mutate(r.id)}
+              />
+            </Tooltip>
+          </div>
+        )}
       </div>
     );
   };
@@ -275,9 +308,13 @@ export function TasksPage() {
         <Segmented options={FILTERS} value={filter} onChange={(v) => setFilter(v as string)} />
       </div>
 
-      {tasks.isLoading ? (
+      {(isListView ? listQ.isLoading : tasks.isLoading) ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
           <Spin />
+        </div>
+      ) : isListView && listQ.isError ? (
+        <div style={{ padding: '24px 16px', color: '#8a9099', fontSize: 13 }}>
+          This list could not be loaded.
         </div>
       ) : (
         <div className="orbit-tasklist">
@@ -291,31 +328,47 @@ export function TasksPage() {
             <div className="col-head">Task ID</div>
           </div>
 
-          {SOURCES.map((s) => {
-            const rows = grouped[s.key] ?? [];
-            const isCollapsed = collapsed[s.key];
-            return (
-              <div key={s.key}>
-                <div
-                  className="group-header"
-                  onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !c[s.key] }))}
-                >
-                  <CaretDownOutlined className={`group-caret ${isCollapsed ? 'collapsed' : ''}`} />
-                  <span className="group-name">{s.label}</span>
-                  <span className="group-count">{rows.length}</span>
+          {isListView ? (
+            <>
+              {listRows.length === 0 ? (
+                <div style={{ padding: '24px 16px', color: '#8a9099', fontSize: 13 }}>
+                  No tasks in this list yet.
                 </div>
-                {!isCollapsed && (
-                  <>
-                    {rows.map(renderRow)}
-                    <div className="new-task-row" onClick={() => setOpen(true)}>
-                      <PlusOutlined />
-                      <span>New Task</span>
-                    </div>
-                  </>
-                )}
+              ) : (
+                listRows.map((r: any) => renderRow(r, { actions: false }))
+              )}
+              <div className="new-task-row" onClick={() => setOpen(true)}>
+                <PlusOutlined />
+                <span>New Task</span>
               </div>
-            );
-          })}
+            </>
+          ) : (
+            SOURCES.map((s) => {
+              const rows = grouped[s.key] ?? [];
+              const isCollapsed = collapsed[s.key];
+              return (
+                <div key={s.key}>
+                  <div
+                    className="group-header"
+                    onClick={() => setCollapsed((c) => ({ ...c, [s.key]: !c[s.key] }))}
+                  >
+                    <CaretDownOutlined className={`group-caret ${isCollapsed ? 'collapsed' : ''}`} />
+                    <span className="group-name">{s.label}</span>
+                    <span className="group-count">{rows.length}</span>
+                  </div>
+                  {!isCollapsed && (
+                    <>
+                      {rows.map((r: any) => renderRow(r))}
+                      <div className="new-task-row" onClick={() => setOpen(true)}>
+                        <PlusOutlined />
+                        <span>New Task</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       )}
           </>
