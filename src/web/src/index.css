@@ -983,6 +983,10 @@ body {
 .chat-user {
   background: #eaf1ff;
   margin-left: auto;
+  /* Hug the text — .chat-msg's max-width:80% is a wrap cap, not a fixed width, so a
+     plain block would stretch the bubble background across 80% and trail blank space
+     after a short message. fit-content shrinks to the text; margin-left:auto right-aligns. */
+  width: fit-content;
 }
 /* Assistant turns are long-form Markdown — render them as a document (no bubble,
    capped reading measure) rather than a chat pill; only short user/streaming-raw
