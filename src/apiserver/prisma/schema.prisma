@@ -227,11 +227,37 @@ model Session {
   turns     ConversationTurn[]
   toolCalls ToolCall[]
   llmUsage  LlmUsage[]
+  approvals Approval[]
 
   @@index([assignedRunnerId, status])
   @@index([ownerId])
   @@index([status])
   @@map("session")
+}
+
+// A tool-permission request from claude's --permission-prompt-tool (served by the
+// runner's orbit MCP server), awaiting a human allow/deny. The MCP tool blocks on a
+// long-poll until status flips. Not a RunEvent: the orbit MCP server is a separate
+// process from the runner's seq-owning session loop, so persisting it as an event
+// would race the runner's monotonic seq. Idempotent on (sessionId, toolUseId).
+model Approval {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  sessionId   String    @map("session_id") @db.Uuid
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  toolName    String    @map("tool_name")
+  input       Json
+  toolUseId   String?   @map("tool_use_id")
+  // PENDING -> ALLOWED | DENIED
+  status      String    @default("PENDING")
+  message     String? // optional deny reason / note from the human
+  // User who decided it (no FK; cf. Activity.actorId).
+  decidedById String?   @map("decided_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  decidedAt   DateTime? @map("decided_at")
+
+  @@unique([sessionId, toolUseId])
+  @@index([sessionId, status])
+  @@map("approval")
 }
 
 // Normalized streamed events for a session (replay + live SSE).

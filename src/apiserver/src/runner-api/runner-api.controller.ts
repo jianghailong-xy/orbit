@@ -14,6 +14,9 @@ import {
 import { Prisma, RunStatus } from '@prisma/client';
 import {
   AgentExecConfig,
+  ApprovalCreateRequest,
+  ApprovalDecisionResponse,
+  ApprovalStatus,
   ClaimedSession,
   ConversationTurnKind,
   DevicePollRequest,
@@ -48,6 +51,10 @@ const OFFLINE_AFTER_MS = 90_000;
 // Interactive sessions (Route B): per-session input long-poll + at-least-once lease.
 const INBOX_LONG_POLL_MS = 25_000;
 const INBOX_LEASE_MS = 300_000;
+// Tool-permission approvals: the orbit MCP permission tool blocks on this long-poll
+// until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
+const APPROVAL_LONG_POLL_MS = 25_000;
+const APPROVAL_POLL_INTERVAL_MS = 1_500;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
 @Controller('runner')
@@ -364,6 +371,76 @@ export class RunnerApiController {
       });
     }
     return { turnId: t.id, seq: t.seq, kind: t.kind as ConversationTurnKind, content: t.content ?? undefined };
+  }
+
+  /**
+   * Register a tool-permission request from claude's --permission-prompt-tool (served
+   * by the orbit MCP server) and surface it to the UI. Idempotent on toolUseId so a
+   * retried call returns the same approval. The MCP tool then polls /approvals/:id.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/approvals')
+  async createApproval(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: ApprovalCreateRequest,
+  ): Promise<{ id: string; status: ApprovalStatus }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const existing = dto.toolUseId
+      ? await this.prisma.approval.findUnique({
+          where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
+        })
+      : null;
+    const approval =
+      existing ??
+      (await this.prisma.approval.create({
+        data: {
+          sessionId,
+          toolName: dto.toolName,
+          input: (dto.input ?? {}) as Prisma.InputJsonValue,
+          toolUseId: dto.toolUseId ?? null,
+        },
+      }));
+    if (!existing) {
+      this.realtime.publish(sessionId, {
+        seq: 0,
+        type: RunEventType.APPROVAL_REQUEST,
+        payload: {
+          id: approval.id,
+          toolName: approval.toolName,
+          input: approval.input,
+          toolUseId: approval.toolUseId ?? undefined,
+        },
+        ts: new Date().toISOString(),
+      });
+    }
+    return { id: approval.id, status: approval.status as ApprovalStatus };
+  }
+
+  /** Long-poll one approval until a human decides (window elapsed undecided → PENDING). */
+  @UseGuards(RunnerAuthGuard)
+  @Get('sessions/:id/approvals/:approvalId')
+  async pollApproval(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Param('approvalId') approvalId: string,
+  ): Promise<ApprovalDecisionResponse> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
+    for (;;) {
+      const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId } });
+      if (!a) return { id: approvalId, status: 'DENIED', behavior: 'deny', message: 'approval not found' };
+      if (a.status !== 'PENDING') {
+        return {
+          id: a.id,
+          status: a.status as ApprovalStatus,
+          behavior: a.status === 'ALLOWED' ? 'allow' : 'deny',
+          message: a.message ?? undefined,
+        };
+      }
+      if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
+      await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+    }
   }
 
   /** A single interactive turn finished; park the session awaiting the next input. */

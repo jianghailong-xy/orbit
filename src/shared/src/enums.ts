@@ -50,6 +50,10 @@ export enum RunEventType {
   USER = 'user', // a user turn entered the transcript
   TURN_END = 'turn_end', // one turn finished; session parks for the next input
   INTERRUPT = 'interrupt', // a turn was interrupted by the user
+  // Tool-permission approvals (live-only SSE nudges; the durable record is the
+  // Approval row, not a RunEvent — so they never collide with the runner's seq).
+  APPROVAL_REQUEST = 'approval_request', // a tool call is awaiting a human allow/deny
+  APPROVAL_RESOLVED = 'approval_resolved', // a pending approval was decided
 }
 
 /** Lifecycle of a human-facing work item (Task). */

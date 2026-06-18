@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -217,9 +218,75 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "permission_prompt":
+		return s.permissionPrompt(args)
+
 	default:
 		return toolResult("unknown tool: "+name, true)
 	}
+}
+
+// maxApprovalPolls caps the total wait for a human decision (~25s per poll), so a
+// forgotten approval can't wedge the claude process forever.
+const maxApprovalPolls = 120
+
+// permissionPrompt is claude's --permission-prompt-tool: it registers the gated tool
+// call as a pending approval, blocks until a human allows/denies it (re-polling across
+// the server's long-poll windows), and returns the decision in the shape claude wants:
+//
+//	{"behavior":"allow","updatedInput":{...}}  or  {"behavior":"deny","message":"..."}
+//
+// Fails CLOSED (deny) on any transport error — a control-plane outage must never
+// silently auto-approve a gated action.
+func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]interface{} {
+	if s.sessionID == "" {
+		return toolResult(denyJSON("no session context (ORBIT_SESSION_ID unset)"), false)
+	}
+	id, err := s.t.createApproval(s.sessionID, map[string]interface{}{
+		"toolName":  getString(args, "tool_name"),
+		"input":     args["input"],
+		"toolUseId": getString(args, "tool_use_id"),
+	})
+	if err != nil {
+		return toolResult(denyJSON("could not register approval: "+err.Error()), false)
+	}
+	for i := 0; i < maxApprovalPolls; i++ {
+		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
+		if err != nil {
+			return toolResult(denyJSON("approval poll failed: "+err.Error()), false)
+		}
+		switch dec.Status {
+		case "ALLOWED":
+			return toolResult(allowJSON(args["input"]), false)
+		case "DENIED":
+			msg := dec.Message
+			if msg == "" {
+				msg = "denied by the user"
+			}
+			return toolResult(denyJSON(msg), false)
+		}
+		// PENDING: the server's long-poll window elapsed undecided — re-poll.
+	}
+	return toolResult(denyJSON("approval timed out"), false)
+}
+
+func allowJSON(input interface{}) string {
+	if input == nil {
+		input = map[string]interface{}{}
+	}
+	b, err := json.Marshal(map[string]interface{}{"behavior": "allow", "updatedInput": input})
+	if err != nil {
+		return `{"behavior":"allow","updatedInput":{}}`
+	}
+	return string(b)
+}
+
+func denyJSON(message string) string {
+	b, err := json.Marshal(map[string]interface{}{"behavior": "deny", "message": message})
+	if err != nil {
+		return `{"behavior":"deny","message":"denied"}`
+	}
+	return string(b)
 }
 
 // resolveTaskID prefers an explicit taskId arg, then the injected current task.
@@ -295,6 +362,17 @@ func toolDescriptors() []map[string]interface{} {
 			"name":        "tasklist_create",
 			"description": "Create a task list (group).",
 			"inputSchema": obj(map[string]interface{}{"title": str}, "title"),
+		},
+		{
+			// Claude Code's --permission-prompt-tool target. Claude calls it (not the
+			// agent) when a tool needs permission; it blocks on a human allow/deny.
+			"name":        "permission_prompt",
+			"description": "Internal: handles Claude Code tool-permission prompts. Not for direct use.",
+			"inputSchema": obj(map[string]interface{}{
+				"tool_name":   str,
+				"input":       map[string]interface{}{"type": "object"},
+				"tool_use_id": str,
+			}),
 		},
 	}
 }

@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { concat, concatMap, from, map, Observable, switchMap, throwError } from 'rxjs';
+import { ApprovalDecisionRequest } from '@orbit/shared';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
@@ -76,6 +77,27 @@ export class SessionsController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.remove(user.userId, id);
+  }
+
+  /** Tool-permission approvals for this session (optionally filtered by status). */
+  @Get(':id/approvals')
+  approvals(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Query('status') status?: string,
+  ) {
+    return this.sessions.listApprovals(user.userId, id, status);
+  }
+
+  /** Allow or deny a pending tool-permission approval. */
+  @Post(':id/approvals/:approvalId/decision')
+  decideApproval(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Param('approvalId') approvalId: string,
+    @Body() dto: ApprovalDecisionRequest,
+  ) {
+    return this.sessions.decideApproval(user.userId, id, approvalId, dto);
   }
 
   /** Replays a session's persisted events, then streams live ones over SSE. */

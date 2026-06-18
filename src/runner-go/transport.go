@@ -156,6 +156,29 @@ func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) error 
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, nil, 35*time.Second)
 }
 
+// createApproval registers a pending tool-permission request (from the orbit MCP
+// permission-prompt tool) and returns its id. Idempotent server-side on toolUseId.
+func (t *Transport) createApproval(sessionID string, body interface{}) (string, error) {
+	var r struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
+		return "", err
+	}
+	return r.ID, nil
+}
+
+// pollApproval long-polls one approval; a "PENDING" status means the server's window
+// elapsed undecided and the caller should re-poll.
+func (t *Transport) pollApproval(ctx context.Context, sessionID, approvalID string) (*ApprovalDecisionResponse, error) {
+	var r ApprovalDecisionResponse
+	if err := t.do(ctx, "GET", "/runner/sessions/"+sessionID+"/approvals/"+approvalID, nil, &r, 35*time.Second); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // ── Task/TaskList ops for the `orbit mcp` server ───────────────────────────
 // These hit the runner-token-authenticated endpoints under /runner; the server
 // scopes everything to the runner's owner. Creating work passes X-Orbit-Agent-Id

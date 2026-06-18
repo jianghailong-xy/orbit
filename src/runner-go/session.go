@@ -179,6 +179,10 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 		b, _ := json.Marshal(map[string]interface{}{"mcpServers": servers})
 		_ = os.WriteFile(mcpPath, b, 0o644)
 		args = append(args, "--mcp-config", mcpPath)
+		// Route tool-permission prompts (incl. plan-mode ExitPlanMode) to the orbit MCP
+		// server's permission_prompt tool, which blocks on a human allow/deny in the UI.
+		// The orbit server is always injected above, so this target always exists.
+		args = append(args, "--permission-prompt-tool", "mcp__orbit__permission_prompt")
 	}
 	if firstSpawn {
 		args = append(args, "--session-id", job.SessionUUID)

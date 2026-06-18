@@ -85,6 +85,35 @@ export const resumeSession = (sessionId: string, content: string) =>
     body: { clientTurnId: uuid(), content },
   });
 
+export interface ApprovalInfo {
+  id: string;
+  sessionId: string;
+  toolName: string;
+  input: unknown;
+  toolUseId?: string;
+  status: 'PENDING' | 'ALLOWED' | 'DENIED';
+  message?: string;
+  createdAt: string;
+  decidedAt?: string;
+}
+
+/** Pending (default) tool-permission approvals awaiting a human allow/deny. */
+export const listApprovals = (sessionId: string, status = 'PENDING') =>
+  api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
+
+/** Allow or deny a pending tool-permission approval; the runner's long-poll
+ *  delivers the decision back to claude's --permission-prompt-tool. */
+export const decideApproval = (
+  sessionId: string,
+  approvalId: string,
+  behavior: 'allow' | 'deny',
+  message?: string,
+) =>
+  api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
+    method: 'POST',
+    body: { behavior, message },
+  });
+
 export const interruptSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/interrupt`, { method: 'POST' });
 

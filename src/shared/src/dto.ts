@@ -148,6 +148,45 @@ export interface RunEventBatch {
   events: NormalizedRunEvent[];
 }
 
+export type ApprovalStatus = 'PENDING' | 'ALLOWED' | 'DENIED';
+
+/** A tool-permission request awaiting a human allow/deny (from claude's
+ *  --permission-prompt-tool, served by the orbit MCP server). */
+export interface ApprovalInfo {
+  id: string;
+  sessionId: string;
+  toolName: string;
+  input: unknown;
+  toolUseId?: string;
+  status: ApprovalStatus;
+  message?: string;
+  createdAt: string;
+  decidedAt?: string;
+}
+
+/** Runner (orbit MCP permission tool) → control plane: register a pending tool
+ *  approval. Idempotent on (sessionId, toolUseId). */
+export interface ApprovalCreateRequest {
+  toolName: string;
+  input: unknown;
+  toolUseId?: string;
+}
+
+/** Browser → control plane: a human's allow/deny on a pending approval. */
+export interface ApprovalDecisionRequest {
+  behavior: 'allow' | 'deny';
+  message?: string;
+}
+
+/** Control plane → runner: the resolved decision (returned by the approval
+ *  long-poll). status === 'PENDING' means the long-poll window elapsed undecided. */
+export interface ApprovalDecisionResponse {
+  id: string;
+  status: ApprovalStatus;
+  behavior?: 'allow' | 'deny';
+  message?: string;
+}
+
 export type ConversationTurnKind = 'message' | 'interrupt' | 'end';
 
 /** Browser → control plane: enqueue a user turn for a live interactive session. */

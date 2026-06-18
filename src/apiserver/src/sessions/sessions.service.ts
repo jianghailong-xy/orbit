@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import { ApprovalDecisionRequest, ApprovalInfo, ApprovalStatus, RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -231,6 +232,73 @@ export class SessionsService {
    * session (full prior context) rather than starting fresh. Requires that runner to
    * be online: claude's transcript lives on its disk, so no other machine can resume.
    */
+  /** Pending (or all) tool-permission approvals for a session the caller owns. */
+  async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    const approvals = await this.prisma.approval.findMany({
+      where: { sessionId: id, ...(status ? { status } : {}) },
+      orderBy: { createdAt: 'asc' },
+    });
+    return approvals.map((a) => this.toApprovalInfo(a));
+  }
+
+  /** Record a human allow/deny on a pending approval; the runner's long-poll picks
+   *  it up and returns it to claude's --permission-prompt-tool. */
+  async decideApproval(
+    ownerId: string,
+    id: string,
+    approvalId: string,
+    dto: ApprovalDecisionRequest,
+  ): Promise<ApprovalInfo> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    if (dto.behavior !== 'allow' && dto.behavior !== 'deny') {
+      throw new BadRequestException('behavior must be "allow" or "deny"');
+    }
+    const status = dto.behavior === 'allow' ? 'ALLOWED' : 'DENIED';
+    // Only the first decision on a still-PENDING approval applies (idempotent).
+    const res = await this.prisma.approval.updateMany({
+      where: { id: approvalId, sessionId: id, status: 'PENDING' },
+      data: { status, message: dto.message ?? null, decidedById: ownerId, decidedAt: new Date() },
+    });
+    const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
+    if (!a) throw new NotFoundException('approval not found');
+    if (res.count > 0) {
+      this.realtime.publish(id, {
+        seq: 0,
+        type: RunEventType.APPROVAL_RESOLVED,
+        payload: { id: approvalId, behavior: dto.behavior },
+        ts: new Date().toISOString(),
+      });
+    }
+    return this.toApprovalInfo(a);
+  }
+
+  private toApprovalInfo(a: {
+    id: string;
+    sessionId: string;
+    toolName: string;
+    input: Prisma.JsonValue;
+    toolUseId: string | null;
+    status: string;
+    message: string | null;
+    createdAt: Date;
+    decidedAt: Date | null;
+  }): ApprovalInfo {
+    return {
+      id: a.id,
+      sessionId: a.sessionId,
+      toolName: a.toolName,
+      input: a.input,
+      toolUseId: a.toolUseId ?? undefined,
+      status: a.status as ApprovalStatus,
+      message: a.message ?? undefined,
+      createdAt: a.createdAt.toISOString(),
+      decidedAt: a.decidedAt?.toISOString(),
+    };
+  }
+
   async resume(ownerId: string, id: string, dto: SessionTurnDto) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');

@@ -16,14 +16,18 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import {
   api,
+  type ApprovalInfo,
   createInteractiveSession,
+  decideApproval,
   endSession,
   interruptSession,
+  listApprovals,
   resumeSession,
   sendTurn,
   sessionEventsUrl,
 } from '../api';
 import { Transcript } from './Transcript';
+import { ApprovalPanel } from './ApprovalPanel';
 import type { Runner } from './TasksSidePanel';
 
 interface RunEvent {
@@ -92,6 +96,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [effort, setEffort] = useState('');
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
@@ -158,9 +163,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     setEvents([]);
     setStreamingText('');
     setStreamingThink('');
+    setApprovals([]);
     seen.current = new Set();
     setIdle(false);
     if (!selectedId) return;
+    // Pending approvals aren't in the event stream (separate table) — fetch them so
+    // a refresh/deep-link shows any request already awaiting a decision.
+    listApprovals(selectedId)
+      .then(setApprovals)
+      .catch(() => undefined);
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
@@ -194,6 +205,26 @@ export function AgentView({ runner }: { runner: Runner }) {
         if (ev.type === 'thinking_delta') {
           const chunk = ev.payload?.text;
           if (typeof chunk === 'string') setStreamingThink((p) => p + chunk);
+          return;
+        }
+        // Approval nudges (live-only, seq 0) — handle BEFORE the seq dedup, which is
+        // keyed on seq and would drop the second one. They drive `approvals`, not the
+        // transcript reducer.
+        if (ev.type === 'approval_request') {
+          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string };
+          setApprovals((prev) =>
+            prev.some((x) => x.id === p.id)
+              ? prev
+              : [
+                  ...prev,
+                  { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo,
+                ],
+          );
+          return;
+        }
+        if (ev.type === 'approval_resolved') {
+          const id = ev.payload?.id as string | undefined;
+          if (id) setApprovals((prev) => prev.filter((x) => x.id !== id));
           return;
         }
         if (seen.current.has(ev.seq)) return;
@@ -242,7 +273,21 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [events, streamingText, streamingThink]);
+  }, [events, streamingText, streamingThink, approvals]);
+
+  // Allow/deny a pending tool-permission request; optimistically drop it (the
+  // approval_resolved SSE also removes it), re-fetching to resync on failure.
+  const decide = async (approvalId: string, behavior: 'allow' | 'deny'): Promise<void> => {
+    if (!selectedId) return;
+    setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
+    try {
+      await decideApproval(selectedId, approvalId, behavior);
+    } catch {
+      listApprovals(selectedId)
+        .then(setApprovals)
+        .catch(() => undefined);
+    }
+  };
 
   const send = useMutation({
     mutationFn: async (content: string): Promise<string> => {
@@ -349,6 +394,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           <Transcript events={events} live={live} />
           {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
           {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
+          {approvals.map((a) => (
+            <ApprovalPanel key={a.id} approval={a} onDecide={decide} />
+          ))}
           {selected &&
             !TERMINAL.includes(selected.status) &&
             selected.status !== 'PENDING' &&

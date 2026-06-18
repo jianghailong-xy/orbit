@@ -186,6 +186,15 @@ type Manifest struct {
 	Version string `json:"version"`
 }
 
+// ApprovalDecisionResponse mirrors @orbit/shared: the resolved decision returned by
+// the approval long-poll. Status "PENDING" means the window elapsed undecided.
+type ApprovalDecisionResponse struct {
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Behavior string `json:"behavior,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
 // Run-event type strings — mirror RunEventType in @orbit/shared.
 const (
 	evSystem        = "system"
