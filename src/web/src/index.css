@@ -1323,6 +1323,59 @@ body {
   min-width: 0;
 }
 
+/* AskUserQuestion: one card per question (header · prompt · options) */
+.chat-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-q {
+  border: 1px solid #eceef1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.chat-q-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8f959e;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
+}
+.chat-q-text {
+  font-size: 13px;
+  color: #1f2329;
+  margin-bottom: 6px;
+}
+.chat-q-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chat-q-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f7f8fa;
+}
+.chat-q-opt-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.chat-q-opt-desc {
+  font-size: 12px;
+  color: #646a73;
+}
+.chat-q-multi {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8f959e;
+}
+
 /* monospace blocks (commands, json, results) */
 .chat-pre-wrap.muted .chat-pre {
   color: #646a73;

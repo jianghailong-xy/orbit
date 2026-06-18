@@ -13,6 +13,7 @@ import {
   LoadingOutlined,
   MinusCircleOutlined,
   PartitionOutlined,
+  QuestionCircleOutlined,
   RightOutlined,
   SearchOutlined,
   ToolOutlined,
@@ -218,8 +219,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const isSubAgent = node.name === 'Task' || node.name === 'Agent';
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
-  // A plan is the point of the turn — open it by default; errors also auto-open.
-  const [open, setOpen] = useState(!!node.result?.isError || node.name === 'ExitPlanMode');
+  // A plan or a question to the user is the point of the turn — open it by
+  // default; errors also auto-open.
+  const [open, setOpen] = useState(
+    !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion',
+  );
   return (
     <div
       className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${
@@ -368,6 +372,19 @@ function describeTool(name: string, input: any): ToolDesc {
           </div>
         ) : undefined,
       };
+    case 'AskUserQuestion': {
+      // A multiple-choice prompt to the user — render each question as a card
+      // (header · question · options) instead of dumping the nested questions
+      // array as a raw JSON blob via the default branch.
+      const qs: any[] = Array.isArray(i.questions) ? i.questions : [];
+      return {
+        label: 'Question',
+        icon: <QuestionCircleOutlined />,
+        tone: 'agent',
+        summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
+        body: qs.length ? <Questions questions={qs} /> : undefined,
+      };
+    }
     default:
       if (name.startsWith('mcp__')) {
         return {
@@ -565,6 +582,30 @@ function Todos({ todos }: { todos: any[] }) {
         <div key={k} className={`todo todo-${t.status}`}>
           <span className="todo-mark">{mark(t.status)}</span>
           <span>{t.content ?? t.activeForm ?? ''}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Questions renders an AskUserQuestion input: each question as a card with its
+// header, prompt text, and the selectable options (label + description).
+function Questions({ questions }: { questions: any[] }) {
+  return (
+    <div className="chat-questions">
+      {questions.map((q: any, k: number) => (
+        <div className="chat-q" key={k}>
+          {q?.header && <div className="chat-q-header">{q.header}</div>}
+          {q?.question && <div className="chat-q-text">{String(q.question)}</div>}
+          <div className="chat-q-opts">
+            {(q?.options ?? []).map((o: any, j: number) => (
+              <div className="chat-q-opt" key={j}>
+                <span className="chat-q-opt-label">{o?.label ?? ''}</span>
+                {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
+              </div>
+            ))}
+          </div>
+          {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
         </div>
       ))}
     </div>
