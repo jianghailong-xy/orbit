@@ -2010,3 +2010,55 @@ body {
 .tdp-compose .ant-input {
   flex: 1;
 }
+
+/* Task comment @-mentions: highlighted chip in rendered comments + composer menu. */
+.tdp-mention {
+  color: #3370ff;
+  background: #eaf1ff;
+  border-radius: 4px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.tdp-compose {
+  position: relative;
+}
+.tdp-mention-menu {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(100% - 6px);
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  z-index: 20;
+}
+.tdp-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tdp-mention-item.active,
+.tdp-mention-item:hover {
+  background: #f2f3f5;
+}
+.tdp-mention-name {
+  font-size: 13px;
+  color: #1f2329;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-mention-norunner {
+  font-size: 11px;
+  color: #a0a4ab;
+  flex: none;
+}

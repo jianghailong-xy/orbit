@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 
 const TASK_STATUSES = Object.values(TaskStatus);
@@ -31,4 +31,8 @@ export class CreateTaskCommentDto {
   @IsString()
   @MinLength(1)
   body!: string;
+
+  // Agent ids @-mentioned in the comment. Each owned agent is notified and triggered
+  // on this task; unknown/non-owned ids are silently dropped (see TasksService).
+  @IsOptional() @IsArray() @IsString({ each: true }) mentions?: string[];
 }

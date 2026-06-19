@@ -421,6 +421,9 @@ model TaskComment {
   authorType CreatorType @map("author_type")
   authorId   String      @map("author_id") @db.Uuid
   body       String
+  // Agent ids @-mentioned in this comment (web composer). Each mention notifies and
+  // triggers that agent on this task; resolved to names in the UI. No FK (cf. authorId).
+  mentions   String[]    @default([]) @db.Uuid
   createdAt  DateTime    @default(now()) @map("created_at")
 
   @@index([taskId, createdAt])
