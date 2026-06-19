@@ -67,6 +67,7 @@ model User {
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
   taskLists        TaskList[] // task lists this user owns (tenant scope)
+  attachments      Attachment[] // blobs this user uploaded (tenant scope)
 
   @@map("user")
 }
@@ -244,6 +245,7 @@ model Session {
   approvals Approval[]
   // Tasks an agent created from within this session (cf. Task.creatorSession).
   createdTasks Task[] @relation("TaskCreatorSession")
+  attachments  Attachment[]
 
   @@index([assignedRunnerId, status])
   @@index([ownerId])
@@ -352,6 +354,30 @@ model ConversationTurn {
   @@unique([sessionId, seq])
   @@index([sessionId, status])
   @@map("conversation_turn")
+}
+
+// Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
+// Postgres is the only persistent store in the single-host Compose deployment (the
+// apiserver mounts no volume), and the runner is a remote process that must fetch bytes
+// over HTTP regardless of backend — so DB storage is the simplest option that also
+// survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
+// the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+model Attachment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
+  owner     User     @relation(fields: [ownerId], references: [id])
+  // Optional session scope: set when uploaded inside a session composer so the blob
+  // cascade-deletes with the session. Null for uploads made before the session exists.
+  sessionId String?  @map("session_id") @db.Uuid
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  mimeType  String   @map("mime_type")
+  sizeBytes Int      @map("size_bytes")
+  data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@index([sessionId])
+  @@map("attachment")
 }
 
 // Lightweight activity feed (no FKs, append-only).
