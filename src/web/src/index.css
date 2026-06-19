@@ -1570,6 +1570,31 @@ body {
 .chat-q-custom::placeholder {
   color: #a8acb3;
 }
+/* "Chat about this": a free-form reply that rides back as a deny message so claude
+   keeps the conversation going instead of forcing one of its listed options. */
+.chat-q-reply {
+  margin-top: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: #1f2329;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.1s, background 0.1s;
+}
+.chat-q-reply:focus {
+  border-color: #3370ff;
+  background: #f0f5ff;
+}
+.chat-q-reply::placeholder {
+  color: #a8acb3;
+}
 
 /* monospace blocks (commands, json, results) */
 .chat-pre-wrap.muted .chat-pre {
@@ -1750,6 +1775,12 @@ body {
   font-size: 13.5px;
   color: #1f2329;
 }
+/* The question form grows with its content instead of scrolling inside the card —
+   multiple questions stay fully visible and the transcript scrolls naturally. */
+.approval-body.is-questions {
+  max-height: none;
+  overflow: visible;
+}
 .approval-input {
   white-space: pre-wrap;
   word-break: break-word;
@@ -1783,6 +1814,14 @@ body {
 }
 .approval-btn.deny:hover {
   background: #f2f3f5;
+}
+.approval-btn.chat {
+  background: #fff;
+  color: #3370ff;
+  border-color: #b9ceff;
+}
+.approval-btn.chat:hover {
+  background: #f0f5ff;
 }
 .approval-btn:disabled {
   opacity: 0.5;
