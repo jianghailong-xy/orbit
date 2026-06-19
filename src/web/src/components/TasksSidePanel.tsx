@@ -48,7 +48,7 @@ interface Agent {
   id: string;
   name: string;
   // ISO-8601 creation timestamp; the sidebar sorts on it so the list is
-  // newest-first regardless of the API's ordering.
+  // oldest-first regardless of the API's ordering.
   createdAt: string;
   // The machine this agent belongs to (null for config-only agents); an agent
   // with no runner has no console to open.
@@ -137,10 +137,12 @@ export function TasksSidePanel() {
 
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
-  // Newest-added first. Sort client-side so the order holds even if the API
-  // returns them unordered; ISO timestamps compare lexicographically.
+  // Oldest-added first, so ⌘1 always maps to the first agent created and the
+  // shortcuts stay stable as newer agents append below. Sort client-side so the
+  // order holds even if the API returns them unordered; ISO timestamps compare
+  // lexicographically.
   const agentList = useMemo(
-    () => [...(agents.data ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    () => [...(agents.data ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)),
     [agents.data],
   );
 
