@@ -18,13 +18,14 @@ import {
   Spin,
   Tooltip,
 } from 'antd';
-import { useMemo, useState } from 'react';
-import { Link, useLocation, useMatch, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { api, getSession } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
 import { TasksSidePanel } from '../components/TasksSidePanel';
+import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { RunnersPage } from './RunnersPage';
 import { RunnerDetailPage } from './RunnerDetailPage';
 
@@ -93,6 +94,7 @@ export function TasksPage() {
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState('ALL');
   // The "Add a runner" guide is its own route; show it whenever we're on /runners/register.
   const showRegister = loc.pathname === '/runners/register';
@@ -117,6 +119,8 @@ export function TasksPage() {
     enabled: !!listId,
   });
   const isListView = !!listId;
+  // Switching lists/sections closes any open detail panel.
+  useEffect(() => setSelectedTaskId(null), [listId, loc.pathname]);
   const pageTitle = isListView
     ? (listQ.data?.title ?? '')
     : (SECTION_TITLES[loc.pathname] ?? 'Active');
@@ -171,13 +175,16 @@ export function TasksPage() {
   const renderRow = (r: any) => {
     // The agent assigned to run the task (GET /tasks and the list view both include it).
     const assigneeName = r.assignee?.name ?? null;
+    const selected = selectedTaskId === r.id;
     return (
-      <div className="task-row" key={r.id}>
+      <div
+        className={`task-row clickable${selected ? ' selected' : ''}`}
+        key={r.id}
+        onClick={() => setSelectedTaskId(r.id)}
+      >
         <div className="task-title-cell">
           <StatusCircle status={r.status} />
-          <Link to={`/tasks/${r.id}`} className="task-title">
-            {r.title}
-          </Link>
+          <span className="task-title">{r.title}</span>
         </div>
         <div className="task-creator">
           {assigneeName ? (
@@ -203,7 +210,10 @@ export function TasksPage() {
               type="text"
               danger
               icon={<DeleteOutlined />}
-              onClick={() => remove.mutate(r.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                remove.mutate(r.id);
+              }}
             />
           </Tooltip>
         </div>
@@ -281,6 +291,14 @@ export function TasksPage() {
           </>
         )}
       </main>
+
+      {selectedTaskId && (
+        <TaskDetailPanel
+          taskId={selectedTaskId}
+          summary={(isListView ? listRows : taskRows).find((r: any) => r.id === selectedTaskId)}
+          onClose={() => setSelectedTaskId(null)}
+        />
+      )}
 
       <Modal
         title="New Task"

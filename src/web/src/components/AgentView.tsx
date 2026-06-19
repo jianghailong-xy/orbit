@@ -699,12 +699,21 @@ export function AgentView({ runner }: { runner: Runner }) {
           block
           size="small"
           value={selectedId ? 'active' : view}
-          disabled={!!selectedId}
-          onChange={(v) => setView(v as 'active' | 'archived' | 'deleted')}
+          onChange={(v) => {
+            const next = v as 'active' | 'archived' | 'deleted';
+            setView(next);
+            // Switching tabs while a session transcript is open closes it: the open
+            // session lives in the active set and archived/trash rows aren't openable,
+            // so browsing another tab means leaving the conversation.
+            if (selectedId) {
+              const a = scopeAgentId ?? agentsForRunner[0]?.id;
+              navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+            }
+          }}
           options={[
-            { label: '进行中', value: 'active' },
-            { label: '已完成', value: 'archived' },
-            { label: '回收站', value: 'deleted' },
+            { label: 'Active', value: 'active' },
+            { label: 'Completed', value: 'archived' },
+            { label: 'Trash', value: 'deleted' },
           ]}
         />
         <div className="agent-sessions session-col-list" ref={listRef}>
@@ -923,7 +932,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   return;
                 }
               }
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 onSend();
               }

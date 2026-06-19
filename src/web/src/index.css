@@ -1719,3 +1719,247 @@ body {
 .approval-btn.deny:hover {
   background: #f2f3f5;
 }
+
+/* ---- Task detail panel (slide-in beside the task list) ---- */
+.task-row.clickable {
+  cursor: pointer;
+}
+.task-row.selected {
+  background: #eaf1ff;
+}
+.task-row.selected:hover {
+  background: #e3edff;
+}
+
+.task-detail-panel {
+  flex: none;
+  width: clamp(380px, 42vw, 620px);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #eceef1;
+  background: #fff;
+  box-shadow: -4px 0 16px rgba(31, 35, 41, 0.04);
+  animation: tdp-slide-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes tdp-slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.tdp-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 18px 12px 14px 20px;
+  border-bottom: 1px solid #eceef1;
+  flex: none;
+}
+.tdp-head-main {
+  flex: 1;
+  min-width: 0;
+}
+.tdp-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2329;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.tdp-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #646a73;
+}
+.tdp-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tdp-meta-item.muted {
+  color: #8f959e;
+}
+.tdp-badge {
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+}
+.tdp-badge.tone-blue {
+  background: #eaf1ff;
+  color: #3370ff;
+  border-color: #c9d6f5;
+}
+.tdp-badge.tone-green {
+  background: #eafaf0;
+  color: #2ea121;
+  border-color: #b6e7c4;
+}
+.tdp-badge.tone-muted {
+  background: #f2f3f5;
+  color: #8f959e;
+  border-color: #e3e6eb;
+}
+
+.tdp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.tdp-loading,
+.tdp-empty {
+  padding: 48px;
+  text-align: center;
+  color: #8f959e;
+  font-size: 13px;
+}
+.tdp-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f2f3f5;
+}
+.tdp-section:last-child {
+  border-bottom: none;
+}
+.tdp-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8f959e;
+  margin-bottom: 10px;
+}
+.tdp-field {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.tdp-field:last-child {
+  margin-bottom: 0;
+}
+.tdp-field-label {
+  width: 76px;
+  flex: none;
+  color: #8f959e;
+}
+.tdp-field-value {
+  flex: 1;
+  min-width: 0;
+  color: #1f2329;
+  word-break: break-word;
+}
+.tdp-prose {
+  font-size: 13px;
+  color: #4e5969;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f7f8fa;
+  border: 1px solid #eceef1;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.tdp-muted {
+  color: #8f959e;
+  font-size: 13px;
+}
+
+.tdp-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #1f2329;
+  font-size: 13px;
+}
+.tdp-session:hover {
+  background: #f5f6f7;
+}
+.tdp-session-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-session-status {
+  font-size: 11px;
+  color: #8f959e;
+  flex: none;
+}
+.tdp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c9cdd4;
+  flex: none;
+}
+.tdp-dot.RUNNING {
+  background: #3370ff;
+}
+.tdp-dot.SUCCEEDED,
+.tdp-dot.ENDED {
+  background: #2ea121;
+}
+.tdp-dot.FAILED {
+  background: #f54a45;
+}
+
+.tdp-comment {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.tdp-comment:last-child {
+  margin-bottom: 0;
+}
+.tdp-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+.tdp-comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.tdp-comment-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+}
+.tdp-comment-time {
+  font-size: 11px;
+  color: #8f959e;
+}
+.tdp-comment-text {
+  font-size: 13px;
+  color: #4e5969;
+  line-height: 1.6;
+  background: #f7f8fa;
+  border-radius: 8px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tdp-compose {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid #eceef1;
+}
+.tdp-compose .ant-input {
+  flex: 1;
+}
