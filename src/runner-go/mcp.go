@@ -163,6 +163,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate")
+		// Default the assignee to the current agent when the caller didn't specify one
+		// (an explicit assigneeId, including null to leave it unassigned, is respected).
+		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
+			body["assigneeId"] = s.agentID
+		}
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("create task failed: "+err.Error(), true)
@@ -351,7 +356,7 @@ func toolDescriptors() []map[string]interface{} {
 		},
 		{
 			"name":        "task_create",
-			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId/listId must be owned by the caller; dueDate is an ISO date string.",
+			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string.",
 			"inputSchema": obj(map[string]interface{}{
 				"title":       str,
 				"description": promptDesc,
