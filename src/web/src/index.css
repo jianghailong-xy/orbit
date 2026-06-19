@@ -1146,7 +1146,7 @@ body {
    turns keep a bubble. Equal specificity to .chat-msg, but later, so these win. */
 .chat-assistant {
   background: transparent;
-  max-width: 680px;
+  max-width: 780px;
   padding: 0 12px;
   border-radius: 0;
 }
