@@ -245,6 +245,10 @@ export class RunnerApiController {
         status: dto?.status ?? 'ONLINE',
         version: dto?.version ?? runner.version ?? undefined,
         lastHeartbeatAt: new Date(),
+        // Refresh the `/` autocomplete catalog; older runners omit these (leave as-is).
+        // Cast: a typed interface[] isn't structurally an InputJsonValue (no index sig).
+        availableCommands: (dto?.commands ?? undefined) as Prisma.InputJsonValue | undefined,
+        availableSkills: (dto?.skills ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
     let cancelSessionIds: string[] = [];

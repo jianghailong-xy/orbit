@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import type { SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
@@ -47,14 +48,19 @@ export class RunnersService {
         version: true,
         lastHeartbeatAt: true,
         enrolledAt: true,
+        availableCommands: true,
+        availableSkills: true,
       },
     });
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const staleBefore = Date.now() - OFFLINE_AFTER_MS;
-    return runners.map((r) => ({
+    return runners.map(({ availableCommands, availableSkills, ...r }) => ({
       ...r,
       online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
+      // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
+      commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
+      skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],
     }));
   }
 

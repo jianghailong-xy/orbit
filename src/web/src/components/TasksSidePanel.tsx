@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
+import type { SlashCommandInfo } from '@orbit/shared';
 import { api, clearToken, getSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 
@@ -42,6 +43,9 @@ export interface Runner {
   status?: string;
   lastHeartbeatAt?: string | null;
   enrolledAt?: string | null;
+  // Slash commands / skills the runner reported, for the composer's `/` autocomplete.
+  commands?: SlashCommandInfo[];
+  skills?: SlashCommandInfo[];
 }
 
 interface Agent {
