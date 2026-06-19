@@ -619,6 +619,16 @@ body {
 .task-title:hover {
   color: #3370ff;
 }
+/* Live "running" indicator on a task row: breathing blue dot, same visual language
+   as the sidebar's task-list dot. Shown when the task has a busy session executing. */
+.task-running-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3370ff;
+  flex: none;
+  animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
+}
 .task-creator {
   display: flex;
   align-items: center;

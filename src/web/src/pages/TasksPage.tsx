@@ -97,7 +97,13 @@ export function TasksPage() {
   const runnerDetailId = !showRegister && runnerDetailMatch ? decodeId(runnerDetailMatch.params.id) : null;
   const [form] = Form.useForm();
 
-  const tasks = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
+  // Poll while any task is running so its live indicator clears once the run ends;
+  // 5s busy / 15s idle, matching the sidebar's task-list poll.
+  const tasks = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => api<any[]>('/tasks'),
+    refetchInterval: (q) => ((q.state.data ?? []).some((t: any) => t.running) ? 5_000 : 15_000),
+  });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 
@@ -109,6 +115,8 @@ export function TasksPage() {
     queryKey: ['task-list', listId],
     queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
     enabled: !!listId,
+    refetchInterval: (q) =>
+      (q.state.data?.tasks ?? []).some((t: any) => t.running) ? 5_000 : 15_000,
   });
   const isListView = !!listId;
   // Switching lists/sections closes any open detail panel.
@@ -311,6 +319,11 @@ export function TasksPage() {
         <div className="task-title-cell">
           <StatusCircle status={r.status} />
           <span className="task-title">{r.title}</span>
+          {r.running && (
+            <Tooltip title="运行中">
+              <span className="task-running-dot" />
+            </Tooltip>
+          )}
         </div>
         <div className="task-creator">
           {assigneeName ? (

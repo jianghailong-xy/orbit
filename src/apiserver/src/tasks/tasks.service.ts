@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CreatorType, Prisma, TaskComment } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -97,8 +97,8 @@ export class TasksService {
     return session?.id;
   }
 
-  list(ownerId: string) {
-    return this.prisma.task.findMany({
+  async list(ownerId: string) {
+    const tasks = await this.prisma.task.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -116,6 +116,29 @@ export class TasksService {
         _count: { select: { comments: true } },
       },
     });
+    return this.withRunning(tasks);
+  }
+
+  /**
+   * Tag each task with `running` = it has a busy (PENDING/RUNNING) session, i.e. it is
+   * actually executing right now. This is the live ground truth, distinct from
+   * Task.status (an agent-maintained label that can lag). One grouped query covers the
+   * whole page. The list-detail view (TaskListsService) computes the same flag inline.
+   */
+  private async withRunning<T extends { id: string }>(
+    tasks: T[],
+  ): Promise<(T & { running: boolean })[]> {
+    if (tasks.length === 0) return [];
+    const busy = await this.prisma.session.groupBy({
+      by: ['taskId'],
+      where: {
+        taskId: { in: tasks.map((t) => t.id) },
+        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      },
+      _count: { _all: true },
+    });
+    const running = new Set(busy.map((b) => b.taskId));
+    return tasks.map((t) => ({ ...t, running: running.has(t.id) }));
   }
 
   async get(ownerId: string, id: string) {

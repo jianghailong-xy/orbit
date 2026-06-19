@@ -59,7 +59,22 @@ export class TaskListsService {
       },
     });
     if (!list) throw new NotFoundException('task list not found');
-    return { ...list, tasks: await this.resolveTaskCreators(list.tasks) };
+    const tasks = await this.resolveTaskCreators(list.tasks);
+    // Tag each task with `running` (has a PENDING/RUNNING session) so the list view
+    // shows the same live indicator as the Active view — see TasksService.withRunning.
+    const ids = tasks.map((t) => t.id);
+    const busy = ids.length
+      ? await this.prisma.session.groupBy({
+          by: ['taskId'],
+          where: {
+            taskId: { in: ids },
+            status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const running = new Set(busy.map((b) => b.taskId));
+    return { ...list, tasks: tasks.map((t) => ({ ...t, running: running.has(t.id) })) };
   }
 
   /**
