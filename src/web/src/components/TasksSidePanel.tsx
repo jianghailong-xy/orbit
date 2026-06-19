@@ -24,7 +24,7 @@ const TOP = [
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
 const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
-const DEFAULT_SIDEBAR_WIDTH = 264;
+const DEFAULT_SIDEBAR_WIDTH = 340;
 const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
@@ -92,7 +92,11 @@ export function TasksSidePanel() {
     // the top "Runners" item and back on each ArrowUp/ArrowDown.
     placeholderData: keepPreviousData,
   });
-  const activeAgentId = openAgentId ?? sessionQ.data?.agent?.id ?? null;
+  // Only resolve the agent from session data while we're actually on a session
+  // route. keepPreviousData (above) keeps the last session's data around to avoid
+  // flicker between sessions, but that stale data would otherwise keep an agent
+  // row highlighted after navigating away to a list or top-nav route.
+  const activeAgentId = openAgentId ?? (sessionId ? sessionQ.data?.agent?.id : null) ?? null;
 
   // On a top-nav route the highlight follows the URL ("/" and "/tasks" both map
   // to Active); the runner-centric routes (/runners, /runner, /agents, /sessions)

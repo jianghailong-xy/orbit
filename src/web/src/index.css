@@ -1142,15 +1142,24 @@ body {
   color: #8f959e;
 }
 /* Assistant turns are long-form Markdown — render them as a document (no bubble,
-   capped reading measure) rather than a chat pill; only short user/streaming-raw
-   turns keep a bubble. Equal specificity to .chat-msg, but later, so these win. */
+   spanning the full session width) rather than a chat pill; only short
+   user/streaming-raw turns keep a bubble. max-width:none overrides .chat-msg's
+   80% cap (equal specificity, but later, so this wins). */
 .chat-assistant {
   background: transparent;
-  max-width: 680px;
+  max-width: none;
   padding: 0 12px;
   border-radius: 0;
 }
 .chat-streaming::after {
+  content: '▋';
+  margin-left: 1px;
+  color: #8f959e;
+  animation: chat-caret-blink 1s steps(1) infinite;
+}
+/* Streaming assistant bubble renders markdown, so attach the caret inline after the
+   last rendered block instead of after the bubble (which would drop it to a new line). */
+.chat-streaming-md .md > :last-child::after {
   content: '▋';
   margin-left: 1px;
   color: #8f959e;
@@ -1548,6 +1557,28 @@ body {
   content: '✓ ';
   color: #3370ff;
 }
+/* Free-text answer field: lets the user type their own answer to a question. */
+.chat-q-custom {
+  margin-top: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: #1f2329;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.1s, background 0.1s;
+}
+.chat-q-custom:focus {
+  border-color: #3370ff;
+  background: #f0f5ff;
+}
+.chat-q-custom::placeholder {
+  color: #a8acb3;
+}
 
 /* monospace blocks (commands, json, results) */
 .chat-pre-wrap.muted .chat-pre {
@@ -1765,6 +1796,11 @@ body {
 .approval-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.approval-btn-kbd {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 /* ---- Task detail panel (slide-in beside the task list) ---- */

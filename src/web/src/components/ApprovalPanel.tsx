@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo } from '../api';
@@ -17,17 +17,50 @@ function planText(input: unknown): string {
 
 type OnDecide = (id: string, behavior: 'allow' | 'deny', answers?: Record<string, string[]>) => void;
 
+// The hotkey accepts metaKey || ctrlKey on every platform; only the hint label is
+// platform-specific — ⌘ on macOS, Ctrl elsewhere.
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+const SHORTCUT_HINT = IS_MAC ? '⌘ + Enter' : 'Ctrl + Enter';
+
+/** ⌘/Ctrl + Enter fires the card's primary action while it's the active card (the first
+ *  pending one). Skipped while typing in an input so it doesn't clash with the composer. */
+function useApproveHotkey(active: boolean, onTrigger: () => void): void {
+  const fn = useRef(onTrigger);
+  fn.current = onTrigger;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLElement &&
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+      )
+        return;
+      e.preventDefault();
+      fn.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+}
+
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
  *  form for AskUserQuestion, otherwise a plain allow/deny (with a rich render for plans). */
 export function ApprovalPanel({
   approval,
   onDecide,
+  active = false,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  active?: boolean;
 }): JSX.Element {
-  if (approval.toolName === 'AskUserQuestion') {
-    return <QuestionForm approval={approval} onDecide={onDecide} />;
+  const isQuestion = approval.toolName === 'AskUserQuestion';
+  // The plain card approves on ⌘/Ctrl + Enter; questions submit via QuestionForm's own hook.
+  useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'));
+  if (isQuestion) {
+    return <QuestionForm approval={approval} onDecide={onDecide} active={active} />;
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
   return (
@@ -47,6 +80,7 @@ export function ApprovalPanel({
       <div className="approval-actions">
         <button className="approval-btn approve" onClick={() => onDecide(approval.id, 'allow')}>
           {isPlan(approval) ? '批准并实施' : '批准'}
+          {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
         </button>
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
           {isPlan(approval) ? '继续规划' : '拒绝'}
@@ -68,11 +102,22 @@ function questionsOf(input: unknown): QItem[] {
 
 /** AskUserQuestion: pick option(s) per question and submit, like Claude's TUI. The picks
  *  ride back to claude as `answers` (question text → labels) on an `allow`. */
-function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide: OnDecide }): JSX.Element {
+function QuestionForm({
+  approval,
+  onDecide,
+  active = false,
+}: {
+  approval: ApprovalInfo;
+  onDecide: OnDecide;
+  active?: boolean;
+}): JSX.Element {
   const questions = questionsOf(approval.input);
   const [sel, setSel] = useState<Record<string, string[]>>({});
+  // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
+  // the user type their own answer instead of picking a listed option.
+  const [custom, setCustom] = useState<Record<string, string>>({});
 
-  const toggle = (q: string, label: string, multi: boolean) =>
+  const toggle = (q: string, label: string, multi: boolean) => {
     setSel((prev) => {
       const cur = prev[q] ?? [];
       if (multi) {
@@ -80,19 +125,38 @@ function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide
       }
       return { ...prev, [q]: cur.includes(label) ? [] : [label] };
     });
+    // Single-select: a listed option and free text are mutually exclusive.
+    if (!multi) setCustom((prev) => (prev[q] ? { ...prev, [q]: '' } : prev));
+  };
 
-  // Require a pick for every question before the agent can act on the answers.
-  const complete = questions.length > 0 && questions.every((qq) => (sel[qq.question ?? '']?.length ?? 0) > 0);
+  const onCustom = (q: string, value: string, multi: boolean) => {
+    setCustom((prev) => ({ ...prev, [q]: value }));
+    // Single-select: typing a custom answer clears any picked option.
+    if (!multi && value.trim()) setSel((prev) => (prev[q]?.length ? { ...prev, [q]: [] } : prev));
+  };
+
+  // A question is answered once it has a picked option or non-empty typed text.
+  const answered = (qq: QItem): boolean => {
+    const q = qq.question ?? '';
+    return (sel[q]?.length ?? 0) > 0 || (custom[q]?.trim().length ?? 0) > 0;
+  };
+  const complete = questions.length > 0 && questions.every(answered);
 
   const submit = () => {
+    if (!complete) return;
     const answers: Record<string, string[]> = {};
     for (const qq of questions) {
       const q = qq.question ?? '';
-      const picks = sel[q];
-      if (q && picks?.length) answers[q] = picks;
+      const picks = [...(sel[q] ?? [])];
+      const typed = custom[q]?.trim();
+      if (typed) picks.push(typed);
+      if (q && picks.length) answers[q] = picks;
     }
     onDecide(approval.id, 'allow', answers);
   };
+
+  // ⌘/Ctrl + Enter submits once every question has a pick.
+  useApproveHotkey(active && complete, submit);
 
   return (
     <div className="approval-card">
@@ -124,6 +188,19 @@ function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide
                     );
                   })}
                 </div>
+                <input
+                  type="text"
+                  className="chat-q-custom"
+                  placeholder="或输入你自己的回答…"
+                  value={custom[q] ?? ''}
+                  onChange={(e) => onCustom(q, e.target.value, multi)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && complete) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                />
                 {multi && <div className="chat-q-multi">可多选</div>}
               </div>
             );
@@ -133,6 +210,7 @@ function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide
       <div className="approval-actions">
         <button className="approval-btn approve" disabled={!complete} onClick={submit}>
           提交
+          {active && complete && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
         </button>
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
           不回答

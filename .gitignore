@@ -15,6 +15,9 @@ tmp/
 # runner local state
 .orbit/
 
+# claude worktrees
+.claude/worktrees/
+
 # prisma local db
 *.db
 

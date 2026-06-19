@@ -60,6 +60,13 @@ export class SessionsController {
     return this.sessions.createTurn(user.userId, id, dto);
   }
 
+  // Still-queued (PENDING) user messages, so reopening/deep-linking a running session
+  // can restore the visible queue (these aren't in the event stream until delivered).
+  @Get(':id/turns')
+  queuedTurns(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.listQueuedTurns(user.userId, id);
+  }
+
   // Withdraw a still-queued message (turnId is the raw conversation_turn id returned
   // by POST /turns, not a base62 public id).
   @Delete(':id/turns/:turnId')

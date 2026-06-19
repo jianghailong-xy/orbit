@@ -34,13 +34,14 @@ import {
   endSession,
   interruptSession,
   listApprovals,
+  listQueuedTurns,
   restoreSession,
   resumeSession,
   sendTurn,
   sessionEventsUrl,
   updateSessionConfig,
 } from '../api';
-import { Transcript } from './Transcript';
+import { StreamingMessage, Transcript } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import type { Runner } from './TasksSidePanel';
 
@@ -103,6 +104,13 @@ const SESSION_COL_KEY = 'orbit.sessionColWidth';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 264;
+
+// Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
+// the list doesn't open-then-immediately-close a connection per session skipped past.
+const SWITCH_DEBOUNCE_MS = 150;
+// Cap on cached transcripts (mount-scoped), so a long browsing session can't grow
+// the cache without bound. Least-recently-selected entries are evicted first.
+const TRANSCRIPT_CACHE_MAX = 20;
 
 const fmtTime = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -195,6 +203,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
   const seen = useRef<Set<number>>(new Set());
+  // Per-session transcript cache (mount-scoped): switching seeds events from here for
+  // an instant paint and resumes the SSE just past the cached seq, instead of replaying
+  // each session's full history from seq 0 on every visit.
+  const transcriptCache = useRef<Map<string, RunEvent[]>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
   // Width of the left session column; drag the divider to resize, persisted to
@@ -351,28 +363,46 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Subscribe to the session's event stream; reset only when the selection changes.
   useEffect(() => {
-    setEvents([]);
+    // Live/ephemeral drafts belong to the previous selection — clear them at once.
     setStreamingText('');
     setStreamingThink('');
     setApprovals([]);
     setQueued([]);
-    seen.current = new Set();
     setIdle(false);
-    if (!selectedId) return;
-    // Pending approvals aren't in the event stream (separate table) — fetch them so
-    // a refresh/deep-link shows any request already awaiting a decision.
-    listApprovals(selectedId)
-      .then(setApprovals)
-      .catch(() => undefined);
+    if (!selectedId) {
+      setEvents([]);
+      seen.current = new Set();
+      return;
+    }
+    // Seed from cache for an instant paint; touch the entry so it's most-recently-used.
+    const cache = transcriptCache.current;
+    const cached = cache.get(selectedId) ?? [];
+    cache.delete(selectedId);
+    cache.set(selectedId, cached);
+    let acc = cached;
+    setEvents(acc);
+    const isSeq = (s: unknown): s is number =>
+      typeof s === 'number' && s !== Number.MAX_SAFE_INTEGER;
+    seen.current = new Set(cached.map((e) => e.seq).filter(isSeq));
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
     let fails = 0;
-    let lastSeq = 0;
+    // Resume just past what's cached so only the gap is fetched, not the whole history.
+    let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
     const stop = (): void => {
       closed = true;
       if (retry) clearTimeout(retry);
       es?.close();
+    };
+    const push = (ev: RunEvent): void => {
+      acc = [...acc, ev];
+      cache.set(selectedId, acc);
+      if (cache.size > TRANSCRIPT_CACHE_MAX) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
+      }
+      setEvents(acc);
     };
     const connect = (): void => {
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
@@ -421,7 +451,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         }
         if (seen.current.has(ev.seq)) return;
         seen.current.add(ev.seq);
-        setEvents((prev) => [...prev, ev]);
+        push(ev);
         // The authoritative full text (or a turn/user/interrupt boundary) supersedes
         // the live drafts — clear them so streamed text isn't rendered twice. Text
         // implies thinking is done, so a text/turn boundary clears both; the durable
@@ -457,8 +487,27 @@ export function AgentView({ runner }: { runner: Runner }) {
         retry = setTimeout(connect, Math.min(2000 * fails, 15000) + Math.random() * 500);
       };
     };
-    connect();
-    return stop;
+    // Debounce the network work: scrubbing the list with the arrow keys shouldn't open
+    // (and tear down) a connection — nor re-fetch approvals/queued turns — for each
+    // session skipped past. The cached transcript above is already on screen meanwhile.
+    const start = setTimeout(() => {
+      // Pending approvals aren't in the event stream (separate table) — fetch them so
+      // a refresh/deep-link shows any request already awaiting a decision.
+      listApprovals(selectedId)
+        .then(setApprovals)
+        .catch(() => undefined);
+      // Same for queued messages: a still-PENDING turn emits no event until the runner
+      // picks it up, so switching away and back (or a refresh/deep-link) would lose the
+      // visible queue — restore it from the DB, the source of truth.
+      listQueuedTurns(selectedId)
+        .then(setQueued)
+        .catch(() => undefined);
+      connect();
+    }, SWITCH_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(start);
+      stop();
+    };
   }, [selectedId]);
 
   // Polled fallback for idleness, in case an SSE turn_end was missed / reconnected.
@@ -675,13 +724,14 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
-  // / runner.skills). Show them as a hint menu while the composer holds a single
-  // `/token` with no space yet, like the Claude Code TUI; picking one inserts
-  // `/<name> ` (the trailing space drops the regex match, so the menu auto-hides).
+  // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
+  // at the start of input or right after whitespace/newline, like the Claude Code TUI;
+  // picking one replaces just that token with `/<name> ` (the trailing space drops the
+  // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
-  const slashToken = /^\/(\S*)$/.exec(text)?.[1] ?? null;
+  const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
   const slashItems = useMemo(
     () => [
       ...(runner.commands ?? []).map((c) => ({ name: c.name, description: c.description, type: 'command' as const })),
@@ -706,7 +756,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     slashToken !== null && slashToken !== slashDismissed && runner.online && slashMatches.length > 0;
   const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
   const pickSlash = (name: string): void => {
-    setText(`/${name} `);
+    // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
+    // it), so picking a command mid-message doesn't clobber text typed earlier.
+    setText(text.replace(/(^|\s)\/\S*$/, `$1/${name} `));
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -893,9 +945,11 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             <Transcript events={events} live={live} />
             {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
-            {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
-            {approvals.map((a) => (
-              <ApprovalPanel key={a.id} approval={a} onDecide={decide} />
+            {streamingText && <StreamingMessage text={streamingText} />}
+            {approvals.map((a, i) => (
+              // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
+              // it's decided the next card becomes first, so the key walks the queue in order.
+              <ApprovalPanel key={a.id} approval={a} onDecide={decide} active={i === 0} />
             ))}
             {queued.map((q) => (
               <div className="chat-msg chat-user chat-queued" key={q.turnId}>
