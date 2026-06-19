@@ -8,7 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Avatar, Dropdown, Input, Modal } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { api, clearToken, getSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
@@ -48,6 +48,9 @@ export interface Runner {
 interface Agent {
   id: string;
   name: string;
+  // ISO-8601 creation timestamp; the sidebar sorts on it so the list is
+  // newest-first regardless of the API's ordering.
+  createdAt: string;
   // The machine this agent belongs to (null for config-only agents); an agent
   // with no runner has no console to open.
   runnerId?: string | null;
@@ -135,6 +138,12 @@ export function TasksSidePanel() {
 
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
+  // Newest-added first. Sort client-side so the order holds even if the API
+  // returns them unordered; ISO timestamps compare lexicographically.
+  const agentList = useMemo(
+    () => [...(agents.data ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    [agents.data],
+  );
 
   // User-created task lists shown in the "Task List" group below.
   const taskLists = useQuery({
@@ -166,7 +175,7 @@ export function TasksSidePanel() {
   // focused so it doesn't fight the composer; preventDefault stops the browser's
   // own tab-switch on the same chord.
   useEffect(() => {
-    const list = agents.data ?? [];
+    const list = agentList;
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
       const n = Number(e.key);
@@ -182,7 +191,7 @@ export function TasksSidePanel() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [agents.data, openAgent]);
+  }, [agentList, openAgent]);
 
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
@@ -254,7 +263,7 @@ export function TasksSidePanel() {
           </div>
           {agentsOpen && (
             <>
-              {(agents.data ?? []).map((a, i) => {
+              {agentList.map((a, i) => {
                 const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
                 return (
                   <div
