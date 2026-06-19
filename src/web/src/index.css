@@ -1939,6 +1939,26 @@ body {
   color: #1f2329;
   word-break: break-word;
 }
+/* 内联可编辑的「负责 Agent」下拉，外观对齐其它文本字段 */
+.tdp-assignee-select {
+  flex: 1;
+  min-width: 0;
+  margin: -3px 0;
+}
+.tdp-assignee-select.ant-select .ant-select-selector {
+  padding: 0;
+  font-size: 13px;
+}
+.tdp-assignee-select.ant-select .ant-select-selection-item {
+  color: #1f2329;
+}
+.tdp-assignee-select.ant-select .ant-select-selection-placeholder {
+  color: #8f959e;
+}
+.tdp-assignee-select.ant-select:hover .ant-select-selector {
+  background: #f2f3f5;
+  border-radius: 4px;
+}
 .tdp-prose {
   font-size: 13px;
   color: #4e5969;
@@ -2031,8 +2051,11 @@ body {
   background: #f7f8fa;
   border-radius: 8px;
   padding: 8px 10px;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+/* Comment markdown inherits the 13px bubble size rather than .md's 14px. */
+.tdp-comment-text.md {
+  font-size: 13px;
 }
 
 .tdp-compose {

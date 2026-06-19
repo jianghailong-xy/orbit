@@ -1,8 +1,11 @@
 import { CloseOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Avatar, Button, Input, Spin } from 'antd';
+import { App as AntApp, Avatar, Button, Input, Select, Spin } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import Markdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 
@@ -27,6 +30,49 @@ const fmt = (d?: string | null): string =>
 const initial = (name?: string | null): string => (name ?? '?').trim().charAt(0).toUpperCase();
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// rehype plugin: after the comment markdown is parsed, wrap each standalone
+// `@<owned agent name>` in a text node with a `.tdp-mention` chip. Skips code/pre
+// so mentions inside code spans stay literal. `names` is sorted longest-first so
+// "@Bot2" wins over "@Bot"; the trailing `(?![\w])` blocks substrings.
+const rehypeMentions = (names: string[]) => () => (tree: any) => {
+  if (!names.length) return;
+  const re = new RegExp(`@(?:${names.map(escapeRegExp).join('|')})(?![\\w])`, 'g');
+  const splitText = (value: string): any[] => {
+    re.lastIndex = 0;
+    const out: any[] = [];
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(value)) !== null) {
+      if (m.index > last) out.push({ type: 'text', value: value.slice(last, m.index) });
+      out.push({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: ['tdp-mention'] },
+        children: [{ type: 'text', value: m[0] }],
+      });
+      last = m.index + m[0].length;
+    }
+    if (last < value.length) out.push({ type: 'text', value: value.slice(last) });
+    return out.length ? out : [{ type: 'text', value }];
+  };
+  const walk = (node: any) => {
+    if (!Array.isArray(node.children)) return;
+    const next: any[] = [];
+    for (const child of node.children) {
+      if (child.type === 'text') {
+        next.push(...splitText(child.value));
+      } else {
+        if (child.type === 'element' && child.tagName !== 'code' && child.tagName !== 'pre') {
+          walk(child);
+        }
+        next.push(child);
+      }
+    }
+    node.children = next;
+  };
+  walk(tree);
+};
 
 // The list row passed in for an instant header render before /tasks/:id resolves.
 export interface TaskSummary {
@@ -89,6 +135,18 @@ export function TaskDetailPanel({
       parts.push(`${noRunner.map((a) => a.name).join('、')} 未绑定 runner，仅记录未触发`);
     if (parts.length) message.info(parts.join('；'));
   };
+
+  // Reassign (or clear, when null) the task's responsible agent. Refresh both the
+  // open detail and the list row that shows the assignee.
+  const updateAssignee = useMutation({
+    mutationFn: (assigneeId: string | null) =>
+      api(`/tasks/${taskId}`, { method: 'PATCH', body: { assigneeId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
 
   const addComment = useMutation({
     mutationFn: (vars: { body: string; mentions: string[] }) =>
@@ -164,25 +222,7 @@ export function TaskDetailPanel({
     () => agentList.map((a) => a.name).filter(Boolean).sort((a, b) => b.length - a.length),
     [agentList],
   );
-  const renderBody = (body: string): React.ReactNode => {
-    if (!mentionNames.length) return body;
-    const re = new RegExp(`@(?:${mentionNames.map(escapeRegExp).join('|')})(?![\\w])`, 'g');
-    const out: React.ReactNode[] = [];
-    let last = 0;
-    let key = 0;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(body)) !== null) {
-      if (m.index > last) out.push(body.slice(last, m.index));
-      out.push(
-        <span key={key++} className="tdp-mention">
-          {m[0]}
-        </span>,
-      );
-      last = m.index + m[0].length;
-    }
-    if (last < body.length) out.push(body.slice(last));
-    return out;
-  };
+  const mentionPlugin = useMemo(() => rehypeMentions(mentionNames), [mentionNames]);
 
   const status = STATUS_META[task?.status as string] ?? { label: task?.status ?? '', tone: 'muted' };
   const comments = q.data?.comments ?? [];
@@ -221,7 +261,20 @@ export function TaskDetailPanel({
             <div className="tdp-section-title">详情</div>
             <div className="tdp-field">
               <span className="tdp-field-label">负责 Agent</span>
-              <span className="tdp-field-value">{task?.assignee?.name ?? '—'}</span>
+              <Select
+                className="tdp-assignee-select"
+                variant="borderless"
+                value={task?.assignee?.id ?? undefined}
+                placeholder="未指定"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                loading={agentsQ.isLoading || updateAssignee.isPending}
+                disabled={updateAssignee.isPending}
+                popupMatchSelectWidth={false}
+                options={agentList.map((a) => ({ value: a.id, label: a.name }))}
+                onChange={(val) => updateAssignee.mutate(val ?? null)}
+              />
             </div>
             <div className="tdp-field">
               <span className="tdp-field-label">创建人</span>
@@ -277,7 +330,14 @@ export function TaskDetailPanel({
                       <span className="tdp-comment-author">{c.authorName ?? '未知'}</span>
                       <span className="tdp-comment-time">{fmt(c.createdAt)}</span>
                     </div>
-                    <div className="tdp-comment-text">{renderBody(c.body)}</div>
+                    <div className="tdp-comment-text md">
+                      <Markdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight, mentionPlugin]}
+                      >
+                        {c.body}
+                      </Markdown>
+                    </div>
                   </div>
                 </div>
               ))

@@ -813,7 +813,6 @@ export function AgentView({ runner }: { runner: Runner }) {
           options={[
             { label: 'Active', value: 'active' },
             { label: 'Completed', value: 'archived' },
-            { label: 'Trash', value: 'deleted' },
           ]}
         />
         <div className="agent-sessions session-col-list" ref={listRef}>
