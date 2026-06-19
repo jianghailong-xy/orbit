@@ -17,11 +17,12 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
 };
 
-// RunStatus terminal states (mirror SessionsService.TERMINAL). A session in any other
-// state (PENDING/RUNNING/AWAITING_INPUT/INTERRUPTED) is still live, so the task is
-// "running" — used to keep the 开始执行 button in its running state.
-const TERMINAL_SESSION_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
-const isSessionActive = (status?: string): boolean => !!status && !TERMINAL_SESSION_STATUSES.has(status);
+// The task counts as "执行中" only while one of its sessions is actually working:
+// queued for a runner slot (PENDING) or running (RUNNING). AWAITING_INPUT and
+// INTERRUPTED are idle states — the agent finished its turn and is waiting (grey
+// icons in AgentView), so the run is over and 开始执行 should be re-enabled.
+const BUSY_SESSION_STATUSES = new Set(['PENDING', 'RUNNING']);
+const isSessionBusy = (status?: string): boolean => !!status && BUSY_SESSION_STATUSES.has(status);
 
 const fmt = (d?: string | null): string =>
   d
@@ -115,10 +116,10 @@ export function TaskDetailPanel({
   const q = useQuery({
     queryKey: ['task', taskId],
     queryFn: () => api<any>(`/tasks/${taskId}`),
-    // While the task has a live session, poll so the 开始执行 button leaves its running
-    // state once the run ends; stay idle otherwise.
+    // While the task has a busy (queued/running) session, poll so the 开始执行 button
+    // leaves its running state once the run ends; stay idle otherwise.
     refetchInterval: (query) =>
-      (query.state.data?.sessions ?? []).some((s: any) => isSessionActive(s.status)) ? 4000 : false,
+      (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s.status)) ? 4000 : false,
   });
   const task = q.data ?? summary;
 
@@ -254,10 +255,10 @@ export function TaskDetailPanel({
   const sessions = q.data?.sessions ?? [];
   // Need a responsible agent to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
-  // "Running" = the trigger request is in flight, or the task already has a live session.
-  // The button shows this state and stays disabled throughout — which also debounces it
-  // against repeated clicks (no second trigger until the current run ends).
-  const running = execute.isPending || sessions.some((s: any) => isSessionActive(s.status));
+  // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
+  // session. The button shows this state and stays disabled throughout — which also
+  // debounces it against repeated clicks (no second trigger until the current run ends).
+  const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s.status));
   const executeDisabled = !canExecute || running;
   const executeHint = !canExecute ? '请先指定负责 Agent' : running ? '任务执行中…' : '';
 
