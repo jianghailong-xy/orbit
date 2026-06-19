@@ -17,6 +17,12 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
 };
 
+// RunStatus terminal states (mirror SessionsService.TERMINAL). A session in any other
+// state (PENDING/RUNNING/AWAITING_INPUT/INTERRUPTED) is still live, so the task is
+// "running" — used to keep the 开始执行 button in its running state.
+const TERMINAL_SESSION_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+const isSessionActive = (status?: string): boolean => !!status && !TERMINAL_SESSION_STATUSES.has(status);
+
 const fmt = (d?: string | null): string =>
   d
     ? new Date(d).toLocaleString([], {
@@ -106,7 +112,14 @@ export function TaskDetailPanel({
 
   // /tasks/:id carries the full detail (description, comments, sessions) that the
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
-  const q = useQuery({ queryKey: ['task', taskId], queryFn: () => api<any>(`/tasks/${taskId}`) });
+  const q = useQuery({
+    queryKey: ['task', taskId],
+    queryFn: () => api<any>(`/tasks/${taskId}`),
+    // While the task has a live session, poll so the 开始执行 button leaves its running
+    // state once the run ends; stay idle otherwise.
+    refetchInterval: (query) =>
+      (query.state.data?.sessions ?? []).some((s: any) => isSessionActive(s.status)) ? 4000 : false,
+  });
   const task = q.data ?? summary;
 
   // Owner's agents, for @-mention autocomplete and to label/trigger mentions.
@@ -241,6 +254,12 @@ export function TaskDetailPanel({
   const sessions = q.data?.sessions ?? [];
   // Need a responsible agent to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
+  // "Running" = the trigger request is in flight, or the task already has a live session.
+  // The button shows this state and stays disabled throughout — which also debounces it
+  // against repeated clicks (no second trigger until the current run ends).
+  const running = execute.isPending || sessions.some((s: any) => isSessionActive(s.status));
+  const executeDisabled = !canExecute || running;
+  const executeHint = !canExecute ? '请先指定负责 Agent' : running ? '任务执行中…' : '';
 
   return (
     <aside className="task-detail-panel">
@@ -261,17 +280,17 @@ export function TaskDetailPanel({
           </div>
         </div>
         <div className="tdp-head-actions">
-          <Tooltip title={canExecute ? '' : '请先指定负责 Agent'}>
+          <Tooltip title={executeHint}>
             <span style={{ display: 'inline-flex' }}>
               <Button
                 type="primary"
                 icon={<PlayCircleOutlined />}
-                loading={execute.isPending}
-                disabled={!canExecute}
+                loading={running}
+                disabled={executeDisabled}
                 onClick={() => execute.mutate()}
-                style={canExecute ? undefined : { pointerEvents: 'none' }}
+                style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
-                开始执行
+                {running ? '运行中' : '开始执行'}
               </Button>
             </span>
           </Tooltip>
