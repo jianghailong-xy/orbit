@@ -633,6 +633,9 @@ body {
   flex: none;
 }
 .session-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 14px;
   font-weight: 600;
   color: #1f2329;
@@ -655,6 +658,10 @@ body {
 }
 .session-row:hover {
   background: #f5f6f7;
+}
+/* Archived / trash rows are managed, not opened — no pointer affordance. */
+.session-row.no-open {
+  cursor: default;
 }
 .session-icon {
   display: flex;
@@ -681,8 +688,22 @@ body {
   text-overflow: ellipsis;
 }
 .session-right {
-  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: none;
+}
+/* Row action buttons (archive/delete/restore): revealed on row hover. Space is
+   reserved while hidden so the timestamp doesn't shift when they appear. */
+.session-actions {
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.session-row:hover .session-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 .session-status {
   font-size: 12.5px;

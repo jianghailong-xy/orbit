@@ -37,8 +37,12 @@ export class SessionsController {
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('runnerId') runnerId?: string) {
-    return this.sessions.list(user.userId, { runnerId });
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('runnerId') runnerId?: string,
+    @Query('view') view?: 'active' | 'archived' | 'deleted',
+  ) {
+    return this.sessions.list(user.userId, { runnerId, view });
   }
 
   @Get(':id')
@@ -74,6 +78,17 @@ export class SessionsController {
     return this.sessions.end(user.userId, id);
   }
 
+  @Post(':id/archive')
+  archive(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.archive(user.userId, id);
+  }
+
+  @Post(':id/restore')
+  restore(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.restore(user.userId, id);
+  }
+
+  // Soft-delete: moves the session to the trash (deletedAt), retaining all data.
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.remove(user.userId, id);

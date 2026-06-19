@@ -124,6 +124,18 @@ export const interruptSession = (sessionId: string) =>
 
 export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end`, { method: 'POST' });
 
+// Soft visibility actions for ended sessions. Archive hides a session into the
+// Archived view; delete moves it to the trash. Both keep all data; restore (which
+// clears both) brings it back to the active list. There is no hard delete.
+export const archiveSession = (sessionId: string) =>
+  api(`/sessions/${sessionId}/archive`, { method: 'POST' });
+
+export const deleteSession = (sessionId: string) =>
+  api(`/sessions/${sessionId}`, { method: 'DELETE' });
+
+export const restoreSession = (sessionId: string) =>
+  api(`/sessions/${sessionId}/restore`, { method: 'POST' });
+
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to
  *  resolve the runner behind a `/sessions/:id` deep link. */
 export const getSession = (idOrPublicId: string) =>

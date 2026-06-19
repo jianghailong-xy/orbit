@@ -95,9 +95,17 @@ export class SessionsService {
     return session;
   }
 
-  list(ownerId: string, filters: { runnerId?: string }) {
+  list(ownerId: string, filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' }) {
+    // active = neither archived nor deleted; archived = archived but not deleted;
+    // deleted (trash) = deleted, regardless of archive state. Default to active.
+    const visibility: Prisma.SessionWhereInput =
+      filters.view === 'deleted'
+        ? { deletedAt: { not: null } }
+        : filters.view === 'archived'
+          ? { archivedAt: { not: null }, deletedAt: null }
+          : { archivedAt: null, deletedAt: null };
     return this.prisma.session.findMany({
-      where: { ownerId, assignedRunnerId: filters.runnerId || undefined },
+      where: { ownerId, assignedRunnerId: filters.runnerId || undefined, ...visibility },
       orderBy: { createdAt: 'desc' },
       include: {
         agent: { select: { id: true, name: true, model: true } },
@@ -360,9 +368,44 @@ export class SessionsService {
     return { turnId: turn.id, seq: turn.seq };
   }
 
+  /**
+   * Load an owner's session and assert it has ended — only terminal sessions can be
+   * archived or deleted. Hiding a live one would desync the "what's running" list and
+   * could orphan the runner's claude process.
+   */
+  private async getEnded(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (!SessionsService.TERMINAL.includes(session.status)) {
+      throw new ConflictException('end the session before archiving or deleting it');
+    }
+    return session;
+  }
+
+  /** Hide a terminal session from the active list (Archived view). Reversible. */
+  async archive(ownerId: string, id: string) {
+    const session = await this.getEnded(ownerId, id);
+    await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
+    return { ok: true };
+  }
+
+  /**
+   * Soft-delete a terminal session (moves it to the trash view). No data is removed —
+   * the transcript and billing stay; restore brings it back. There is no hard delete.
+   */
   async remove(ownerId: string, id: string) {
-    await this.get(ownerId, id);
-    await this.prisma.session.delete({ where: { id } });
+    const session = await this.getEnded(ownerId, id);
+    await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
+    return { ok: true };
+  }
+
+  /** Bring an archived or soft-deleted session back to the active list. */
+  async restore(ownerId: string, id: string) {
+    await this.get(ownerId, id); // ownership check (404s otherwise)
+    await this.prisma.session.update({
+      where: { id },
+      data: { archivedAt: null, deletedAt: null },
+    });
     return { ok: true };
   }
 }

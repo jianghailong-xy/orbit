@@ -4,24 +4,30 @@ import {
   CheckCircleFilled,
   CloseCircleFilled,
   ControlOutlined,
+  DeleteOutlined,
+  InboxOutlined,
   LoadingOutlined,
   PlusOutlined,
   RobotOutlined,
   ThunderboltOutlined,
+  UndoOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Input, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Input, Segmented, Select, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import {
   api,
   type ApprovalInfo,
+  archiveSession,
   createInteractiveSession,
   decideApproval,
+  deleteSession,
   endSession,
   interruptSession,
   listApprovals,
+  restoreSession,
   resumeSession,
   sendTurn,
   sessionEventsUrl,
@@ -94,6 +100,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [effort, setEffort] = useState('');
+  // Which slice of the session list to show: active, archived, or trash.
+  const [view, setView] = useState<'active' | 'archived' | 'deleted'>('active');
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
@@ -103,9 +111,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   const seen = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // The list is scoped by `view`. A selected session (its transcript is open) is
+  // always resolved from the active set — that's where live sessions and the runner's
+  // slot accounting live — so force `active` whenever one is open.
+  const effectiveView = selectedId ? 'active' : view;
   const sessionsQ = useQuery({
-    queryKey: ['sessions', runner.id],
-    queryFn: () => api<any[]>(`/sessions?runnerId=${runner.id}`),
+    queryKey: ['sessions', runner.id, effectiveView],
+    queryFn: () => api<any[]>(`/sessions?runnerId=${runner.id}&view=${effectiveView}`),
     refetchInterval: 4000,
   });
 
@@ -347,6 +359,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
       setIdle(false); // a turn is now starting
+      setView('active'); // a new/continued session lives in the active list
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error(e.message),
@@ -355,6 +368,51 @@ export function AgentView({ runner }: { runner: Runner }) {
     mutationFn: ({ id, action }: { id: string; action: 'interrupt' | 'end' }) =>
       action === 'interrupt' ? interruptSession(id) : endSession(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onError: (e: Error) => message.error(e.message),
+  });
+  // Soft visibility actions for ended sessions. All reversible, so no confirm dialog —
+  // archive/delete fire immediately and surface an Undo toast; restore (used by the
+  // toast and the Archived/Trash views) clears both flags back to active.
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => restoreSession(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    onError: (e: Error) => message.error(e.message),
+  });
+  const showUndo = (id: string, label: string): void => {
+    const key = `undo-${id}`;
+    message.open({
+      key,
+      type: 'success',
+      content: (
+        <span>
+          {label}{' '}
+          <a
+            onClick={() => {
+              message.destroy(key);
+              restoreMut.mutate(id);
+            }}
+          >
+            撤销
+          </a>
+        </span>
+      ),
+      duration: 4,
+    });
+  };
+  const archiveMut = useMutation({
+    mutationFn: (id: string) => archiveSession(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+      showUndo(id, '已归档');
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => deleteSession(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+      showUndo(id, '已删除');
+    },
     onError: (e: Error) => message.error(e.message),
   });
 
@@ -447,27 +505,108 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
       ) : (
         <>
-          <div className="session-head">Sessions</div>
+          <div className="session-head">
+            <span>Sessions</span>
+            <Segmented
+              size="small"
+              value={view}
+              onChange={(v) => setView(v as 'active' | 'archived' | 'deleted')}
+              options={[
+                { label: '进行中', value: 'active' },
+                { label: '已归档', value: 'archived' },
+                { label: '回收站', value: 'deleted' },
+              ]}
+            />
+          </div>
           <div className="agent-sessions">
             {visibleSessions.length === 0 && (
-              <div className="chat-note">No sessions yet — send a message below to start one.</div>
+              <div className="chat-note">
+                {view === 'active'
+                  ? 'No sessions yet — send a message below to start one.'
+                  : view === 'archived'
+                    ? '没有已归档的会话。'
+                    : '回收站为空。'}
+              </div>
             )}
-            {visibleSessions.map((s) => (
-              <div className="session-row" key={s.id} onClick={() => navigate(`/sessions/${encodeId(s.id)}`)}>
-                <span className="session-icon">
-                  <StatusIcon status={s.status} />
-                </span>
-                <div className="session-main">
-                  <div className="session-title">{s.title}</div>
-                  <div className="session-meta">
-                    {s.numTurns ?? 0} turns · ${(s.costUsd ?? 0).toFixed(2)}
+            {visibleSessions.map((s) => {
+              const ended = TERMINAL.includes(s.status);
+              return (
+                <div
+                  className={`session-row${view === 'active' ? '' : ' no-open'}`}
+                  key={s.id}
+                  onClick={view === 'active' ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
+                >
+                  <span className="session-icon">
+                    <StatusIcon status={s.status} />
+                  </span>
+                  <div className="session-main">
+                    <div className="session-title">{s.title}</div>
+                    <div className="session-meta">
+                      {s.numTurns ?? 0} turns · ${(s.costUsd ?? 0).toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="session-right">
+                    <div className="session-time">{fmtTime(s.createdAt)}</div>
+                    <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                      {view === 'active' && (
+                        <>
+                          <Tooltip title={ended ? 'Archive' : '结束会话后才能归档'}>
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={<InboxOutlined />}
+                              disabled={!ended}
+                              onClick={() => archiveMut.mutate(s.id)}
+                            />
+                          </Tooltip>
+                          <Tooltip title={ended ? 'Delete' : '结束会话后才能删除'}>
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              disabled={!ended}
+                              onClick={() => deleteMut.mutate(s.id)}
+                            />
+                          </Tooltip>
+                        </>
+                      )}
+                      {view === 'archived' && (
+                        <>
+                          <Tooltip title="Restore">
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={<UndoOutlined />}
+                              onClick={() => restoreMut.mutate(s.id)}
+                            />
+                          </Tooltip>
+                          <Tooltip title="Delete">
+                            <Button
+                              size="small"
+                              type="text"
+                              danger
+                              icon={<DeleteOutlined />}
+                              onClick={() => deleteMut.mutate(s.id)}
+                            />
+                          </Tooltip>
+                        </>
+                      )}
+                      {view === 'deleted' && (
+                        <Tooltip title="Restore">
+                          <Button
+                            size="small"
+                            type="text"
+                            icon={<UndoOutlined />}
+                            onClick={() => restoreMut.mutate(s.id)}
+                          />
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="session-right">
-                  <div className="session-time">{fmtTime(s.createdAt)}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
