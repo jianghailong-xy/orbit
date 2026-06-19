@@ -34,6 +34,7 @@ import {
   endSession,
   interruptSession,
   listApprovals,
+  listQueuedTurns,
   restoreSession,
   resumeSession,
   sendTurn,
@@ -487,13 +488,19 @@ export function AgentView({ runner }: { runner: Runner }) {
       };
     };
     // Debounce the network work: scrubbing the list with the arrow keys shouldn't open
-    // (and tear down) a connection — nor re-fetch approvals — for each session skipped
-    // past. The cached transcript above is already on screen during the short wait.
+    // (and tear down) a connection — nor re-fetch approvals/queued turns — for each
+    // session skipped past. The cached transcript above is already on screen meanwhile.
     const start = setTimeout(() => {
       // Pending approvals aren't in the event stream (separate table) — fetch them so
       // a refresh/deep-link shows any request already awaiting a decision.
       listApprovals(selectedId)
         .then(setApprovals)
+        .catch(() => undefined);
+      // Same for queued messages: a still-PENDING turn emits no event until the runner
+      // picks it up, so switching away and back (or a refresh/deep-link) would lose the
+      // visible queue — restore it from the DB, the source of truth.
+      listQueuedTurns(selectedId)
+        .then(setQueued)
         .catch(() => undefined);
       connect();
     }, SWITCH_DEBOUNCE_MS);

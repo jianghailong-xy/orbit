@@ -238,6 +238,24 @@ export class SessionsService {
     return { ok: true };
   }
 
+  /** The session's still-queued user messages (PENDING — accepted but not yet picked
+   *  up by the runner), oldest first. A queued turn emits no event until it's delivered,
+   *  so it can't be recovered from the event stream; reopening or deep-linking a running
+   *  session fetches this to restore the visible queue (mirrors listApprovals). */
+  async listQueuedTurns(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const turns = await this.prisma.conversationTurn.findMany({
+      where: { sessionId: id, kind: 'message', status: 'PENDING' },
+      orderBy: { seq: 'asc' },
+      select: { id: true, content: true },
+    });
+    return turns.map((t) => ({ turnId: t.id, content: t.content ?? '' }));
+  }
+
   /** Withdraw a queued user message. Only a still-PENDING message can be cancelled;
    *  once the runner has leased it (IN_FLIGHT) it's already feeding claude and will
    *  appear in the transcript, so cancelling is rejected. */

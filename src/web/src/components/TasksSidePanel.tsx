@@ -5,7 +5,7 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
@@ -87,6 +87,10 @@ export function TasksSidePanel() {
     queryKey: ['session', sessionId],
     queryFn: () => getSession(sessionId!),
     enabled: !!sessionId,
+    // Keep the previous session's data while the next one loads so activeAgentId
+    // never blips to null between sessions — otherwise the highlight flickers to
+    // the top "Runners" item and back on each ArrowUp/ArrowDown.
+    placeholderData: keepPreviousData,
   });
   const activeAgentId = openAgentId ?? sessionQ.data?.agent?.id ?? null;
 
