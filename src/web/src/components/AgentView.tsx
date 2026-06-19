@@ -2,10 +2,10 @@ import {
   AppstoreOutlined,
   ArrowUpOutlined,
   CheckCircleFilled,
+  CheckCircleOutlined,
   CloseCircleFilled,
   ControlOutlined,
   DeleteOutlined,
-  InboxOutlined,
   LoadingOutlined,
   PlusOutlined,
   RobotOutlined,
@@ -403,7 +403,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     mutationFn: (id: string) => archiveSession(id),
     onSuccess: (_d, id) => {
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(id, '已归档');
+      showUndo(id, '已完成');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -513,7 +513,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               onChange={(v) => setView(v as 'active' | 'archived' | 'deleted')}
               options={[
                 { label: '进行中', value: 'active' },
-                { label: '已归档', value: 'archived' },
+                { label: '已完成', value: 'archived' },
                 { label: '回收站', value: 'deleted' },
               ]}
             />
@@ -524,7 +524,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {view === 'active'
                   ? 'No sessions yet — send a message below to start one.'
                   : view === 'archived'
-                    ? '没有已归档的会话。'
+                    ? '没有已完成的会话。'
                     : '回收站为空。'}
               </div>
             )}
@@ -550,11 +550,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                     <div className="session-actions" onClick={(e) => e.stopPropagation()}>
                       {view === 'active' && (
                         <>
-                          <Tooltip title={ended ? 'Archive' : '结束会话后才能归档'}>
+                          <Tooltip title={ended ? 'Complete' : '结束会话后才能完成'}>
                             <Button
                               size="small"
                               type="text"
-                              icon={<InboxOutlined />}
+                              icon={<CheckCircleOutlined />}
                               disabled={!ended}
                               onClick={() => archiveMut.mutate(s.id)}
                             />
