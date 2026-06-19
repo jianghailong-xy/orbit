@@ -682,13 +682,14 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
-  // / runner.skills). Show them as a hint menu while the composer holds a single
-  // `/token` with no space yet, like the Claude Code TUI; picking one inserts
-  // `/<name> ` (the trailing space drops the regex match, so the menu auto-hides).
+  // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
+  // at the start of input or right after whitespace/newline, like the Claude Code TUI;
+  // picking one replaces just that token with `/<name> ` (the trailing space drops the
+  // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
-  const slashToken = /^\/(\S*)$/.exec(text)?.[1] ?? null;
+  const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
   const slashItems = useMemo(
     () => [
       ...(runner.commands ?? []).map((c) => ({ name: c.name, description: c.description, type: 'command' as const })),
@@ -713,7 +714,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     slashToken !== null && slashToken !== slashDismissed && runner.online && slashMatches.length > 0;
   const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
   const pickSlash = (name: string): void => {
-    setText(`/${name} `);
+    // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
+    // it), so picking a command mid-message doesn't clobber text typed earlier.
+    setText(text.replace(/(^|\s)\/\S*$/, `$1/${name} `));
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
