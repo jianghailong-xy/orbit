@@ -172,6 +172,44 @@ export function TasksPage() {
     [listQ.data, filter],
   );
 
+  // The rows currently shown (a single list's tasks, or all tasks otherwise).
+  const rows = isListView ? listRows : taskRows;
+
+  // Up/Down arrows step through the task rows, opening each like tabs — the same
+  // selection a click drives. Skipped while typing in an input/textarea (so the detail
+  // panel's comment box keeps its own arrows) or while the New Task modal is open. With
+  // nothing selected, Down enters from the top, Up from the bottom.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (open) return;
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLElement &&
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+      )
+        return;
+      if (rows.length === 0) return;
+      const cur = rows.findIndex((r: any) => r.id === selectedTaskId);
+      let next: number;
+      if (cur === -1) next = e.key === 'ArrowDown' ? 0 : rows.length - 1;
+      else {
+        next = cur + (e.key === 'ArrowDown' ? 1 : -1);
+        if (next < 0 || next >= rows.length) return; // stop at the ends
+      }
+      e.preventDefault();
+      setSelectedTaskId(rows[next].id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [rows, selectedTaskId, open]);
+
+  // Keep the highlighted row in view when arrowing through a long list.
+  useEffect(() => {
+    document.querySelector('.task-row.selected')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedTaskId]);
+
   const renderRow = (r: any) => {
     // The agent assigned to run the task (GET /tasks and the list view both include it).
     const assigneeName = r.assignee?.name ?? null;
@@ -268,7 +306,6 @@ export function TasksPage() {
           </div>
 
           {(() => {
-            const rows = isListView ? listRows : taskRows;
             const empty = isListView ? 'No tasks in this list yet.' : 'No tasks yet.';
             return (
               <>
@@ -295,7 +332,7 @@ export function TasksPage() {
       {selectedTaskId && (
         <TaskDetailPanel
           taskId={selectedTaskId}
-          summary={(isListView ? listRows : taskRows).find((r: any) => r.id === selectedTaskId)}
+          summary={rows.find((r: any) => r.id === selectedTaskId)}
           onClose={() => setSelectedTaskId(null)}
         />
       )}
