@@ -112,6 +112,35 @@ const SWITCH_DEBOUNCE_MS = 150;
 // the cache without bound. Least-recently-selected entries are evicted first.
 const TRANSCRIPT_CACHE_MAX = 20;
 
+// Shell-style composer history, kept per-agent in localStorage so the Up/Down arrows
+// recall this agent's recently sent prompts. Stored oldest-first, newest last; capped
+// so it can't grow without bound. Keyed by the agent the message goes to ('default'
+// when none is picked yet).
+const HISTORY_KEY_PREFIX = 'orbit.composerHistory:';
+const HISTORY_MAX = 100;
+const historyKey = (agentId?: string): string => `${HISTORY_KEY_PREFIX}${agentId ?? 'default'}`;
+function loadHistory(agentId?: string): string[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(historyKey(agentId)) ?? '[]');
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function pushHistory(agentId: string | undefined, entry: string): void {
+  const e = entry.trim();
+  if (!e) return;
+  const list = loadHistory(agentId);
+  if (list[list.length - 1] === e) return; // skip if identical to the last sent
+  list.push(e);
+  while (list.length > HISTORY_MAX) list.shift();
+  try {
+    localStorage.setItem(historyKey(agentId), JSON.stringify(list));
+  } catch {
+    // ignore quota/serialization errors — history is best-effort
+  }
+}
+
 const fmtTime = (d?: string): string =>
   d
     ? new Date(d).toLocaleString([], {
@@ -197,6 +226,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   const lockedAgentId = decodeId(agentMatch?.params.id);
   const composingRoute = (agentMatch?.params['*'] ?? '') === 'new';
   const [text, setText] = useState('');
+  // Composer history cursor: -1 = editing the live draft; otherwise an index into the
+  // agent's stored history. `histDraft` stashes what was typed before recall started,
+  // so stepping back past the newest entry restores it (shell-style).
+  const [histIdx, setHistIdx] = useState(-1);
+  const [histDraft, setHistDraft] = useState('');
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [effort, setEffort] = useState('');
@@ -586,11 +620,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     approvalId: string,
     behavior: 'allow' | 'deny',
     answers?: Record<string, string[]>,
+    message?: string,
   ): Promise<void> => {
     if (!selectedId) return;
     setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
     try {
-      await decideApproval(selectedId, approvalId, behavior, undefined, answers);
+      await decideApproval(selectedId, approvalId, behavior, message, answers);
     } catch {
       listApprovals(selectedId)
         .then(setApprovals)
@@ -759,6 +794,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const onSend = (): void => {
     const c = text.trim();
     if (!c || send.isPending) return;
+    pushHistory(shownAgentId, c);
+    setHistIdx(-1);
     send.mutate(c);
   };
   // Open the new-session draft for this agent. A /sessions/<id> URL carries no
@@ -838,6 +875,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   const configEditable = live ? idle && runner.online : true;
   // A live session's agent is fixed; otherwise reflect the local pick.
   const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
+  // Switching agent or session leaves whatever history recall was in progress; reset
+  // the cursor so the next Up starts fresh from the (per-agent) history.
+  useEffect(() => {
+    setHistIdx(-1);
+  }, [shownAgentId, selectedId]);
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no agent in the URL, so fall back to the open session's agent, then runner.
   const headAgentName =
@@ -1101,8 +1143,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             }
             value={text}
             disabled={!runner.online}
-            onChange={(e) => setText(e.target.value)}
-            // One keydown handler: drive the menu while open, else Enter=send / Shift+Enter=newline.
+            // Typing exits history recall: the next Up starts fresh from this draft.
+            onChange={(e) => {
+              setText(e.target.value);
+              if (histIdx !== -1) setHistIdx(-1);
+            }}
+            // One keydown handler: drive the menu while open, else Up/Down recall
+            // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
             onKeyDown={(e) => {
               if (showSlash && !e.nativeEvent.isComposing) {
                 if (e.key === 'ArrowDown') {
@@ -1123,6 +1170,56 @@ export function AgentView({ runner }: { runner: Runner }) {
                 if (e.key === 'Escape') {
                   e.preventDefault();
                   setSlashDismissed(slashToken);
+                  return;
+                }
+              }
+              // Shell-style history recall. Up only fires on the first line and Down on
+              // the last line (with no text selected), so navigating within a multi-line
+              // draft still moves the caret normally. After recall the caret is parked at
+              // the start (Up) / end (Down) so a repeat keeps stepping through history.
+              if (
+                (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+                !e.nativeEvent.isComposing &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !e.shiftKey
+              ) {
+                const ta = e.currentTarget;
+                const noSelection = ta.selectionStart === ta.selectionEnd;
+                const onFirstLine = !ta.value.slice(0, ta.selectionStart).includes('\n');
+                const onLastLine = !ta.value.slice(ta.selectionEnd).includes('\n');
+                const setCaret = (pos: number): void => {
+                  // setText re-renders the textarea; restore the caret on the next tick.
+                  setTimeout(() => {
+                    ta.selectionStart = ta.selectionEnd = pos;
+                  }, 0);
+                };
+                if (e.key === 'ArrowUp' && noSelection && onFirstLine) {
+                  const list = loadHistory(shownAgentId);
+                  if (list.length) {
+                    e.preventDefault();
+                    if (histIdx === -1) setHistDraft(text);
+                    const idx = histIdx === -1 ? list.length - 1 : Math.max(0, histIdx - 1);
+                    setHistIdx(idx);
+                    setText(list[idx]);
+                    setCaret(0);
+                    return;
+                  }
+                }
+                if (e.key === 'ArrowDown' && noSelection && onLastLine && histIdx !== -1) {
+                  e.preventDefault();
+                  const list = loadHistory(shownAgentId);
+                  if (histIdx < list.length - 1) {
+                    const idx = histIdx + 1;
+                    setHistIdx(idx);
+                    setText(list[idx]);
+                    setCaret(list[idx].length);
+                  } else {
+                    setHistIdx(-1);
+                    setText(histDraft);
+                    setCaret(histDraft.length);
+                  }
                   return;
                 }
               }
