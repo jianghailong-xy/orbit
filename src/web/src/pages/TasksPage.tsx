@@ -52,21 +52,6 @@ const SECTION_TITLES: Record<string, string> = {
   '/skills': 'Skills',
 };
 
-const fmtDate = (d?: string): string =>
-  d ? new Date(d).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '—';
-
-const fmtDateTime = (d?: string): string => {
-  if (!d) return '—';
-  const date = new Date(d);
-  const now = new Date();
-  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === now.toDateString()) return `Today, ${time}`;
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday, ${time}`;
-  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
-};
-
 function StatusCircle({ status }: { status: string }) {
   let node: React.ReactNode;
   switch (status) {
@@ -243,8 +228,6 @@ export function TasksPage() {
             <span className="task-cell">Unassigned</span>
           )}
         </div>
-        <div className="task-cell">{fmtDate(r.dueDate)}</div>
-        <div className="task-cell">{fmtDateTime(r.createdAt)}</div>
         <div className="row-actions">
           <Tooltip title="Delete">
             <Button
@@ -305,8 +288,6 @@ export function TasksPage() {
           <div className="col-head-row">
             <div className="col-head">Task Title</div>
             <div className="col-head">Assignee</div>
-            <div className="col-head">Due Date</div>
-            <div className="col-head">Created at</div>
           </div>
 
           {(() => {

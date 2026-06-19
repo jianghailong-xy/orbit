@@ -442,9 +442,9 @@ body {
   margin-bottom: 6px;
 }
 
-/* shared column grid: title | assignee | due | created */
+/* shared column grid: title | assignee */
 .orbit-tasklist {
-  --cols: minmax(200px, 1fr) 160px 116px 150px;
+  --cols: minmax(200px, 1fr) 160px;
   border-top: 1px solid #eceef1;
 }
 .col-head-row,
@@ -1816,7 +1816,7 @@ body {
 
 .task-detail-panel {
   flex: none;
-  width: clamp(380px, 42vw, 620px);
+  width: clamp(460px, 52vw, 780px);
   height: 100vh;
   display: flex;
   flex-direction: column;
