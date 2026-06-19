@@ -752,15 +752,11 @@ body {
 }
 .session-right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: space-between;
-  align-self: stretch;
-  padding: 8px 0;
+  align-items: center;
   flex: none;
 }
 /* Row action menu (the "..." kebab): revealed on row hover or while its menu is
-   open. Space is reserved while hidden so the timestamp doesn't shift. */
+   open. Space is reserved while hidden so the title/meta column doesn't shift. */
 .session-actions {
   display: flex;
   opacity: 0;
@@ -789,11 +785,6 @@ body {
 }
 .session-status {
   font-size: 12.5px;
-}
-.session-time {
-  font-size: 12px;
-  color: #8f959e;
-  margin-top: 3px;
 }
 
 /* ---- Add a runner (Option A) ---- */

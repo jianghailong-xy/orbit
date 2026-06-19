@@ -113,7 +113,15 @@ const SWITCH_DEBOUNCE_MS = 150;
 const TRANSCRIPT_CACHE_MAX = 20;
 
 const fmtTime = (d?: string): string =>
-  d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  d
+    ? new Date(d).toLocaleString([], {
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    : '';
 
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
@@ -896,7 +904,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                 <div className="session-main">
                   <div className="session-title">{s.title}</div>
                   <div className="session-meta">
-                    {s.numTurns ?? 0} turns · ${(s.costUsd ?? 0).toFixed(2)}
+                    {fmtTime(s.lastTurnAt ?? s.createdAt)} · {s.numTurns ?? 0} turns · $
+                    {(s.costUsd ?? 0).toFixed(2)}
                   </div>
                 </div>
                 <div className="session-right">
@@ -917,7 +926,6 @@ export function AgentView({ runner }: { runner: Runner }) {
                       </span>
                     </Dropdown>
                   </div>
-                  <div className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</div>
                 </div>
               </div>
             );
