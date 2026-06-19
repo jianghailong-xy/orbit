@@ -225,12 +225,16 @@ export class TasksService {
         if (!(e instanceof ConflictException)) throw e;
       }
     }
-    await this.sessions.create(ownerId, {
-      prompt,
-      agentId: agent.id,
-      taskId: task.id,
-      title: `回应评论：${task.title}`.slice(0, 80),
-    });
+    await this.sessions.create(
+      ownerId,
+      {
+        prompt,
+        agentId: agent.id,
+        taskId: task.id,
+        title: `回应评论：${task.title}`.slice(0, 80),
+      },
+      { source: 'system' },
+    );
   }
 
   async removeComment(ownerId: string, id: string, commentId: string) {

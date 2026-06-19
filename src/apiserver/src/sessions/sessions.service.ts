@@ -46,7 +46,10 @@ export class SessionsService {
     }
   }
 
-  async create(ownerId: string, dto: CreateSessionDto) {
+  // `source` defaults to "user"; internal callers (e.g. auto-replying to an @-mention)
+  // pass "system" so the session lands in the System tab instead of Active. It's not on
+  // CreateSessionDto, so HTTP clients can't spoof it.
+  async create(ownerId: string, dto: CreateSessionDto, opts?: { source?: string }) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen agent's machine (agents belong to a runner) — picking an agent is
@@ -87,6 +90,7 @@ export class SessionsService {
         agentId: dto.agentId,
         assignedRunnerId,
         taskId: dto.taskId,
+        source: opts?.source ?? 'user',
         creatorId: ownerId,
         ownerId,
       },
@@ -95,15 +99,23 @@ export class SessionsService {
     return session;
   }
 
-  async list(ownerId: string, filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' }) {
+  async list(
+    ownerId: string,
+    filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' | 'system' },
+  ) {
     // active = neither archived nor deleted; archived = archived but not deleted;
-    // deleted (trash) = deleted, regardless of archive state. Default to active.
+    // deleted (trash) = deleted, regardless of archive state; system = auto-created
+    // (a non-deleted system session), shown in its own tab. Default to active.
+    // Note: active still includes system sessions — they occupy runner slots and back
+    // selection/deep-link resolution. The web Active tab hides them from its list.
     const visibility: Prisma.SessionWhereInput =
       filters.view === 'deleted'
         ? { deletedAt: { not: null } }
-        : filters.view === 'archived'
-          ? { archivedAt: { not: null }, deletedAt: null }
-          : { archivedAt: null, deletedAt: null };
+        : filters.view === 'system'
+          ? { source: 'system', deletedAt: null }
+          : filters.view === 'archived'
+            ? { archivedAt: { not: null }, deletedAt: null }
+            : { archivedAt: null, deletedAt: null };
     const sessions = await this.prisma.session.findMany({
       where: { ownerId, assignedRunnerId: filters.runnerId || undefined, ...visibility },
       orderBy: [{ lastTurnAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],

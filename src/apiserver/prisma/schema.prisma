@@ -210,6 +210,10 @@ model Session {
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude
   // uses the model's default.
   effort            String?
+  // Who created the session: "user" = a person via the UI, "system" = auto-created
+  // by Orbit itself (e.g. an @-mention comment reply). System sessions are corralled
+  // into their own "System" list tab instead of cluttering Active.
+  source            String    @default("user")
   // PENDING = created, claimable by its assigned runner.
   status            RunStatus @default(PENDING)
   // billing, accrued per turn

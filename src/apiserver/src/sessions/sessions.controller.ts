@@ -41,7 +41,7 @@ export class SessionsController {
   list(
     @CurrentUser() user: AuthUser,
     @Query('runnerId') runnerId?: string,
-    @Query('view') view?: 'active' | 'archived' | 'deleted',
+    @Query('view') view?: 'active' | 'archived' | 'deleted' | 'system',
   ) {
     return this.sessions.list(user.userId, { runnerId, view });
   }

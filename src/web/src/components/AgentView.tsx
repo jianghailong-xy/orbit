@@ -192,8 +192,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [effort, setEffort] = useState('');
-  // Which slice of the session list to show: active, archived, or trash.
-  const [view, setView] = useState<'active' | 'archived' | 'deleted'>('active');
+  // Which slice of the session list to show: active, archived, system, or trash.
+  const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
@@ -218,9 +218,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [resizing, setResizing] = useState(false);
 
   // The list is scoped by `view`. A selected session (its transcript is open) is
-  // always resolved from the active set — that's where live sessions and the runner's
-  // slot accounting live — so force `active` whenever one is open.
-  const effectiveView = selectedId ? 'active' : view;
+  // resolved from the loaded set, so force a view that contains it: `system` when
+  // browsing the System tab (system sessions live there), otherwise `active` — that's
+  // where live sessions and the runner's slot accounting live. (active also includes
+  // system sessions server-side, so deep-linking one still resolves.)
+  const effectiveView = selectedId ? (view === 'system' ? 'system' : 'active') : view;
   const sessionsQ = useQuery({
     queryKey: ['sessions', runner.id, effectiveView],
     queryFn: () => api<any[]>(`/sessions?runnerId=${runner.id}&view=${effectiveView}`),
@@ -246,10 +248,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
   // the selected session's own agent.
   const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? null;
-  const visibleSessions = useMemo(
-    () => (scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions),
-    [sessions, scopeAgentId],
-  );
+  const visibleSessions = useMemo(() => {
+    let list = scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions;
+    // System (auto-created) sessions get their own tab; the active query still returns
+    // them for slot accounting and deep-link resolution, so hide them from the Active list.
+    if (view === 'active') list = list.filter((s) => s.source !== 'system');
+    return list;
+  }, [sessions, scopeAgentId, view]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/agents/<id>/new),
@@ -276,7 +281,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (!selectedId && view !== 'active') return;
+      if (!selectedId && view !== 'active' && view !== 'system') return;
       const el = document.activeElement;
       if (
         el instanceof HTMLElement &&
@@ -798,9 +803,11 @@ export function AgentView({ runner }: { runner: Runner }) {
         <Segmented
           block
           size="small"
-          value={selectedId ? 'active' : view}
+          // Deep-linking a system session lands with view='active'; highlight System
+          // once it resolves so the tab matches the open conversation.
+          value={selected?.source === 'system' ? 'system' : effectiveView}
           onChange={(v) => {
-            const next = v as 'active' | 'archived' | 'deleted';
+            const next = v as 'active' | 'archived' | 'deleted' | 'system';
             setView(next);
             // Switching tabs while a session transcript is open closes it: the open
             // session lives in the active set and archived/trash rows aren't openable,
@@ -813,6 +820,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           options={[
             { label: 'Active', value: 'active' },
             { label: 'Completed', value: 'archived' },
+            { label: 'System', value: 'system' },
           ]}
         />
         <div className="agent-sessions session-col-list" ref={listRef}>
@@ -822,7 +830,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 ? 'No sessions yet.'
                 : view === 'archived'
                   ? '没有已完成的会话。'
-                  : '回收站为空。'}
+                  : view === 'system'
+                    ? '没有系统会话。'
+                    : '回收站为空。'}
             </div>
           )}
           {visibleSessions.map((s) => {
@@ -864,12 +874,16 @@ export function AgentView({ runner }: { runner: Runner }) {
                   ]
                 : view === 'archived'
                   ? [restoreItem, { type: 'divider' }, deleteItem(false)]
-                  : [restoreItem];
+                  : view === 'system'
+                    ? [deleteItem(!ended)]
+                    : [restoreItem];
+            // System sessions are openable like active ones; archived/trash rows aren't.
+            const openable = view === 'active' || view === 'system';
             return (
               <div
-                className={`session-row${view === 'active' ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
+                className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
                 key={s.id}
-                onClick={view === 'active' ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
+                onClick={openable ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
               >
                 <span className="session-icon">
                   <StatusIcon session={s} />
