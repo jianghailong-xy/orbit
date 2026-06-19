@@ -18,7 +18,7 @@ import {
   Spin,
   Tooltip,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { api, getSession } from '../api';
 import { decodeId } from '../lib/idCodec';
@@ -129,6 +129,16 @@ export function TasksPage() {
   const runnerId =
     openAgent?.runnerId ?? openAgentId ?? sessionQ.data?.assignedRunnerId ?? null;
   const selectedRunner = (runners.data ?? []).find((r: any) => r.id === runnerId) ?? null;
+  // Navigating /agents/<id>/new -> /sessions/<newId> drops the agent from the URL, so
+  // the runner can only come from getSession — undefined until that request returns.
+  // Without a bridge, AgentView would unmount to a <Spin/> and remount (losing its SSE
+  // stream / transcript and re-loading the session list) on every such hop. The runner
+  // doesn't change across an in-console navigation, so hold the last resolved one as a
+  // fallback while getSession is in flight; clear it on leaving the console.
+  const lastRunner = useRef<any>(null);
+  if (!inAgentView) lastRunner.current = null;
+  else if (selectedRunner) lastRunner.current = selectedRunner;
+  const viewRunner = inAgentView ? (selectedRunner ?? lastRunner.current) : null;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
 
@@ -257,8 +267,8 @@ export function TasksPage() {
         ) : runnerDetailId ? (
           <RunnerDetailPage runnerId={runnerDetailId} />
         ) : inAgentView ? (
-          selectedRunner ? (
-            <AgentView runner={selectedRunner} />
+          viewRunner ? (
+            <AgentView runner={viewRunner} />
           ) : (
             <div style={{ padding: 48, textAlign: 'center' }}>
               <Spin />
