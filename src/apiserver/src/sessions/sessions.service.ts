@@ -450,20 +450,6 @@ export class SessionsService {
   }
 
   /**
-   * Load an owner's session and assert it has ended — only terminal sessions can be
-   * deleted. Hiding a live one would orphan the runner's claude process (archiving a
-   * live session is allowed because it recycles the process first; see `archive`).
-   */
-  private async getEnded(ownerId: string, id: string) {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (!SessionsService.TERMINAL.includes(session.status)) {
-      throw new ConflictException('end the session before deleting it');
-    }
-    return session;
-  }
-
-  /**
    * Hide a session from the active list (Archived view). Reversible. A session that
    * hasn't ended is archived too: we recycle its runner process first (enqueue an
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
@@ -521,11 +507,18 @@ export class SessionsService {
   }
 
   /**
-   * Soft-delete a terminal session (moves it to the trash view). No data is removed —
-   * the transcript and billing stay; restore brings it back. There is no hard delete.
+   * Soft-delete a session (moves it to the trash view). No data is removed — the
+   * transcript and billing stay; restore brings it back. There is no hard delete.
+   * A session that hasn't ended is deleted too: like `archive`, we recycle its runner
+   * process first (`endLive`) so a live claude isn't orphaned. Status settles to
+   * CANCELLED async while the row already sits in Trash.
    */
   async remove(ownerId: string, id: string) {
-    const session = await this.getEnded(ownerId, id);
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
+      await this.endLive(session);
+    }
     await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
     return { ok: true };
   }

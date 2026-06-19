@@ -852,17 +852,16 @@ export function AgentView({ runner }: { runner: Runner }) {
                 restoreMut.mutate(s.id);
               },
             };
-            const deleteItem = (disabled: boolean) => ({
+            const deleteItem = {
               key: 'delete',
               icon: <DeleteOutlined />,
-              label: disabled ? 'Delete（需先结束会话）' : 'Delete',
+              label: ended ? 'Delete' : 'Delete & end session',
               danger: true,
-              disabled,
               onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                 domEvent.stopPropagation();
                 deleteMut.mutate(s.id);
               },
-            });
+            };
             const menuItems: MenuProps['items'] =
               view === 'active'
                 ? [
@@ -876,12 +875,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                       },
                     },
                     { type: 'divider' },
-                    deleteItem(!ended),
+                    deleteItem,
                   ]
                 : view === 'archived'
-                  ? [restoreItem, { type: 'divider' }, deleteItem(false)]
+                  ? [restoreItem, { type: 'divider' }, deleteItem]
                   : view === 'system'
-                    ? [deleteItem(!ended)]
+                    ? [deleteItem]
                     : [restoreItem];
             // System sessions are openable like active ones; archived/trash rows aren't.
             const openable = view === 'active' || view === 'system';
