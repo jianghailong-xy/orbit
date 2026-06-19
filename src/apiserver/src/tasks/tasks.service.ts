@@ -381,6 +381,16 @@ export class TasksService {
     };
   }
 
+  /** Set (or clear, when assigneeId is null) the responsible agent on many tasks at once. */
+  async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
+    await this.assertOwnedAgent(ownerId, assigneeId);
+    const res = await this.prisma.task.updateMany({
+      where: { id: { in: taskIds }, ownerId },
+      data: { assigneeId: assigneeId ?? null },
+    });
+    return { updated: res.count };
+  }
+
   async removeComment(ownerId: string, id: string, commentId: string) {
     await this.get(ownerId, id);
     const comment = await this.prisma.taskComment.findFirst({

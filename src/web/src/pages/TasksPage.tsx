@@ -4,6 +4,7 @@ import {
   LoadingOutlined,
   PlayCircleOutlined,
   PlusOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -87,6 +88,8 @@ export function TasksPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
   const [concurrency, setConcurrency] = useState(3);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignAgentId, setAssignAgentId] = useState<string | null>(null);
   const [filter, setFilter] = useState('ALL');
   // The "Add a runner" guide is its own route; show it whenever we're on /runners/register.
   const showRegister = loc.pathname === '/runners/register';
@@ -184,6 +187,17 @@ export function TasksPage() {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  const batchAssign = useMutation({
+    mutationFn: (body: { taskIds: string[]; assigneeId: string | null }) =>
+      api<{ updated: number }>('/tasks/batch-assign', { method: 'POST', body }),
+    onSuccess: (res) => {
+      setAssignOpen(false);
+      setSelectedIds(new Set());
+      message.success(`已为 ${res.updated} 个任务设置执行人`);
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
 
   const taskRows = useMemo(
     () => (tasks.data ?? []).filter((t: any) => matchesFilter(t.status, filter)),
@@ -237,6 +251,13 @@ export function TasksPage() {
     const caps = involvedRunners.map((rn: any) => rn.maxConcurrent ?? 1);
     setConcurrency(caps.length ? Math.max(...caps) : 3);
     setBatchOpen(true);
+  };
+
+  const openAssign = () => {
+    // Pre-select the shared assignee when the whole selection already agrees, else blank.
+    const ids = [...new Set(selectedRows.map((r: any) => r.assignee?.id ?? null))];
+    setAssignAgentId(ids.length === 1 ? ids[0] : null);
+    setAssignOpen(true);
   };
 
   // The task list is one of several views this page hosts; the others (agent console,
@@ -365,6 +386,9 @@ export function TasksPage() {
               onClick={openBatch}
             >
               批量运行
+            </Button>
+            <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
+              设置执行人
             </Button>
             <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
               清除
@@ -496,6 +520,34 @@ export function TasksPage() {
           任务会一次性全部提交，最多同时运行该数量，其余排队、有空位时自动开始。该值会设为本批涉及的{' '}
           {involvedRunners.length} 个运行器的同时运行上限，并持久保存。
         </p>
+      </Modal>
+
+      <Modal
+        title="批量设置执行人"
+        open={assignOpen}
+        onCancel={() => setAssignOpen(false)}
+        onOk={() =>
+          batchAssign.mutate({
+            taskIds: selectedRows.map((r: any) => r.id),
+            assigneeId: assignAgentId,
+          })
+        }
+        confirmLoading={batchAssign.isPending}
+        okText="确定"
+      >
+        <p style={{ marginTop: 0 }}>
+          为选中的 <b>{selectedRows.length}</b> 个任务设置执行人（负责 Agent）。
+        </p>
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          placeholder="选择一个 Agent，留空则清除执行人"
+          value={assignAgentId ?? undefined}
+          onChange={(v) => setAssignAgentId(v ?? null)}
+          options={(agents.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
+        />
       </Modal>
     </div>
   );

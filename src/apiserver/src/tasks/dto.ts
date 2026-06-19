@@ -48,6 +48,13 @@ export class BatchExecuteDto {
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
 }
 
+export class BatchAssignDto {
+  @IsArray() @IsString({ each: true }) taskIds!: string[];
+
+  // The agent to set as responsible for every selected task; null clears the assignment.
+  @IsOptional() @IsString() assigneeId?: string | null;
+}
+
 export class CreateTaskCommentDto {
   @IsString()
   @MinLength(1)

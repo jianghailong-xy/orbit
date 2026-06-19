@@ -10,7 +10,13 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { BatchExecuteDto, CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import {
+  BatchAssignDto,
+  BatchExecuteDto,
+  CreateTaskCommentDto,
+  CreateTaskDto,
+  UpdateTaskDto,
+} from './dto';
 import { TasksService } from './tasks.service';
 
 @UseGuards(JwtAuthGuard)
@@ -47,6 +53,11 @@ export class TasksController {
   @Post('batch-execute')
   batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
     return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent);
+  }
+
+  @Post('batch-assign')
+  batchAssign(@CurrentUser() user: AuthUser, @Body() dto: BatchAssignDto) {
+    return this.tasks.batchAssign(user.userId, dto.taskIds, dto.assigneeId);
   }
 
   @Post(':id/execute')
