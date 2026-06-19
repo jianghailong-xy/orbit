@@ -177,6 +177,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const seen = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
   // The list is scoped by `view`. A selected session (its transcript is open) is
   // always resolved from the active set — that's where live sessions and the runner's
@@ -228,6 +229,41 @@ export function AgentView({ runner }: { runner: Runner }) {
     const first = visibleSessions[0];
     if (first) navigate(`/sessions/${encodeId(first.id)}`, { replace: true });
   }, [selectedId, composingRoute, view, sessionsQ.isSuccess, visibleSessions, navigate]);
+
+  // Up/Down arrows step through the session list (left column), switching the open
+  // session like tabs. Skipped while typing in an input/textarea (so the composer and
+  // Ant dropdowns keep their own arrows) and on the archived/trash tabs, whose rows
+  // aren't openable. With nothing selected, Down enters from the top, Up from the bottom.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (!selectedId && view !== 'active') return;
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLElement &&
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+      )
+        return;
+      if (visibleSessions.length === 0) return;
+      const cur = visibleSessions.findIndex((s) => s.id === selectedId);
+      let next: number;
+      if (cur === -1) next = e.key === 'ArrowDown' ? 0 : visibleSessions.length - 1;
+      else {
+        next = cur + (e.key === 'ArrowDown' ? 1 : -1);
+        if (next < 0 || next >= visibleSessions.length) return; // stop at the ends
+      }
+      e.preventDefault();
+      navigate(`/sessions/${encodeId(visibleSessions[next].id)}`);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visibleSessions, selectedId, view, navigate]);
+
+  // Keep the highlighted row in view when arrowing through a long list.
+  useEffect(() => {
+    listRef.current?.querySelector('.session-row.active')?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId]);
 
   // Agents belonging to this machine runner — each is a project dir + coding tool.
   // Picking one tells the server where (which dir) to run a new session.
@@ -591,7 +627,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             { label: '回收站', value: 'deleted' },
           ]}
         />
-        <div className="agent-sessions session-col-list">
+        <div className="agent-sessions session-col-list" ref={listRef}>
           {visibleSessions.length === 0 && (
             <div className="chat-note">
               {view === 'active'
