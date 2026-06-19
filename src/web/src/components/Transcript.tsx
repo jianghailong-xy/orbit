@@ -18,7 +18,7 @@ import {
   SearchOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -153,11 +153,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       // '#' or '*' the user typed isn't reinterpreted.
       return <div className="chat-msg chat-user">{node.text}</div>;
     case 'assistant':
-      return (
-        <div className="chat-msg chat-assistant">
-          <MD>{node.text}</MD>
-        </div>
-      );
+      return <AssistantBubble text={node.text} />;
     case 'thinking':
       return <Thinking text={node.text} />;
     case 'tool':
@@ -174,18 +170,63 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
 }
 
 // ── Markdown ────────────────────────────────────────────────────────────────
-// memo'd on the text string: when a new event is appended the tree is rebuilt and
+// memo'd on (text, highlight): when a new event is appended the tree is rebuilt and
 // every node object is new, but unchanged text compares equal by value, so the
 // react-markdown AST isn't re-parsed for messages that didn't change.
-export const MD = memo(function MD({ children }: { children: string }) {
+// `highlight` is off while streaming — re-highlighting the whole doc on every chunk
+// is the expensive part, and code isn't complete mid-stream anyway.
+export const MD = memo(function MD({ children, highlight = true }: { children: string; highlight?: boolean }) {
   return (
     <div className="md">
-      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+      <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={highlight ? [rehypeHighlight] : []}>
         {children}
       </Markdown>
     </div>
   );
 });
+
+// Assistant message bubble — the single render path shared by the finalized
+// transcript node and the live streaming draft, so both look and behave identically.
+// While streaming we drop syntax highlighting (see MD) and mark the bubble so the
+// blinking caret CSS attaches.
+export function AssistantBubble({ text, streaming }: { text: string; streaming?: boolean }) {
+  return (
+    <div className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}>
+      <MD highlight={!streaming}>{text}</MD>
+    </div>
+  );
+}
+
+// Live assistant draft. text_delta chunks arrive every few ms; throttling before
+// the markdown re-parse keeps a long, dense answer from re-rendering on every chunk.
+// Leading-edge + trailing flush: the first chunk shows immediately and the latest
+// text always lands within `ms` of the last update.
+export function StreamingMessage({ text }: { text: string }) {
+  return <AssistantBubble text={useThrottled(text, 90)} streaming />;
+}
+
+function useThrottled(value: string, ms: number): string {
+  const [shown, setShown] = useState(value);
+  const last = useRef(0);
+  const latest = useRef(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    latest.current = value;
+    const elapsed = Date.now() - last.current;
+    if (elapsed >= ms) {
+      last.current = Date.now();
+      setShown(value);
+    } else if (timer.current === undefined) {
+      timer.current = setTimeout(() => {
+        last.current = Date.now();
+        timer.current = undefined;
+        setShown(latest.current);
+      }, ms - elapsed);
+    }
+  }, [value, ms]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return shown;
+}
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
 function Thinking({ text }: { text: string }) {

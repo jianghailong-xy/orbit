@@ -1157,6 +1157,14 @@ body {
   color: #8f959e;
   animation: chat-caret-blink 1s steps(1) infinite;
 }
+/* Streaming assistant bubble renders markdown, so attach the caret inline after the
+   last rendered block instead of after the bubble (which would drop it to a new line). */
+.chat-streaming-md .md > :last-child::after {
+  content: '▋';
+  margin-left: 1px;
+  color: #8f959e;
+  animation: chat-caret-blink 1s steps(1) infinite;
+}
 @keyframes chat-caret-blink {
   50% {
     opacity: 0;
