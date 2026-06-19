@@ -726,9 +726,20 @@ export function AgentView({ runner }: { runner: Runner }) {
       duration: 4,
     });
   };
+  // Archiving/deleting the OPEN session drops it from the active list, so it can no
+  // longer be resolved (selected → null) and `scopeAgentId` would collapse to null —
+  // un-scoping the left column to every agent's sessions. Step back to the agent's
+  // list (same move as the tab switcher), which re-scopes and auto-opens its next
+  // session. A non-open row leaves the current conversation untouched.
+  const leaveIfOpen = (id: string): void => {
+    if (id !== selectedId) return;
+    const a = scopeAgentId ?? agentsForRunner[0]?.id;
+    navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+  };
   const archiveMut = useMutation({
     mutationFn: (id: string) => archiveSession(id),
     onSuccess: (_d, id) => {
+      leaveIfOpen(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已完成');
     },
@@ -737,6 +748,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
+      leaveIfOpen(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已删除');
     },
