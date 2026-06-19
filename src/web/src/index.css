@@ -1467,6 +1467,26 @@ body {
   font-size: 11px;
   color: #8f959e;
 }
+/* Interactive variant (in the approval card): options are clickable buttons. */
+.chat-q-opt-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e5e6eb;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s;
+}
+.chat-q-opt-btn:hover {
+  border-color: #94b4ff;
+  background: #f0f5ff;
+}
+.chat-q-opt-btn.is-picked {
+  border-color: #3370ff;
+  background: #e8f0ff;
+}
+.chat-q-opt-btn.is-picked .chat-q-opt-label::before {
+  content: '✓ ';
+  color: #3370ff;
+}
 
 /* monospace blocks (commands, json, results) */
 .chat-pre-wrap.muted .chat-pre {
@@ -1680,4 +1700,8 @@ body {
 }
 .approval-btn.deny:hover {
   background: #f2f3f5;
+}
+.approval-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

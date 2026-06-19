@@ -290,7 +290,13 @@ export class SessionsService {
     // Only the first decision on a still-PENDING approval applies (idempotent).
     const res = await this.prisma.approval.updateMany({
       where: { id: approvalId, sessionId: id, status: 'PENDING' },
-      data: { status, message: dto.message ?? null, decidedById: ownerId, decidedAt: new Date() },
+      data: {
+        status,
+        message: dto.message ?? null,
+        answers: dto.answers ? (dto.answers as Prisma.InputJsonValue) : Prisma.DbNull,
+        decidedById: ownerId,
+        decidedAt: new Date(),
+      },
     });
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');

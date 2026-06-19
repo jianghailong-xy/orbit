@@ -455,11 +455,15 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
-  const decide = async (approvalId: string, behavior: 'allow' | 'deny'): Promise<void> => {
+  const decide = async (
+    approvalId: string,
+    behavior: 'allow' | 'deny',
+    answers?: Record<string, string[]>,
+  ): Promise<void> => {
     if (!selectedId) return;
     setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
     try {
-      await decideApproval(selectedId, approvalId, behavior);
+      await decideApproval(selectedId, approvalId, behavior, undefined, answers);
     } catch {
       listApprovals(selectedId)
         .then(setApprovals)

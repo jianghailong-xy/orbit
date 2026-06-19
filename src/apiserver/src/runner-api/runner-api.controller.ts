@@ -24,6 +24,7 @@ import {
   DeviceStartRequest,
   DeviceStartResponse,
   PermissionMode,
+  QuestionAnswers,
   ReclaimResponse,
   ReclaimSession,
   RunEventBatch,
@@ -437,6 +438,7 @@ export class RunnerApiController {
           status: a.status as ApprovalStatus,
           behavior: a.status === 'ALLOWED' ? 'allow' : 'deny',
           message: a.message ?? undefined,
+          answers: (a.answers as QuestionAnswers | null) ?? undefined,
         };
       }
       if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };

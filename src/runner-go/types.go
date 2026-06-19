@@ -204,6 +204,9 @@ type ApprovalDecisionResponse struct {
 	Status   string `json:"status"`
 	Behavior string `json:"behavior,omitempty"`
 	Message  string `json:"message,omitempty"`
+	// AskUserQuestion only: the human's picks, keyed by question text -> selected
+	// option labels. Fed back to claude as the tool's updatedInput.answers.
+	Answers map[string][]string `json:"answers,omitempty"`
 }
 
 // Run-event type strings — mirror RunEventType in @orbit/shared.

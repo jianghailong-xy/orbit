@@ -257,6 +257,11 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		}
 		switch dec.Status {
 		case "ALLOWED":
+			// AskUserQuestion's "answer" rides back as updatedInput.answers (question
+			// text -> picked labels); claude reads it and formats the tool result.
+			if getString(args, "tool_name") == "AskUserQuestion" {
+				return toolResult(allowJSON(askQuestionInput(args["input"], dec.Answers)), false)
+			}
 			return toolResult(allowJSON(args["input"]), false)
 		case "DENIED":
 			msg := dec.Message
@@ -268,6 +273,25 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		// PENDING: the server's long-poll window elapsed undecided — re-poll.
 	}
 	return toolResult(denyJSON("approval timed out"), false)
+}
+
+// askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the
+// original questions plus the human's answers. claude validates this against a
+// strict object schema, so we pass only the keys it accepts (questions + answers).
+// answers is question text -> picked option labels; a multi-pick array is joined
+// by claude itself.
+func askQuestionInput(input interface{}, answers map[string][]string) map[string]interface{} {
+	out := map[string]interface{}{}
+	if m, ok := input.(map[string]interface{}); ok {
+		if q, ok := m["questions"]; ok {
+			out["questions"] = q
+		}
+	}
+	if answers == nil {
+		answers = map[string][]string{}
+	}
+	out["answers"] = answers
+	return out
 }
 
 func allowJSON(input interface{}) string {

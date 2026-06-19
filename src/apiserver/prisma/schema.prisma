@@ -255,6 +255,9 @@ model Approval {
   // PENDING -> ALLOWED | DENIED
   status      String    @default("PENDING")
   message     String? // optional deny reason / note from the human
+  // AskUserQuestion only: the human's picks, keyed by question text -> selected
+  // option labels. The runner feeds this back to claude as updatedInput.answers.
+  answers     Json?
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById String?   @map("decided_by_id") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at")

@@ -107,16 +107,18 @@ export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
 
 /** Allow or deny a pending tool-permission approval; the runner's long-poll
- *  delivers the decision back to claude's --permission-prompt-tool. */
+ *  delivers the decision back to claude's --permission-prompt-tool. For an
+ *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
   behavior: 'allow' | 'deny',
   message?: string,
+  answers?: Record<string, string[]>,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message },
+    body: { behavior, message, answers },
   });
 
 /** Change a live session's model and/or permission mode between turns. The runner
