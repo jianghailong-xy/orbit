@@ -305,6 +305,7 @@ func (s *mcpServer) resolveTaskID(args map[string]interface{}) (string, bool) {
 func toolDescriptors() []map[string]interface{} {
 	str := map[string]interface{}{"type": "string"}
 	taskIDProp := map[string]interface{}{"type": "string", "description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted"}
+	promptDesc := map[string]interface{}{"type": "string", "description": "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."}
 	status := map[string]interface{}{"type": "string", "enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED"}}
 	obj := func(props map[string]interface{}, required ...string) map[string]interface{} {
 		schema := map[string]interface{}{"type": "object", "properties": props}
@@ -326,10 +327,10 @@ func toolDescriptors() []map[string]interface{} {
 		},
 		{
 			"name":        "task_create",
-			"description": "Create a task (attributed to this agent). assigneeId/listId must be owned by the caller; dueDate is an ISO date string.",
+			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId/listId must be owned by the caller; dueDate is an ISO date string.",
 			"inputSchema": obj(map[string]interface{}{
 				"title":       str,
-				"description": str,
+				"description": promptDesc,
 				"listId":      str,
 				"assigneeId":  str,
 				"dueDate":     str,
@@ -337,11 +338,11 @@ func toolDescriptors() []map[string]interface{} {
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Pass null for assigneeId/listId/dueDate to clear them.",
+			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). Pass null for assigneeId/listId/dueDate to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,
-				"description": str,
+				"description": promptDesc,
 				"status":      status,
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},

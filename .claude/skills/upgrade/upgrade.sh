@@ -54,6 +54,18 @@ else
   exit 1
 fi
 
+# Serialize upgrades — only one upgrade.sh may run against this deployment at a
+# time. flock -n grabs the lock non-blocking; if another upgrade already holds
+# it, fail fast instead of queueing a redundant rebuild. fd 9 is released
+# automatically when the script exits (normally or via set -e), so no stale lock.
+LOCK_FILE="/tmp/orbit-upgrade.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  echo "error: another upgrade is already in progress (lock: $LOCK_FILE)" >&2
+  echo "       wait for it to finish, or check: docker compose ps" >&2
+  exit 1
+fi
+
 if [ "$GIT_PULL" -eq 1 ]; then
   echo "==> git pull --ff-only"
   git pull --ff-only

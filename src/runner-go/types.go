@@ -48,6 +48,17 @@ type HeartbeatRequest struct {
 	Status       string `json:"status"`
 	IdleCapacity int    `json:"idleCapacity"`
 	Version      string `json:"version,omitempty"`
+	// Slash assets discovered on this machine, surfaced to the web composer for
+	// `/` autocomplete. Empty slices are omitted so quiet heartbeats stay small.
+	Commands []SlashCommandInfo `json:"commands,omitempty"`
+	Skills   []SlashCommandInfo `json:"skills,omitempty"`
+}
+
+// SlashCommandInfo mirrors @orbit/shared: one `/`-invocable asset (command or skill).
+type SlashCommandInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Type        string `json:"type,omitempty"` // "command" | "skill"
 }
 
 type HeartbeatResponse struct {

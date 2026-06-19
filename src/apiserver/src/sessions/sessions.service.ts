@@ -11,7 +11,7 @@ import { ApprovalDecisionRequest, ApprovalInfo, ApprovalStatus, RunEventType } f
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { CreateSessionDto, SessionResumeDto, SessionTurnDto } from './dto';
+import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 
 @Injectable()
 export class SessionsService {
@@ -95,7 +95,7 @@ export class SessionsService {
     return session;
   }
 
-  list(ownerId: string, filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' }) {
+  async list(ownerId: string, filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' }) {
     // active = neither archived nor deleted; archived = archived but not deleted;
     // deleted (trash) = deleted, regardless of archive state. Default to active.
     const visibility: Prisma.SessionWhereInput =
@@ -104,14 +104,26 @@ export class SessionsService {
         : filters.view === 'archived'
           ? { archivedAt: { not: null }, deletedAt: null }
           : { archivedAt: null, deletedAt: null };
-    return this.prisma.session.findMany({
+    const sessions = await this.prisma.session.findMany({
       where: { ownerId, assignedRunnerId: filters.runnerId || undefined, ...visibility },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ lastTurnAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       include: {
         agent: { select: { id: true, name: true, model: true } },
         assignedRunner: { select: { id: true, name: true } },
       },
     });
+    // A turn blocked on a permission prompt keeps the session RUNNING, so the
+    // list can't tell "running" from "waiting for approval" without this count.
+    // Only RUNNING sessions can hold a live approval; skip the query otherwise.
+    const running = sessions.filter((s) => s.status === RunStatus.RUNNING).map((s) => s.id);
+    if (running.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
+    const counts = await this.prisma.approval.groupBy({
+      by: ['sessionId'],
+      where: { sessionId: { in: running }, status: 'PENDING' },
+      _count: { _all: true },
+    });
+    const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
+    return sessions.map((s) => ({ ...s, pendingApprovals: byId.get(s.id) ?? 0 }));
   }
 
   async get(ownerId: string, id: string) {
@@ -386,6 +398,47 @@ export class SessionsService {
   async archive(ownerId: string, id: string) {
     const session = await this.getEnded(ownerId, id);
     await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
+    return { ok: true };
+  }
+
+  /**
+   * Change the model / permission mode of an already-started session. The live
+   * claude process was spawned with the old --model/--permission-mode flags, so we
+   * persist the new values and enqueue a `reload` control turn: the runner tears the
+   * process down and re-spawns it with --resume + the new flags (full context kept).
+   * Only allowed between turns (AWAITING_INPUT) — a swap would abort an in-flight turn.
+   * A not-yet-claimed (PENDING) session needs no reload: the claim reads the new value.
+   */
+  async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
+    if (dto.model === undefined && dto.permissionMode === undefined) {
+      throw new BadRequestException('nothing to update');
+    }
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (SessionsService.TERMINAL.includes(session.status)) {
+      throw new ConflictException('the session has ended');
+    }
+    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.PENDING) {
+      throw new ConflictException('a turn is in progress; change the model between turns');
+    }
+    await this.prisma.session.update({
+      where: { id },
+      data: {
+        lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
+        ...(dto.model !== undefined ? { model: dto.model } : {}),
+        ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
+      },
+    });
+    if (session.status === RunStatus.AWAITING_INPUT) {
+      // Carry only the changed fields; the runner overrides just those, keeping the
+      // rest of the running config. Multiple rapid changes queue + apply in order.
+      await this.insertTurn(id, {
+        kind: 'reload',
+        content: JSON.stringify({ model: dto.model, permissionMode: dto.permissionMode }),
+        clientTurnId: randomUUID(),
+      });
+      this.realtime.notifyInbox(id);
+    }
     return { ok: true };
   }
 

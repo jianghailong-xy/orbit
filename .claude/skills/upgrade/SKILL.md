@@ -74,3 +74,6 @@ applied — this is the only path that may recreate (restart) `postgres`.
 - The `orbit_pg` volume is preserved across the upgrade; data is not lost.
 - If a healthcheck fails, `up --wait` exits non-zero — check
   `docker compose logs <service>` (commonly `apiserver` if a migration failed).
+- Concurrent upgrades are serialized by a `flock` lock (`/tmp/orbit-upgrade.lock`).
+  If an upgrade is already running, a second invocation exits immediately with a
+  non-zero status rather than running a redundant rebuild.

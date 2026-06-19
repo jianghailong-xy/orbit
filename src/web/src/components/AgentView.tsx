@@ -3,10 +3,15 @@ import {
   ArrowUpOutlined,
   CheckCircleFilled,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloseCircleFilled,
   ControlOutlined,
   DeleteOutlined,
+  DisconnectOutlined,
   LoadingOutlined,
+  MessageOutlined,
+  MinusCircleOutlined,
+  PauseCircleOutlined,
   PlusOutlined,
   RobotOutlined,
   ThunderboltOutlined,
@@ -31,6 +36,7 @@ import {
   resumeSession,
   sendTurn,
   sessionEventsUrl,
+  updateSessionConfig,
 } from '../api';
 import { Transcript } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
@@ -77,12 +83,63 @@ const EFFORT_OPTIONS = [
 const fmtTime = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
 
-function StatusIcon({ status }: { status: string }) {
-  if (status === 'RUNNING') return <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 16 }} />;
-  if (status === 'SUCCEEDED') return <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
-  if (status === 'FAILED' || status === 'CANCELLED')
-    return <CloseCircleFilled style={{ color: '#f54a45', fontSize: 16 }} />;
-  return <span className="status-circle hollow" />;
+// One glyph per session state. Colour carries the meaning: blue = working,
+// amber = needs a human decision, green = done, red = real failure, grey =
+// neutral terminal (cancelled / interrupted / disconnected). A runner that went
+// offline is reaped to FAILED with error 'runner offline'; that's a dropped
+// connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
+function StatusIcon({ session }: { session: any }) {
+  const status: string = session.status;
+  const fontSize = 16;
+  if (status === 'RUNNING') {
+    return (session.pendingApprovals ?? 0) > 0 ? (
+      <Tooltip title="Waiting for approval">
+        <PauseCircleOutlined style={{ color: '#ff8800', fontSize }} />
+      </Tooltip>
+    ) : (
+      <Tooltip title="Running">
+        <LoadingOutlined spin style={{ color: '#3370ff', fontSize }} />
+      </Tooltip>
+    );
+  }
+  if (status === 'AWAITING_INPUT')
+    return (
+      <Tooltip title="Waiting for your reply">
+        <MessageOutlined style={{ color: '#8c8c8c', fontSize }} />
+      </Tooltip>
+    );
+  if (status === 'SUCCEEDED')
+    return (
+      <Tooltip title="Completed">
+        <CheckCircleFilled style={{ color: '#2ea121', fontSize }} />
+      </Tooltip>
+    );
+  if (status === 'FAILED') {
+    const err: string = typeof session.error === 'string' ? session.error : '';
+    if (err.toLowerCase().includes('offline'))
+      return (
+        <Tooltip title="Disconnected — runner went offline">
+          <DisconnectOutlined style={{ color: '#8c8c8c', fontSize }} />
+        </Tooltip>
+      );
+    return (
+      <Tooltip title={err || 'Failed'}>
+        <CloseCircleFilled style={{ color: '#f54a45', fontSize }} />
+      </Tooltip>
+    );
+  }
+  if (status === 'CANCELLED' || status === 'INTERRUPTED')
+    return (
+      <Tooltip title={status === 'CANCELLED' ? 'Cancelled' : 'Interrupted'}>
+        <MinusCircleOutlined style={{ color: '#8c8c8c', fontSize }} />
+      </Tooltip>
+    );
+  // PENDING — queued, not yet started
+  return (
+    <Tooltip title="Queued">
+      <ClockCircleOutlined style={{ color: '#c9cdd4', fontSize }} />
+    </Tooltip>
+  );
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
@@ -95,7 +152,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const selectedId = decodeId(useMatch('/sessions/:id')?.params.id);
   // /agents/<id> names the agent this console is scoped to: the picker is locked
   // to it and the session list is filtered to that agent's conversations.
-  const lockedAgentId = decodeId(useMatch('/agents/:id')?.params.id);
+  // /agents/<id>/new is the "compose a new session" draft state (the splat is 'new').
+  const agentMatch = useMatch('/agents/:id/*');
+  const lockedAgentId = decodeId(agentMatch?.params.id);
+  const composingRoute = (agentMatch?.params['*'] ?? '') === 'new';
   const [text, setText] = useState('');
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
@@ -122,7 +182,12 @@ export function AgentView({ runner }: { runner: Runner }) {
   });
 
   const sessions = useMemo(
-    () => (sessionsQ.data ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    () =>
+      (sessionsQ.data ?? []).slice().sort((a, b) => {
+        const ta = a.lastTurnAt ?? a.createdAt;
+        const tb = b.lastTurnAt ?? b.createdAt;
+        return ta < tb ? 1 : -1;
+      }),
     [sessionsQ.data],
   );
   const selected = useMemo(() => sessions.find((s) => s.id === selectedId) ?? null, [sessions, selectedId]);
@@ -415,6 +480,27 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  // Change a LIVE session's model / mode between turns. Optimistically patch the
+  // cached session so the pill updates instantly; server-side the runner re-spawns
+  // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
+  // effectiveView to match the (view-scoped) sessions query that renders the list.
+  const configMut = useMutation({
+    mutationFn: (cfg: { model?: string; permissionMode?: string }) =>
+      updateSessionConfig(selected!.id, cfg),
+    onMutate: async (cfg) => {
+      await qc.cancelQueries({ queryKey: ['sessions', runner.id, effectiveView] });
+      const prev = qc.getQueryData<any[]>(['sessions', runner.id, effectiveView]);
+      qc.setQueryData<any[]>(['sessions', runner.id, effectiveView], (old) =>
+        (old ?? []).map((s) => (s.id === selected!.id ? { ...s, ...cfg } : s)),
+      );
+      return { prev };
+    },
+    onError: (e: Error, _cfg, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['sessions', runner.id, effectiveView], ctx.prev);
+      message.error(e.message);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+  });
 
   const onSend = (): void => {
     const c = text.trim();
@@ -426,13 +512,18 @@ export function AgentView({ runner }: { runner: Runner }) {
   const loadingSession = !!selectedId && !selected;
   const canSend =
     !!text.trim() && !send.isPending && runner.online && !loadingSession && (live ? idle : true);
-  // While a LIVE session is selected the selectors are read-only and show that
-  // session's stored choice; otherwise they're editable and reflect local state.
+  // A LIVE session's pills show its stored choice (and Model/Mode are editable while
+  // it's idle — see configEditable); otherwise they're editable and reflect local state.
   const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
   const shownEffort: string = live ? (selected.effort ?? '') : effort;
+  // Model & Mode can be changed mid-session, but only between turns: the change
+  // re-spawns claude, which would abort a turn in flight (and needs the runner online
+  // to act on it). When not live they're freely editable (pre-session config).
+  // Effort & Agent stay fixed once live.
+  const configEditable = live ? idle && runner.online : true;
   // A live session's agent is fixed; otherwise reflect the local pick.
   const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
 
@@ -537,7 +628,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onClick={view === 'active' ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
                 >
                   <span className="session-icon">
-                    <StatusIcon status={s.status} />
+                    <StatusIcon session={s} />
                   </span>
                   <div className="session-main">
                     <div className="session-title">{s.title}</div>
@@ -546,7 +637,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     </div>
                   </div>
                   <div className="session-right">
-                    <div className="session-time">{fmtTime(s.createdAt)}</div>
+                    <div className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</div>
                     <div className="session-actions" onClick={(e) => e.stopPropagation()}>
                       {view === 'active' && (
                         <>
@@ -651,7 +742,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             onClick={onSend}
           />
         </div>
-        <Tooltip title="Agent is fixed once a session starts. Mode, Model & Effort are fixed while it runs, but can be changed before resuming an ended session.">
+        <Tooltip title="Agent & Effort are fixed once a session starts. Model & Mode can be changed between turns — the session resumes with the new setting on your next message.">
           <div className="composer-pills">
             <span className="composer-pill">
               <AppstoreOutlined className="composer-pill-icon" />
@@ -672,9 +763,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                 size="small"
                 variant="borderless"
                 value={shownMode}
-                onChange={(v) => setMode(v)}
+                onChange={(v) =>
+                  live ? configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] }) : setMode(v)
+                }
                 options={MODE_OPTIONS.map((m) => ({ value: m, label: m }))}
-                disabled={live}
+                disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
             </span>
@@ -684,9 +777,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 size="small"
                 variant="borderless"
                 value={shownModel}
-                onChange={setModel}
+                onChange={(v) => (live ? configMut.mutate({ model: v }) : setModel(v))}
                 options={MODEL_OPTIONS}
-                disabled={live}
+                disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
             </span>

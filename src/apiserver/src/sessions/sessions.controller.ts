@@ -6,6 +6,7 @@ import {
   Get,
   MessageEvent,
   Param,
+  Patch,
   Post,
   Query,
   Sse,
@@ -19,7 +20,7 @@ import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { CreateSessionDto, SessionResumeDto, SessionTurnDto } from './dto';
+import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { SessionsService } from './sessions.service';
 
 @UseGuards(JwtAuthGuard)
@@ -66,6 +67,15 @@ export class SessionsController {
     @Body() dto: SessionResumeDto,
   ) {
     return this.sessions.resume(user.userId, id, dto);
+  }
+
+  @Patch(':id/config')
+  updateConfig(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Body() dto: SessionConfigDto,
+  ) {
+    return this.sessions.updateConfig(user.userId, id, dto);
   }
 
   @Post(':id/interrupt')

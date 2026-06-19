@@ -106,11 +106,25 @@ export interface RunnerAgentSummary {
   workDir?: string;
 }
 
+/** One `/`-invocable asset (slash command or skill) discovered on a runner's
+ *  filesystem, surfaced to the web composer for `/` autocomplete. */
+export interface SlashCommandInfo {
+  /** Invocation name without the leading slash, e.g. "commit". */
+  name: string;
+  description?: string;
+  /** 'command' (.claude/commands/*.md) or 'skill' (.claude/skills/<name>/SKILL.md). */
+  type?: 'command' | 'skill';
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more concurrent sessions the runner can accept right now. */
   idleCapacity: number;
   version?: string;
+  /** Custom slash commands the runner found under ~/.claude + its workDirs. */
+  commands?: SlashCommandInfo[];
+  /** Skills the runner found under ~/.claude + its workDirs. */
+  skills?: SlashCommandInfo[];
 }
 
 export interface RunnerHeartbeatResponse {
@@ -187,7 +201,10 @@ export interface ApprovalDecisionResponse {
   message?: string;
 }
 
-export type ConversationTurnKind = 'message' | 'interrupt' | 'end';
+// 'reload' carries no user text: it tells the runner the session's model /
+// permission-mode changed, so it should re-spawn claude with --resume + the new
+// flags (full context preserved). The new config rides in the turn's `content` JSON.
+export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload';
 
 /** Browser → control plane: enqueue a user turn for a live interactive session. */
 export interface RunTurnRequest {

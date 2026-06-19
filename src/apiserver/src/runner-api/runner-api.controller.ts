@@ -347,7 +347,7 @@ export class RunnerApiController {
         SELECT id FROM "conversation_turn"
         WHERE "session_id" = ${sessionId}::uuid
           AND ("status" = 'PENDING' OR ("status" = 'IN_FLIGHT' AND "lease_deadline_at" < now()))
-        ORDER BY (CASE WHEN "kind" IN ('interrupt', 'end') THEN 0 ELSE 1 END), "seq" ASC
+        ORDER BY (CASE WHEN "kind" IN ('interrupt', 'end', 'reload') THEN 0 ELSE 1 END), "seq" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )

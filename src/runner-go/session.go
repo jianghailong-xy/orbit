@@ -113,25 +113,38 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
-	for attempt := 0; attempt <= maxRespawns; attempt++ {
+	// A reclaimed or revived session's claude session already exists, so even its
+	// first spawn must --resume (firstSpawn=false), not --session-id.
+	firstSpawn := !job.Reclaimed && !job.Resume
+	respawns := 0
+	for {
 		if ctx.Err() != nil {
 			break
 		}
-		// A reclaimed or revived session's claude session already exists, so even its
-		// first spawn must --resume (firstSpawn=false), not --session-id.
-		st, ended := runSessionProcess(ctx, t, job, execDir, scratch, emit, setTurn, attempt == 0 && !job.Reclaimed && !job.Resume)
+		st, ended, reload := runSessionProcess(ctx, t, job, execDir, scratch, emit, setTurn, firstSpawn)
+		firstSpawn = false
 		if ended {
 			status = st
 			break
 		}
-		if attempt < maxRespawns {
-			setTurn("") // 'resumed' is session-level, not part of any turn
-			emit(evSystem, map[string]interface{}{"subtype": "resumed", "attempt": attempt + 1})
-			logln(fmt.Sprintf("interactive run %s — claude exited unexpectedly; resuming (attempt %d)", job.SessionID, attempt+1))
-			time.Sleep(time.Duration(attempt+1) * time.Second)
-		} else {
-			status = stFailed
+		setTurn("") // 'resumed' is session-level, not part of any turn
+		if reload {
+			// The user changed the model / permission-mode mid-session: re-spawn with
+			// --resume + the new flags (already applied to job.Agent). Not a crash, so
+			// it doesn't consume the respawn budget and skips the back-off sleep.
+			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
+			logln(fmt.Sprintf("interactive run %s — config changed; resuming with model=%s mode=%s", job.SessionID, job.Agent.Model, job.Agent.PermissionMode))
+			continue
 		}
+		// Unexpected crash — resume up to maxRespawns times with a small back-off.
+		respawns++
+		if respawns > maxRespawns {
+			status = stFailed
+			break
+		}
+		emit(evSystem, map[string]interface{}{"subtype": "resumed", "attempt": respawns})
+		logln(fmt.Sprintf("interactive run %s — claude exited unexpectedly; resuming (attempt %d)", job.SessionID, respawns))
+		time.Sleep(time.Duration(respawns) * time.Second)
 	}
 	if ctx.Err() != nil {
 		status = stCancelled
@@ -151,11 +164,16 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 // runSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
 // ended=false means an unexpected crash that the caller should --resume.
-func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool) (string, bool) {
+// Returns (status, ended, reload). ended=false means the caller should re-spawn:
+// reload=true for a requested model/permission-mode change (re-spawn with the new
+// flags now on job.Agent), reload=false for an unexpected crash.
+func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
 	a := job.Agent
+	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
+	var reloadRequested atomic.Bool
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
 	args := []string{
@@ -220,7 +238,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
-		return stFailed, true // a spawn failure won't be fixed by respawning
+		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
 
 	go func() {
@@ -310,6 +328,27 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 				})
 				_ = writeStdin(string(ctrl) + "\n")
 				emit(evInterrupt, map[string]interface{}{})
+			case "reload":
+				// Model / permission-mode changed on this idle session. --model and
+				// --permission-mode are spawn flags, so we apply the new values to
+				// job.Agent and tear claude down; the outer loop re-spawns with
+				// --resume + the new flags (full context preserved). Only the changed
+				// fields are carried, so an untouched field keeps its running value.
+				var cfg struct {
+					Model          string `json:"model"`
+					PermissionMode string `json:"permissionMode"`
+				}
+				if json.Unmarshal([]byte(resp.Content), &cfg) == nil {
+					if cfg.Model != "" {
+						job.Agent.Model = cfg.Model
+					}
+					if cfg.PermissionMode != "" {
+						job.Agent.PermissionMode = cfg.PermissionMode
+					}
+				}
+				reloadRequested.Store(true)
+				procCancel() // kill claude; the main loop returns reload=true to re-spawn
+				return
 			case "end":
 				endSession()
 				return
@@ -374,12 +413,15 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 	<-pollDone
 
 	if ctx.Err() != nil {
-		return stCancelled, true
+		return stCancelled, true, false
+	}
+	if reloadRequested.Load() {
+		return stCancelled, false, true // config changed -> respawn with the new flags
 	}
 	select {
 	case <-endedCh:
-		return stSucceeded, true // user ended the session
+		return stSucceeded, true, false // user ended the session
 	default:
-		return stFailed, false // unexpected exit -> respawn with --resume
+		return stFailed, false, false // unexpected exit -> respawn with --resume
 	}
 }
