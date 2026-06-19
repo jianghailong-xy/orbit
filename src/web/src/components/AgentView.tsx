@@ -905,7 +905,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
             {streamingText && <div className="chat-msg chat-assistant chat-streaming">{streamingText}</div>}
             {approvals.map((a) => (
-              <ApprovalPanel key={a.id} approval={a} onDecide={decide} />
+              <ApprovalPanel key={a.id} approval={a} onDecide={decide} active={approvals.length === 1} />
             ))}
             {queued.map((q) => (
               <div className="chat-msg chat-user chat-queued" key={q.turnId}>

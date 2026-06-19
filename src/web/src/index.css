@@ -1766,6 +1766,12 @@ body {
   opacity: 0.5;
   cursor: not-allowed;
 }
+.approval-hint {
+  margin-left: auto;
+  align-self: center;
+  font-size: 11px;
+  color: #8f959e;
+}
 
 /* ---- Task detail panel (slide-in beside the task list) ---- */
 .task-row.clickable {

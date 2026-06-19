@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo } from '../api';
@@ -17,17 +17,45 @@ function planText(input: unknown): string {
 
 type OnDecide = (id: string, behavior: 'allow' | 'deny', answers?: Record<string, string[]>) => void;
 
+/** ⌘/Ctrl + Enter fires the card's primary action while it's the active (sole pending)
+ *  approval. Skipped while typing in an input so it doesn't clash with the composer. */
+function useApproveHotkey(active: boolean, onTrigger: () => void): void {
+  const fn = useRef(onTrigger);
+  fn.current = onTrigger;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLElement &&
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+      )
+        return;
+      e.preventDefault();
+      fn.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active]);
+}
+
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
  *  form for AskUserQuestion, otherwise a plain allow/deny (with a rich render for plans). */
 export function ApprovalPanel({
   approval,
   onDecide,
+  active = false,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
+  active?: boolean;
 }): JSX.Element {
-  if (approval.toolName === 'AskUserQuestion') {
-    return <QuestionForm approval={approval} onDecide={onDecide} />;
+  const isQuestion = approval.toolName === 'AskUserQuestion';
+  // The plain card approves on ⌘/Ctrl + Enter; questions submit via QuestionForm's own hook.
+  useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'));
+  if (isQuestion) {
+    return <QuestionForm approval={approval} onDecide={onDecide} active={active} />;
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
   return (
@@ -51,6 +79,7 @@ export function ApprovalPanel({
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
           {isPlan(approval) ? '继续规划' : '拒绝'}
         </button>
+        {active && <span className="approval-hint">⌘/Ctrl + Enter 批准</span>}
       </div>
     </div>
   );
@@ -68,7 +97,15 @@ function questionsOf(input: unknown): QItem[] {
 
 /** AskUserQuestion: pick option(s) per question and submit, like Claude's TUI. The picks
  *  ride back to claude as `answers` (question text → labels) on an `allow`. */
-function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide: OnDecide }): JSX.Element {
+function QuestionForm({
+  approval,
+  onDecide,
+  active = false,
+}: {
+  approval: ApprovalInfo;
+  onDecide: OnDecide;
+  active?: boolean;
+}): JSX.Element {
   const questions = questionsOf(approval.input);
   const [sel, setSel] = useState<Record<string, string[]>>({});
 
@@ -93,6 +130,9 @@ function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide
     }
     onDecide(approval.id, 'allow', answers);
   };
+
+  // ⌘/Ctrl + Enter submits once every question has a pick.
+  useApproveHotkey(active && complete, submit);
 
   return (
     <div className="approval-card">
@@ -137,6 +177,7 @@ function QuestionForm({ approval, onDecide }: { approval: ApprovalInfo; onDecide
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
           不回答
         </button>
+        {active && complete && <span className="approval-hint">⌘/Ctrl + Enter 提交</span>}
       </div>
     </div>
   );
