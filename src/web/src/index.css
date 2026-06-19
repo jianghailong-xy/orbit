@@ -442,9 +442,9 @@ body {
   margin-bottom: 6px;
 }
 
-/* shared column grid: title | estimates | start | due | creator | created */
+/* shared column grid: title | assignee | due | created */
 .orbit-tasklist {
-  --cols: minmax(200px, 1fr) 88px 116px 116px 140px 150px;
+  --cols: minmax(200px, 1fr) 160px 116px 150px;
   border-top: 1px solid #eceef1;
 }
 .col-head-row,
@@ -784,17 +784,33 @@ body {
   gap: 6px;
   flex: none;
 }
-/* Row action buttons (archive/delete/restore): revealed on row hover. Space is
-   reserved while hidden so the timestamp doesn't shift when they appear. */
+/* Row action menu (the "..." kebab): revealed on row hover or while its menu is
+   open. Space is reserved while hidden so the timestamp doesn't shift. */
 .session-actions {
   display: flex;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.session-row:hover .session-actions {
+.session-row:hover .session-actions,
+.session-row.menu-open .session-actions {
   opacity: 1;
   pointer-events: auto;
+}
+.session-kebab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: #8f959e;
+  font-size: 15px;
+  flex: none;
+}
+.session-kebab:hover {
+  background: #e3e6eb;
+  color: #1f2329;
 }
 .session-status {
   font-size: 12.5px;
