@@ -311,7 +311,12 @@ export class TasksService {
     return (
       `请开始执行任务「${task.title}」。\n\n` +
       (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-      `请用 task_get 查看该任务的完整信息与历史评论，完成后用 task_comment 在该任务下汇报进展与结果。`
+      `请按以下步骤进行：\n` +
+      `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
+      `2. 执行任务。\n` +
+      `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
+      `再用 task_update 将该任务状态（status）置为 DONE。\n` +
+      `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
     );
   }
 
