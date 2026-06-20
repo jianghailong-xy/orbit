@@ -1245,14 +1245,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                   <StatusIcon session={s} />
                 </span>
                 <div className="session-main">
-                  <div className="session-title">{s.title}</div>
+                  <div className="session-title-row">
+                    <div className="session-title">{s.title}</div>
+                    <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+                  </div>
                   {s.lastAssistantText ? (
                     <div className="session-preview">{plainPreview(s.lastAssistantText)}</div>
                   ) : null}
-                  <div className="session-meta">
-                    {fmtTime(s.lastTurnAt ?? s.createdAt)} · {s.numTurns ?? 0} turns
-                    <span className="session-cost"> · ${(s.costUsd ?? 0).toFixed(2)}</span>
-                  </div>
                 </div>
                 <div className="session-right">
                   <div className="session-actions" onClick={(e) => e.stopPropagation()}>

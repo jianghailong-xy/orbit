@@ -1093,7 +1093,15 @@ body {
   flex: 1;
   min-width: 0;
 }
+/* Title and time share the first row: title fills, time pins to the right. */
+.session-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
 .session-title {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   color: #1f2329;
   line-height: 1.35;
@@ -1119,11 +1127,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* Cost is for after-the-fact accounting, not session triage — keep it visible
-   but a notch lighter than time/turns so the hierarchy reads time first. */
-.session-cost {
-  color: #a8adb5;
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle
    the title fills the full row width, and on hover the icon fades in over the
