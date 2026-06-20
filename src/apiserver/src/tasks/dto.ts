@@ -42,9 +42,9 @@ export class BatchExecuteDto {
   // server-side rather than failing the batch.
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 
-  // When set, every runner backing the selected tasks gets its concurrency cap set to
-  // this before dispatch — the only server-side lever on how many run at once (the
-  // claim queue gates live sessions per runner on max_concurrent). The rest queue.
+  // When set, caps how many of THIS batch's tasks run at once. It applies only to this
+  // batch (the claim queue gates the batch's live sessions on it) and never touches any
+  // runner's persistent max_concurrent — independent of the per-runner cap. Rest queue.
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
 }
 

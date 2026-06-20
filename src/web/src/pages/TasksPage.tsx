@@ -271,12 +271,6 @@ export function TasksPage() {
     () => selectedRows.filter((r: any) => r.assignee?.runner?.id),
     [selectedRows],
   );
-  // The distinct runners backing the runnable selection — concurrency is set per runner.
-  const involvedRunners = useMemo(() => {
-    const m = new Map<string, any>();
-    for (const r of runnableRows) m.set(r.assignee.runner.id, r.assignee.runner);
-    return [...m.values()];
-  }, [runnableRows]);
 
   const toggleOne = (id: string) =>
     setSelectedIds((prev) => {
@@ -293,10 +287,9 @@ export function TasksPage() {
       message.warning('选中的任务都没有可执行的负责 Agent（或未绑定 runner）');
       return;
     }
-    // Pre-fill with the most permissive current cap so confirming doesn't silently
-    // throttle a runner the user didn't mean to touch.
-    const caps = involvedRunners.map((rn: any) => rn.maxConcurrent ?? 1);
-    setConcurrency(caps.length ? Math.max(...caps) : 3);
+    // Batch concurrency is its own knob (it doesn't touch any runner's cap); default to
+    // a sane few, never more than the number of tasks we're about to run.
+    setConcurrency(Math.min(runnableRows.length, 3) || 1);
     setBatchOpen(true);
   };
 
@@ -588,8 +581,7 @@ export function TasksPage() {
           <span style={{ color: '#8a9099' }}>个任务同时运行</span>
         </div>
         <p style={{ marginTop: 10, marginBottom: 0, color: '#8a9099', fontSize: 12 }}>
-          任务会一次性全部提交，最多同时运行该数量，其余排队、有空位时自动开始。该值会设为本批涉及的{' '}
-          {involvedRunners.length} 个运行器的同时运行上限，并持久保存。
+          任务会一次性全部提交，本批最多同时运行该数量，其余排队、有空位时自动开始。该限制只作用于这一批任务，不会修改任何运行器自身的并发上限。
         </p>
       </Modal>
 

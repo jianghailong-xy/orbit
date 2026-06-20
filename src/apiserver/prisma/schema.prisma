@@ -203,6 +203,12 @@ model Session {
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId            String?   @map("task_id") @db.Uuid
   task              Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
+  // Batch-run grouping: when a session is dispatched as part of a "批量运行" batch,
+  // these tag it with that batch's id and the batch's own concurrency cap. The claim
+  // queue gates live sessions per batch on batchMaxConcurrent — independent of, and on
+  // top of, the runner's own max_concurrent. null = not part of any batch (ungated).
+  batchId           String?   @map("batch_id") @db.Uuid
+  batchMaxConcurrent Int?     @map("batch_max_concurrent")
   // Pre-generated Claude session id: --session-id on first spawn, --resume on
   // reclaim/respawn.
   claudeSessionId   String?   @map("claude_session_id")
@@ -248,6 +254,7 @@ model Session {
   attachments  Attachment[]
 
   @@index([assignedRunnerId, status])
+  @@index([batchId, status])
   @@index([ownerId])
   @@index([status])
   @@map("session")

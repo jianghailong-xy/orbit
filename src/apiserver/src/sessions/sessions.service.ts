@@ -49,7 +49,11 @@ export class SessionsService {
   // `source` defaults to "user"; internal callers (e.g. auto-replying to an @-mention)
   // pass "system" so the session lands in the System tab instead of Active. It's not on
   // CreateSessionDto, so HTTP clients can't spoof it.
-  async create(ownerId: string, dto: CreateSessionDto, opts?: { source?: string }) {
+  async create(
+    ownerId: string,
+    dto: CreateSessionDto,
+    opts?: { source?: string; batch?: { id: string; maxConcurrent: number } },
+  ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen agent's machine (agents belong to a runner) — picking an agent is
@@ -91,6 +95,8 @@ export class SessionsService {
         assignedRunnerId,
         taskId: dto.taskId,
         source: opts?.source ?? 'user',
+        batchId: opts?.batch?.id ?? null,
+        batchMaxConcurrent: opts?.batch?.maxConcurrent ?? null,
         creatorId: ownerId,
         ownerId,
       },
@@ -424,7 +430,12 @@ export class SessionsService {
     };
   }
 
-  async resume(ownerId: string, id: string, dto: SessionResumeDto) {
+  async resume(
+    ownerId: string,
+    id: string,
+    dto: SessionResumeDto,
+    opts?: { batch?: { id: string; maxConcurrent: number } | null },
+  ) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     // Still live — a normal turn belongs on the running process, not a revive.
@@ -482,6 +493,12 @@ export class SessionsService {
         ...(dto.model !== undefined ? { model: dto.model } : {}),
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
         ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
+        // Batch membership for this revival: a batch run re-stamps it (object), a
+        // single re-run clears it (null) so it escapes any prior batch's cap; a plain
+        // user resume passes nothing and leaves it as-is.
+        ...(opts?.batch !== undefined
+          ? { batchId: opts.batch?.id ?? null, batchMaxConcurrent: opts.batch?.maxConcurrent ?? null }
+          : {}),
       },
     });
     this.queue.notifySessionQueued();

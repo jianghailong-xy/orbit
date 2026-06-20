@@ -273,6 +273,10 @@ export class TasksService {
     agent: { id: string; runnerId: string | null },
     prompt: string,
     newSessionTitle: string,
+    // Set only by batchExecute: tags the (re)claimed session with the batch's id +
+    // concurrency cap. Omitted for single runs (@-mention / 开始执行), which then
+    // clears any stale batch membership so the session escapes a prior batch's cap.
+    batch?: { id: string; maxConcurrent: number },
   ): Promise<string | undefined> {
     if (!agent.runnerId) return undefined;
     const latest = await this.prisma.session.findFirst({
@@ -282,7 +286,12 @@ export class TasksService {
     });
     if (latest) {
       try {
-        await this.sessions.resume(ownerId, latest.id, { clientTurnId: randomUUID(), content: prompt });
+        await this.sessions.resume(
+          ownerId,
+          latest.id,
+          { clientTurnId: randomUUID(), content: prompt },
+          { batch: batch ?? null },
+        );
         return latest.id;
       } catch (e) {
         if (!(e instanceof ConflictException)) throw e;
@@ -296,7 +305,7 @@ export class TasksService {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
       },
-      { source: 'system' },
+      { source: 'system', batch },
     );
     return session.id;
   }
@@ -348,10 +357,11 @@ export class TasksService {
    * same way as {@link execute} (resume-or-create), but a missing assignee/runner skips
    * that task instead of failing the batch, and per-task errors are collected.
    *
-   * `maxConcurrent`, when given, is written to every runner backing the selection first:
-   * the claim queue gates live sessions per runner on `max_concurrent`, so this is what
-   * actually bounds how many of the freshly-submitted (PENDING) sessions run at once —
-   * the rest queue and start as slots free.
+   * `maxConcurrent`, when given, is a cap *for this batch only*: all the dispatched
+   * sessions share one batchId and this limit, and the claim queue gates live sessions
+   * per batch on it — independently of, and on top of, each runner's own max_concurrent.
+   * It is NOT written to any runner, so a batch run never disturbs a runner's persistent
+   * slots. The rest queue and start as batch (and runner) slots free.
    */
   async batchExecute(ownerId: string, taskIds: string[], maxConcurrent?: number) {
     const tasks = await this.prisma.task.findMany({
@@ -375,12 +385,8 @@ export class TasksService {
     // taskIds with no matching owned task (deleted / not owned) are silently ignored.
 
     const runnerIds = [...new Set(runnable.map((t) => t.assignee!.runnerId!))];
-    if (maxConcurrent != null && runnerIds.length) {
-      await this.prisma.runner.updateMany({
-        where: { id: { in: runnerIds }, ownerId },
-        data: { maxConcurrent },
-      });
-    }
+    // One id ties this batch's sessions together; the queue counts live siblings by it.
+    const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
 
     const results = await Promise.all(
       runnable.map(async (t) => {
@@ -391,6 +397,7 @@ export class TasksService {
             { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
             this.buildExecutePrompt(t),
             `执行任务：${t.title}`,
+            batch,
           );
           return { id: t.id, ok: true as const, sessionId };
         } catch (e) {
@@ -405,6 +412,7 @@ export class TasksService {
       failed: results.filter((r) => !r.ok),
       skipped,
       runnerIds,
+      batchId: batch?.id ?? null,
       maxConcurrent: maxConcurrent ?? null,
     };
   }
