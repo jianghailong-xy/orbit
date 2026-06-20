@@ -214,11 +214,24 @@ export interface ApprovalDecisionResponse {
 // flags (full context preserved). The new config rides in the turn's `content` JSON.
 export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload';
 
+/** An image attachment as handed to the runner on the inbox: the id to fetch its bytes
+ *  with (`GET /api/attachments/:id`) plus its MIME type, so the runner can build the
+ *  claude `image` content block (base64) without a second round-trip for the type. The
+ *  bytes themselves never travel inline — only this reference does. */
+export interface TurnAttachment {
+  id: string;
+  mimeType: string;
+}
+
 /** Browser → control plane: enqueue a user turn for a live interactive session. */
 export interface RunTurnRequest {
   /** Client-supplied idempotency key (UUID); dedups double-clicks / cross-tab sends. */
   clientTurnId: string;
   content: string;
+  /** Ids of pre-uploaded image attachments (`POST /api/attachments`) to send with this
+   *  turn. Only the ids travel here — the bytes already live in the control plane.
+   *  Omitted/empty keeps the turn text-only. */
+  attachmentIds?: string[];
 }
 
 /**
@@ -231,6 +244,10 @@ export interface RunInboxResponse {
   seq: number;
   kind: ConversationTurnKind;
   content?: string;
+  /** Image attachments for this (message) turn. The runner fetches each blob via
+   *  `GET /api/attachments/:id`, base64-encodes it, and adds an `image` content block
+   *  alongside the text. Omitted for text-only turns and all control turns. */
+  attachments?: TurnAttachment[];
 }
 
 /** One interactive session a restarted runner can re-attach to and --resume. */

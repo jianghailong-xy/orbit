@@ -214,6 +214,39 @@ export class SessionsService {
     await this.insertTurn(sessionId, { kind, clientTurnId: randomUUID() });
   }
 
+  /**
+   * Verify the given attachment ids are the caller's, scoped to this session, and not yet
+   * tied to a turn. Returns the de-duped ids. Throws on any unknown/foreign/already-used id
+   * so a bad reference is rejected BEFORE a turn is queued (no orphan text turn, no silent
+   * drop of an image the user meant to send). Call before inserting the turn; link after.
+   */
+  private async assertLinkableAttachments(
+    ownerId: string,
+    sessionId: string,
+    attachmentIds: string[] | undefined,
+  ): Promise<string[]> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (ids.length === 0) return [];
+    const found = await this.prisma.attachment.findMany({
+      where: { id: { in: ids }, ownerId, sessionId, turnId: null },
+      select: { id: true },
+    });
+    if (found.length !== ids.length) {
+      throw new BadRequestException('one or more attachments are unknown, not yours, or already attached');
+    }
+    return ids;
+  }
+
+  /** Stamp pre-validated attachments with the turn they belong to, so the inbox can
+   *  deliver them. `turnId: null` in the filter keeps a concurrent link from double-using one. */
+  private async linkAttachments(turnId: string, attachmentIds: string[]): Promise<void> {
+    if (attachmentIds.length === 0) return;
+    await this.prisma.attachment.updateMany({
+      where: { id: { in: attachmentIds }, turnId: null },
+      data: { turnId },
+    });
+  }
+
   /** Enqueue a user message for the live session. */
   async createTurn(ownerId: string, id: string, dto: SessionTurnDto) {
     await this.getLive(ownerId, id);
@@ -221,6 +254,8 @@ export class SessionsService {
       where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
     });
     if (existing) return { turnId: existing.id, seq: existing.seq }; // idempotent
+    // Validate any image refs up front so a bad one fails the request before a turn lands.
+    const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
     // Accept the message even while a turn is running: it's queued as PENDING and
     // delivery is serialized in the inbox (dequeueTurn releases the next message only
     // once the in-flight one is answered). The user can withdraw a still-queued one.
@@ -229,6 +264,7 @@ export class SessionsService {
       content: dto.content,
       clientTurnId: dto.clientTurnId,
     });
+    await this.linkAttachments(turn.id, attachmentIds);
     // User activity resets the idle clock so the reaper won't tear down a session
     // that just received a message but hasn't been picked up by the runner yet.
     await this.prisma.session.update({ where: { id }, data: { lastTurnAt: new Date() } });
@@ -421,6 +457,8 @@ export class SessionsService {
     if (!online) {
       throw new ConflictException('the runner is offline; it must be online to resume this session');
     }
+    // Validate image refs before reviving, mirroring createTurn.
+    const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
     // Append the message, then flip the row back to PENDING so the runner re-claims
     // it; buildSession sees the existing turns and re-spawns claude with --resume.
     const turn = await this.insertTurn(id, {
@@ -428,6 +466,7 @@ export class SessionsService {
       content: dto.content,
       clientTurnId: dto.clientTurnId,
     });
+    await this.linkAttachments(turn.id, attachmentIds);
     await this.prisma.session.update({
       where: { id },
       data: {

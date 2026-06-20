@@ -350,6 +350,10 @@ model ConversationTurn {
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
+  // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
+  // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
+  attachments     Attachment[]
+
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
   @@index([sessionId, status])
@@ -370,6 +374,11 @@ model Attachment {
   // cascade-deletes with the session. Null for uploads made before the session exists.
   sessionId String?  @map("session_id") @db.Uuid
   session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // Optional turn scope: set when the attachment is sent with a user turn, so the inbox
+  // can hand the runner exactly that turn's images. Null until linked at enqueue time;
+  // cascades with the turn (withdrawing a queued turn or ending the session drops it).
+  turnId    String?           @map("turn_id") @db.Uuid
+  turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
   mimeType  String   @map("mime_type")
   sizeBytes Int      @map("size_bytes")
   data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
@@ -377,6 +386,7 @@ model Attachment {
 
   @@index([ownerId])
   @@index([sessionId])
+  @@index([turnId])
   @@map("attachment")
 }
 

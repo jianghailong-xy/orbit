@@ -35,6 +35,7 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   SessionCompleteRequest,
+  TurnAttachment,
   TurnCompleteRequest,
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
@@ -374,6 +375,7 @@ export class RunnerApiController {
     `;
     if (rows.length === 0) return null;
     const t = rows[0];
+    let attachments: TurnAttachment[] | undefined;
     if (t.kind === 'message') {
       await this.prisma.session.updateMany({
         where: {
@@ -382,6 +384,15 @@ export class RunnerApiController {
         },
         data: { status: RunStatus.RUNNING, lastTurnAt: new Date() },
       });
+      // Hand the runner this turn's image refs (id + mime); it fetches the bytes via
+      // GET /api/attachments/:id and builds the claude `image` content block. Text-only
+      // turns have none, so the field is omitted.
+      const atts = await this.prisma.attachment.findMany({
+        where: { turnId: t.id },
+        select: { id: true, mimeType: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (atts.length > 0) attachments = atts.map((a) => ({ id: a.id, mimeType: a.mimeType }));
     } else {
       // Control turns (interrupt/end) are fire-and-forget: ack on delivery so a
       // stale one can never re-fire ahead of real messages every lease window.
@@ -390,7 +401,13 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
     }
-    return { turnId: t.id, seq: t.seq, kind: t.kind as ConversationTurnKind, content: t.content ?? undefined };
+    return {
+      turnId: t.id,
+      seq: t.seq,
+      kind: t.kind as ConversationTurnKind,
+      content: t.content ?? undefined,
+      attachments,
+    };
   }
 
   /**
