@@ -64,6 +64,9 @@ interface TaskList {
   id: string;
   title: string;
   _count?: { tasks: number };
+  // How many of the list's tasks are executing right now (have a PENDING/RUNNING
+  // session). >0 turns the list's dot into a pulsing blue "running" indicator.
+  runningTasks?: number;
 }
 
 function logout() {
@@ -158,10 +161,14 @@ export function TasksSidePanel() {
     [agents.data],
   );
 
-  // User-created task lists shown in the "Task List" group below.
+  // User-created task lists shown in the "Task List" group below. Poll so the
+  // per-list running indicator stays live: 5s while anything is running (mirrors the
+  // task detail panel's busy-poll cadence), 15s when idle (same as the runner poll).
   const taskLists = useQuery({
     queryKey: ['task-lists'],
     queryFn: () => api<TaskList[]>('/task-lists'),
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((l) => (l.runningTasks ?? 0) > 0) ? 5_000 : 15_000,
   });
 
   // Runners carry the computed `online` flag (set when their heartbeat is fresh).
@@ -269,6 +276,7 @@ export function TasksSidePanel() {
             <>
               {(taskLists.data ?? []).map((l) => {
                 const key = encodeId(l.id);
+                const running = (l.runningTasks ?? 0) > 0;
                 return (
                   <div
                     key={l.id}
@@ -279,14 +287,8 @@ export function TasksSidePanel() {
                     }}
                   >
                     <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: '#c0c4cc',
-                        flex: 'none',
-                        marginRight: 8,
-                      }}
+                      className={`tp-list-dot ${running ? 'running' : ''}`}
+                      title={running ? `${l.runningTasks} 个任务执行中` : undefined}
                     />
                     <span className="tp-label">{l.title}</span>
                   </div>

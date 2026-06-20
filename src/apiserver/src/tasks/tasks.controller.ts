@@ -10,7 +10,13 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import {
+  BatchAssignDto,
+  BatchExecuteDto,
+  CreateTaskCommentDto,
+  CreateTaskDto,
+  UpdateTaskDto,
+} from './dto';
 import { TasksService } from './tasks.service';
 
 @UseGuards(JwtAuthGuard)
@@ -41,6 +47,17 @@ export class TasksController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tasks.remove(user.userId, id);
+  }
+
+  // Declared before ':id/execute' so the literal path isn't shadowed by the param route.
+  @Post('batch-execute')
+  batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
+    return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent);
+  }
+
+  @Post('batch-assign')
+  batchAssign(@CurrentUser() user: AuthUser, @Body() dto: BatchAssignDto) {
+    return this.tasks.batchAssign(user.userId, dto.taskIds, dto.assigneeId);
   }
 
   @Post(':id/execute')

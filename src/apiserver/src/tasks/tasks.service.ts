@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CreatorType, Prisma, TaskComment } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -63,10 +63,14 @@ export class TasksService {
     return { type: CreatorType.AGENT, id: agent.id };
   }
 
-  async create(ownerId: string, dto: CreateTaskDto, creator?: Creator) {
+  async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedAgent(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
+    // Link to the originating session only when it's one this owner has (the runner
+    // injects its own session id, so this is a guard, not a trust boundary). A stale id
+    // would otherwise fail the FK insert.
+    const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
     return this.prisma.task.create({
       data: {
         title: dto.title,
@@ -75,6 +79,7 @@ export class TasksService {
         // Defaults to the human (user-facing API); the runner path passes the agent.
         creatorType: creator?.type ?? CreatorType.USER,
         creatorId: creator?.id ?? ownerId,
+        creatorSessionId: sessionId,
         assigneeId: dto.assigneeId,
         listId: dto.listId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
@@ -82,15 +87,58 @@ export class TasksService {
     });
   }
 
-  list(ownerId: string) {
-    return this.prisma.task.findMany({
+  /** Return the session id only if it exists under this owner; otherwise undefined. */
+  private async resolveOwnedSession(ownerId: string, sessionId?: string): Promise<string | undefined> {
+    if (!sessionId) return undefined;
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true },
+    });
+    return session?.id;
+  }
+
+  async list(ownerId: string) {
+    const tasks = await this.prisma.task.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
       include: {
-        assignee: { select: { id: true, name: true, model: true } },
+        // runner is included so the batch-run modal can show which runners back the
+        // selection and pre-fill the concurrency from their current cap.
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            model: true,
+            runnerId: true,
+            runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
+          },
+        },
         _count: { select: { comments: true } },
       },
     });
+    return this.withRunning(tasks);
+  }
+
+  /**
+   * Tag each task with `running` = it has a busy (PENDING/RUNNING) session, i.e. it is
+   * actually executing right now. This is the live ground truth, distinct from
+   * Task.status (an agent-maintained label that can lag). One grouped query covers the
+   * whole page. The list-detail view (TaskListsService) computes the same flag inline.
+   */
+  private async withRunning<T extends { id: string }>(
+    tasks: T[],
+  ): Promise<(T & { running: boolean })[]> {
+    if (tasks.length === 0) return [];
+    const busy = await this.prisma.session.groupBy({
+      by: ['taskId'],
+      where: {
+        taskId: { in: tasks.map((t) => t.id) },
+        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      },
+      _count: { _all: true },
+    });
+    const running = new Set(busy.map((b) => b.taskId));
+    return tasks.map((t) => ({ ...t, running: running.has(t.id) }));
   }
 
   async get(ownerId: string, id: string) {
@@ -101,6 +149,7 @@ export class TasksService {
         // author is polymorphic (no FK), so names are resolved separately below.
         comments: { orderBy: { createdAt: 'asc' } },
         sessions: { select: { id: true, title: true, status: true } },
+        creatorSession: { select: { id: true, title: true, status: true } },
       },
     });
     if (!task) throw new NotFoundException('task not found');
@@ -224,6 +273,10 @@ export class TasksService {
     agent: { id: string; runnerId: string | null },
     prompt: string,
     newSessionTitle: string,
+    // Set only by batchExecute: tags the (re)claimed session with the batch's id +
+    // concurrency cap. Omitted for single runs (@-mention / 开始执行), which then
+    // clears any stale batch membership so the session escapes a prior batch's cap.
+    batch?: { id: string; maxConcurrent: number },
   ): Promise<string | undefined> {
     if (!agent.runnerId) return undefined;
     const latest = await this.prisma.session.findFirst({
@@ -233,7 +286,12 @@ export class TasksService {
     });
     if (latest) {
       try {
-        await this.sessions.resume(ownerId, latest.id, { clientTurnId: randomUUID(), content: prompt });
+        await this.sessions.resume(
+          ownerId,
+          latest.id,
+          { clientTurnId: randomUUID(), content: prompt },
+          { batch: batch ?? null },
+        );
         return latest.id;
       } catch (e) {
         if (!(e instanceof ConflictException)) throw e;
@@ -247,7 +305,7 @@ export class TasksService {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
       },
-      { source: 'system' },
+      { source: 'system', batch },
     );
     return session.id;
   }
@@ -270,10 +328,7 @@ export class TasksService {
     if (!task) throw new NotFoundException('task not found');
     if (!task.assignee) throw new BadRequestException('请先为任务指定负责 Agent');
     if (!task.assignee.runnerId) throw new BadRequestException('负责 Agent 未绑定 runner，无法执行');
-    const prompt =
-      `请开始执行任务「${task.title}」。\n\n` +
-      (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-      `请用 task_get 查看该任务的完整信息与历史评论，完成后用 task_comment 在该任务下汇报进展与结果。`;
+    const prompt = this.buildExecutePrompt(task);
     const sessionId = await this.runAgentOnTask(
       ownerId,
       { id: task.id, title: task.title },
@@ -282,6 +337,94 @@ export class TasksService {
       `执行任务：${task.title}`,
     );
     return { ok: true, sessionId };
+  }
+
+  private buildExecutePrompt(task: { title: string; description?: string | null }): string {
+    return (
+      `请开始执行任务「${task.title}」。\n\n` +
+      (task.description ? `任务描述：\n${task.description}\n\n` : '') +
+      `请按以下步骤进行：\n` +
+      `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
+      `2. 执行任务。\n` +
+      `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
+      `再用 task_update 将该任务状态（status）置为 DONE。\n` +
+      `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
+    );
+  }
+
+  /**
+   * Run several tasks in one action. Each task's responsible agent is kicked off the
+   * same way as {@link execute} (resume-or-create), but a missing assignee/runner skips
+   * that task instead of failing the batch, and per-task errors are collected.
+   *
+   * `maxConcurrent`, when given, is a cap *for this batch only*: all the dispatched
+   * sessions share one batchId and this limit, and the claim queue gates live sessions
+   * per batch on it — independently of, and on top of, each runner's own max_concurrent.
+   * It is NOT written to any runner, so a batch run never disturbs a runner's persistent
+   * slots. The rest queue and start as batch (and runner) slots free.
+   */
+  async batchExecute(ownerId: string, taskIds: string[], maxConcurrent?: number) {
+    const tasks = await this.prisma.task.findMany({
+      where: { id: { in: taskIds }, ownerId },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        assignee: { select: { id: true, runnerId: true } },
+      },
+    });
+
+    const runnable: typeof tasks = [];
+    const skipped: { id: string; title: string; reason: string }[] = [];
+    for (const t of tasks) {
+      if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: '未指定负责 Agent' });
+      else if (!t.assignee.runnerId)
+        skipped.push({ id: t.id, title: t.title, reason: '负责 Agent 未绑定 runner' });
+      else runnable.push(t);
+    }
+    // taskIds with no matching owned task (deleted / not owned) are silently ignored.
+
+    const runnerIds = [...new Set(runnable.map((t) => t.assignee!.runnerId!))];
+    // One id ties this batch's sessions together; the queue counts live siblings by it.
+    const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
+
+    const results = await Promise.all(
+      runnable.map(async (t) => {
+        try {
+          const sessionId = await this.runAgentOnTask(
+            ownerId,
+            { id: t.id, title: t.title },
+            { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
+            this.buildExecutePrompt(t),
+            `执行任务：${t.title}`,
+            batch,
+          );
+          return { id: t.id, ok: true as const, sessionId };
+        } catch (e) {
+          this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
+          return { id: t.id, ok: false as const, error: e instanceof Error ? e.message : String(e) };
+        }
+      }),
+    );
+
+    return {
+      dispatched: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok),
+      skipped,
+      runnerIds,
+      batchId: batch?.id ?? null,
+      maxConcurrent: maxConcurrent ?? null,
+    };
+  }
+
+  /** Set (or clear, when assigneeId is null) the responsible agent on many tasks at once. */
+  async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
+    await this.assertOwnedAgent(ownerId, assigneeId);
+    const res = await this.prisma.task.updateMany({
+      where: { id: { in: taskIds }, ownerId },
+      data: { assigneeId: assigneeId ?? null },
+    });
+    return { updated: res.count };
   }
 
   async removeComment(ownerId: string, id: string, commentId: string) {

@@ -161,6 +161,27 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 }
 
+// builtinTaskTools are Claude's built-in task/todo tools. They are disabled for
+// every session because they collide with Orbit's own mcp__orbit__task_* tools:
+// an agent asked to "create tasks" reaches for these, but their todos live only in
+// the claude process and never reach Orbit's database, so the tasks never show in
+// the UI. Disabling them forces all task work through the orbit MCP server.
+var builtinTaskTools = []string{"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop"}
+
+// withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
+// disallow list, de-duplicated and order-stable.
+func withBuiltinTaskToolsDisallowed(configured []string) []string {
+	seen := make(map[string]bool, len(configured)+len(builtinTaskTools))
+	out := make([]string, 0, len(configured)+len(builtinTaskTools))
+	for _, t := range append(append([]string{}, configured...), builtinTaskTools...) {
+		if t != "" && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // runSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
 // ended=false means an unexpected crash that the caller should --resume.
@@ -189,11 +210,24 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 	if a.Effort != "" {
 		args = append(args, "--effort", a.Effort)
 	}
+	// Apply the agent's configured prompts (claim payload carries both; previously
+	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
+	if a.SystemPrompt != "" {
+		args = append(args, "--system-prompt", a.SystemPrompt)
+	}
+	if a.AppendSystemPrompt != "" {
+		args = append(args, "--append-system-prompt", a.AppendSystemPrompt)
+	}
 	if len(a.AllowedTools) > 0 {
 		args = append(args, "--allowedTools", strings.Join(a.AllowedTools, ","))
 	}
-	if len(a.DisallowedTools) > 0 {
-		args = append(args, "--disallowedTools", strings.Join(a.DisallowedTools, ","))
+	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
+	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
+	// reaches for them, but those entries are session-local todos that never reach
+	// Orbit's DB — so the tasks never appear in the UI. Always disable the built-in
+	// family so task work is forced through the orbit MCP server.
+	if disallowed := withBuiltinTaskToolsDisallowed(a.DisallowedTools); len(disallowed) > 0 {
+		args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
 	}
 	// Always pass an --mcp-config: merge the agent's configured servers with the
 	// built-in `orbit` server (this same binary in `mcp` mode), so every session can

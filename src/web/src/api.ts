@@ -118,19 +118,28 @@ export interface ApprovalInfo {
 export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
 
+/** A claude permission rule to add for the rest of the session so future "same kind"
+ *  calls are auto-allowed (mirrors PermissionRule in @orbit/shared). */
+export interface PermissionRule {
+  toolName: string;
+  ruleContent?: string;
+}
+
 /** Allow or deny a pending tool-permission approval; the runner's long-poll
  *  delivers the decision back to claude's --permission-prompt-tool. For an
- *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow. */
+ *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow.
+ *  `rememberRule` (on an allow) auto-allows the same kind of call for the session. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
   behavior: 'allow' | 'deny',
   message?: string,
   answers?: Record<string, string[]>,
+  rememberRule?: PermissionRule,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message, answers },
+    body: { behavior, message, answers, rememberRule },
   });
 
 /** Change a live session's model and/or permission mode between turns. The runner

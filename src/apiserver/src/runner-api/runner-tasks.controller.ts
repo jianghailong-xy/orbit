@@ -25,10 +25,11 @@ export class RunnerTasksController {
   async createTask(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-agent-id') agentId: string | undefined,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateTaskDto,
   ) {
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
-    return this.tasks.create(runner.ownerId, dto, creator);
+    return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
 
   @Get('tasks')

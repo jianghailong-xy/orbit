@@ -67,6 +67,7 @@ model User {
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
   taskLists        TaskList[] // task lists this user owns (tenant scope)
+  attachments      Attachment[] // blobs this user uploaded (tenant scope)
 
   @@map("user")
 }
@@ -201,7 +202,13 @@ model Session {
   agent             Agent?    @relation(fields: [agentId], references: [id])
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId            String?   @map("task_id") @db.Uuid
-  task              Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task              Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
+  // Batch-run grouping: when a session is dispatched as part of a "批量运行" batch,
+  // these tag it with that batch's id and the batch's own concurrency cap. The claim
+  // queue gates live sessions per batch on batchMaxConcurrent — independent of, and on
+  // top of, the runner's own max_concurrent. null = not part of any batch (ungated).
+  batchId           String?   @map("batch_id") @db.Uuid
+  batchMaxConcurrent Int?     @map("batch_max_concurrent")
   // Pre-generated Claude session id: --session-id on first spawn, --resume on
   // reclaim/respawn.
   claudeSessionId   String?   @map("claude_session_id")
@@ -242,8 +249,12 @@ model Session {
   toolCalls ToolCall[]
   llmUsage  LlmUsage[]
   approvals Approval[]
+  // Tasks an agent created from within this session (cf. Task.creatorSession).
+  createdTasks Task[] @relation("TaskCreatorSession")
+  attachments  Attachment[]
 
   @@index([assignedRunnerId, status])
+  @@index([batchId, status])
   @@index([ownerId])
   @@index([status])
   @@map("session")
@@ -267,6 +278,10 @@ model Approval {
   // AskUserQuestion only: the human's picks, keyed by question text -> selected
   // option labels. The runner feeds this back to claude as updatedInput.answers.
   answers     Json?
+  // Set when the human chose "allow + remember same kind": a claude permission rule
+  // ({ toolName, ruleContent? }) the runner adds to the session so future matching
+  // calls are auto-allowed by claude without re-prompting.
+  rememberRule Json?    @map("remember_rule")
   // User who decided it (no FK; cf. Activity.actorId).
   decidedById String?   @map("decided_by_id") @db.Uuid
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -346,10 +361,44 @@ model ConversationTurn {
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
+  // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
+  // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
+  attachments     Attachment[]
+
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
   @@index([sessionId, status])
   @@map("conversation_turn")
+}
+
+// Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
+// Postgres is the only persistent store in the single-host Compose deployment (the
+// apiserver mounts no volume), and the runner is a remote process that must fetch bytes
+// over HTTP regardless of backend — so DB storage is the simplest option that also
+// survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
+// the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+model Attachment {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
+  owner     User     @relation(fields: [ownerId], references: [id])
+  // Optional session scope: set when uploaded inside a session composer so the blob
+  // cascade-deletes with the session. Null for uploads made before the session exists.
+  sessionId String?  @map("session_id") @db.Uuid
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // Optional turn scope: set when the attachment is sent with a user turn, so the inbox
+  // can hand the runner exactly that turn's images. Null until linked at enqueue time;
+  // cascades with the turn (withdrawing a queued turn or ending the session drops it).
+  turnId    String?           @map("turn_id") @db.Uuid
+  turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
+  mimeType  String   @map("mime_type")
+  sizeBytes Int      @map("size_bytes")
+  data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@index([sessionId])
+  @@index([turnId])
+  @@map("attachment")
 }
 
 // Lightweight activity feed (no FKs, append-only).
@@ -394,6 +443,11 @@ model Task {
   // Polymorphic creator (no FK, cf. Activity.actorId): who/what authored the task.
   creatorType CreatorType @map("creator_type")
   creatorId   String      @map("creator_id") @db.Uuid
+  // The session an in-session agent created this task from (real FK, optional; null for
+  // user-created tasks). Deleting the session detaches but keeps the task. Lets the task
+  // detail page link back to its origin run.
+  creatorSessionId String?  @map("creator_session_id") @db.Uuid
+  creatorSession   Session? @relation("TaskCreatorSession", fields: [creatorSessionId], references: [id], onDelete: SetNull)
   // The agent assigned to execute it (real FK, optional).
   assigneeId  String?     @map("assignee_id") @db.Uuid
   assignee    Agent?      @relation(fields: [assigneeId], references: [id])
@@ -405,7 +459,7 @@ model Task {
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
   comments TaskComment[]
-  sessions Session[] // agent sessions run under this task (one Task -> many Session)
+  sessions Session[] @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
 
   @@index([ownerId])
   @@index([assigneeId])

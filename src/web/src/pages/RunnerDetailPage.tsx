@@ -6,6 +6,7 @@ import {
   MoreOutlined,
   PlusOutlined,
   RobotOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -13,6 +14,7 @@ import {
   Button,
   Dropdown,
   Input,
+  InputNumber,
   Modal,
   Select,
   Spin,
@@ -32,11 +34,25 @@ const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
 ];
 
+// Kept in sync with AgentView's MODE_TO_PERMISSION — claude --permission-mode
+// values, the default mode each new session of this agent starts in.
+const MODE_OPTIONS = [
+  { value: 'default', label: 'Default' },
+  { value: 'plan', label: 'Plan' },
+  { value: 'acceptEdits', label: 'Accept Edits' },
+  { value: 'auto', label: 'Auto' },
+  { value: 'dontAsk', label: "Don't Ask" },
+  { value: 'bypassPermissions', label: 'Bypass' },
+];
+// Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
+const AUTO_CAPABLE_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
+
 interface Agent {
   id: string;
   name: string;
   description?: string | null;
   model?: string;
+  permissionMode?: string;
   workDir?: string | null;
   runnerId?: string | null;
   enabled?: boolean;
@@ -82,6 +98,19 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
     },
     onError: (e: Error) => message.error(e.message || 'Rename failed'),
   });
+
+  // Edit the runner's concurrency cap — same PATCH the rename uses.
+  const [slotsOpen, setSlotsOpen] = useState(false);
+  const [slotsVal, setSlotsVal] = useState(1);
+  const slotsMut = useMutation({
+    mutationFn: (maxConcurrent: number) =>
+      api(`/runners/${runnerId}`, { method: 'PATCH', body: { maxConcurrent } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['runners'] });
+      setSlotsOpen(false);
+    },
+    onError: (e: Error) => message.error(e.message || 'Update failed'),
+  });
   const deleteMut = useMutation({
     mutationFn: () => api(`/runners/${runnerId}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -97,14 +126,22 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
   const [fModel, setFModel] = useState('claude-sonnet-4-6');
+  const [fMode, setFMode] = useState('dontAsk');
   const [fDesc, setFDesc] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
+
+  // Pick a model; if it can't run Auto, fall back the default mode off Auto.
+  const onModelChange = (m: string) => {
+    setFModel(m);
+    if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(m)) setFMode('default');
+  };
 
   const saveMut = useMutation({
     mutationFn: () => {
       const body = {
         name: fName.trim(),
         model: fModel,
+        permissionMode: fMode,
         description: fDesc.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
       };
@@ -129,6 +166,7 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
     setEditing(null);
     setFName('');
     setFModel('claude-sonnet-4-6');
+    setFMode('dontAsk');
     setFDesc('');
     setFWorkDir('');
     setFormOpen(true);
@@ -137,6 +175,7 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
     setEditing(a);
     setFName(a.name);
     setFModel(a.model ?? 'claude-sonnet-4-6');
+    setFMode(a.permissionMode ?? 'dontAsk');
     setFDesc(a.description ?? '');
     setFWorkDir(a.workDir ?? '');
     setFormOpen(true);
@@ -172,6 +211,15 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
       onClick: () => {
         setRenameVal(runner.displayName || runner.name);
         setRenaming(true);
+      },
+    },
+    {
+      key: 'slots',
+      icon: <ThunderboltOutlined />,
+      label: 'Set max concurrent',
+      onClick: () => {
+        setSlotsVal(runner.maxConcurrent ?? 1);
+        setSlotsOpen(true);
       },
     },
     { type: 'divider' },
@@ -328,6 +376,31 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
       </Modal>
 
       <Modal
+        title="Set max concurrent"
+        open={slotsOpen}
+        okText="Save"
+        cancelText="Cancel"
+        confirmLoading={slotsMut.isPending}
+        onOk={() => slotsMut.mutate(slotsVal)}
+        onCancel={() => setSlotsOpen(false)}
+        destroyOnClose
+      >
+        <InputNumber
+          value={slotsVal}
+          onChange={(v) => setSlotsVal(typeof v === 'number' ? v : 1)}
+          min={1}
+          max={64}
+          precision={0}
+          style={{ width: '100%' }}
+          autoFocus
+        />
+        <div style={{ marginTop: 8, color: '#8f959e', fontSize: 12 }}>
+          Max sessions this runner runs at once. Takes effect on the next claim — no
+          restart needed.
+        </div>
+      </Modal>
+
+      <Modal
         title={editing ? 'Edit agent' : 'Add agent'}
         open={formOpen}
         okText={editing ? 'Save' : 'Create'}
@@ -356,8 +429,19 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
           <div className="rd-form-label">Model</div>
           <Select
             value={fModel}
-            onChange={setFModel}
+            onChange={onModelChange}
             options={MODEL_OPTIONS}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div className="rd-form-field">
+          <div className="rd-form-label">Permission mode</div>
+          <Select
+            value={fMode}
+            onChange={setFMode}
+            options={MODE_OPTIONS.filter(
+              (o) => o.value !== 'auto' || AUTO_CAPABLE_MODELS.has(fModel),
+            )}
             style={{ width: '100%' }}
           />
         </div>

@@ -160,16 +160,21 @@ export class RunnersService {
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
-    const data: { displayName?: string | null } = {};
+    const data: { displayName?: string | null; maxConcurrent?: number } = {};
     if (dto.displayName !== undefined) {
       const trimmed = dto.displayName.trim();
       data.displayName = trimmed.length ? trimmed : null;
+    }
+    // The queue gates live sessions on this per claim, so a change takes effect
+    // next cycle without restarting the runner.
+    if (dto.maxConcurrent !== undefined) {
+      data.maxConcurrent = dto.maxConcurrent;
     }
     // Never echo back tokenHash.
     return this.prisma.runner.update({
       where: { id },
       data,
-      select: { id: true, name: true, displayName: true },
+      select: { id: true, name: true, displayName: true, maxConcurrent: true },
     });
   }
 

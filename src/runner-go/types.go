@@ -197,6 +197,15 @@ type Manifest struct {
 	Version string `json:"version"`
 }
 
+// PermissionRule mirrors @orbit/shared: a claude permission rule to add for the rest of
+// the session so future "same kind" calls are auto-allowed. ToolName is the gated tool;
+// RuleContent narrows it (Bash uses a command prefix like "git commit:*") — empty means
+// allow every call to that tool.
+type PermissionRule struct {
+	ToolName    string `json:"toolName"`
+	RuleContent string `json:"ruleContent,omitempty"`
+}
+
 // ApprovalDecisionResponse mirrors @orbit/shared: the resolved decision returned by
 // the approval long-poll. Status "PENDING" means the window elapsed undecided.
 type ApprovalDecisionResponse struct {
@@ -207,6 +216,9 @@ type ApprovalDecisionResponse struct {
 	// AskUserQuestion only: the human's picks, keyed by question text -> selected
 	// option labels. Fed back to claude as the tool's updatedInput.answers.
 	Answers map[string][]string `json:"answers,omitempty"`
+	// Set when the human chose "allow + remember same kind": fed back to claude as
+	// updatedPermissions so its engine auto-allows matching calls for the session.
+	RememberRule *PermissionRule `json:"rememberRule,omitempty"`
 }
 
 // Run-event type strings — mirror RunEventType in @orbit/shared.

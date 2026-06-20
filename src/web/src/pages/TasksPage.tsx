@@ -2,16 +2,22 @@ import {
   CheckCircleFilled,
   DeleteOutlined,
   LoadingOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
+  SortAscendingOutlined,
+  SortDescendingOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   App as AntApp,
   Avatar,
   Button,
+  Checkbox,
   DatePicker,
   Form,
   Input,
+  InputNumber,
   Modal,
   Segmented,
   Select,
@@ -28,6 +34,7 @@ import { TasksSidePanel } from '../components/TasksSidePanel';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { RunnersPage } from './RunnersPage';
 import { RunnerDetailPage } from './RunnerDetailPage';
+import { SkillsPage } from './SkillsPage';
 
 const FILTERS = [
   { label: 'All', value: 'ALL' },
@@ -44,22 +51,59 @@ const matchesFilter = (status: string, f: string): boolean => {
   return true;
 };
 
+const SORTS = [
+  { label: '创建时间', value: 'created' },
+  { label: '状态', value: 'status' },
+  { label: '标题', value: 'title' },
+  { label: '执行人', value: 'assignee' },
+];
+
+// Rank for the "状态" sort: a live (running) task ranks first, then by lifecycle, so
+// ascending groups 运行中 at the top and 已完成/已取消 at the bottom (descending flips it).
+const STATUS_ORDER: Record<string, number> = {
+  IN_PROGRESS: 1,
+  OPEN: 2,
+  DONE: 3,
+  CANCELLED: 4,
+};
+const statusRank = (t: any): number => (t.running ? 0 : (STATUS_ORDER[t.status] ?? 5));
+
+// Compare two tasks by the chosen field, ascending. Equal pairs return 0 so the caller's
+// stable sort preserves the incoming createdAt-desc order as a tiebreak.
+const compareBy = (a: any, b: any, field: string): number => {
+  switch (field) {
+    case 'status':
+      return statusRank(a) - statusRank(b);
+    case 'title':
+      return (a.title ?? '').localeCompare(b.title ?? '', 'zh');
+    case 'assignee':
+      return (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '', 'zh');
+    case 'created':
+    default:
+      return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  }
+};
+
 const cap = (s: string): string =>
   s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ');
 
-// Top-nav sections share this view; only the heading differs (default: Active).
-const SECTION_TITLES: Record<string, string> = {
-  '/skills': 'Skills',
-};
-
-function StatusCircle({ status }: { status: string }) {
+// `running` is the live ground truth (a PENDING/RUNNING session exists), distinct from
+// the agent-maintained `status` label which can lag. The spinning indicator means
+// "actually running now", so it's gated on `running`: an IN_PROGRESS task whose session
+// already ended (failed/cancelled without the agent finalizing it) shows a static dot,
+// not a perpetual spinner.
+function StatusCircle({ status, running }: { status: string; running?: boolean }) {
   let node: React.ReactNode;
   switch (status) {
     case 'DONE':
       node = <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
       break;
     case 'IN_PROGRESS':
-      node = <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 15 }} />;
+      node = running ? (
+        <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 15 }} />
+      ) : (
+        <span className="status-circle filled blue" />
+      );
       break;
     case 'OPEN':
       node = <span className="status-circle hollow blue" />;
@@ -80,17 +124,34 @@ export function TasksPage() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // Multi-select for batch actions, keyed by task id, scoped to the visible rows.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [concurrency, setConcurrency] = useState(3);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignAgentId, setAssignAgentId] = useState<string | null>(null);
   const [filter, setFilter] = useState('ALL');
+  // Client-side sort over the visible rows; default 'created'/'desc' mirrors the
+  // backend's createdAt-desc ordering, so the initial view is unchanged.
+  const [sortField, setSortField] = useState('created');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   // The "Add a runner" guide is its own route; show it whenever we're on /runners/register.
   const showRegister = loc.pathname === '/runners/register';
   const showRunners = loc.pathname === '/runners';
+  const showSkills = loc.pathname === '/skills';
   // /runners/<base62> opens that runner's detail/settings page. (/runners/register
   // also matches the :id pattern, so guard against it.)
   const runnerDetailMatch = useMatch('/runners/:id');
   const runnerDetailId = !showRegister && runnerDetailMatch ? decodeId(runnerDetailMatch.params.id) : null;
   const [form] = Form.useForm();
 
-  const tasks = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
+  // Poll while any task is running so its live indicator clears once the run ends;
+  // 5s busy / 15s idle, matching the sidebar's task-list poll.
+  const tasks = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => api<any[]>('/tasks'),
+    refetchInterval: (q) => ((q.state.data ?? []).some((t: any) => t.running) ? 5_000 : 15_000),
+  });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 
@@ -102,13 +163,17 @@ export function TasksPage() {
     queryKey: ['task-list', listId],
     queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
     enabled: !!listId,
+    refetchInterval: (q) =>
+      (q.state.data?.tasks ?? []).some((t: any) => t.running) ? 5_000 : 15_000,
   });
   const isListView = !!listId;
   // Switching lists/sections closes any open detail panel.
   useEffect(() => setSelectedTaskId(null), [listId, loc.pathname]);
-  const pageTitle = isListView
-    ? (listQ.data?.title ?? '')
-    : (SECTION_TITLES[loc.pathname] ?? 'Active');
+  // The selection is scoped to what's currently visible; reset it whenever that set
+  // changes (different list/section, or a different status filter) to avoid running
+  // tasks the user can no longer see.
+  useEffect(() => setSelectedIds(new Set()), [listId, loc.pathname, filter]);
+  const pageTitle = isListView ? (listQ.data?.title ?? '') : 'Active';
 
   // The console is keyed by runner: /agents/<agent> names the agent (its runner is
   // derived below), or /sessions/<id> from which we resolve the runner behind it.
@@ -156,6 +221,34 @@ export function TasksPage() {
     onSuccess: invalidate,
     onError: (e: Error) => message.error(e.message),
   });
+  const batchRun = useMutation({
+    mutationFn: (body: { taskIds: string[]; maxConcurrent: number }) =>
+      api<{ dispatched: number; failed: unknown[]; skipped: unknown[] }>('/tasks/batch-execute', {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: (res) => {
+      setBatchOpen(false);
+      setSelectedIds(new Set());
+      const parts = [`已触发 ${res.dispatched} 个任务`];
+      if (res.failed.length) parts.push(`${res.failed.length} 个失败`);
+      if (res.skipped.length) parts.push(`${res.skipped.length} 个跳过`);
+      message[res.dispatched ? 'success' : 'warning'](parts.join('，'));
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const batchAssign = useMutation({
+    mutationFn: (body: { taskIds: string[]; assigneeId: string | null }) =>
+      api<{ updated: number }>('/tasks/batch-assign', { method: 'POST', body }),
+    onSuccess: (res) => {
+      setAssignOpen(false);
+      setSelectedIds(new Set());
+      message.success(`已为 ${res.updated} 个任务设置执行人`);
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
 
   const taskRows = useMemo(
     () => (tasks.data ?? []).filter((t: any) => matchesFilter(t.status, filter)),
@@ -167,12 +260,59 @@ export function TasksPage() {
     [listQ.data, filter],
   );
 
-  // The rows currently shown (a single list's tasks, or all tasks otherwise).
-  const rows = isListView ? listRows : taskRows;
+  // The rows currently shown (a single list's tasks, or all tasks otherwise),
+  // ordered by the selected sort field/direction.
+  const visibleRows = isListView ? listRows : taskRows;
+  const rows = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...visibleRows].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
+  }, [visibleRows, sortField, sortDir]);
+
+  // ── Multi-select / batch-run derived state ──
+  const selectedRows = useMemo(
+    () => rows.filter((r: any) => selectedIds.has(r.id)),
+    [rows, selectedIds],
+  );
+  const allSelected = rows.length > 0 && rows.every((r: any) => selectedIds.has(r.id));
+  const someSelected = rows.some((r: any) => selectedIds.has(r.id));
+  // A task can run only if it has a responsible agent bound to a runner.
+  const runnableRows = useMemo(
+    () => selectedRows.filter((r: any) => r.assignee?.runner?.id),
+    [selectedRows],
+  );
+
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelectedIds(allSelected ? new Set() : new Set(rows.map((r: any) => r.id)));
+
+  const openBatch = () => {
+    if (runnableRows.length === 0) {
+      message.warning('选中的任务都没有可执行的负责 Agent（或未绑定 runner）');
+      return;
+    }
+    // Batch concurrency is its own knob (it doesn't touch any runner's cap); default to
+    // a sane few, never more than the number of tasks we're about to run.
+    setConcurrency(Math.min(runnableRows.length, 3) || 1);
+    setBatchOpen(true);
+  };
+
+  const openAssign = () => {
+    // Pre-select the shared assignee when the whole selection already agrees, else blank.
+    const ids = [...new Set(selectedRows.map((r: any) => r.assignee?.id ?? null))];
+    setAssignAgentId(ids.length === 1 ? ids[0] : null);
+    setAssignOpen(true);
+  };
 
   // The task list is one of several views this page hosts; the others (agent console,
   // runners, register guide) render in its place. Arrow keys must only drive the list.
-  const showTaskList = !showRegister && !showRunners && !runnerDetailId && !inAgentView;
+  const showTaskList =
+    !showRegister && !showRunners && !showSkills && !runnerDetailId && !inAgentView;
 
   // Up/Down arrows step through the task rows, opening each like tabs — the same
   // selection a click drives. Skipped while typing in an input/textarea (so the detail
@@ -219,9 +359,17 @@ export function TasksPage() {
         key={r.id}
         onClick={() => setSelectedTaskId(r.id)}
       >
+        <div className="task-check" onClick={(e) => e.stopPropagation()}>
+          <Checkbox checked={selectedIds.has(r.id)} onChange={() => toggleOne(r.id)} />
+        </div>
         <div className="task-title-cell">
-          <StatusCircle status={r.status} />
+          <StatusCircle status={r.status} running={r.running} />
           <span className="task-title">{r.title}</span>
+          {r.running && (
+            <Tooltip title="运行中">
+              <span className="task-running-dot" />
+            </Tooltip>
+          )}
         </div>
         <div className="task-creator">
           {assigneeName ? (
@@ -264,6 +412,8 @@ export function TasksPage() {
           <RunnerRegisterGuide onClose={() => navigate('/tasks')} />
         ) : showRunners ? (
           <RunnersPage />
+        ) : showSkills ? (
+          <SkillsPage />
         ) : runnerDetailId ? (
           <RunnerDetailPage runnerId={runnerDetailId} />
         ) : inAgentView ? (
@@ -283,6 +433,41 @@ export function TasksPage() {
           New Task
         </Button>
         <Segmented options={FILTERS} value={filter} onChange={(v) => setFilter(v as string)} />
+        <div className="tasks-sort">
+          <span className="tasks-sort-label">排序</span>
+          <Select
+            value={sortField}
+            onChange={setSortField}
+            options={SORTS}
+            style={{ width: 104 }}
+            popupMatchSelectWidth={false}
+          />
+          <Tooltip title={sortDir === 'asc' ? '升序' : '降序'}>
+            <Button
+              icon={sortDir === 'asc' ? <SortAscendingOutlined /> : <SortDescendingOutlined />}
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            />
+          </Tooltip>
+        </div>
+        {selectedIds.size > 0 && (
+          <div className="tasks-bulkbar">
+            <span className="tasks-bulkbar-count">已选 {selectedIds.size} 项</span>
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              onClick={openBatch}
+            >
+              批量运行
+            </Button>
+            <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
+              设置执行人
+            </Button>
+            <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
+              清除
+            </Button>
+          </div>
+        )}
       </div>
 
       {(isListView ? listQ.isLoading : tasks.isLoading) ? (
@@ -296,6 +481,14 @@ export function TasksPage() {
       ) : (
         <div className="orbit-tasklist">
           <div className="col-head-row">
+            <div className="col-head task-check">
+              <Checkbox
+                checked={allSelected}
+                indeterminate={someSelected && !allSelected}
+                onChange={toggleAll}
+                disabled={rows.length === 0}
+              />
+            </div>
             <div className="col-head">Task Title</div>
             <div className="col-head">Assignee</div>
           </div>
@@ -362,6 +555,71 @@ export function TasksPage() {
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title="批量运行任务"
+        open={batchOpen}
+        onCancel={() => setBatchOpen(false)}
+        onOk={() =>
+          batchRun.mutate({
+            taskIds: selectedRows.map((r: any) => r.id),
+            maxConcurrent: concurrency,
+          })
+        }
+        confirmLoading={batchRun.isPending}
+        okText="开始运行"
+        okButtonProps={{ disabled: runnableRows.length === 0 }}
+      >
+        <p style={{ marginTop: 0 }}>
+          将运行选中的 <b>{runnableRows.length}</b> 个任务
+          {selectedRows.length > runnableRows.length
+            ? `，跳过 ${selectedRows.length - runnableRows.length} 个（未指定负责 Agent 或未绑定 runner）`
+            : ''}
+          。
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span>并发度</span>
+          <InputNumber
+            min={1}
+            max={64}
+            value={concurrency}
+            onChange={(v) => setConcurrency(v ?? 1)}
+            style={{ width: 96 }}
+          />
+          <span style={{ color: '#8a9099' }}>个任务同时运行</span>
+        </div>
+        <p style={{ marginTop: 10, marginBottom: 0, color: '#8a9099', fontSize: 12 }}>
+          任务会一次性全部提交，本批最多同时运行该数量，其余排队、有空位时自动开始。该限制只作用于这一批任务，不会修改任何运行器自身的并发上限。
+        </p>
+      </Modal>
+
+      <Modal
+        title="批量设置执行人"
+        open={assignOpen}
+        onCancel={() => setAssignOpen(false)}
+        onOk={() =>
+          batchAssign.mutate({
+            taskIds: selectedRows.map((r: any) => r.id),
+            assigneeId: assignAgentId,
+          })
+        }
+        confirmLoading={batchAssign.isPending}
+        okText="确定"
+      >
+        <p style={{ marginTop: 0 }}>
+          为选中的 <b>{selectedRows.length}</b> 个任务设置执行人（负责 Agent）。
+        </p>
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          style={{ width: '100%' }}
+          placeholder="选择一个 Agent，留空则清除执行人"
+          value={assignAgentId ?? undefined}
+          onChange={(v) => setAssignAgentId(v ?? null)}
+          options={(agents.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
+        />
       </Modal>
     </div>
   );

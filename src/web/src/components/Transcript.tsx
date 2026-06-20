@@ -151,7 +151,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'user':
       // User input is kept verbatim (pre-wrap), not Markdown-parsed, so a literal
       // '#' or '*' the user typed isn't reinterpreted.
-      return <div className="chat-msg chat-user">{node.text}</div>;
+      return <div className="chat-msg chat-user" data-seq={node.seq}>{node.text}</div>;
     case 'assistant':
       return <AssistantBubble text={node.text} />;
     case 'thinking':

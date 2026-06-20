@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ApprovalInfo } from '../api';
+import type { ApprovalInfo, PermissionRule } from '../api';
 
 // claude routes plan-mode "exit?" through the same permission tool as any other gated
 // call; ExitPlanMode is the one worth a rich render (its input carries the plan).
@@ -15,7 +15,50 @@ function planText(input: unknown): string {
   return '';
 }
 
-type OnDecide = (id: string, behavior: 'allow' | 'deny', answers?: Record<string, string[]>) => void;
+// The leading command word(s) to auto-allow as "same kind" — claude's engine then
+// matches future calls against `Bash(<prefix>:*)`. Skip FOO=bar env assignments, take
+// the program word, and add one following sub-command word when it looks like one (not
+// a flag/path/operator), so `git commit -m x` → "git commit" and `ls -la` → "ls".
+function bashPrefix(input: unknown): string | null {
+  const cmd =
+    input && typeof input === 'object' ? (input as { command?: unknown }).command : undefined;
+  if (typeof cmd !== 'string' || !cmd.trim()) return null;
+  const toks = cmd.trim().split(/\s+/);
+  let i = 0;
+  while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+  const prog = toks[i];
+  if (!prog || !/^[A-Za-z./_-][\w./-]*$/.test(prog)) return null; // not a clean program word
+  const next = toks[i + 1];
+  return next && /^[A-Za-z][\w-]*$/.test(next) ? `${prog} ${next}` : prog;
+}
+
+// Derive the session-scoped rule for "allow + remember same kind", or null when it
+// doesn't apply: questions/plans aren't repeatable, and a Bash command with no clean
+// prefix can't be generalized. Non-Bash tools get a tool-wide rule (no ruleContent).
+function rememberRuleFor(a: ApprovalInfo): PermissionRule | null {
+  if (a.toolName === 'AskUserQuestion' || isPlan(a)) return null;
+  if (a.toolName === 'Bash') {
+    const p = bashPrefix(a.input);
+    return p ? { toolName: 'Bash', ruleContent: `${p}:*` } : null;
+  }
+  return { toolName: a.toolName };
+}
+
+// The human-readable scope shown on the "remember" button.
+function rememberLabel(rule: PermissionRule): string {
+  if (rule.toolName === 'Bash' && rule.ruleContent) {
+    return rule.ruleContent.replace(/:\*$/, ''); // "git commit:*" → "git commit"
+  }
+  return rule.toolName;
+}
+
+type OnDecide = (
+  id: string,
+  behavior: 'allow' | 'deny',
+  answers?: Record<string, string[]>,
+  message?: string,
+  rememberRule?: PermissionRule,
+) => void;
 
 // The hotkey accepts metaKey || ctrlKey on every platform; only the hint label is
 // platform-specific — ⌘ on macOS, Ctrl elsewhere.
@@ -63,6 +106,9 @@ export function ApprovalPanel({
     return <QuestionForm approval={approval} onDecide={onDecide} active={active} />;
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
+  // "Allow + remember same kind" for the rest of the session (claude's engine matches
+  // future calls). Null for questions/plans and Bash commands with no clean prefix.
+  const rule = rememberRuleFor(approval);
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -82,6 +128,15 @@ export function ApprovalPanel({
           {isPlan(approval) ? '批准并实施' : '批准'}
           {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
         </button>
+        {rule && (
+          <button
+            className="approval-btn approve-always"
+            title="本次会话内自动批准同类调用，不再询问"
+            onClick={() => onDecide(approval.id, 'allow', undefined, undefined, rule)}
+          >
+            批准，并自动允许后续 <code className="approval-rule">{rememberLabel(rule)}</code>
+          </button>
+        )}
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
           {isPlan(approval) ? '继续规划' : '拒绝'}
         </button>
@@ -116,6 +171,15 @@ function QuestionForm({
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
   const [custom, setCustom] = useState<Record<string, string>>({});
+  // "Chat about this" mode: instead of answering, reply conversationally. The text
+  // rides back as a `deny` message, so claude reads it as in-turn feedback and keeps
+  // going without being forced to pick one of its listed options.
+  const [chatting, setChatting] = useState(false);
+  const [chatText, setChatText] = useState('');
+  const chatRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (chatting) chatRef.current?.focus();
+  }, [chatting]);
 
   const toggle = (q: string, label: string, multi: boolean) => {
     setSel((prev) => {
@@ -155,13 +219,20 @@ function QuestionForm({
     onDecide(approval.id, 'allow', answers);
   };
 
-  // ⌘/Ctrl + Enter submits once every question has a pick.
-  useApproveHotkey(active && complete, submit);
+  const sendChat = () => {
+    const msg = chatText.trim();
+    if (!msg) return;
+    onDecide(approval.id, 'deny', undefined, msg);
+  };
+
+  // ⌘/Ctrl + Enter submits once every question has a pick — but not while chatting,
+  // where the same chord sends the reply instead (handled on the textarea).
+  useApproveHotkey(active && complete && !chatting, submit);
 
   return (
     <div className="approval-card">
       <div className="approval-head">❓ Claude 有问题需要你回答</div>
-      <div className="approval-body">
+      <div className="approval-body is-questions">
         <div className="chat-questions">
           {questions.map((qq, k) => {
             const q = qq.question ?? '';
@@ -206,16 +277,52 @@ function QuestionForm({
             );
           })}
         </div>
+        {chatting && (
+          <textarea
+            ref={chatRef}
+            className="chat-q-reply"
+            placeholder="和 Claude 聊聊这个问题…（它会读到你的话并继续，而不强制你选某个选项）"
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && chatText.trim()) {
+                e.preventDefault();
+                sendChat();
+              }
+            }}
+          />
+        )}
       </div>
-      <div className="approval-actions">
-        <button className="approval-btn approve" disabled={!complete} onClick={submit}>
-          提交
-          {active && complete && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
-        </button>
-        <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
-          不回答
-        </button>
-      </div>
+      {chatting ? (
+        <div className="approval-actions">
+          <button className="approval-btn approve" disabled={!chatText.trim()} onClick={sendChat}>
+            发送
+            {active && chatText.trim() && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
+          </button>
+          <button
+            className="approval-btn deny"
+            onClick={() => {
+              setChatting(false);
+              setChatText('');
+            }}
+          >
+            返回
+          </button>
+        </div>
+      ) : (
+        <div className="approval-actions">
+          <button className="approval-btn approve" disabled={!complete} onClick={submit}>
+            提交
+            {active && complete && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
+          </button>
+          <button className="approval-btn chat" onClick={() => setChatting(true)}>
+            💬 聊聊这个
+          </button>
+          <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
+            不回答
+          </button>
+        </div>
+      )}
     </div>
   );
 }

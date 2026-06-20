@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CreatorType } from '@prisma/client';
+import { CreatorType, RunStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
@@ -14,12 +14,26 @@ export class TaskListsService {
     });
   }
 
-  list(ownerId: string) {
-    return this.prisma.taskList.findMany({
+  async list(ownerId: string) {
+    const lists = await this.prisma.taskList.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { tasks: true } } },
     });
+    // `runningTasks` = how many of the list's tasks are actually executing right now:
+    // a task with a busy (PENDING/RUNNING) session. Same liveness notion the task
+    // detail panel uses for its 执行中 state — IN_PROGRESS is just a label, not a live
+    // run. One grouped query keeps this O(1) regardless of list count.
+    const grouped = await this.prisma.task.groupBy({
+      by: ['listId'],
+      where: {
+        listId: { in: lists.map((l) => l.id) },
+        sessions: { some: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
+      },
+      _count: { _all: true },
+    });
+    const running = new Map(grouped.map((g) => [g.listId, g._count._all]));
+    return lists.map((l) => ({ ...l, runningTasks: running.get(l.id) ?? 0 }));
   }
 
   async get(ownerId: string, id: string) {
@@ -30,14 +44,37 @@ export class TaskListsService {
         tasks: {
           orderBy: { createdAt: 'desc' },
           include: {
-            assignee: { select: { id: true, name: true, model: true } },
+            assignee: {
+              select: {
+                id: true,
+                name: true,
+                model: true,
+                runnerId: true,
+                runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
+              },
+            },
             _count: { select: { comments: true } },
           },
         },
       },
     });
     if (!list) throw new NotFoundException('task list not found');
-    return { ...list, tasks: await this.resolveTaskCreators(list.tasks) };
+    const tasks = await this.resolveTaskCreators(list.tasks);
+    // Tag each task with `running` (has a PENDING/RUNNING session) so the list view
+    // shows the same live indicator as the Active view — see TasksService.withRunning.
+    const ids = tasks.map((t) => t.id);
+    const busy = ids.length
+      ? await this.prisma.session.groupBy({
+          by: ['taskId'],
+          where: {
+            taskId: { in: ids },
+            status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const running = new Set(busy.map((b) => b.taskId));
+    return { ...list, tasks: tasks.map((t) => ({ ...t, running: running.has(t.id) })) };
   }
 
   /**

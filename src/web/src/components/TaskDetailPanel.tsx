@@ -17,6 +17,13 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
 };
 
+// The task counts as "执行中" only while one of its sessions is actually working:
+// queued for a runner slot (PENDING) or running (RUNNING). AWAITING_INPUT and
+// INTERRUPTED are idle states — the agent finished its turn and is waiting (grey
+// icons in AgentView), so the run is over and 开始执行 should be re-enabled.
+const BUSY_SESSION_STATUSES = new Set(['PENDING', 'RUNNING']);
+const isSessionBusy = (status?: string): boolean => !!status && BUSY_SESSION_STATUSES.has(status);
+
 const fmt = (d?: string | null): string =>
   d
     ? new Date(d).toLocaleString([], {
@@ -106,7 +113,14 @@ export function TaskDetailPanel({
 
   // /tasks/:id carries the full detail (description, comments, sessions) that the
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
-  const q = useQuery({ queryKey: ['task', taskId], queryFn: () => api<any>(`/tasks/${taskId}`) });
+  const q = useQuery({
+    queryKey: ['task', taskId],
+    queryFn: () => api<any>(`/tasks/${taskId}`),
+    // While the task has a busy (queued/running) session, poll so the 开始执行 button
+    // leaves its running state once the run ends; stay idle otherwise.
+    refetchInterval: (query) =>
+      (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s.status)) ? 4000 : false,
+  });
   const task = q.data ?? summary;
 
   // Owner's agents, for @-mention autocomplete and to label/trigger mentions.
@@ -241,6 +255,12 @@ export function TaskDetailPanel({
   const sessions = q.data?.sessions ?? [];
   // Need a responsible agent to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
+  // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
+  // session. The button shows this state and stays disabled throughout — which also
+  // debounces it against repeated clicks (no second trigger until the current run ends).
+  const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s.status));
+  const executeDisabled = !canExecute || running;
+  const executeHint = !canExecute ? '请先指定负责 Agent' : running ? '任务执行中…' : '';
 
   return (
     <aside className="task-detail-panel">
@@ -261,17 +281,17 @@ export function TaskDetailPanel({
           </div>
         </div>
         <div className="tdp-head-actions">
-          <Tooltip title={canExecute ? '' : '请先指定负责 Agent'}>
+          <Tooltip title={executeHint}>
             <span style={{ display: 'inline-flex' }}>
               <Button
                 type="primary"
                 icon={<PlayCircleOutlined />}
-                loading={execute.isPending}
-                disabled={!canExecute}
+                loading={running}
+                disabled={executeDisabled}
                 onClick={() => execute.mutate()}
-                style={canExecute ? undefined : { pointerEvents: 'none' }}
+                style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
-                开始执行
+                {running ? '运行中' : '开始执行'}
               </Button>
             </span>
           </Tooltip>
@@ -310,6 +330,18 @@ export function TaskDetailPanel({
               <span className="tdp-field-label">创建人</span>
               <span className="tdp-field-value">{summary?.creatorName ?? '—'}</span>
             </div>
+            {q.data?.creatorSession && (
+              <div className="tdp-field">
+                <span className="tdp-field-label">创建来源</span>
+                <Link
+                  to={`/sessions/${encodeId(q.data.creatorSession.id)}`}
+                  className="tdp-field-value tdp-field-link"
+                  title="跳转到创建此任务的会话"
+                >
+                  {q.data.creatorSession.title || '未命名会话'}
+                </Link>
+              </div>
+            )}
             <div className="tdp-field">
               <span className="tdp-field-label">创建时间</span>
               <span className="tdp-field-value">{fmt(task?.createdAt)}</span>

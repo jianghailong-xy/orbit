@@ -149,6 +149,31 @@ body {
 .tp-item.active .tp-count {
   color: #3370ff;
 }
+/* Task-list status dot. Grey + static by default; turns blue and breathes while
+   the list has a task executing right now (runningTasks > 0). */
+.tp-list-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  flex: none;
+  margin-right: 8px;
+}
+.tp-list-dot.running {
+  background: #3370ff;
+  animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tp-list-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(51, 112, 255, 0.5);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(51, 112, 255, 0);
+    opacity: 0.6;
+  }
+}
 /* Per-runner "more actions" trigger: hidden until the row is hovered or its
    menu is open, where it swaps in for the ⌘N shortcut hint. */
 .tp-kebab {
@@ -251,6 +276,31 @@ body {
   gap: 12px;
   margin: 16px 0 8px;
 }
+/* Sort control: field select + asc/desc toggle, sitting beside the status filter. */
+.tasks-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tasks-sort-label {
+  font-size: 13px;
+  color: #8f959e;
+}
+/* Inline bar with batch actions, shown only while rows are selected. */
+.tasks-bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 4px 10px;
+  background: #f0f5ff;
+  border: 1px solid #d6e4ff;
+  border-radius: 8px;
+}
+.tasks-bulkbar-count {
+  font-size: 13px;
+  color: #1f2329;
+}
 
 /* ---- Runners page (the runner list, moved out of the sidebar) ---- */
 .runners-empty {
@@ -320,6 +370,78 @@ body {
 .runner-card:hover .runner-kebab,
 .runner-card.menu-open .runner-kebab {
   display: flex;
+}
+
+/* ---- Skills page (skills/commands a runner reported, grouped per machine) ---- */
+.skills-empty {
+  margin-top: 24px;
+  color: #8f959e;
+  font-size: 14px;
+}
+.skills-empty code {
+  background: #f2f3f5;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
+.skills-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skills-runner {
+  border: 1px solid #eceef1;
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px;
+}
+.skills-runner-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.skills-runner-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2329;
+}
+.skills-runner-status {
+  font-size: 12px;
+  color: #8f959e;
+}
+.skills-group {
+  margin-top: 12px;
+}
+.skills-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8f959e;
+  margin-bottom: 6px;
+}
+.skill-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+}
+.skill-name {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  color: #3370ff;
+}
+.skill-desc {
+  font-size: 13px;
+  color: #646a73;
+  min-width: 0;
+}
+.skills-runner-empty {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #8f959e;
 }
 
 /* ---- Runner detail / settings page ---- */
@@ -444,8 +566,14 @@ body {
 
 /* shared column grid: title | assignee */
 .orbit-tasklist {
-  --cols: minmax(200px, 1fr) 160px;
+  --cols: 28px minmax(200px, 1fr) 160px;
   border-top: 1px solid #eceef1;
+}
+/* Multi-select checkbox column (header + per row). */
+.task-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .col-head-row,
 .task-row {
@@ -500,6 +628,16 @@ body {
 }
 .task-title:hover {
   color: #3370ff;
+}
+/* Live "running" indicator on a task row: breathing blue dot, same visual language
+   as the sidebar's task-list dot. Shown when the task has a busy session executing. */
+.task-running-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3370ff;
+  flex: none;
+  animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
 }
 .task-creator {
   display: flex;
@@ -557,6 +695,12 @@ body {
 }
 .status-circle.hollow.muted {
   border-color: #dee0e3;
+}
+/* IN_PROGRESS label but no live session: static blue dot (vs. the spinner used while
+   actually running). Distinct from OPEN's hollow ring. */
+.status-circle.filled.blue {
+  border: 1.5px solid #3370ff;
+  background: radial-gradient(circle at center, #3370ff 0 42%, transparent 44%);
 }
 
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
@@ -1112,6 +1256,38 @@ body {
      after a short message. fit-content shrinks to the text; margin-left:auto right-aligns. */
   width: fit-content;
 }
+/* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
+   jitter) and surfaces the in-view turn's question once a long answer pushes it off the
+   top. Click to jump back to the original bubble. */
+.chat-sticky-question {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  border-bottom: 1px solid #eceef1;
+  background: #f7f8fa;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1f2329;
+}
+.chat-sticky-question:hover {
+  background: #eef0f3;
+}
+.chat-sticky-label {
+  flex: none;
+  font-size: 12px;
+  color: #8f959e;
+}
+.chat-sticky-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* A message queued behind the running turn: a dimmed user bubble with a withdraw
    action, shown until the runner picks it up (then it renders as a normal user turn). */
 .chat-queued {
@@ -1570,6 +1746,31 @@ body {
 .chat-q-custom::placeholder {
   color: #a8acb3;
 }
+/* "Chat about this": a free-form reply that rides back as a deny message so claude
+   keeps the conversation going instead of forcing one of its listed options. */
+.chat-q-reply {
+  margin-top: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: #1f2329;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.1s, background 0.1s;
+}
+.chat-q-reply:focus {
+  border-color: #3370ff;
+  background: #f0f5ff;
+}
+.chat-q-reply::placeholder {
+  color: #a8acb3;
+}
 
 /* monospace blocks (commands, json, results) */
 .chat-pre-wrap.muted .chat-pre {
@@ -1750,6 +1951,12 @@ body {
   font-size: 13.5px;
   color: #1f2329;
 }
+/* The question form grows with its content instead of scrolling inside the card —
+   multiple questions stay fully visible and the transcript scrolls naturally. */
+.approval-body.is-questions {
+  max-height: none;
+  overflow: visible;
+}
 .approval-input {
   white-space: pre-wrap;
   word-break: break-word;
@@ -1783,6 +1990,30 @@ body {
 }
 .approval-btn.deny:hover {
   background: #f2f3f5;
+}
+.approval-btn.chat {
+  background: #fff;
+  color: #3370ff;
+  border-color: #b9ceff;
+}
+.approval-btn.chat:hover {
+  background: #f0f5ff;
+}
+.approval-btn.approve-always {
+  background: #eef4ff;
+  color: #2860e0;
+  border-color: #b9ceff;
+}
+.approval-btn.approve-always:hover {
+  background: #e0ecff;
+}
+.approval-rule {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #d8e6ff;
+  color: #1d4ed8;
 }
 .approval-btn:disabled {
   opacity: 0.5;
@@ -1935,6 +2166,16 @@ body {
   min-width: 0;
   color: #1f2329;
   word-break: break-word;
+}
+/* 「创建来源」会话链接，跳转到创建此任务的 session */
+.tdp-field-link {
+  color: #3370ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tdp-field-link:hover {
+  text-decoration: underline;
 }
 /* 内联可编辑的「负责 Agent」下拉，外观对齐其它文本字段 */
 .tdp-assignee-select {

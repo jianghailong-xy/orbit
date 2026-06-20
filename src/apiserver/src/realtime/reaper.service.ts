@@ -3,6 +3,7 @@ import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -50,6 +51,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       where: { status: { in: LIVE } },
       select: {
         id: true,
+        taskId: true,
         assignedRunnerId: true,
         status: true,
         lastTurnAt: true,
@@ -63,7 +65,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const offline =
           !s.assignedRunner || s.assignedRunner.status === 'OFFLINE' || now - hb > OFFLINE_AFTER_MS;
         if (offline) {
-          await this.forceFail(s.id, s.assignedRunnerId, 'runner offline');
+          await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'runner offline');
           continue;
         }
         // Online runner that hasn't honored a cancel/end in time: the session is
@@ -71,7 +73,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // the slot is freed; without this both branches below skip it forever.
         const cancelAt = s.cancelRequestedAt?.getTime() ?? 0;
         if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
-          await this.forceFail(s.id, s.assignedRunnerId, 'cancel not honored');
+          await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'cancel not honored');
           continue;
         }
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
@@ -93,6 +95,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private async forceFail(
     sessionId: string,
     runnerId: string | null,
+    taskId: string | null,
     reason: string,
   ): Promise<void> {
     const ok = await this.prisma.$transaction(async (tx) => {
@@ -112,6 +115,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
+      // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
+      if (taskId) await reclaimStalledTask(tx, taskId);
       return true;
     });
     if (!ok) return;

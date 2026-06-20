@@ -194,6 +194,19 @@ func agentHeader(agentID string) map[string]string {
 	return map[string]string{"X-Orbit-Agent-Id": agentID}
 }
 
+// taskCreateHeaders attributes a created task to the acting agent and records the
+// session it was created from, so the task detail page can link back to that run.
+func taskCreateHeaders(agentID, sessionID string) map[string]string {
+	h := agentHeader(agentID)
+	if sessionID != "" {
+		if h == nil {
+			h = map[string]string{}
+		}
+		h["X-Orbit-Session-Id"] = sessionID
+	}
+	return h
+}
+
 type SessionMetaResponse struct {
 	SessionUUID string  `json:"sessionUuid"`
 	WorkDir     *string `json:"workDir"`
@@ -220,9 +233,9 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-func (t *Transport) createTask(agentID string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) createTask(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, agentHeader(agentID))
+	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
 	return out, err
 }
 

@@ -24,6 +24,7 @@ import {
   DeviceStartRequest,
   DeviceStartResponse,
   PermissionMode,
+  PermissionRule,
   QuestionAnswers,
   ReclaimResponse,
   ReclaimSession,
@@ -35,6 +36,7 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   SessionCompleteRequest,
+  TurnAttachment,
   TurnCompleteRequest,
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
@@ -42,6 +44,7 @@ import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
@@ -374,6 +377,7 @@ export class RunnerApiController {
     `;
     if (rows.length === 0) return null;
     const t = rows[0];
+    let attachments: TurnAttachment[] | undefined;
     if (t.kind === 'message') {
       await this.prisma.session.updateMany({
         where: {
@@ -382,6 +386,15 @@ export class RunnerApiController {
         },
         data: { status: RunStatus.RUNNING, lastTurnAt: new Date() },
       });
+      // Hand the runner this turn's image refs (id + mime); it fetches the bytes via
+      // GET /api/attachments/:id and builds the claude `image` content block. Text-only
+      // turns have none, so the field is omitted.
+      const atts = await this.prisma.attachment.findMany({
+        where: { turnId: t.id },
+        select: { id: true, mimeType: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (atts.length > 0) attachments = atts.map((a) => ({ id: a.id, mimeType: a.mimeType }));
     } else {
       // Control turns (interrupt/end) are fire-and-forget: ack on delivery so a
       // stale one can never re-fire ahead of real messages every lease window.
@@ -390,7 +403,13 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
     }
-    return { turnId: t.id, seq: t.seq, kind: t.kind as ConversationTurnKind, content: t.content ?? undefined };
+    return {
+      turnId: t.id,
+      seq: t.seq,
+      kind: t.kind as ConversationTurnKind,
+      content: t.content ?? undefined,
+      attachments,
+    };
   }
 
   /**
@@ -457,6 +476,7 @@ export class RunnerApiController {
           behavior: a.status === 'ALLOWED' ? 'allow' : 'deny',
           message: a.message ?? undefined,
           answers: (a.answers as QuestionAnswers | null) ?? undefined,
+          rememberRule: (a.rememberRule as PermissionRule | null) ?? undefined,
         };
       }
       if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
@@ -611,6 +631,12 @@ export class RunnerApiController {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
+      // Abnormal end (FAILED/CANCELLED): if the agent never got to finalize its
+      // task, reclaim a now-stalled IN_PROGRESS task so it stops looking like it's
+      // still running. SUCCEEDED is left alone — the agent owns DONE.
+      if (session.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
+        await reclaimStalledTask(tx, session.taskId);
+      }
       return true;
     });
     if (!finalized) return { ok: true };

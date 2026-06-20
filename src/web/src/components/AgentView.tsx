@@ -20,7 +20,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Dropdown, Input, type MenuProps, Segmented, Select, Tooltip } from 'antd';
-import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import {
@@ -35,6 +35,7 @@ import {
   interruptSession,
   listApprovals,
   listQueuedTurns,
+  type PermissionRule,
   restoreSession,
   resumeSession,
   sendTurn,
@@ -111,6 +112,37 @@ const SWITCH_DEBOUNCE_MS = 150;
 // Cap on cached transcripts (mount-scoped), so a long browsing session can't grow
 // the cache without bound. Least-recently-selected entries are evicted first.
 const TRANSCRIPT_CACHE_MAX = 20;
+
+// Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
+// recall only this session's recently sent prompts (never another session's). Stored
+// oldest-first, newest last; capped so it can't grow without bound. Keyed by session id;
+// a not-yet-created session (new-session draft) has no id and so no history to recall.
+const HISTORY_KEY_PREFIX = 'orbit.composerHistory:';
+const HISTORY_MAX = 100;
+const historyKey = (sessionId: string): string => `${HISTORY_KEY_PREFIX}${sessionId}`;
+function loadHistory(sessionId?: string | null): string[] {
+  if (!sessionId) return [];
+  try {
+    const arr = JSON.parse(localStorage.getItem(historyKey(sessionId)) ?? '[]');
+    return Array.isArray(arr) ? arr.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function pushHistory(sessionId: string | undefined, entry: string): void {
+  if (!sessionId) return;
+  const e = entry.trim();
+  if (!e) return;
+  const list = loadHistory(sessionId);
+  if (list[list.length - 1] === e) return; // skip if identical to the last sent
+  list.push(e);
+  while (list.length > HISTORY_MAX) list.shift();
+  try {
+    localStorage.setItem(historyKey(sessionId), JSON.stringify(list));
+  } catch {
+    // ignore quota/serialization errors — history is best-effort
+  }
+}
 
 const fmtTime = (d?: string): string =>
   d
@@ -197,6 +229,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   const lockedAgentId = decodeId(agentMatch?.params.id);
   const composingRoute = (agentMatch?.params['*'] ?? '') === 'new';
   const [text, setText] = useState('');
+  // Composer history cursor: -1 = editing the live draft; otherwise an index into the
+  // session's stored history. `histDraft` stashes what was typed before recall started,
+  // so stepping back past the newest entry restores it (shell-style).
+  const [histIdx, setHistIdx] = useState(-1);
+  const [histDraft, setHistDraft] = useState('');
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [effort, setEffort] = useState('');
@@ -217,6 +254,43 @@ export function AgentView({ runner }: { runner: Runner }) {
   const transcriptCache = useRef<Map<string, RunEvent[]>>(new Map());
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
+  // The user's prompt for the turn currently in view, surfaced as a sticky bar when a long
+  // answer has pushed that bubble off the top — so what was asked stays findable. null hides it.
+  const [stuck, setStuck] = useState<{ seq: string | null; text: string } | null>(null);
+  // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
+  // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
+  const atBottomRef = useRef(true);
+  // Last observed scrollTop, so the scroll handler can tell a genuine user scroll-up from a
+  // programmatic re-pin or a late scroll event fired after streaming grew the container.
+  const lastTopRef = useRef(0);
+  // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
+  // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      setStuck(null);
+      return;
+    }
+    const top = el.scrollTop;
+    // Pin to the bottom while at (or near) it; un-pin only when the user scrolls UP. A long
+    // transcript replays as a flood of one-event-at-a-time renders, and each programmatic
+    // scrollTo fires its scroll event asynchronously — by which time newer events have grown
+    // the container, so a position-only check reads a large gap and wrongly un-pins, stranding
+    // the view above the bottom. Gating the un-pin on a downward scrollTop delta ignores that.
+    if (el.scrollHeight - top - el.clientHeight < 80) atBottomRef.current = true;
+    else if (top < lastTopRef.current - 1) atBottomRef.current = false;
+    lastTopRef.current = top;
+    const topY = el.getBoundingClientRect().top;
+    const bubbles = Array.from(
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued)'),
+    ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-agent transcript
+    let cur: HTMLElement | null = null;
+    for (const b of bubbles) {
+      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      else break;
+    }
+    setStuck(cur ? { seq: cur.getAttribute('data-seq'), text: cur.textContent || '' } : null);
+  }, []);
   // Width of the left session column; drag the divider to resize, persisted to
   // localStorage so the choice survives a reload.
   const [colWidth, setColWidth] = useState<number>(() => {
@@ -370,6 +444,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     setModel(pickedAgent.model);
   }, [selectedId, pickedAgent?.id, pickedAgent?.model]);
 
+  // Likewise seed the Mode pill from the picked agent's configured default. Without
+  // this the pill stays at the hardcoded 'Default', so a new session always sends
+  // permissionMode 'default' — which the server's session→agent fallback treats as
+  // an explicit choice, silently ignoring the agent's configured mode.
+  useEffect(() => {
+    if (selectedId || !pickedAgent) return;
+    setMode(PERMISSION_TO_MODE[pickedAgent.permissionMode ?? 'dontAsk'] ?? 'Default');
+  }, [selectedId, pickedAgent?.id, pickedAgent?.permissionMode]);
+
   // Slot accounting: a runner hosts at most maxConcurrent live sessions. When it's
   // full, a newly created session sits PENDING instead of starting — surface that
   // as an explicit concurrency wait rather than a silent "Starting…".
@@ -388,6 +471,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     setApprovals([]);
     setQueued([]);
     setIdle(false);
+    setStuck(null);
+    atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
+    lastTopRef.current = 0;
     if (!selectedId) {
       setEvents([]);
       seen.current = new Set();
@@ -537,8 +623,20 @@ export function AgentView({ runner }: { runner: Runner }) {
   }, [runStatus]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [events, streamingText, streamingThink, approvals, queued]);
+    const el = scrollRef.current;
+    if (!el) return;
+    if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
+    measure(); // content grew — the in-view prompt may have just scrolled off the top
+  }, [events, streamingText, streamingThink, approvals, queued, measure]);
+
+  // Track at-bottom + which prompt to surface as the user scrolls.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = (): void => measure();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [selectedId, measure]);
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -546,11 +644,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     approvalId: string,
     behavior: 'allow' | 'deny',
     answers?: Record<string, string[]>,
+    message?: string,
+    rememberRule?: PermissionRule,
   ): Promise<void> => {
     if (!selectedId) return;
     setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
     try {
-      await decideApproval(selectedId, approvalId, behavior, undefined, answers);
+      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRule);
     } catch {
       listApprovals(selectedId)
         .then(setApprovals)
@@ -593,7 +693,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       });
       return { id: created.id, created: true };
     },
-    onSuccess: ({ id, queuedItem, created }) => {
+    onSuccess: ({ id, queuedItem, created }, content) => {
+      pushHistory(id, content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
       // back to keepPreviousData — the previously open session's agent — and the
@@ -664,9 +765,20 @@ export function AgentView({ runner }: { runner: Runner }) {
       duration: 4,
     });
   };
+  // Archiving/deleting the OPEN session drops it from the active list, so it can no
+  // longer be resolved (selected → null) and `scopeAgentId` would collapse to null —
+  // un-scoping the left column to every agent's sessions. Step back to the agent's
+  // list (same move as the tab switcher), which re-scopes and auto-opens its next
+  // session. A non-open row leaves the current conversation untouched.
+  const leaveIfOpen = (id: string): void => {
+    if (id !== selectedId) return;
+    const a = scopeAgentId ?? agentsForRunner[0]?.id;
+    navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+  };
   const archiveMut = useMutation({
     mutationFn: (id: string) => archiveSession(id),
     onSuccess: (_d, id) => {
+      leaveIfOpen(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已完成');
     },
@@ -675,6 +787,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
+      leaveIfOpen(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已删除');
     },
@@ -732,6 +845,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const onSend = (): void => {
     const c = text.trim();
     if (!c || send.isPending) return;
+    setHistIdx(-1);
     send.mutate(c);
   };
   // Open the new-session draft for this agent. A /sessions/<id> URL carries no
@@ -811,6 +925,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   const configEditable = live ? idle && runner.online : true;
   // A live session's agent is fixed; otherwise reflect the local pick.
   const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
+  // Switching session leaves whatever history recall was in progress; reset the cursor
+  // so the next Up starts fresh from the (per-session) history.
+  useEffect(() => {
+    setHistIdx(-1);
+  }, [selectedId]);
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no agent in the URL, so fall back to the open session's agent, then runner.
   const headAgentName =
@@ -971,6 +1090,23 @@ export function AgentView({ runner }: { runner: Runner }) {
           </div>
         </div>
 
+        {stuck && (
+          <button
+            className="chat-sticky-question"
+            title={stuck.text}
+            onClick={() => {
+              const seq = stuck?.seq;
+              if (!seq) return;
+              scrollRef.current
+                ?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`)
+                ?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            }}
+          >
+            <span className="chat-sticky-label">↑ 你的提问</span>
+            <span className="chat-sticky-text">{stuck.text}</span>
+          </button>
+        )}
+
         {selectedId ? (
           <div className="agent-sessions" ref={scrollRef}>
             {selected &&
@@ -1057,8 +1193,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             }
             value={text}
             disabled={!runner.online}
-            onChange={(e) => setText(e.target.value)}
-            // One keydown handler: drive the menu while open, else Enter=send / Shift+Enter=newline.
+            // Typing exits history recall: the next Up starts fresh from this draft.
+            onChange={(e) => {
+              setText(e.target.value);
+              if (histIdx !== -1) setHistIdx(-1);
+            }}
+            // One keydown handler: drive the menu while open, else Up/Down recall
+            // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
             onKeyDown={(e) => {
               if (showSlash && !e.nativeEvent.isComposing) {
                 if (e.key === 'ArrowDown') {
@@ -1079,6 +1220,56 @@ export function AgentView({ runner }: { runner: Runner }) {
                 if (e.key === 'Escape') {
                   e.preventDefault();
                   setSlashDismissed(slashToken);
+                  return;
+                }
+              }
+              // Shell-style history recall. Up only fires on the first line and Down on
+              // the last line (with no text selected), so navigating within a multi-line
+              // draft still moves the caret normally. After recall the caret is parked at
+              // the start (Up) / end (Down) so a repeat keeps stepping through history.
+              if (
+                (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+                !e.nativeEvent.isComposing &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                !e.shiftKey
+              ) {
+                const ta = e.currentTarget;
+                const noSelection = ta.selectionStart === ta.selectionEnd;
+                const onFirstLine = !ta.value.slice(0, ta.selectionStart).includes('\n');
+                const onLastLine = !ta.value.slice(ta.selectionEnd).includes('\n');
+                const setCaret = (pos: number): void => {
+                  // setText re-renders the textarea; restore the caret on the next tick.
+                  setTimeout(() => {
+                    ta.selectionStart = ta.selectionEnd = pos;
+                  }, 0);
+                };
+                if (e.key === 'ArrowUp' && noSelection && onFirstLine) {
+                  const list = loadHistory(selectedId);
+                  if (list.length) {
+                    e.preventDefault();
+                    if (histIdx === -1) setHistDraft(text);
+                    const idx = histIdx === -1 ? list.length - 1 : Math.max(0, histIdx - 1);
+                    setHistIdx(idx);
+                    setText(list[idx]);
+                    setCaret(0);
+                    return;
+                  }
+                }
+                if (e.key === 'ArrowDown' && noSelection && onLastLine && histIdx !== -1) {
+                  e.preventDefault();
+                  const list = loadHistory(selectedId);
+                  if (histIdx < list.length - 1) {
+                    const idx = histIdx + 1;
+                    setHistIdx(idx);
+                    setText(list[idx]);
+                    setCaret(list[idx].length);
+                  } else {
+                    setHistIdx(-1);
+                    setText(histDraft);
+                    setCaret(histDraft.length);
+                  }
                   return;
                 }
               }

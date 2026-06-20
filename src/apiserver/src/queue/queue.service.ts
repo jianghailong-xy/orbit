@@ -65,6 +65,17 @@ export class QueueService {
             WHERE live."assigned_runner_id" = ${runner.id}::uuid
               AND live."status" IN ('RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
           ) < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
+          -- Batch-run cap, independent of the runner cap above: a session tagged with a
+          -- batch_id may only start while fewer than batch_max_concurrent of its batch
+          -- siblings are live (counted across all runners). Untagged sessions skip this.
+          AND (
+            s."batch_id" IS NULL
+            OR (
+              SELECT count(*) FROM "session" bl
+              WHERE bl."batch_id" = s."batch_id"
+                AND bl."status" IN ('RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+            ) < s."batch_max_concurrent"
+          )
         ORDER BY s."created_at" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
