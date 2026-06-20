@@ -380,21 +380,23 @@ export class RunnerApiController {
         SELECT id FROM "conversation_turn"
         WHERE "session_id" = ${sessionId}::uuid
           AND (
-            -- Control turns (interrupt/end/reload) land immediately, even mid-message.
-            ("kind" IN ('interrupt', 'end', 'reload')
+            -- interrupt/end land immediately, even mid-message (interrupt is the point).
+            ("kind" IN ('interrupt', 'end')
               AND ("status" = 'PENDING' OR ("status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())))
             -- A crashed in-flight message: re-deliver the same one (at-least-once lease).
             OR ("kind" = 'message' AND "status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())
-            -- The next queued message is released only once no message is in flight, so
-            -- turns run strictly one at a time (queued follow-ups fire in seq order).
-            OR ("kind" = 'message' AND "status" = 'PENDING' AND NOT EXISTS (
+            -- reload (a model/mode/effort change) and the next queued message both wait
+            -- until no message is in flight, so a config change made mid-turn applies
+            -- between turns (re-spawn) instead of aborting the running one. reload is
+            -- ordered ahead of queued messages below, so the next turn runs under it.
+            OR ("kind" IN ('reload', 'message') AND "status" = 'PENDING' AND NOT EXISTS (
               SELECT 1 FROM "conversation_turn" inflight
               WHERE inflight."session_id" = ${sessionId}::uuid
                 AND inflight."kind" = 'message'
                 AND inflight."status" = 'IN_FLIGHT'
             ))
           )
-        ORDER BY (CASE WHEN "kind" IN ('interrupt', 'end', 'reload') THEN 0 ELSE 1 END), "seq" ASC
+        ORDER BY (CASE WHEN "kind" IN ('interrupt', 'end') THEN 0 WHEN "kind" = 'reload' THEN 1 ELSE 2 END), "seq" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )

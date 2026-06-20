@@ -1104,8 +1104,8 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // A LIVE session's pills show its stored choice (and Model/Mode are editable while
-  // it's idle — see configEditable); otherwise they're editable and reflect local state.
+  // A LIVE session's pills show its stored choice (editable any time the runner is
+  // online — see configEditable); otherwise they're editable and reflect local state.
   const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
@@ -1114,11 +1114,12 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Auto is offered only on models that support it (see supportsAuto); the option
   // is greyed out otherwise so an unsupported model can't pick a mode claude rejects.
   const autoOk = supportsAuto(shownModel);
-  // Model, Mode & Effort can be changed mid-session, but only between turns: the
-  // change re-spawns claude, which would abort a turn in flight (and needs the runner
-  // online to act on it). When not live they're freely editable (pre-session config).
+  // Model, Mode & Effort can be changed any time on a live session (the runner must be
+  // online to act on it). A change made mid-turn doesn't abort the running turn: the
+  // server defers the re-spawn until the turn finishes, so it applies on the next turn —
+  // same as a queued message. When not live they're freely editable (pre-session config).
   // Agent stays fixed once live.
-  const configEditable = live ? idle && runner.online : true;
+  const configEditable = live ? runner.online : true;
   // A live session's agent is fixed; otherwise reflect the local pick.
   const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
   // The agent can't be switched once the session is live, nor when the view is locked to
@@ -1131,12 +1132,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     lockedAgent?.name;
   // Per-control hints derived from the same state that drives enable/disable, so the help
   // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
-  // Empty string = no tooltip, which keeps enabled controls free of hover noise.
-  const configHint = configEditable
-    ? ''
-    : !runner.online
-      ? 'Runner 离线，暂不可修改'
-      : '回合进行中；可在回合之间修改，下次消息生效';
+  // Empty string = no tooltip, which keeps idle controls free of hover noise.
+  const configHint = live && !runner.online
+    ? 'Runner 离线，暂不可修改'
+    : live && !idle
+      ? '回合进行中；将在本回合结束后生效'
+      : '';
   const agentHint = live ? '会话开始后不可更改' : '已锁定到该 Agent';
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.

@@ -631,12 +631,14 @@ export class SessionsService {
   }
 
   /**
-   * Change the model / permission mode of an already-started session. The live
+   * Change the model / permission mode / effort of an already-started session. The live
    * claude process was spawned with the old --model/--permission-mode flags, so we
    * persist the new values and enqueue a `reload` control turn: the runner tears the
    * process down and re-spawns it with --resume + the new flags (full context kept).
-   * Only allowed between turns (AWAITING_INPUT) — a swap would abort an in-flight turn.
-   * A not-yet-claimed (PENDING) session needs no reload: the claim reads the new value.
+   * The reload is deferred by the inbox lease until no message is in flight, so changing
+   * config mid-turn doesn't abort the running turn — it applies between turns (the next
+   * queued message then runs under the new config). A not-yet-claimed (PENDING) session
+   * needs no reload: the claim reads the new value.
    */
   async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
     if (dto.model === undefined && dto.permissionMode === undefined && dto.effort === undefined) {
@@ -647,9 +649,6 @@ export class SessionsService {
     if (SessionsService.TERMINAL.includes(session.status)) {
       throw new ConflictException('the session has ended');
     }
-    if (session.status !== RunStatus.AWAITING_INPUT && session.status !== RunStatus.PENDING) {
-      throw new ConflictException('a turn is in progress; change the model between turns');
-    }
     await this.prisma.session.update({
       where: { id },
       data: {
@@ -659,9 +658,11 @@ export class SessionsService {
         ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
       },
     });
-    if (session.status === RunStatus.AWAITING_INPUT) {
-      // Carry only the changed fields; the runner overrides just those, keeping the
-      // rest of the running config. Multiple rapid changes queue + apply in order.
+    if (session.status !== RunStatus.PENDING) {
+      // Live session (RUNNING or AWAITING_INPUT): enqueue a reload. The lease holds it
+      // until the current turn (if any) finishes, then the runner re-spawns with the new
+      // flags. Carry only the changed fields; the runner overrides just those, keeping
+      // the rest of the running config. Multiple rapid changes queue + apply in order.
       // effort is sent even when '' (clear to default) — undefined is omitted by
       // JSON.stringify, so the runner sees the key only when it actually changed.
       await this.insertTurn(id, {
