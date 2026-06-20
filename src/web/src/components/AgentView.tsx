@@ -163,16 +163,26 @@ function pushHistory(sessionId: string | undefined, entry: string): void {
   }
 }
 
-const fmtTime = (d?: string): string =>
-  d
-    ? new Date(d).toLocaleString([], {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })
-    : '';
+// Recent sessions read better as relative time ("3h ago"); anything older than a
+// day falls back to an absolute month/day stamp. hour12:false keeps it compact.
+const fmtTime = (d?: string): string => {
+  if (!d) return '';
+  const t = new Date(d).getTime();
+  const diff = Date.now() - t;
+  const min = 60_000;
+  const hour = 60 * min;
+  const day = 24 * hour;
+  if (diff >= 0 && diff < min) return 'just now';
+  if (diff >= 0 && diff < hour) return `${Math.floor(diff / min)}m ago`;
+  if (diff >= 0 && diff < day) return `${Math.floor(diff / hour)}h ago`;
+  return new Date(t).toLocaleString([], {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+};
 
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
@@ -1152,8 +1162,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                 <div className="session-main">
                   <div className="session-title">{s.title}</div>
                   <div className="session-meta">
-                    {fmtTime(s.lastTurnAt ?? s.createdAt)} · {s.numTurns ?? 0} turns · $
-                    {(s.costUsd ?? 0).toFixed(2)}
+                    {fmtTime(s.lastTurnAt ?? s.createdAt)} · {s.numTurns ?? 0} turns
+                    <span className="session-cost"> · ${(s.costUsd ?? 0).toFixed(2)}</span>
                   </div>
                 </div>
                 <div className="session-right">

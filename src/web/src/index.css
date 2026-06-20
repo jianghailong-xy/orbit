@@ -776,17 +776,21 @@ body {
   height: 38px;
   margin: 2px 8px 8px 0;
   padding: 0 8px;
+  border: 1px solid #dbe6ff;
   border-radius: 8px;
+  background: #f5f9ff;
   color: #3370ff;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 .session-new:hover {
-  background: #f2f3f5;
+  background: #eaf1ff;
+  border-color: #bcd3ff;
 }
 .session-new.active {
   background: #eaf1ff;
+  border-color: #bcd3ff;
 }
 .session-col .ant-segmented {
   flex: none;
@@ -905,17 +909,24 @@ body {
 .session-title {
   font-size: 14px;
   color: #1f2329;
-  white-space: nowrap;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .session-meta {
   font-size: 12.5px;
-  color: #8f959e;
+  color: #646a73;
   margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Cost is for after-the-fact accounting, not session triage — keep it visible
+   but a notch lighter than time/turns so the hierarchy reads time first. */
+.session-cost {
+  color: #a8adb5;
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle
    the title fills the full row width, and on hover the icon fades in over the
