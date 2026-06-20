@@ -1509,6 +1509,10 @@ body {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+  /* Indent the thumbnail row so its left edge lines up with the composer text,
+     not the panel edge: 1px box border + 12px box padding-left + 11px antd
+     textarea inset = 24px. */
+  padding-left: 24px;
 }
 .composer-attach {
   position: relative;
