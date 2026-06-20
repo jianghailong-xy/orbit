@@ -593,7 +593,7 @@ function ToolResult({
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (
-            <img key={i} className="chat-image" src={src} alt="" />
+            <ChatImage key={i} src={src} />
           ))}
         </div>
       )}
