@@ -1118,6 +1118,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
     selected?.agent?.name ??
     lockedAgent?.name;
+  // Per-control hints derived from the same state that drives enable/disable, so the help
+  // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
+  // Empty string = no tooltip, which keeps enabled controls free of hover noise.
+  const configHint = configEditable
+    ? ''
+    : !runner.online
+      ? 'Runner 离线，暂不可修改'
+      : '回合进行中；可在回合之间修改，下次消息生效';
+  const agentHint = live ? '会话开始后不可更改' : '已锁定到该 Agent';
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -1583,26 +1592,28 @@ export function AgentView({ runner }: { runner: Runner }) {
             />
           )}
         </div>
-        <Tooltip title="Agent is fixed once a session starts. Model, Mode & Effort can be changed between turns — the session resumes with the new setting on your next message. Auto mode needs a recent model (Sonnet 4.6 / Opus 4.6+) and your org to allow it.">
-          <div className="composer-pills">
-            {/* The agent is only a Select when it can actually be picked (new, unlocked
-                session); once read-only it shows as a static pill left of Model below. */}
-            {!agentReadOnly && (
-              <span className="composer-pill">
-                <AppstoreOutlined className="composer-pill-icon" />
-                <Select
-                  size="small"
-                  variant="borderless"
-                  suffixIcon={null}
-                  value={shownAgentId}
-                  onChange={setAgentId}
-                  options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                  placeholder="Default"
-                  disabled={live || !!lockedAgentId}
-                  popupMatchSelectWidth={false}
-                />
-              </span>
-            )}
+        <div className="composer-pills">
+          {/* The agent is only a Select when it can actually be picked (new, unlocked
+              session); once read-only it shows as a static pill left of Model below. */}
+          {!agentReadOnly && (
+            <span className="composer-pill">
+              <AppstoreOutlined className="composer-pill-icon" />
+              <Select
+                size="small"
+                variant="borderless"
+                suffixIcon={null}
+                value={shownAgentId}
+                onChange={setAgentId}
+                options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                placeholder="Default"
+                disabled={live || !!lockedAgentId}
+                popupMatchSelectWidth={false}
+              />
+            </span>
+          )}
+          {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
+              events, so the parent span is what surfaces the reason on hover. */}
+          <Tooltip title={configHint}>
             <span className="composer-pill">
               <ControlOutlined className="composer-pill-icon" />
               <Select
@@ -1615,20 +1626,26 @@ export function AgentView({ runner }: { runner: Runner }) {
                 }
                 options={MODE_OPTIONS.map((m) => ({
                   value: m,
-                  label: m,
+                  // Carry the Auto-mode constraint on the greyed option itself, where it's
+                  // actionable, instead of in a row-wide paragraph.
+                  label: m === 'Auto' && !autoOk ? 'Auto（需 Sonnet 4.6 或 Opus 4.8）' : m,
                   disabled: m === 'Auto' && !autoOk,
                 }))}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
             </span>
-            <span className="composer-pill-spacer" />
-            {agentReadOnly && shownAgentName && (
+          </Tooltip>
+          <span className="composer-pill-spacer" />
+          {agentReadOnly && shownAgentName && (
+            <Tooltip title={agentHint}>
               <span className="composer-pill composer-pill-static">
                 <AppstoreOutlined className="composer-pill-icon" />
                 <span className="composer-pill-static-label">{shownAgentName}</span>
               </span>
-            )}
+            </Tooltip>
+          )}
+          <Tooltip title={configHint}>
             <span className="composer-pill">
               <RobotOutlined className="composer-pill-icon" />
               <Select
@@ -1652,6 +1669,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                 popupMatchSelectWidth={false}
               />
             </span>
+          </Tooltip>
+          <Tooltip title={configHint}>
             <span className="composer-pill">
               <ThunderboltOutlined className="composer-pill-icon" />
               <Select
@@ -1665,8 +1684,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                 popupMatchSelectWidth={false}
               />
             </span>
-          </div>
-        </Tooltip>
+          </Tooltip>
+        </div>
       </div>
       </div>
     </div>
