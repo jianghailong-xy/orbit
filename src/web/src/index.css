@@ -314,6 +314,63 @@ body {
   color: #1f2329;
 }
 
+/* Progress overview under the list title: done (green) + in-progress (blue) over the total. */
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 14px 0 4px;
+}
+.task-progress-track {
+  flex: 1;
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  background: #eceef1;
+  overflow: hidden;
+}
+.task-progress-seg.done {
+  background: #2ea121;
+}
+.task-progress-seg.ongoing {
+  background: #3370ff;
+  opacity: 0.85;
+}
+.task-progress-text {
+  font-size: 13px;
+  color: #646a73;
+  white-space: nowrap;
+}
+.task-progress-text b {
+  color: #1f2329;
+  font-weight: 650;
+}
+.task-progress-text .sep {
+  margin: 0 8px;
+  color: #dfe1e6;
+}
+
+/* Filter tab labels carry a count badge (counts come from the unfiltered view). */
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.seg-count {
+  font-size: 11px;
+  line-height: 16px;
+  color: #8f959e;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
+  padding: 0 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.ant-segmented-item-selected .seg-count {
+  background: #eef3ff;
+  color: #3370ff;
+}
+
 /* ---- Runners page (the runner list, moved out of the sidebar) ---- */
 .runners-empty {
   margin-top: 24px;
@@ -576,9 +633,9 @@ body {
   margin-bottom: 6px;
 }
 
-/* shared column grid: title | assignee */
+/* shared column grid: check | status | title | assignee */
 .orbit-tasklist {
-  --cols: 28px minmax(200px, 1fr) 160px;
+  --cols: 28px 92px minmax(160px, 1fr) 160px;
   border-top: 1px solid #eceef1;
 }
 /* Multi-select checkbox column (header + per row). */
@@ -641,13 +698,6 @@ body {
 .task-title:hover {
   color: #3370ff;
 }
-/* Queued (a PENDING session, nothing running yet): the row's single status glyph keeps
-   its lifecycle shape but gets a gentle fade, reading as "waiting to run" without a
-   second indicator. */
-.status-glyph-queued {
-  display: inline-flex;
-  animation: tp-queued-fade 1.8s ease-in-out infinite;
-}
 @keyframes tp-queued-fade {
   0%,
   100% {
@@ -683,42 +733,84 @@ body {
   pointer-events: auto;
 }
 
-.new-task-row {
+/* Status column: a labeled pill (text + shape + color) so status reads without relying
+   on color alone. */
+.task-status-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 12px;
-  color: #8f959e;
-  font-size: 13px;
-  cursor: pointer;
-  border-bottom: 1px solid #f2f3f5;
+  min-width: 0;
 }
-.new-task-row:hover {
-  color: #3370ff;
-}
-
-.status-circle {
+.status-pill {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.status-pill .status-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex: none;
 }
-.status-circle.hollow {
-  border: 1.5px solid #c9cdd4;
+.status-pill .anticon {
+  font-size: 12px;
 }
-.status-circle.hollow.blue {
-  border-color: #3370ff;
+.status-pill.done {
+  background: #e8f6ec;
+  color: #1a7f37;
 }
-.status-circle.hollow.muted {
-  border-color: #dee0e3;
+.status-pill.done .status-dot {
+  background: #2ea121;
 }
-/* IN_PROGRESS label but no live session: static blue dot (vs. the spinner used while
-   actually running). Distinct from OPEN's hollow ring. */
-.status-circle.filled.blue {
-  border: 1.5px solid #3370ff;
-  background: radial-gradient(circle at center, #3370ff 0 42%, transparent 44%);
+/* IN_PROGRESS uses a square dot — a second, color-independent cue vs. the round done/todo. */
+.status-pill.ongoing {
+  background: #eef3ff;
+  color: #245ae0;
+}
+.status-pill.ongoing .status-dot {
+  background: #3370ff;
+  border-radius: 2px;
+}
+.status-pill.todo {
+  background: #f1f1f4;
+  color: #646a73;
+}
+.status-pill.todo .status-dot {
+  background: transparent;
+  border: 1.5px solid #a9adb5;
+}
+.status-pill.failed {
+  background: #fdeceb;
+  color: #cf3b35;
+}
+.status-pill.failed .status-dot {
+  background: #d4380d;
+}
+.status-pill.cancelled {
+  background: #f3f4f6;
+  color: #8f959e;
+}
+.status-pill.cancelled .status-dot {
+  background: transparent;
+  border: 1.5px solid #dee0e3;
+}
+.status-pill.running {
+  background: #eef3ff;
+  color: #245ae0;
+}
+/* Queued (a PENDING session, nothing running yet): a gently fading pill, "waiting to run". */
+.status-pill.queued {
+  background: #eef3ff;
+  color: #5b6b8c;
+  animation: tp-queued-fade 1.8s ease-in-out infinite;
+}
+.status-pill.queued .status-dot {
+  background: #3370ff;
 }
 
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */

@@ -1,11 +1,8 @@
 import {
-  CheckCircleFilled,
-  CloseCircleFilled,
   DeleteOutlined,
   LoadingOutlined,
   LockOutlined,
   PlayCircleOutlined,
-  PlusOutlined,
   SortAscendingOutlined,
   SortDescendingOutlined,
   UserOutlined,
@@ -16,9 +13,6 @@ import {
   Avatar,
   Button,
   Checkbox,
-  DatePicker,
-  Form,
-  Input,
   InputNumber,
   Modal,
   Segmented,
@@ -37,14 +31,6 @@ import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { RunnersPage } from './RunnersPage';
 import { RunnerDetailPage } from './RunnerDetailPage';
 import { SkillsPage } from './SkillsPage';
-
-const FILTERS = [
-  { label: 'All', value: 'ALL' },
-  { label: 'Ongoing', value: 'ONGOING' },
-  { label: 'Failed', value: 'FAILED' },
-  { label: 'Done', value: 'DONE' },
-  { label: 'Cancelled', value: 'CANCELLED' },
-];
 
 // Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED).
 const matchesFilter = (status: string, f: string): boolean => {
@@ -89,20 +75,24 @@ const compareBy = (a: any, b: any, field: string): number => {
   }
 };
 
-const cap = (s: string): string =>
-  s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ');
+// Lifecycle label → pill class + text. Status is encoded three ways (text + shape + color)
+// so it reads without relying on color alone: done = green dot, 进行中 = blue square,
+// 待办 = hollow ring, 失败 = red dot, 已取消 = muted ring.
+const STATUS_PILL: Record<string, { cls: string; label: string }> = {
+  DONE: { cls: 'done', label: '已完成' },
+  IN_PROGRESS: { cls: 'ongoing', label: '进行中' },
+  OPEN: { cls: 'todo', label: '待办' },
+  FAILED: { cls: 'failed', label: '失败' },
+  CANCELLED: { cls: 'cancelled', label: '已取消' },
+};
 
-// One status glyph per row: the agent-maintained lifecycle (`status`) overlaid with the
-// live session state, so the row carries a single indicator instead of a status circle
-// plus a separate activity dot. `running`/`queued` are the live ground truth (a RUNNING
-// or PENDING session exists), distinct from the `status` label which can lag.
-//   - running → blue spinner, regardless of the lifecycle label: "executing now" is the
-//     most urgent signal and outranks everything.
-//   - queued (a PENDING session, nothing running yet) → the lifecycle glyph with a gentle
-//     fade, reading as "waiting to run".
-//   - neither → the plain lifecycle glyph (an IN_PROGRESS task whose session already ended
-//     without the agent finalizing it falls here, showing a static dot — not a spinner).
-function StatusCircle({
+// One status pill per row: the agent-maintained lifecycle (`status`) overlaid with the live
+// session state (`running`/`queued` — a RUNNING or PENDING session exists, the ground truth
+// the `status` label can lag behind).
+//   - running → blue spinner pill "运行中": "executing now" outranks the lifecycle label.
+//   - queued (a PENDING session, nothing running yet) → a gently fading "排队中" pill.
+//   - neither → the plain lifecycle pill.
+function StatusPill({
   status,
   running,
   queued,
@@ -113,39 +103,27 @@ function StatusCircle({
 }) {
   if (running) {
     return (
-      <Tooltip title="运行中">
-        <LoadingOutlined spin style={{ color: '#3370ff', fontSize: 15 }} />
-      </Tooltip>
+      <span className="status-pill running">
+        <LoadingOutlined spin />
+        运行中
+      </span>
     );
-  }
-  let node: React.ReactNode;
-  switch (status) {
-    case 'DONE':
-      node = <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
-      break;
-    case 'FAILED':
-      node = <CloseCircleFilled style={{ color: '#d4380d', fontSize: 16 }} />;
-      break;
-    case 'IN_PROGRESS':
-      node = <span className="status-circle filled blue" />;
-      break;
-    case 'OPEN':
-      node = <span className="status-circle hollow blue" />;
-      break;
-    case 'CANCELLED':
-      node = <span className="status-circle hollow muted" />;
-      break;
-    default:
-      node = <span className="status-circle hollow" />;
   }
   if (queued) {
     return (
-      <Tooltip title="排队中">
-        <span className="status-glyph-queued">{node}</span>
-      </Tooltip>
+      <span className="status-pill queued">
+        <span className="status-dot" />
+        排队中
+      </span>
     );
   }
-  return <Tooltip title={cap(status)}>{node}</Tooltip>;
+  const s = STATUS_PILL[status] ?? { cls: 'todo', label: status };
+  return (
+    <span className={`status-pill ${s.cls}`}>
+      <span className="status-dot" />
+      {s.label}
+    </span>
+  );
 }
 
 export function TasksPage() {
@@ -153,7 +131,6 @@ export function TasksPage() {
   const navigate = useNavigate();
   const { message } = AntApp.useApp();
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   // Multi-select for batch actions, keyed by task id, scoped to the visible rows.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -174,7 +151,6 @@ export function TasksPage() {
   // also matches the :id pattern, so guard against it.)
   const runnerDetailMatch = useMatch('/runners/:id');
   const runnerDetailId = !showRegister && runnerDetailMatch ? decodeId(runnerDetailMatch.params.id) : null;
-  const [form] = Form.useForm();
 
   // Poll while any task is running so its live indicator clears once the run ends;
   // 5s busy / 15s idle, matching the sidebar's task-list poll.
@@ -242,15 +218,6 @@ export function TasksPage() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
 
-  const create = useMutation({
-    mutationFn: (body: unknown) => api('/tasks', { method: 'POST', body }),
-    onSuccess: () => {
-      setOpen(false);
-      form.resetFields();
-      invalidate();
-    },
-    onError: (e: Error) => message.error(e.message),
-  });
   const remove = useMutation({
     mutationFn: (id: string) => api(`/tasks/${id}`, { method: 'DELETE' }),
     onSuccess: invalidate,
@@ -306,6 +273,43 @@ export function TasksPage() {
     return [...visibleRows].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
   }, [visibleRows, sortField, sortDir]);
 
+  // The current view's full task set (before the status filter) — drives the progress
+  // overview and the per-filter counts, which must reflect the whole list, not the
+  // currently filtered subset.
+  const baseRows = useMemo(
+    () =>
+      isListView
+        ? (listQ.data?.tasks ?? [])
+        : (tasks.data ?? []).filter((t: any) => (isUnlisted ? !t.listId : true)),
+    [isListView, listQ.data, tasks.data, isUnlisted],
+  );
+  const counts = useMemo(() => {
+    const c = { total: baseRows.length, done: 0, inProgress: 0, open: 0, failed: 0, cancelled: 0 };
+    for (const t of baseRows) {
+      if (t.status === 'DONE') c.done++;
+      else if (t.status === 'FAILED') c.failed++;
+      else if (t.status === 'CANCELLED') c.cancelled++;
+      else if (t.status === 'IN_PROGRESS') c.inProgress++;
+      else if (t.status === 'OPEN') c.open++;
+    }
+    return c;
+  }, [baseRows]);
+  const filterOptions = useMemo(() => {
+    const seg = (label: string, n: number) => (
+      <span className="seg-opt">
+        {label}
+        <span className="seg-count">{n}</span>
+      </span>
+    );
+    return [
+      { value: 'ALL', label: seg('全部', counts.total) },
+      { value: 'ONGOING', label: seg('进行中', counts.open + counts.inProgress) },
+      { value: 'FAILED', label: seg('失败', counts.failed) },
+      { value: 'DONE', label: seg('已完成', counts.done) },
+      { value: 'CANCELLED', label: seg('已取消', counts.cancelled) },
+    ];
+  }, [counts]);
+
   // ── Multi-select / batch-run derived state ──
   const selectedRows = useMemo(
     () => rows.filter((r: any) => selectedIds.has(r.id)),
@@ -360,7 +364,7 @@ export function TasksPage() {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (!showTaskList || open) return;
+      if (!showTaskList) return;
       const el = document.activeElement;
       if (
         el instanceof HTMLElement &&
@@ -380,7 +384,7 @@ export function TasksPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rows, selectedTaskId, open, showTaskList]);
+  }, [rows, selectedTaskId, showTaskList]);
 
   // Keep the highlighted row in view when arrowing through a long list.
   useEffect(() => {
@@ -400,8 +404,10 @@ export function TasksPage() {
         <div className="task-check" onClick={(e) => e.stopPropagation()}>
           <Checkbox checked={selectedIds.has(r.id)} onChange={() => toggleOne(r.id)} />
         </div>
+        <div className="task-status-cell">
+          <StatusPill status={r.status} running={r.running} queued={r.queued} />
+        </div>
         <div className="task-title-cell">
-          <StatusCircle status={r.status} running={r.running} queued={r.queued} />
           <span className="task-title">{r.title}</span>
           {r.blocked ? (
             <Tooltip
@@ -473,11 +479,33 @@ export function TasksPage() {
           <>
         <h1 className="page-title">{pageTitle}</h1>
 
+        {counts.total > 0 && (
+          <div className="task-progress">
+            <div className="task-progress-track">
+              <span
+                className="task-progress-seg done"
+                style={{ width: `${(counts.done / counts.total) * 100}%` }}
+              />
+              <span
+                className="task-progress-seg ongoing"
+                style={{ width: `${(counts.inProgress / counts.total) * 100}%` }}
+              />
+            </div>
+            <div className="task-progress-text">
+              已完成 <b>{counts.done}</b> / {counts.total}
+              <span className="sep">·</span>进行中 {counts.inProgress}
+              <span className="sep">·</span>待办 {counts.open}
+              {counts.failed > 0 && (
+                <>
+                  <span className="sep">·</span>失败 {counts.failed}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="tasks-toolbar">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
-          New Task
-        </Button>
-        <Segmented options={FILTERS} value={filter} onChange={(v) => setFilter(v as string)} />
+        <Segmented options={filterOptions} value={filter} onChange={(v) => setFilter(v as string)} />
         <div className="tasks-sort">
           <span className="tasks-sort-label">排序</span>
           <Select
@@ -534,8 +562,9 @@ export function TasksPage() {
                 disabled={rows.length === 0}
               />
             </div>
-            <div className="col-head">Task Title</div>
-            <div className="col-head">Assignee</div>
+            <div className="col-head">状态</div>
+            <div className="col-head">任务</div>
+            <div className="col-head">负责人</div>
           </div>
 
           {(() => {
@@ -553,10 +582,6 @@ export function TasksPage() {
                 ) : (
                   rows.map((r: any) => renderRow(r))
                 )}
-                <div className="new-task-row" onClick={() => setOpen(true)}>
-                  <PlusOutlined />
-                  <span>New Task</span>
-                </div>
               </>
             );
           })()}
@@ -573,38 +598,6 @@ export function TasksPage() {
           onClose={() => setSelectedTaskId(null)}
         />
       )}
-
-      <Modal
-        title="New Task"
-        open={open}
-        onCancel={() => setOpen(false)}
-        onOk={() => form.submit()}
-        confirmLoading={create.isPending}
-        okText="Create"
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={(v) => create.mutate({ ...v, listId: listId ?? undefined })}
-        >
-          <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-            <Input placeholder="e.g. 运行命令 tea-cli-sg hdfs clean enable" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} placeholder="Optional details about the task" />
-          </Form.Item>
-          <Form.Item name="assigneeId" label="Assignee">
-            <Select
-              allowClear
-              placeholder="Pick an agent to run this task"
-              options={(agents.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
-            />
-          </Form.Item>
-          <Form.Item name="dueDate" label="Due date">
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-        </Form>
-      </Modal>
 
       <Modal
         title="批量运行任务"
