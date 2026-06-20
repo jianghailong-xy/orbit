@@ -821,6 +821,60 @@ body {
 .status-pill.queued .status-dot {
   background: #3370ff;
 }
+/* AWAITING_INPUT / INTERRUPTED: amber "needs you" pill, distinct from the blue live states. */
+.status-pill.awaiting {
+  background: #fff4e6;
+  color: #c2710c;
+}
+.status-pill.awaiting .status-dot {
+  background: #fa8c16;
+}
+
+/* ---- Active: live sessions grouped by how much they need a human ---- */
+.orbit-sessionlist {
+  /* status | title (flex) | meta */
+  --cols: 92px minmax(160px, 1fr) auto;
+  border-top: 1px solid #eceef1;
+}
+.orbit-sessionlist .task-row {
+  grid-template-columns: var(--cols);
+}
+.session-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8f959e;
+}
+/* "需要你回复" leads in amber — the bucket that actually needs action. */
+.session-group-head.attention {
+  color: #c2710c;
+}
+.session-group-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8f959e;
+  background: #f1f1f4;
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 16px;
+}
+.session-meta {
+  text-align: right;
+  justify-self: end;
+}
+.session-approval-badge {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: #c2710c;
+  background: #fff4e6;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
 
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .agent-split {
@@ -1411,18 +1465,17 @@ body {
   margin-top: 10px;
   flex-wrap: wrap;
 }
+/* Lightweight, borderless controls (Claude-style): just icon + text, with a faint
+   rounded background surfacing only on hover. */
 .composer-pill {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding-left: 8px;
-  border: 1px solid #dee0e3;
-  border-radius: 999px;
-  background: #f7f8fa;
-  transition: border-color 0.15s, background 0.15s;
+  padding-left: 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
 }
 .composer-pill:hover {
-  border-color: #c9cdd4;
   background: #f2f3f5;
 }
 .composer-pill-icon {
@@ -1435,8 +1488,7 @@ body {
   cursor: default;
 }
 .composer-pill-static:hover {
-  border-color: #dee0e3;
-  background: #f7f8fa;
+  background: transparent;
 }
 .composer-pill-static-label {
   padding: 0 8px 0 2px;

@@ -418,14 +418,17 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				_ = writeStdin(string(ctrl) + "\n")
 				emit(evInterrupt, map[string]interface{}{})
 			case "reload":
-				// Model / permission-mode changed on this idle session. --model and
-				// --permission-mode are spawn flags, so we apply the new values to
-				// job.Agent and tear claude down; the outer loop re-spawns with
-				// --resume + the new flags (full context preserved). Only the changed
-				// fields are carried, so an untouched field keeps its running value.
+				// Model / permission-mode / effort changed on this idle session.
+				// --model, --permission-mode and --effort are spawn flags, so we apply
+				// the new values to job.Agent and tear claude down; the outer loop
+				// re-spawns with --resume + the new flags (full context preserved).
+				// Only the changed fields are carried, so an untouched field keeps its
+				// running value. Effort is a *string so present-but-empty can clear it
+				// back to the model default (drop --effort) — "" that model/mode can't.
 				var cfg struct {
-					Model          string `json:"model"`
-					PermissionMode string `json:"permissionMode"`
+					Model          string  `json:"model"`
+					PermissionMode string  `json:"permissionMode"`
+					Effort         *string `json:"effort"`
 				}
 				if json.Unmarshal([]byte(resp.Content), &cfg) == nil {
 					if cfg.Model != "" {
@@ -433,6 +436,9 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					}
 					if cfg.PermissionMode != "" {
 						job.Agent.PermissionMode = cfg.PermissionMode
+					}
+					if cfg.Effort != nil {
+						job.Agent.Effort = *cfg.Effort
 					}
 				}
 				reloadRequested.Store(true)

@@ -40,9 +40,11 @@ export interface SessionResumeDto extends SessionTurnDto {
 }
 
 export interface SessionConfigDto {
-  /** Change the model and/or permission mode of an already-started session. The
-   *  runner re-spawns claude with --resume so the change takes effect on the next
-   *  turn. Only allowed between turns (AWAITING_INPUT); omitted fields are untouched. */
+  /** Change the model, permission mode and/or effort of an already-started session.
+   *  The runner re-spawns claude with --resume so the change takes effect on the next
+   *  turn. Only allowed between turns (AWAITING_INPUT); omitted fields are untouched.
+   *  effort: '' clears it back to the model default; omitted keeps the running value. */
   model?: string;
   permissionMode?: string;
+  effort?: string;
 }

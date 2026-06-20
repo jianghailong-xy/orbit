@@ -184,11 +184,11 @@ export const decideApproval = (
     body: { behavior, message, answers, rememberRule },
   });
 
-/** Change a live session's model and/or permission mode between turns. The runner
- *  re-spawns claude with --resume so the change takes effect on the next turn. */
+/** Change a live session's model, permission mode and/or effort between turns. The
+ *  runner re-spawns claude with --resume so the change takes effect on the next turn. */
 export const updateSessionConfig = (
   sessionId: string,
-  config: { model?: string; permissionMode?: string },
+  config: { model?: string; permissionMode?: string; effort?: string },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
 export const interruptSession = (sessionId: string) =>

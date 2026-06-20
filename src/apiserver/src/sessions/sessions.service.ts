@@ -571,7 +571,7 @@ export class SessionsService {
    * A not-yet-claimed (PENDING) session needs no reload: the claim reads the new value.
    */
   async updateConfig(ownerId: string, id: string, dto: SessionConfigDto) {
-    if (dto.model === undefined && dto.permissionMode === undefined) {
+    if (dto.model === undefined && dto.permissionMode === undefined && dto.effort === undefined) {
       throw new BadRequestException('nothing to update');
     }
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -588,14 +588,21 @@ export class SessionsService {
         lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
         ...(dto.model !== undefined ? { model: dto.model } : {}),
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
+        ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
       },
     });
     if (session.status === RunStatus.AWAITING_INPUT) {
       // Carry only the changed fields; the runner overrides just those, keeping the
       // rest of the running config. Multiple rapid changes queue + apply in order.
+      // effort is sent even when '' (clear to default) — undefined is omitted by
+      // JSON.stringify, so the runner sees the key only when it actually changed.
       await this.insertTurn(id, {
         kind: 'reload',
-        content: JSON.stringify({ model: dto.model, permissionMode: dto.permissionMode }),
+        content: JSON.stringify({
+          model: dto.model,
+          permissionMode: dto.permissionMode,
+          effort: dto.effort,
+        }),
         clientTurnId: randomUUID(),
       });
       this.realtime.notifyInbox(id);
