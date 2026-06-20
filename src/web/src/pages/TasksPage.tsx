@@ -4,6 +4,8 @@ import {
   LoadingOutlined,
   PlayCircleOutlined,
   PlusOutlined,
+  SortAscendingOutlined,
+  SortDescendingOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -49,6 +51,39 @@ const matchesFilter = (status: string, f: string): boolean => {
   return true;
 };
 
+const SORTS = [
+  { label: '创建时间', value: 'created' },
+  { label: '状态', value: 'status' },
+  { label: '标题', value: 'title' },
+  { label: '执行人', value: 'assignee' },
+];
+
+// Rank for the "状态" sort: a live (running) task ranks first, then by lifecycle, so
+// ascending groups 运行中 at the top and 已完成/已取消 at the bottom (descending flips it).
+const STATUS_ORDER: Record<string, number> = {
+  IN_PROGRESS: 1,
+  OPEN: 2,
+  DONE: 3,
+  CANCELLED: 4,
+};
+const statusRank = (t: any): number => (t.running ? 0 : (STATUS_ORDER[t.status] ?? 5));
+
+// Compare two tasks by the chosen field, ascending. Equal pairs return 0 so the caller's
+// stable sort preserves the incoming createdAt-desc order as a tiebreak.
+const compareBy = (a: any, b: any, field: string): number => {
+  switch (field) {
+    case 'status':
+      return statusRank(a) - statusRank(b);
+    case 'title':
+      return (a.title ?? '').localeCompare(b.title ?? '', 'zh');
+    case 'assignee':
+      return (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '', 'zh');
+    case 'created':
+    default:
+      return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+  }
+};
+
 const cap = (s: string): string =>
   s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ');
 
@@ -87,6 +122,10 @@ export function TasksPage() {
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignAgentId, setAssignAgentId] = useState<string | null>(null);
   const [filter, setFilter] = useState('ALL');
+  // Client-side sort over the visible rows; default 'created'/'desc' mirrors the
+  // backend's createdAt-desc ordering, so the initial view is unchanged.
+  const [sortField, setSortField] = useState('created');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   // The "Add a runner" guide is its own route; show it whenever we're on /runners/register.
   const showRegister = loc.pathname === '/runners/register';
   const showRunners = loc.pathname === '/runners';
@@ -212,8 +251,13 @@ export function TasksPage() {
     [listQ.data, filter],
   );
 
-  // The rows currently shown (a single list's tasks, or all tasks otherwise).
-  const rows = isListView ? listRows : taskRows;
+  // The rows currently shown (a single list's tasks, or all tasks otherwise),
+  // ordered by the selected sort field/direction.
+  const visibleRows = isListView ? listRows : taskRows;
+  const rows = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...visibleRows].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
+  }, [visibleRows, sortField, sortDir]);
 
   // ── Multi-select / batch-run derived state ──
   const selectedRows = useMemo(
@@ -387,6 +431,22 @@ export function TasksPage() {
           New Task
         </Button>
         <Segmented options={FILTERS} value={filter} onChange={(v) => setFilter(v as string)} />
+        <div className="tasks-sort">
+          <span className="tasks-sort-label">排序</span>
+          <Select
+            value={sortField}
+            onChange={setSortField}
+            options={SORTS}
+            style={{ width: 104 }}
+            popupMatchSelectWidth={false}
+          />
+          <Tooltip title={sortDir === 'asc' ? '升序' : '降序'}>
+            <Button
+              icon={sortDir === 'asc' ? <SortAscendingOutlined /> : <SortDescendingOutlined />}
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            />
+          </Tooltip>
+        </div>
         {selectedIds.size > 0 && (
           <div className="tasks-bulkbar">
             <span className="tasks-bulkbar-count">已选 {selectedIds.size} 项</span>

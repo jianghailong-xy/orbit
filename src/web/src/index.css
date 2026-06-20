@@ -276,6 +276,16 @@ body {
   gap: 12px;
   margin: 16px 0 8px;
 }
+/* Sort control: field select + asc/desc toggle, sitting beside the status filter. */
+.tasks-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tasks-sort-label {
+  font-size: 13px;
+  color: #8f959e;
+}
 /* Inline bar with batch actions, shown only while rows are selected. */
 .tasks-bulkbar {
   display: flex;
