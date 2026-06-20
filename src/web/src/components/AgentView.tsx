@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
+  BorderOutlined,
   CheckCircleFilled,
   CheckOutlined,
   ClockCircleOutlined,
@@ -35,7 +36,6 @@ import {
   createInteractiveSession,
   decideApproval,
   deleteSession,
-  endSession,
   getSession,
   interruptSession,
   listApprovals,
@@ -247,7 +247,7 @@ function StatusIcon({ session }: { session: any }) {
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
-  const { message, modal } = AntApp.useApp();
+  const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
@@ -805,10 +805,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
   });
   const control = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'interrupt' | 'end' }) =>
-      action === 'interrupt' ? interruptSession(id) : endSession(id),
+    mutationFn: (id: string) => interruptSession(id),
     onSuccess: () => {
-      // Both interrupt and end drop queued follow-ups server-side; mirror that locally.
+      // Interrupt drops queued follow-ups server-side; mirror that locally.
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -1039,6 +1038,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     runner.online &&
     !loadingSession &&
     (live ? SLOT_HELD.includes(selected.status) : true);
+  // The single send button morphs into a Stop while a turn is generating AND the composer
+  // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
+  // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
+  // and the reaper recycles an idle/finished session's slot on its own.
+  const showStop = selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0;
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -1547,49 +1551,25 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </Upload>
           </Tooltip>
-          {selected && live && (
-            <>
-              <Tooltip title="Stop the current turn">
-                <Button size="small" onClick={() => control.mutate({ id: selected.id, action: 'interrupt' })}>
-                  Stop
-                </Button>
-              </Tooltip>
-              {/* End is destructive and irreversible, so it lives behind ⋯ with a confirm
-                  rather than as a one-click button next to Send. */}
-              <Dropdown
-                trigger={['click']}
-                menu={{
-                  items: [
-                    {
-                      key: 'end',
-                      danger: true,
-                      label: '结束会话',
-                      onClick: () =>
-                        modal.confirm({
-                          title: '结束会话？',
-                          content: '将释放并发 slot，且无法恢复。',
-                          okText: '结束会话',
-                          okButtonProps: { danger: true },
-                          cancelText: '取消',
-                          onOk: () => control.mutate({ id: selected.id, action: 'end' }),
-                        }),
-                    },
-                  ],
-                }}
-              >
-                <Tooltip title="更多">
-                  <Button size="small" type="text" icon={<MoreOutlined />} aria-label="更多" />
-                </Tooltip>
-              </Dropdown>
-            </>
+          {showStop ? (
+            <Tooltip title="停止当前回合">
+              <Button
+                type="primary"
+                icon={<BorderOutlined />}
+                onClick={() => selected && control.mutate(selected.id)}
+                aria-label="停止"
+              />
+            </Tooltip>
+          ) : (
+            <Button
+              type="primary"
+              icon={<ArrowUpOutlined />}
+              disabled={!canSend}
+              loading={send.isPending}
+              onClick={onSend}
+              aria-label="发送"
+            />
           )}
-          <Button
-            type="primary"
-            icon={<ArrowUpOutlined />}
-            disabled={!canSend}
-            loading={send.isPending}
-            onClick={onSend}
-          />
         </div>
         <Tooltip title="Agent is fixed once a session starts. Model, Mode & Effort can be changed between turns — the session resumes with the new setting on your next message. Auto mode needs a recent model (Sonnet 4.6 / Opus 4.6+) and your org to allow it.">
           <div className="composer-pills">
