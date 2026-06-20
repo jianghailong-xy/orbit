@@ -21,7 +21,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Dropdown, Input, type MenuProps, Segmented, Select, Tooltip, Upload } from 'antd';
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
@@ -35,6 +35,7 @@ import {
   decideApproval,
   deleteSession,
   endSession,
+  getSession,
   interruptSession,
   listApprovals,
   listQueuedTurns,
@@ -354,6 +355,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     [sessionsQ.data],
   );
   const selected = useMemo(() => sessions.find((s) => s.id === selectedId) ?? null, [sessions, selectedId]);
+  // Detail of the open session, keyed the same as TasksSidePanel so React Query dedupes
+  // the fetch. Its only job here is to resolve the session's agent the instant it's opened:
+  // a freshly created session isn't in the list query yet (so `selected` is null), but its
+  // detail is primed synchronously in send.onSuccess, so this keeps `scopeAgentId` stable
+  // across the /agents/<id>/new → /sessions/<id> navigation. Without it the list briefly
+  // un-scopes (shows every agent's sessions) until the list refetch lands.
+  const sessionDetailQ = useQuery({
+    queryKey: ['session', selectedId],
+    queryFn: () => getSession(selectedId!),
+    enabled: !!selectedId,
+    placeholderData: keepPreviousData,
+  });
   const live = selected ? !TERMINAL.includes(selected.status) : false;
   // An ended session can be revived (--resume claude's context) only if it actually
   // ran and its runner is online — the transcript lives on that machine's disk.
@@ -362,7 +375,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // it reads as a conversation with that agent. On /agents/<id> that's the locked
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
   // the selected session's own agent.
-  const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? null;
+  const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? sessionDetailQ.data?.agent?.id ?? null;
   // The tab the user actually sees: a system session forces the System tab even when
   // `view` is still 'active' (e.g. deep-linking one — the Segmented highlights it as
   // System). The list and arrow-nav must step through that tab's sessions, not `view`'s.
@@ -830,13 +843,21 @@ export function AgentView({ runner }: { runner: Runner }) {
       duration: 4,
     });
   };
-  // Archiving/deleting the OPEN session drops it from the active list, so it can no
-  // longer be resolved (selected → null) and `scopeAgentId` would collapse to null —
-  // un-scoping the left column to every agent's sessions. Step back to the agent's
-  // list (same move as the tab switcher), which re-scopes and auto-opens its next
-  // session. A non-open row leaves the current conversation untouched.
+  // Archiving/deleting the OPEN session drops it from the active list. Keep the
+  // selection at the same row: step to the next session down (or the previous one
+  // when we just completed the last row) so the cursor stays put instead of jumping
+  // to the top of the list. With nothing left to land on, fall back to the agent's
+  // list (same move as the tab switcher) — that re-scopes the left column (a null
+  // `selected` would collapse `scopeAgentId` and leak every agent's sessions) and
+  // shows its empty/compose state. A non-open row leaves the conversation untouched.
   const leaveIfOpen = (id: string): void => {
     if (id !== selectedId) return;
+    const idx = visibleSessions.findIndex((s) => s.id === id);
+    const next = idx >= 0 ? (visibleSessions[idx + 1] ?? visibleSessions[idx - 1]) : null;
+    if (next) {
+      navigate(`/sessions/${encodeId(next.id)}`);
+      return;
+    }
     const a = scopeAgentId ?? agentsForRunner[0]?.id;
     navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
