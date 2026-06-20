@@ -830,10 +830,21 @@ export function AgentView({ runner }: { runner: Runner }) {
     const a = scopeAgentId ?? agentsForRunner[0]?.id;
     navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
+  // After leaveIfOpen re-scopes to the agent, the auto-open effect picks that agent's
+  // next session — but it reads the cached list, which still holds the row we just
+  // archived/deleted until the refetch lands. Drop it now so auto-open can't re-select
+  // the removed session (which would null out `selected`, collapse the agent scope, and
+  // leak every agent's sessions into the list). The invalidate below still reconciles.
+  const dropFromLists = (id: string): void => {
+    qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+      Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
+    );
+  };
   const archiveMut = useMutation({
     mutationFn: (id: string) => archiveSession(id),
     onSuccess: (_d, id) => {
       leaveIfOpen(id);
+      dropFromLists(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已完成');
     },
@@ -843,6 +854,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
       leaveIfOpen(id);
+      dropFromLists(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(id, '已删除');
     },
