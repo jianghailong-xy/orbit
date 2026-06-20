@@ -877,6 +877,9 @@ body {
   display: flex;
   height: 100%;
   min-height: 0;
+  /* Page gutter for the two-pane console. The app-view region is full-bleed; the
+     console carries its own gutter so content doesn't hug the window edges. */
+  padding: 24px 32px;
 }
 .session-col {
   flex: none;
@@ -1741,7 +1744,6 @@ body {
   word-break: break-word;
 }
 .chat-turn-divider {
-  border-top: 1px dashed #eceef1;
   margin: 12px 0;
 }
 .chat-error {
