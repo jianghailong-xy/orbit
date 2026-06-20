@@ -1430,7 +1430,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   alt=""
                   preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
                 />
-                {im.status === 'uploading' && <LoadingOutlined className="composer-attach-spin" />}
+                {im.status === 'uploading' && <LoadingOutlined spin className="composer-attach-spin" />}
                 <button
                   type="button"
                   className="composer-attach-remove"
