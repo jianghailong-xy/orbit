@@ -127,57 +127,98 @@ export class SessionsService {
     // (a non-deleted system session), shown in its own tab. Default to active.
     // Note: active still includes system sessions — they occupy runner slots and back
     // selection/deep-link resolution. The web Active tab hides them from its list.
-    const visibility: Prisma.SessionWhereInput =
+    const visibility: Prisma.Sql =
       filters.view === 'deleted'
-        ? { deletedAt: { not: null } }
+        ? Prisma.sql`s.deleted_at IS NOT NULL`
         : filters.view === 'system'
-          ? { source: 'system', deletedAt: null }
+          ? Prisma.sql`s.source = 'system' AND s.deleted_at IS NULL`
           : filters.view === 'archived'
-            ? { archivedAt: { not: null }, deletedAt: null }
-            : { archivedAt: null, deletedAt: null };
-    const sessions = await this.prisma.session.findMany({
-      where: { ownerId, assignedRunnerId: filters.runnerId || undefined, ...visibility },
-      orderBy: [{ lastTurnAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      // Only the columns the list UI actually renders. Notably this drops `prompt`
-      // (the full first-turn seed) and the other large text columns the list never
-      // shows — those dominate the payload and grow it linearly with session count.
-      select: {
-        id: true,
-        status: true,
-        title: true,
-        createdAt: true,
-        lastTurnAt: true,
-        startedAt: true,
-        numTurns: true,
-        costUsd: true,
-        error: true,
-        source: true,
-        model: true,
-        permissionMode: true,
-        effort: true,
-        lastAssistantText: true,
-        agent: { select: { id: true, name: true, model: true } },
-        assignedRunner: { select: { id: true, name: true } },
-      },
-    });
-    // The list only renders a single ellipsised preview line, but the stored reply can
-    // be several KB; truncate so the denormalized preview doesn't bloat the payload.
-    const trimmed = sessions.map((s) => ({
-      ...s,
-      lastAssistantText: s.lastAssistantText?.slice(0, SessionsService.PREVIEW_LEN) ?? null,
+            ? Prisma.sql`s.archived_at IS NOT NULL AND s.deleted_at IS NULL`
+            : Prisma.sql`s.archived_at IS NULL AND s.deleted_at IS NULL`;
+    const runnerFilter = filters.runnerId
+      ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
+      : Prisma.empty;
+    // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
+    // only ~200 chars per row ever leave the DB. It also omits big unused columns like
+    // `prompt`; together this keeps the list payload flat as the session count grows.
+    // `select` can't express left()/substring(), hence the hand-written join.
+    type Row = {
+      id: string;
+      status: RunStatus;
+      title: string;
+      createdAt: Date;
+      lastTurnAt: Date | null;
+      startedAt: Date | null;
+      numTurns: number;
+      costUsd: number;
+      error: string | null;
+      source: string;
+      model: string | null;
+      permissionMode: string | null;
+      effort: string | null;
+      lastAssistantText: string | null;
+      agentId: string | null;
+      agentName: string | null;
+      agentModel: string | null;
+      runnerId: string | null;
+      runnerName: string | null;
+    };
+    const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        s.id, s.status, s.title,
+        s.created_at      AS "createdAt",
+        s.last_turn_at    AS "lastTurnAt",
+        s.started_at      AS "startedAt",
+        s.num_turns       AS "numTurns",
+        s.cost_usd        AS "costUsd",
+        s.error, s.source, s.model,
+        s.permission_mode AS "permissionMode",
+        s.effort,
+        left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}) AS "lastAssistantText",
+        a.id    AS "agentId",
+        a.name  AS "agentName",
+        a.model AS "agentModel",
+        r.id    AS "runnerId",
+        r.name  AS "runnerName"
+      FROM session s
+      LEFT JOIN agent a  ON a.id = s.agent_id
+      LEFT JOIN runner r ON r.id = s.assigned_runner_id
+      WHERE s.owner_id = ${ownerId}::uuid
+        ${runnerFilter}
+        AND (${visibility})
+      ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
+    `);
+    // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
+    const sessions = rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      title: r.title,
+      createdAt: r.createdAt,
+      lastTurnAt: r.lastTurnAt,
+      startedAt: r.startedAt,
+      numTurns: r.numTurns,
+      costUsd: r.costUsd,
+      error: r.error,
+      source: r.source,
+      model: r.model,
+      permissionMode: r.permissionMode,
+      effort: r.effort,
+      lastAssistantText: r.lastAssistantText,
+      agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
+      assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
     }));
     // A turn blocked on a permission prompt keeps the session RUNNING, so the
     // list can't tell "running" from "waiting for approval" without this count.
     // Only RUNNING sessions can hold a live approval; skip the query otherwise.
-    const running = trimmed.filter((s) => s.status === RunStatus.RUNNING).map((s) => s.id);
-    if (running.length === 0) return trimmed.map((s) => ({ ...s, pendingApprovals: 0 }));
+    const running = sessions.filter((s) => s.status === RunStatus.RUNNING).map((s) => s.id);
+    if (running.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
     const counts = await this.prisma.approval.groupBy({
       by: ['sessionId'],
       where: { sessionId: { in: running }, status: 'PENDING' },
       _count: { _all: true },
     });
     const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
-    return trimmed.map((s) => ({ ...s, pendingApprovals: byId.get(s.id) ?? 0 }));
+    return sessions.map((s) => ({ ...s, pendingApprovals: byId.get(s.id) ?? 0 }));
   }
 
   async get(ownerId: string, id: string) {
