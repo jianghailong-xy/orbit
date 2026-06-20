@@ -430,7 +430,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Up/Down arrows step through the session list (left column), switching the open
   // session like tabs. Skipped while typing in an input/textarea (so the composer and
   // Ant dropdowns keep their own arrows) and on the archived/trash tabs, whose rows
-  // aren't openable. With nothing selected, Down enters from the top, Up from the bottom.
+  // aren't openable. The Active/Completed/System Segmented renders its options as
+  // radio <input>s, so radios are excluded from the guard — otherwise focusing a tab
+  // would swallow the arrows. With nothing selected, Down enters from the top, Up from the bottom.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -439,7 +441,9 @@ export function AgentView({ runner }: { runner: Runner }) {
       const el = document.activeElement;
       if (
         el instanceof HTMLElement &&
-        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+        (el.isContentEditable ||
+          el.tagName === 'TEXTAREA' ||
+          (el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'radio'))
       )
         return;
       if (visibleSessions.length === 0) return;
