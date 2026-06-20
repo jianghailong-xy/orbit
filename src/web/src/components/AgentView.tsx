@@ -427,39 +427,46 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (first) navigate(`/sessions/${encodeId(first.id)}`, { replace: true });
   }, [selectedId, composingRoute, view, sessionsQ.isSuccess, visibleSessions, navigate]);
 
+  // Step the open session up/down the visible list. Shared by the window-level Up/Down
+  // handler and the Segmented's capture handler below. Returns false (a no-op) at the
+  // list ends, on an empty list, or on the archived/trash tabs with nothing open. With
+  // nothing selected, Down enters from the top, Up from the bottom.
+  const stepSession = useCallback(
+    (dir: 1 | -1): boolean => {
+      if (!selectedId && view !== 'active' && view !== 'system') return false;
+      if (visibleSessions.length === 0) return false;
+      const cur = visibleSessions.findIndex((s) => s.id === selectedId);
+      let next: number;
+      if (cur === -1) next = dir === 1 ? 0 : visibleSessions.length - 1;
+      else {
+        next = cur + dir;
+        if (next < 0 || next >= visibleSessions.length) return false; // stop at the ends
+      }
+      navigate(`/sessions/${encodeId(visibleSessions[next].id)}`);
+      return true;
+    },
+    [visibleSessions, selectedId, view, navigate],
+  );
+
   // Up/Down arrows step through the session list (left column), switching the open
   // session like tabs. Skipped while typing in an input/textarea (so the composer and
-  // Ant dropdowns keep their own arrows) and on the archived/trash tabs, whose rows
-  // aren't openable. The Active/Completed/System Segmented renders its options as
-  // radio <input>s, so radios are excluded from the guard — otherwise focusing a tab
-  // would swallow the arrows. With nothing selected, Down enters from the top, Up from the bottom.
+  // Ant dropdowns keep their own arrows). The Active/Completed/System tabs swallow
+  // Up/Down themselves via onKeyDownCapture below, so a focused tab steps sessions too.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      if (!selectedId && view !== 'active' && view !== 'system') return;
       const el = document.activeElement;
       if (
         el instanceof HTMLElement &&
-        (el.isContentEditable ||
-          el.tagName === 'TEXTAREA' ||
-          (el.tagName === 'INPUT' && (el as HTMLInputElement).type !== 'radio'))
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
       )
         return;
-      if (visibleSessions.length === 0) return;
-      const cur = visibleSessions.findIndex((s) => s.id === selectedId);
-      let next: number;
-      if (cur === -1) next = e.key === 'ArrowDown' ? 0 : visibleSessions.length - 1;
-      else {
-        next = cur + (e.key === 'ArrowDown' ? 1 : -1);
-        if (next < 0 || next >= visibleSessions.length) return; // stop at the ends
-      }
-      e.preventDefault();
-      navigate(`/sessions/${encodeId(visibleSessions[next].id)}`);
+      if (stepSession(e.key === 'ArrowDown' ? 1 : -1)) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visibleSessions, selectedId, view, navigate]);
+  }, [stepSession]);
 
   // Keep the highlighted row in view when arrowing through a long list.
   useEffect(() => {
@@ -1155,6 +1162,19 @@ export function AgentView({ runner }: { runner: Runner }) {
         <Segmented
           block
           size="small"
+          // A focused tab otherwise eats Up/Down two ways: rc-segmented's own onKeyDown
+          // and the native radio-group arrow navigation (the options share a name). Catch
+          // them in the capture phase and kill both — stopPropagation for the former,
+          // preventDefault for the latter — so Up/Down steps the session list instead.
+          // Left/Right fall through and still switch tabs; stopPropagation also keeps the
+          // window handler above from double-firing.
+          onKeyDownCapture={(e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+            e.stopPropagation();
+            e.preventDefault();
+            stepSession(e.key === 'ArrowDown' ? 1 : -1);
+          }}
           // Deep-linking a system session lands with view='active'; highlight System
           // once it resolves so the tab matches the open conversation.
           value={selected?.source === 'system' ? 'system' : effectiveView}
