@@ -6,6 +6,7 @@ import {
   CodeOutlined,
   DownOutlined,
   EditOutlined,
+  EyeOutlined,
   FileAddOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
@@ -18,6 +19,7 @@ import {
   SearchOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
+import { Image } from 'antd';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
@@ -210,7 +212,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           {node.images && node.images.length > 0 ? (
             <div className="chat-images">
               {node.images.map((im, i) => (
-                <img key={i} className="chat-image" src={im.url} alt="" />
+                <ChatImage key={i} src={im.url} />
               ))}
             </div>
           ) : (
@@ -267,7 +269,28 @@ function AttachmentImage({ id }: { id: string }) {
     };
   }, [id]);
   if (!url) return <span className="chat-image chat-image-loading" />;
-  return <img className="chat-image" src={url} alt="" />;
+  return <ChatImage src={url} />;
+}
+
+// A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close).
+// The displayed src is already the full-resolution image (just CSS-constrained to 220px),
+// so the lightbox shows it at native size with no extra fetch. The hover mask is the
+// click affordance — without it a bare <img> gives no hint it's interactive.
+export function ChatImage({ src }: { src: string }) {
+  return (
+    <Image
+      className="chat-image"
+      src={src}
+      alt="用户发送的图片"
+      preview={{
+        mask: (
+          <span className="chat-image-mask">
+            <EyeOutlined /> 预览
+          </span>
+        ),
+      }}
+    />
+  );
 }
 
 // ── Markdown ────────────────────────────────────────────────────────────────

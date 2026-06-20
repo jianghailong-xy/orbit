@@ -45,7 +45,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { ChatImage, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import type { Runner } from './TasksSidePanel';
 
@@ -1277,7 +1277,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {turnImages[q.turnId]?.length > 0 && (
                   <div className="chat-images">
                     {turnImages[q.turnId].map((im, i) => (
-                      <img key={i} className="chat-image" src={im.url} alt="" />
+                      <ChatImage key={i} src={im.url} />
                     ))}
                   </div>
                 )}

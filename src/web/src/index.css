@@ -1380,6 +1380,20 @@ body {
   object-fit: contain;
   display: block;
 }
+/* AntD wraps each <Image> in a .ant-image; round it so the hover mask is clipped to the
+   image's corners, and hint clickability with a zoom cursor. */
+.chat-images .ant-image {
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+/* The custom preview mask (eye icon + "预览") shown on hover. */
+.chat-image-mask {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
 /* Placeholder box while a durable attachment blob is being fetched (post-reload). */
 .chat-image-loading {
   width: 120px;
