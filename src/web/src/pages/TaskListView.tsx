@@ -121,8 +121,8 @@ function StatusPill({
 }
 
 // The default view: the task table (all tasks, or a single user list) plus its detail
-// panel and batch-action modals. Mounted by TasksPage only when the task list is the
-// active view, so all of its state is scoped to this component.
+// panel and batch-action modals. The default route ("/", "/tasks", "/lists/:key")
+// renders it, so all of its state is scoped to this component.
 export function TaskListView() {
   const loc = useLocation();
   const { message } = AntApp.useApp();

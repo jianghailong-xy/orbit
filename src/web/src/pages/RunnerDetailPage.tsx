@@ -22,9 +22,9 @@ import {
   type MenuProps,
 } from 'antd';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { encodeId } from '../lib/idCodec';
+import { decodeId, encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
 
 // Kept in sync with AgentView's MODEL_OPTIONS — the models a new agent can run.
@@ -72,7 +72,9 @@ const fmtTime = (d?: string | null): string =>
 // Runner detail / settings page. Clicking a runner lands here (not the chat
 // console) — you manage the runner and the agents that run under it. The live
 // conversation belongs to an agent, reached via each agent's "对话" button.
-export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
+export function RunnerDetailPage() {
+  // /runners/<base62> — decode the route param to the runner's UUID.
+  const runnerId = decodeId(useParams().id);
   const navigate = useNavigate();
   const { modal, message } = AntdApp.useApp();
   const qc = useQueryClient();

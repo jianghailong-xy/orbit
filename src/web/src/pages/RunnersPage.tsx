@@ -9,8 +9,8 @@ import type { Runner } from '../components/TasksSidePanel';
 
 // The runner list used to live in the left sidebar; it now has its own page so
 // "Runners" can sit in the top nav alongside Active/Skills. Selecting a runner
-// opens its detail/settings page at /runners/<id> (resolved by TasksPage from the
-// URL) — where you manage the agents that run under it.
+// opens its detail/settings page at /runners/<id> (its own route) — where you
+// manage the agents that run under it.
 export function RunnersPage() {
   const navigate = useNavigate();
   const { modal, message } = AntdApp.useApp();

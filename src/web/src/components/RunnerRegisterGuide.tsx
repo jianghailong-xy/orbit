@@ -2,6 +2,7 @@ import { CheckCircleFilled, CheckOutlined, CopyOutlined } from '@ant-design/icon
 import { useQuery } from '@tanstack/react-query';
 import { Segmented } from 'antd';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
@@ -70,7 +71,8 @@ function Step({
 }
 
 /** Right-pane guide for connecting a new runner machine (shown from the side panel's “Add”). */
-export function RunnerRegisterGuide({ onClose }: { onClose: () => void }) {
+export function RunnerRegisterGuide() {
+  const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -164,7 +166,7 @@ export function RunnerRegisterGuide({ onClose }: { onClose: () => void }) {
                 It's now in the sidebar under Runners. You can close this page.
               </div>
             </div>
-            <button className="runner-done-btn" onClick={onClose} type="button">
+            <button className="runner-done-btn" onClick={() => navigate('/tasks')} type="button">
               Done
             </button>
           </div>

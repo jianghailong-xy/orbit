@@ -105,7 +105,7 @@ export function TasksSidePanel() {
 
   // The open agent comes from /agents/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
-  // TasksPage's cache (same key), so it adds no extra request.
+  // the console's cache (same key via sessionQuery), so it adds no extra request.
   // Splat (`/*`) so a sub-route like /agents/<id>/new still resolves the agent;
   // a bare `/agents/:id` matches exactly and would miss /new, falling back to the
   // "Runners" highlight. params.id stays the agent id under the splat.
