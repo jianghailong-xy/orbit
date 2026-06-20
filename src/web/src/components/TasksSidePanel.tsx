@@ -25,8 +25,9 @@ import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type { SlashCommandInfo } from '@orbit/shared';
-import { api, clearToken, getSession } from '../api';
+import { api, clearToken } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
+import { sessionQuery } from '../lib/queries';
 
 // Feishu-style top navigation. Each entry routes to "/<key>" (they all share the
 // Tasks view for now — only the heading differs). "Runners" opens the runners
@@ -111,9 +112,7 @@ export function TasksSidePanel() {
   const openAgentId = decodeId(useMatch('/agents/:id/*')?.params.id);
   const sessionId = decodeId(useMatch('/sessions/:id')?.params.id);
   const sessionQ = useQuery({
-    queryKey: ['session', sessionId],
-    queryFn: () => getSession(sessionId!),
-    enabled: !!sessionId,
+    ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeAgentId
     // never blips to null between sessions — otherwise the highlight flickers to
     // the top "Runners" item and back on each ArrowUp/ArrowDown.

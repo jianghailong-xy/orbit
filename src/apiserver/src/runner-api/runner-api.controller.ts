@@ -628,6 +628,23 @@ export class RunnerApiController {
       });
     }
 
+    // Denormalize the latest assistant reply onto the session for the list's preview
+    // line. Take the highest-seq assistant event in this batch with non-empty text;
+    // seq is monotonic per session, so this only ever advances.
+    const lastAssistant = durable
+      .filter((e) => e.type === RunEventType.ASSISTANT)
+      .reduce<{ seq: number; text: string } | null>((acc, e) => {
+        const text = (e.payload as { text?: string } | null)?.text?.trim();
+        if (!text) return acc;
+        return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
+      }, null);
+    if (lastAssistant) {
+      await this.prisma.session.update({
+        where: { id: sessionId },
+        data: { lastAssistantText: lastAssistant.text },
+      });
+    }
+
     const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
     if (toolUses.length > 0) {
       await this.prisma.toolCall.createMany({

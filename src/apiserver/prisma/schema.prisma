@@ -242,6 +242,10 @@ model Session {
   finishedAt        DateTime? @map("finished_at")
   error             String?
   result            String?
+  // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
+  // event ingestion. Lets the session list show a last-reply line without querying the
+  // (high-volume, append-only) run_event table per row. null until the first reply.
+  lastAssistantText String?   @map("last_assistant_text")
   // Soft visibility: null = active. archivedAt hides the session into the Archived
   // view, deletedAt into the trash. Both retain all data (transcript, billing) and
   // are reversible — restore clears them. There is no hard delete.

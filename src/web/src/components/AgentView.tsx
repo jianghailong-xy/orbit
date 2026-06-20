@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
+  BorderOutlined,
   CheckCircleFilled,
   CheckOutlined,
   ClockCircleOutlined,
@@ -27,16 +28,14 @@ import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Segmente
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
+import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import {
-  api,
   type ApprovalInfo,
   archiveSession,
   cancelQueuedTurn,
   createInteractiveSession,
   decideApproval,
   deleteSession,
-  endSession,
-  getSession,
   interruptSession,
   listApprovals,
   listQueuedTurns,
@@ -187,6 +186,18 @@ const fmtTime = (d?: string): string => {
   });
 };
 
+// Flatten an assistant reply into a single-line list preview: drop code blocks and the
+// most common markdown markers so the line reads as prose, not syntax, then collapse
+// all whitespace/newlines. Length is handled by CSS ellipsis, not here.
+const plainPreview = (md: string): string =>
+  md
+    .replace(/```[\s\S]*?```/g, ' ') // fenced code blocks
+    .replace(/`([^`]+)`/g, '$1') // inline code
+    .replace(/^[#>\-*\s]+/gm, '') // heading / quote / list markers at line start
+    .replace(/[*_~]/g, '') // emphasis marks
+    .replace(/\s+/g, ' ')
+    .trim();
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
 // neutral terminal (cancelled / interrupted / disconnected). A runner that went
@@ -247,7 +258,7 @@ function StatusIcon({ session }: { session: any }) {
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
-  const { message, modal } = AntApp.useApp();
+  const { message } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
@@ -350,11 +361,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // where live sessions and the runner's slot accounting live. (active also includes
   // system sessions server-side, so deep-linking one still resolves.)
   const effectiveView = selectedId ? (view === 'system' ? 'system' : 'active') : view;
-  const sessionsQ = useQuery({
-    queryKey: ['sessions', runner.id, effectiveView],
-    queryFn: () => api<any[]>(`/sessions?runnerId=${runner.id}&view=${effectiveView}`),
-    refetchInterval: 4000,
-  });
+  // One factory call drives both the list query and the optimistic-update key below, so
+  // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
+  const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
+  const sessionsKey = sessionsOpts.queryKey;
+  const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: 4000 });
 
   const sessions = useMemo(
     () =>
@@ -373,9 +384,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // across the /agents/<id>/new → /sessions/<id> navigation. Without it the list briefly
   // un-scopes (shows every agent's sessions) until the list refetch lands.
   const sessionDetailQ = useQuery({
-    queryKey: ['session', selectedId],
-    queryFn: () => getSession(selectedId!),
-    enabled: !!selectedId,
+    ...sessionQuery(selectedId),
     placeholderData: keepPreviousData,
   });
   const live = selected ? !TERMINAL.includes(selected.status) : false;
@@ -455,7 +464,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Agents belonging to this machine runner — each is a project dir + coding tool.
   // Picking one tells the server where (which dir) to run a new session.
-  const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+  const agentsQ = useQuery(agentsQuery());
   const agentsForRunner = useMemo(
     () => (agentsQ.data ?? []).filter((a) => a.runnerId === runner.id),
     [agentsQ.data, runner.id],
@@ -777,7 +786,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       // highlight blips to that agent until this session's fetch lands. Mirrors
       // getSession's shape; the background refetch fills in the rest.
       if (created)
-        qc.setQueryData(['session', id], {
+        qc.setQueryData(sessionQuery(id).queryKey, {
           id,
           assignedRunnerId: runner.id,
           agent: agentId ? { id: agentId } : null,
@@ -805,10 +814,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
   });
   const control = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'interrupt' | 'end' }) =>
-      action === 'interrupt' ? interruptSession(id) : endSession(id),
+    mutationFn: (id: string) => interruptSession(id),
     onSuccess: () => {
-      // Both interrupt and end drop queued follow-ups server-side; mirror that locally.
+      // Interrupt drops queued follow-ups server-side; mirror that locally.
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -925,15 +933,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     mutationFn: (cfg: { model?: string; permissionMode?: string; effort?: string }) =>
       updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
-      await qc.cancelQueries({ queryKey: ['sessions', runner.id, effectiveView] });
-      const prev = qc.getQueryData<any[]>(['sessions', runner.id, effectiveView]);
-      qc.setQueryData<any[]>(['sessions', runner.id, effectiveView], (old) =>
+      await qc.cancelQueries({ queryKey: sessionsKey });
+      const prev = qc.getQueryData<any[]>(sessionsKey);
+      qc.setQueryData<any[]>(sessionsKey, (old) =>
         (old ?? []).map((s) => (s.id === selected!.id ? { ...s, ...cfg } : s)),
       );
       return { prev };
     },
     onError: (e: Error, _cfg, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['sessions', runner.id, effectiveView], ctx.prev);
+      if (ctx?.prev) qc.setQueryData(sessionsKey, ctx.prev);
       message.error(e.message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
@@ -1039,6 +1047,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     runner.online &&
     !loadingSession &&
     (live ? SLOT_HELD.includes(selected.status) : true);
+  // The single send button morphs into a Stop while a turn is generating AND the composer
+  // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
+  // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
+  // and the reaper recycles an idle/finished session's slot on its own.
+  const showStop = selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0;
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -1201,6 +1214,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </span>
                 <div className="session-main">
                   <div className="session-title">{s.title}</div>
+                  {s.lastAssistantText ? (
+                    <div className="session-preview">{plainPreview(s.lastAssistantText)}</div>
+                  ) : null}
                   <div className="session-meta">
                     {fmtTime(s.lastTurnAt ?? s.createdAt)} · {s.numTurns ?? 0} turns
                     <span className="session-cost"> · ${(s.costUsd ?? 0).toFixed(2)}</span>
@@ -1547,49 +1563,25 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </Upload>
           </Tooltip>
-          {selected && live && (
-            <>
-              <Tooltip title="Stop the current turn">
-                <Button size="small" onClick={() => control.mutate({ id: selected.id, action: 'interrupt' })}>
-                  Stop
-                </Button>
-              </Tooltip>
-              {/* End is destructive and irreversible, so it lives behind ⋯ with a confirm
-                  rather than as a one-click button next to Send. */}
-              <Dropdown
-                trigger={['click']}
-                menu={{
-                  items: [
-                    {
-                      key: 'end',
-                      danger: true,
-                      label: '结束会话',
-                      onClick: () =>
-                        modal.confirm({
-                          title: '结束会话？',
-                          content: '将释放并发 slot，且无法恢复。',
-                          okText: '结束会话',
-                          okButtonProps: { danger: true },
-                          cancelText: '取消',
-                          onOk: () => control.mutate({ id: selected.id, action: 'end' }),
-                        }),
-                    },
-                  ],
-                }}
-              >
-                <Tooltip title="更多">
-                  <Button size="small" type="text" icon={<MoreOutlined />} aria-label="更多" />
-                </Tooltip>
-              </Dropdown>
-            </>
+          {showStop ? (
+            <Tooltip title="停止当前回合">
+              <Button
+                type="primary"
+                icon={<BorderOutlined />}
+                onClick={() => selected && control.mutate(selected.id)}
+                aria-label="停止"
+              />
+            </Tooltip>
+          ) : (
+            <Button
+              type="primary"
+              icon={<ArrowUpOutlined />}
+              disabled={!canSend}
+              loading={send.isPending}
+              onClick={onSend}
+              aria-label="发送"
+            />
           )}
-          <Button
-            type="primary"
-            icon={<ArrowUpOutlined />}
-            disabled={!canSend}
-            loading={send.isPending}
-            onClick={onSend}
-          />
         </div>
         <Tooltip title="Agent is fixed once a session starts. Model, Mode & Effort can be changed between turns — the session resumes with the new setting on your next message. Auto mode needs a recent model (Sonnet 4.6 / Opus 4.6+) and your org to allow it.">
           <div className="composer-pills">

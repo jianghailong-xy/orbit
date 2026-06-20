@@ -2,8 +2,8 @@ import { LoadingOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Spin } from 'antd';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { sessionsQuery } from '../lib/queries';
 
 // "Active" = sessions that are live or queued right now, grouped by how much they
 // need a human. Anything finished (SUCCEEDED/FAILED/CANCELLED) is not shown here.
@@ -68,11 +68,7 @@ function StatusBadge({ status }: { status: string }) {
 export function ActiveSessionsView() {
   const navigate = useNavigate();
   // Same query the agent console uses; poll often since this is the "what's live now" view.
-  const sessionsQ = useQuery({
-    queryKey: ['sessions', 'active'],
-    queryFn: () => api<any[]>('/sessions?view=active'),
-    refetchInterval: 4000,
-  });
+  const sessionsQ = useQuery({ ...sessionsQuery({ view: 'active' }), refetchInterval: 4000 });
 
   // view=active is "not archived, not deleted" — it still includes finished and
   // system sessions, so filter to real, still-live ones here.

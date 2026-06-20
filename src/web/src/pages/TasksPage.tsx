@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Spin } from 'antd';
 import { useRef } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
-import { api, getSession } from '../api';
+import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
+import { sessionQuery } from '../lib/queries';
 import { ActiveSessionsView } from '../components/ActiveSessionsView';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
@@ -41,11 +42,7 @@ export function TasksPage() {
   const inAgentView = !!agentMatch || !!sessionMatch;
   const selectedSessionId = sessionMatch ? decodeId(sessionMatch.params.id) : null;
   // A /sessions/:id deep link carries no runner — fetch the session to find it.
-  const sessionQ = useQuery({
-    queryKey: ['session', selectedSessionId],
-    queryFn: () => getSession(selectedSessionId!),
-    enabled: !!selectedSessionId,
-  });
+  const sessionQ = useQuery(sessionQuery(selectedSessionId));
   const openAgentId = agentMatch ? decodeId(agentMatch.params.id) : null;
   const openAgent = (agents.data ?? []).find((a: any) => a.id === openAgentId) ?? null;
   // Prefer the agent's runner; fall back to treating the id as a runner so older

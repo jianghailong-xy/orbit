@@ -1094,10 +1094,20 @@ body {
   font-size: 14px;
   color: #1f2329;
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Last assistant reply, flattened to one line. Sits between the title (identity) and
+   the meta (time/turns/cost) — darker than meta so it reads as content, not metadata. */
+.session-preview {
+  font-size: 13px;
+  color: #4e5969;
+  line-height: 1.35;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .session-meta {
   font-size: 12.5px;
