@@ -471,6 +471,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	// ack the oldest fed message turn via /turn-complete.
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
+	// Text of the most recent assistant message this turn — a Claude API error (e.g.
+	// content filtering) shows up here while the trailing `result` still says success,
+	// so we use it to fail the turn below. Reset once the turn's `result` is handled.
+	var lastAssistantText string
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -481,6 +485,11 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 			continue
 		}
 		handleMessage(msg, emit)
+		if msg["type"] == "assistant" {
+			if txt := assistantText(msg); txt != "" {
+				lastAssistantText = txt
+			}
+		}
 		if msg["type"] == "result" {
 			r := resultFrom(msg, procCtx)
 			turnStatus := stSucceeded
@@ -489,6 +498,14 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 			} else if r.Status == stFailed {
 				turnStatus = stFailed
 			}
+			// A Claude API error returns as assistant text + a "success" result with no
+			// is_error, so it slips past resultFrom. Treat the turn as failed so the
+			// control plane surfaces it (and reclaims a task session) instead of parking
+			// the session as if the turn succeeded.
+			if turnStatus == stSucceeded && (isAPIError(r.Result) || isAPIError(lastAssistantText)) {
+				turnStatus = stFailed
+			}
+			lastAssistantText = ""
 			emit(evTurnEnd, map[string]interface{}{
 				"subtype":  r.Subtype,
 				"numTurns": r.NumTurns,

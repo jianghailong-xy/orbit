@@ -63,6 +63,10 @@ export enum TaskStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   DONE = 'DONE',
   CANCELLED = 'CANCELLED',
+  /** A run ended in a genuine failure (e.g. an API/content-filter error the agent
+   *  couldn't recover from) and the work needs a human — distinct from OPEN, which the
+   *  reclaim backstop uses for retryable infra hiccups / user cancels. */
+  FAILED = 'FAILED',
 }
 
 /** Who/what authored a Task (polymorphic creator). */

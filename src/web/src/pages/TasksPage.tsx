@@ -1,5 +1,6 @@
 import {
   CheckCircleFilled,
+  CloseCircleFilled,
   DeleteOutlined,
   LoadingOutlined,
   LockOutlined,
@@ -40,13 +41,15 @@ import { SkillsPage } from './SkillsPage';
 const FILTERS = [
   { label: 'All', value: 'ALL' },
   { label: 'Ongoing', value: 'ONGOING' },
+  { label: 'Failed', value: 'FAILED' },
   { label: 'Done', value: 'DONE' },
   { label: 'Cancelled', value: 'CANCELLED' },
 ];
 
-// Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED).
+// Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED).
 const matchesFilter = (status: string, f: string): boolean => {
   if (f === 'ONGOING') return ['OPEN', 'IN_PROGRESS'].includes(status);
+  if (f === 'FAILED') return status === 'FAILED';
   if (f === 'DONE') return status === 'DONE';
   if (f === 'CANCELLED') return status === 'CANCELLED';
   return true;
@@ -63,9 +66,10 @@ const SORTS = [
 // ascending groups 运行中 at the top and 已完成/已取消 at the bottom (descending flips it).
 const STATUS_ORDER: Record<string, number> = {
   IN_PROGRESS: 1,
-  OPEN: 2,
-  DONE: 3,
-  CANCELLED: 4,
+  FAILED: 2,
+  OPEN: 3,
+  DONE: 4,
+  CANCELLED: 5,
 };
 const statusRank = (t: any): number => (t.running || t.queued ? 0 : (STATUS_ORDER[t.status] ?? 5));
 
@@ -118,6 +122,9 @@ function StatusCircle({
   switch (status) {
     case 'DONE':
       node = <CheckCircleFilled style={{ color: '#2ea121', fontSize: 16 }} />;
+      break;
+    case 'FAILED':
+      node = <CloseCircleFilled style={{ color: '#d4380d', fontSize: 16 }} />;
       break;
     case 'IN_PROGRESS':
       node = <span className="status-circle filled blue" />;

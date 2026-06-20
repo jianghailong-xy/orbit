@@ -9,12 +9,13 @@ import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 
-// TaskStatus (OPEN/IN_PROGRESS/DONE/CANCELLED) -> header badge label + tone.
+// TaskStatus (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED) -> header badge label + tone.
 const STATUS_META: Record<string, { label: string; tone: string }> = {
   OPEN: { label: 'Open', tone: 'muted' },
   IN_PROGRESS: { label: 'In progress', tone: 'blue' },
   DONE: { label: 'Done', tone: 'green' },
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
+  FAILED: { label: 'Failed', tone: 'red' },
 };
 
 // The task counts as "执行中" only while one of its sessions is actually working:

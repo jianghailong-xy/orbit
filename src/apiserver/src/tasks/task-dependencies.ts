@@ -7,19 +7,20 @@ import { TaskStatus } from '@orbit/shared';
  *
  * Resolution is anchored entirely on Task.status (the product decision: "A 完成" means
  * Task.status === DONE), so the rule is simple and predictable:
- *   - no prerequisites            -> NONE
- *   - any prerequisite CANCELLED  -> BLOCKED_FAILED  (terminal failure; needs a human)
- *   - every prerequisite DONE     -> READY
+ *   - no prerequisites                     -> NONE
+ *   - any prerequisite CANCELLED / FAILED  -> BLOCKED_FAILED  (terminal failure; needs a human)
+ *   - every prerequisite DONE              -> READY
  *   - otherwise (some still OPEN / IN_PROGRESS) -> BLOCKED (waiting)
- * A prerequisite whose run failed leaves that task at OPEN (see reclaimStalledTask), so
- * its dependents stay BLOCKED until it's retried — only an explicit CANCELLED escalates
- * to BLOCKED_FAILED.
+ * A prerequisite left at OPEN (e.g. a retryable run hiccup, see reclaimStalledTask) keeps
+ * its dependents BLOCKED until it's retried; an explicit CANCELLED or a genuine FAILED run
+ * escalates to BLOCKED_FAILED.
  */
 export type DependencyState = 'NONE' | 'READY' | 'BLOCKED' | 'BLOCKED_FAILED';
 
 export function computeDependencyState(prerequisiteStatuses: TaskStatus[]): DependencyState {
   if (prerequisiteStatuses.length === 0) return 'NONE';
-  if (prerequisiteStatuses.some((s) => s === TaskStatus.CANCELLED)) return 'BLOCKED_FAILED';
+  if (prerequisiteStatuses.some((s) => s === TaskStatus.CANCELLED || s === TaskStatus.FAILED))
+    return 'BLOCKED_FAILED';
   if (prerequisiteStatuses.every((s) => s === TaskStatus.DONE)) return 'READY';
   return 'BLOCKED';
 }

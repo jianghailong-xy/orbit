@@ -12,7 +12,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
   AgentExecConfig,
   ApprovalCreateRequest,
@@ -516,22 +516,30 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: TurnCompleteRequest,
   ) {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id);
     const usage = dto.usage;
-    await this.prisma.$transaction(async (tx) => {
+    // A task run that failed mid-turn (e.g. an API/content-filter error the agent
+    // couldn't recover from — the runner now reports such turns as FAILED) would
+    // otherwise park at AWAITING_INPUT and sit there with the task stuck IN_PROGRESS
+    // and nothing watching. For a task-bound session we instead finalize the session
+    // FAILED and reclaim the task as FAILED so it surfaces for a human. Chat sessions
+    // (no taskId) keep parking so the user can retry in place.
+    const failTask = dto.status === RunStatus.FAILED && !!session.taskId;
+    const finalized = await this.prisma.$transaction(async (tx) => {
       // Idempotent ack: only the first turn-complete for this turn applies.
       const ack = await tx.conversationTurn.updateMany({
         where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
-      if (ack.count === 0) return;
-      // Park + bill ONLY if the session is still live and not being torn down, so a
-      // late/retried turn-complete can never resurrect a finalized/cancelled session
-      // or double-bill it.
+      if (ack.count === 0) return false;
+      // Park (or, on a failed task turn, finalize) + bill ONLY if the session is still
+      // live and not being torn down, so a late/retried turn-complete can never
+      // resurrect a finalized/cancelled session or double-bill it.
       const parked = await tx.session.updateMany({
         where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
         data: {
-          status: RunStatus.AWAITING_INPUT,
+          status: failTask ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
+          ...(failTask ? { error: dto.result || 'run failed', finishedAt: new Date() } : {}),
           lastTurnAt: new Date(),
           numTurns: { increment: dto.numTurns ?? 1 },
           costUsd: { increment: dto.costUsd ?? 0 },
@@ -541,7 +549,7 @@ export class RunnerApiController {
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
         },
       });
-      if (parked.count === 0) return; // session no longer live -> turn acked, no billing
+      if (parked.count === 0) return false; // session no longer live -> turn acked, no billing
       if (dto.modelUsage) {
         const rows = Object.entries(dto.modelUsage).map(([model, mu]) => ({
           sessionId,
@@ -554,7 +562,30 @@ export class RunnerApiController {
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
       }
+      if (failTask) {
+        // Drain queued turns so nothing can be leased after the session ends, then
+        // surface the abandoned task.
+        await tx.conversationTurn.updateMany({
+          where: { sessionId, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+        await reclaimStalledTask(tx, session.taskId!, TaskStatus.FAILED);
+      }
+      return true;
     });
+    if (failTask) {
+      // Only announce the terminal status if this call actually finalized the session
+      // (a late/duplicate turn-complete for an already-ended session is a no-op).
+      if (finalized) {
+        this.realtime.publish(sessionId, {
+          seq: Number.MAX_SAFE_INTEGER,
+          type: RunEventType.STATUS,
+          ts: new Date().toISOString(),
+          payload: { status: RunStatus.FAILED, final: true },
+        });
+      }
+      return { ok: true };
+    }
     // The turn just parked the session at AWAITING_INPUT; wake the inbox poller so any
     // queued follow-up message is leased now instead of after the long-poll window.
     this.realtime.notifyInbox(sessionId);
@@ -657,9 +688,15 @@ export class RunnerApiController {
       });
       // Abnormal end (FAILED/CANCELLED): if the agent never got to finalize its
       // task, reclaim a now-stalled IN_PROGRESS task so it stops looking like it's
-      // still running. SUCCEEDED is left alone — the agent owns DONE.
+      // still running. A genuine FAILED run lands the task at FAILED (needs a human);
+      // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
+      // the agent owns DONE.
       if (session.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
-        await reclaimStalledTask(tx, session.taskId);
+        await reclaimStalledTask(
+          tx,
+          session.taskId,
+          effectiveStatus === RunStatus.FAILED ? TaskStatus.FAILED : TaskStatus.OPEN,
+        );
       }
       return true;
     });

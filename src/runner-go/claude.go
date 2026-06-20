@@ -91,6 +91,31 @@ func handleMessage(msg map[string]interface{}, emit emitFn) {
 	}
 }
 
+// isAPIError reports whether a result/assistant text carries a Claude Code API error
+// (e.g. content filtering, a 4xx/5xx). Such errors come back as an assistant text block
+// plus a `result` with subtype "success" and no `is_error`, so they slip past the
+// is_error/subtype check in resultFrom. We key on the stable "API Error" prefix Claude
+// Code uses. Heuristic; keep in sync with isApiErrorText in @orbit/shared.
+func isAPIError(s string) bool {
+	return strings.HasPrefix(strings.TrimSpace(s), "API Error")
+}
+
+// assistantText concatenates the text blocks of an `assistant` stream-json message.
+func assistantText(msg map[string]interface{}) string {
+	message, _ := msg["message"].(map[string]interface{})
+	content, _ := message["content"].([]interface{})
+	var b strings.Builder
+	for _, c := range content {
+		block, _ := c.(map[string]interface{})
+		if block["type"] == "text" {
+			if t, ok := block["text"].(string); ok {
+				b.WriteString(t)
+			}
+		}
+	}
+	return b.String()
+}
+
 func resultFrom(msg map[string]interface{}, ctx context.Context) ExecResult {
 	subtype, _ := msg["subtype"].(string)
 	isErr := false

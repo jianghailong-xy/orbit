@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunStatus, TaskStatus } from '@prisma/client';
+import { RunEventType, isApiErrorText } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { reclaimStalledTask } from '../tasks/reclaim-stalled-task';
@@ -76,6 +76,30 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'cancel not honored');
           continue;
         }
+        // Backstop for a task run whose last turn ended in a Claude API error (e.g.
+        // content filtering): the SDK reports it as a successful turn, so an older
+        // runner parks the session at AWAITING_INPUT and the task stays IN_PROGRESS
+        // with nothing watching. (Current runners flag the turn FAILED at the source,
+        // so this only catches sessions a stale runner left behind.) Finalize FAILED and
+        // reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
+        if (s.status === RunStatus.AWAITING_INPUT && s.taskId && !s.cancelRequestedAt) {
+          const last = await this.prisma.runEvent.findFirst({
+            where: { sessionId: s.id, type: RunEventType.ASSISTANT },
+            orderBy: { seq: 'desc' },
+            select: { payload: true },
+          });
+          const text = (last?.payload as { text?: string } | null)?.text;
+          if (isApiErrorText(text)) {
+            await this.forceFail(
+              s.id,
+              s.assignedRunnerId,
+              s.taskId,
+              'run failed (API error)',
+              TaskStatus.FAILED,
+            );
+            continue;
+          }
+        }
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         if (
           s.status === RunStatus.AWAITING_INPUT &&
@@ -91,12 +115,17 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Dead runner: finalize session, drain queued turns, signal + publish terminal. */
+  /**
+   * Finalize a session FAILED, drain queued turns, signal + publish terminal. `resetTaskTo`
+   * is how a now-stalled IN_PROGRESS task is reclaimed: OPEN for a retryable end (dead/
+   * partitioned runner, unhonored cancel) or FAILED for a genuine run failure.
+   */
   private async forceFail(
     sessionId: string,
     runnerId: string | null,
     taskId: string | null,
     reason: string,
+    resetTaskTo: TaskStatus = TaskStatus.OPEN,
   ): Promise<void> {
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.session.updateMany({
@@ -116,7 +145,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      if (taskId) await reclaimStalledTask(tx, taskId);
+      if (taskId) await reclaimStalledTask(tx, taskId, resetTaskTo);
       return true;
     });
     if (!ok) return;

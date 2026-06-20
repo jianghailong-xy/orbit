@@ -2217,6 +2217,11 @@ body {
   color: #8f959e;
   border-color: #e3e6eb;
 }
+.tdp-badge.tone-red {
+  background: #fff1f0;
+  color: #d4380d;
+  border-color: #ffccc7;
+}
 
 .tdp-body {
   flex: 1;

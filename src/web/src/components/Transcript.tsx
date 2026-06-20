@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl } from '../api';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -116,7 +117,14 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         break;
       }
       case 'assistant':
-        if (p.text) into(parent).push({ kind: 'assistant', seq: ev.seq, text: String(p.text) });
+        if (p.text) {
+          const text = String(p.text);
+          // A Claude API error (e.g. content filtering) comes back as an assistant text
+          // block, not an `error` event — render it as an error so the failed turn is
+          // unmistakable instead of looking like a normal reply.
+          if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
+          else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
+        }
         break;
       case 'thinking':
         if (p.text) into(parent).push({ kind: 'thinking', seq: ev.seq, text: String(p.text) });

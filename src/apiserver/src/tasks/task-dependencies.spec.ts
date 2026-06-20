@@ -39,6 +39,12 @@ test('CANCELLED wins over a still-pending prerequisite', () => {
   );
 });
 
+test('a FAILED prerequisite escalates to BLOCKED_FAILED (needs a human, like CANCELLED)', () => {
+  const state = computeDependencyState([TaskStatus.DONE, TaskStatus.FAILED]);
+  assert.equal(state, 'BLOCKED_FAILED');
+  assert.equal(canRun(state), false);
+});
+
 test('self-dependency is a cycle', () => {
   assert.equal(wouldCreateCycle([], 'A', 'A'), true);
 });
