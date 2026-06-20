@@ -18,6 +18,8 @@ export interface AgentExecConfig {
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
   mcpConfig?: Record<string, unknown>;
+  /** Custom environment variables injected into the claude process. */
+  env?: Record<string, string>;
 }
 
 // ─────────────────────────────── Runner ⇆ control plane ───────────────────────────────

@@ -274,10 +274,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	defer pollCancel()
 	cmd := exec.CommandContext(procCtx, "claude", args...)
 	cmd.Dir = execDir
+	// Start from the runner's own env, then layer the agent's custom env vars on top.
+	cmd.Env = os.Environ()
+	for k, v := range job.Agent.Env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
 	// Inject session context so the built-in `orbit mcp` server (a child of claude)
 	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
 	// from config.json so it never lands in the claude process environment.
-	cmd.Env = append(os.Environ(),
+	// Appended last so a custom env var can't shadow the session context.
+	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"

@@ -97,6 +97,8 @@ type AgentExecConfig struct {
 	MaxTurns           *int                   `json:"maxTurns"`
 	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
 	McpConfig          map[string]interface{} `json:"mcpConfig"`
+	// Custom env vars injected into the claude process (cf. session.go cmd.Env).
+	Env map[string]string `json:"env"`
 }
 
 // ClaimedSession is one interactive session a runner has claimed (or reclaimed).

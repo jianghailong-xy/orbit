@@ -54,6 +54,7 @@ interface Agent {
   model?: string;
   permissionMode?: string;
   workDir?: string | null;
+  env?: Record<string, string> | null;
   runnerId?: string | null;
   enabled?: boolean;
 }
@@ -129,6 +130,7 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
   const [fMode, setFMode] = useState('dontAsk');
   const [fDesc, setFDesc] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
+  const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
   // Pick a model; if it can't run Auto, fall back the default mode off Auto.
   const onModelChange = (m: string) => {
@@ -144,6 +146,9 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
         permissionMode: fMode,
         description: fDesc.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
+        env: Object.fromEntries(
+          fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
+        ),
       };
       return editing
         ? api(`/agents/${editing.id}`, { method: 'PATCH', body })
@@ -169,6 +174,7 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
     setFMode('dontAsk');
     setFDesc('');
     setFWorkDir('');
+    setFEnv([]);
     setFormOpen(true);
   };
   const openEdit = (a: Agent) => {
@@ -178,6 +184,7 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
     setFMode(a.permissionMode ?? 'dontAsk');
     setFDesc(a.description ?? '');
     setFWorkDir(a.workDir ?? '');
+    setFEnv(Object.entries(a.env ?? {}).map(([key, value]) => ({ key, value })));
     setFormOpen(true);
   };
   const submitAgent = () => {
@@ -461,6 +468,40 @@ export function RunnerDetailPage({ runnerId }: { runnerId: string }) {
             onChange={(e) => setFWorkDir(e.target.value)}
             placeholder="/path/to/project on the runner (optional)"
           />
+        </div>
+        <div className="rd-form-field">
+          <div className="rd-form-label">Environment variables</div>
+          {fEnv.map((row, i) => (
+            <div className="rd-env-row" key={i}>
+              <Input
+                value={row.key}
+                onChange={(e) =>
+                  setFEnv(fEnv.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
+                }
+                placeholder="KEY"
+              />
+              <Input
+                value={row.value}
+                onChange={(e) =>
+                  setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+                }
+                placeholder="value"
+              />
+              <Button
+                type="text"
+                icon={<DeleteOutlined />}
+                onClick={() => setFEnv(fEnv.filter((_, j) => j !== i))}
+              />
+            </div>
+          ))}
+          <Button
+            type="dashed"
+            icon={<PlusOutlined />}
+            onClick={() => setFEnv([...fEnv, { key: '', value: '' }])}
+            block
+          >
+            Add variable
+          </Button>
         </div>
       </Modal>
     </>

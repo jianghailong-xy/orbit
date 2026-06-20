@@ -48,6 +48,7 @@ export class AgentsService {
         targetLabels: dto.targetLabels ?? [],
         runnerId: dto.runnerId,
         workDir: dto.workDir,
+        env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         enabled: dto.enabled ?? true,
       },
     });
@@ -112,6 +113,7 @@ export class AgentsService {
     if (dto.allowedTools) data.allowedTools = dto.allowedTools as Prisma.InputJsonValue;
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.mcpConfig) data.mcpConfig = dto.mcpConfig as Prisma.InputJsonValue;
+    if (dto.env) data.env = dto.env as Prisma.InputJsonValue;
     if (dto.targetLabels) data.targetLabels = dto.targetLabels;
     // runnerId is a relation FK: connect to (re)bind, disconnect to detach.
     if (dto.runnerId !== undefined) {

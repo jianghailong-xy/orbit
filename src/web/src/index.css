@@ -632,6 +632,15 @@ body {
   color: #1f2329;
   margin-bottom: 6px;
 }
+/* Agent env-var editor: KEY input | value input | delete button per row. */
+.rd-env-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rd-env-row > .ant-input:first-child {
+  flex: 0 0 38%;
+}
 
 /* shared column grid: check | status | title | assignee */
 .orbit-tasklist {

@@ -172,6 +172,8 @@ model Agent {
   runner             Runner?  @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   // The project directory claude runs in for this agent, and its coding-tool key.
   workDir            String?  @map("work_dir")
+  // Custom environment variables injected into this agent's claude process (string map).
+  env                Json?    @map("env")
   agentKey           String?  @map("agent_key")
   enabled            Boolean  @default(true)
   ownerId            String   @map("owner_id") @db.Uuid

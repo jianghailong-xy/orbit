@@ -157,6 +157,7 @@ export class QueueService {
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
+        env: (agent?.env as Record<string, string> | null) ?? undefined,
       },
     };
   }

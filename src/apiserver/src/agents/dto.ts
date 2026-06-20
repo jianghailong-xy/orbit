@@ -33,6 +33,7 @@ export class CreateAgentDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsString() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
@@ -52,6 +53,7 @@ export class UpdateAgentDto {
   @IsOptional() @IsArray() @IsString({ each: true }) targetLabels?: string[];
   @IsOptional() @IsString() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
