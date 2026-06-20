@@ -23,6 +23,13 @@ const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatu
 // IDLE_AFTER_MS. Covers DONE from either the agent (MCP) or a manual user edit.
 const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED];
 
+// How long a PENDING session for an already-terminal task must sit untouched before
+// it's treated as an orphan and cancelled. A just-created/revived run is briefly in
+// that exact state (session PENDING, task still DONE — Task.status is agent-owned and
+// only flips once the agent actually runs) before the queue claims it, so gating on a
+// stale updatedAt avoids reaping a legitimate (re)run that hasn't been claimed yet.
+const PENDING_ORPHAN_AFTER_MS = 30 * 60_000;
+
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
  * whose runner dies would sit RUNNING/AWAITING_INPUT forever, leaking a session and
@@ -123,6 +130,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         this.log.error(`reap of ${s.id} failed: ${(e as Error).message}`);
       }
     }
+    await this.cancelOrphanPending();
   }
 
   /**
@@ -167,6 +175,62 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       payload: { status: RunStatus.FAILED, final: true, reason },
     });
     this.log.warn(`reaped dead-runner session ${sessionId} (${reason})`);
+  }
+
+  /**
+   * Cancel sessions still queued (PENDING) for a task that's already terminal. The LIVE
+   * sweep above never sees these — PENDING isn't a live status — so a never-claimed
+   * session sits PENDING forever, keeping the list's "running" dot lit. This happens
+   * when a task gets double-queued (e.g. into two batches): one session runs to DONE
+   * while the other is never claimed. A PENDING session has no runner process to stop,
+   * so just finalize it CANCELLED. The task is already terminal, so no reclaim needed.
+   *
+   * Gated on a stale updatedAt (see PENDING_ORPHAN_AFTER_MS) so a fresh (re)run, which
+   * is momentarily PENDING-on-a-still-terminal-task before the queue claims it, isn't
+   * reaped — its updatedAt is recent; a real orphan's hasn't moved since it was queued.
+   */
+  private async cancelOrphanPending(): Promise<void> {
+    const cutoff = new Date(Date.now() - PENDING_ORPHAN_AFTER_MS);
+    const orphans = await this.prisma.session.findMany({
+      where: {
+        status: RunStatus.PENDING,
+        updatedAt: { lt: cutoff },
+        task: { status: { in: TASK_TERMINAL } },
+      },
+      select: { id: true },
+    });
+    for (const o of orphans) {
+      try {
+        const ok = await this.prisma.$transaction(async (tx) => {
+          // Guard on PENDING so we never clobber a session the queue just claimed.
+          const res = await tx.session.updateMany({
+            where: { id: o.id, status: RunStatus.PENDING },
+            data: {
+              status: RunStatus.CANCELLED,
+              error: 'orphaned: task already finished',
+              finishedAt: new Date(),
+              cancelRequestedAt: new Date(),
+            },
+          });
+          if (res.count === 0) return false;
+          await tx.conversationTurn.updateMany({
+            where: { sessionId: o.id, status: { not: 'ANSWERED' } },
+            data: { status: 'ANSWERED', answeredAt: new Date() },
+          });
+          return true;
+        });
+        if (!ok) continue;
+        this.realtime.publish(o.id, {
+          seq: Number.MAX_SAFE_INTEGER,
+          type: RunEventType.STATUS,
+          ts: new Date().toISOString(),
+          payload: { status: RunStatus.CANCELLED, final: true, reason: 'orphaned: task finished' },
+        });
+        this.log.log(`cancelled orphaned PENDING session ${o.id} (task terminal)`);
+      } catch (e) {
+        this.log.error(`orphan-cancel of ${o.id} failed: ${(e as Error).message}`);
+      }
+    }
   }
 
   /**

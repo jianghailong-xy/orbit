@@ -3,7 +3,7 @@ import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 // Sessions that could still be working a task: live (RUNNING/AWAITING_INPUT/
 // INTERRUPTED) or queued for a runner slot (PENDING). Mirrors the reaper's LIVE
 // set plus PENDING.
-const TASK_OCCUPYING: RunStatus[] = [
+export const TASK_OCCUPYING: RunStatus[] = [
   RunStatus.PENDING,
   RunStatus.RUNNING,
   RunStatus.AWAITING_INPUT,

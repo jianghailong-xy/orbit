@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
   computeDependencyState,
@@ -446,6 +447,17 @@ export class TasksService {
     batch?: { id: string; maxConcurrent: number },
   ): Promise<string | undefined> {
     if (!agent.runnerId) return undefined;
+    // Dedup: if the task already has a session occupying it (queued PENDING or live),
+    // it's already being run — don't spawn a duplicate. This is the guard the
+    // resume-or-create path below lacks: a leftover PENDING session (e.g. from an
+    // earlier batch the runner never claimed) makes resume() throw ConflictException,
+    // which would otherwise fall through to create() and double-queue the task.
+    const occupying = await this.prisma.session.findFirst({
+      where: { taskId: task.id, status: { in: TASK_OCCUPYING } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (occupying) return occupying.id;
     const latest = await this.prisma.session.findFirst({
       where: { taskId: task.id, agentId: agent.id, ownerId },
       orderBy: { createdAt: 'desc' },
@@ -550,6 +562,17 @@ export class TasksService {
     });
 
     const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    // Tasks that already have a queued/live session: skip them so the batch doesn't
+    // double-queue a task that's already running (runAgentOnTask also guards this, but
+    // surfacing it here lets us report it as skipped rather than silently dispatched).
+    const occupied = new Set(
+      (
+        await this.prisma.session.findMany({
+          where: { taskId: { in: tasks.map((t) => t.id) }, status: { in: TASK_OCCUPYING } },
+          select: { taskId: true },
+        })
+      ).map((s) => s.taskId),
+    );
     const runnable: typeof tasks = [];
     const skipped: { id: string; title: string; reason: string }[] = [];
     for (const t of tasks) {
@@ -563,6 +586,8 @@ export class TasksService {
           title: t.title,
           reason: state === 'BLOCKED_FAILED' ? '前置任务已取消' : '前置任务尚未完成',
         });
+      else if (occupied.has(t.id))
+        skipped.push({ id: t.id, title: t.title, reason: '已有进行中的会话' });
       else runnable.push(t);
     }
     // taskIds with no matching owned task (deleted / not owned) are silently ignored.
