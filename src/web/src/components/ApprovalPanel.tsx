@@ -60,32 +60,39 @@ type OnDecide = (
   rememberRule?: PermissionRule,
 ) => void;
 
-// The hotkey accepts metaKey || ctrlKey on every platform; only the hint label is
-// platform-specific — ⌘ on macOS, Ctrl elsewhere.
+// The modifier hotkey accepts metaKey || ctrlKey on every platform; only the hint label
+// is platform-specific — ⌘ on macOS, Ctrl elsewhere. Plain Enter has no modifier.
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const SHORTCUT_HINT = IS_MAC ? '⌘ + Enter' : 'Ctrl + Enter';
+const ENTER_HINT = 'Enter';
 
-/** ⌘/Ctrl + Enter fires the card's primary action while it's the active card (the first
- *  pending one). Skipped while typing in an input so it doesn't clash with the composer. */
-function useApproveHotkey(active: boolean, onTrigger: () => void): void {
+/** Fires the card's action on Enter while it's the active card (the first pending one).
+ *  By default requires ⌘/Ctrl + Enter; pass { requireMod: false } for a plain Enter — and
+ *  then the modifier chord is ignored, so a separate mod-Enter binding can own it. Skipped
+ *  while a field is focused (so it never clashes with the composer); plain Enter also yields
+ *  to a focused button so it doesn't double-fire with that button's own Enter. */
+function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requireMod?: boolean }): void {
+  const requireMod = opts?.requireMod ?? true;
   const fn = useRef(onTrigger);
   fn.current = onTrigger;
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+      if (e.key !== 'Enter') return;
+      const hasMod = e.metaKey || e.ctrlKey;
+      if (requireMod ? !hasMod : hasMod) return;
       const el = document.activeElement;
-      if (
+      const isField =
         el instanceof HTMLElement &&
-        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
-      )
-        return;
+        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+      const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
+      if (isField || (!requireMod && isButton)) return;
       e.preventDefault();
       fn.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active]);
+  }, [active, requireMod]);
 }
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
@@ -100,15 +107,19 @@ export function ApprovalPanel({
   active?: boolean;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
-  // The plain card approves on ⌘/Ctrl + Enter; questions submit via QuestionForm's own hook.
-  useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'));
+  // "Allow + remember same kind" for the rest of the session (claude's engine matches
+  // future calls). Null for questions/plans and Bash commands with no clean prefix.
+  const rule = isQuestion ? null : rememberRuleFor(approval);
+  // Plain card: Enter approves; ⌘/Ctrl + Enter approves-and-remembers (only when that
+  // option exists). Questions submit via QuestionForm's own ⌘/Ctrl + Enter hook.
+  useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'), { requireMod: false });
+  useApproveHotkey(active && !isQuestion && !!rule, () => {
+    if (rule) onDecide(approval.id, 'allow', undefined, undefined, rule);
+  });
   if (isQuestion) {
     return <QuestionForm approval={approval} onDecide={onDecide} active={active} />;
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
-  // "Allow + remember same kind" for the rest of the session (claude's engine matches
-  // future calls). Null for questions/plans and Bash commands with no clean prefix.
-  const rule = rememberRuleFor(approval);
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -126,7 +137,7 @@ export function ApprovalPanel({
       <div className="approval-actions">
         <button className="approval-btn approve" onClick={() => onDecide(approval.id, 'allow')}>
           {isPlan(approval) ? '批准并实施' : '批准'}
-          {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
+          {active && <span className="approval-btn-kbd">{ENTER_HINT}</span>}
         </button>
         {rule && (
           <button
@@ -135,6 +146,7 @@ export function ApprovalPanel({
             onClick={() => onDecide(approval.id, 'allow', undefined, undefined, rule)}
           >
             批准，并自动允许后续 <code className="approval-rule">{rememberLabel(rule)}</code>
+            {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
           </button>
         )}
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
