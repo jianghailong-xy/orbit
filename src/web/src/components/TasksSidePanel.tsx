@@ -5,7 +5,22 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
@@ -51,9 +66,11 @@ export interface Runner {
 interface Agent {
   id: string;
   name: string;
-  // ISO-8601 creation timestamp; the sidebar sorts on it so the list is
-  // oldest-first regardless of the API's ordering.
+  // ISO-8601 creation timestamp; the sidebar falls back to it (oldest-first) for
+  // agents that have never been dragged into a custom slot.
   createdAt: string;
+  // Drag-to-reorder slot (0-based). null until the user reorders, so it sorts last.
+  position?: number | null;
   // The machine this agent belongs to (null for config-only agents); an agent
   // with no runner has no console to open.
   runnerId?: string | null;
@@ -77,6 +94,10 @@ function logout() {
 export function TasksSidePanel() {
   const loc = useLocation();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  // A small drag threshold so a plain click still opens an agent; only real movement
+  // starts a reorder drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // The open agent comes from /agents/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -152,12 +173,19 @@ export function TasksSidePanel() {
 
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
-  // Oldest-added first, so ⌘1 always maps to the first agent created and the
-  // shortcuts stay stable as newer agents append below. Sort client-side so the
-  // order holds even if the API returns them unordered; ISO timestamps compare
-  // lexicographically.
+  // Custom drag order (position) first; agents never dragged (position null) fall to
+  // the end, ordered oldest-first. ⌘N maps to this final order. Sort client-side so it
+  // holds even if the API returns them unordered, mirroring the server's ordering.
   const agentList = useMemo(
-    () => [...(agents.data ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)),
+    () =>
+      [...(agents.data ?? [])].sort((a, b) => {
+        const pa = a.position ?? null;
+        const pb = b.position ?? null;
+        if (pa !== null && pb !== null) return pa - pb;
+        if (pa !== null) return -1;
+        if (pb !== null) return 1;
+        return a.createdAt < b.createdAt ? -1 : 1;
+      }),
     [agents.data],
   );
 
@@ -189,6 +217,31 @@ export function TasksSidePanel() {
       navigate(`/agents/${encodeId(a.id)}`);
     },
     [navigate],
+  );
+
+  // Drag-to-reorder: optimistically stamp the new positions onto the cached list so
+  // the order (and ⌘N labels) update instantly, persist via POST /agents/reorder,
+  // then re-sync with the server's truth (also rolls back on failure).
+  const onAgentDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      const { active, over } = e;
+      if (!over || active.id === over.id) return;
+      const oldIndex = agentList.findIndex((a) => a.id === active.id);
+      const newIndex = agentList.findIndex((a) => a.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return;
+      const next = arrayMove(agentList, oldIndex, newIndex);
+      const order = new Map(next.map((a, i) => [a.id, i]));
+      qc.setQueryData<Agent[]>(['agents'], (prev) =>
+        prev?.map((a) => {
+          const p = order.get(a.id);
+          return p === undefined ? a : { ...a, position: p };
+        }),
+      );
+      void api('/agents/reorder', { method: 'POST', body: { ids: next.map((a) => a.id) } })
+        .catch(() => {})
+        .finally(() => void qc.invalidateQueries({ queryKey: ['agents'] }));
+    },
+    [agentList, qc],
   );
 
   // ⌘/Ctrl + 1‒9 opens the matching agent in the list. The modifier chord never
@@ -237,31 +290,27 @@ export function TasksSidePanel() {
             <CaretDownOutlined className={`tp-caret ${agentsOpen ? '' : 'collapsed'}`} />
           </div>
           {agentsOpen && (
-            <>
-              {agentList.map((a, i) => {
-                const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
-                return (
-                  <div
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onAgentDragEnd}
+            >
+              <SortableContext
+                items={agentList.map((a) => a.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {agentList.map((a, i) => (
+                  <SortableAgentRow
                     key={a.id}
-                    className={`tp-item inset ${a.id === activeAgentId ? 'active' : ''}`}
-                    onClick={() => openAgent(a)}
-                  >
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: online ? '#2ea121' : '#c0c4cc',
-                        flex: 'none',
-                        marginRight: 8,
-                      }}
-                    />
-                    <span className="tp-label">{a.name}</span>
-                    {i < 9 && <span className="tp-count">⌘{i + 1}</span>}
-                  </div>
-                );
-              })}
-            </>
+                    agent={a}
+                    index={i}
+                    active={a.id === activeAgentId}
+                    online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
+                    onOpen={openAgent}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 
@@ -330,5 +379,53 @@ export function TasksSidePanel() {
         onMouseDown={startResize}
       />
     </aside>
+  );
+}
+
+// One draggable agent row. The drag listeners sit on the whole row; the sensor's
+// activation distance keeps a plain click opening the agent instead of starting a drag.
+function SortableAgentRow({
+  agent,
+  index,
+  active,
+  online,
+  onOpen,
+}: {
+  agent: Agent;
+  index: number;
+  active: boolean;
+  online: boolean;
+  onOpen: (a: Agent) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: agent.id,
+  });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`tp-item inset ${active ? 'active' : ''}`}
+      onClick={() => onOpen(agent)}
+      {...attributes}
+      {...listeners}
+    >
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: online ? '#2ea121' : '#c0c4cc',
+          flex: 'none',
+          marginRight: 8,
+        }}
+      />
+      <span className="tp-label">{agent.name}</span>
+      {index < 9 && <span className="tp-count">⌘{index + 1}</span>}
+    </div>
   );
 }

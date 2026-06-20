@@ -176,6 +176,9 @@ model Agent {
   ownerId            String   @map("owner_id") @db.Uuid
   owner              User     @relation(fields: [ownerId], references: [id])
   createdAt          DateTime @default(now()) @map("created_at")
+  // Sidebar display order set by drag-to-reorder; NULL sorts last (after positioned
+  // agents, by createdAt) so existing/new agents stay oldest-first until reordered.
+  position           Int?     @map("position")
 
   sessions      Session[]
   assignedTasks Task[] // tasks assigned to this agent to execute

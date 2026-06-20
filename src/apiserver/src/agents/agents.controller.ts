@@ -11,7 +11,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { AgentsService } from './agents.service';
-import { CreateAgentDto, UpdateAgentDto } from './dto';
+import { CreateAgentDto, ReorderAgentsDto, UpdateAgentDto } from './dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('agents')
@@ -26,6 +26,13 @@ export class AgentsController {
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.agents.list(user.userId);
+  }
+
+  // Persist the sidebar drag order. Declared before the `:id` routes; the static
+  // path keeps it from being shadowed by a param route.
+  @Post('reorder')
+  reorder(@CurrentUser() user: AuthUser, @Body() dto: ReorderAgentsDto) {
+    return this.agents.reorder(user.userId, dto.ids);
   }
 
   @Get(':id')

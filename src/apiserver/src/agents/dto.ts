@@ -54,3 +54,8 @@ export class UpdateAgentDto {
   @IsOptional() @IsString() workDir?: string;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
+
+// The full agent list in the desired sidebar order; each id's index becomes its position.
+export class ReorderAgentsDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}

@@ -56,10 +56,31 @@ export class AgentsService {
   list(ownerId: string) {
     return this.prisma.agent.findMany({
       where: { ownerId },
-      orderBy: { createdAt: 'desc' },
+      // Custom drag order first; never-reordered agents (position NULL) sort last by
+      // creation time, so newly added agents append below the arranged ones.
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       // Expose the machine an agent belongs to so the UI can group/route by runner.
       include: { runner: { select: { id: true, name: true, displayName: true } } },
     });
+  }
+
+  /**
+   * Persist the sidebar order. `ids` is the full agent list in the desired order;
+   * each agent's `position` is set to its index. Ids the caller doesn't own are
+   * dropped, so a stale or hostile client can't stamp positions onto another
+   * tenant's agents.
+   */
+  async reorder(ownerId: string, ids: string[]) {
+    const owned = await this.prisma.agent.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((a) => a.id));
+    const ordered = ids.filter((id) => ownedIds.has(id));
+    await this.prisma.$transaction(
+      ordered.map((id, i) => this.prisma.agent.update({ where: { id }, data: { position: i } })),
+    );
+    return this.list(ownerId);
   }
 
   async get(ownerId: string, id: string) {
