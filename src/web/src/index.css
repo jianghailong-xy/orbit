@@ -30,38 +30,30 @@ body {
   background: #c9cdd4;
 }
 
-/* ---- App shell: content wrapper ---- */
-.orbit-shell {
-  display: flex;
-  min-height: 100vh;
-}
-.orbit-main {
-  flex: 1;
-  min-width: 0;
-}
-.orbit-page-pad {
-  padding: 24px 32px;
-}
-
-/* ---- Tasks two-pane layout ---- */
-.tasks-layout {
+/* ---- App shell: side nav | main region (master/detail) ---- */
+.app-shell {
   display: flex;
   height: 100vh;
 }
-.tasks-main {
+.app-main {
   flex: 1;
   min-width: 0;
   height: 100vh;
+  overflow: hidden;
+}
+/* A view fills the main region. .app-view--doc adds the page gutter and owns its
+   scroll; the bare class is full-bleed (the agent console / runner install guide). */
+.app-view {
+  height: 100%;
+  min-width: 0;
+}
+.app-view--doc {
   overflow: auto;
   padding: 24px 32px;
 }
-/* AgentView fills the region itself — no page gutter (see TasksPage). */
-.tasks-main--flush {
-  padding: 0;
-}
 
-/* ---- Tasks side panel (static scaffold) ---- */
-.tasks-panel {
+/* ---- App side nav (static scaffold) ---- */
+.app-nav {
   position: relative;
   width: 264px;
   flex: none;

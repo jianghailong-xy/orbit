@@ -317,7 +317,7 @@ export function TasksSidePanel() {
   };
 
   return (
-    <aside className="tasks-panel" style={{ width: sidebarWidth }}>
+    <aside className="app-nav" style={{ width: sidebarWidth }}>
       <div className="tp-brand">
         <span className="tp-brand-logo">🛰</span>
         <span className="tp-brand-name">Orbit</span>
