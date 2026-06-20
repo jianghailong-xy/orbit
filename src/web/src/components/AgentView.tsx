@@ -1601,6 +1601,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 <Select
                   size="small"
                   variant="borderless"
+                  suffixIcon={null}
                   value={shownAgentId}
                   onChange={setAgentId}
                   options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
@@ -1615,6 +1616,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               <Select
                 size="small"
                 variant="borderless"
+                suffixIcon={null}
                 value={shownMode}
                 onChange={(v) =>
                   live ? configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] }) : setMode(v)
@@ -1640,6 +1642,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               <Select
                 size="small"
                 variant="borderless"
+                suffixIcon={null}
                 value={shownModel}
                 onChange={(v) => {
                   // Switching to a model that can't do Auto while Auto is selected
@@ -1662,6 +1665,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               <Select
                 size="small"
                 variant="borderless"
+                suffixIcon={null}
                 value={shownEffort}
                 onChange={(v) => (live ? configMut.mutate({ effort: v }) : setEffort(v))}
                 options={EFFORT_OPTIONS}

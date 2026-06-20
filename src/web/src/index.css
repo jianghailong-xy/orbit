@@ -1456,18 +1456,17 @@ body {
   margin-top: 10px;
   flex-wrap: wrap;
 }
+/* Lightweight, borderless controls (Claude-style): just icon + text, with a faint
+   rounded background surfacing only on hover. */
 .composer-pill {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding-left: 8px;
-  border: 1px solid #dee0e3;
-  border-radius: 999px;
-  background: #f7f8fa;
-  transition: border-color 0.15s, background 0.15s;
+  padding-left: 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
 }
 .composer-pill:hover {
-  border-color: #c9cdd4;
   background: #f2f3f5;
 }
 .composer-pill-icon {
@@ -1480,8 +1479,7 @@ body {
   cursor: default;
 }
 .composer-pill-static:hover {
-  border-color: #dee0e3;
-  background: #f7f8fa;
+  background: transparent;
 }
 .composer-pill-static-label {
   padding: 0 8px 0 2px;
