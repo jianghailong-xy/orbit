@@ -330,9 +330,6 @@ function QuestionForm({
           <button className="approval-btn chat" onClick={() => setChatting(true)}>
             💬 聊聊这个
           </button>
-          <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
-            不回答
-          </button>
         </div>
       )}
     </div>
