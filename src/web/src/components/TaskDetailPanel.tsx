@@ -1,4 +1,4 @@
-import { CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -383,6 +383,15 @@ export function TaskDetailPanel({
               </Button>
             </span>
           </Tooltip>
+          {task && task.status !== 'DONE' && (
+            <Button
+              icon={<CheckOutlined />}
+              loading={markDone.isPending}
+              onClick={() => markDone.mutate()}
+            >
+              标记完成
+            </Button>
+          )}
           <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </div>
