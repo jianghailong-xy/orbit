@@ -145,7 +145,7 @@ export function TasksSidePanel() {
 
   const [agentsOpen, setAgentsOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
-  const [archOpen, setArchOpen] = useState(false);
+  const [completedOpen, setCompletedOpen] = useState(false);
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -201,6 +201,19 @@ export function TasksSidePanel() {
     refetchInterval: (q) =>
       (q.state.data ?? []).some((l) => (l.runningTasks ?? 0) > 0) ? 5_000 : 15_000,
   });
+
+  // Split lists into the active "Task List" group and the finished "Completed"
+  // group. A list lands in Completed only once every task is DONE and nothing is
+  // still running — a running task means work is in flight, so it stays active.
+  const { activeLists, completedLists } = useMemo(() => {
+    const active: TaskList[] = [];
+    const completed: TaskList[] = [];
+    for (const l of taskLists.data ?? []) {
+      if (l.completed && (l.runningTasks ?? 0) === 0) completed.push(l);
+      else active.push(l);
+    }
+    return { activeLists: active, completedLists: completed };
+  }, [taskLists.data]);
 
   // Runners carry the computed `online` flag (set when their heartbeat is fresh).
   // An agent's dot turns green when its machine is online; poll on the same 15s
@@ -263,6 +276,36 @@ export function TasksSidePanel() {
     return () => window.removeEventListener('keydown', onKey);
   }, [agentList, openAgent]);
 
+  const renderListRow = (l: TaskList) => {
+    const key = encodeId(l.id);
+    const running = (l.runningTasks ?? 0) > 0;
+    // A running task means work is still in flight, so it outranks the
+    // completed state even if every other task is already DONE.
+    const completed = !running && !!l.completed;
+    return (
+      <div
+        key={l.id}
+        className={`tp-item inset ${sel === key ? 'active' : ''}`}
+        onClick={() => {
+          setSel(key);
+          navigate(`/lists/${key}`);
+        }}
+      >
+        <span
+          className={`tp-list-dot ${running ? 'running' : completed ? 'done' : ''}`}
+          title={
+            running
+              ? `${l.runningTasks} 个任务执行中`
+              : completed
+                ? '全部任务已完成'
+                : undefined
+          }
+        />
+        <span className={`tp-label ${completed ? 'done' : ''}`}>{l.title}</span>
+      </div>
+    );
+  };
+
   return (
     <aside className="tasks-panel" style={{ width: sidebarWidth }}>
       <div className="tp-brand">
@@ -324,46 +367,15 @@ export function TasksSidePanel() {
             <span className="tp-group-name">Task List</span>
             <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
-          {listOpen && (
-            <>
-              {(taskLists.data ?? []).map((l) => {
-                const key = encodeId(l.id);
-                const running = (l.runningTasks ?? 0) > 0;
-                // A running task means work is still in flight, so it outranks the
-                // completed state even if every other task is already DONE.
-                const completed = !running && !!l.completed;
-                return (
-                  <div
-                    key={l.id}
-                    className={`tp-item inset ${sel === key ? 'active' : ''}`}
-                    onClick={() => {
-                      setSel(key);
-                      navigate(`/lists/${key}`);
-                    }}
-                  >
-                    <span
-                      className={`tp-list-dot ${running ? 'running' : completed ? 'done' : ''}`}
-                      title={
-                        running
-                          ? `${l.runningTasks} 个任务执行中`
-                          : completed
-                            ? '全部任务已完成'
-                            : undefined
-                      }
-                    />
-                    <span className={`tp-label ${completed ? 'done' : ''}`}>{l.title}</span>
-                  </div>
-                );
-              })}
-            </>
-          )}
+          {listOpen && <>{activeLists.map(renderListRow)}</>}
         </div>
 
         <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setArchOpen((o) => !o)}>
-            <span className="tp-group-name">Archived</span>
-            <CaretDownOutlined className={`tp-caret ${archOpen ? '' : 'collapsed'}`} />
+          <div className="tp-group-head" onClick={() => setCompletedOpen((o) => !o)}>
+            <span className="tp-group-name">Completed</span>
+            <CaretDownOutlined className={`tp-caret ${completedOpen ? '' : 'collapsed'}`} />
           </div>
+          {completedOpen && <>{completedLists.map(renderListRow)}</>}
         </div>
       </div>
 
