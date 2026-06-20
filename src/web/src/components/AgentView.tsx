@@ -2,7 +2,7 @@ import {
   AppstoreOutlined,
   ArrowUpOutlined,
   CheckCircleFilled,
-  CheckCircleOutlined,
+  CheckOutlined,
   ClockCircleOutlined,
   CloseCircleFilled,
   CloseOutlined,
@@ -1161,13 +1161,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                     {view === 'active' ? (
                       <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top">
                         <span
-                          className="session-kebab"
+                          className="session-kebab session-complete"
                           onClick={(e) => {
                             e.stopPropagation();
                             archiveMut.mutate(s.id);
                           }}
                         >
-                          <CheckCircleOutlined />
+                          <CheckOutlined />
                         </span>
                       </Tooltip>
                     ) : (

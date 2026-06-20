@@ -800,9 +800,11 @@ body {
 }
 .session-row.active {
   background: #eaf1ff;
+  --row-bg: #eaf1ff;
 }
 .session-row.active:hover {
   background: #e1ebff;
+  --row-bg: #e1ebff;
 }
 .agent-draft {
   display: flex;
@@ -873,6 +875,7 @@ body {
   overflow-y: auto;
 }
 .session-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -880,9 +883,11 @@ body {
   padding: 0 8px;
   border-bottom: 1px solid #f2f3f5;
   cursor: pointer;
+  --row-bg: #fff;
 }
 .session-row:hover {
   background: #f5f6f7;
+  --row-bg: #f5f6f7;
 }
 /* Archived / trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
@@ -912,38 +917,68 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Row actions overlay the right edge instead of taking layout space: while idle
+   the title fills the full row width, and on hover the icon fades in over the
+   text. A gradient blends the title into the row background so it never collides
+   with the icon. */
 .session-right {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
   display: flex;
   align-items: center;
-  flex: none;
-}
-/* Row action menu (the "..." kebab): revealed on row hover or while its menu is
-   open. Space is reserved while hidden so the title/meta column doesn't shift. */
-.session-actions {
-  display: flex;
+  padding-left: 40px;
+  background: linear-gradient(to right, transparent, var(--row-bg) 40px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.session-row:hover .session-actions,
-.session-row.menu-open .session-actions {
+.session-row:hover .session-right,
+.session-row.menu-open .session-right {
   opacity: 1;
   pointer-events: auto;
 }
+.session-actions {
+  display: flex;
+}
 .session-kebab {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   color: #8f959e;
-  font-size: 15px;
+  font-size: 16px;
   flex: none;
+}
+/* Enlarge the click/hover target to the full row height without growing the
+   visible chip, so the icon stays light but is easy to hit. */
+.session-kebab::before {
+  content: '';
+  position: absolute;
+  top: -18px;
+  bottom: -18px;
+  left: -10px;
+  right: -10px;
 }
 .session-kebab:hover {
   background: #e3e6eb;
   color: #1f2329;
+}
+/* Completion button: a bare check with no chip — the row's own hover/selected
+   highlight already frames it, so the action stays light and never clashes with
+   the selected-row tint. Darkens slightly on direct hover for feedback. */
+.session-kebab.session-complete {
+  background: transparent;
+  color: #8f959e;
+  font-size: 16px;
+}
+.session-kebab.session-complete:hover {
+  background: transparent;
+  color: #4e5560;
 }
 .session-status {
   font-size: 12.5px;
