@@ -559,7 +559,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
 
   const send = useMutation({
-    mutationFn: async (content: string): Promise<{ id: string; queuedItem?: QueuedTurn }> => {
+    mutationFn: async (
+      content: string,
+    ): Promise<{ id: string; queuedItem?: QueuedTurn; created?: boolean }> => {
       // Continue a live session; revive an ended-but-resumable one (same row, claude
       // --resumes its context); otherwise (no selection, or unresumable) start a
       // fresh session so the composer never dead-locks.
@@ -589,9 +591,20 @@ export function AgentView({ runner }: { runner: Runner }) {
         permissionMode: MODE_TO_PERMISSION[mode],
         effort: effort || undefined,
       });
-      return { id: created.id };
+      return { id: created.id, created: true };
     },
-    onSuccess: ({ id, queuedItem }) => {
+    onSuccess: ({ id, queuedItem, created }) => {
+      // For a freshly created session, prime its detail cache so the sidebar resolves
+      // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
+      // back to keepPreviousData — the previously open session's agent — and the
+      // highlight blips to that agent until this session's fetch lands. Mirrors
+      // getSession's shape; the background refetch fills in the rest.
+      if (created)
+        qc.setQueryData(['session', id], {
+          id,
+          assignedRunnerId: runner.id,
+          agent: agentId ? { id: agentId } : null,
+        });
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
       setView('active'); // a new/continued session lives in the active list
