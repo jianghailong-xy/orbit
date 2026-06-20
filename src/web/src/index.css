@@ -1420,6 +1420,28 @@ body {
   color: #8f959e;
   font-size: 13px;
 }
+/* Read-only agent identity, shown above the box when the agent can't be switched
+   (live or locked session). Muted so it reads as context, not an editable control. */
+.composer-ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-left: 2px;
+  color: #8f959e;
+  font-size: 13px;
+}
+.composer-ctx-icon {
+  font-size: 13px;
+}
+.composer-ctx-name {
+  font-weight: 500;
+  color: #4e5969;
+}
+/* Pushes Model + Effort to the right edge of the pill row, leaving Mode on the left. */
+.composer-pill-spacer {
+  flex: 1 1 auto;
+}
 
 /* Staged image attachments — a row of thumbnail chips above the composer box. Each chip
    reuses the .composer-pill shape (rounded, bordered) sized to a small thumbnail. */

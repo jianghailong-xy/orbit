@@ -107,9 +107,9 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const AUTO_CAPABLE_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
 const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
 const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
-  { value: 'claude-opus-4-8', label: 'claude-opus-4-8' },
-  { value: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { value: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
 // Claude effort level. '' = Default (omit --effort, model picks its own).
 const EFFORT_OPTIONS = [
@@ -246,7 +246,7 @@ function StatusIcon({ session }: { session: any }) {
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
-  const { message } = AntApp.useApp();
+  const { message, modal } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
@@ -1096,6 +1096,14 @@ export function AgentView({ runner }: { runner: Runner }) {
   const configEditable = live ? idle && runner.online : true;
   // A live session's agent is fixed; otherwise reflect the local pick.
   const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
+  // The agent can't be switched once the session is live, nor when the view is locked to
+  // one agent. In those cases it's read-only info, so we surface it as a static line above
+  // the box (see composer-ctx) instead of a fake-editable pill; otherwise it stays a Select.
+  const agentReadOnly = live || !!lockedAgentId;
+  const shownAgentName =
+    agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
+    selected?.agent?.name ??
+    lockedAgent?.name;
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -1362,6 +1370,12 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="agent-composer">
+        {agentReadOnly && shownAgentName && (
+          <div className="composer-ctx">
+            <AppstoreOutlined className="composer-ctx-icon" />
+            <span className="composer-ctx-name">{shownAgentName}</span>
+          </div>
+        )}
         {images.length > 0 && (
           <div className="composer-attachments">
             {images.map((im) => (
@@ -1540,11 +1554,33 @@ export function AgentView({ runner }: { runner: Runner }) {
                   Stop
                 </Button>
               </Tooltip>
-              <Tooltip title="End the session">
-                <Button size="small" danger onClick={() => control.mutate({ id: selected.id, action: 'end' })}>
-                  End
-                </Button>
-              </Tooltip>
+              {/* End is destructive and irreversible, so it lives behind ⋯ with a confirm
+                  rather than as a one-click button next to Send. */}
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  items: [
+                    {
+                      key: 'end',
+                      danger: true,
+                      label: '结束会话',
+                      onClick: () =>
+                        modal.confirm({
+                          title: '结束会话？',
+                          content: '将释放并发 slot，且无法恢复。',
+                          okText: '结束会话',
+                          okButtonProps: { danger: true },
+                          cancelText: '取消',
+                          onOk: () => control.mutate({ id: selected.id, action: 'end' }),
+                        }),
+                    },
+                  ],
+                }}
+              >
+                <Tooltip title="更多">
+                  <Button size="small" type="text" icon={<MoreOutlined />} aria-label="更多" />
+                </Tooltip>
+              </Dropdown>
             </>
           )}
           <Button
@@ -1557,19 +1593,23 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
         <Tooltip title="Agent & Effort are fixed once a session starts. Model & Mode can be changed between turns — the session resumes with the new setting on your next message. Auto mode needs a recent model (Sonnet 4.6 / Opus 4.6+) and your org to allow it.">
           <div className="composer-pills">
-            <span className="composer-pill">
-              <AppstoreOutlined className="composer-pill-icon" />
-              <Select
-                size="small"
-                variant="borderless"
-                value={shownAgentId}
-                onChange={setAgentId}
-                options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                placeholder="Default"
-                disabled={live || !!lockedAgentId}
-                popupMatchSelectWidth={false}
-              />
-            </span>
+            {/* The agent is only a Select when it can actually be picked (new, unlocked
+                session); once read-only it shows as the static composer-ctx line above. */}
+            {!agentReadOnly && (
+              <span className="composer-pill">
+                <AppstoreOutlined className="composer-pill-icon" />
+                <Select
+                  size="small"
+                  variant="borderless"
+                  value={shownAgentId}
+                  onChange={setAgentId}
+                  options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                  placeholder="Default"
+                  disabled={live || !!lockedAgentId}
+                  popupMatchSelectWidth={false}
+                />
+              </span>
+            )}
             <span className="composer-pill">
               <ControlOutlined className="composer-pill-icon" />
               <Select
@@ -1588,6 +1628,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 popupMatchSelectWidth={false}
               />
             </span>
+            <span className="composer-pill-spacer" />
             <span className="composer-pill">
               <RobotOutlined className="composer-pill-icon" />
               <Select
