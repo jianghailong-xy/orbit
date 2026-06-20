@@ -259,6 +259,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
+  // Last observed scrollTop, so the scroll handler can tell a genuine user scroll-up from a
+  // programmatic re-pin or a late scroll event fired after streaming grew the container.
+  const lastTopRef = useRef(0);
   // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
   // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
   const measure = useCallback(() => {
@@ -267,7 +270,15 @@ export function AgentView({ runner }: { runner: Runner }) {
       setStuck(null);
       return;
     }
-    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    const top = el.scrollTop;
+    // Pin to the bottom while at (or near) it; un-pin only when the user scrolls UP. A long
+    // transcript replays as a flood of one-event-at-a-time renders, and each programmatic
+    // scrollTo fires its scroll event asynchronously — by which time newer events have grown
+    // the container, so a position-only check reads a large gap and wrongly un-pins, stranding
+    // the view above the bottom. Gating the un-pin on a downward scrollTop delta ignores that.
+    if (el.scrollHeight - top - el.clientHeight < 80) atBottomRef.current = true;
+    else if (top < lastTopRef.current - 1) atBottomRef.current = false;
+    lastTopRef.current = top;
     const topY = el.getBoundingClientRect().top;
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued)'),
@@ -461,6 +472,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setIdle(false);
     setStuck(null);
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
+    lastTopRef.current = 0;
     if (!selectedId) {
       setEvents([]);
       seen.current = new Set();
