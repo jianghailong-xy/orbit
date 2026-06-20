@@ -228,9 +228,9 @@ export interface ApprovalDecisionResponse {
 export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload';
 
 /** An image attachment as handed to the runner on the inbox: the id to fetch its bytes
- *  with (`GET /api/attachments/:id`) plus its MIME type, so the runner can build the
- *  claude `image` content block (base64) without a second round-trip for the type. The
- *  bytes themselves never travel inline — only this reference does. */
+ *  with (runner-scoped `GET /runner/sessions/:id/attachments/:attId`) plus its MIME type,
+ *  so the runner can build the claude `image` content block (base64) without a second
+ *  round-trip for the type. The bytes themselves never travel inline — only this ref does. */
 export interface TurnAttachment {
   id: string;
   mimeType: string;
@@ -257,9 +257,9 @@ export interface RunInboxResponse {
   seq: number;
   kind: ConversationTurnKind;
   content?: string;
-  /** Image attachments for this (message) turn. The runner fetches each blob via
-   *  `GET /api/attachments/:id`, base64-encodes it, and adds an `image` content block
-   *  alongside the text. Omitted for text-only turns and all control turns. */
+  /** Image attachments for this (message) turn. The runner fetches each blob via the
+   *  runner-scoped `GET /runner/sessions/:id/attachments/:attId`, base64-encodes it, and
+   *  adds an `image` content block alongside the text. Omitted for text-only/control turns. */
   attachments?: TurnAttachment[];
 }
 

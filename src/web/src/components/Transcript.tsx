@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { fetchAttachmentObjectUrl } from '../api';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -62,7 +63,11 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  // Local previews of images the composer just sent (object URLs, shown instantly).
   images?: TurnImage[];
+  // Durable refs from the persisted `user` event — fetched on demand so a turn's images
+  // survive a reload (and show on the seeded first turn, which has no local preview).
+  imageRefs?: { id: string }[];
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -91,16 +96,21 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     const parent: string | undefined = p.parentToolUseId;
     switch (ev.type) {
       case 'user': {
-        // The runner echoes only the text; images the composer sent with this turn are
-        // joined in here by turnId. An image-only turn has empty text, so still render a
-        // bubble when there are images for it.
+        // The composer's just-sent previews join in by turnId (instant, local object URLs);
+        // the runner also echoes durable image refs in the event payload, used when there's
+        // no local preview (after a reload, or the server-seeded first turn). An image-only
+        // turn has empty text, so still render a bubble when there are images for it.
         const imgs = ev.turnId ? turnImages?.[ev.turnId] : undefined;
-        if (p.text || (imgs && imgs.length)) {
+        const refs: { id: string }[] | undefined = Array.isArray(p.images)
+          ? p.images.filter((im: any) => im && typeof im.id === 'string').map((im: any) => ({ id: String(im.id) }))
+          : undefined;
+        if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           into(parent).push({
             kind: 'user',
             seq: ev.seq,
             text: p.text ? String(p.text) : '',
             images: imgs,
+            imageRefs: refs,
           });
         }
         break;
@@ -185,15 +195,25 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'user':
       // User input is kept verbatim (pre-wrap), not Markdown-parsed, so a literal
       // '#' or '*' the user typed isn't reinterpreted. Any images sent with the turn
-      // render above the text (an image-only turn has empty text).
+      // render above the text (an image-only turn has empty text). Prefer the local
+      // preview (instant); fall back to fetching the durable refs when there's none.
       return (
         <div className="chat-msg chat-user" data-seq={node.seq}>
-          {node.images && node.images.length > 0 && (
+          {node.images && node.images.length > 0 ? (
             <div className="chat-images">
               {node.images.map((im, i) => (
                 <img key={i} className="chat-image" src={im.url} alt="" />
               ))}
             </div>
+          ) : (
+            node.imageRefs &&
+            node.imageRefs.length > 0 && (
+              <div className="chat-images">
+                {node.imageRefs.map((r) => (
+                  <AttachmentImage key={r.id} id={r.id} />
+                ))}
+              </div>
+            )
           )}
           {node.text}
         </div>
@@ -213,6 +233,33 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'error':
       return <div className="chat-error">✖ {node.message}</div>;
   }
+}
+
+// Renders a past turn's image from its attachment id. The download endpoint is
+// bearer-guarded (an <img src> can't carry the token), so fetch the blob and show its
+// object URL, revoking it on unmount. Stays blank until loaded (and on error).
+function AttachmentImage({ id }: { id: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    let made: string | null = null;
+    fetchAttachmentObjectUrl(id)
+      .then((u) => {
+        if (active) {
+          made = u;
+          setUrl(u);
+        } else {
+          URL.revokeObjectURL(u); // unmounted before the fetch resolved
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [id]);
+  if (!url) return <span className="chat-image chat-image-loading" />;
+  return <img className="chat-image" src={url} alt="" />;
 }
 
 // ── Markdown ────────────────────────────────────────────────────────────────

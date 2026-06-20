@@ -48,6 +48,9 @@ export const createInteractiveSession = (body: {
   model?: string;
   permissionMode?: string;
   effort?: string;
+  /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
+   *  new session and links them to its seeded first turn. */
+  attachmentIds?: string[];
 }) =>
   api<{ id: string }>('/sessions', {
     method: 'POST',
@@ -81,13 +84,14 @@ export const sendTurn = (sessionId: string, content: string, attachmentIds?: str
   });
 
 /** Upload one image to the control plane (multipart/form-data — the shared `api` helper
- *  only does JSON). Scoped to `sessionId` so the server can later link it to a turn of
- *  that session (POST /turns and resume only accept attachment ids scoped to their
- *  session). Returns the new attachment id; reference it via sendTurn/resumeSession. */
-export const uploadAttachment = async (file: File, sessionId: string): Promise<{ id: string }> => {
+ *  only does JSON). With `sessionId` the blob is scoped to that session (live/resume turns);
+ *  omitted (composing a new session) it's uploaded unscoped and the create call scopes it.
+ *  Returns the new attachment id; reference it via createInteractiveSession/sendTurn/resume. */
+export const uploadAttachment = async (file: File, sessionId?: string): Promise<{ id: string }> => {
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`/api/attachments?sessionId=${encodeURIComponent(sessionId)}`, {
+  const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+  const res = await fetch(`/api/attachments${qs}`, {
     method: 'POST',
     // No content-type header: the browser sets the multipart boundary itself.
     headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
@@ -102,6 +106,18 @@ export const uploadAttachment = async (file: File, sessionId: string): Promise<{
     throw new Error(msg.message || res.statusText);
   }
   return (await res.json()) as { id: string };
+};
+
+/** Fetch an attachment's bytes as a blob object URL, for rendering a past turn's image in
+ *  the transcript after reload. The download endpoint is bearer-guarded, so an `<img src>`
+ *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
+ *  the caller must revoke. */
+export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
+  const res = await fetch(`/api/attachments/${encodeURIComponent(id)}`, {
+    headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
+  });
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return URL.createObjectURL(await res.blob());
 };
 
 /** Withdraw a still-queued message (only works before the runner picks it up). */

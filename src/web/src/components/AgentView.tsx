@@ -701,10 +701,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       // still uploading, so this is the complete set.
       const attachmentIds = imgs.map((im) => im.id).filter((x): x is string => !!x);
       // Continue a live session; revive an ended-but-resumable one (same row, claude
-      // --resumes its context); otherwise (no selection, or unresumable) start a
-      // fresh session so the composer never dead-locks. Images attach only to the first
-      // two — a brand-new session's create endpoint takes no attachments (canAttach gates
-      // the picker to live/resumable sessions, so imgs is empty on this path).
+      // --resumes its context); otherwise (no selection, or unresumable) start a fresh
+      // session so the composer never dead-locks. All three carry the pasted images: the
+      // create path scopes them to the new session (server links them to the seeded first
+      // turn), so a brand-new session composed from scratch can include screenshots too.
       if (selected && live) {
         const res = await sendTurn(selected.id, content, attachmentIds);
         // A turn already running ⇒ this message is queued (delivered once that turn
@@ -731,6 +731,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         model,
         permissionMode: MODE_TO_PERMISSION[mode],
         effort: effort || undefined,
+        attachmentIds,
       });
       return { id: created.id, created: true };
     },
@@ -750,11 +751,16 @@ export function AgentView({ runner }: { runner: Runner }) {
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
       // Hand the sent previews to the transcript, keyed by turnId, so the image shows in
-      // the user bubble (the runner echoes only text). The object URLs move here as-is —
-      // setImages([]) below drops the chips without revoking them.
+      // the user bubble immediately (the runner echoes the text + image refs). The object
+      // URLs move here as-is — setImages([]) below drops the chips without revoking them.
       if (turnId && vars.images.length) {
         const refs: TurnImage[] = vars.images.map((im) => ({ url: im.previewUrl, mime: im.file.type }));
         setTurnImages((m) => ({ ...m, [turnId]: refs }));
+      } else if (created && vars.images.length) {
+        // The create path has no turnId to key local previews on (the runner seeds the
+        // first turn), so free these object URLs — the seeded turn's `user` event carries
+        // the image refs and the transcript fetches them back for display.
+        vars.images.forEach((im) => URL.revokeObjectURL(im.previewUrl));
       }
       setImages([]);
       setView('active'); // a new/continued session lives in the active list
@@ -891,17 +897,17 @@ export function AgentView({ runner }: { runner: Runner }) {
     document.addEventListener('mouseup', onUp);
   };
 
-  // Image attachments ride on an existing session only: the upload is scoped to a
-  // sessionId and only POST /turns + resume accept attachment ids (a brand-new session's
-  // create has no id to scope to and no attachment field). So offer the picker for a live
-  // or resumable session with the runner online; otherwise it's disabled.
-  const canAttach = runner.online && !!selected && (live || resumable);
+  // Attach images to a live/resumable session (scoped to its id) or while composing a new
+  // one (uploaded unscoped, then scoped to the session the send creates). Either way the
+  // runner must be online to fetch the bytes; otherwise the picker is disabled.
+  const canAttach = runner.online && (selected ? live || resumable : composing);
   const imageUid = useRef(0);
   // Validate, then upload an image as a staged chip. Uploaded eagerly (not on send) so the
-  // turn carries only the id and a slow upload doesn't block typing.
+  // turn carries only the id and a slow upload doesn't block typing. When composing there's
+  // no session yet, so it's uploaded unscoped; create scopes it to the new session.
   const addImage = useCallback(
     async (file: File): Promise<void> => {
-      if (!selected || !(live || resumable)) return;
+      if (!canAttach) return;
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
         message.error(`不支持的图片类型：${file.type || file.name}`);
         return;
@@ -914,7 +920,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       const previewUrl = URL.createObjectURL(file);
       setImages((prev) => [...prev, { uid, file, previewUrl, status: 'uploading' }]);
       try {
-        const { id } = await uploadAttachment(file, selected.id);
+        const { id } = await uploadAttachment(file, selected?.id);
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
@@ -923,7 +929,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         message.error((e as Error).message);
       }
     },
-    [selected, live, resumable, message],
+    [canAttach, selected, message],
   );
   const removeImage = (uid: string): void => {
     setImages((prev) => {

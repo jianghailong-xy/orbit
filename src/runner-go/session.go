@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -337,7 +338,38 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 				if dup {
 					continue
 				}
-				emit(evUser, map[string]interface{}{"text": resp.Content})
+				// Build the claude user message: any pasted images as base64 `image`
+				// blocks, then the text. The runner fetches each blob (runner-scoped);
+				// a fetch failure drops just that image so the turn still goes through as
+				// text rather than stalling the conversation. imgRefs (id+mime) ride on
+				// the `user` event so the web can render the images after a reload.
+				content := []map[string]interface{}{}
+				var imgRefs []map[string]interface{}
+				for _, att := range resp.Attachments {
+					data, ferr := t.fetchAttachment(procCtx, job.SessionID, att.ID)
+					if ferr != nil {
+						logln("attachment fetch failed for", job.SessionID, att.ID+":", ferr)
+						continue
+					}
+					content = append(content, map[string]interface{}{
+						"type": "image",
+						"source": map[string]interface{}{
+							"type":       "base64",
+							"media_type": att.MimeType,
+							"data":       base64.StdEncoding.EncodeToString(data),
+						},
+					})
+					imgRefs = append(imgRefs, map[string]interface{}{"id": att.ID, "mime": att.MimeType})
+				}
+				// Keep the text block unless this is an image-only turn (empty text + images).
+				if resp.Content != "" || len(content) == 0 {
+					content = append(content, map[string]interface{}{"type": "text", "text": resp.Content})
+				}
+				userEv := map[string]interface{}{"text": resp.Content}
+				if len(imgRefs) > 0 {
+					userEv["images"] = imgRefs
+				}
+				emit(evUser, userEv)
 				select {
 				case pending <- resp.TurnID:
 				case <-procCtx.Done():
@@ -347,7 +379,7 @@ func runSessionProcess(ctx context.Context, t *Transport, job *ClaimedSession, e
 					"type": "user",
 					"message": map[string]interface{}{
 						"role":    "user",
-						"content": []map[string]interface{}{{"type": "text", "text": resp.Content}},
+						"content": content,
 					},
 				})
 				if err := writeStdin(string(line) + "\n"); err != nil {

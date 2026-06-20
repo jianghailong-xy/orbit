@@ -14,6 +14,11 @@ export interface CreateSessionDto {
   permissionMode?: string;
   /** Claude effort level (low|medium|high|xhigh|max); '' / omitted → model default. */
   effort?: string;
+  /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
+   *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
+   *  session/turn — they're scoped to this session on create, then linked to the initial
+   *  turn when the runner seeds it. Omitted/empty keeps the first turn text-only. */
+  attachmentIds?: string[];
 }
 
 export interface SessionTurnDto {

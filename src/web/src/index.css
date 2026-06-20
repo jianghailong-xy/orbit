@@ -1347,6 +1347,13 @@ body {
   object-fit: contain;
   display: block;
 }
+/* Placeholder box while a durable attachment blob is being fetched (post-reload). */
+.chat-image-loading {
+  width: 120px;
+  height: 90px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+}
 /* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
    jitter) and surfaces the in-view turn's question once a long answer pushes it off the
    top. Click to jump back to the original bubble. */

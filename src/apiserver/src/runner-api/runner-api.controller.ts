@@ -8,6 +8,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  StreamableFile,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -337,6 +338,29 @@ export class RunnerApiController {
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
       await this.realtime.waitForInbox(sessionId, Math.min(remaining, 5000));
     }
+  }
+
+  /**
+   * Fetch one of a turn's image attachments as raw bytes, for the runner to base64-encode
+   * into a claude `image` content block (the ids/mimes arrive on the inbox). Runner-scoped
+   * (not the user-JWT /api/attachments/:id): the attachment must belong to a session this
+   * runner owns, so a runner can't read another tenant's blobs.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Get('sessions/:id/attachments/:attId')
+  async attachment(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Param('attId') attId: string,
+  ): Promise<StreamableFile> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const att = await this.prisma.attachment.findFirst({
+      where: { id: attId, sessionId },
+      select: { data: true, mimeType: true },
+    });
+    if (!att) throw new NotFoundException('attachment not found');
+    const data = Buffer.from(att.data);
+    return new StreamableFile(data, { type: att.mimeType, disposition: 'inline', length: data.length });
   }
 
   /**

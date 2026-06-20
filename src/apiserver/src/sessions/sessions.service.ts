@@ -79,6 +79,10 @@ export class SessionsService {
       });
       if (!task) throw new ForbiddenException('task not found');
     }
+    // Validate any compose-page image refs up front (caller's, still unscoped) so a bad
+    // one fails the request before a session is created. They're scoped to the session
+    // below and linked to the seeded first turn when the runner claims it (queue.service).
+    const attachmentIds = await this.assertScopableAttachments(ownerId, dto.attachmentIds);
     // PENDING so the assigned runner claims it and spawns the long-lived claude
     // process; it then awaits turns via the inbox.
     const session = await this.prisma.session.create({
@@ -101,6 +105,15 @@ export class SessionsService {
         ownerId,
       },
     });
+    // Scope the compose-page uploads to this session now that it exists. They stay
+    // turn-less until the runner seeds the first turn (queue.service links them to it),
+    // and cascade-delete with the session.
+    if (attachmentIds.length > 0) {
+      await this.prisma.attachment.updateMany({
+        where: { id: { in: attachmentIds }, sessionId: null, turnId: null },
+        data: { sessionId: session.id },
+      });
+    }
     this.queue.notifySessionQueued();
     return session;
   }
@@ -239,6 +252,28 @@ export class SessionsService {
     });
     if (found.length !== ids.length) {
       throw new BadRequestException('one or more attachments are unknown, not yours, or already attached');
+    }
+    return ids;
+  }
+
+  /**
+   * Verify the given attachment ids are the caller's and still unscoped (no session, no
+   * turn) — i.e. fresh uploads made on the compose page before any session existed. Returns
+   * the de-duped ids. Throws on any unknown/foreign/already-scoped id so a bad reference is
+   * rejected BEFORE the session is created. Used by create() for the seeded first turn.
+   */
+  private async assertScopableAttachments(
+    ownerId: string,
+    attachmentIds: string[] | undefined,
+  ): Promise<string[]> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (ids.length === 0) return [];
+    const found = await this.prisma.attachment.findMany({
+      where: { id: { in: ids }, ownerId, sessionId: null, turnId: null },
+      select: { id: true },
+    });
+    if (found.length !== ids.length) {
+      throw new BadRequestException('one or more attachments are unknown, not yours, or already used');
     }
     return ids;
   }

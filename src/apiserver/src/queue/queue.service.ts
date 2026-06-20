@@ -104,7 +104,7 @@ export class QueueService {
       // Truly fresh (first claim ever): seed the first turn from the session prompt
       // so every turn (incl. the first) flows through the same inbox + turn-complete
       // path on the runner.
-      await this.prisma.conversationTurn.create({
+      const turn = await this.prisma.conversationTurn.create({
         data: {
           sessionId: session.id,
           seq: 1,
@@ -113,6 +113,14 @@ export class QueueService {
           content: session.prompt,
           status: 'PENDING',
         },
+        select: { id: true },
+      });
+      // Link any images pasted on the compose page (scoped to this session on create,
+      // still turn-less) to this first turn, so the inbox delivers them like any other
+      // turn's attachments. No-op for a text-only first turn.
+      await this.prisma.attachment.updateMany({
+        where: { sessionId: session.id, turnId: null },
+        data: { turnId: turn.id },
       });
     }
     // Continue the monotonic event seq past whatever a prior run persisted (incl. a

@@ -156,6 +156,35 @@ func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) error 
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, nil, 35*time.Second)
 }
 
+// fetchAttachment GETs one image's raw bytes (runner-scoped, by session+attachment id),
+// for the inbox poller to base64-encode into a claude `image` content block. Returns the
+// raw body — not JSON — so it bypasses `do`.
+func (t *Transport) fetchAttachment(ctx context.Context, sessionID, attID string) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	url := t.baseURL + "/api/runner/sessions/" + sessionID + "/attachments/" + attID
+	req, err := http.NewRequestWithContext(cctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if t.token != "" {
+		req.Header.Set("authorization", "Bearer "+t.token)
+	}
+	resp, err := t.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("GET attachment %s -> %d %s", attID, resp.StatusCode, string(data))
+	}
+	return data, nil
+}
+
 // createApproval registers a pending tool-permission request (from the orbit MCP
 // permission-prompt tool) and returns its id. Idempotent server-side on toolUseId.
 func (t *Transport) createApproval(sessionID string, body interface{}) (string, error) {

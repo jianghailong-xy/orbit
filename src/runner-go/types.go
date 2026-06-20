@@ -124,6 +124,13 @@ type ClaimedSession struct {
 
 // Interactive sessions (Route B) — wire DTOs mirroring @orbit/shared.
 
+// TurnAttachment references one image to fetch for a user turn: its id + MIME type. The
+// bytes come from the runner-scoped GET /runner/sessions/:id/attachments/:attId.
+type TurnAttachment struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mimeType"`
+}
+
 // RunInboxResponse is the next user turn to feed the live claude process.
 // TurnID == "" means nothing is available (mirrors the empty-runId claim convention).
 type RunInboxResponse struct {
@@ -131,6 +138,9 @@ type RunInboxResponse struct {
 	Seq     int    `json:"seq"`
 	Kind    string `json:"kind"`
 	Content string `json:"content,omitempty"`
+	// Image attachments for this (message) turn; the runner fetches each blob and
+	// base64-encodes it into a claude `image` content block. Nil for text-only turns.
+	Attachments []TurnAttachment `json:"attachments,omitempty"`
 }
 
 type ReclaimSession struct {
