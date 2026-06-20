@@ -66,7 +66,7 @@ const STATUS_ORDER: Record<string, number> = {
   DONE: 3,
   CANCELLED: 4,
 };
-const statusRank = (t: any): number => (t.running ? 0 : (STATUS_ORDER[t.status] ?? 5));
+const statusRank = (t: any): number => (t.running || t.queued ? 0 : (STATUS_ORDER[t.status] ?? 5));
 
 // Compare two tasks by the chosen field, ascending. Equal pairs return 0 so the caller's
 // stable sort preserves the incoming createdAt-desc order as a tiebreak.
@@ -87,11 +87,11 @@ const compareBy = (a: any, b: any, field: string): number => {
 const cap = (s: string): string =>
   s.charAt(0) + s.slice(1).toLowerCase().replace('_', ' ');
 
-// `running` is the live ground truth (a PENDING/RUNNING session exists), distinct from
-// the agent-maintained `status` label which can lag. The spinning indicator means
-// "actually running now", so it's gated on `running`: an IN_PROGRESS task whose session
-// already ended (failed/cancelled without the agent finalizing it) shows a static dot,
-// not a perpetual spinner.
+// `running` is the live ground truth (a RUNNING session exists), distinct from the
+// agent-maintained `status` label which can lag. The spinning indicator means
+// "actually running now", so it's gated on `running`: an IN_PROGRESS task with only a
+// queued (PENDING) session, or whose session already ended (failed/cancelled without
+// the agent finalizing it), shows a static dot — not a perpetual spinner.
 function StatusCircle({ status, running }: { status: string; running?: boolean }) {
   let node: React.ReactNode;
   switch (status) {
@@ -150,7 +150,8 @@ export function TasksPage() {
   const tasks = useQuery({
     queryKey: ['tasks'],
     queryFn: () => api<any[]>('/tasks'),
-    refetchInterval: (q) => ((q.state.data ?? []).some((t: any) => t.running) ? 5_000 : 15_000),
+    refetchInterval: (q) =>
+      (q.state.data ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
   });
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   const runners = useQuery({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
@@ -164,7 +165,7 @@ export function TasksPage() {
     queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
     enabled: !!listId,
     refetchInterval: (q) =>
-      (q.state.data?.tasks ?? []).some((t: any) => t.running) ? 5_000 : 15_000,
+      (q.state.data?.tasks ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
   });
   const isListView = !!listId;
   // Switching lists/sections closes any open detail panel.
@@ -365,11 +366,15 @@ export function TasksPage() {
         <div className="task-title-cell">
           <StatusCircle status={r.status} running={r.running} />
           <span className="task-title">{r.title}</span>
-          {r.running && (
+          {r.running ? (
             <Tooltip title="运行中">
               <span className="task-running-dot" />
             </Tooltip>
-          )}
+          ) : r.queued ? (
+            <Tooltip title="排队中">
+              <span className="task-queued-dot" />
+            </Tooltip>
+          ) : null}
         </div>
         <div className="task-creator">
           {assigneeName ? (

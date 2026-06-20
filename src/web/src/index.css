@@ -639,6 +639,26 @@ body {
   flex: none;
   animation: tp-list-dot-pulse 1.4s ease-in-out infinite;
 }
+/* Queued (PENDING) indicator: the session is waiting for a runner slot, not executing
+   yet — a muted grey dot with a gentle fade, distinct from the blue breathing 'running'
+   dot above. */
+.task-queued-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  flex: none;
+  animation: tp-queued-fade 1.8s ease-in-out infinite;
+}
+@keyframes tp-queued-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
 .task-creator {
   display: flex;
   align-items: center;

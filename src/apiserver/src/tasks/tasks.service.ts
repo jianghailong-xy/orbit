@@ -120,25 +120,38 @@ export class TasksService {
   }
 
   /**
-   * Tag each task with `running` = it has a busy (PENDING/RUNNING) session, i.e. it is
-   * actually executing right now. This is the live ground truth, distinct from
-   * Task.status (an agent-maintained label that can lag). One grouped query covers the
-   * whole page. The list-detail view (TaskListsService) computes the same flag inline.
+   * Tag each task with `running` = it has a RUNNING session (actually executing right
+   * now) and `queued` = it has a PENDING session waiting for a runner slot but nothing
+   * running yet. Both are the live ground truth, distinct from Task.status (an
+   * agent-maintained label that can lag): the list breathes only for `running` and
+   * shows a distinct queued indicator for `queued`. One grouped query covers the whole
+   * page. The list-detail view (TaskListsService) computes the same flags inline.
    */
   private async withRunning<T extends { id: string }>(
     tasks: T[],
-  ): Promise<(T & { running: boolean })[]> {
+  ): Promise<(T & { running: boolean; queued: boolean })[]> {
     if (tasks.length === 0) return [];
     const busy = await this.prisma.session.groupBy({
-      by: ['taskId'],
+      by: ['taskId', 'status'],
       where: {
         taskId: { in: tasks.map((t) => t.id) },
         status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
       },
       _count: { _all: true },
     });
-    const running = new Set(busy.map((b) => b.taskId));
-    return tasks.map((t) => ({ ...t, running: running.has(t.id) }));
+    const running = new Set(
+      busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId),
+    );
+    const queued = new Set(
+      busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
+    );
+    return tasks.map((t) => ({
+      ...t,
+      running: running.has(t.id),
+      // A task with both a RUNNING and a PENDING session is simply running; `queued`
+      // is only meaningful when nothing is running yet.
+      queued: queued.has(t.id) && !running.has(t.id),
+    }));
   }
 
   async get(ownerId: string, id: string) {

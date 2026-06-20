@@ -695,7 +695,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const send = useMutation({
     mutationFn: async (
       vars: { content: string; images: ComposerImage[] },
-    ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn }> => {
+    ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn; created?: boolean }> => {
       const { content, images: imgs } = vars;
       // Only fully-uploaded images carry an id to reference; onSend blocks while any is
       // still uploading, so this is the complete set.
@@ -732,10 +732,21 @@ export function AgentView({ runner }: { runner: Runner }) {
         permissionMode: MODE_TO_PERMISSION[mode],
         effort: effort || undefined,
       });
-      return { id: created.id };
+      return { id: created.id, created: true };
     },
-    onSuccess: ({ id, turnId, queuedItem }, vars) => {
+    onSuccess: ({ id, turnId, queuedItem, created }, vars) => {
       pushHistory(id, vars.content); // record under the resolved session id, new sessions included
+      // For a freshly created session, prime its detail cache so the sidebar resolves
+      // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
+      // back to keepPreviousData — the previously open session's agent — and the
+      // highlight blips to that agent until this session's fetch lands. Mirrors
+      // getSession's shape; the background refetch fills in the rest.
+      if (created)
+        qc.setQueryData(['session', id], {
+          id,
+          assignedRunnerId: runner.id,
+          agent: agentId ? { id: agentId } : null,
+        });
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
       // Hand the sent previews to the transcript, keyed by turnId, so the image shows in
