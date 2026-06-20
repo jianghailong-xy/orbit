@@ -1,4 +1,7 @@
-node_modules/
+# No trailing slash: also ignore a symlink named node_modules (a worktree may
+# symlink it to the main checkout). With a slash, git tracks such symlinks and a
+# later checkout clobbers the real deps with a self-referential link.
+node_modules
 dist/
 dist-bin/
 build/
