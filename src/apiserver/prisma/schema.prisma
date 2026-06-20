@@ -458,11 +458,18 @@ model Task {
   listId      String?     @map("list_id") @db.Uuid
   list        TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
   dueDate     DateTime?   @map("due_date")
+  // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
+  // default). Turn off to keep the gate but trigger the run manually.
+  autoRunWhenReady Boolean @default(true) @map("auto_run_when_ready")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
   comments TaskComment[]
   sessions Session[] @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
+  // Dependency edges where THIS task is the dependent: the prerequisites it waits on.
+  dependsOn    TaskDependency[] @relation("DependencyFromTask")
+  // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
+  dependedOnBy TaskDependency[] @relation("DependencyToTask")
 
   @@index([ownerId])
   @@index([assigneeId])
@@ -489,4 +496,24 @@ model TaskComment {
 
   @@index([taskId, createdAt])
   @@map("task_comment")
+}
+
+// A "B depends on A" edge: the dependent task (`taskId`) may only run once its
+// prerequisite (`dependsOnTaskId`) reaches DONE. An explicit join table because the
+// relation is many-to-many (a task can wait on several prerequisites and block several
+// dependents). Both endpoints cascade-delete with their task; the graph is kept acyclic
+// in code (wouldCreateCycle) on insert, so the completion-triggered runner can't loop.
+// Tenant scope is the endpoints' owner — both tasks are validated same-owner on insert
+// (cf. TaskComment, which likewise carries no own ownerId).
+model TaskDependency {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  taskId          String   @map("task_id") @db.Uuid
+  task            Task     @relation("DependencyFromTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTaskId String   @map("depends_on_task_id") @db.Uuid
+  dependsOnTask   Task     @relation("DependencyToTask", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, dependsOnTaskId])
+  @@index([dependsOnTaskId])
+  @@map("task_dependency")
 }

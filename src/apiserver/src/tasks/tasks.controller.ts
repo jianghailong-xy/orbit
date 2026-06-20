@@ -11,6 +11,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
+  AddDependencyDto,
   BatchAssignDto,
   BatchExecuteDto,
   CreateTaskCommentDto,
@@ -81,5 +82,23 @@ export class TasksController {
     @Param('commentId') commentId: string,
   ) {
     return this.tasks.removeComment(user.userId, id, commentId);
+  }
+
+  @Post(':id/dependencies')
+  addDependency(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: AddDependencyDto,
+  ) {
+    return this.tasks.addDependency(user.userId, id, dto.dependsOnTaskId);
+  }
+
+  @Delete(':id/dependencies/:dependsOnTaskId')
+  removeDependency(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('dependsOnTaskId') dependsOnTaskId: string,
+  ) {
+    return this.tasks.removeDependency(user.userId, id, dependsOnTaskId);
   }
 }

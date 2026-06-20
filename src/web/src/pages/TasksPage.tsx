@@ -2,6 +2,7 @@ import {
   CheckCircleFilled,
   DeleteOutlined,
   LoadingOutlined,
+  LockOutlined,
   PlayCircleOutlined,
   PlusOutlined,
   SortAscendingOutlined,
@@ -373,6 +374,17 @@ export function TasksPage() {
           ) : r.queued ? (
             <Tooltip title="排队中">
               <span className="task-queued-dot" />
+            </Tooltip>
+          ) : r.blocked ? (
+            <Tooltip
+              title={r.dependencyState === 'BLOCKED_FAILED' ? '前置任务已取消，需处理' : '等待前置任务完成'}
+            >
+              <LockOutlined
+                style={{
+                  fontSize: 12,
+                  color: r.dependencyState === 'BLOCKED_FAILED' ? '#d4380d' : '#8c8c8c',
+                }}
+              />
             </Tooltip>
           ) : null}
         </div>

@@ -1,6 +1,6 @@
 import { CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Avatar, Button, Input, Select, Spin, Tooltip } from 'antd';
+import { App as AntApp, Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -174,6 +174,48 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
+  // All tasks, to pick prerequisites from (excludes this task + ones already added).
+  const allTasksQ = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
+
+  // After any dependency/auto-run/mark-done change, refresh this panel and the list (its
+  // lock indicators and the picker's task statuses both derive from the same data).
+  const refreshTaskViews = () => {
+    qc.invalidateQueries({ queryKey: ['task', taskId] });
+    qc.invalidateQueries({ queryKey: ['tasks'] });
+  };
+
+  const addDependency = useMutation({
+    mutationFn: (dependsOnTaskId: string) =>
+      api(`/tasks/${taskId}/dependencies`, { method: 'POST', body: { dependsOnTaskId } }),
+    onSuccess: refreshTaskViews,
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const removeDependency = useMutation({
+    mutationFn: (dependsOnTaskId: string) =>
+      api(`/tasks/${taskId}/dependencies/${dependsOnTaskId}`, { method: 'DELETE' }),
+    onSuccess: refreshTaskViews,
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  const setAutoRun = useMutation({
+    mutationFn: (autoRunWhenReady: boolean) =>
+      api(`/tasks/${taskId}`, { method: 'PATCH', body: { autoRunWhenReady } }),
+    onSuccess: refreshTaskViews,
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  // Safety net for the "agent forgot to mark DONE" case (see §6.3): mark the task done
+  // so its waiting dependents are released (and auto-run).
+  const markDone = useMutation({
+    mutationFn: () => api(`/tasks/${taskId}`, { method: 'PATCH', body: { status: 'DONE' } }),
+    onSuccess: () => {
+      message.success('已标记完成，下游任务将被释放');
+      refreshTaskViews();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
   const addComment = useMutation({
     mutationFn: (vars: { body: string; mentions: string[] }) =>
       api(`/tasks/${taskId}/comments`, { method: 'POST', body: vars }),
@@ -253,14 +295,40 @@ export function TaskDetailPanel({
   const status = STATUS_META[task?.status as string] ?? { label: task?.status ?? '', tone: 'muted' };
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
+
+  // ── Dependencies ───────────────────────────────────────────────────────────
+  const dependsOn = q.data?.dependsOn ?? []; // edges: this task's prerequisites
+  const dependedOnBy = q.data?.dependedOnBy ?? []; // edges: tasks waiting on this one
+  const dependencyState: string = q.data?.dependencyState ?? 'NONE';
+  const blocked = dependencyState === 'BLOCKED' || dependencyState === 'BLOCKED_FAILED';
+  const prereqIds = new Set(dependsOn.map((d: any) => d.dependsOnTask.id));
+  // Candidate prerequisites: every other task not already a prerequisite of this one.
+  const dependencyOptions = (allTasksQ.data ?? [])
+    .filter((t: any) => t.id !== taskId && !prereqIds.has(t.id))
+    .map((t: any) => ({ value: t.id, label: t.title }));
+  // §6.3 safety net: a run finished successfully but the task still isn't DONE while
+  // dependents wait — surface a one-click "标记完成" so the pipeline doesn't stall.
+  const hasSucceededSession = sessions.some((s: any) => s.status === 'SUCCEEDED');
+  const needsDoneConfirm =
+    dependedOnBy.length > 0 && task?.status !== 'DONE' && hasSucceededSession;
+
   // Need a responsible agent to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also
   // debounces it against repeated clicks (no second trigger until the current run ends).
   const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s.status));
-  const executeDisabled = !canExecute || running;
-  const executeHint = !canExecute ? '请先指定负责 Agent' : running ? '任务执行中…' : '';
+  // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
+  const executeDisabled = !canExecute || running || blocked;
+  const executeHint = blocked
+    ? dependencyState === 'BLOCKED_FAILED'
+      ? '前置任务已取消，需先处理'
+      : '等待前置任务完成'
+    : !canExecute
+      ? '请先指定负责 Agent'
+      : running
+        ? '任务执行中…'
+        : '';
 
   return (
     <aside className="task-detail-panel">
@@ -307,6 +375,28 @@ export function TaskDetailPanel({
         <div className="tdp-empty">无法加载任务详情。</div>
       ) : (
         <div className="tdp-body">
+          {needsDoneConfirm && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                marginBottom: 12,
+                background: '#fffbe6',
+                border: '1px solid #ffe58f',
+                borderRadius: 6,
+                fontSize: 13,
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                有 {dependedOnBy.length} 个下游任务在等待，但此任务尚未标记完成。
+              </span>
+              <Button size="small" type="primary" loading={markDone.isPending} onClick={() => markDone.mutate()}>
+                标记完成
+              </Button>
+            </div>
+          )}
           <section className="tdp-section">
             <div className="tdp-section-title">详情</div>
             <div className="tdp-field">
@@ -350,6 +440,80 @@ export function TaskDetailPanel({
               <span className="tdp-field-label">截止时间</span>
               <span className="tdp-field-value">{fmt(task?.dueDate)}</span>
             </div>
+          </section>
+
+          <section className="tdp-section">
+            <div className="tdp-section-title">前置依赖</div>
+            {blocked && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 10px',
+                  marginBottom: 8,
+                  borderRadius: 6,
+                  fontSize: 12,
+                  background: dependencyState === 'BLOCKED_FAILED' ? '#fff1f0' : '#f0f5ff',
+                  border: `1px solid ${dependencyState === 'BLOCKED_FAILED' ? '#ffccc7' : '#adc6ff'}`,
+                  color: dependencyState === 'BLOCKED_FAILED' ? '#cf1322' : '#1d39c4',
+                }}
+              >
+                {dependencyState === 'BLOCKED_FAILED'
+                  ? '前置任务已取消，需先处理后才能执行'
+                  : '等待前置任务全部完成后才能执行'}
+              </div>
+            )}
+            {dependsOn.length === 0 ? (
+              <div className="tdp-muted">无前置依赖</div>
+            ) : (
+              dependsOn.map((d: any) => {
+                const meta = STATUS_META[d.dependsOnTask.status] ?? { label: d.dependsOnTask.status, tone: 'muted' };
+                return (
+                  <div
+                    key={d.dependsOnTask.id}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
+                  >
+                    <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {d.dependsOnTask.title}
+                    </span>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<CloseOutlined />}
+                      loading={removeDependency.isPending}
+                      onClick={() => removeDependency.mutate(d.dependsOnTask.id)}
+                      aria-label="移除依赖"
+                    />
+                  </div>
+                );
+              })
+            )}
+            <Select
+              style={{ width: '100%', marginTop: 8 }}
+              placeholder="添加前置任务…"
+              value={null}
+              showSearch
+              optionFilterProp="label"
+              loading={allTasksQ.isLoading || addDependency.isPending}
+              popupMatchSelectWidth={false}
+              options={dependencyOptions}
+              onChange={(val) => val && addDependency.mutate(val)}
+            />
+            {dependsOn.length > 0 && (
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13 }}
+              >
+                <Switch
+                  size="small"
+                  checked={task?.autoRunWhenReady ?? true}
+                  loading={setAutoRun.isPending}
+                  onChange={(v) => setAutoRun.mutate(v)}
+                />
+                <span>前置全部完成后自动执行</span>
+              </div>
+            )}
           </section>
 
           {q.data?.description && (

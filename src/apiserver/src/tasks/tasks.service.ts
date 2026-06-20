@@ -7,10 +7,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
+import { TaskStatus } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import {
+  canRun,
+  computeDependencyState,
+  wouldCreateCycle,
+  type DependencyState,
+} from './task-dependencies';
 
 /** A polymorphic actor (user or agent) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -48,6 +55,38 @@ export class TasksService {
     if (!list) throw new ForbiddenException('task list not found');
   }
 
+  /** Assert every id is a task this user owns (dependency endpoints both sides). */
+  private async assertOwnedTasks(ownerId: string, ids: string[]): Promise<void> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return;
+    const count = await this.prisma.task.count({ where: { id: { in: unique }, ownerId } });
+    if (count !== unique.length) throw new NotFoundException('task not found');
+  }
+
+  /**
+   * Derive each task's DependencyState in one batched pass: load every dependency edge
+   * whose dependent is in `taskIds`, joined to its prerequisite's status, group by
+   * dependent and reduce. Tasks with no prerequisites are absent (caller reads absent as
+   * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
+   */
+  private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
+    if (taskIds.length === 0) return new Map();
+    const edges = await this.prisma.taskDependency.findMany({
+      where: { taskId: { in: taskIds } },
+      select: { taskId: true, dependsOnTask: { select: { status: true } } },
+    });
+    const byTask = new Map<string, TaskStatus[]>();
+    for (const e of edges) {
+      const status = e.dependsOnTask.status as unknown as TaskStatus;
+      const arr = byTask.get(e.taskId);
+      if (arr) arr.push(status);
+      else byTask.set(e.taskId, [status]);
+    }
+    const out = new Map<string, DependencyState>();
+    for (const [taskId, statuses] of byTask) out.set(taskId, computeDependencyState(statuses));
+    return out;
+  }
+
   /**
    * Validate an agent belongs to the owner and return it as a task/comment creator.
    * Used by the runner MCP path to attribute work to the acting agent. Returns
@@ -71,7 +110,11 @@ export class TasksService {
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
     const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
-    return this.prisma.task.create({
+    // Validate prerequisites up front so we never create a task and then reject its deps.
+    // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
+    const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
+    if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
+    const task = await this.prisma.task.create({
       data: {
         title: dto.title,
         description: dto.description,
@@ -83,8 +126,16 @@ export class TasksService {
         assigneeId: dto.assigneeId,
         listId: dto.listId,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        autoRunWhenReady: dto.autoRunWhenReady,
       },
     });
+    if (dependsOnTaskIds.length) {
+      await this.prisma.taskDependency.createMany({
+        data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: task.id, dependsOnTaskId })),
+        skipDuplicates: true,
+      });
+    }
+    return task;
   }
 
   /** Return the session id only if it exists under this owner; otherwise undefined. */
@@ -116,7 +167,14 @@ export class TasksService {
         _count: { select: { comments: true } },
       },
     });
-    return this.withRunning(tasks);
+    const withRun = await this.withRunning(tasks);
+    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    return withRun.map((t) => {
+      const dependencyState = states.get(t.id) ?? 'NONE';
+      // `blocked` drives the list's lock indicator; canRun is the single source of truth
+      // shared with the execute/batch gates so the UI never offers a run the API rejects.
+      return { ...t, dependencyState, blocked: !canRun(dependencyState) };
+    });
   }
 
   /**
@@ -163,10 +221,24 @@ export class TasksService {
         comments: { orderBy: { createdAt: 'asc' } },
         sessions: { select: { id: true, title: true, status: true } },
         creatorSession: { select: { id: true, title: true, status: true } },
+        // Prerequisites this task waits on, and the tasks blocked until this one is DONE.
+        dependsOn: {
+          include: { dependsOnTask: { select: { id: true, title: true, status: true } } },
+        },
+        dependedOnBy: {
+          include: { task: { select: { id: true, title: true, status: true } } },
+        },
       },
     });
     if (!task) throw new NotFoundException('task not found');
-    return { ...task, comments: await this.resolveCommentAuthors(task.comments) };
+    const dependencyState = computeDependencyState(
+      task.dependsOn.map((d) => d.dependsOnTask.status as unknown as TaskStatus),
+    );
+    return {
+      ...task,
+      comments: await this.resolveCommentAuthors(task.comments),
+      dependencyState,
+    };
   }
 
   /**
@@ -192,7 +264,7 @@ export class TasksService {
   }
 
   async update(ownerId: string, id: string, dto: UpdateTaskDto) {
-    await this.get(ownerId, id);
+    const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedAgent(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     const data: Prisma.TaskUpdateInput = {
@@ -200,6 +272,7 @@ export class TasksService {
       description: dto.description,
       status: dto.status,
       dueDate: dto.dueDate === null ? null : dto.dueDate ? new Date(dto.dueDate) : undefined,
+      autoRunWhenReady: dto.autoRunWhenReady,
     };
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
@@ -209,7 +282,88 @@ export class TasksService {
     if (dto.listId !== undefined) {
       data.list = dto.listId ? { connect: { id: dto.listId } } : { disconnect: true };
     }
-    return this.prisma.task.update({ where: { id }, data });
+    const updated = await this.prisma.task.update({ where: { id }, data });
+    // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
+    // (both the user PATCH and the agent's task_update MCP flow through here). On the
+    // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
+    // trigger failure must never fail the status write that caused it.
+    if (dto.status === TaskStatus.DONE && before.status !== 'DONE') {
+      await this.triggerDependents(ownerId, id).catch((e) =>
+        this.logger.warn(`triggerDependents failed for task ${id}: ${e?.message ?? e}`),
+      );
+    }
+    return updated;
+  }
+
+  /**
+   * A prerequisite (`doneTaskId`) just reached DONE: find every task that depends on it
+   * and auto-run the ones this completion unblocked. A dependent fires only when it is
+   * now fully READY (all its prerequisites DONE), still actionable (OPEN), opted into
+   * auto-run, and has an assignee bound to a runner. Each run is best-effort and isolated
+   * so one failure doesn't stop the others. Downstream chains flow naturally: the agent
+   * marking that dependent DONE re-enters update() and triggers the next layer.
+   */
+  private async triggerDependents(ownerId: string, doneTaskId: string): Promise<void> {
+    const edges = await this.prisma.taskDependency.findMany({
+      where: { dependsOnTaskId: doneTaskId },
+      select: { taskId: true },
+    });
+    const dependentIds = [...new Set(edges.map((e) => e.taskId))];
+    if (!dependentIds.length) return;
+    const states = await this.dependencyStatesFor(dependentIds);
+    const dependents = await this.prisma.task.findMany({
+      where: { id: { in: dependentIds }, ownerId },
+      select: {
+        id: true,
+        status: true,
+        autoRunWhenReady: true,
+        assignee: { select: { id: true, runnerId: true } },
+      },
+    });
+    for (const dep of dependents) {
+      if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
+      if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
+      if (!dep.autoRunWhenReady) continue; // gate kept, manual trigger only
+      if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
+      try {
+        await this.execute(ownerId, dep.id);
+      } catch (e) {
+        this.logger.warn(
+          `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+  }
+
+  /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */
+  async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
+    if (taskId === dependsOnTaskId) throw new BadRequestException('任务不能依赖自身');
+    await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
+    // Cycle check over this owner's whole dependency subgraph (both endpoints are
+    // same-owner by construction, so filtering edges by the dependent's owner is enough).
+    const edges = await this.prisma.taskDependency.findMany({
+      where: { task: { ownerId } },
+      select: { taskId: true, dependsOnTaskId: true },
+    });
+    if (wouldCreateCycle(edges, taskId, dependsOnTaskId)) {
+      throw new BadRequestException('该依赖会形成循环依赖');
+    }
+    try {
+      await this.prisma.taskDependency.create({ data: { taskId, dependsOnTaskId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('该依赖已存在');
+      }
+      throw e;
+    }
+    return this.get(ownerId, taskId);
+  }
+
+  /** Remove a prerequisite edge (no-op if it doesn't exist). */
+  async removeDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
+    await this.assertOwnedTasks(ownerId, [taskId]);
+    await this.prisma.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
+    return this.get(ownerId, taskId);
   }
 
   async remove(ownerId: string, id: string) {
@@ -339,6 +493,14 @@ export class TasksService {
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    const depState = (await this.dependencyStatesFor([id])).get(id) ?? 'NONE';
+    if (!canRun(depState)) {
+      throw new BadRequestException(
+        depState === 'BLOCKED_FAILED'
+          ? '前置任务已取消，请先处理前置任务后再执行'
+          : '前置任务尚未全部完成，无法执行',
+      );
+    }
     if (!task.assignee) throw new BadRequestException('请先为任务指定负责 Agent');
     if (!task.assignee.runnerId) throw new BadRequestException('负责 Agent 未绑定 runner，无法执行');
     const prompt = this.buildExecutePrompt(task);
@@ -387,12 +549,20 @@ export class TasksService {
       },
     });
 
+    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
     const runnable: typeof tasks = [];
     const skipped: { id: string; title: string; reason: string }[] = [];
     for (const t of tasks) {
+      const state = states.get(t.id) ?? 'NONE';
       if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: '未指定负责 Agent' });
       else if (!t.assignee.runnerId)
         skipped.push({ id: t.id, title: t.title, reason: '负责 Agent 未绑定 runner' });
+      else if (!canRun(state))
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: state === 'BLOCKED_FAILED' ? '前置任务已取消' : '前置任务尚未完成',
+        });
       else runnable.push(t);
     }
     // taskIds with no matching owned task (deleted / not owned) are silently ignored.
