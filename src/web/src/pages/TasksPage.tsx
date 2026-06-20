@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import { api, getSession } from '../api';
 import { decodeId } from '../lib/idCodec';
+import { ActiveSessionsView } from '../components/ActiveSessionsView';
 import { AgentView } from '../components/AgentView';
 import { RunnerRegisterGuide } from '../components/RunnerRegisterGuide';
 import { TasksSidePanel } from '../components/TasksSidePanel';
@@ -147,6 +148,8 @@ export function TasksPage() {
   const showRegister = loc.pathname === '/runners/register';
   const showRunners = loc.pathname === '/runners';
   const showSkills = loc.pathname === '/skills';
+  // Active now lists live sessions (what's running now) instead of the task table.
+  const showActive = loc.pathname === '/active';
   // /runners/<base62> opens that runner's detail/settings page. (/runners/register
   // also matches the :id pattern, so guard against it.)
   const runnerDetailMatch = useMatch('/runners/:id');
@@ -354,7 +357,7 @@ export function TasksPage() {
   // The task list is one of several views this page hosts; the others (agent console,
   // runners, register guide) render in its place. Arrow keys must only drive the list.
   const showTaskList =
-    !showRegister && !showRunners && !showSkills && !runnerDetailId && !inAgentView;
+    !showRegister && !showRunners && !showSkills && !runnerDetailId && !inAgentView && !showActive;
 
   // Up/Down arrows step through the task rows, opening each like tabs — the same
   // selection a click drives. Skipped while typing in an input/textarea (so the detail
@@ -475,6 +478,8 @@ export function TasksPage() {
               <Spin />
             </div>
           )
+        ) : showActive ? (
+          <ActiveSessionsView />
         ) : (
           <>
         <h1 className="page-title">{pageTitle}</h1>
