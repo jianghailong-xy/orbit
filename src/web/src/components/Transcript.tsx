@@ -366,11 +366,12 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const [open, setOpen] = useState(
     !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion',
   );
-  // While an AskUserQuestion is still awaiting the user, the interactive answer
-  // card (ApprovalPanel) is shown separately — don't also render this read-only
-  // copy in the transcript. Once answered (result arrives) or the session has
-  // ended, show it as the historical record (question + the chosen answer).
-  if (node.name === 'AskUserQuestion' && live && !node.result) return null;
+  // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
+  // interactive card (ApprovalPanel) is shown separately — don't also render this
+  // read-only copy in the transcript (it would duplicate the question/plan). Once
+  // resolved (result arrives) or the session has ended, show it as the historical
+  // record (question + chosen answer, or the plan).
+  if ((node.name === 'AskUserQuestion' || node.name === 'ExitPlanMode') && live && !node.result) return null;
   return (
     <div
       className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${

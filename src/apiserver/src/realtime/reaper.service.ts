@@ -17,6 +17,12 @@ const CANCEL_GRACE_MS = 2 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
+// A task in a terminal state has no work left, so a session still parked at
+// AWAITING_INPUT for it (e.g. a "开始执行" run whose agent marked the task DONE) is
+// just holding a concurrency slot. Recycle it immediately instead of waiting out
+// IDLE_AFTER_MS. Covers DONE from either the agent (MCP) or a manual user edit.
+const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED];
+
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
  * whose runner dies would sit RUNNING/AWAITING_INPUT forever, leaking a session and
@@ -56,6 +62,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         status: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
+        task: { select: { status: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
     });
@@ -101,12 +108,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
         }
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
+        // Tear a parked session down when its task is already finished (recycle the
+        // slot now) or when it has sat idle past IDLE_AFTER_MS.
+        const taskDone = !!s.task && TASK_TERMINAL.includes(s.task.status);
         if (
           s.status === RunStatus.AWAITING_INPUT &&
           !s.cancelRequestedAt &&
-          now - lastTurn > IDLE_AFTER_MS
+          (taskDone || now - lastTurn > IDLE_AFTER_MS)
         ) {
-          await this.endIdle(s.id, s.assignedRunnerId, idleCutoff);
+          await this.endParked(s.id, s.assignedRunnerId, idleCutoff);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
@@ -159,22 +169,28 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     this.log.warn(`reaped dead-runner session ${sessionId} (${reason})`);
   }
 
-  /** Live runner but idle too long: gracefully end via an inbox 'end' turn + cancel. */
-  private async endIdle(
+  /**
+   * Gracefully tear down a session parked at AWAITING_INPUT (inbox 'end' turn +
+   * cancel), freeing its concurrency slot. Triggered when the session's task is
+   * already terminal (its work is done) or when it has been idle past IDLE_AFTER_MS.
+   */
+  private async endParked(
     sessionId: string,
     runnerId: string | null,
     idleCutoff: Date,
   ): Promise<void> {
-    // Claim the teardown atomically: re-evaluate idleness at execution time and put
+    // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
-    // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so.
+    // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
+    // re-check mirrors sweep() — still parked, and either its task is terminal or it's
+    // still idle — so a turn that arrived since the sweep read doesn't get cut off.
     const done = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.session.updateMany({
         where: {
           id: sessionId,
           status: RunStatus.AWAITING_INPUT,
           cancelRequestedAt: null,
-          lastTurnAt: { lt: idleCutoff },
+          OR: [{ task: { status: { in: TASK_TERMINAL } } }, { lastTurnAt: { lt: idleCutoff } }],
         },
         data: { cancelRequestedAt: new Date() },
       });
@@ -198,6 +214,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     if (!done) return;
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     this.realtime.notifyInbox(sessionId);
-    this.log.log(`ending idle session ${sessionId}`);
+    this.log.log(`recycling parked session ${sessionId}`);
   }
 }
