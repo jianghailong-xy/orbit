@@ -5,17 +5,28 @@ import { useNavigate } from 'react-router-dom';
 import { encodeId } from '../lib/idCodec';
 import { sessionsQuery } from '../lib/queries';
 
-// "Active" = sessions that are live or queued right now, grouped by how much they
-// need a human. Anything finished (SUCCEEDED/FAILED/CANCELLED) is not shown here.
-//   需要你回复 — blocked on you (AWAITING_INPUT) or paused by you (INTERRUPTED)
-//   正在运行   — Claude is working (RUNNING)
+// "Active" = sessions that need your click, are working, or are queued right now.
+// A session only counts as "需要你回复" when a clickable card is pending — an
+// AskUserQuestion, a Plan (ExitPlanMode) approval, or a tool-permission allow/deny.
+// Such a card blocks inside an in-flight turn, so the session's status is RUNNING;
+// we promote it by its pending-approval count (server-provided), not by status.
+// Sessions that merely parked for your next message (AWAITING_INPUT / INTERRUPTED,
+// no card) are intentionally NOT shown here — find them in the session list/history.
+//   需要你回复 — a card is waiting for your click (pendingApprovals > 0)
+//   正在运行   — Claude is working, nothing to click (RUNNING, no card)
 //   排队中     — waiting for a runner slot (PENDING)
 const GROUPS = [
-  { key: 'attention', label: '需要你回复', statuses: ['AWAITING_INPUT', 'INTERRUPTED'] },
-  { key: 'running', label: '正在运行', statuses: ['RUNNING'] },
-  { key: 'queued', label: '排队中', statuses: ['PENDING'] },
+  { key: 'attention', label: '需要你回复' },
+  { key: 'running', label: '正在运行' },
+  { key: 'queued', label: '排队中' },
 ];
-const ACTIVE = GROUPS.flatMap((g) => g.statuses);
+// Only RUNNING (working / blocked on a card) and PENDING (queued) ever show here.
+const VISIBLE = ['RUNNING', 'PENDING'];
+// A pending card blocks inside a RUNNING turn, so attention is decided by the
+// approval count, not the raw status; everything else falls through by status.
+const hasCard = (s: any): boolean => (s.pendingApprovals ?? 0) > 0;
+const groupOf = (s: any): string =>
+  hasCard(s) ? 'attention' : s.status === 'RUNNING' ? 'running' : 'queued';
 
 // Compact Chinese relative time: 刚刚 / N 分钟 / N 小时 / N 天.
 const fmtAgo = (d?: string | null): string => {
@@ -33,34 +44,35 @@ const fmtAgo = (d?: string | null): string => {
 // Most-recent activity drives both the time label and the in-group ordering.
 const timeOf = (s: any): string => s.lastTurnAt ?? s.startedAt ?? s.createdAt;
 
-// A time phrase tuned to the session's state: running shows elapsed, waiting shows
-// how long it's been blocked, queued just says it's waiting for a slot.
+// A time phrase tuned to the session's state: a pending card shows how long it's
+// been waiting on you, a plain running session shows elapsed, queued says it's
+// waiting for a slot.
 function timeLabel(s: any): string {
   const ago = fmtAgo(timeOf(s));
+  if (hasCard(s)) return ago ? `等待 ${ago}` : '';
   if (s.status === 'RUNNING') return ago ? `已跑 ${ago}` : '';
-  if (s.status === 'PENDING') return '等待算力';
-  return ago ? `等待 ${ago}` : '';
+  return '等待算力'; // PENDING
 }
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === 'RUNNING')
+function StatusBadge({ session }: { session: any }) {
+  if (hasCard(session))
+    return (
+      <span className="status-pill awaiting">
+        <span className="status-dot" />
+        等待回复
+      </span>
+    );
+  if (session.status === 'RUNNING')
     return (
       <span className="status-pill running">
         <LoadingOutlined spin />
         运行中
       </span>
     );
-  if (status === 'PENDING')
-    return (
-      <span className="status-pill queued">
-        <span className="status-dot" />
-        排队中
-      </span>
-    );
   return (
-    <span className="status-pill awaiting">
+    <span className="status-pill queued">
       <span className="status-dot" />
-      {status === 'INTERRUPTED' ? '已中断' : '等待回复'}
+      排队中
     </span>
   );
 }
@@ -73,7 +85,7 @@ export function ActiveSessionsView() {
   // view=active is "not archived, not deleted" — it still includes finished and
   // system sessions, so filter to real, still-live ones here.
   const active = (sessionsQ.data ?? []).filter(
-    (s: any) => s.source !== 'system' && ACTIVE.includes(s.status),
+    (s: any) => s.source !== 'system' && VISIBLE.includes(s.status),
   );
 
   const renderRow = (s: any) => {
@@ -85,7 +97,7 @@ export function ActiveSessionsView() {
         onClick={() => navigate(`/sessions/${encodeId(s.id)}`)}
       >
         <div className="task-status-cell">
-          <StatusBadge status={s.status} />
+          <StatusBadge session={s} />
         </div>
         <div className="task-title-cell">
           <span className="task-title">{s.title || '(无标题会话)'}</span>
@@ -115,7 +127,7 @@ export function ActiveSessionsView() {
             // Oldest activity first within a group: the longest-waiting / longest-running
             // session floats to the top, where it most needs attention.
             const rows = active
-              .filter((s: any) => g.statuses.includes(s.status))
+              .filter((s: any) => groupOf(s) === g.key)
               .sort((a: any, b: any) => timeOf(a).localeCompare(timeOf(b)));
             if (rows.length === 0) return null;
             return (
