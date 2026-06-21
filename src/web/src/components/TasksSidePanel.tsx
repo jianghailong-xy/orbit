@@ -237,8 +237,9 @@ export function TasksSidePanel() {
   const unlistedCount = (tasks.data ?? []).filter((t: any) => !t.listId).length;
 
   // The "Active" badge must match what ActiveSessionsView lists — live sessions only:
-  // RUNNING or PENDING, excluding system sessions (NOT the total task count). Shares the
-  // ['sessions', null, 'active'] cache that view fills, so it adds no extra request.
+  // RUNNING or PENDING, including system/task-execution sessions (NOT the total task
+  // count). Shares the ['sessions', null, 'active'] cache that view fills, so it adds no
+  // extra request.
   const activeSessions = useQuery({
     ...sessionsQuery({ view: 'active' }),
     refetchInterval: (q) =>
@@ -247,7 +248,7 @@ export function TasksSidePanel() {
         : 15_000,
   });
   const activeCount = (activeSessions.data ?? []).filter(
-    (s: any) => s.source !== 'system' && (s.status === 'RUNNING' || s.status === 'PENDING'),
+    (s: any) => s.status === 'RUNNING' || s.status === 'PENDING',
   ).length;
 
   // Open an agent's console — the same destination the runner detail page uses.

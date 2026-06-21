@@ -82,11 +82,10 @@ export function ActiveSessionsView() {
   // Same query the agent console uses; poll often since this is the "what's live now" view.
   const sessionsQ = useQuery({ ...sessionsQuery({ view: 'active' }), refetchInterval: 4000 });
 
-  // view=active is "not archived, not deleted" — it still includes finished and
-  // system sessions, so filter to real, still-live ones here.
-  const active = (sessionsQ.data ?? []).filter(
-    (s: any) => s.source !== 'system' && VISIBLE.includes(s.status),
-  );
+  // view=active is "not archived, not deleted" — it still includes finished
+  // sessions, so filter to still-live ones here. System (task-execution) sessions
+  // ARE shown: a queued/running task is live work the user expects to see here.
+  const active = (sessionsQ.data ?? []).filter((s: any) => VISIBLE.includes(s.status));
 
   const renderRow = (s: any) => {
     const meta = [s.agent?.name, s.assignedRunner?.name, timeLabel(s)].filter(Boolean).join(' · ');
