@@ -1,5 +1,4 @@
 import {
-  AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
   BorderOutlined,
@@ -8,7 +7,6 @@ import {
   ClockCircleOutlined,
   CloseCircleFilled,
   CloseOutlined,
-  ControlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EyeOutlined,
@@ -17,10 +15,7 @@ import {
   MinusCircleOutlined,
   MoreOutlined,
   PauseCircleOutlined,
-  PictureOutlined,
   PlusOutlined,
-  RobotOutlined,
-  ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1537,6 +1532,28 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
+          <Tooltip title={canAttach ? '添加图片' : '仅可向已开始的会话发送图片'}>
+            {/* beforeUpload returns false: we upload via uploadAttachment ourselves and
+                keep antd's own list/request out of it. */}
+            <Upload
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              showUploadList={false}
+              disabled={!canAttach}
+              beforeUpload={(file) => {
+                void addImage(file);
+                return false;
+              }}
+            >
+              <Button
+                size="small"
+                type="text"
+                icon={<PlusOutlined />}
+                disabled={!canAttach}
+                aria-label="添加图片"
+              />
+            </Upload>
+          </Tooltip>
           <Input.TextArea
             ref={taRef}
             variant="borderless"
@@ -1645,28 +1662,6 @@ export function AgentView({ runner }: { runner: Runner }) {
               }
             }}
           />
-          <Tooltip title={canAttach ? '添加图片' : '仅可向已开始的会话发送图片'}>
-            {/* beforeUpload returns false: we upload via uploadAttachment ourselves and
-                keep antd's own list/request out of it. */}
-            <Upload
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              showUploadList={false}
-              disabled={!canAttach}
-              beforeUpload={(file) => {
-                void addImage(file);
-                return false;
-              }}
-            >
-              <Button
-                size="small"
-                type="text"
-                icon={<PictureOutlined />}
-                disabled={!canAttach}
-                aria-label="添加图片"
-              />
-            </Upload>
-          </Tooltip>
           {showStop ? (
             <Tooltip title="停止当前回合">
               <Button
@@ -1691,26 +1686,27 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* The agent is only a Select when it can actually be picked (new, unlocked
               session); once read-only it shows as a static pill left of Model below. */}
           {!agentReadOnly && (
-            <span className="composer-pill">
-              <AppstoreOutlined className="composer-pill-icon" />
-              <Select
-                size="small"
-                variant="borderless"
-                suffixIcon={null}
-                value={shownAgentId}
-                onChange={setAgentId}
-                options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                placeholder="Default"
-                disabled={live || !!lockedAgentId}
-                popupMatchSelectWidth={false}
-              />
-            </span>
+            <Tooltip title="Agent">
+              <span className="composer-pill">
+                <Select
+                  size="small"
+                  variant="borderless"
+                  suffixIcon={null}
+                  value={shownAgentId}
+                  onChange={setAgentId}
+                  options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                  placeholder="Default"
+                  disabled={live || !!lockedAgentId}
+                  popupMatchSelectWidth={false}
+                />
+              </span>
+            </Tooltip>
           )}
           {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
-              events, so the parent span is what surfaces the reason on hover. */}
-          <Tooltip title={configHint}>
+              events, so the parent span is what surfaces the reason on hover. With the
+              icons gone, the tooltip also names what each pill controls. */}
+          <Tooltip title={configHint || '权限模式'}>
             <span className="composer-pill">
-              <ControlOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"
@@ -1733,14 +1729,14 @@ export function AgentView({ runner }: { runner: Runner }) {
           </Tooltip>
           <span className="composer-pill-spacer" />
           {agentReadOnly && shownAgentName && (
-            <span className="composer-pill composer-pill-static">
-              <AppstoreOutlined className="composer-pill-icon" />
-              <span className="composer-pill-static-label">{shownAgentName}</span>
-            </span>
+            <Tooltip title="Agent">
+              <span className="composer-pill composer-pill-static">
+                <span className="composer-pill-static-label">{shownAgentName}</span>
+              </span>
+            </Tooltip>
           )}
-          <Tooltip title={configHint}>
+          <Tooltip title={configHint || '模型'}>
             <span className="composer-pill">
-              <RobotOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"
@@ -1763,9 +1759,8 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          <Tooltip title={configHint}>
+          <Tooltip title={configHint || '推理强度'}>
             <span className="composer-pill">
-              <ThunderboltOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"
