@@ -1261,6 +1261,17 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Live status line (in place of a reply, while the agent works). Colour matches the
+   status glyph: blue = running, amber = waiting on you, grey = queued. */
+.session-preview.tone-running {
+  color: #3370ff;
+}
+.session-preview.tone-approval {
+  color: #ff8800;
+}
+.session-preview.tone-queued {
+  color: #8c8c8c;
+}
 .session-meta {
   font-size: 12.5px;
   color: #646a73;

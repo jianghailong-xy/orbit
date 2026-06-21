@@ -255,6 +255,12 @@ model Session {
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
   lastAssistantText String?   @map("last_assistant_text")
+  // Denormalized "frontier" activity for the sidebar's live status line: the tool
+  // name when a tool_use is the latest durable event (in flight, no tool_result yet),
+  // cleared back to null on any other frontier (assistant text, tool_result, turn end).
+  // Only meaningful while RUNNING; the list gates display on status so a stale value
+  // on a finished session is never shown.
+  lastToolUse       String?   @map("last_tool_use")
   // Soft visibility: null = active. archivedAt hides the session into the Archived
   // view, deletedAt into the trash. Both retain all data (transcript, billing) and
   // are reversible — restore clears them. There is no hard delete.

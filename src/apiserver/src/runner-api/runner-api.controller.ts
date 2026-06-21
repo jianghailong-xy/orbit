@@ -641,10 +641,30 @@ export class RunnerApiController {
         if (!text) return acc;
         return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
       }, null);
-    if (lastAssistant) {
+    // Denormalize the "frontier" activity for the sidebar's live status line. The
+    // highest-seq durable event is the agent's latest known state: a tool_use means a
+    // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
+    // other frontier (assistant text, tool_result, turn end) means no tool is running
+    // → clear it. Batches arrive in seq order, so the latest batch's frontier is the
+    // latest overall. An empty (all-streaming) batch leaves the prior value untouched.
+    let frontier: { seq: number; tool: string | null } | null = null;
+    for (const e of durable) {
+      if (frontier && e.seq <= frontier.seq) continue;
+      const tool =
+        e.type === RunEventType.TOOL_USE
+          ? String((e.payload as { name?: string } | null)?.name ?? '')
+              .trim()
+              .slice(0, 60) || null
+          : null;
+      frontier = { seq: e.seq, tool };
+    }
+    if (lastAssistant || frontier) {
       await this.prisma.session.update({
         where: { id: sessionId },
-        data: { lastAssistantText: lastAssistant.text },
+        data: {
+          ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
+          ...(frontier ? { lastToolUse: frontier.tool } : {}),
+        },
       });
     }
 

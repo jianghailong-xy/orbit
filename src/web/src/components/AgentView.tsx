@@ -196,6 +196,28 @@ const plainPreview = (md: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// Shorten a tool id for the live status line: mcp__orbit__task_create -> task_create;
+// plain tool names (Bash, Read, Edit) pass through unchanged.
+const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
+
+// The line shown under a session title. For a LIVE (openable) session that's working we
+// surface its current state — the tool in flight, that it's blocked on you, or a bare
+// "Running…" — so the row never collapses to just a title with no sign of progress.
+// Otherwise it's the flattened last reply (or nothing). `tone` drives the colour:
+// blue = working, amber = needs you, grey = queued, default = reply content.
+type SessionLine = { text: string; tone: 'preview' | 'running' | 'approval' | 'queued' };
+const sessionLine = (s: any, live: boolean): SessionLine | null => {
+  if (live && s.status === 'RUNNING') {
+    if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
+    if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
+    if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+    return { text: 'Running…', tone: 'running' };
+  }
+  if (live && s.status === 'PENDING') return { text: 'Queued', tone: 'queued' };
+  if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+  return null;
+};
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
 // neutral terminal (dormant / cancelled / interrupted / disconnected). A runner that
@@ -1317,6 +1339,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   : [restoreItem];
             // System sessions are openable like active ones; archived/trash rows aren't.
             const openable = view === 'active' || view === 'system';
+            const line = sessionLine(s, openable);
             return (
               <div
                 className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
@@ -1331,8 +1354,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                     <div className="session-title">{s.title}</div>
                     <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
                   </div>
-                  {s.lastAssistantText ? (
-                    <div className="session-preview">{plainPreview(s.lastAssistantText)}</div>
+                  {line ? (
+                    <div
+                      className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                    >
+                      {line.text}
+                    </div>
                   ) : null}
                 </div>
                 <div className="session-right">

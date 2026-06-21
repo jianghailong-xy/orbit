@@ -164,6 +164,7 @@ export class SessionsService {
       permissionMode: string | null;
       effort: string | null;
       lastAssistantText: string | null;
+      lastToolUse: string | null;
       agentId: string | null;
       agentName: string | null;
       agentModel: string | null;
@@ -184,6 +185,7 @@ export class SessionsService {
         s.permission_mode AS "permissionMode",
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
+        s.last_tool_use   AS "lastToolUse",
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
@@ -214,6 +216,7 @@ export class SessionsService {
       permissionMode: r.permissionMode,
       effort: r.effort,
       lastAssistantText: r.lastAssistantText,
+      lastToolUse: r.lastToolUse,
       agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
       assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
     }));
