@@ -1,5 +1,4 @@
 import {
-  AppstoreOutlined,
   ArrowDownOutlined,
   ArrowUpOutlined,
   BorderOutlined,
@@ -8,7 +7,7 @@ import {
   ClockCircleOutlined,
   CloseCircleFilled,
   CloseOutlined,
-  ControlOutlined,
+  CodeOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EyeOutlined,
@@ -16,15 +15,14 @@ import {
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
+  PaperClipOutlined,
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
-  RobotOutlined,
-  ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Segmented, Select, Tooltip, Upload } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Segmented, Select, Tooltip } from 'antd';
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
@@ -1172,6 +1170,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
   const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
@@ -1202,6 +1201,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
     // it), so picking a command mid-message doesn't clobber text typed earlier.
     setText(text.replace(/(^|\s)\/\S*$/, `$1/${name} `));
+    setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // Open the command/skill autocomplete from the `+` menu: drop a `/` (prefixed with a
+  // space when mid-message) so slashToken matches and the menu pops.
+  const insertSlash = (): void => {
+    setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -1564,6 +1570,56 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
+          {/* Hidden picker the `添加图片` menu item triggers; we upload via addImage
+              ourselves and reset value so re-picking the same file fires onChange again. */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            hidden
+            onChange={(e) => {
+              Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
+              e.target.value = '';
+            }}
+          />
+          <Dropdown
+            trigger={['click']}
+            placement="topLeft"
+            disabled={!runner.online}
+            menu={{
+              items: [
+                {
+                  key: 'image',
+                  icon: <PictureOutlined />,
+                  label: canAttach ? '添加图片' : '添加图片（需已开始的会话）',
+                  disabled: !canAttach,
+                  onClick: () => imageInputRef.current?.click(),
+                },
+                {
+                  key: 'slash',
+                  icon: <CodeOutlined />,
+                  label: '命令 / 技能',
+                  disabled: slashItems.length === 0,
+                  onClick: insertSlash,
+                },
+                {
+                  key: 'file',
+                  icon: <PaperClipOutlined />,
+                  label: '上传文件（即将支持）',
+                  disabled: true,
+                },
+              ],
+            }}
+          >
+            <Button
+              size="small"
+              type="text"
+              icon={<PlusOutlined />}
+              disabled={!runner.online}
+              aria-label="添加附件"
+            />
+          </Dropdown>
           <Input.TextArea
             ref={taRef}
             variant="borderless"
@@ -1672,28 +1728,6 @@ export function AgentView({ runner }: { runner: Runner }) {
               }
             }}
           />
-          <Tooltip title={canAttach ? '添加图片' : '仅可向已开始的会话发送图片'}>
-            {/* beforeUpload returns false: we upload via uploadAttachment ourselves and
-                keep antd's own list/request out of it. */}
-            <Upload
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              showUploadList={false}
-              disabled={!canAttach}
-              beforeUpload={(file) => {
-                void addImage(file);
-                return false;
-              }}
-            >
-              <Button
-                size="small"
-                type="text"
-                icon={<PictureOutlined />}
-                disabled={!canAttach}
-                aria-label="添加图片"
-              />
-            </Upload>
-          </Tooltip>
           {showStop ? (
             <Tooltip title="停止当前回合">
               <Button
@@ -1718,26 +1752,27 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* The agent is only a Select when it can actually be picked (new, unlocked
               session); once read-only it shows as a static pill left of Model below. */}
           {!agentReadOnly && (
-            <span className="composer-pill">
-              <AppstoreOutlined className="composer-pill-icon" />
-              <Select
-                size="small"
-                variant="borderless"
-                suffixIcon={null}
-                value={shownAgentId}
-                onChange={setAgentId}
-                options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
-                placeholder="Default"
-                disabled={live || !!lockedAgentId}
-                popupMatchSelectWidth={false}
-              />
-            </span>
+            <Tooltip title="Agent">
+              <span className="composer-pill">
+                <Select
+                  size="small"
+                  variant="borderless"
+                  suffixIcon={null}
+                  value={shownAgentId}
+                  onChange={setAgentId}
+                  options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                  placeholder="Default"
+                  disabled={live || !!lockedAgentId}
+                  popupMatchSelectWidth={false}
+                />
+              </span>
+            </Tooltip>
           )}
           {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
-              events, so the parent span is what surfaces the reason on hover. */}
-          <Tooltip title={configHint}>
+              events, so the parent span is what surfaces the reason on hover. With the
+              icons gone, the tooltip also names what each pill controls. */}
+          <Tooltip title={configHint || '权限模式'}>
             <span className="composer-pill">
-              <ControlOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"
@@ -1760,14 +1795,14 @@ export function AgentView({ runner }: { runner: Runner }) {
           </Tooltip>
           <span className="composer-pill-spacer" />
           {agentReadOnly && shownAgentName && (
-            <span className="composer-pill composer-pill-static">
-              <AppstoreOutlined className="composer-pill-icon" />
-              <span className="composer-pill-static-label">{shownAgentName}</span>
-            </span>
+            <Tooltip title="Agent">
+              <span className="composer-pill composer-pill-static">
+                <span className="composer-pill-static-label">{shownAgentName}</span>
+              </span>
+            </Tooltip>
           )}
-          <Tooltip title={configHint}>
+          <Tooltip title={configHint || '模型'}>
             <span className="composer-pill">
-              <RobotOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"
@@ -1790,9 +1825,8 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          <Tooltip title={configHint}>
+          <Tooltip title={configHint || '推理强度'}>
             <span className="composer-pill">
-              <ThunderboltOutlined className="composer-pill-icon" />
               <Select
                 size="small"
                 variant="borderless"

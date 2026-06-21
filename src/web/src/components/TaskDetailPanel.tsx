@@ -1,7 +1,7 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -113,37 +113,6 @@ interface AgentRow {
   id: string;
   name: string;
   runnerId?: string | null;
-}
-
-// The description is free-form spec text that often runs many lines. Clamp it (like the
-// skills catalog) and only offer 展开 when it's actually cut off, so the 运行/评论 sections
-// below stay reachable without scrolling past a wall of text.
-function TaskDescription({ text }: { text: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Measured while clamped — only show the toggle when the text is truncated.
-    setOverflowing(el.scrollHeight > el.clientHeight + 1);
-  }, [text]);
-  return (
-    <>
-      <div ref={ref} className={`tdp-prose${expanded ? ' expanded' : ''}`}>
-        {text}
-      </div>
-      {(overflowing || expanded) && (
-        <button
-          type="button"
-          className="tdp-prose-toggle"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? '收起' : '展开'}
-        </button>
-      )}
-    </>
-  );
 }
 
 export function TaskDetailPanel({
@@ -529,10 +498,6 @@ export function TaskDetailPanel({
               <span className="tdp-field-label">创建时间</span>
               <span className="tdp-field-value">{fmt(task?.createdAt)}</span>
             </div>
-            <div className="tdp-field">
-              <span className="tdp-field-label">截止时间</span>
-              <span className="tdp-field-value">{fmt(task?.dueDate)}</span>
-            </div>
           </section>
 
           <section className="tdp-section">
@@ -612,7 +577,7 @@ export function TaskDetailPanel({
           {q.data?.description && (
             <section className="tdp-section">
               <div className="tdp-section-title">描述</div>
-              <TaskDescription text={q.data.description} />
+              <div className="tdp-prose">{q.data.description}</div>
             </section>
           )}
 

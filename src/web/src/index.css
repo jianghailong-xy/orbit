@@ -436,7 +436,7 @@ body {
   margin-top: 2px;
 }
 .runner-kebab {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -445,6 +445,11 @@ body {
   color: #8f959e;
   font-size: 15px;
   flex: none;
+  /* Always reserve the slot so revealing the kebab on hover doesn't shift
+     the version number and chevron; only fade visibility. */
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 .runner-kebab:hover {
   background: #e3e6eb;
@@ -452,7 +457,8 @@ body {
 }
 .runner-card:hover .runner-kebab,
 .runner-card.menu-open .runner-kebab {
-  display: flex;
+  visibility: visible;
+  opacity: 1;
 }
 /* Slot utilization: a thin track with a fill proportional to live sessions. */
 .runner-util {
@@ -1562,7 +1568,7 @@ body {
   gap: 8px;
   border: 1px solid #dee0e3;
   border-radius: 10px;
-  padding: 6px 6px 6px 12px;
+  padding: 6px;
 }
 .composer-box:focus-within {
   border-color: #3370ff;
@@ -1623,8 +1629,8 @@ body {
   margin-top: 10px;
   flex-wrap: wrap;
 }
-/* Lightweight, borderless controls (Claude-style): just icon + text, with a faint
-   rounded background surfacing only on hover. */
+/* Lightweight, borderless controls (Claude-style): text-only label, with a faint
+   rounded background surfacing only on hover. The pill category is named via Tooltip. */
 .composer-pill {
   display: inline-flex;
   align-items: center;
@@ -1635,10 +1641,6 @@ body {
 }
 .composer-pill:hover {
   background: #f2f3f5;
-}
-.composer-pill-icon {
-  color: #8f959e;
-  font-size: 13px;
 }
 /* Read-only agent identity, rendered as a static pill in the controls row (left of Model)
    when the agent can't be switched. No chevron and no hover so it reads as fixed context. */
@@ -2750,30 +2752,6 @@ body {
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
-  background: #f7f8fa;
-  border: 1px solid #eceef1;
-  border-radius: 8px;
-  padding: 12px 14px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 10;
-  overflow: hidden;
-}
-.tdp-prose.expanded {
-  display: block;
-  overflow: visible;
-}
-.tdp-prose-toggle {
-  margin-top: 6px;
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 12px;
-  color: #3370ff;
-  cursor: pointer;
-}
-.tdp-prose-toggle:hover {
-  text-decoration: underline;
 }
 .tdp-muted {
   color: #8f959e;
@@ -2866,9 +2844,6 @@ body {
   font-size: 13px;
   color: #4e5969;
   line-height: 1.6;
-  background: #f7f8fa;
-  border-radius: 8px;
-  padding: 8px 10px;
   word-break: break-word;
 }
 /* Comment markdown inherits the 13px bubble size rather than .md's 14px. */
