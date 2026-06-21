@@ -48,6 +48,11 @@ export class RunnersController {
     return this.runners.updateRunner(user.userId, id, dto);
   }
 
+  @Post(':id/rotate-token')
+  rotateToken(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.rotateToken(user.userId, id);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.runners.removeRunner(user.userId, id);

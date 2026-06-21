@@ -52,6 +52,8 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
+  // Live sessions currently occupying this runner's slots (of maxConcurrent).
+  activeSessions?: number;
   // Extra fields returned by GET /runners, shown read-only on the runner detail page.
   hostname?: string | null;
   labels?: string[];
