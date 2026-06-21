@@ -376,18 +376,22 @@ body {
 
 /* ---- Runners page (the runner list, moved out of the sidebar) ---- */
 .runners-head {
+  max-width: 920px;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 .runners-empty {
-  margin-top: 24px;
+  max-width: 920px;
+  margin: 24px auto 0;
   color: #8f959e;
   font-size: 14px;
 }
 .runners-list {
-  margin-top: 16px;
+  max-width: 920px;
+  margin: 16px auto 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
