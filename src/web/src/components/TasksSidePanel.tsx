@@ -363,6 +363,7 @@ export function TasksSidePanel() {
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setAgentsOpen((o) => !o)}>
             <span className="tp-group-name">Agents</span>
+            {agentList.length > 0 && <span className="tp-count">{agentList.length}</span>}
             <CaretDownOutlined className={`tp-caret ${agentsOpen ? '' : 'collapsed'}`} />
           </div>
           {agentsOpen && (
@@ -395,6 +396,7 @@ export function TasksSidePanel() {
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
             <span className="tp-group-name">Task List</span>
+            {activeLists.length > 0 && <span className="tp-count">{activeLists.length}</span>}
             <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
           {listOpen && (
@@ -419,6 +421,7 @@ export function TasksSidePanel() {
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setCompletedOpen((o) => !o)}>
             <span className="tp-group-name">Completed</span>
+            {completedLists.length > 0 && <span className="tp-count">{completedLists.length}</span>}
             <CaretDownOutlined className={`tp-caret ${completedOpen ? '' : 'collapsed'}`} />
           </div>
           {completedOpen && <>{completedLists.map(renderListRow)}</>}
