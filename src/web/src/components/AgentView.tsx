@@ -22,7 +22,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Segmented, Select, Tooltip, Upload } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Segmented, Select, Tooltip } from 'antd';
 import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
@@ -1182,6 +1182,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // Open the command/skill autocomplete from the `+` menu: drop a `/` (prefixed with a
+  // space when mid-message) so slashToken matches and the menu pops.
+  const insertSlash = (): void => {
+    setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
+    setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
@@ -1536,28 +1543,56 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
-          <Tooltip title={canAttach ? '添加图片' : '仅可向已开始的会话发送图片'}>
-            {/* beforeUpload returns false: we upload via uploadAttachment ourselves and
-                keep antd's own list/request out of it. */}
-            <Upload
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              multiple
-              showUploadList={false}
-              disabled={!canAttach}
-              beforeUpload={(file) => {
-                void addImage(file);
-                return false;
-              }}
-            >
-              <Button
-                size="small"
-                type="text"
-                icon={<PlusOutlined />}
-                disabled={!canAttach}
-                aria-label="添加图片"
-              />
-            </Upload>
-          </Tooltip>
+          {/* Hidden picker the `添加图片` menu item triggers; we upload via addImage
+              ourselves and reset value so re-picking the same file fires onChange again. */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            hidden
+            onChange={(e) => {
+              Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
+              e.target.value = '';
+            }}
+          />
+          <Dropdown
+            trigger={['click']}
+            placement="topLeft"
+            disabled={!runner.online}
+            menu={{
+              items: [
+                {
+                  key: 'image',
+                  icon: <PictureOutlined />,
+                  label: canAttach ? '添加图片' : '添加图片（需已开始的会话）',
+                  disabled: !canAttach,
+                  onClick: () => imageInputRef.current?.click(),
+                },
+                {
+                  key: 'slash',
+                  icon: <CodeOutlined />,
+                  label: '命令 / 技能',
+                  disabled: slashItems.length === 0,
+                  onClick: insertSlash,
+                },
+                {
+                  key: 'file',
+                  icon: <PaperClipOutlined />,
+                  label: '上传文件（即将支持）',
+                  disabled: true,
+                },
+              ],
+            }}
+          >
+            <Button
+              size="small"
+              type="text"
+              icon={<PlusOutlined />}
+              disabled={!runner.online}
+              aria-label="添加附件"
+            />
+          </Dropdown>
           <Input.TextArea
             ref={taRef}
             variant="borderless"
