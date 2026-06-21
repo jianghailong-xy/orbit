@@ -3115,12 +3115,13 @@ body {
 /* ============================================================================
    NARROW VIEWPORTS (phones / split panes)
    The desktop layout is a row of fixed-width columns — nav · session list ·
-   conversation (and, on the task list, a detail panel). That never fits a phone,
-   so below this breakpoint the nav collapses into an off-canvas drawer and each
-   master/detail pair stacks to one full-width screen at a time. Keep the query in
-   sync with MOBILE_QUERY in lib/useMediaQuery.ts.
+   conversation (and, on the task list, a detail panel). Below ~960px that stops
+   fitting (nav 340 + list 264 leaves a usable conversation no room), so the nav
+   collapses into an off-canvas drawer and each master/detail pair stacks to one
+   full-width screen at a time. Keep the query in sync with MOBILE_QUERY in
+   lib/useMediaQuery.ts.
    ========================================================================== */
-@media (max-width: 768px) {
+@media (max-width: 960px) {
   /* The off-canvas drawer lives at the viewport's left edge; without this any
      stray sideways overflow would still surface a horizontal scrollbar. */
   body {
