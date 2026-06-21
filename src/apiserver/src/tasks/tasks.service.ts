@@ -27,6 +27,13 @@ export type Creator = { type: CreatorType; id: string };
 // Postgres and surface as a 500; we treat it like any unknown task instead.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Single-run dedup (开始执行 / @-mention): only a PENDING (queued) or RUNNING (a turn is
+// actively executing) session means the task is already mid-flight, so re-triggering it
+// must be a no-op. A session parked at AWAITING_INPUT/INTERRUPTED is idle — it is NOT in
+// this set so it falls through to the resume path, where the trigger delivers its prompt
+// as a new turn instead of silently returning the parked session and doing nothing.
+const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
@@ -461,13 +468,16 @@ export class TasksService {
     batch?: { id: string; maxConcurrent: number },
   ): Promise<string | undefined> {
     if (!agent.runnerId) return undefined;
-    // Dedup: if the task already has a session occupying it (queued PENDING or live),
-    // it's already being run — don't spawn a duplicate. This is the guard the
-    // resume-or-create path below lacks: a leftover PENDING session (e.g. from an
-    // earlier batch the runner never claimed) makes resume() throw ConflictException,
-    // which would otherwise fall through to create() and double-queue the task.
+    // Dedup against a session already mid-flight (PENDING/RUNNING): don't spawn a
+    // duplicate. This is the guard the resume-or-create path below lacks: a leftover
+    // PENDING session (e.g. from an earlier batch the runner never claimed) makes
+    // resume() throw ConflictException, which would otherwise fall through to create()
+    // and double-queue the task. A session parked at AWAITING_INPUT/INTERRUPTED is
+    // deliberately excluded (see SINGLE_RUN_DEDUP): it's idle, so it falls through to
+    // the resume path and the trigger delivers its prompt as a new turn rather than
+    // no-oping (which is why "开始执行" on a parked task used to do nothing).
     const occupying = await this.prisma.session.findFirst({
-      where: { taskId: task.id, status: { in: TASK_OCCUPYING } },
+      where: { taskId: task.id, status: { in: SINGLE_RUN_DEDUP } },
       orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
