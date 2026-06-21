@@ -247,7 +247,6 @@ body {
   transform: rotate(-90deg);
 }
 .tp-group-name {
-  flex: 1;
   font-size: 13px;
   font-weight: 600;
   color: #646a73;
