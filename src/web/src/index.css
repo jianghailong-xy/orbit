@@ -1770,6 +1770,10 @@ body {
 .composer-box .composer-attach-btn.ant-btn {
   width: 24px;
 }
+/* Trim the textarea's default ~11px left padding so the text hugs the + icon. */
+.composer-box textarea.ant-input {
+  padding-inline-start: 2px;
+}
 
 /* `/` command & skill autocomplete — floats just above the composer box */
 .composer-slash-menu {
