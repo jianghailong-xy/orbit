@@ -174,7 +174,7 @@ export class SessionsService {
         s.error, s.source, s.model,
         s.permission_mode AS "permissionMode",
         s.effort,
-        left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}) AS "lastAssistantText",
+        left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
