@@ -23,6 +23,10 @@ import {
 /** A polymorphic actor (user or agent) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
 
+// Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
+// Postgres and surface as a 500; we treat it like any unknown task instead.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class TasksService {
   private readonly logger = new Logger(TasksService.name);
@@ -214,6 +218,7 @@ export class TasksService {
   }
 
   async get(ownerId: string, id: string) {
+    if (!UUID_RE.test(id)) throw new NotFoundException('task not found');
     const task = await this.prisma.task.findFirst({
       where: { id, ownerId },
       include: {
