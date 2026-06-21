@@ -954,7 +954,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 24px 0;
+  padding: 24px 8px;
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -997,7 +997,7 @@ body {
   gap: 8px;
   flex: none;
   height: 38px;
-  margin: 2px 8px 8px 0;
+  margin: 2px 0 8px;
   padding: 0 8px;
   border: 1px solid #dbe6ff;
   border-radius: 8px;
@@ -1017,13 +1017,12 @@ body {
 }
 .session-col .ant-segmented {
   flex: none;
-  margin: 0 8px 8px 0;
+  margin: 0 0 8px;
 }
 .session-col-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
 }
 .session-row.active {
   background: #eaf1ff;
