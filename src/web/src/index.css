@@ -506,6 +506,11 @@ body {
 }
 
 /* ---- Skills page (skills/commands a runner reported, grouped per machine) ---- */
+/* Center the content column to match Runners / session pages (920px). */
+.skills-page {
+  max-width: 920px;
+  margin: 0 auto;
+}
 .skills-empty {
   margin-top: 24px;
   color: #8f959e;

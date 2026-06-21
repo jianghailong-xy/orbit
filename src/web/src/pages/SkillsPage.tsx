@@ -85,7 +85,7 @@ export function SkillsPage() {
     .filter((c) => !q || c.skills.length > 0 || c.commands.length > 0);
 
   return (
-    <>
+    <div className="skills-page">
       <h1 className="page-title">Skills</h1>
 
       {runners.isLoading ? (
@@ -137,6 +137,6 @@ export function SkillsPage() {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
