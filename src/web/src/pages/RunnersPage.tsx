@@ -1,4 +1,13 @@
-import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  CopyOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  KeyOutlined,
+  MoreOutlined,
+  PlusOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } from 'antd';
 import { useState } from 'react';
@@ -6,6 +15,20 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
+
+// Compact relative time for heartbeats (which arrive every ~30s, so seconds matter).
+const fmtAgo = (d?: string | null): string => {
+  if (!d) return '';
+  const diff = Date.now() - new Date(d).getTime();
+  if (diff < 0) return 'just now';
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
 
 // The runner list used to live in the left sidebar; it now has its own page so
 // "Runners" can sit in the top nav alongside Active/Skills. Selecting a runner
@@ -26,6 +49,9 @@ export function RunnersPage() {
   const [renaming, setRenaming] = useState<Runner | null>(null);
   const [renameVal, setRenameVal] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  // The freshly minted token from a rotation, shown exactly once.
+  const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const renameMut = useMutation({
     mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
@@ -43,8 +69,25 @@ export function RunnersPage() {
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
 
+  const rotateMut = useMutation({
+    mutationFn: ({ id }: { id: string; name: string }) =>
+      api<{ token: string }>(`/runners/${id}/rotate-token`, { method: 'POST' }),
+    onSuccess: (data, vars) => {
+      setCopied(false);
+      setRevealed({ name: vars.name, token: data.token });
+    },
+    onError: (e: Error) => message.error(e.message || 'Rotate failed'),
+  });
+
   const submitRename = () => {
     if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
+  };
+
+  const copyToken = () => {
+    if (!revealed) return;
+    void navigator.clipboard?.writeText(revealed.token)?.catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
   };
 
   const open = (r: Runner) => navigate(`/runners/${encodeId(r.id)}`);
@@ -58,6 +101,22 @@ export function RunnersPage() {
         domEvent.stopPropagation();
         setRenameVal(r.displayName || r.name);
         setRenaming(r);
+      },
+    },
+    {
+      key: 'rotate',
+      icon: <KeyOutlined />,
+      label: 'Rotate token',
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        modal.confirm({
+          title: `Rotate token for “${r.displayName || r.name}”?`,
+          content:
+            'This immediately invalidates the runner’s current credential. The runner will go offline until you set the new token as runnerToken in its ~/.orbit/config.json and restart it.',
+          okText: 'Rotate token',
+          cancelText: 'Cancel',
+          onOk: () => rotateMut.mutateAsync({ id: r.id, name: r.displayName || r.name }),
+        });
       },
     },
     { type: 'divider' },
@@ -81,61 +140,93 @@ export function RunnersPage() {
     },
   ];
 
+  const registerBtn = (
+    <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/runners/register')}>
+      Register Runner
+    </Button>
+  );
+
   return (
     <>
-      <h1 className="page-title">Runners</h1>
+      <div className="runners-head">
+        <h1 className="page-title">Runners</h1>
+        {list.length > 0 && registerBtn}
+      </div>
 
       {runners.isLoading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
           <Spin />
         </div>
       ) : list.length === 0 ? (
-        <div className="runners-empty">No runners yet — register a machine to get started.</div>
+        <div className="runners-empty">
+          <div>No runners yet — register a machine to get started.</div>
+          <div style={{ marginTop: 16 }}>{registerBtn}</div>
+        </div>
       ) : (
         <div className="runners-list">
-          {list.map((r) => (
-            <div
-              key={r.id}
-              className={`runner-card ${menuOpenId === r.id ? 'menu-open' : ''}`}
-              onClick={() => open(r)}
-            >
-              <span
-                className="runner-dot"
-                style={{ background: r.online ? '#2ea121' : '#c0c4cc' }}
-                title={r.online ? 'Online' : 'Offline'}
-              />
-              <div className="runner-meta">
-                <div className="runner-name">{r.displayName || r.name}</div>
-                <div className="runner-sub">
-                  {r.online ? 'Online' : 'Offline'}
-                  {typeof r.maxConcurrent === 'number' ? ` · ${r.maxConcurrent} slots` : ''}
-                </div>
-              </div>
-              <Dropdown
-                trigger={['click']}
-                placement="bottomRight"
-                open={menuOpenId === r.id}
-                onOpenChange={(o) => setMenuOpenId(o ? r.id : null)}
-                menu={{ items: menu(r) }}
+          {list.map((r) => {
+            const state = !r.online ? 'offline' : r.status === 'DRAINING' ? 'draining' : 'online';
+            const dotColor =
+              state === 'online' ? '#2ea121' : state === 'draining' ? '#f5a623' : '#c0c4cc';
+            const stateLabel =
+              state === 'online' ? 'Online' : state === 'draining' ? 'Draining' : 'Offline';
+            const max = r.maxConcurrent ?? 0;
+            const active = r.activeSessions ?? 0;
+            const showUtil = state !== 'offline' && max > 0;
+            const tags = [r.hostname, r.labels?.length ? r.labels.join(', ') : null]
+              .filter(Boolean)
+              .join(' · ');
+            return (
+              <div
+                key={r.id}
+                className={`runner-card ${menuOpenId === r.id ? 'menu-open' : ''}`}
+                onClick={() => open(r)}
               >
-                <span
-                  className="runner-kebab"
-                  title="More actions"
-                  onClick={(e) => e.stopPropagation()}
+                <span className="runner-dot" style={{ background: dotColor }} title={stateLabel} />
+                <div className="runner-meta">
+                  <div className="runner-name">{r.displayName || r.name}</div>
+                  <div className="runner-sub">
+                    {showUtil
+                      ? `${stateLabel} · ${active} / ${max} running`
+                      : r.lastHeartbeatAt
+                        ? `${stateLabel} · last seen ${fmtAgo(r.lastHeartbeatAt)}`
+                        : stateLabel}
+                  </div>
+                  {showUtil && (
+                    <div
+                      className={`runner-util ${active >= max ? 'full' : ''}`}
+                      title={`${active} of ${max} slots in use`}
+                    >
+                      <span
+                        className="runner-util-fill"
+                        style={{ width: `${Math.min(100, (active / max) * 100)}%` }}
+                      />
+                    </div>
+                  )}
+                  {tags && <div className="runner-tags">{tags}</div>}
+                </div>
+                {r.version && <span className="runner-version">{r.version}</span>}
+                <Dropdown
+                  trigger={['click']}
+                  placement="bottomRight"
+                  open={menuOpenId === r.id}
+                  onOpenChange={(o) => setMenuOpenId(o ? r.id : null)}
+                  menu={{ items: menu(r) }}
                 >
-                  <MoreOutlined />
-                </span>
-              </Dropdown>
-            </div>
-          ))}
+                  <span
+                    className="runner-kebab"
+                    title="More actions"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreOutlined />
+                  </span>
+                </Dropdown>
+                <RightOutlined className="runner-chevron" />
+              </div>
+            );
+          })}
         </div>
       )}
-
-      <div className="tasks-toolbar">
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/runners/register')}>
-          Register Runner
-        </Button>
-      </div>
 
       <Modal
         title="Rename runner"
@@ -158,6 +249,31 @@ export function RunnersPage() {
         <div style={{ marginTop: 8, color: '#8f959e', fontSize: 12 }}>
           Leave empty to use the machine name{renaming ? ` (${renaming.name})` : ''}.
         </div>
+      </Modal>
+
+      <Modal
+        title="New runner token"
+        open={revealed !== null}
+        onCancel={() => setRevealed(null)}
+        footer={[
+          <Button key="done" type="primary" onClick={() => setRevealed(null)}>
+            Done
+          </Button>,
+        ]}
+        destroyOnClose
+      >
+        <div style={{ color: '#8f959e', fontSize: 13, marginBottom: 12 }}>
+          Copy this token now — it won’t be shown again. Set it as <code>runnerToken</code> in{' '}
+          <code>~/.orbit/config.json</code> on <b>{revealed?.name}</b>, then restart the runner.
+        </div>
+        <div className="runner-token-box">{revealed?.token}</div>
+        <Button
+          icon={copied ? <CheckOutlined /> : <CopyOutlined />}
+          onClick={copyToken}
+          style={{ marginTop: 12 }}
+        >
+          {copied ? 'Copied' : 'Copy token'}
+        </Button>
       </Modal>
     </>
   );

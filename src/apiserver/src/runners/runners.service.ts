@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { RunStatus } from '@prisma/client';
 import type { SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +7,9 @@ import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
+// A session occupies one of a runner's slots while it's in any of these states —
+// the same set the claim queue counts against maxConcurrent.
+const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
@@ -52,12 +56,23 @@ export class RunnersService {
         availableSkills: true,
       },
     });
+    // How many slots each runner is currently using, so the list can show
+    // utilization (e.g. "3 / 16 running") rather than capacity alone.
+    const liveCounts = await this.prisma.session.groupBy({
+      by: ['assignedRunnerId'],
+      where: { assignedRunnerId: { in: runners.map((r) => r.id) }, status: { in: LIVE } },
+      _count: { _all: true },
+    });
+    const activeByRunner = new Map(
+      liveCounts.map((c) => [c.assignedRunnerId, c._count._all]),
+    );
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const staleBefore = Date.now() - OFFLINE_AFTER_MS;
     return runners.map(({ availableCommands, availableSkills, ...r }) => ({
       ...r,
       online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
+      activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
       skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],
@@ -176,6 +191,20 @@ export class RunnersService {
       data,
       select: { id: true, name: true, displayName: true, maxConcurrent: true },
     });
+  }
+
+  /**
+   * Reissue a runner's long-lived credential. The old token stops authenticating
+   * immediately (only the new hash is kept), so the runner will 401 until its
+   * config.json runnerToken is updated and it is restarted. The raw token is
+   * returned exactly once — same one-shot contract as enrollment.
+   */
+  async rotateToken(ownerId: string, id: string) {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const token = generateToken(32);
+    await this.prisma.runner.update({ where: { id }, data: { tokenHash: sha256(token) } });
+    return { token };
   }
 
   async removeRunner(ownerId: string, id: string) {
