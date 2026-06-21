@@ -14,6 +14,23 @@ export enum RunStatus {
   INTERRUPTED = 'INTERRUPTED',
 }
 
+/**
+ * Why a session reached a terminal state. Orthogonal to RunStatus, which collapses
+ * every graceful end into CANCELLED — so "the runner recycled an idle session" and
+ * "the user cancelled" look identical without this. Set by whoever requests the end
+ * (endLive / the reaper). null = a natural agent finish (read RunStatus) or a
+ * pre-migration row. The column is a plain string, not a Prisma enum; the web reads
+ * the same values as string literals.
+ */
+export enum SessionEndReason {
+  IDLE = 'idle', // reaper recycled it after inactivity — resumable
+  TASK_DONE = 'task_done', // reaper recycled it because its task finished — resumable
+  ENDED = 'ended', // user ended the session — resumable
+  COMPLETED = 'completed', // user marked it complete (archived)
+  DELETED = 'deleted', // user deleted it (trash)
+  ORPHANED = 'orphaned', // never-claimed run for an already-finished task
+}
+
 /** Health of a registered runner machine. */
 export enum RunnerStatus {
   ONLINE = 'ONLINE',

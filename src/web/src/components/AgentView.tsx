@@ -200,12 +200,27 @@ const plainPreview = (md: string): string =>
 
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
-// neutral terminal (cancelled / interrupted / disconnected). A runner that went
-// offline is reaped to FAILED with error 'runner offline'; that's a dropped
+// neutral terminal (dormant / cancelled / interrupted / disconnected). A runner that
+// went offline is reaped to FAILED with error 'runner offline'; that's a dropped
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
-function StatusIcon({ session }: { session: any }) {
+// `status` collapses every graceful end to CANCELLED, so `endReason` is what tells a
+// benign recycle (idle/task-done/user-ended — resumable, shown as paused) apart from a
+// real cancel/orphan (shown as ⊖).
+function StatusIcon({ session, completed }: { session: any; completed?: boolean }) {
   const status: string = session.status;
   const fontSize = 16;
+  // In the Completed (archived) view the user has deliberately filed this session, so
+  // archivedAt itself IS the "done by me" signal. Archiving a still-live session ends it,
+  // and its status settles to CANCELLED async — so most filed sessions would otherwise
+  // render as a grey ⊖ "Cancelled", contradicting the very action ("Complete") that put
+  // them here. Show them as completed instead. A genuine FAILED is the one outcome still
+  // worth surfacing post-filing, so it falls through to the real status icon below.
+  if (completed && status !== 'FAILED')
+    return (
+      <Tooltip title="Completed">
+        <CheckCircleFilled style={{ color: '#2ea121', fontSize }} />
+      </Tooltip>
+    );
   if (status === 'RUNNING') {
     return (session.pendingApprovals ?? 0) > 0 ? (
       <Tooltip title="Waiting for approval">
@@ -243,18 +258,73 @@ function StatusIcon({ session }: { session: any }) {
       </Tooltip>
     );
   }
-  if (status === 'CANCELLED' || status === 'INTERRUPTED')
+  if (status === 'CANCELLED' || status === 'INTERRUPTED') {
+    const reason: string = session.endReason ?? '';
+    // A benign recycle — the runner reclaimed an idle/finished session, or the user
+    // ended it — is resumable, not a cancellation. Show it as paused, not ⊖.
+    if (reason === 'idle' || reason === 'task_done' || reason === 'ended')
+      return (
+        <Tooltip title="Dormant — send a message to resume">
+          <PauseCircleOutlined style={{ color: '#8c8c8c', fontSize }} />
+        </Tooltip>
+      );
     return (
-      <Tooltip title={status === 'CANCELLED' ? 'Cancelled' : 'Interrupted'}>
+      <Tooltip
+        title={
+          reason === 'orphaned'
+            ? 'Ended — task already finished'
+            : status === 'INTERRUPTED'
+              ? 'Interrupted'
+              : 'Cancelled'
+        }
+      >
         <MinusCircleOutlined style={{ color: '#8c8c8c', fontSize }} />
       </Tooltip>
     );
+  }
   // PENDING — queued, not yet started
   return (
     <Tooltip title="Queued">
       <ClockCircleOutlined style={{ color: '#c9cdd4', fontSize }} />
     </Tooltip>
   );
+}
+
+// Human-facing copy for a terminal session's banner. `status` alone is too coarse — it
+// collapses idle-recycle, user-complete, delete and orphan all into CANCELLED — so the
+// end reason drives the wording, falling back to status for a natural finish / legacy
+// row. The suffix says whether sending a message resumes the session or starts fresh.
+function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): string {
+  const status: string = session.status;
+  const reason: string = session.endReason ?? '';
+  const suffix = resumable
+    ? ' 发消息可续接这个会话。'
+    : runnerOnline
+      ? ' 发消息将新开一个会话。'
+      : ' 运行器离线，需上线后才能续接。';
+  let base: string;
+  if (status === 'SUCCEEDED') base = '会话已完成。';
+  else if (status === 'FAILED') {
+    // A dropped connection isn't a crash — the suffix already names the offline runner,
+    // so keep the base neutral and avoid repeating "离线".
+    const err: string = typeof session.error === 'string' ? session.error : '';
+    base = err.toLowerCase().includes('offline') ? '会话已中断。' : '会话运行失败。';
+  } else {
+    // CANCELLED — disambiguate the overloaded status by reason.
+    base =
+      reason === 'idle'
+        ? '会话因长时间无活动已自动结束。'
+        : reason === 'task_done'
+          ? '关联任务已完成，会话已自动结束。'
+          : reason === 'orphaned'
+            ? '会话已结束（关联任务已完成）。'
+            : reason === 'deleted'
+              ? '会话已删除。'
+              : reason === 'completed'
+                ? '会话已完成。'
+                : '会话已结束。'; // 'ended' or a pre-migration row
+  }
+  return base + suffix;
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
@@ -1239,7 +1309,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 onClick={openable ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
               >
                 <span className="session-icon">
-                  <StatusIcon session={s} />
+                  <StatusIcon session={s} completed={view === 'archived'} />
                 </span>
                 <div className="session-main">
                   <div className="session-title-row">
@@ -1390,14 +1460,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               !streamingText &&
               !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
             {selected && TERMINAL.includes(selected.status) && (
-              <div className="chat-note">
-                Session {selected.status.toLowerCase()}.
-                {resumable
-                  ? ' 发消息可续接这个会话。'
-                  : runner.online
-                    ? ' 发消息将新开一个会话。'
-                    : ' 运行器离线，需上线后才能续接。'}
-              </div>
+              <div className="chat-note">{endedBanner(selected, !!resumable, !!runner.online)}</div>
             )}
           </div>
         ) : composing ? (

@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { ApprovalDecisionRequest, ApprovalInfo, ApprovalStatus, RunEventType } from '@orbit/shared';
+import {
+  ApprovalDecisionRequest,
+  ApprovalInfo,
+  ApprovalStatus,
+  RunEventType,
+  SessionEndReason,
+} from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -152,6 +158,7 @@ export class SessionsService {
       numTurns: number;
       costUsd: number;
       error: string | null;
+      endReason: string | null;
       source: string;
       model: string | null;
       permissionMode: string | null;
@@ -171,7 +178,9 @@ export class SessionsService {
         s.started_at      AS "startedAt",
         s.num_turns       AS "numTurns",
         s.cost_usd        AS "costUsd",
-        s.error, s.source, s.model,
+        s.error,
+        s.end_reason      AS "endReason",
+        s.source, s.model,
         s.permission_mode AS "permissionMode",
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
@@ -199,6 +208,7 @@ export class SessionsService {
       numTurns: r.numTurns,
       costUsd: r.costUsd,
       error: r.error,
+      endReason: r.endReason,
       source: r.source,
       model: r.model,
       permissionMode: r.permissionMode,
@@ -428,20 +438,24 @@ export class SessionsService {
   /** End a live session (closes the runner's claude process). */
   async end(ownerId: string, id: string) {
     const session = await this.getLive(ownerId, id);
-    await this.endLive(session);
+    await this.endLive(session, SessionEndReason.ENDED);
     return { ok: true };
   }
 
   /**
    * Signal the runner to tear down a session's claude process: mark cancel-requested,
-   * enqueue an `end` control turn, and (if claimed) ask the runner to cancel now. The
-   * status settles to CANCELLED async once the runner reports back. Caller must have
-   * already loaded the session and confirmed it isn't terminal.
+   * record why it ended, enqueue an `end` control turn, and (if claimed) ask the runner
+   * to cancel now. The status settles to CANCELLED async once the runner reports back —
+   * `endReason` is what lets the UI tell that benign end apart from a real cancel.
+   * Caller must have already loaded the session and confirmed it isn't terminal.
    */
-  private async endLive(session: { id: string; assignedRunnerId: string | null }) {
+  private async endLive(
+    session: { id: string; assignedRunnerId: string | null },
+    reason: SessionEndReason,
+  ) {
     await this.prisma.session.update({
       where: { id: session.id },
-      data: { cancelRequestedAt: new Date() },
+      data: { cancelRequestedAt: new Date(), endReason: reason },
     });
     // Drop queued-but-undelivered messages so they can't replay if the session is
     // later revived (resume re-claims the same row and would otherwise deliver these
@@ -592,6 +606,7 @@ export class SessionsService {
       data: {
         status: RunStatus.PENDING,
         cancelRequestedAt: null,
+        endReason: null,
         finishedAt: null,
         error: null,
         result: null,
@@ -624,7 +639,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endLive(session);
+      await this.endLive(session, SessionEndReason.COMPLETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
     return { ok: true };
@@ -690,7 +705,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endLive(session);
+      await this.endLive(session, SessionEndReason.DELETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
     return { ok: true };

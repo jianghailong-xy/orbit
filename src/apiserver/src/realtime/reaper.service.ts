@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RunStatus, TaskStatus } from '@prisma/client';
-import { RunEventType, isApiErrorText } from '@orbit/shared';
+import { RunEventType, SessionEndReason, isApiErrorText } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
@@ -124,7 +124,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           !s.cancelRequestedAt &&
           (taskDone || now - lastTurn > IDLE_AFTER_MS)
         ) {
-          await this.endParked(s.id, s.assignedRunnerId, idleCutoff);
+          await this.endParked(
+            s.id,
+            s.assignedRunnerId,
+            idleCutoff,
+            taskDone ? SessionEndReason.TASK_DONE : SessionEndReason.IDLE,
+          );
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
@@ -217,6 +222,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             data: {
               status: RunStatus.CANCELLED,
               error: 'orphaned: task already finished',
+              endReason: SessionEndReason.ORPHANED,
               finishedAt: new Date(),
               cancelRequestedAt: new Date(),
             },
@@ -251,6 +257,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     runnerId: string | null,
     idleCutoff: Date,
+    reason: SessionEndReason,
   ): Promise<void> {
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
@@ -265,7 +272,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           cancelRequestedAt: null,
           OR: [{ task: { status: { in: TASK_TERMINAL } } }, { lastTurnAt: { lt: idleCutoff } }],
         },
-        data: { cancelRequestedAt: new Date() },
+        data: { cancelRequestedAt: new Date(), endReason: reason },
       });
       if (claimed.count === 0) return false;
       const last = await tx.conversationTurn.findFirst({

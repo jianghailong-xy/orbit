@@ -242,6 +242,12 @@ model Session {
   finishedAt        DateTime? @map("finished_at")
   error             String?
   result            String?
+  // Why the session ended, orthogonal to `status` (which collapses every graceful end
+  // to CANCELLED). Set by the path that requests the end — endLive (user end/complete/
+  // delete) or the reaper (idle/task-done recycle, orphan) — and left untouched by the
+  // runner's async /complete. null = a natural agent finish (read `status`) or a
+  // pre-migration row. Values: see SessionEndReason in @orbit/shared.
+  endReason         String?   @map("end_reason")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
