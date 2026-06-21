@@ -436,7 +436,7 @@ body {
   margin-top: 2px;
 }
 .runner-kebab {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -445,6 +445,11 @@ body {
   color: #8f959e;
   font-size: 15px;
   flex: none;
+  /* Always reserve the slot so revealing the kebab on hover doesn't shift
+     the version number and chevron; only fade visibility. */
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
 }
 .runner-kebab:hover {
   background: #e3e6eb;
@@ -452,7 +457,8 @@ body {
 }
 .runner-card:hover .runner-kebab,
 .runner-card.menu-open .runner-kebab {
-  display: flex;
+  visibility: visible;
+  opacity: 1;
 }
 /* Slot utilization: a thin track with a fill proportional to live sessions. */
 .runner-util {
