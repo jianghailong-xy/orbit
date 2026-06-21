@@ -120,6 +120,13 @@ body {
   background: #eaf1ff;
   color: #3370ff;
 }
+.tp-item:focus {
+  outline: none;
+}
+.tp-item:focus-visible {
+  outline: 2px solid #3370ff;
+  outline-offset: -2px;
+}
 .tp-item.inset {
   padding-left: 30px;
 }
@@ -368,6 +375,12 @@ body {
 }
 
 /* ---- Runners page (the runner list, moved out of the sidebar) ---- */
+.runners-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .runners-empty {
   margin-top: 24px;
   color: #8f959e;
@@ -399,6 +412,8 @@ body {
   height: 9px;
   border-radius: 50%;
   flex: none;
+  align-self: flex-start;
+  margin-top: 5px;
 }
 .runner-meta {
   flex: 1;
@@ -435,6 +450,55 @@ body {
 .runner-card:hover .runner-kebab,
 .runner-card.menu-open .runner-kebab {
   display: flex;
+}
+/* Slot utilization: a thin track with a fill proportional to live sessions. */
+.runner-util {
+  margin-top: 6px;
+  width: 100%;
+  max-width: 200px;
+  height: 4px;
+  border-radius: 2px;
+  background: #eceef1;
+  overflow: hidden;
+}
+.runner-util-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #3370ff;
+  transition: width 0.2s ease;
+}
+.runner-util.full .runner-util-fill {
+  background: #f5a623;
+}
+.runner-tags {
+  font-size: 12px;
+  color: #b7bcc4;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.runner-version {
+  font-size: 12px;
+  color: #8f959e;
+  flex: none;
+}
+/* Always-visible navigation affordance; the whole card is clickable. */
+.runner-chevron {
+  color: #c0c4cc;
+  font-size: 12px;
+  flex: none;
+}
+.runner-token-box {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  background: #f7f8fa;
+  border: 1px solid #eceef1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #1f2329;
 }
 
 /* ---- Skills page (skills/commands a runner reported, grouped per machine) ---- */
@@ -940,7 +1004,7 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 24px 0;
+  padding: 24px 8px;
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -983,7 +1047,7 @@ body {
   gap: 8px;
   flex: none;
   height: 38px;
-  margin: 2px 8px 8px 0;
+  margin: 2px 0 8px;
   padding: 0 8px;
   border: 1px solid #dbe6ff;
   border-radius: 8px;
@@ -1003,13 +1067,12 @@ body {
 }
 .session-col .ant-segmented {
   flex: none;
-  margin: 0 8px 8px 0;
+  margin: 0 0 8px;
 }
 .session-col-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
 }
 .session-row.active {
   background: #eaf1ff;

@@ -42,8 +42,10 @@ const SORTS = [
   { label: '执行人', value: 'assignee' },
 ];
 
-// Rank for the "状态" sort: a live (running) task ranks first, then by lifecycle, so
-// ascending groups 运行中 at the top and 已完成/已取消 at the bottom (descending flips it).
+// Rank for the "状态" sort: 运行中 (executing now) ranks first, then 排队中 (waiting), then by
+// lifecycle, so ascending groups 运行中 above 排队中 above 已完成/已取消 (descending flips it).
+// running and queued get distinct ranks — they're different states, so the live task must not
+// be intermixed with the queue (the +1 keeps lifecycle ranks below both session overlays).
 const STATUS_ORDER: Record<string, number> = {
   IN_PROGRESS: 1,
   FAILED: 2,
@@ -51,7 +53,8 @@ const STATUS_ORDER: Record<string, number> = {
   DONE: 4,
   CANCELLED: 5,
 };
-const statusRank = (t: any): number => (t.running || t.queued ? 0 : (STATUS_ORDER[t.status] ?? 5));
+const statusRank = (t: any): number =>
+  t.running ? 0 : t.queued ? 1 : (STATUS_ORDER[t.status] ?? 5) + 1;
 
 // Compare two tasks by the chosen field, ascending. Equal pairs return 0 so the caller's
 // stable sort preserves the incoming createdAt-desc order as a tiebreak.
