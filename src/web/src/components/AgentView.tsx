@@ -7,6 +7,7 @@ import {
   ClockCircleOutlined,
   CloseCircleFilled,
   CloseOutlined,
+  CodeOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EyeOutlined,
@@ -14,7 +15,9 @@ import {
   MessageOutlined,
   MinusCircleOutlined,
   MoreOutlined,
+  PaperClipOutlined,
   PauseCircleOutlined,
+  PictureOutlined,
   PlusOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -1145,6 +1148,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // picking one replaces just that token with `/<name> ` (the trailing space drops the
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
   const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
