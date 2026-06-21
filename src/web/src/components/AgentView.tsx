@@ -1663,7 +1663,6 @@ export function AgentView({ runner }: { runner: Runner }) {
             }}
           >
             <Button
-              size="small"
               type="text"
               icon={<PlusOutlined />}
               disabled={!runner.online}
