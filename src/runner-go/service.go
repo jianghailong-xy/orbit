@@ -24,7 +24,7 @@ const (
 // launchd LaunchAgent. Returns an error instead of exiting, so `orbit register` can
 // call it best-effort. The runner authenticates through the machine's local Claude
 // Code login, so no API key is involved here.
-func setupService(orbitHome string) error {
+func setupService(orbitHome string, proxyVars []envVar) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("cannot locate executable: %w", err)
@@ -35,9 +35,9 @@ func setupService(orbitHome string) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		return installSystemd(exe, orbitHome, systemdService)
+		return installSystemd(exe, orbitHome, systemdService, proxyVars)
 	case "darwin":
-		return installLaunchd(exe, orbitHome, launchdLabel)
+		return installLaunchd(exe, orbitHome, launchdLabel, proxyVars)
 	default:
 		return errors.New("background service is only supported on Linux (systemd) and macOS (launchd); run `orbit run` under your own supervisor")
 	}
@@ -78,7 +78,7 @@ func uninstallService() {
 	}
 }
 
-func installSystemd(exe, orbitHome, svc string) error {
+func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	unitPath := "/etc/systemd/system/" + svc + ".service"
 
 	// The runner — and the `claude` processes it spawns — should operate as the
@@ -121,10 +121,10 @@ TimeoutStopSec=180
 Environment=HOME=%s
 Environment=ORBIT_HOME=%s
 Environment=PATH=%s
-
+%s
 [Install]
 WantedBy=multi-user.target
-`, u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv)
+`, u.Username, grp, exe, u.HomeDir, orbitHome, pathEnv, systemdProxyEnv(proxyVars))
 
 	// Writing the unit + enabling it needs root. When we aren't root, do just
 	// those steps via sudo (prompts once) so `orbit register` ends with a live
@@ -223,7 +223,7 @@ func pathContains(path, dir string) bool {
 	return false
 }
 
-func installLaunchd(exe, orbitHome, label string) error {
+func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 	home := os.Getenv("HOME")
 	if home == "" {
 		if h, err := os.UserHomeDir(); err == nil {
@@ -262,14 +262,14 @@ func installLaunchd(exe, orbitHome, label string) error {
     <key>ORBIT_HOME</key><string>%s</string>
     <key>HOME</key><string>%s</string>
     <key>PATH</key><string>%s</string>
-  </dict>
+%s  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string>%s</string>
   <key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, label, exe, orbitHome, home, pathEnv, logPath, logPath)
+`, label, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
 
 	agentsDir := filepath.Dir(plistPath)
 	if err := writePlist(agentsDir, plistPath, plist); err != nil {
@@ -365,4 +365,61 @@ func ensureOwnedByUser(dir string) {
 	}
 	fmt.Printf("\n%s is owned by another user (likely a past sudo run). Restoring it to %s —\nyou may be prompted for your password.\n", dir, u.Username)
 	_ = run(sudo, "chown", "-R", u.Username, dir)
+}
+
+// --- proxy-into-service support (orbit register --proxy) ---
+
+// envVar is one service environment entry. Proxy vars are an ordered slice (not a
+// map) so the generated plist/unit is deterministic.
+type envVar struct{ K, V string }
+
+// proxyServiceEnv returns the proxy env vars to bake into the runner background
+// service, or nil when proxy is empty. The control-plane host (from server) plus
+// localhost are added to no_proxy so the runner-to-server traffic bypasses the
+// proxy; any pre-existing no_proxy is preserved.
+func proxyServiceEnv(proxy, server, envNoProxy string) []envVar {
+	if proxy == "" {
+		return nil
+	}
+	parts := []string{"localhost", "127.0.0.1", "::1"}
+	if h := hostOnly(server); h != "" {
+		parts = append(parts, h)
+	}
+	if envNoProxy != "" {
+		parts = append(parts, envNoProxy)
+	}
+	noProxy := strings.Join(parts, ",")
+	return []envVar{
+		{"http_proxy", proxy}, {"https_proxy", proxy},
+		{"HTTP_PROXY", proxy}, {"HTTPS_PROXY", proxy},
+		{"no_proxy", noProxy}, {"NO_PROXY", noProxy},
+	}
+}
+
+// hostOnly extracts the bare host from a URL (http://h:port/path -> h).
+func hostOnly(raw string) string {
+	s := raw
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexAny(s, ":/"); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+func systemdProxyEnv(vars []envVar) string {
+	s := ""
+	for _, e := range vars {
+		s += fmt.Sprintf("Environment=%s=%s\n", e.K, e.V)
+	}
+	return s
+}
+
+func launchdProxyEnv(vars []envVar) string {
+	s := ""
+	for _, e := range vars {
+		s += fmt.Sprintf("    <key>%s</key><string>%s</string>\n", e.K, e.V)
+	}
+	return s
 }
