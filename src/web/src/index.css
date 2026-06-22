@@ -453,25 +453,39 @@ body {
 .tasks-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin: 16px 0 8px;
 }
-/* Sort control: field select + asc/desc toggle, sitting beside the status filter. */
-.tasks-sort {
+.tasks-search {
+  width: 200px;
+}
+/* Right-aligned cluster: the shared-assignee chip and the batch-action bar. */
+.tasks-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  margin-left: auto;
 }
-.tasks-sort-label {
-  font-size: 13px;
+/* Muted chips surfacing context dropped from the rows: the shared title prefix and, when
+   every task shares one assignee, that assignee. */
+.task-prefix-chip,
+.task-assignee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-3);
+  background: var(--fill-muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 /* Inline bar with batch actions, shown only while rows are selected. */
 .tasks-bulkbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
   padding: 4px 10px;
   background: var(--brand-tint);
   border: 1px solid var(--brand-border);
@@ -940,6 +954,11 @@ body {
   --cols: 28px 92px minmax(160px, 1fr) 160px;
   border-top: 1px solid var(--border-subtle);
 }
+/* Detail panel open, or every row shares one assignee → drop the assignee column so the
+   title keeps its width. */
+.orbit-tasklist.no-assignee {
+  --cols: 28px 92px minmax(160px, 1fr);
+}
 /* Multi-select checkbox column (header + per row). */
 .task-check {
   display: flex;
@@ -967,6 +986,19 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Click-to-sort headers: hover/active darken, active shows a direction caret. */
+.col-head.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s ease;
+}
+.col-head.sortable:hover,
+.col-head.active {
+  color: var(--text-1);
+}
+.col-sort-caret {
+  font-size: 11px;
 }
 
 .task-row {

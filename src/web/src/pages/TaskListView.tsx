@@ -1,10 +1,11 @@
 import {
+  CaretDownOutlined,
+  CaretUpOutlined,
   DeleteOutlined,
   LoadingOutlined,
   LockOutlined,
   PlayCircleOutlined,
-  SortAscendingOutlined,
-  SortDescendingOutlined,
+  SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +14,7 @@ import {
   Avatar,
   Button,
   Checkbox,
+  Input,
   InputNumber,
   Modal,
   Segmented,
@@ -35,13 +37,6 @@ const matchesFilter = (status: string, f: string): boolean => {
   return true;
 };
 
-const SORTS = [
-  { label: 'Created', value: 'created' },
-  { label: 'Status', value: 'status' },
-  { label: 'Title', value: 'title' },
-  { label: 'Assignee', value: 'assignee' },
-];
-
 // Rank for the "状态" sort: 运行中 (executing now) ranks first, then 排队中 (waiting), then by
 // lifecycle, so ascending groups 运行中 above 排队中 above 已完成/已取消 (descending flips it).
 // running and queued get distinct ranks — they're different states, so the live task must not
@@ -63,7 +58,8 @@ const compareBy = (a: any, b: any, field: string): number => {
     case 'status':
       return statusRank(a) - statusRank(b);
     case 'title':
-      return (a.title ?? '').localeCompare(b.title ?? '', 'zh');
+      // Numeric collation so "Unit 9" sorts before "Unit 73" (not lexicographically).
+      return (a.title ?? '').localeCompare(b.title ?? '', 'zh', { numeric: true });
     case 'assignee':
       return (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '', 'zh');
     case 'created':
@@ -153,12 +149,33 @@ export function TaskListView() {
     );
   const filter = searchParams.get('filter') ?? 'ALL';
   const setFilter = (v: string) => setParam('filter', v, 'ALL');
-  // Client-side sort over the visible rows; default 'created'/'desc' mirrors the
-  // backend's createdAt-desc ordering, so the initial view is unchanged.
+  // Free-text filter over the visible rows' titles; lives in the URL (?q=…) like the rest
+  // of the view state so it survives a refresh and is shareable.
+  const query = searchParams.get('q') ?? '';
+  const setQuery = (v: string) => setParam('q', v, '');
+  // Client-side sort over the visible rows; default 'created'/'desc' mirrors the backend's
+  // createdAt-desc ordering, so the initial view is unchanged. Column headers drive it:
+  // click cycles asc → desc → cleared (back to created). Field + direction are written in
+  // one update so the two URL params never clobber each other.
   const sortField = searchParams.get('sort') ?? 'created';
-  const setSortField = (v: string) => setParam('sort', v, 'created');
   const sortDir: 'asc' | 'desc' = searchParams.get('dir') === 'asc' ? 'asc' : 'desc';
-  const setSortDir = (v: 'asc' | 'desc') => setParam('dir', v, 'desc');
+  const setSort = (field: string, dir: 'asc' | 'desc') =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (field === 'created') next.delete('sort');
+        else next.set('sort', field);
+        if (dir === 'desc') next.delete('dir');
+        else next.set('dir', dir);
+        return next;
+      },
+      { replace: true },
+    );
+  const cycleSort = (field: string) => {
+    if (sortField !== field) setSort(field, 'asc');
+    else if (sortDir === 'asc') setSort(field, 'desc');
+    else setSort('created', 'desc');
+  };
 
   // Poll while any task is running so its live indicator clears once the run ends;
   // 5s busy / 15s idle, matching the sidebar's task-list poll.
@@ -250,9 +267,13 @@ export function TaskListView() {
   // ordered by the selected sort field/direction.
   const visibleRows = isListView ? listRows : taskRows;
   const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? visibleRows.filter((r: any) => (r.title ?? '').toLowerCase().includes(q))
+      : visibleRows;
     const dir = sortDir === 'asc' ? 1 : -1;
-    return [...visibleRows].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
-  }, [visibleRows, sortField, sortDir]);
+    return [...filtered].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
+  }, [visibleRows, query, sortField, sortDir]);
 
   // The current view's full task set (before the status filter) — drives the progress
   // overview and the per-filter counts, which must reflect the whole list, not the
@@ -287,6 +308,36 @@ export function TaskListView() {
     }
     return c;
   }, [baseRows]);
+
+  // Tasks in a list usually share a boilerplate title prefix ("实现 EGIU Unit …"). Compute
+  // the longest common prefix across the whole view, trim it back to the last word boundary
+  // (so a shared number like "Unit 12" vs "120" isn't sliced), and strip it per row —
+  // surfacing it once instead of repeating it on every line. Needs ≥3 rows to be meaningful.
+  const commonPrefix = useMemo(() => {
+    const titles = baseRows.map((t: any) => t.title ?? '').filter(Boolean);
+    if (titles.length < 3) return '';
+    let p: string = titles[0];
+    for (const t of titles) {
+      let i = 0;
+      while (i < p.length && i < t.length && p[i] === t[i]) i++;
+      p = p.slice(0, i);
+      if (!p) break;
+    }
+    p = p.slice(0, p.lastIndexOf(' ') + 1); // keep through the last space (incl. it)
+    return p.includes(' ') && p.trim().length >= 5 ? p : '';
+  }, [baseRows]);
+
+  // When every visible task shares one assignee, the column is pure repetition: drop it and
+  // surface the assignee once. `name` is null when all are unassigned (nothing to surface).
+  const uniformAssignee = useMemo(() => {
+    const names = new Set(baseRows.map((t: any) => t.assignee?.name ?? null));
+    return names.size === 1 ? { name: [...names][0] as string | null } : null;
+  }, [baseRows]);
+
+  // The detail panel is a flex sibling that squeezes the list; with it open, drop the
+  // assignee column too so the title keeps its width. Either condition hides the column.
+  const panelOpen = selectedTaskId !== null;
+  const showAssigneeCol = !uniformAssignee && !panelOpen;
   const filterOptions = useMemo(() => {
     const seg = (label: string, n: number) => (
       <span className="seg-opt">
@@ -378,10 +429,34 @@ export function TaskListView() {
     document.querySelector('.task-row.selected')?.scrollIntoView({ block: 'nearest' });
   }, [selectedTaskId]);
 
+  // A clickable column header that drives the sort. Active header shows a caret for the
+  // direction; clicking cycles asc → desc → cleared (handled by cycleSort).
+  const sortHead = (field: string, label: string) => {
+    const active = sortField === field;
+    return (
+      <div
+        className={`col-head sortable${active ? ' active' : ''}`}
+        onClick={() => cycleSort(field)}
+      >
+        {label}
+        {active &&
+          (sortDir === 'asc' ? (
+            <CaretUpOutlined className="col-sort-caret" />
+          ) : (
+            <CaretDownOutlined className="col-sort-caret" />
+          ))}
+      </div>
+    );
+  };
+
   const renderRow = (r: any) => {
     // The agent assigned to run the task (GET /tasks and the list view both include it).
     const assigneeName = r.assignee?.name ?? null;
     const selected = selectedTaskId === r.id;
+    // Strip the shared prefix for display; the full title stays in the hover tooltip.
+    const stripped =
+      commonPrefix && r.title?.startsWith(commonPrefix) ? r.title.slice(commonPrefix.length) : r.title;
+    const displayTitle = stripped?.trim() ? stripped : (r.title ?? '');
     return (
       <div
         className={`task-row clickable${selected ? ' selected' : ''}`}
@@ -395,7 +470,9 @@ export function TaskListView() {
           <StatusPill status={r.status} running={r.running} queued={r.queued} />
         </div>
         <div className="task-title-cell">
-          <span className="task-title">{r.title}</span>
+          <span className="task-title" title={r.title}>
+            {displayTitle}
+          </span>
           {r.blocked ? (
             <Tooltip
               title={r.dependencyState === 'BLOCKED_FAILED' ? 'Prerequisite cancelled — resolve it' : 'Waiting for prerequisites'}
@@ -409,21 +486,23 @@ export function TaskListView() {
             </Tooltip>
           ) : null}
         </div>
-        <div className="task-creator">
-          {assigneeName ? (
-            <>
-              <Avatar
-                size={22}
-                style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 11, flex: 'none' }}
-              >
-                {assigneeName.trim().charAt(0).toUpperCase()}
-              </Avatar>
-              <span className="task-cell">{assigneeName}</span>
-            </>
-          ) : (
-            <span className="task-cell">Unassigned</span>
-          )}
-        </div>
+        {showAssigneeCol && (
+          <div className="task-creator">
+            {assigneeName ? (
+              <>
+                <Avatar
+                  size={22}
+                  style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 11, flex: 'none' }}
+                >
+                  {assigneeName.trim().charAt(0).toUpperCase()}
+                </Avatar>
+                <span className="task-cell">{assigneeName}</span>
+              </>
+            ) : (
+              <span className="task-cell">Unassigned</span>
+            )}
+          </div>
+        )}
         <div className="row-actions">
           <Tooltip title="Delete">
             <Button
@@ -488,41 +567,48 @@ export function TaskListView() {
               value={filter}
               onChange={(v) => setFilter(v as string)}
             />
-            <div className="tasks-sort">
-              <span className="tasks-sort-label">Sort</span>
-              <Select
-                value={sortField}
-                onChange={setSortField}
-                options={SORTS}
-                style={{ width: 104 }}
-                popupMatchSelectWidth={false}
-              />
-              <Tooltip title={sortDir === 'asc' ? 'Ascending' : 'Descending'}>
-                <Button
-                  icon={sortDir === 'asc' ? <SortAscendingOutlined /> : <SortDescendingOutlined />}
-                  onClick={() => setSortDir(sortDir === 'asc' ? 'desc' : 'asc')}
-                />
-              </Tooltip>
+            <Input
+              className="tasks-search"
+              size="small"
+              allowClear
+              prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
+              placeholder="Search tasks"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
+            <div className="tasks-toolbar-right">
+              {uniformAssignee?.name && (
+                <span className="task-assignee-chip">
+                  <Avatar
+                    size={18}
+                    style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10, flex: 'none' }}
+                  >
+                    {uniformAssignee.name.trim().charAt(0).toUpperCase()}
+                  </Avatar>
+                  {uniformAssignee.name}
+                </span>
+              )}
+              {selectedIds.size > 0 && (
+                <div className="tasks-bulkbar">
+                  <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<PlayCircleOutlined />}
+                    onClick={openBatch}
+                  >
+                    Run
+                  </Button>
+                  <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
+                    Set assignee
+                  </Button>
+                  <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
+                    Clear
+                  </Button>
+                </div>
+              )}
             </div>
-            {selectedIds.size > 0 && (
-              <div className="tasks-bulkbar">
-                <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<PlayCircleOutlined />}
-                  onClick={openBatch}
-                >
-                  Run
-                </Button>
-                <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
-                  Set assignee
-                </Button>
-                <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
-                  Clear
-                </Button>
-              </div>
-            )}
           </div>
 
           {(isListView ? listQ.isLoading : tasks.isLoading) ? (
@@ -534,7 +620,7 @@ export function TaskListView() {
               This list could not be loaded.
             </div>
           ) : (
-            <div className="orbit-tasklist">
+            <div className={`orbit-tasklist${showAssigneeCol ? '' : ' no-assignee'}`}>
               <div className="col-head-row">
                 <div className="col-head task-check">
                   <Checkbox
@@ -544,18 +630,20 @@ export function TaskListView() {
                     disabled={rows.length === 0}
                   />
                 </div>
-                <div className="col-head">Status</div>
-                <div className="col-head">Task</div>
-                <div className="col-head">Assignee</div>
+                {sortHead('status', 'Status')}
+                {sortHead('title', 'Task')}
+                {showAssigneeCol && sortHead('assignee', 'Assignee')}
               </div>
 
               {rows.length === 0 ? (
                 <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
-                  {isListView
-                    ? 'No tasks in this list yet.'
-                    : isUnlisted
-                      ? 'No tasks without a list yet.'
-                      : 'No tasks yet.'}
+                  {query.trim()
+                    ? `No tasks match “${query.trim()}”.`
+                    : isListView
+                      ? 'No tasks in this list yet.'
+                      : isUnlisted
+                        ? 'No tasks without a list yet.'
+                        : 'No tasks yet.'}
                 </div>
               ) : (
                 rows.map((r: any) => renderRow(r))
