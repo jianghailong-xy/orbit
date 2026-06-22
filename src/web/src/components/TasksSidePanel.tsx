@@ -3,6 +3,7 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   DesktopOutlined,
+  InboxOutlined,
   LogoutOutlined,
   SettingOutlined,
   ThunderboltOutlined,
@@ -401,29 +402,38 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
         <div className="tp-divider" />
 
+        {/* "No list" is the complement of the lists below — tasks in no list at all.
+            It's a peer of the Task List group, not a child of it, so it never reads
+            as "a list called No list". Only shown when such tasks actually exist
+            (agent-created, or detached when a list was deleted); the usual case is
+            none, and then it stays out of the way entirely. An icon (not a status
+            dot) marks it as a view rather than a list. */}
+        {unlistedCount > 0 && (
+          <div className="tp-group">
+            <div
+              className={`tp-item ${sel === 'none' ? 'active' : ''}`}
+              onClick={() => {
+                setSel('none');
+                navigate('/lists/none');
+              }}
+              title="Tasks not in any list (includes agent-created tasks and ones detached when a list was deleted)"
+            >
+              <span className="tp-ico">
+                <InboxOutlined />
+              </span>
+              <span className="tp-label">No list</span>
+              <span className="tp-count">{unlistedCount}</span>
+            </div>
+          </div>
+        )}
+
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
             <span className="tp-group-name">Task List</span>
             {activeLists.length > 0 && <span className="tp-count">{activeLists.length}</span>}
             <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
           </div>
-          {listOpen && (
-            <>
-              <div
-                className={`tp-item inset ${sel === 'none' ? 'active' : ''}`}
-                onClick={() => {
-                  setSel('none');
-                  navigate('/lists/none');
-                }}
-                title="Tasks not in any list (includes agent-created tasks and ones detached when a list was deleted)"
-              >
-                <span className="tp-list-dot" />
-                <span className="tp-label">No list</span>
-                {unlistedCount > 0 && <span className="tp-count">{unlistedCount}</span>}
-              </div>
-              {activeLists.map(renderListRow)}
-            </>
-          )}
+          {listOpen && <>{activeLists.map(renderListRow)}</>}
         </div>
 
         <div className="tp-group">
