@@ -956,6 +956,77 @@ body {
 .rd-env-row > .ant-input:first-child {
   flex: 0 0 38%;
 }
+/* In-place agent editor card — replaces the old modal; lives inside the list. */
+.rd-agent-form {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  padding: 16px 16px 14px;
+}
+.rd-agent-form-new {
+  border-color: var(--brand);
+}
+/* Two-column grid for the short fields; long fields below span full width. */
+.rd-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+.rd-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+@media (max-width: 600px) {
+  .rd-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Edit-in-place: the clicked row stays as a header and the editor expands below
+   it, the two merged into one bordered card. */
+.rd-agent-editing {
+  border: 1px solid var(--brand);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rd-agent-editing > .rd-agent-row {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.rd-agent-editing > .rd-agent-form-wrap > .rd-agent-form {
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+/* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
+   rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
+.rd-agent-form-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: rd-form-expand 0.2s ease;
+}
+.rd-agent-form-wrap > * {
+  min-height: 0;
+  overflow: hidden;
+}
+@keyframes rd-form-expand {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-agent-form-wrap {
+    animation: none;
+  }
+}
 
 /* shared column grid: check | status | title | assignee */
 .orbit-tasklist {
@@ -2070,6 +2141,59 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A PENDING session before its first event: instead of a lonely top-left note in a
+   blank pane, fill the transcript area with a calm, centered "waiting to run" state. */
+.chat-queued-state {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+.chat-queued-dots {
+  display: flex;
+  gap: 6px;
+}
+.chat-queued-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: chat-queued-bounce 1.4s ease-in-out infinite;
+}
+.chat-queued-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.chat-queued-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes chat-queued-bounce {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.chat-queued-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.chat-queued-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  max-width: 320px;
+}
+
 /* A message queued behind the running turn: a dimmed user bubble with a withdraw
    action, shown until the runner picks it up (then it renders as a normal user turn). */
 .chat-queued {

@@ -37,6 +37,7 @@ export enum SessionEndReason {
   COMPLETED = 'completed', // user marked it complete (archived)
   DELETED = 'deleted', // user deleted it (trash)
   ORPHANED = 'orphaned', // never-claimed run for an already-finished task
+  CANCELLED = 'cancelled', // user stopped the run (batch-stop) — settles CANCELLED, not PARKED
 }
 
 /** Health of a registered runner machine. */

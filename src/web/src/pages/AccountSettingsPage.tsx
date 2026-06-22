@@ -38,10 +38,10 @@ export function AccountSettingsPage() {
   });
 
   return (
-    <>
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 className="page-title">Account settings</h1>
 
-      <Card title="Profile" style={{ maxWidth: 480, marginBottom: 16 }}>
+      <Card title="Profile" style={{ marginBottom: 16 }}>
         <div style={{ display: 'grid', gap: 12 }}>
           <div>
             <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 2 }}>Name</div>
@@ -54,7 +54,7 @@ export function AccountSettingsPage() {
         </div>
       </Card>
 
-      <Card title="Change password" style={{ maxWidth: 480 }}>
+      <Card title="Change password">
         <Form form={form} layout="vertical" requiredMark={false} onFinish={(v) => changePwd.mutate(v)}>
           <Form.Item
             name="currentPassword"
@@ -94,6 +94,6 @@ export function AccountSettingsPage() {
           </Button>
         </Form>
       </Card>
-    </>
+    </div>
   );
 }
