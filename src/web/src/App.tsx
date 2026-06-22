@@ -5,6 +5,7 @@ import { AppShell, DocView, FlushView } from './components/AppShell';
 import { AgentConsole } from './components/AgentConsole';
 import { ActiveSessionsView } from './components/ActiveSessionsView';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
+import { AccountSettingsPage } from './pages/AccountSettingsPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
@@ -68,6 +69,14 @@ export function App() {
               element={
                 <DocView>
                   <SkillsPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="settings/account"
+              element={
+                <DocView>
+                  <AccountSettingsPage />
                 </DocView>
               }
             />
