@@ -71,6 +71,11 @@ Options:
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
+  --proxy [<url>]          Use an HTTP proxy for claude on the runner so it can reach
+                           the Anthropic API on a proxied network. Bare --proxy uses
+                           $https_proxy/$http_proxy; or pass a URL. If omitted and a
+                           proxy is set in your shell, you are asked. The control-plane
+                           host is auto-added to no_proxy.
 `,
 	"run": `orbit run — start the runner loop in the foreground
 
@@ -214,6 +219,12 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	}
 	// --foreground (and --no-service) skip installing the background service.
 	withService := !bools["no-service"] && !foreground
+	// The runner spawns claude -p, which on a proxied network must use the same
+	// HTTP proxy to reach the Anthropic API. Let the user opt in.
+	proxyVars := proxyServiceEnv(resolveProxy(flags, bools), server, firstNonEmpty(os.Getenv("no_proxy"), os.Getenv("NO_PROXY")))
+	if len(proxyVars) > 0 {
+		fmt.Printf("the runner will use HTTP proxy %s for claude\n", proxyVars[0].V)
+	}
 	t := NewTransport(server, "")
 
 	// Legacy path: an explicit enrollment token skips browser approval.
@@ -227,7 +238,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			os.Exit(1)
 		}
 		finishRegister(res.RunnerID, res.RunnerToken, res.Name,
-			server, labels, maxConcurrent, workDir, withService, foreground)
+			server, labels, maxConcurrent, workDir, withService, foreground, proxyVars)
 		return
 	}
 
@@ -255,7 +266,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		}
 		if poll.Status == "approved" {
 			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
-				server, labels, maxConcurrent, workDir, withService, foreground)
+				server, labels, maxConcurrent, workDir, withService, foreground, proxyVars)
 			return
 		}
 		if poll.Status == "expired" {
@@ -268,7 +279,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 
 // finishRegister persists the machine runner credential and installs the
 // background service (unless running in the foreground).
-func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool) {
+func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool, proxyVars []envVar) {
 	cfg := &RunnerConfig{
 		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
 		Name: name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
@@ -288,7 +299,7 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		fmt.Println("  Start it with:  orbit run")
 		return
 	}
-	if err := setupService(machineHome()); err != nil {
+	if err := setupService(machineHome(), proxyVars); err != nil {
 		fmt.Fprintf(os.Stderr, "\nnote: could not auto-install the background service (%s)\n", firstLine(err.Error()))
 		fmt.Fprintln(os.Stderr, "  you can run it in the foreground instead:  orbit run")
 	}
@@ -640,4 +651,36 @@ func confirm(question string, defaultYes bool) bool {
 		return s != "n" && s != "no"
 	}
 	return s == "y" || s == "yes"
+}
+
+// firstNonEmpty returns the first non-empty string.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// resolveProxy decides the HTTP proxy to bake into the runner service: an explicit
+// --proxy <url>, the environment proxy when --proxy is bare or the user opts in at
+// the prompt, or "" for none.
+func resolveProxy(flags map[string]string, bools map[string]bool) string {
+	if v := flags["proxy"]; v != "" {
+		return v
+	}
+	envProxy := firstNonEmpty(os.Getenv("https_proxy"), os.Getenv("HTTPS_PROXY"), os.Getenv("http_proxy"), os.Getenv("HTTP_PROXY"))
+	if bools["proxy"] {
+		if envProxy == "" {
+			fmt.Fprintln(os.Stderr, "note: --proxy given but no http(s)_proxy in the environment; registering without a proxy")
+		}
+		return envProxy
+	}
+	if envProxy != "" && interactive() {
+		if confirm(fmt.Sprintf("Use detected HTTP proxy %s for the runner (so claude -p can reach the Anthropic API)? [y/N] ", envProxy), false) {
+			return envProxy
+		}
+	}
+	return ""
 }
