@@ -104,7 +104,7 @@ export function RunnerDetailPage() {
 
   // Edit the runner's concurrency cap — same PATCH the rename uses.
   const [slotsOpen, setSlotsOpen] = useState(false);
-  const [slotsVal, setSlotsVal] = useState(1);
+  const [slotsVal, setSlotsVal] = useState<number | null>(1);
   const slotsMut = useMutation({
     mutationFn: (maxConcurrent: number) =>
       api(`/runners/${runnerId}`, { method: 'PATCH', body: { maxConcurrent } }),
@@ -392,13 +392,14 @@ export function RunnerDetailPage() {
         okText="Save"
         cancelText="Cancel"
         confirmLoading={slotsMut.isPending}
-        onOk={() => slotsMut.mutate(slotsVal)}
+        okButtonProps={{ disabled: slotsVal == null }}
+        onOk={() => slotsVal != null && slotsMut.mutate(slotsVal)}
         onCancel={() => setSlotsOpen(false)}
         destroyOnClose
       >
         <InputNumber
           value={slotsVal}
-          onChange={(v) => setSlotsVal(typeof v === 'number' ? v : 1)}
+          onChange={(v) => setSlotsVal(v)}
           min={1}
           max={64}
           precision={0}
