@@ -164,10 +164,23 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		return
 	}
 
-	if err := t.complete(job.SessionID, CompleteRequest{Status: status}); err != nil {
+	// Finalize the session's worktree (when isolated): commit the work onto its branch and
+	// compute the diff, so the branch is usable for a manual merge even after the checkout
+	// is removed. A SUCCEEDED/FAILED run is done — drop the checkout (the branch stays); a
+	// CANCELLED one keeps its checkout for a possible resume and is reaped by gcWorktrees.
+	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus}
+	if job.WT != nil {
+		cr.Branch = job.WT.Branch
+		cr.BaseSha = job.WT.BaseSha
+		cr.ChangedFiles = finalizeWorktree(job.WT, job.Title)
+	}
+	if err := t.complete(job.SessionID, cr); err != nil {
 		logln("complete failed for", job.SessionID+":", err)
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
+	}
+	if job.WT != nil && (status == stSucceeded || status == stFailed) {
+		removeWorktree(job.WT)
 	}
 }
 

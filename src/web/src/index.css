@@ -918,16 +918,21 @@ body {
 .rd-agent-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+/* One panel with hairline dividers between rows, instead of boxing each row —
+   denser and faster to scan. */
+.rd-agent-list > * + * {
+  border-top: 1px solid var(--border-subtle);
 }
 .rd-agent-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
+  padding: 10px 14px;
 }
 .rd-agent-ico {
   display: flex;
@@ -982,7 +987,7 @@ body {
   padding: 16px 16px 14px;
 }
 .rd-agent-form-new {
-  border-color: var(--brand);
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 /* Two-column grid for the short fields; long fields below span full width. */
 .rd-form-grid {
@@ -1004,10 +1009,8 @@ body {
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
    it, the two merged into one bordered card. */
 .rd-agent-editing {
-  border: 1px solid var(--brand);
-  border-radius: 10px;
-  background: var(--bg-raised);
   overflow: hidden;
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 .rd-agent-editing > .rd-agent-row {
   border: none;
@@ -1018,6 +1021,12 @@ body {
   border: none;
   border-radius: 0;
   border-top: 1px solid var(--border-subtle);
+}
+/* Create form sits inline at the top of the panel — shed its own card frame too. */
+.rd-agent-list > .rd-agent-form-wrap > .rd-agent-form {
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 /* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
    rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
@@ -1477,6 +1486,146 @@ body {
   font-size: 12.5px;
   color: var(--text-3);
   margin-top: 2px;
+}
+
+/* Per-session worktree result, shown below the header once a run finishes (see
+   SessionOutputs.tsx): the branch the work was committed to + the changed files. */
+.session-outputs {
+  margin: 0 16px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  font-size: 12.5px;
+}
+.session-outputs-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.session-outputs-branch {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 7px;
+}
+.session-outputs-base {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.session-outputs-count {
+  color: var(--text-3);
+  margin-left: auto;
+}
+.session-outputs-files {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow: auto;
+}
+.session-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.session-file-status {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.session-file-status.st-a {
+  color: var(--success-solid);
+}
+.session-file-status.st-d {
+  color: var(--error-solid);
+}
+.session-file-status.st-r {
+  color: var(--warning-solid);
+}
+.session-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.session-file-stat {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+}
+.session-file-stat .add {
+  color: var(--success-solid);
+}
+.session-file-stat .del {
+  color: var(--error-solid);
+}
+.session-file-bin {
+  flex: none;
+  color: var(--text-4);
+  font-style: italic;
+}
+.session-outputs-merge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.session-outputs-nogit {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.session-outputs-warn {
+  font-weight: 600;
+  color: var(--warning);
+}
+.session-outputs-hint {
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.session-outputs-hint code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  background: var(--bg-raised);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.session-outputs-enable {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-outputs-enable:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.session-outputs-enable:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 .agent-header-spacer {
   flex: 1;

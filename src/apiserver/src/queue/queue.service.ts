@@ -135,6 +135,11 @@ export class QueueService {
       prompt: session.prompt,
       // The project directory claude runs in comes from the session's agent.
       workDir: agent?.workDir ?? undefined,
+      // Per-session worktree branch (generated at creation); the runner isolates the
+      // session in a `git worktree` on this branch when workDir is a git repo.
+      branch: session.branch ?? undefined,
+      // Agent opt-in: auto-`git init` a non-git workDir so it can be isolated.
+      autoInitGit: agent?.autoInitGit ?? undefined,
       // We spawn claude with --session-id = claudeSessionId, so it's known up front.
       sessionUuid: session.claudeSessionId ?? session.id,
       maxSeq,

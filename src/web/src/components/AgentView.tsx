@@ -29,6 +29,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { SessionOutputs } from './SessionOutputs';
 import {
   type ApprovalInfo,
   archiveSession,
@@ -36,6 +37,7 @@ import {
   createInteractiveSession,
   decideApproval,
   deleteSession,
+  enableAgentIsolation,
   interruptSession,
   listApprovals,
   listQueuedTurns,
@@ -391,7 +393,7 @@ function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): s
 }
 
 export function AgentView({ runner }: { runner: Runner }) {
-  const { message } = AntApp.useApp();
+  const { message, modal } = AntApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
@@ -1083,6 +1085,26 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  // Enable worktree isolation for a non-git agent: flip autoInitGit so the runner `git
+  // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
+  const enableIsoMut = useMutation({
+    mutationFn: (agentId: string) => enableAgentIsolation(agentId),
+    onSuccess: () =>
+      message.success('Isolation enabled — the next run will initialize git and isolate.'),
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askEnableIsolation = (agentId: string) =>
+    modal.confirm({
+      title: 'Enable worktree isolation?',
+      content:
+        "This initializes a git repo in the agent's working directory (a default .gitignore" +
+        ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
+        ' each get their own branch instead of sharing the directory.',
+      okText: 'Enable',
+      // Swallow a rejected enable (onError already toasts) so confirm() closes cleanly
+      // instead of leaving an unhandled promise rejection.
+      onOk: () => enableIsoMut.mutateAsync(agentId).catch(() => {}),
+    });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -1526,6 +1548,18 @@ export function AgentView({ runner }: { runner: Runner }) {
             </>
           )}
         </div>
+
+        {selected && !composing && (
+          <SessionOutputs
+            detail={sessionDetailQ.data}
+            enabling={enableIsoMut.isPending}
+            onEnableIsolation={
+              sessionDetailQ.data?.agent?.id
+                ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
+                : undefined
+            }
+          />
+        )}
 
         {stuck && (
           <button

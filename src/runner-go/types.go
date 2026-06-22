@@ -122,6 +122,15 @@ type ClaimedSession struct {
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
 	Reclaimed bool `json:"-"`
+	// Branch is the per-session git worktree branch (server-set). When non-empty and
+	// WorkDir is a git repo, the runner isolates the session in its own checkout on it.
+	Branch string `json:"branch,omitempty"`
+	// AutoInitGit: agent opted in to auto-`git init` a non-git workDir so it can be isolated.
+	AutoInitGit bool `json:"autoInitGit,omitempty"`
+	// WT and IsolationStatus are runner-internal, resolved by setupWorktree at start: WT
+	// is the live worktree (nil when running shared), IsolationStatus what was done.
+	WT              *Worktree `json:"-"`
+	IsolationStatus string    `json:"-"`
 }
 
 // Interactive sessions (Route B) — wire DTOs mirroring @orbit/shared.
@@ -156,6 +165,10 @@ type ReclaimSession struct {
 	// Injected into the claude process, cf. ClaimedSession.AgentID/TaskID.
 	AgentID string `json:"agentId,omitempty"`
 	TaskID  string `json:"taskId,omitempty"`
+	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.
+	Branch string `json:"branch,omitempty"`
+	// AutoInitGit, cf. ClaimedSession.AutoInitGit.
+	AutoInitGit bool `json:"autoInitGit,omitempty"`
 }
 
 type ReclaimResponse struct {
@@ -192,6 +205,15 @@ type TokenUsage struct {
 	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 }
 
+// ChangedFile is one file a worktree-isolated session changed, computed by the runner
+// (git diff baseSha..branch) at completion. Additions/Deletions are -1 for binary files.
+type ChangedFile struct {
+	Path      string `json:"path"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+	Status    string `json:"status"`
+}
+
 type CompleteRequest struct {
 	Status          string                 `json:"status"`
 	Result          string                 `json:"result,omitempty"`
@@ -203,6 +225,12 @@ type CompleteRequest struct {
 	CostUsd         float64                `json:"costUsd"`
 	Usage           *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage      map[string]interface{} `json:"modelUsage,omitempty"`
+	// Worktree isolation outcome (see worktree.go): the branch the work was committed to,
+	// the base it forked from, what the runner did, and the per-file diff summary.
+	Branch          string        `json:"branch,omitempty"`
+	BaseSha         string        `json:"baseSha,omitempty"`
+	IsolationStatus string        `json:"isolationStatus,omitempty"`
+	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
 }
 
 type Manifest struct {

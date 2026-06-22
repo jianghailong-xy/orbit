@@ -29,6 +29,11 @@ services:
       # Shared secret guarding operator-only endpoints (e.g. POST /api/users).
       # Leave unset to keep those endpoints closed.
       ADMIN_TOKEN: "${ADMIN_TOKEN:-}"
+      # Optional: DeepSeek (OpenAI-compatible) for clean English session titles + worktree
+      # branch slugs. Unset → a deterministic slug fallback, no LLM call (see naming.ts).
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+      DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
+      DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-chat}"
     depends_on:
       postgres:
         condition: service_healthy

@@ -116,7 +116,10 @@ func runLoop(cfg *RunnerConfig) {
 	// startSession registers a session in `active` and drives it in its own
 	// goroutine, removing it on exit. Shared by fresh claims and reclaimed sessions.
 	startSession := func(job *ClaimedSession) {
-		execDir := sessionExecDir(job.WorkDir)
+		// Per-session git worktree isolation: when the agent's workDir is a git repo, run
+		// claude in its own checkout on job.Branch instead of the shared dir. Falls back to
+		// the shared dir (recording why on job.IsolationStatus) for non-git workDirs.
+		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
 		jobCtx, cancel := context.WithCancel(context.Background())
 		mu.Lock()
 		active[job.SessionID] = cancel
@@ -146,6 +149,8 @@ func runLoop(cfg *RunnerConfig) {
 				Title:       r.Title,
 				Agent:       r.Agent,
 				WorkDir:     r.WorkDir,
+				Branch:      r.Branch,
+				AutoInitGit: r.AutoInitGit,
 				AgentID:     r.AgentID,
 				TaskID:      r.TaskID,
 				Reclaimed:   true,
@@ -154,6 +159,17 @@ func runLoop(cfg *RunnerConfig) {
 			})
 		}
 	}
+
+	// Reap orphan worktrees from a previous process — any checkout whose session we did
+	// not just reclaim (a crash mid-finalize, or a cancelled session never resumed). The
+	// branches are kept; only the stray checkout dirs are removed.
+	mu.Lock()
+	liveSet := make(map[string]bool, len(active))
+	for id := range active {
+		liveSet[id] = true
+	}
+	mu.Unlock()
+	gcWorktrees(liveSet)
 
 	for loopCtx.Err() == nil {
 		mu.Lock()

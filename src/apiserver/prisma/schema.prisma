@@ -179,6 +179,10 @@ model Agent {
   env                Json?    @map("env")
   agentKey           String?  @map("agent_key")
   enabled            Boolean  @default(true)
+  // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
+  // baseline commit) on the next claim so its sessions can be worktree-isolated. Opt-in
+  // per agent — the web "Enable isolation" action on a non-git run flips this on.
+  autoInitGit        Boolean  @default(false) @map("auto_init_git")
   ownerId            String   @map("owner_id") @db.Uuid
   owner              User     @relation(fields: [ownerId], references: [id])
   createdAt          DateTime @default(now()) @map("created_at")
@@ -261,6 +265,20 @@ model Session {
   // Only meaningful while RUNNING; the list gates display on status so a stale value
   // on a finished session is never shown.
   lastToolUse       String?   @map("last_tool_use")
+  // ── Per-session git worktree isolation ──────────────────────────────────────
+  // When the agent's workDir is a git repo, the runner runs this session in its own
+  // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
+  // On terminal completion the runner commits the work to `branch`, removes the
+  // worktree (the branch stays, for a manual merge), and reports `changedFiles` — a
+  // compact per-file {path,additions,deletions,status} summary, deliberately NOT
+  // selected by the session list query so the (potentially large) diff never bloats
+  // the list payload. `isolationStatus` records what the runner actually did:
+  // 'worktree' (isolated) or 'shared-nogit' (workDir wasn't a git repo, so it ran in
+  // the shared dir with no isolation). All null for pre-feature / never-run sessions.
+  branch            String?
+  baseSha           String?   @map("base_sha")
+  changedFiles      Json?     @map("changed_files")
+  isolationStatus   String?   @map("isolation_status")
   // Soft visibility: null = active. archivedAt hides the session into the Archived
   // view, deletedAt into the trash. Both retain all data (transcript, billing) and
   // are reversible — restore clears them. There is no hard delete.

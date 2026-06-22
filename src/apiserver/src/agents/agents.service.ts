@@ -50,6 +50,7 @@ export class AgentsService {
         workDir: dto.workDir,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         enabled: dto.enabled ?? true,
+        autoInitGit: dto.autoInitGit ?? false,
       },
     });
   }
@@ -109,6 +110,7 @@ export class AgentsService {
       workDir: dto.workDir,
       targetRunnerId: dto.targetRunnerId,
       enabled: dto.enabled,
+      autoInitGit: dto.autoInitGit,
     };
     if (dto.allowedTools) data.allowedTools = dto.allowedTools as Prisma.InputJsonValue;
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;

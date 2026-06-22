@@ -317,6 +317,8 @@ export class RunnerApiController {
         maxSeq: agg._max.seq ?? 0,
         agent: agentCfg,
         workDir: agent?.workDir ?? undefined,
+        branch: s.branch ?? undefined,
+        autoInitGit: agent?.autoInitGit ?? undefined,
         agentId: s.agentId ?? undefined,
         taskId: s.taskId ?? undefined,
       });
@@ -743,6 +745,15 @@ export class RunnerApiController {
           error: dto.error,
           claudeSessionId: dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
+          // Worktree isolation outcome reported by the runner: the branch it committed
+          // the work to, the base it forked from, what it did (worktree/shared-nogit),
+          // and the per-file diff summary. Each left untouched when the runner omits it.
+          branch: dto.branch ?? undefined,
+          baseSha: dto.baseSha ?? undefined,
+          isolationStatus: dto.isolationStatus ?? undefined,
+          ...(dto.changedFiles !== undefined
+            ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
+            : {}),
         },
       });
       if (res.count === 0) return false;

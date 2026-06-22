@@ -35,6 +35,7 @@ export class CreateAgentDto {
   @IsOptional() @IsString() workDir?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsBoolean() autoInitGit?: boolean;
 }
 
 export class UpdateAgentDto {
@@ -55,6 +56,7 @@ export class UpdateAgentDto {
   @IsOptional() @IsString() workDir?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
+  @IsOptional() @IsBoolean() autoInitGit?: boolean;
 }
 
 // The full agent list in the desired sidebar order; each id's index becomes its position.

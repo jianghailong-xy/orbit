@@ -302,7 +302,11 @@ export function RunnerDetailPage() {
 
   // One agent row — shown on its own, or kept as the header above the in-place
   // editor. While this row is being edited, the pencil toggles the editor closed.
-  const agentRow = (a: Agent) => (
+  const agentRow = (a: Agent) => {
+    // When an agent overrides the endpoint/model via env (e.g. a DeepSeek-compatible
+    // base URL), the static `model` field is stale — show the effective model instead.
+    const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || 'claude-sonnet-4-6';
+    return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">
         <RobotOutlined />
@@ -313,7 +317,7 @@ export function RunnerDetailPage() {
           {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
         </div>
         <div className="rd-agent-meta">
-          {a.model || 'claude-sonnet-4-6'}
+          {effectiveModel}
           {a.workDir ? ` · ${a.workDir}` : ''}
         </div>
       </div>
@@ -348,7 +352,8 @@ export function RunnerDetailPage() {
         }
       />
     </div>
-  );
+    );
+  };
 
   if (runners.isLoading) {
     return (

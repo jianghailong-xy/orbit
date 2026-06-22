@@ -208,9 +208,35 @@ export const deleteSession = (sessionId: string) =>
 export const restoreSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/restore`, { method: 'POST' });
 
+/** One file a worktree-isolated session changed (git diff baseSha..branch); additions/
+ *  deletions are -1 for binary files. Mirrors @orbit/shared ChangedFile. */
+export interface SessionChangedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  status: string;
+}
+
+/** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
+ *  reads are typed; `branch`/`baseSha`/`changedFiles`/`isolationStatus` carry the
+ *  per-session git worktree result (null until the runner reports completion). */
+export interface SessionDetail {
+  id: string;
+  assignedRunnerId: string | null;
+  agent: { id: string } | null;
+  branch?: string | null;
+  baseSha?: string | null;
+  changedFiles?: SessionChangedFile[] | null;
+  isolationStatus?: string | null;
+}
+
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to
- *  resolve the runner behind a `/sessions/:id` deep link. */
+ *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
 export const getSession = (idOrPublicId: string) =>
-  api<{ id: string; assignedRunnerId: string | null; agent: { id: string } | null }>(
-    `/sessions/${idOrPublicId}`,
-  );
+  api<SessionDetail>(`/sessions/${idOrPublicId}`);
+
+/** Enable per-session worktree isolation for an agent whose workDir isn't a git repo:
+ *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline
+ *  commit) on the agent's next run, after which sessions isolate on their own branch. */
+export const enableAgentIsolation = (agentId: string) =>
+  api(`/agents/${agentId}`, { method: 'PATCH', body: { autoInitGit: true } });

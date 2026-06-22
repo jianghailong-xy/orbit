@@ -145,6 +145,13 @@ export interface ClaimedSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** Git branch for this session's worktree (e.g. "orbit/fix-login-500-a1b2c3"). When set
+   *  and workDir is a git repo, the runner runs claude in a per-session `git worktree` on
+   *  this branch instead of the shared workDir. Generated server-side at session creation. */
+  branch?: string;
+  /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
+   *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
+  autoInitGit?: boolean;
   /** Pre-generated Claude session id to pass via --session-id (and --resume on respawn). */
   sessionUuid: string;
   /** Highest RunEvent.seq already persisted, so a respawned runner continues the
@@ -277,6 +284,11 @@ export interface ReclaimSession {
   agent: AgentExecConfig;
   /** Project directory to run claude in (claude's cwd), from the session's agent. */
   workDir?: string;
+  /** Git branch for this session's worktree, cf. ClaimedSession.branch. On reclaim the
+   *  runner re-attaches to (or re-creates from this branch) the same worktree. */
+  branch?: string;
+  /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
+  autoInitGit?: boolean;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */
   agentId?: string;
   /** DB id of the parent Task this session runs under, if any (ORBIT_TASK_ID). */
@@ -304,6 +316,16 @@ export interface TurnCompleteRequest {
   modelUsage?: Record<string, ModelUsage>;
 }
 
+/** One file changed by a worktree-isolated session, as a compact diff summary the runner
+ *  computes (git diff baseSha..branch) at terminal completion. `status` is the git
+ *  name-status letter (A/M/D/R/...); `additions`/`deletions` are -1 for binary files. */
+export interface ChangedFile {
+  path: string;
+  additions: number;
+  deletions: number;
+  status: string;
+}
+
 /**
  * Runner → control plane: finalize the whole session to a terminal status,
  * distinct from per-turn /turn-complete.
@@ -321,4 +343,13 @@ export interface SessionCompleteRequest {
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;
+  // ── Worktree isolation outcome (see Session.branch/baseSha/changedFiles) ──
+  /** The session's worktree branch, echoed back so the server persists it. */
+  branch?: string;
+  /** Commit the branch forked from (workDir HEAD at claim). */
+  baseSha?: string;
+  /** Per-file diff summary of the branch vs its base; empty when nothing changed. */
+  changedFiles?: ChangedFile[];
+  /** What the runner did: 'worktree' (isolated) | 'shared-nogit' (no git → shared dir). */
+  isolationStatus?: string;
 }

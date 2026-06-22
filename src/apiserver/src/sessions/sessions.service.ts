@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
+import { generateNaming } from './naming';
 
 @Injectable()
 export class SessionsService {
@@ -91,9 +92,18 @@ export class SessionsService {
     const attachmentIds = await this.assertScopableAttachments(ownerId, dto.attachmentIds);
     // PENDING so the assigned runner claims it and spawns the long-lived claude
     // process; it then awaits turns via the inbox.
+    // Title + per-session worktree branch. DeepSeek (when DEEPSEEK_API_KEY is set) returns a
+    // clean English title and branch slug; otherwise a deterministic slug fallback. Keep an
+    // explicit dto.title (task templates, user-typed) and only adopt DeepSeek's title for an
+    // otherwise-unnamed session; the branch always uses the best available slug. The runner
+    // runs claude in its own `git worktree` on this branch when the workDir is a git repo,
+    // then commits the work here for a manual merge — harmless for non-git/shared runs.
+    const naming = await generateNaming({ prompt: dto.prompt, title: dto.title });
+    const title = dto.title ?? naming.title ?? dto.prompt.slice(0, 80);
     const session = await this.prisma.session.create({
       data: {
-        title: dto.title ?? dto.prompt.slice(0, 80),
+        title,
+        branch: naming.branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
