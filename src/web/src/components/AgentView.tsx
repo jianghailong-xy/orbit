@@ -20,6 +20,7 @@ import {
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
+  ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -130,7 +131,7 @@ const EFFORT_KEY = 'orbit.effort';
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
-const SESSION_COL_DEFAULT = 264;
+const SESSION_COL_DEFAULT = 320;
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
@@ -1243,6 +1244,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
+  // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
+  const [slashScope, setSlashScope] = useState<'command' | 'skill' | null>(null);
   const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
   const slashItems = useMemo(
     () => [
@@ -1255,15 +1258,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (slashToken === null) return [];
     const q = slashToken.toLowerCase();
     return slashItems
-      .filter((it) => it.name.toLowerCase().includes(q))
+      .filter((it) => (slashScope === null || it.type === slashScope) && it.name.toLowerCase().includes(q))
       .sort((a, b) => {
         const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
         const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
         return pa - pb || a.name.localeCompare(b.name);
       })
       .slice(0, 50);
-  }, [slashItems, slashToken]);
-  useEffect(() => setSlashIndex(0), [slashToken]);
+  }, [slashItems, slashToken, slashScope]);
+  useEffect(() => {
+    setSlashIndex(0);
+    if (slashToken === null) setSlashScope(null);
+  }, [slashToken]);
   const showSlash =
     slashToken !== null && slashToken !== slashDismissed && runner.online && slashMatches.length > 0;
   const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
@@ -1274,9 +1280,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // Open the command/skill autocomplete from the `+` menu: drop a `/` (prefixed with a
-  // space when mid-message) so slashToken matches and the menu pops.
-  const insertSlash = (): void => {
+  // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
+  // with a space when mid-message) so slashToken matches and the menu pops.
+  const insertSlash = (scope: 'command' | 'skill'): void => {
+    setSlashScope(scope);
     setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
@@ -1724,11 +1731,18 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onClick: () => imageInputRef.current?.click(),
                 },
                 {
-                  key: 'slash',
+                  key: 'command',
                   icon: <CodeOutlined />,
-                  label: 'Commands / Skills',
-                  disabled: slashItems.length === 0,
-                  onClick: insertSlash,
+                  label: 'Command',
+                  disabled: (runner.commands?.length ?? 0) === 0,
+                  onClick: () => insertSlash('command'),
+                },
+                {
+                  key: 'skill',
+                  icon: <ThunderboltOutlined />,
+                  label: 'Skill',
+                  disabled: (runner.skills?.length ?? 0) === 0,
+                  onClick: () => insertSlash('skill'),
                 },
                 {
                   key: 'file',

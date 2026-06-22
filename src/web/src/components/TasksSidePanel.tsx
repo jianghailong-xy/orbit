@@ -42,7 +42,7 @@ const TOP = [
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
 const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
-const DEFAULT_SIDEBAR_WIDTH = 340;
+const DEFAULT_SIDEBAR_WIDTH = 280;
 const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
