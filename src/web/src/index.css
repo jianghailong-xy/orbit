@@ -460,13 +460,6 @@ body {
 .tasks-search {
   width: 200px;
 }
-/* Right-aligned cluster: the shared-assignee chip and the batch-action bar. */
-.tasks-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
 /* Muted chips surfacing context dropped from the rows: the shared title prefix and, when
    every task shares one assignee, that assignee. */
 .task-prefix-chip,
