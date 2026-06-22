@@ -14,6 +14,7 @@ import {
   AddDependencyDto,
   BatchAssignDto,
   BatchExecuteDto,
+  BatchStopDto,
   CreateTaskCommentDto,
   CreateTaskDto,
   UpdateTaskDto,
@@ -54,6 +55,11 @@ export class TasksController {
   @Post('batch-execute')
   batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
     return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent);
+  }
+
+  @Post('batch-stop')
+  batchStop(@CurrentUser() user: AuthUser, @Body() dto: BatchStopDto) {
+    return this.tasks.batchStop(user.userId, dto.taskIds);
   }
 
   @Post('batch-assign')

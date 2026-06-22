@@ -242,6 +242,7 @@ function statusLabel(session: any): string {
       reason === 'orphaned' ||
       reason === 'deleted' ||
       reason === 'completed' ||
+      reason === 'cancelled' ||
       (status === 'INTERRUPTED' && reason === '');
     if (!terminal) return 'Dormant';
     return reason === 'orphaned' ? 'Ended' : status === 'INTERRUPTED' ? 'Interrupted' : 'Cancelled';
@@ -320,6 +321,7 @@ function StatusIcon({ session, completed }: { session: any; completed?: boolean 
       reason === 'orphaned' ||
       reason === 'deleted' ||
       reason === 'completed' ||
+      reason === 'cancelled' ||
       (status === 'INTERRUPTED' && reason === '');
     if (!terminalCancel)
       return (
@@ -381,7 +383,9 @@ function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): s
               ? 'Session deleted.'
               : reason === 'completed'
                 ? 'Session completed.'
-                : 'Session ended.'; // 'ended' or a pre-migration row
+                : reason === 'cancelled'
+                  ? 'Session cancelled.'
+                  : 'Session ended.'; // 'ended' or a pre-migration row
   }
   return base + suffix;
 }

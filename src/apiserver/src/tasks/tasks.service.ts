@@ -649,6 +649,35 @@ export class TasksService {
     };
   }
 
+  /**
+   * Stop a batch of tasks: cancel each selected task's in-flight session — running ones
+   * have their claude process torn down, queued (PENDING) ones are dropped so they never
+   * start. The mirror of {@link batchExecute}. Cancelled sessions settle to CANCELLED; a
+   * task whose running session is torn down is reclaimed to OPEN by the runner's
+   * /complete (retryable). Tasks with no stoppable session are silently no-ops.
+   */
+  async batchStop(ownerId: string, taskIds: string[]) {
+    const sessions = await this.prisma.session.findMany({
+      where: { ownerId, taskId: { in: taskIds }, status: { in: TASK_OCCUPYING } },
+      select: { id: true, taskId: true },
+    });
+    const results = await Promise.all(
+      sessions.map(async (s) => {
+        try {
+          return { ok: await this.sessions.cancel(ownerId, s.id) };
+        } catch (e) {
+          this.logger.warn(`batchStop: session ${s.id} failed: ${e}`);
+          return { ok: false, error: e instanceof Error ? e.message : String(e) };
+        }
+      }),
+    );
+    return {
+      stopped: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => 'error' in r),
+      tasks: new Set(sessions.map((s) => s.taskId)).size,
+    };
+  }
+
   /** Set (or clear, when assigneeId is null) the responsible agent on many tasks at once. */
   async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
     await this.assertOwnedAgent(ownerId, assigneeId);

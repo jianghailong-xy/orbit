@@ -63,6 +63,12 @@ export class BatchExecuteDto {
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
 }
 
+export class BatchStopDto {
+  // The tasks whose in-flight session (running or queued) should be cancelled. Tasks
+  // with no stoppable session are silently no-ops.
+  @IsArray() @IsString({ each: true }) taskIds!: string[];
+}
+
 export class BatchAssignDto {
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 

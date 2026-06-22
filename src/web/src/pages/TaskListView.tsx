@@ -5,6 +5,7 @@ import {
   PlayCircleOutlined,
   SortAscendingOutlined,
   SortDescendingOutlined,
+  StopOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -15,6 +16,7 @@ import {
   Checkbox,
   InputNumber,
   Modal,
+  Popconfirm,
   Segmented,
   Select,
   Spin,
@@ -217,6 +219,21 @@ export function TaskListView() {
       if (res.failed.length) parts.push(`${res.failed.length} failed`);
       if (res.skipped.length) parts.push(`${res.skipped.length} skipped`);
       message[res.dispatched ? 'success' : 'warning'](parts.join(', '));
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const batchStop = useMutation({
+    mutationFn: (body: { taskIds: string[] }) =>
+      api<{ stopped: number; failed: unknown[]; tasks: number }>('/tasks/batch-stop', {
+        method: 'POST',
+        body,
+      }),
+    onSuccess: (res) => {
+      setSelectedIds(new Set());
+      message[res.stopped ? 'success' : 'info'](
+        res.stopped ? `Stopped ${res.stopped} run(s)` : 'No running tasks to stop',
+      );
       invalidate();
     },
     onError: (e: Error) => message.error(e.message),
@@ -494,6 +511,19 @@ export function TaskListView() {
                 >
                   Run
                 </Button>
+                <Popconfirm
+                  title="Stop selected tasks?"
+                  description="Cancels each selected task's running or queued run."
+                  okText="Stop"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() =>
+                    batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })
+                  }
+                >
+                  <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
+                    Stop
+                  </Button>
+                </Popconfirm>
                 <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
                   Set assignee
                 </Button>
