@@ -543,7 +543,14 @@ export class RunnerApiController {
         where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
         data: {
           status: failTask ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
-          ...(failTask ? { error: dto.result || 'run failed', finishedAt: new Date() } : {}),
+          // On a failed task turn claude is still alive (the turn errored, the process
+          // didn't exit), so finalizing FAILED here would leak its runner concurrency
+          // slot — the process lingers, holding a slot, until the runner restarts. Set
+          // cancelRequestedAt so the next heartbeat's cancel-drain tells the runner to
+          // tear that process down and reclaim the slot (mirrors reaper forceFail).
+          ...(failTask
+            ? { error: dto.result || 'run failed', finishedAt: new Date(), cancelRequestedAt: new Date() }
+            : {}),
           lastTurnAt: new Date(),
           numTurns: { increment: dto.numTurns ?? 1 },
           costUsd: { increment: dto.costUsd ?? 0 },
