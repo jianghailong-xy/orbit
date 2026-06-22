@@ -5,6 +5,7 @@ import {
   LoadingOutlined,
   LockOutlined,
   PlayCircleOutlined,
+  ReloadOutlined,
   SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -17,6 +18,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Segmented,
   Select,
   Spin,
@@ -221,6 +223,17 @@ export function TaskListView() {
     onSuccess: invalidate,
     onError: (e: Error) => message.error(e.message),
   });
+  // Single-task run/retry from the row's hover actions; reuses the per-task execute the
+  // detail panel uses. The backend validates assignee + runner and dedups an in-flight run,
+  // so a stray double-click can't double-trigger.
+  const runOne = useMutation({
+    mutationFn: (id: string) => api(`/tasks/${id}/execute`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success('Run started');
+      invalidate();
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
   const batchRun = useMutation({
     mutationFn: (body: { taskIds: string[]; maxConcurrent: number }) =>
       api<{ dispatched: number; failed: unknown[]; skipped: unknown[] }>('/tasks/batch-execute', {
@@ -339,8 +352,8 @@ export function TaskListView() {
   const panelOpen = selectedTaskId !== null;
   const showAssigneeCol = !uniformAssignee && !panelOpen;
   const filterOptions = useMemo(() => {
-    const seg = (label: string, n: number) => (
-      <span className="seg-opt">
+    const seg = (label: string, n: number, danger = false) => (
+      <span className={`seg-opt${danger ? ' seg-opt--danger' : ''}`}>
         {label}
         <span className="seg-count">{n}</span>
       </span>
@@ -348,7 +361,7 @@ export function TaskListView() {
     return [
       { value: 'ALL', label: seg('All', counts.total) },
       { value: 'ONGOING', label: seg('Open', counts.open + counts.inProgress) },
-      { value: 'FAILED', label: seg('Failed', counts.failed) },
+      { value: 'FAILED', label: seg('Failed', counts.failed, counts.failed > 0) },
       { value: 'DONE', label: seg('Done', counts.done) },
       { value: 'CANCELLED', label: seg('Cancelled', counts.cancelled) },
     ];
@@ -457,6 +470,11 @@ export function TaskListView() {
     const stripped =
       commonPrefix && r.title?.startsWith(commonPrefix) ? r.title.slice(commonPrefix.length) : r.title;
     const displayTitle = stripped?.trim() ? stripped : (r.title ?? '');
+    // Row-level run/retry: offered only for an actionable, runnable task that isn't busy,
+    // blocked, or already done. FAILED reframes the same action as "Retry".
+    const canRunRow =
+      !!r.assignee?.runner?.id && !r.running && !r.queued && !r.blocked && r.status !== 'DONE';
+    const isRetry = r.status === 'FAILED';
     return (
       <div
         className={`task-row clickable${selected ? ' selected' : ''}`}
@@ -504,18 +522,33 @@ export function TaskListView() {
           </div>
         )}
         <div className="row-actions">
-          <Tooltip title="Delete">
+          {canRunRow && (
+            <Tooltip title={isRetry ? 'Retry' : 'Run'}>
+              <Button
+                size="small"
+                type="text"
+                icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runOne.mutate(r.id);
+                }}
+              />
+            </Tooltip>
+          )}
+          <Popconfirm
+            title="Delete this task?"
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => remove.mutate(r.id)}
+          >
             <Button
               size="small"
               type="text"
               danger
               icon={<DeleteOutlined />}
-              onClick={(e) => {
-                e.stopPropagation();
-                remove.mutate(r.id);
-              }}
+              onClick={(e) => e.stopPropagation()}
             />
-          </Tooltip>
+          </Popconfirm>
         </div>
       </div>
     );

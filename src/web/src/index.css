@@ -552,6 +552,14 @@ body {
   background: var(--brand-tint);
   color: var(--brand);
 }
+/* Failed filter with a non-zero count leads in red — a failure is a signal, not a tab. */
+.seg-opt--danger,
+.seg-opt--danger .seg-count {
+  color: var(--error);
+}
+.seg-opt--danger .seg-count {
+  background: var(--error-bg);
+}
 
 /* ---- Runners page (the runner list, moved out of the sidebar) ---- */
 .runners-head {
