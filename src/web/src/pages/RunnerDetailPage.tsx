@@ -192,6 +192,113 @@ export function RunnerDetailPage() {
   const submitAgent = () => {
     if (fName.trim()) saveMut.mutate();
   };
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  // In-place agent editor — rendered as a card in the list (top for create, in
+  // the row itself for edit) instead of a modal, so the runner + agent list stay
+  // in view while you edit.
+  const agentForm = (mode: 'create' | 'edit') => (
+    <div className={`rd-agent-form${mode === 'create' ? ' rd-agent-form-new' : ''}`}>
+      <div className="rd-form-grid">
+        <div className="rd-form-field">
+          <div className="rd-form-label">Name</div>
+          <Input
+            value={fName}
+            onChange={(e) => setFName(e.target.value)}
+            onPressEnter={submitAgent}
+            placeholder="e.g. tea-cli builder"
+            maxLength={60}
+            autoFocus
+          />
+        </div>
+        <div className="rd-form-field">
+          <div className="rd-form-label">Model</div>
+          <Select
+            value={fModel}
+            onChange={onModelChange}
+            options={MODEL_OPTIONS}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div className="rd-form-field">
+          <div className="rd-form-label">Permission mode</div>
+          <Select
+            value={fMode}
+            onChange={setFMode}
+            options={MODE_OPTIONS.filter(
+              (o) => o.value !== 'auto' || AUTO_CAPABLE_MODELS.has(fModel),
+            )}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div className="rd-form-field">
+          <div className="rd-form-label">Working directory</div>
+          <Input
+            value={fWorkDir}
+            onChange={(e) => setFWorkDir(e.target.value)}
+            placeholder="/path/to/project on the runner (optional)"
+          />
+        </div>
+      </div>
+      <div className="rd-form-field">
+        <div className="rd-form-label">Description</div>
+        <Input.TextArea
+          value={fDesc}
+          onChange={(e) => setFDesc(e.target.value)}
+          rows={2}
+          placeholder="What this agent is for (optional)"
+        />
+      </div>
+      <div className="rd-form-field">
+        <div className="rd-form-label">Environment variables</div>
+        {fEnv.map((row, i) => (
+          <div className="rd-env-row" key={i}>
+            <Input
+              value={row.key}
+              onChange={(e) =>
+                setFEnv(fEnv.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
+              }
+              placeholder="KEY"
+            />
+            <Input
+              value={row.value}
+              onChange={(e) =>
+                setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+              }
+              placeholder="value"
+            />
+            <Button
+              type="text"
+              icon={<DeleteOutlined />}
+              onClick={() => setFEnv(fEnv.filter((_, j) => j !== i))}
+            />
+          </div>
+        ))}
+        <Button
+          type="dashed"
+          icon={<PlusOutlined />}
+          onClick={() => setFEnv([...fEnv, { key: '', value: '' }])}
+          block
+        >
+          Add variable
+        </Button>
+      </div>
+      <div className="rd-form-actions">
+        <Button onClick={closeForm}>Cancel</Button>
+        <Button
+          type="primary"
+          onClick={submitAgent}
+          loading={saveMut.isPending}
+          disabled={!fName.trim()}
+        >
+          {mode === 'create' ? 'Create' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  );
 
   if (runners.isLoading) {
     return (
@@ -295,69 +402,74 @@ export function RunnerDetailPage() {
       <section className="rd-section">
         <div className="rd-section-head">
           <div className="rd-section-title">Agents</div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Add agent
-          </Button>
+          {!formOpen && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Add agent
+            </Button>
+          )}
         </div>
         {agentsQ.isLoading ? (
           <div style={{ padding: 24, textAlign: 'center' }}>
             <Spin />
           </div>
-        ) : agents.length === 0 ? (
+        ) : agents.length === 0 && !(formOpen && !editing) ? (
           <div className="rd-empty">
             No agents under this runner yet — add one to start a conversation.
           </div>
         ) : (
           <div className="rd-agent-list">
-            {agents.map((a) => (
-              <div key={a.id} className="rd-agent-row">
-                <span className="rd-agent-ico">
-                  <RobotOutlined />
-                </span>
-                <div className="rd-agent-main">
-                  <div className="rd-agent-name">
-                    {a.name}
-                    {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
+            {formOpen && !editing && agentForm('create')}
+            {agents.map((a) =>
+              formOpen && editing?.id === a.id ? (
+                <div key={a.id}>{agentForm('edit')}</div>
+              ) : (
+                <div key={a.id} className="rd-agent-row">
+                  <span className="rd-agent-ico">
+                    <RobotOutlined />
+                  </span>
+                  <div className="rd-agent-main">
+                    <div className="rd-agent-name">
+                      {a.name}
+                      {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
+                    </div>
+                    <div className="rd-agent-meta">
+                      {a.model || 'claude-sonnet-4-6'}
+                      {a.workDir ? ` · ${a.workDir}` : ''}
+                    </div>
                   </div>
-                  <div className="rd-agent-meta">
-                    {a.model || 'claude-sonnet-4-6'}
-                    {a.workDir ? ` · ${a.workDir}` : ''}
-                  </div>
+                  <Button
+                    size="small"
+                    icon={<MessageOutlined />}
+                    onClick={() => navigate(`/agents/${encodeId(a.id)}`)}
+                  >
+                    Chat
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<EditOutlined />}
+                    title="Edit"
+                    onClick={() => openEdit(a)}
+                  />
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    title="Delete"
+                    onClick={() =>
+                      modal.confirm({
+                        title: `Delete agent “${a.name}”?`,
+                        okText: 'Delete',
+                        okButtonProps: { danger: true },
+                        cancelText: 'Cancel',
+                        onOk: () => removeAgentMut.mutateAsync(a.id),
+                      })
+                    }
+                  />
                 </div>
-                <Button
-                  size="small"
-                  icon={<MessageOutlined />}
-                  onClick={() =>
-                    navigate(`/agents/${encodeId(a.id)}`)
-                  }
-                >
-                  Chat
-                </Button>
-                <Button
-                  size="small"
-                  type="text"
-                  icon={<EditOutlined />}
-                  title="Edit"
-                  onClick={() => openEdit(a)}
-                />
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  icon={<DeleteOutlined />}
-                  title="Delete"
-                  onClick={() =>
-                    modal.confirm({
-                      title: `Delete agent “${a.name}”?`,
-                      okText: 'Delete',
-                      okButtonProps: { danger: true },
-                      cancelText: 'Cancel',
-                      onOk: () => removeAgentMut.mutateAsync(a.id),
-                    })
-                  }
-                />
-              </div>
-            ))}
+              ),
+            )}
           </div>
         )}
       </section>
@@ -412,103 +524,6 @@ export function RunnerDetailPage() {
         </div>
       </Modal>
 
-      <Modal
-        title={editing ? 'Edit agent' : 'Add agent'}
-        open={formOpen}
-        okText={editing ? 'Save' : 'Create'}
-        cancelText="Cancel"
-        okButtonProps={{ disabled: !fName.trim() }}
-        confirmLoading={saveMut.isPending}
-        onOk={submitAgent}
-        onCancel={() => {
-          setFormOpen(false);
-          setEditing(null);
-        }}
-        destroyOnClose
-      >
-        <div className="rd-form-field">
-          <div className="rd-form-label">Name</div>
-          <Input
-            value={fName}
-            onChange={(e) => setFName(e.target.value)}
-            onPressEnter={submitAgent}
-            placeholder="e.g. tea-cli builder"
-            maxLength={60}
-            autoFocus
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Model</div>
-          <Select
-            value={fModel}
-            onChange={onModelChange}
-            options={MODEL_OPTIONS}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Permission mode</div>
-          <Select
-            value={fMode}
-            onChange={setFMode}
-            options={MODE_OPTIONS.filter(
-              (o) => o.value !== 'auto' || AUTO_CAPABLE_MODELS.has(fModel),
-            )}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Description</div>
-          <Input.TextArea
-            value={fDesc}
-            onChange={(e) => setFDesc(e.target.value)}
-            rows={2}
-            placeholder="What this agent is for (optional)"
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Working directory</div>
-          <Input
-            value={fWorkDir}
-            onChange={(e) => setFWorkDir(e.target.value)}
-            placeholder="/path/to/project on the runner (optional)"
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Environment variables</div>
-          {fEnv.map((row, i) => (
-            <div className="rd-env-row" key={i}>
-              <Input
-                value={row.key}
-                onChange={(e) =>
-                  setFEnv(fEnv.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
-                }
-                placeholder="KEY"
-              />
-              <Input
-                value={row.value}
-                onChange={(e) =>
-                  setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
-                }
-                placeholder="value"
-              />
-              <Button
-                type="text"
-                icon={<DeleteOutlined />}
-                onClick={() => setFEnv(fEnv.filter((_, j) => j !== i))}
-              />
-            </div>
-          ))}
-          <Button
-            type="dashed"
-            icon={<PlusOutlined />}
-            onClick={() => setFEnv([...fEnv, { key: '', value: '' }])}
-            block
-          >
-            Add variable
-          </Button>
-        </div>
-      </Modal>
     </>
   );
 }

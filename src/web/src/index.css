@@ -934,6 +934,33 @@ body {
 .rd-env-row > .ant-input:first-child {
   flex: 0 0 38%;
 }
+/* In-place agent editor card — replaces the old modal; lives inside the list. */
+.rd-agent-form {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  padding: 16px 16px 14px;
+}
+.rd-agent-form-new {
+  border-color: var(--brand);
+}
+/* Two-column grid for the short fields; long fields below span full width. */
+.rd-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+.rd-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+@media (max-width: 600px) {
+  .rd-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* shared column grid: check | status | title | assignee */
 .orbit-tasklist {
