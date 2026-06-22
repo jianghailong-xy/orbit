@@ -131,7 +131,7 @@ const EFFORT_KEY = 'orbit.effort';
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
-const SESSION_COL_DEFAULT = 264;
+const SESSION_COL_DEFAULT = 320;
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
