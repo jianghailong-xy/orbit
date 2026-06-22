@@ -456,6 +456,51 @@ export class SessionsService {
   }
 
   /**
+   * Stop a session and settle it to CANCELLED — unlike {@link end}, which PARKS the
+   * session as dormant/resumable. A live session has its claude process torn down
+   * (endLive, reason CANCELLED so /complete finalizes CANCELLED not PARKED). A still-
+   * queued PENDING session is finalized in place: there's no claude to tear down and a
+   * runner may never claim it (offline / batch concurrency cap full), so endLive alone
+   * would leave it stuck PENDING — finalizing directly is what lets a batch-stop drop
+   * its queued, not-yet-started tasks. No-op (returns false) if already terminal or
+   * already ending. Used by {@link TasksService.batchStop}.
+   */
+  async cancel(ownerId: string, id: string): Promise<boolean> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) return false;
+    if (session.status === RunStatus.PENDING) {
+      // Atomic against the claim queue, which flips PENDING→RUNNING. Guarding on
+      // status=PENDING means the runner can't have started claude under us.
+      const res = await this.prisma.session.updateMany({
+        where: { id, status: RunStatus.PENDING },
+        data: {
+          status: RunStatus.CANCELLED,
+          endReason: SessionEndReason.CANCELLED,
+          cancelRequestedAt: new Date(),
+          finishedAt: new Date(),
+        },
+      });
+      if (res.count > 0) {
+        // Drain queued turns so nothing can be leased if the row is ever revived.
+        await this.prisma.conversationTurn.updateMany({
+          where: { sessionId: id, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+        this.realtime.notifyInbox(id);
+        return true;
+      }
+      // Lost the race: the runner claimed it (now RUNNING). Re-load and tear it down.
+      const live = await this.prisma.session.findFirst({ where: { id, ownerId } });
+      if (!live || SessionsService.TERMINAL.includes(live.status) || live.cancelRequestedAt) return false;
+      await this.endLive(live, SessionEndReason.CANCELLED);
+      return true;
+    }
+    await this.endLive(session, SessionEndReason.CANCELLED);
+    return true;
+  }
+
+  /**
    * Signal the runner to tear down a session's claude process: mark cancel-requested,
    * record why it ended, enqueue an `end` control turn, and (if claimed) ask the runner
    * to cancel now. The status settles to CANCELLED async once the runner reports back —
