@@ -2810,6 +2810,11 @@ body {
 .task-row.clickable {
   cursor: pointer;
 }
+/* Multi-select (checkbox) rows get a left accent bar — distinct from the focused row's
+   tinted background, so "selected for a batch" reads differently from "open in the panel". */
+.task-row.checked {
+  box-shadow: inset 3px 0 0 var(--brand);
+}
 .task-row.selected {
   background: var(--brand-tint);
 }

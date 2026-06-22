@@ -131,6 +131,8 @@ export function TaskListView() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   // Multi-select for batch actions, keyed by task id, scoped to the visible rows.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Anchor for Shift-click range selection: the last checkbox toggled without Shift.
+  const [anchorId, setAnchorId] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [concurrency, setConcurrency] = useState(3);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -380,13 +382,28 @@ export function TaskListView() {
     [selectedRows],
   );
 
-  const toggleOne = (id: string) =>
+  // Toggle one row, or — with Shift held and an anchor set — add the whole contiguous range
+  // from the anchor to this row (in the current sort order). A plain click sets the anchor.
+  const toggleRow = (id: string, shift: boolean) => {
+    const idx = rows.findIndex((r: any) => r.id === id);
+    const a = anchorId ? rows.findIndex((r: any) => r.id === anchorId) : -1;
+    if (shift && a !== -1 && idx !== -1) {
+      const [lo, hi] = a < idx ? [a, idx] : [idx, a];
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (let i = lo; i <= hi; i++) next.add(rows[i].id);
+        return next;
+      });
+      return;
+    }
+    setAnchorId(id);
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
   const toggleAll = () =>
     setSelectedIds(allSelected ? new Set() : new Set(rows.map((r: any) => r.id)));
 
@@ -477,12 +494,17 @@ export function TaskListView() {
     const isRetry = r.status === 'FAILED';
     return (
       <div
-        className={`task-row clickable${selected ? ' selected' : ''}`}
+        className={`task-row clickable${selected ? ' selected' : ''}${
+          selectedIds.has(r.id) ? ' checked' : ''
+        }`}
         key={r.id}
         onClick={() => setSelectedTaskId(r.id)}
       >
         <div className="task-check" onClick={(e) => e.stopPropagation()}>
-          <Checkbox checked={selectedIds.has(r.id)} onChange={() => toggleOne(r.id)} />
+          <Checkbox
+            checked={selectedIds.has(r.id)}
+            onChange={(e) => toggleRow(r.id, e.nativeEvent.shiftKey)}
+          />
         </div>
         <div className="task-status-cell">
           <StatusPill status={r.status} running={r.running} queued={r.queued} />
