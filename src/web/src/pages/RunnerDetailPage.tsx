@@ -129,7 +129,7 @@ export function RunnerDetailPage() {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
   const [fModel, setFModel] = useState('claude-sonnet-4-6');
-  const [fMode, setFMode] = useState('dontAsk');
+  const [fMode, setFMode] = useState('auto');
   const [fDesc, setFDesc] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
@@ -173,7 +173,7 @@ export function RunnerDetailPage() {
     setEditing(null);
     setFName('');
     setFModel('claude-sonnet-4-6');
-    setFMode('dontAsk');
+    setFMode('auto');
     setFDesc('');
     setFWorkDir('');
     setFEnv([]);
