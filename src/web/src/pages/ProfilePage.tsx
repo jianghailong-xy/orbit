@@ -1,13 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { App as AntdApp, Button, Card, Form, Input } from 'antd';
 import { api } from '../api';
-
-interface Me {
-  id: string;
-  email: string;
-  name: string;
-  createdAt: string;
-}
+import { meQuery } from '../lib/queries';
 
 interface PwdValues {
   currentPassword: string;
@@ -22,7 +16,7 @@ export function ProfilePage() {
   const { message } = AntdApp.useApp();
   const [form] = Form.useForm<PwdValues>();
 
-  const me = useQuery({ queryKey: ['user', 'me'], queryFn: () => api<Me>('/users/me') });
+  const me = useQuery(meQuery());
 
   const changePwd = useMutation({
     mutationFn: (v: PwdValues) =>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useMatch } from 'react-router-dom';
 import { getToken } from '../api';
 import { decodeId } from '../lib/idCodec';
-import { agentsQuery, runnersQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { agentsQuery, meQuery, runnersQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 
 // Routes that render their own loaders and have no first-screen data to wait on.
 const BYPASS = ['/login', '/enroll'];
@@ -58,6 +58,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // Every query below reuses the shared factory keys (lib/queries) so the data the splash
   // pre-warms lands under the exact keys the page/console then read from cache.
   const runners = useQuery({ ...runnersQuery(), enabled: gated });
+  // Warm the signed-in user so the nav footer's name paints with the first frame.
+  // Not a readiness milestone — it must never hold the splash open.
+  useQuery({ ...meQuery(), enabled: gated });
   // Home/list routes wait on the global session list (shared with the Active view/sidebar).
   const sessionsGlobal = useQuery({ ...sessionsQuery(), enabled: gated && !deep });
   // A /sessions/<id> deep link carries no runner — its session detail resolves one.

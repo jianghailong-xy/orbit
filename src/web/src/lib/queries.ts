@@ -26,6 +26,13 @@ export const runnersQuery = () =>
 export const agentsQuery = () =>
   queryOptions({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
 
+/** The signed-in user — backs the account page and the nav footer's avatar + name. */
+export const meQuery = () =>
+  queryOptions({
+    queryKey: ['user', 'me'] as const,
+    queryFn: () => api<{ id: string; email: string; name: string; createdAt: string }>('/users/me'),
+  });
+
 /**
  * Session list, optionally scoped to a runner and/or a lifecycle view. The key mirrors
  * the query string one-to-one — `['sessions', runnerId, view]` — so every scope is its

@@ -638,64 +638,68 @@ export function TaskListView() {
           )}
 
           <div className="tasks-toolbar">
-            <Segmented
-              options={filterOptions}
-              value={filter}
-              onChange={(v) => setFilter(v as string)}
-            />
-            <Input
-              className="tasks-search"
-              size="small"
-              allowClear
-              prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
-              placeholder="Search tasks"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
-            <div className="tasks-toolbar-right">
-              {uniformAssignee?.name && (
-                <span className="task-assignee-chip">
-                  <Avatar
-                    size={18}
-                    style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10, flex: 'none' }}
-                  >
-                    {uniformAssignee.name.trim().charAt(0).toUpperCase()}
-                  </Avatar>
-                  {uniformAssignee.name}
-                </span>
-              )}
-              {selectedIds.size > 0 && (
-                <div className="tasks-bulkbar">
-                  <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<PlayCircleOutlined />}
-                    onClick={openBatch}
-                  >
-                    Run
+            {selectedIds.size > 0 ? (
+              // Selection mode: the batch-action bar takes over the whole toolbar row so it
+              // never has to share width with the filters (which made it wrap to a 2nd line).
+              // Clear restores the filter toolbar.
+              <div className="tasks-bulkbar">
+                <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  onClick={openBatch}
+                >
+                  Run
+                </Button>
+                <Popconfirm
+                  title="Stop selected tasks?"
+                  description="Cancels each selected task's running or queued run."
+                  okText="Stop"
+                  okButtonProps={{ danger: true }}
+                  onConfirm={() => batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })}
+                >
+                  <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
+                    Stop
                   </Button>
-                  <Popconfirm
-                    title="Stop selected tasks?"
-                    description="Cancels each selected task's running or queued run."
-                    okText="Stop"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })}
-                  >
-                    <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
-                      Stop
-                    </Button>
-                  </Popconfirm>
-                  <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
-                    Set assignee
-                  </Button>
-                  <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
-                    Clear
-                  </Button>
-                </div>
-              )}
-            </div>
+                </Popconfirm>
+                <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
+                  Set assignee
+                </Button>
+                <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Segmented
+                  options={filterOptions}
+                  value={filter}
+                  onChange={(v) => setFilter(v as string)}
+                />
+                <Input
+                  className="tasks-search"
+                  size="small"
+                  allowClear
+                  prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
+                  placeholder="Search tasks"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
+                {uniformAssignee?.name && (
+                  <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
+                    <Avatar
+                      size={18}
+                      style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10, flex: 'none' }}
+                    >
+                      {uniformAssignee.name.trim().charAt(0).toUpperCase()}
+                    </Avatar>
+                    {uniformAssignee.name}
+                  </span>
+                )}
+              </>
+            )}
           </div>
 
           {(isListView ? listQ.isLoading : tasks.isLoading) ? (

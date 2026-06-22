@@ -442,6 +442,16 @@ body {
 .tp-user-trigger:hover {
   background: var(--bg-hover);
 }
+.tp-user-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+}
 
 /* ---- Tasks page ---- */
 .page-title {
@@ -459,13 +469,6 @@ body {
 }
 .tasks-search {
   width: 200px;
-}
-/* Right-aligned cluster: the shared-assignee chip and the batch-action bar. */
-.tasks-toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
 }
 /* Muted chips surfacing context dropped from the rows: the shared title prefix and, when
    every task shares one assignee, that assignee. */
@@ -1055,6 +1058,13 @@ body {
 .col-head-row {
   height: 38px;
   border-bottom: 1px solid var(--border-subtle);
+  /* Pin the header so sort/select-all stay reachable while scrolling a long list.
+     .app-view--doc is the scroll container; an opaque bg + z-index occlude the rows
+     passing underneath. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-base);
 }
 .col-head {
   font-size: 12px;
