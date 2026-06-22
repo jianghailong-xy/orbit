@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   DesktopOutlined,
   LogoutOutlined,
+  SettingOutlined,
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -458,6 +459,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                     ),
                   onClick: () => setMode(it.key),
                 })),
+              },
+              {
+                key: 'account-settings',
+                icon: <SettingOutlined />,
+                label: 'Account settings',
+                onClick: () => navigate('/settings/account'),
               },
               { type: 'divider' },
               { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout },
