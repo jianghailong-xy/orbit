@@ -120,6 +120,9 @@ const EFFORT_OPTIONS = [
   { value: 'xhigh', label: 'xHigh' },
   { value: 'max', label: 'Max' },
 ];
+// Last-picked reasoning effort, remembered across reloads so a new session starts
+// at the effort you last chose instead of resetting to Default. ('' = Default.)
+const EFFORT_KEY = 'orbit.effort';
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -408,7 +411,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [histDraft, setHistDraft] = useState('');
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
-  const [effort, setEffort] = useState('');
+  const [effort, setEffort] = useState(() => localStorage.getItem(EFFORT_KEY) ?? '');
   // Which slice of the session list to show: active, archived, system, or trash.
   const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
@@ -652,6 +655,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (selectedId || !pickedAgent?.model) return;
     setModel(pickedAgent.model);
   }, [selectedId, pickedAgent?.id, pickedAgent?.model]);
+
+  // Effort has no agent-level default, so a fresh session restores the last-picked
+  // effort from localStorage (see EFFORT_KEY) instead. Keeps the pill consistent with
+  // Model/Mode when switching back to compose after viewing a resumed session.
+  useEffect(() => {
+    if (selectedId) return;
+    setEffort(localStorage.getItem(EFFORT_KEY) ?? '');
+  }, [selectedId]);
 
   // Likewise seed the Mode pill from the picked agent's configured default. Without
   // this the pill stays at the hardcoded 'Default', so a new session always sends
@@ -1902,7 +1913,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                 variant="borderless"
                 suffixIcon={null}
                 value={shownEffort}
-                onChange={(v) => (live ? configMut.mutate({ effort: v }) : setEffort(v))}
+                onChange={(v) => {
+                  localStorage.setItem(EFFORT_KEY, v);
+                  if (live) configMut.mutate({ effort: v });
+                  else setEffort(v);
+                }}
                 options={EFFORT_OPTIONS}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
