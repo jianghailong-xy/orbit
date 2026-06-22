@@ -376,14 +376,19 @@ export function TaskListView() {
         <span className="seg-count">{n}</span>
       </span>
     );
-    return [
+    const opts = [
       { value: 'ALL', label: seg('All', counts.total) },
       { value: 'ONGOING', label: seg('Open', counts.open + counts.inProgress) },
       { value: 'FAILED', label: seg('Failed', counts.failed, counts.failed > 0) },
       { value: 'DONE', label: seg('Done', counts.done) },
-      { value: 'CANCELLED', label: seg('Cancelled', counts.cancelled) },
     ];
-  }, [counts]);
+    // Cancelled is rare — only surface the tab once something's been cancelled (or while
+    // it's the active filter, so a deep-linked CANCELLED view can still navigate away).
+    if (counts.cancelled > 0 || filter === 'CANCELLED') {
+      opts.push({ value: 'CANCELLED', label: seg('Cancelled', counts.cancelled) });
+    }
+    return opts;
+  }, [counts, filter]);
 
   // ── Multi-select / batch-run derived state ──
   const selectedRows = useMemo(

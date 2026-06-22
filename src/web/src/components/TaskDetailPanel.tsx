@@ -1,13 +1,20 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+
+// The detail panel's width is drag-resizable; persist the choice so it sticks across reloads.
+// Until the user resizes, width stays null and the CSS clamp (responsive default) wins.
+const TDP_WIDTH_KEY = 'orbit.taskDetailWidth';
+const TDP_WIDTH_MIN = 440;
+const TDP_WIDTH_MAX = 1000;
+const TDP_WIDTH_DEFAULT = 600;
 
 // TaskStatus (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED) -> header badge label + tone.
 const STATUS_META: Record<string, { label: string; tone: string }> = {
@@ -127,6 +134,13 @@ export function TaskDetailPanel({
   const qc = useQueryClient();
   const { message } = AntApp.useApp();
   const [draft, setDraft] = useState('');
+  // Drag-resizable panel width (null until the user resizes — see TDP_WIDTH_* + startResize).
+  const asideRef = useRef<HTMLElement>(null);
+  const [width, setWidth] = useState<number | null>(() => {
+    const s = Number(localStorage.getItem(TDP_WIDTH_KEY));
+    return s >= TDP_WIDTH_MIN && s <= TDP_WIDTH_MAX ? s : null;
+  });
+  const [resizing, setResizing] = useState(false);
 
   // /tasks/:id carries the full detail (description, comments, sessions) that the
   // list row lacks; show `summary` meanwhile so the header doesn't flash.
@@ -366,8 +380,42 @@ export function TaskDetailPanel({
         ? 'Task running…'
         : '';
 
+  // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
+  // Listeners live on document so a fast drag keeps tracking past the 1px handle.
+  const startResize = (e: ReactMouseEvent): void => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width ?? asideRef.current?.getBoundingClientRect().width ?? TDP_WIDTH_DEFAULT;
+    let latest = startW;
+    setResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent): void => {
+      latest = Math.min(TDP_WIDTH_MAX, Math.max(TDP_WIDTH_MIN, startW + startX - ev.clientX));
+      setWidth(latest);
+    };
+    const onUp = (): void => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setResizing(false);
+      localStorage.setItem(TDP_WIDTH_KEY, String(latest));
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   return (
-    <aside className="task-detail-panel">
+    <aside
+      ref={asideRef}
+      className="task-detail-panel"
+      style={width != null ? { width } : undefined}
+    >
+      <div
+        className={`tdp-resizer${resizing ? ' resizing' : ''}`}
+        onMouseDown={startResize}
+      />
       <div className="tdp-head">
         <div className="tdp-head-main">
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>

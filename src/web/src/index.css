@@ -2947,6 +2947,7 @@ body {
 }
 
 .task-detail-panel {
+  position: relative;
   flex: none;
   width: clamp(460px, 52vw, 780px);
   height: 100dvh;
@@ -2956,6 +2957,25 @@ body {
   background: var(--bg-raised);
   box-shadow: -4px 0 16px rgba(31, 35, 41, 0.04);
   animation: tdp-slide-in 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Drag handle on the panel's left edge — a 1px line (over the border) with a wider hit area. */
+.tdp-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.tdp-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0 -5px;
+}
+.tdp-resizer:hover,
+.tdp-resizer.resizing {
+  background: var(--brand);
 }
 @keyframes tdp-slide-in {
   from {
@@ -3424,5 +3444,9 @@ body {
     height: 100dvh;
     z-index: 60;
     border-left: none;
+  }
+  /* No drag-to-resize on a full-screen panel. */
+  .tdp-resizer {
+    display: none;
   }
 }
