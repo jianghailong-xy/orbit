@@ -680,10 +680,16 @@ export class RunnerApiController {
       });
     }
 
-    // Only broadcast to live subscribers while the session is active; once finalized,
-    // don't let late/replayed events spam the live stream. They remain in the
-    // persisted transcript and appear on replay.
-    if (session.status === RunStatus.RUNNING) {
+    // Broadcast to live subscribers while the session is active (any LIVE status);
+    // once finalized, don't let late/replayed events spam the live stream — they
+    // remain in the persisted transcript and appear on replay. NB: must include
+    // AWAITING_INPUT, not just RUNNING — the runner emits a turn's final batch
+    // (last text_delta + the authoritative `assistant` + `turn_end`) into its 250ms
+    // buffer, then immediately calls /turn-complete, which parks the session at
+    // AWAITING_INPUT. So that buffered batch almost always arrives here AFTER the
+    // park; gating on RUNNING alone dropped every turn's tail from the live stream
+    // (it only reappeared on refresh, via replay).
+    if (LIVE.includes(session.status)) {
       for (const e of events) this.realtime.publish(sessionId, e);
     }
     return { ok: true };
