@@ -37,7 +37,8 @@ export function SessionOutputs({
   committed?: boolean;
   /** True while a turn is actively in flight (live session, not awaiting input). The branch
    *  state is then transient — possibly a mid-turn committed checkpoint the agent will build
-   *  on — so the bar holds "Merge to main" until the turn finishes. Commit stays available. */
+   *  on — so the bar holds "Merge to main" (hidden) and "Commit" (disabled) until the turn
+   *  finishes; committing a half-built mid-turn tree would capture an inconsistent snapshot. */
   turnActive?: boolean;
   /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
   onEnableIsolation?: () => void;
@@ -137,7 +138,12 @@ export function SessionOutputs({
         </span>
         <span className="wt-spacer" />
         {showCommit && (
-          <CommitButton status={detail.commitStatus} busy={committing} onCommit={onCommit} />
+          <CommitButton
+            status={detail.commitStatus}
+            busy={committing}
+            turnActive={turnActive}
+            onCommit={onCommit}
+          />
         )}
         {showMerge && (
           <MergeButton
@@ -276,14 +282,18 @@ function MergeButton({
  *  changes (worktreeDirty). Commits them onto the branch via the runner (heartbeat round-trip);
  *  once the runner reports the tree clean the bar flips to MergeButton. Drives off commitStatus:
  *  idle → Commit; pending → "Committing…"; error → "Retry commit" (detail sits in the expanded
- *  panel). With no driver (no onCommit) it renders nothing. */
+ *  panel). Disabled while a turn is in flight (turnActive) — the mid-turn tree is half-built, so
+ *  committing it would capture an inconsistent snapshot. With no driver (no onCommit) it renders
+ *  nothing. */
 function CommitButton({
   status,
   busy,
+  turnActive,
   onCommit,
 }: {
   status?: SessionDetail['commitStatus'];
   busy?: boolean;
+  turnActive?: boolean;
   onCommit?: () => void;
 }) {
   if (!onCommit) return null;
@@ -293,9 +303,15 @@ function CommitButton({
     <button
       type="button"
       className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
-      disabled={pending}
+      disabled={pending || turnActive}
       onClick={onCommit}
-      title={failed ? 'Commit failed — try again' : 'Commit the worktree changes onto this branch'}
+      title={
+        turnActive && !pending
+          ? 'Wait for the current turn to finish before committing'
+          : failed
+            ? 'Commit failed — try again'
+            : 'Commit the worktree changes onto this branch'
+      }
     >
       {pending ? 'Committing…' : failed ? 'Retry commit' : 'Commit'}
     </button>
