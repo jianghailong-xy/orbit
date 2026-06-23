@@ -561,6 +561,12 @@ export class RunnerApiController {
           ...(failTask
             ? { error: dto.result || 'run failed', finishedAt: new Date(), cancelRequestedAt: new Date() }
             : {}),
+          // Live worktree state for the composer's status bar, refreshed each turn (the
+          // runner reports the worktree's uncommitted diff vs base on every turn-complete).
+          isolationStatus: dto.isolationStatus ?? undefined,
+          ...(dto.changedFiles !== undefined
+            ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
+            : {}),
           lastTurnAt: new Date(),
           numTurns: { increment: dto.numTurns ?? 1 },
           costUsd: { increment: dto.costUsd ?? 0 },

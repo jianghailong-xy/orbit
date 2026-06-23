@@ -587,6 +587,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					CostUsd:    r.CostUsd,
 					Usage:      r.Usage,
 					ModelUsage: r.ModelUsage,
+					// Live worktree state for the composer's status bar: what this turn left in
+					// the worktree (uncommitted), so the diff updates each turn, not just at end.
+					IsolationStatus: job.IsolationStatus,
+					ChangedFiles:    liveDiffStat(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

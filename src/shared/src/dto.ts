@@ -351,6 +351,11 @@ export interface TurnCompleteRequest {
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;
+  // ── Live worktree state (so the composer's status bar updates each turn) ──
+  /** What the runner did: 'worktree' | 'shared-nogit'. */
+  isolationStatus?: string;
+  /** The worktree's current diff vs base (uncommitted), refreshed each turn. */
+  changedFiles?: ChangedFile[];
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner
