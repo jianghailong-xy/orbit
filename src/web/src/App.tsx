@@ -6,6 +6,8 @@ import { AgentConsole } from './components/AgentConsole';
 import { ActiveSessionsView } from './components/ActiveSessionsView';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -88,6 +90,22 @@ export function App() {
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
             <Route path="settings/account" element={<Navigate to="/settings/profile" replace />} />
+            <Route
+              path="settings"
+              element={
+                <DocView>
+                  <SettingsPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="admin"
+              element={
+                <DocView>
+                  <AdminUsersPage />
+                </DocView>
+              }
+            />
             <Route
               path="runners"
               element={

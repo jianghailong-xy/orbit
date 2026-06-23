@@ -46,18 +46,20 @@ func runLoop(cfg *RunnerConfig) {
 
 	// Slash assets (commands/skills) discovered on this machine, surfaced to the web
 	// composer's `/` autocomplete. Scanned now and refreshed every ~5 min; the cached
-	// value rides each heartbeat. workDirs = the runner's default dir plus each agent's.
-	assetWorkDirs := func() []string {
-		dirs := []string{cfg.WorkDir}
+	// value rides each heartbeat. Roots = the runner's default dir (host-level) plus
+	// each agent's workDir, tagged with the agent's id so the composer can scope the
+	// `/` menu to the session's agent (host-level assets show for every agent).
+	assetRoots := func() []assetRoot {
+		roots := []assetRoot{{base: cfg.WorkDir}}
 		if me, err := t.me(); err == nil {
 			for _, a := range me.Agents {
-				dirs = append(dirs, a.WorkDir)
+				roots = append(roots, assetRoot{base: a.WorkDir, agentID: a.ID})
 			}
 		}
-		return dirs
+		return roots
 	}
 	var assetMu sync.Mutex
-	hbCommands, hbSkills := scanSlashAssets(assetWorkDirs())
+	hbCommands, hbSkills := scanSlashAssets(assetRoots())
 
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
@@ -72,7 +74,7 @@ func runLoop(cfg *RunnerConfig) {
 			case <-ticker.C:
 				cycles++
 				if cycles%10 == 0 { // re-scan assets every ~5 min
-					c, s := scanSlashAssets(assetWorkDirs())
+					c, s := scanSlashAssets(assetRoots())
 					assetMu.Lock()
 					hbCommands, hbSkills = c, s
 					assetMu.Unlock()

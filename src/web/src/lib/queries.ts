@@ -33,11 +33,28 @@ export const setupStatusQuery = () =>
 export const agentsQuery = () =>
   queryOptions({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
 
+/** Per-account UI preferences (theme + new-agent defaults). Mirrors the apiserver's
+ *  UpdatePreferencesDto; every key is optional and falls back to an app default. */
+export interface UserPreferences {
+  theme?: 'system' | 'light' | 'dark';
+  defaultModel?: string;
+  defaultPermissionMode?: string;
+}
+
+export interface Me {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  preferences?: UserPreferences;
+  role?: 'MEMBER' | 'ADMIN';
+}
+
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
 export const meQuery = () =>
   queryOptions({
     queryKey: ['user', 'me'] as const,
-    queryFn: () => api<{ id: string; email: string; name: string; createdAt: string }>('/users/me'),
+    queryFn: () => api<Me>('/users/me'),
   });
 
 /**

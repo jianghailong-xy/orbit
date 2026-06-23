@@ -1,4 +1,5 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { PermissionMode } from '@orbit/shared';
 
 export class CreateUserDto {
   @IsEmail()
@@ -18,4 +19,28 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+}
+
+/**
+ * Partial patch of the current user's own preferences. Merged server-side into
+ * the stored JSON (omitted fields keep their value).
+ */
+export class UpdatePreferencesDto {
+  @IsOptional()
+  @IsIn(['system', 'light', 'dark'])
+  theme?: 'system' | 'light' | 'dark';
+
+  @IsOptional()
+  @IsString()
+  defaultModel?: string;
+
+  @IsOptional()
+  @IsEnum(PermissionMode)
+  defaultPermissionMode?: PermissionMode;
+}
+
+/** Set a user's access role (admin area). */
+export class UpdateRoleDto {
+  @IsIn(['MEMBER', 'ADMIN'])
+  role!: 'MEMBER' | 'ADMIN';
 }

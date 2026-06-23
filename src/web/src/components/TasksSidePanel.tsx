@@ -7,6 +7,8 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  SettingOutlined,
+  TeamOutlined,
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -109,10 +111,15 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { mode, setMode } = useThemeMode();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
+  const { mode, setMode } = useThemeMode();
+  // Admins get an extra top-nav entry into the user-management area.
+  const navItems =
+    me.data?.role === 'ADMIN'
+      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
+      : TOP;
   // A small drag threshold so a plain click still opens an agent; only real movement
   // starts a reorder drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -438,7 +445,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
       <div className="tp-scroll">
         <div className="tp-section">
-          {TOP.map((t) => {
+          {navItems.map((t) => {
             // "Active" shows its live session total. But when some of those sessions are
             // blocked on an approval the user must act on, the count flips to that
             // "needs you" number in an amber attention badge — so "it's your turn" reads
@@ -579,6 +586,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 icon: <UserOutlined />,
                 label: 'Profile',
                 onClick: () => navigate('/settings/profile'),
+              },
+              {
+                key: 'settings',
+                icon: <SettingOutlined />,
+                label: 'Settings',
+                onClick: () => navigate('/settings'),
               },
               { type: 'divider' },
               { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout },

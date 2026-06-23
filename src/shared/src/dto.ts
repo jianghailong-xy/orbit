@@ -116,6 +116,10 @@ export interface SlashCommandInfo {
   description?: string;
   /** 'command' (.claude/commands/*.md) or 'skill' (.claude/skills/<name>/SKILL.md). */
   type?: 'command' | 'skill';
+  /** The agent whose workDir this project-level asset was found in. Empty/undefined
+   *  means host-level (~/.claude or the runner's default dir), shared by all agents;
+   *  the web composer scopes `/` autocomplete to host assets + the session's agent. */
+  agentId?: string;
 }
 
 export interface RunnerHeartbeatRequest {

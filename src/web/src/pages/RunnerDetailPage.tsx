@@ -25,27 +25,15 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
+import { meQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
-
-// Kept in sync with AgentView's MODEL_OPTIONS — the models a new agent can run.
-const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6' },
-  { value: 'claude-opus-4-8', label: 'claude-opus-4-8' },
-  { value: 'claude-haiku-4-5', label: 'claude-haiku-4-5' },
-];
-
-// Kept in sync with AgentView's MODE_TO_PERMISSION — claude --permission-mode
-// values, the default mode each new session of this agent starts in.
-const MODE_OPTIONS = [
-  { value: 'default', label: 'Default' },
-  { value: 'plan', label: 'Plan' },
-  { value: 'acceptEdits', label: 'Accept Edits' },
-  { value: 'auto', label: 'Auto' },
-  { value: 'dontAsk', label: "Don't Ask" },
-  { value: 'bypassPermissions', label: 'Bypass' },
-];
-// Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
-const AUTO_CAPABLE_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
+import {
+  AUTO_CAPABLE_MODELS,
+  DEFAULT_MODEL,
+  DEFAULT_PERMISSION_MODE,
+  MODE_OPTIONS,
+  MODEL_OPTIONS,
+} from '../lib/agentDefaults';
 
 interface Agent {
   id: string;
@@ -134,6 +122,14 @@ export function RunnerDetailPage() {
   const [fWorkDir, setFWorkDir] = useState('');
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
+  // New agents start from the user's saved defaults (Settings → Agent defaults),
+  // falling back to the app defaults. Auto needs an auto-capable model, so a saved
+  // Auto + non-auto model degrades to Default (the same rule onModelChange applies).
+  const me = useQuery(meQuery());
+  const prefModel = me.data?.preferences?.defaultModel ?? DEFAULT_MODEL;
+  let prefMode = me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
+  if (prefMode === 'auto' && !AUTO_CAPABLE_MODELS.has(prefModel)) prefMode = 'default';
+
   // Pick a model; if it can't run Auto, fall back the default mode off Auto.
   const onModelChange = (m: string) => {
     setFModel(m);
@@ -172,8 +168,8 @@ export function RunnerDetailPage() {
   const openCreate = () => {
     setEditing(null);
     setFName('');
-    setFModel('claude-sonnet-4-6');
-    setFMode('auto');
+    setFModel(prefModel);
+    setFMode(prefMode);
     setFDesc('');
     setFWorkDir('');
     setFEnv([]);
