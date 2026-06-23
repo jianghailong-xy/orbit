@@ -2628,11 +2628,14 @@ body {
      after a short message. fit-content shrinks to the text; margin-left:auto right-aligns. */
   width: fit-content;
 }
-/* Wraps the user bubble + its meta row (copy · relative time) as one right-aligned hover
-   unit. The bubble keeps its own look; the wrap takes over the vertical margin and the 80%
-   width cap so the meta row can anchor to the bubble's right edge. */
+/* Wraps the user bubble + a meta row (copy · relative time) beneath it as one right-aligned
+   column. The meta row sits IN FLOW (not absolute) so it reserves its own height — an earlier
+   absolute version overlapped whatever message followed. The time is always shown; the copy
+   button only fades in on hover (its slot is reserved, so revealing it shifts nothing). */
 .chat-user-wrap {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   width: fit-content;
   max-width: 80%;
   margin: 8px 0 8px auto;
@@ -2641,28 +2644,13 @@ body {
   margin: 0;
   max-width: 100%;
 }
-/* Meta row under the bubble — absolutely positioned just below it so it adds no height and
-   shifts nothing. It's a descendant of the wrap, so CSS :hover propagates up: hovering the
-   bubble reveals the row, and moving the pointer down onto the row keeps the wrap "hovered"
-   so the copy button stays clickable. padding-top is the visual gap but counts as hit area
-   (no bare gap to fall through on the way down). */
 .chat-user-meta {
-  position: absolute;
-  top: 100%;
-  right: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-top: 3px;
+  margin-top: 3px;
+  height: 18px;
   white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.chat-user-wrap:hover .chat-user-meta,
-.chat-user-meta:focus-within {
-  opacity: 1;
-  pointer-events: auto;
 }
 .chat-time {
   font-size: 12px;
@@ -2674,7 +2662,7 @@ body {
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 20px;
+  height: 18px;
   padding: 0;
   border: none;
   border-radius: 5px;
@@ -2683,7 +2671,14 @@ body {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  transition: color 0.12s ease, background 0.12s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.chat-user-wrap:hover .chat-copy,
+.chat-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 .chat-copy:hover {
   color: var(--text-1);
