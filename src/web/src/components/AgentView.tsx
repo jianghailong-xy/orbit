@@ -1246,16 +1246,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   // While the selected session is still loading we can't tell if it's live yet;
   // block send to avoid accidentally creating a duplicate session.
   const loadingSession = !!selectedId && !selected;
-  // A live session accepts a message any time it holds a runner slot (RUNNING queues
-  // it, AWAITING_INPUT runs it now) — but not while PENDING (still waiting for a slot,
-  // no claude process yet). A non-live (ended) session revives or starts fresh.
+  // A live session accepts a message in any non-terminal state: RUNNING/INTERRUPTED queue
+  // it, AWAITING_INPUT runs it now, and PENDING (still waiting for a slot, no claude yet)
+  // queues it until the runner claims the session. A non-live (ended) session revives or
+  // starts fresh. `live` is exactly "not terminal", so no per-status gate is needed here.
   const canSend =
     (!!text.trim() || readyImages.length > 0) &&
     !send.isPending &&
     !uploading &&
     runner.online &&
-    !loadingSession &&
-    (live ? SLOT_HELD.includes(selected.status) : true);
+    !loadingSession;
   // The single send button morphs into a Stop while a turn is generating AND the composer
   // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive

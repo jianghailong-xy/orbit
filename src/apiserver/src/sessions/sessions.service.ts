@@ -297,6 +297,54 @@ export class SessionsService {
   }
 
   /**
+   * Like {@link getLive}, but also accepts a still-PENDING session — one queued and
+   * waiting for a runner slot, with no claude process yet. A user message can be lined
+   * up onto it (it's delivered once the runner claims the session); only an ended or
+   * cancel-requested session rejects. Used by createTurn / cancelQueuedTurn so the
+   * composer works while the session waits for a slot.
+   */
+  private async getSendable(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+      throw new ConflictException('the session has ended');
+    }
+    return session;
+  }
+
+  /**
+   * Seed the session's first turn from its prompt, idempotently. A fresh PENDING session
+   * isn't seeded until the runner claims it (queue.service.buildSession), so to queue a
+   * follow-up onto one we must lay down the prompt as turn 1 first — otherwise the
+   * follow-up would take seq 1 and the claim would skip seeding (turnCount > 0), dropping
+   * the prompt. Uses the SAME fixed clientTurnId the claim uses, so whichever path runs
+   * first wins and the other no-ops (insertTurn is idempotent on clientTurnId). No-op once
+   * any turn exists (already seeded, or a re-claimed session with history).
+   */
+  private async ensurePromptSeeded(session: { id: string; prompt: string }) {
+    const count = await this.prisma.conversationTurn.count({ where: { sessionId: session.id } });
+    if (count > 0) return;
+    const turn = await this.insertTurn(session.id, {
+      kind: 'message',
+      content: session.prompt,
+      clientTurnId: SessionsService.initialTurnClientId(session.id),
+    });
+    // Link any compose-page uploads (scoped to the session, still turn-less) to the seed
+    // turn, exactly as the claim would, so they ride along with the prompt.
+    await this.prisma.attachment.updateMany({
+      where: { sessionId: session.id, turnId: null },
+      data: { turnId: turn.id },
+    });
+  }
+
+  /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded
+   *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
+   *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
+  private static initialTurnClientId(sessionId: string): string {
+    return `initial-${sessionId}`;
+  }
+
+  /**
    * Allocate the next per-session delivery seq and insert a turn. Retries on a seq
    * race (unique sessionId+seq); returns the existing row if clientTurnId was
    * already used (idempotent — defeats double-clicks / cross-tab duplicate sends).
@@ -389,15 +437,19 @@ export class SessionsService {
     });
   }
 
-  /** Enqueue a user message for the live session. */
+  /** Enqueue a user message for a live or still-queued (PENDING) session. */
   async createTurn(ownerId: string, id: string, dto: SessionTurnDto) {
-    await this.getLive(ownerId, id);
+    const session = await this.getSendable(ownerId, id);
     const existing = await this.prisma.conversationTurn.findUnique({
       where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
     });
     if (existing) return { turnId: existing.id, seq: existing.seq }; // idempotent
     // Validate any image refs up front so a bad one fails the request before a turn lands.
     const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
+    // The session may still be PENDING (queued, waiting for a runner slot). Its first turn
+    // (the prompt) isn't seeded until the runner claims it, so seed it now — otherwise this
+    // follow-up would land at seq 1 and the claim would drop the prompt. No-op once seeded.
+    if (session.status === RunStatus.PENDING) await this.ensurePromptSeeded(session);
     // Accept the message even while a turn is running: it's queued as PENDING and
     // delivery is serialized in the inbox (dequeueTurn releases the next message only
     // once the in-flight one is answered). The user can withdraw a still-queued one.
@@ -439,7 +491,14 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const turns = await this.prisma.conversationTurn.findMany({
-      where: { sessionId: id, kind: 'message', status: 'PENDING' },
+      // Exclude the seeded prompt turn (still PENDING until the runner claims the session):
+      // it's the session's opening message, not a withdrawable queued follow-up.
+      where: {
+        sessionId: id,
+        kind: 'message',
+        status: 'PENDING',
+        clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+      },
       orderBy: { seq: 'asc' },
       select: { id: true, content: true },
     });
@@ -450,9 +509,16 @@ export class SessionsService {
    *  once the runner has leased it (IN_FLIGHT) it's already feeding claude and will
    *  appear in the transcript, so cancelling is rejected. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
-    await this.getLive(ownerId, id);
+    await this.getSendable(ownerId, id);
     const res = await this.prisma.conversationTurn.deleteMany({
-      where: { id: turnId, sessionId: id, kind: 'message', status: 'PENDING' },
+      // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
+      where: {
+        id: turnId,
+        sessionId: id,
+        kind: 'message',
+        status: 'PENDING',
+        clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+      },
     });
     if (res.count === 0) throw new ConflictException('message already started or not found');
     return { ok: true };
