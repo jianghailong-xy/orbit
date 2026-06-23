@@ -169,6 +169,20 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Branch merges the user requested from the UI for sessions this runner ran. The
+   *  runner merges each session's branch into main on its local repo and reports the
+   *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
+   *  planes (older runners ignore the field → the merge stays pending). */
+  mergeRequests?: MergeCommand[];
+}
+
+/** Control plane → runner: merge one session's worktree branch into the repo's main. */
+export interface MergeCommand {
+  sessionId: string;
+  /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
+  branch: string;
+  /** The session agent's workDir; the runner resolves the repo root from it. */
+  workDir: string;
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -394,4 +408,16 @@ export interface SessionCompleteRequest {
   changedFiles?: ChangedFile[];
   /** What the runner did: 'worktree' (isolated) | 'shared-nogit' (no git → shared dir). */
   isolationStatus?: string;
+}
+
+/**
+ * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
+ * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
+ * means a precondition failed (workDir not on a clean main, branch missing, …). `message`
+ * carries git's stderr / the precondition for the UI.
+ */
+export interface SessionMergeResultRequest {
+  status: 'merged' | 'conflict' | 'error';
+  mergedSha?: string;
+  message?: string;
 }

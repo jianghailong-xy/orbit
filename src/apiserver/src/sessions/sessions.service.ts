@@ -540,6 +540,34 @@ export class SessionsService {
   }
 
   /**
+   * Queue a "merge this session's worktree branch into main" for the runner that ran it.
+   * Worktree-isolated, finished sessions only: the branch exists (committed at /complete)
+   * and `assignedRunnerId` still points at the machine whose local repo holds it. The
+   * runner picks the request up on its next heartbeat (≤30s), merges, and reports the
+   * outcome back into `mergeStatus`/`mergeError`/`mergedAt`. Idempotent while a merge is
+   * already pending; re-requesting a merged/conflicted session re-queues it.
+   */
+  async mergeToMain(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (session.isolationStatus !== 'worktree' || !session.branch) {
+      throw new BadRequestException('session has no worktree branch to merge');
+    }
+    if (!session.finishedAt) {
+      throw new ConflictException('end the session before merging — its work commits on completion');
+    }
+    if (!session.assignedRunnerId) {
+      throw new ConflictException('no runner is associated with this session');
+    }
+    if (session.mergeStatus === 'pending') return { ok: true };
+    await this.prisma.session.update({
+      where: { id },
+      data: { mergeStatus: 'pending', mergeRequestedAt: new Date(), mergeError: null, mergedAt: null },
+    });
+    return { ok: true };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which PARKS the
    * session as dormant/resumable. A live session has its claude process torn down
    * (endLive, reason CANCELLED so /complete finalizes CANCELLED not PARKED). A still-

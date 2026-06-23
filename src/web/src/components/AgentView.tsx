@@ -44,6 +44,7 @@ import {
   interruptSession,
   listApprovals,
   listQueuedTurns,
+  mergeSessionToMain,
   type PermissionRule,
   restoreSession,
   resumeSession,
@@ -601,6 +602,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   const sessionDetailQ = useQuery({
     ...sessionQuery(selectedId),
     placeholderData: keepPreviousData,
+    // While a "merge to main" is pending, poll so the runner's outcome (≤1 heartbeat away)
+    // lands without the user refreshing; idle otherwise.
+    refetchInterval: (q) => (q.state.data?.mergeStatus === 'pending' ? 3000 : false),
   });
   const live = selected ? !TERMINAL.includes(selected.status) : false;
   // An ended session can be revived (--resume claude's context) only if it actually
@@ -1216,6 +1220,27 @@ export function AgentView({ runner }: { runner: Runner }) {
       // instead of leaving an unhandled promise rejection.
       onOk: () => enableIsoMut.mutateAsync(agentId).catch(() => {}),
     });
+  // Merge this session's worktree branch into main on the runner that ran it. Async: the
+  // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
+  // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
+  const mergeMut = useMutation({
+    mutationFn: (id: string) => mergeSessionToMain(id),
+    onSuccess: () => {
+      message.success('Merging to main — the result will appear on the status bar shortly.');
+      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askMergeToMain = (id: string, branch: string) =>
+    modal.confirm({
+      title: 'Merge to main?',
+      content:
+        `This merges ${branch} into main on the runner's repo. It only proceeds when the` +
+        ' repo is on a clean main; on a conflict it aborts cleanly and asks you to merge' +
+        ' manually. The branch is kept either way.',
+      okText: 'Merge',
+      onOk: () => mergeMut.mutateAsync(id).catch(() => {}),
+    });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -1828,6 +1853,12 @@ export function AgentView({ runner }: { runner: Runner }) {
           onEnableIsolation={
             sessionDetailQ.data?.agent?.id
               ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
+              : undefined
+          }
+          merging={mergeMut.isPending}
+          onMergeToMain={
+            selectedId && sessionDetailQ.data?.branch
+              ? () => askMergeToMain(selectedId, sessionDetailQ.data!.branch!)
               : undefined
           }
         />

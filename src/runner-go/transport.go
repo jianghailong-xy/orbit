@@ -156,6 +156,11 @@ func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) error 
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, nil, 35*time.Second)
 }
 
+// mergeResult reports the outcome of a heartbeat-delivered MergeCommand back to the server.
+func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
+	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
+}
+
 // fetchAttachment GETs one image's raw bytes (runner-scoped, by session+attachment id),
 // for the inbox poller to base64-encode into a claude `image` content block. Returns the
 // raw body — not JSON — so it bypasses `do`.

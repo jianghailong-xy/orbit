@@ -1888,6 +1888,47 @@ body {
 .wt-merge-cmd:hover {
   background: var(--bg-hover);
 }
+/* "Merge to main": the action button + its result, with the copyable command as fallback. */
+.wt-merge-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wt-merge-btn {
+  flex: none;
+  padding: 3px 11px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wt-merge-btn:hover:not(:disabled) {
+  background: var(--brand-tint-hover);
+}
+.wt-merge-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.wt-merge-done {
+  font-weight: 600;
+  color: var(--success);
+}
+.wt-merge-err {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--error);
+}
+.wt-merge-or {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 /* Non-git: ran in the shared dir; amber bar with the one-click enable. */
 .wt-bar-nogit {
   border-color: var(--warning-border);

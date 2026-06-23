@@ -72,6 +72,27 @@ type HeartbeatResponse struct {
 	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
 	// control plane that doesn't send it — the runner keeps its current value then.
 	MaxConcurrent int `json:"maxConcurrent"`
+	// Branch merges the user requested for sessions this runner ran: merge each one's
+	// branch into the repo's main, then POST the outcome to /merge-result. Omitted by
+	// older control planes (the field is simply absent → no merges).
+	MergeRequests []MergeCommand `json:"mergeRequests,omitempty"`
+}
+
+// MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into
+// the repo's main on this runner's local repo. WorkDir is the session agent's dir; the
+// runner resolves the repo root from it.
+type MergeCommand struct {
+	SessionID string `json:"sessionId"`
+	Branch    string `json:"branch"`
+	WorkDir   string `json:"workDir"`
+}
+
+// MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a
+// MergeCommand, POSTed back so the UI status bar can show merged ✓ / conflict / error.
+type MergeResultRequest struct {
+	Status    string `json:"status"` // "merged" | "conflict" | "error"
+	MergedSha string `json:"mergedSha,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type MeResponse struct {
