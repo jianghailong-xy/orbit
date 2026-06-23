@@ -1,14 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertValidImageUpload, UploadedFile } from './attachments.media';
+import { assertValidUpload, UploadedFile } from './attachments.media';
 
 @Injectable()
 export class AttachmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Persist an uploaded image for `ownerId`, optionally scoped to a session. Validates
-   * MIME + size, and — when a sessionId is given — that the session belongs to the caller,
+   * Persist an uploaded file for `ownerId`, optionally scoped to a session. Validates
+   * size, and — when a sessionId is given — that the session belongs to the caller,
    * so an upload can't be parked on another tenant's session. Returns the new id.
    */
   async create(
@@ -16,7 +16,7 @@ export class AttachmentsService {
     sessionId: string | undefined,
     file: UploadedFile | undefined,
   ): Promise<{ id: string }> {
-    assertValidImageUpload(file);
+    assertValidUpload(file);
     const f = file as UploadedFile;
     if (sessionId) {
       const session = await this.prisma.session.findFirst({
@@ -31,6 +31,7 @@ export class AttachmentsService {
         sessionId: sessionId ?? null,
         mimeType: f.mimetype,
         sizeBytes: f.size,
+        fileName: f.originalname || null,
         data: f.buffer,
       },
       select: { id: true },

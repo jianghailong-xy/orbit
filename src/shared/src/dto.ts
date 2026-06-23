@@ -322,13 +322,17 @@ export interface ApprovalDecisionResponse {
 // file list but not the patch text — see SessionDiffResultRequest).
 export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell' | 'diff';
 
-/** An image attachment as handed to the runner on the inbox: the id to fetch its bytes
- *  with (runner-scoped `GET /runner/sessions/:id/attachments/:attId`) plus its MIME type,
- *  so the runner can build the claude `image` content block (base64) without a second
- *  round-trip for the type. The bytes themselves never travel inline — only this ref does. */
+/** An attachment as handed to the runner on the inbox: the id to fetch its bytes with
+ *  (runner-scoped `GET /runner/sessions/:id/attachments/:attId`), its MIME type, and the
+ *  original filename. The runner dispatches on the type — `image/*` → image block,
+ *  `application/pdf` → document block, anything else → written to the worktree under
+ *  `fileName`. The bytes themselves never travel inline — only this ref does. */
 export interface TurnAttachment {
   id: string;
   mimeType: string;
+  /** Original upload filename; the runner names a written-to-disk upload with it. Absent
+   *  for pasted images (inlined as image blocks, never written). */
+  fileName?: string;
 }
 
 /** Browser → control plane: enqueue a user turn for a live interactive session. */

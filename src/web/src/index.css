@@ -2776,6 +2776,51 @@ body {
 .composer-attach-remove:hover {
   background: rgba(0, 0, 0, 0.8);
 }
+/* A non-image upload staged in the composer: a horizontal chip (icon + name + size) with a
+   remove button, instead of the image thumbnail. */
+.composer-file {
+  gap: 6px;
+  padding: 4px 6px 4px 8px;
+  max-width: 220px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-size: 12px;
+  color: var(--text-1);
+}
+.composer-file-icon {
+  flex: none;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.composer-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-file-size {
+  flex: none;
+  color: var(--text-3);
+}
+.composer-file-remove {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 9px;
+  cursor: pointer;
+}
+.composer-file-remove:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
 
 /* ---- Interactive session chat (Route B) ---- */
 .chat-note {
@@ -2935,6 +2980,37 @@ body {
   height: 90px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.06);
+}
+/* A non-image attachment the user sent: a downloadable chip (paperclip + filename) that
+   fetches the blob on click. */
+.chat-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-files:not(:last-child) {
+  margin-bottom: 6px;
+}
+.chat-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 240px;
+  padding: 5px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-file:hover {
+  background: var(--bg-hover);
+}
+.chat-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* Sticky "your prompt" bar: sits flush under the header (outside the scroll area, so no
    jitter) and surfaces the in-view turn's question once a long answer pushes it off the

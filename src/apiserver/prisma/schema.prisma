@@ -477,6 +477,9 @@ model Attachment {
   turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
   mimeType  String   @map("mime_type")
   sizeBytes Int      @map("size_bytes")
+  // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
+  // under this name and references it to claude. Null for legacy rows and pasted images.
+  fileName  String?  @map("file_name")
   data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
   createdAt DateTime @default(now()) @map("created_at")
 

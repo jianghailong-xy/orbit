@@ -78,21 +78,31 @@ interface QueuedTurn {
   attachments?: { id: string; mimeType: string }[];
 }
 
-// An image staged in the composer: uploaded to the control plane (POST /api/attachments)
+// An attachment staged in the composer: uploaded to the control plane (POST /api/attachments)
 // the moment it's picked/pasted, then sent by id with the turn. `previewUrl` is a local
-// object URL for the thumbnail; `id` is set once the upload resolves.
+// object URL for the thumbnail — set only for inline images; a non-image file renders as a
+// chip (name + size) instead. `id` is set once the upload resolves.
 interface ComposerImage {
   uid: string;
   file: File;
-  previewUrl: string;
+  previewUrl?: string;
   status: 'uploading' | 'done';
   id?: string;
 }
 
-// Image upload limits — kept in sync with the server (attachments.media.ts) so a bad
-// pick is rejected before the round-trip rather than surfacing a 400/413.
+// The image types Claude takes as inline content blocks: shown as a thumbnail and capped
+// tighter (kept in sync with the runner's image-block dispatch). Anything else is a generic
+// file — any type, up to the server's 25MB cap (attachments.media.ts).
 const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+// Compact byte size for a staged file chip ("12 KB", "3.4 MB").
+const fmtBytes = (n: number): string => {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'PARKED'];
 // Session statuses that occupy one of the runner's maxConcurrent slots.
@@ -809,7 +819,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     // Staged uploads are scoped to the previous session (can't be linked to another), and
     // the sent-image previews are this session's object URLs — drop and revoke both.
     setImages((prev) => {
-      prev.forEach((im) => URL.revokeObjectURL(im.previewUrl));
+      prev.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
       return [];
     });
     setTurnImages((prev) => {
@@ -1076,17 +1086,19 @@ export function AgentView({ runner }: { runner: Runner }) {
         });
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
-      // Hand the sent previews to the transcript, keyed by turnId, so the image shows in
-      // the user bubble immediately (the runner echoes the text + image refs). The object
+      // Hand the sent image previews to the transcript, keyed by turnId, so they show in
+      // the user bubble immediately (the runner echoes the text + attachment refs). Only
+      // inline images have a local object URL; files render from the durable ref echo. The
       // URLs move here as-is — setImages([]) below drops the chips without revoking them.
-      if (turnId && vars.images.length) {
-        const refs: TurnImage[] = vars.images.map((im) => ({ url: im.previewUrl, mime: im.file.type }));
+      const previews = vars.images.filter((im) => im.previewUrl);
+      if (turnId && previews.length) {
+        const refs: TurnImage[] = previews.map((im) => ({ url: im.previewUrl as string, mime: im.file.type }));
         setTurnImages((m) => ({ ...m, [turnId]: refs }));
-      } else if (created && vars.images.length) {
+      } else if (created && previews.length) {
         // The create path has no turnId to key local previews on (the runner seeds the
         // first turn), so free these object URLs — the seeded turn's `user` event carries
-        // the image refs and the transcript fetches them back for display.
-        vars.images.forEach((im) => URL.revokeObjectURL(im.previewUrl));
+        // the attachment refs and the transcript fetches them back for display.
+        previews.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
       }
       setImages([]);
       setView('active'); // a new/continued session lives in the active list
@@ -1330,22 +1342,26 @@ export function AgentView({ runner }: { runner: Runner }) {
   // runner must be online to fetch the bytes; otherwise the picker is disabled.
   const canAttach = runner.online && (selected ? live || resumable : composing);
   const imageUid = useRef(0);
-  // Validate, then upload an image as a staged chip. Uploaded eagerly (not on send) so the
-  // turn carries only the id and a slow upload doesn't block typing. When composing there's
-  // no session yet, so it's uploaded unscoped; create scopes it to the new session.
+  // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
+  // the turn carries only the id and a slow upload doesn't block typing. When composing
+  // there's no session yet, so it's uploaded unscoped; create scopes it to the new session.
+  // An inline-image type gets a thumbnail preview and the tighter image cap; any other type
+  // is a generic file (no preview, 25MB cap) that the runner drops into the worktree.
   const addImage = useCallback(
     async (file: File): Promise<void> => {
       if (!canAttach) return;
-      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        message.error(`Unsupported image type: ${file.type || file.name}`);
+      const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+      if (file.size <= 0) {
+        message.error(`${file.name || 'File'} is empty`);
         return;
       }
-      if (file.size > MAX_IMAGE_BYTES) {
-        message.error('Image exceeds the 5MB limit');
+      if (file.size > cap) {
+        message.error(isInlineImage ? 'Image exceeds the 5MB limit' : 'File exceeds the 25MB limit');
         return;
       }
-      const uid = `img-${imageUid.current++}`;
-      const previewUrl = URL.createObjectURL(file);
+      const uid = `att-${imageUid.current++}`;
+      const previewUrl = isInlineImage ? URL.createObjectURL(file) : undefined;
       setImages((prev) => [...prev, { uid, file, previewUrl, status: 'uploading' }]);
       try {
         const { id } = await uploadAttachment(file, selected?.id);
@@ -1353,7 +1369,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
         setImages((prev) => prev.filter((im) => im.uid !== uid));
-        URL.revokeObjectURL(previewUrl);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
         message.error((e as Error).message);
       }
     },
@@ -1362,7 +1378,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const removeImage = (uid: string): void => {
     setImages((prev) => {
       const target = prev.find((im) => im.uid === uid);
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((im) => im.uid !== uid);
     });
   };
@@ -1441,6 +1457,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // regex match, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
   // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
@@ -1881,29 +1898,51 @@ export function AgentView({ runner }: { runner: Runner }) {
             as part of the message you're about to send, not buried under the diff chip. */}
         {images.length > 0 && (
           <div className="composer-attachments">
-            {images.map((im) => (
-              <span key={im.uid} className="composer-pill composer-attach">
-                <Image
-                  className="composer-attach-thumb"
-                  src={im.previewUrl}
-                  alt=""
-                  preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
-                />
-                {im.status === 'uploading' && (
-                  <span className="composer-attach-spin">
-                    <LoadingOutlined spin />
+            {images.map((im) =>
+              im.previewUrl ? (
+                <span key={im.uid} className="composer-pill composer-attach">
+                  <Image
+                    className="composer-attach-thumb"
+                    src={im.previewUrl}
+                    alt=""
+                    preview={{ mask: <EyeOutlined className="composer-attach-eye" /> }}
+                  />
+                  {im.status === 'uploading' && (
+                    <span className="composer-attach-spin">
+                      <LoadingOutlined spin />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="composer-attach-remove"
+                    onClick={() => removeImage(im.uid)}
+                    aria-label="Remove image"
+                  >
+                    <CloseOutlined />
+                  </button>
+                </span>
+              ) : (
+                <span key={im.uid} className="composer-pill composer-file">
+                  {im.status === 'uploading' ? (
+                    <LoadingOutlined spin className="composer-file-icon" />
+                  ) : (
+                    <PaperClipOutlined className="composer-file-icon" />
+                  )}
+                  <span className="composer-file-name" title={im.file.name}>
+                    {im.file.name}
                   </span>
-                )}
-                <button
-                  type="button"
-                  className="composer-attach-remove"
-                  onClick={() => removeImage(im.uid)}
-                  aria-label="Remove image"
-                >
-                  <CloseOutlined />
-                </button>
-              </span>
-            ))}
+                  <span className="composer-file-size">{fmtBytes(im.file.size)}</span>
+                  <button
+                    type="button"
+                    className="composer-file-remove"
+                    onClick={() => removeImage(im.uid)}
+                    aria-label="Remove file"
+                  >
+                    <CloseOutlined />
+                  </button>
+                </span>
+              ),
+            )}
           </div>
         )}
         <SessionOutputs
@@ -1994,19 +2033,24 @@ export function AgentView({ runner }: { runner: Runner }) {
               e.target.value = '';
             }}
           />
+          {/* Hidden picker for the `Upload file` menu item — any type (the runner routes by
+              MIME: images/PDFs inline, everything else into the worktree). Same upload path. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              Array.from(e.target.files ?? []).forEach((f) => void addImage(f));
+              e.target.value = '';
+            }}
+          />
           <Dropdown
             trigger={['click']}
             placement="topLeft"
             disabled={!runner.online}
             menu={{
               items: [
-                {
-                  key: 'image',
-                  icon: <PictureOutlined />,
-                  label: canAttach ? 'Attach image' : 'Attach image (needs a started session)',
-                  disabled: !canAttach,
-                  onClick: () => imageInputRef.current?.click(),
-                },
                 {
                   key: 'command',
                   icon: <CodeOutlined />,
@@ -2029,10 +2073,18 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onClick: insertShell,
                 },
                 {
+                  key: 'image',
+                  icon: <PictureOutlined />,
+                  label: canAttach ? 'Attach image' : 'Attach image (needs a started session)',
+                  disabled: !canAttach,
+                  onClick: () => imageInputRef.current?.click(),
+                },
+                {
                   key: 'file',
                   icon: <PaperClipOutlined />,
-                  label: 'Upload file (coming soon)',
-                  disabled: true,
+                  label: canAttach ? 'Upload file' : 'Upload file (needs a started session)',
+                  disabled: !canAttach,
+                  onClick: () => fileInputRef.current?.click(),
                 },
               ],
             }}

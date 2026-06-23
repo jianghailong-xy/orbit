@@ -1,41 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  ALLOWED_IMAGE_TYPES,
-  MAX_UPLOAD_BYTES,
-  assertValidImageUpload,
-} from './attachments.media';
+import { MAX_UPLOAD_BYTES, assertValidUpload } from './attachments.media';
 
 test('rejects a missing file', () => {
-  assert.throws(() => assertValidImageUpload(undefined), /file is required/);
-});
-
-test('rejects a disallowed MIME type', () => {
-  assert.throws(
-    () => assertValidImageUpload({ mimetype: 'application/pdf', size: 1024 }),
-    /unsupported image type/,
-  );
+  assert.throws(() => assertValidUpload(undefined), /file is required/);
 });
 
 test('rejects an empty file', () => {
-  assert.throws(() => assertValidImageUpload({ mimetype: 'image/png', size: 0 }), /empty file/);
+  assert.throws(() => assertValidUpload({ size: 0 }), /empty file/);
 });
 
 test('rejects a file over the size cap', () => {
-  assert.throws(
-    () => assertValidImageUpload({ mimetype: 'image/png', size: MAX_UPLOAD_BYTES + 1 }),
-    /exceeds/,
-  );
+  assert.throws(() => assertValidUpload({ size: MAX_UPLOAD_BYTES + 1 }), /exceeds/);
 });
 
-test('accepts every allowed type within the cap', () => {
-  for (const mimetype of ALLOWED_IMAGE_TYPES) {
-    assert.doesNotThrow(() => assertValidImageUpload({ mimetype, size: 512 }));
-  }
+test('accepts any type within the cap', () => {
+  // Type is no longer gated — image, PDF, archive, anything goes (the runner dispatches
+  // on the MIME type), so the only checks are non-empty and within the size cap.
+  assert.doesNotThrow(() => assertValidUpload({ size: 512 }));
 });
 
 test('accepts a file exactly at the cap', () => {
-  assert.doesNotThrow(() =>
-    assertValidImageUpload({ mimetype: 'image/png', size: MAX_UPLOAD_BYTES }),
-  );
+  assert.doesNotThrow(() => assertValidUpload({ size: MAX_UPLOAD_BYTES }));
 });

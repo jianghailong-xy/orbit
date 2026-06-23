@@ -455,16 +455,23 @@ export class RunnerApiController {
         },
         data: { status: RunStatus.RUNNING, lastTurnAt: new Date() },
       });
-      // Hand the runner this turn's image refs (id + mime); it fetches the bytes via
-      // GET /api/attachments/:id and builds the claude `image` content block. Text-only
-      // and shell turns have none, so the field is omitted.
+      // Hand the runner this turn's attachment refs (id + mime + filename); it fetches the
+      // bytes via GET /api/attachments/:id and dispatches on the type (image/PDF inlined as
+      // content blocks, anything else written to the worktree). Shell turns have none, so
+      // the field is omitted.
       if (t.kind === 'message') {
         const atts = await this.prisma.attachment.findMany({
           where: { turnId: t.id },
-          select: { id: true, mimeType: true },
+          select: { id: true, mimeType: true, fileName: true },
           orderBy: { createdAt: 'asc' },
         });
-        if (atts.length > 0) attachments = atts.map((a) => ({ id: a.id, mimeType: a.mimeType }));
+        if (atts.length > 0) {
+          attachments = atts.map((a) => ({
+            id: a.id,
+            mimeType: a.mimeType,
+            fileName: a.fileName ?? undefined,
+          }));
+        }
       }
     } else {
       // Control turns (interrupt/end/reload/diff) are fire-and-forget: ack on delivery so a

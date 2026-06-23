@@ -208,11 +208,14 @@ type ClaimedSession struct {
 
 // Interactive sessions (Route B) — wire DTOs mirroring @orbit/shared.
 
-// TurnAttachment references one image to fetch for a user turn: its id + MIME type. The
-// bytes come from the runner-scoped GET /runner/sessions/:id/attachments/:attId.
+// TurnAttachment references one attachment to fetch for a user turn: its id, MIME type,
+// and original filename. The bytes come from the runner-scoped
+// GET /runner/sessions/:id/attachments/:attId; the type decides how it's fed to claude
+// (image/PDF inlined as a content block, anything else written to the worktree).
 type TurnAttachment struct {
 	ID       string `json:"id"`
 	MimeType string `json:"mimeType"`
+	FileName string `json:"fileName,omitempty"`
 }
 
 // RunInboxResponse is the next user turn to feed the live claude process.
@@ -222,8 +225,8 @@ type RunInboxResponse struct {
 	Seq     int    `json:"seq"`
 	Kind    string `json:"kind"`
 	Content string `json:"content,omitempty"`
-	// Image attachments for this (message) turn; the runner fetches each blob and
-	// base64-encodes it into a claude `image` content block. Nil for text-only turns.
+	// Attachments for this (message) turn; the runner fetches each blob and dispatches on
+	// its type (image/PDF → content block, else → written to the worktree). Nil if none.
 	Attachments []TurnAttachment `json:"attachments,omitempty"`
 }
 

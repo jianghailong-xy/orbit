@@ -16,6 +16,7 @@ import {
   GlobalOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
+  PaperClipOutlined,
   PartitionOutlined,
   QuestionCircleOutlined,
   RightOutlined,
@@ -74,9 +75,10 @@ type TextNode = {
   ts?: string;
   // Local previews of images the composer just sent (object URLs, shown instantly).
   images?: TurnImage[];
-  // Durable refs from the persisted `user` event — fetched on demand so a turn's images
-  // survive a reload (and show on the seeded first turn, which has no local preview).
-  imageRefs?: { id: string }[];
+  // Durable refs from the persisted `user` event — fetched on demand so a turn's
+  // attachments survive a reload (and show on the seeded first turn, which has no local
+  // preview). Images render inline; non-image files render as a downloadable chip.
+  attachmentRefs?: { id: string; mime?: string; name?: string }[];
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -110,9 +112,21 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // no local preview (after a reload, or the server-seeded first turn). An image-only
         // turn has empty text, so still render a bubble when there are images for it.
         const imgs = ev.turnId ? turnImages?.[ev.turnId] : undefined;
-        const refs: { id: string }[] | undefined = Array.isArray(p.images)
-          ? p.images.filter((im: any) => im && typeof im.id === 'string').map((im: any) => ({ id: String(im.id) }))
-          : undefined;
+        // New events echo `attachments` (id+mime+name, any type); older ones echo `images`
+        // (id only, all images). Carry mime/name through so the bubble can tell an inline
+        // image from a downloadable file.
+        const rawRefs: any[] | undefined = Array.isArray(p.attachments)
+          ? p.attachments
+          : Array.isArray(p.images)
+            ? p.images
+            : undefined;
+        const refs = rawRefs
+          ?.filter((a) => a && typeof a.id === 'string')
+          .map((a) => ({
+            id: String(a.id),
+            mime: typeof a.mime === 'string' ? a.mime : undefined,
+            name: typeof a.name === 'string' ? a.name : undefined,
+          }));
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           into(parent).push({
             kind: 'user',
@@ -120,7 +134,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             text: p.text ? String(p.text) : '',
             ts: ev.ts,
             images: imgs,
-            imageRefs: refs,
+            attachmentRefs: refs,
           });
         }
         break;
@@ -242,24 +256,35 @@ function UserBubble({ node }: { node: TextNode }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   };
+  // Inline images come from the instant local previews when present, else from durable refs
+  // (fetched on demand); non-image files always render as a downloadable chip.
+  const localImgs = node.images && node.images.length ? node.images : undefined;
+  const refs = node.attachmentRefs ?? [];
+  const imgRefs = localImgs ? [] : refs.filter((r) => !r.mime || r.mime.startsWith('image/'));
+  const fileRefs = refs.filter((r) => r.mime && !r.mime.startsWith('image/'));
   return (
     <div className="chat-user-wrap">
       <div className="chat-msg chat-user" data-seq={node.seq}>
-        {node.images && node.images.length > 0 ? (
+        {localImgs && (
           <div className="chat-images">
-            {node.images.map((im, i) => (
+            {localImgs.map((im, i) => (
               <ChatImage key={i} src={im.url} />
             ))}
           </div>
-        ) : (
-          node.imageRefs &&
-          node.imageRefs.length > 0 && (
-            <div className="chat-images">
-              {node.imageRefs.map((r) => (
-                <AttachmentImage key={r.id} id={r.id} />
-              ))}
-            </div>
-          )
+        )}
+        {imgRefs.length > 0 && (
+          <div className="chat-images">
+            {imgRefs.map((r) => (
+              <AttachmentImage key={r.id} id={r.id} />
+            ))}
+          </div>
+        )}
+        {fileRefs.length > 0 && (
+          <div className="chat-files">
+            {fileRefs.map((r) => (
+              <AttachmentFile key={r.id} id={r.id} name={r.name} />
+            ))}
+          </div>
         )}
         {node.text}
       </div>
@@ -324,6 +349,38 @@ export function AttachmentImage({ id }: { id: string }) {
   }, [id]);
   if (!url) return <span className="chat-image chat-image-loading" />;
   return <ChatImage src={url} />;
+}
+
+// A non-image file the user sent: a chip that downloads the blob on click (the download
+// endpoint is bearer-guarded, so a plain <a href> would 401 — fetch with the token, then
+// trigger a download from the object URL). The bytes are fetched only when clicked.
+export function AttachmentFile({ id, name }: { id: string; name?: string }) {
+  const [busy, setBusy] = useState(false);
+  const label = name || 'file';
+  const download = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const objUrl = await fetchAttachmentObjectUrl(id);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = label;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+    } catch {
+      /* leave the chip in place so the user can retry */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" className="chat-file" onClick={download} title={`Download ${label}`}>
+      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+      <span className="chat-file-name">{label}</span>
+    </button>
+  );
 }
 
 // A user-sent image: click to open AntD's full-screen preview (zoom/rotate, ESC to close).

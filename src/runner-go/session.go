@@ -378,43 +378,80 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				if dup {
 					continue
 				}
-				// Build the claude user message: any pasted images as base64 `image`
-				// blocks, then the text. The runner fetches each blob (runner-scoped);
-				// a fetch failure drops just that image so the turn still goes through as
-				// text rather than stalling the conversation. imgRefs (id+mime) ride on
-				// the `user` event so the web can render the images after a reload.
+				// Build the claude user message by dispatching each attachment on its MIME
+				// type: images and PDFs are inlined as base64 content blocks; anything else is
+				// written into the worktree for claude to read with its tools (its path is
+				// announced in the text below). The runner fetches each blob (runner-scoped); a
+				// fetch/write failure drops just that one so the turn still goes through rather
+				// than stalling. attRefs (id+mime+name) ride on the `user` event so the web can
+				// render the attachments (image thumbnails / file chips) after a reload.
 				content := []map[string]interface{}{}
-				var imgRefs []map[string]interface{}
+				var attRefs []map[string]interface{}
+				var writtenPaths []string
 				for _, att := range resp.Attachments {
 					data, ferr := t.fetchAttachment(procCtx, job.SessionID, att.ID)
 					if ferr != nil {
 						logln("attachment fetch failed for", job.SessionID, att.ID+":", ferr)
 						continue
 					}
-					content = append(content, map[string]interface{}{
-						"type": "image",
-						"source": map[string]interface{}{
-							"type":       "base64",
-							"media_type": att.MimeType,
-							"data":       base64.StdEncoding.EncodeToString(data),
-						},
-					})
-					imgRefs = append(imgRefs, map[string]interface{}{"id": att.ID, "mime": att.MimeType})
+					switch {
+					// Only the media types Claude accepts as image blocks; other image/* (svg,
+					// bmp, tiff) and every non-image, non-PDF type fall through to disk.
+					case att.MimeType == "image/png" || att.MimeType == "image/jpeg" ||
+						att.MimeType == "image/webp" || att.MimeType == "image/gif":
+						content = append(content, map[string]interface{}{
+							"type": "image",
+							"source": map[string]interface{}{
+								"type":       "base64",
+								"media_type": att.MimeType,
+								"data":       base64.StdEncoding.EncodeToString(data),
+							},
+						})
+					case att.MimeType == "application/pdf":
+						content = append(content, map[string]interface{}{
+							"type": "document",
+							"source": map[string]interface{}{
+								"type":       "base64",
+								"media_type": att.MimeType,
+								"data":       base64.StdEncoding.EncodeToString(data),
+							},
+						})
+					default:
+						rel, werr := writeUpload(execDir, att.FileName, att.ID, data)
+						if werr != nil {
+							logln("attachment write failed for", job.SessionID, att.ID+":", werr)
+							continue
+						}
+						writtenPaths = append(writtenPaths, rel)
+					}
+					attRefs = append(attRefs, map[string]interface{}{"id": att.ID, "mime": att.MimeType, "name": att.FileName})
 				}
-				// Prepend any buffered `!`-shell output as context — claude sees the
+				// Prepend any buffered `!`-shell output as context - claude sees the
 				// command+output with this message (CLI `!` semantics), no turn spent on it.
 				feedText := resp.Content
 				if len(pendingShellCtx) > 0 {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
 					pendingShellCtx = nil
 				}
-				// Keep the text block unless this is an image-only turn with nothing to feed.
+				// Tell claude where the written-to-disk uploads landed, so it reads them with
+				// its tools instead of expecting inline content it never received.
+				if len(writtenPaths) > 0 {
+					note := fmt.Sprintf("[The user uploaded %d file(s) to the working directory: %s - read or process them with your tools as needed.]",
+						len(writtenPaths), strings.Join(writtenPaths, ", "))
+					if feedText != "" {
+						feedText = note + "\n\n" + feedText
+					} else {
+						feedText = note
+					}
+				}
+				// Keep the text block unless this is an inline-attachment-only turn with
+				// nothing to feed.
 				if feedText != "" || len(content) == 0 {
 					content = append(content, map[string]interface{}{"type": "text", "text": feedText})
 				}
 				userEv := map[string]interface{}{"text": resp.Content}
-				if len(imgRefs) > 0 {
-					userEv["images"] = imgRefs
+				if len(attRefs) > 0 {
+					userEv["attachments"] = attRefs
 				}
 				emit(evUser, userEv)
 				select {
@@ -598,14 +635,14 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				// the worktree (uncommitted), so the diff updates each turn, not just at end.
 				liveFiles, livePatches := liveDiff(job.WT)
 				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
-					TurnID:     turnID,
-					Status:     turnStatus,
-					Result:     r.Result,
-					Subtype:    r.Subtype,
-					NumTurns:   r.NumTurns,
-					CostUsd:    r.CostUsd,
-					Usage:      r.Usage,
-					ModelUsage: r.ModelUsage,
+					TurnID:          turnID,
+					Status:          turnStatus,
+					Result:          r.Result,
+					Subtype:         r.Subtype,
+					NumTurns:        r.NumTurns,
+					CostUsd:         r.CostUsd,
+					Usage:           r.Usage,
+					ModelUsage:      r.ModelUsage,
 					IsolationStatus: job.IsolationStatus,
 					ChangedFiles:    liveFiles,
 					ChangedDiff:     livePatches,
@@ -639,4 +676,24 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stCancelled, true, false // graceful drain -> caller detaches without finalizing
 	}
 	return stFailed, false, false // unexpected exit -> respawn with --resume
+}
+
+const uploadsDirName = "orbit-uploads"
+
+// writeUpload saves a non-image/-PDF attachment into the session worktree under a fixed
+// uploads dir, returning the worktree-relative path to hand to claude. The name is reduced
+// to its base (no path traversal) and falls back to the attachment id when unusable.
+func writeUpload(execDir, name, id string, data []byte) (string, error) {
+	base := filepath.Base(strings.TrimSpace(name))
+	if base == "." || base == ".." || base == string(filepath.Separator) || base == "" {
+		base = id
+	}
+	dir := filepath.Join(execDir, uploadsDirName)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, base), data, 0o644); err != nil {
+		return "", err
+	}
+	return filepath.Join(uploadsDirName, base), nil
 }
