@@ -23,6 +23,13 @@ import { api, getSession } from '../api';
 export const runnersQuery = () =>
   queryOptions({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
 
+/** Whether the deployment has zero users — gates the signed-out boot toward /setup. */
+export const setupStatusQuery = () =>
+  queryOptions({
+    queryKey: ['setup-status'] as const,
+    queryFn: () => api<{ needsSetup: boolean }>('/auth/setup-status'),
+  });
+
 export const agentsQuery = () =>
   queryOptions({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
 

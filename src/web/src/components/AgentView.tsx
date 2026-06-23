@@ -30,6 +30,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
 import {
   type ApprovalInfo,
@@ -105,15 +106,6 @@ const PERMISSION_TO_MODE: Record<string, string> = Object.fromEntries(
   Object.entries(MODE_TO_PERMISSION).map(([label, value]) => [value, label]),
 );
 const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
-// Auto mode needs a recent model (Opus 4.6+ / Sonnet 4.6); claude rejects
-// --permission-mode auto on Haiku / older models, so gate the option by model.
-const AUTO_CAPABLE_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
-const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
-const MODEL_OPTIONS = [
-  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { value: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
 // Claude effort level. '' = Default (omit --effort, model picks its own).
 const EFFORT_OPTIONS = [
   { value: '', label: 'Default' },
@@ -434,6 +426,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
+  // "Chat about this" on a pending AskUserQuestion routes the next composer send back to
+  // that approval as a deny+message (resolving the blocking question) instead of a fresh
+  // turn. Null = normal send; `question` is just the reply-chip's label.
+  const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
@@ -723,6 +719,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setStreamingText('');
     setStreamingThink('');
     setApprovals([]);
+    setReplyTo(null);
     setQueued([]);
     setIdle(false);
     setStuck(null);
@@ -922,6 +919,13 @@ export function AgentView({ runner }: { runner: Runner }) {
         .catch(() => undefined);
     }
   };
+
+  // If the approval the composer is replying to gets resolved another way (the user picks
+  // an option, or an SSE approval_resolved arrives), drop the reply context so the chip
+  // can't dangle over a question that's already gone.
+  useEffect(() => {
+    if (replyTo && !approvals.some((a) => a.id === replyTo.id)) setReplyTo(null);
+  }, [approvals, replyTo]);
 
   const send = useMutation({
     mutationFn: async (
@@ -1231,6 +1235,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   const onSend = (): void => {
     const c = text.trim();
     if (send.isPending || uploading) return;
+    // Replying to a pending AskUserQuestion: resolve it as a deny+message (claude reads the
+    // text as feedback and continues) rather than sending a fresh turn. A deny carries no
+    // images, so this path needs text.
+    if (replyTo) {
+      if (!c) return;
+      void decide(replyTo.id, 'deny', undefined, c);
+      setText('');
+      setReplyTo(null);
+      return;
+    }
     if (!c && readyImages.length === 0) return;
     setHistIdx(-1);
     send.mutate({ content: c, images: readyImages });
@@ -1260,7 +1274,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
-  const showStop = selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0;
+  const showStop =
+    selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0 && !replyTo;
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -1319,6 +1334,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashScope(scope);
     setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
     setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // "Chat about this" on a question card hands the reply off to the main composer: show the
+  // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
+  const startChatReply = (id: string, question: string): void => {
+    setReplyTo({ id, question });
     setTimeout(() => taRef.current?.focus(), 0);
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
@@ -1644,7 +1665,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             {approvals.map((a, i) => (
               // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
               // it's decided the next card becomes first, so the key walks the queue in order.
-              <ApprovalPanel key={a.id} approval={a} onDecide={decide} active={i === 0} />
+              <ApprovalPanel
+                key={a.id}
+                approval={a}
+                onDecide={decide}
+                active={i === 0}
+                onChatAbout={startChatReply}
+              />
             ))}
             {queued.map((q) => (
               <div className="chat-msg chat-user chat-queued" key={q.turnId}>
@@ -1712,6 +1739,22 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </button>
               </span>
             ))}
+          </div>
+        )}
+        {replyTo && (
+          <div className="composer-replyto">
+            <span className="composer-replyto-icon">↩</span>
+            <span className="composer-replyto-text">
+              Replying to Claude’s question{replyTo.question ? `: ${replyTo.question}` : ''}
+            </span>
+            <button
+              type="button"
+              className="composer-replyto-cancel"
+              onClick={() => setReplyTo(null)}
+              aria-label="Cancel reply"
+            >
+              <CloseOutlined />
+            </button>
           </div>
         )}
         <div className="composer-box">
@@ -1800,7 +1843,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             variant="borderless"
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder={
-              !runner.online ? 'Runner offline' : selectedId ? 'Reply…' : 'Send this agent a task…'
+              !runner.online
+                ? 'Runner offline'
+                : replyTo
+                  ? 'Reply to Claude’s question…'
+                  : selectedId
+                    ? 'Reply…'
+                    : 'Send this agent a task…'
             }
             value={text}
             disabled={!runner.online}
@@ -1994,7 +2043,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (drop) setMode('Default');
                   }
                 }}
-                options={MODEL_OPTIONS}
+                options={MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.short }))}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />

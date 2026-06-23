@@ -2219,6 +2219,47 @@ body {
 .composer-box:focus-within {
   border-color: var(--brand);
 }
+/* Reply-context chip: shown above the box when "Chat about this" hands a question reply
+   off to the composer. Brand-tinted to echo the approval card it came from. */
+.composer-replyto {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.composer-replyto-icon {
+  flex: none;
+  color: var(--brand);
+  font-weight: 600;
+}
+.composer-replyto-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-replyto-cancel {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.composer-replyto-cancel:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
 /* Attach (+) button: keep the full 32px line height so its icon aligns with the
    send button, but narrow the width so the icon sits close to the text. */
 .composer-box .composer-attach-btn.ant-btn {
@@ -2987,31 +3028,6 @@ body {
   background: var(--brand-tint);
 }
 .chat-q-custom::placeholder {
-  color: var(--text-4);
-}
-/* "Chat about this": a free-form reply that rides back as a deny message so claude
-   keeps the conversation going instead of forcing one of its listed options. */
-.chat-q-reply {
-  margin-top: 10px;
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 64px;
-  resize: vertical;
-  padding: 7px 10px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text-1);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-raised);
-  outline: none;
-  transition: border-color 0.1s, background 0.1s;
-}
-.chat-q-reply:focus {
-  border-color: var(--brand);
-  background: var(--brand-tint);
-}
-.chat-q-reply::placeholder {
   color: var(--text-4);
 }
 

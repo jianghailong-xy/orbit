@@ -101,10 +101,12 @@ export function ApprovalPanel({
   approval,
   onDecide,
   active = false,
+  onChatAbout,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   active?: boolean;
+  onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
   // "Allow + remember same kind" for the rest of the session (claude's engine matches
@@ -117,7 +119,9 @@ export function ApprovalPanel({
     if (rule) onDecide(approval.id, 'allow', undefined, undefined, rule);
   });
   if (isQuestion) {
-    return <QuestionForm approval={approval} onDecide={onDecide} active={active} />;
+    return (
+      <QuestionForm approval={approval} onDecide={onDecide} active={active} onChatAbout={onChatAbout} />
+    );
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
   return (
@@ -173,25 +177,22 @@ function QuestionForm({
   approval,
   onDecide,
   active = false,
+  onChatAbout,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   active?: boolean;
+  onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const questions = questionsOf(approval.input);
   const [sel, setSel] = useState<Record<string, string[]>>({});
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
   const [custom, setCustom] = useState<Record<string, string>>({});
-  // "Chat about this" mode: instead of answering, reply conversationally. The text
-  // rides back as a `deny` message, so claude reads it as in-turn feedback and keeps
-  // going without being forced to pick one of its listed options.
-  const [chatting, setChatting] = useState(false);
-  const [chatText, setChatText] = useState('');
-  const chatRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (chatting) chatRef.current?.focus();
-  }, [chatting]);
+  // "Chat about this": rather than picking an option, the user replies conversationally
+  // in the main composer (handled by AgentView via onChatAbout). The reply still rides back
+  // as a `deny` message so claude reads it as in-turn feedback instead of a forced option.
+  const chatLabel = questions[0]?.header || questions[0]?.question || '';
 
   const toggle = (q: string, label: string, multi: boolean) => {
     setSel((prev) => {
@@ -231,15 +232,8 @@ function QuestionForm({
     onDecide(approval.id, 'allow', answers);
   };
 
-  const sendChat = () => {
-    const msg = chatText.trim();
-    if (!msg) return;
-    onDecide(approval.id, 'deny', undefined, msg);
-  };
-
-  // ⌘/Ctrl + Enter submits once every question has a pick — but not while chatting,
-  // where the same chord sends the reply instead (handled on the textarea).
-  useApproveHotkey(active && complete && !chatting, submit);
+  // ⌘/Ctrl + Enter submits once every question has a pick.
+  useApproveHotkey(active && complete, submit);
 
   return (
     <div className="approval-card">
@@ -289,49 +283,16 @@ function QuestionForm({
             );
           })}
         </div>
-        {chatting && (
-          <textarea
-            ref={chatRef}
-            className="chat-q-reply"
-            placeholder="Chat with Claude about this… (it reads your message and continues, instead of forcing you to pick an option)"
-            value={chatText}
-            onChange={(e) => setChatText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && chatText.trim()) {
-                e.preventDefault();
-                sendChat();
-              }
-            }}
-          />
-        )}
       </div>
-      {chatting ? (
-        <div className="approval-actions">
-          <button className="approval-btn approve" disabled={!chatText.trim()} onClick={sendChat}>
-            Send
-            {active && chatText.trim() && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
-          </button>
-          <button
-            className="approval-btn deny"
-            onClick={() => {
-              setChatting(false);
-              setChatText('');
-            }}
-          >
-            Back
-          </button>
-        </div>
-      ) : (
-        <div className="approval-actions">
-          <button className="approval-btn approve" disabled={!complete} onClick={submit}>
-            Submit
-            {active && complete && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
-          </button>
-          <button className="approval-btn chat" onClick={() => setChatting(true)}>
-            💬 Chat about this
-          </button>
-        </div>
-      )}
+      <div className="approval-actions">
+        <button className="approval-btn approve" disabled={!complete} onClick={submit}>
+          Submit
+          {active && complete && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
+        </button>
+        <button className="approval-btn chat" onClick={() => onChatAbout?.(approval.id, chatLabel)}>
+          💬 Chat about this
+        </button>
+      </div>
     </div>
   );
 }
