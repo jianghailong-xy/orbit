@@ -1903,6 +1903,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           // on selectedId rather than the placeholder-backed query data.
           detail={selectedId ? sessionDetailQ.data : null}
           committed={!live}
+          // A turn in flight (live but not awaiting input) leaves the branch in a transient
+          // state — hold "Merge to main" until it finishes so we never merge half-done work.
+          turnActive={live && !idle}
           enabling={enableIsoMut.isPending}
           onEnableIsolation={
             sessionDetailQ.data?.agent?.id

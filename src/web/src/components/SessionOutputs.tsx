@@ -23,6 +23,7 @@ export function SessionOutputs({
   resolving,
   onCommit,
   committing,
+  turnActive,
 }: {
   detail?: SessionDetail | null;
   /** Fallback for older runners that don't report `worktreeDirty`: true once the session has
@@ -30,6 +31,10 @@ export function SessionOutputs({
    *  the read-only "uncommitted" note. When the runner DOES report worktreeDirty, that drives
    *  the Commit-vs-Merge choice instead — for live and ended sessions alike. */
   committed?: boolean;
+  /** True while a turn is actively in flight (live session, not awaiting input). The branch
+   *  state is then transient — possibly a mid-turn committed checkpoint the agent will build
+   *  on — so the bar holds "Merge to main" until the turn finishes. Commit stays available. */
+  turnActive?: boolean;
   /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
   onEnableIsolation?: () => void;
   enabling?: boolean;
@@ -83,12 +88,15 @@ export function SessionOutputs({
   const del = files.reduce((s, f) => s + Math.max(0, f.deletions), 0);
 
   // Git-state-driven primary action. When the runner reports `worktreeDirty`, the bar shows
-  // Commit while the worktree has uncommitted changes and Merge once it's clean — for live and
-  // ended sessions alike. Older runners don't report it (null) → fall back to the session
-  // lifecycle (`committed`): live shows the read-only "uncommitted" note, ended shows Merge.
+  // Commit while the worktree has uncommitted changes and Merge once it's clean. Older runners
+  // don't report it (null) → fall back to the session lifecycle (`committed`): live shows the
+  // read-only "uncommitted" note, ended shows Merge.
   const dirtyKnown = detail.worktreeDirty != null;
   const showCommit = dirtyKnown && detail.worktreeDirty === true;
-  const showMerge = dirtyKnown ? !showCommit : !!committed;
+  const mergeReady = dirtyKnown ? !showCommit : !!committed;
+  // Hold "Merge to main" while a turn is in flight: a clean worktree mid-turn is just a
+  // transient checkpoint the agent is still building on, not finished work ready for main.
+  const showMerge = mergeReady && !turnActive;
 
   return (
     <div className={`wt-bar${open ? ' wt-open' : ''}`}>
@@ -166,6 +174,8 @@ export function SessionOutputs({
                   </code>
                 </span>
               </div>
+            ) : turnActive ? (
+              <span className="wt-merge-label">Turn in progress — you can merge to main once it finishes.</span>
             ) : (
               <span className="wt-merge-label">Working changes (uncommitted) on {branch}</span>
             )}
