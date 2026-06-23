@@ -2563,25 +2563,27 @@ body {
   /* anchor the hover-revealed copy button to the bubble's edge */
   position: relative;
 }
-/* Copy button on a user message — sits just outside the bubble's left edge (the bubble is
-   right-aligned, so there's always room to its left), fades in on hover so it never
-   competes with the text. Absolute, so it adds no height and shifts nothing on the page. */
+/* Copy button — pinned inside the bubble's bottom-right corner so the cursor never has to
+   leave the bubble to reach it (an earlier left-outside position vanished the moment the
+   pointer crossed the bubble's edge into the gap). Fades in on hover; absolute, so it adds
+   no height. An opaque backing + hairline keeps the icon legible even when it sits over the
+   last line of text. */
 .chat-copy {
   position: absolute;
-  right: 100%;
-  bottom: 0;
-  margin-right: 6px;
+  right: 4px;
+  bottom: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-3);
-  font-size: 13px;
+  border-radius: 5px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+  color: var(--text-2);
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
   opacity: 0;
