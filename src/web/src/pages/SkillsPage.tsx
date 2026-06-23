@@ -44,24 +44,22 @@ function SkillRow({ item }: { item: SlashCommandInfo }) {
   );
 }
 
-// One collapsible scope group: an agent's project assets, or a runner's host-level
-// "Shared" bucket. Skills come from a runner's filesystem (.claude/skills/commands),
-// tagged by the agent whose workDir they were found in (empty = host, shared by all
-// agents on that machine).
+// One collapsible group: an agent's project assets (skills/commands found under its
+// workDir's .claude/). Host-level assets (~/.claude, shared by every agent on the machine)
+// are not cataloged here — they surface in the composer's `/` menu for every session.
 type Group = {
   key: string;
   title: string;
   runnerName: string;
   online: boolean;
-  isHost: boolean;
   skills: SlashCommandInfo[];
   commands: SlashCommandInfo[];
 };
 
 // Runners report the slash commands/skills they found on disk via heartbeat; GET /runners
 // surfaces them per runner, each tagged with its agent. This page flattens that into one
-// collapsible group per agent (plus each runner's shared/host bucket) so the catalog reads
-// agent-first — what each agent can do — rather than buried under the machine.
+// collapsible group per agent so the catalog reads agent-first — what each agent can do —
+// rather than buried under the machine. Host-level assets are omitted (see Group).
 export function SkillsPage() {
   const runners = useQuery({
     queryKey: ['runners'],
@@ -82,10 +80,10 @@ export function SkillsPage() {
     it.name.toLowerCase().includes(q) ||
     (it.description?.toLowerCase().includes(q) ?? false);
 
-  // Collapsed group keys; an active search forces every matching group open.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Expanded group keys — groups start collapsed; an active search forces every match open.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -104,42 +102,33 @@ export function SkillsPage() {
     );
   };
 
-  // Flatten every runner's (search-filtered) assets into per-scope groups: one per agent
-  // that owns project assets, plus the runner's host bucket. Agents sort first by name;
-  // the shared/host buckets sink to the bottom.
+  // Flatten every runner's (search-filtered) assets into one group per agent that owns
+  // project assets, sorted by agent name. Host-level assets (no agentId) are skipped.
   const groups: Group[] = [];
   for (const r of list) {
     const skills = (r.skills ?? []).filter(match);
     const commands = (r.commands ?? []).filter(match);
-    const byScope = new Map<string, Group>();
-    const bucket = (agentId?: string): Group => {
-      const id = agentId || '';
-      let g = byScope.get(id);
+    const byAgent = new Map<string, Group>();
+    const bucket = (agentId: string): Group => {
+      let g = byAgent.get(agentId);
       if (!g) {
         g = {
-          key: `${r.id}:${id || 'host'}`,
-          title: id ? agentName(id) : 'Shared',
+          key: `${r.id}:${agentId}`,
+          title: agentName(agentId),
           runnerName: r.displayName || r.name,
           online: !!r.online,
-          isHost: !id,
           skills: [],
           commands: [],
         };
-        byScope.set(id, g);
+        byAgent.set(agentId, g);
       }
       return g;
     };
-    for (const s of skills) bucket(s.agentId).skills.push(s);
-    for (const c of commands) bucket(c.agentId).commands.push(c);
-    groups.push(...byScope.values());
+    for (const s of skills) if (s.agentId) bucket(s.agentId).skills.push(s);
+    for (const c of commands) if (c.agentId) bucket(c.agentId).commands.push(c);
+    groups.push(...byAgent.values());
   }
-  groups.sort((a, b) =>
-    a.isHost !== b.isHost
-      ? a.isHost
-        ? 1
-        : -1
-      : a.title.localeCompare(b.title) || a.runnerName.localeCompare(b.runnerName),
-  );
+  groups.sort((a, b) => a.title.localeCompare(b.title) || a.runnerName.localeCompare(b.runnerName));
 
   return (
     <div className="skills-page">
@@ -172,7 +161,7 @@ export function SkillsPage() {
           ) : (
             <div className="skills-list">
               {groups.map((g) => {
-                const open = !!q || !collapsed.has(g.key);
+                const open = !!q || expanded.has(g.key);
                 const count = g.skills.length + g.commands.length;
                 return (
                   <div className="skills-group-card" key={g.key}>
