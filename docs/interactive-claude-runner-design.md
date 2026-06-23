@@ -1,6 +1,6 @@
 # Orbit — Interactive Claude Sessions on the Runner (Route B)
 
-> Multi-agent design (red-team hardened). Status: proposal for review.
+> Multi-agent design (red-team hardened). Status: **implemented** and shipped to `main` — kept here as the design record.
 
 # Route B — Red-Team-Hardened Design: Interactive Multi-Turn Claude Sessions
 

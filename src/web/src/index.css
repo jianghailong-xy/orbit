@@ -468,6 +468,170 @@ body {
   color: var(--text-1);
 }
 
+/* ---- Collapsible sidebar ---- */
+/* Collapse/expand toggle in the brand row: pinned to the right edge when expanded,
+   the lone centered control when collapsed. */
+.tp-collapse-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 15px;
+  cursor: pointer;
+}
+.tp-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+/* Drop the focus ring on mouse click; keep it for keyboard navigation. */
+.tp-collapse-btn:focus {
+  outline: none;
+}
+.tp-collapse-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+/* The icon rail that stands in for the full panel when collapsed. Hidden until the
+   desktop media query below turns it on. */
+.tp-rail {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+}
+.tp-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tp-rail-item:hover {
+  background: var(--bg-hover);
+}
+.tp-rail-item.active {
+  background: var(--brand-tint);
+}
+.tp-rail-item.active .tp-ico {
+  color: var(--brand);
+}
+/* Count pill tucked into the icon's top-right corner — amber for "needs you"
+   (mirrors .tp-count.needs-you), brand blue for the plain live count. */
+.tp-rail-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+}
+.tp-rail-badge.needs-you {
+  background: var(--warning-solid);
+}
+/* Agent entries in the collapsed rail: a round monogram avatar with an online dot,
+   so the user's ordered agents (⌘1‒9) stay one click away when collapsed. */
+.tp-rail-divider {
+  width: 24px;
+  height: 1px;
+  flex: none;
+  margin: 4px 0;
+  background: var(--border-subtle);
+}
+.tp-rail-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-hover-strong);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.tp-rail-item.active .tp-rail-avatar {
+  background: var(--brand);
+  color: #fff;
+}
+.tp-rail-adot {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+  border: 2px solid var(--bg-raised);
+}
+.tp-rail-adot.online {
+  background: var(--success-solid);
+}
+
+/* Desktop collapse behaviour. Scoped to >960px so the ≤960 off-canvas drawer
+   (which toggles on .open, not .collapsed) is never touched — there the panel
+   always opens as the full list. */
+@media (min-width: 961px) {
+  .app-nav.collapsed {
+    width: 56px;
+  }
+  .app-nav.collapsed .tp-scroll,
+  .app-nav.collapsed .tp-resizer,
+  .app-nav.collapsed .tp-brand-logo,
+  .app-nav.collapsed .tp-brand-name,
+  .app-nav.collapsed .tp-user-name {
+    display: none;
+  }
+  /* Rail takes over the flex:1 "spacer" role the hidden .tp-scroll played, so the
+     user footer stays pinned to the bottom (icons sit at the top of the rail). It
+     scrolls on its own when the agent list is long; scrollbar hidden to stay clean. */
+  .app-nav.collapsed .tp-rail {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .app-nav.collapsed .tp-rail::-webkit-scrollbar {
+    display: none;
+  }
+  .app-nav.collapsed .tp-brand {
+    justify-content: center;
+    padding: 0;
+  }
+  .app-nav.collapsed .tp-collapse-btn {
+    margin-left: 0;
+  }
+  .app-nav.collapsed .tp-user-trigger {
+    justify-content: center;
+  }
+}
+
+/* The collapse control is desktop-only; the ≤960 drawer is driven by the hamburger. */
+@media (max-width: 960px) {
+  .tp-collapse-btn {
+    display: none;
+  }
+}
+
 /* ---- Tasks page ---- */
 .page-title {
   font-size: 20px;

@@ -3,6 +3,8 @@ import {
   DesktopOutlined,
   InboxOutlined,
   LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   SettingOutlined,
   TeamOutlined,
   ThunderboltOutlined,
@@ -43,6 +45,8 @@ const TOP = [
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
 const SIDEBAR_WIDTH_KEY = 'orbit:sidebar-width';
+// Whether the user collapsed the panel to its icon rail; persisted like the width.
+const SIDEBAR_COLLAPSED_KEY = 'orbit:sidebar-collapsed';
 const DEFAULT_SIDEBAR_WIDTH = 280;
 const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
@@ -163,6 +167,30 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
     return saved > 0 ? clampWidth(saved) : DEFAULT_SIDEBAR_WIDTH;
   });
+
+  // Collapse the whole panel to a slim icon rail (desktop) — hands the content
+  // region the full width back. Persisted so the choice survives a refresh.
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
+  );
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      return next;
+    });
+  }, []);
+  // Cmd/Ctrl + Backslash toggles the sidebar — the VS Code / Linear / Notion convention.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        toggleCollapsed();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleCollapsed]);
 
   // Drag the right-edge handle to resize; the final width is saved on release.
   const startResize = (e: React.MouseEvent) => {
@@ -350,10 +378,65 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   };
 
   return (
-    <aside className={`app-nav${open ? ' open' : ''}`} style={{ width: sidebarWidth }}>
+    <aside
+      className={`app-nav${open ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}
+      style={{ width: collapsed ? undefined : sidebarWidth }}
+    >
       <div className="tp-brand">
         <span className="tp-brand-logo">🛰</span>
         <span className="tp-brand-name">Orbit</span>
+        <button
+          type="button"
+          className="tp-collapse-btn"
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+        </button>
+      </div>
+
+      {/* Collapsed-only icon rail: the fixed top-nav as icons, carrying the Active
+          "needs you" (or live) count so the core "it's your turn" signal survives a
+          collapse. The dynamic lists (agents, task lists) have no icon form, so they
+          fold away — expand to bring them back. Shown only when collapsed, on desktop. */}
+      <div className="tp-rail">
+        {TOP.map((t) => {
+          const isActive = t.key === 'active';
+          const needsYou = isActive && needsReplyCount > 0;
+          const count = isActive ? (needsYou ? needsReplyCount : activeCount) : null;
+          return (
+            <div
+              key={t.key}
+              className={`tp-rail-item ${sel === t.key ? 'active' : ''}`}
+              onClick={() => navigate(`/${t.key}`)}
+              title={needsYou ? `${needsReplyCount} session(s) need your reply` : t.label}
+            >
+              <span className="tp-ico">{t.icon}</span>
+              {count != null && count > 0 && (
+                <span className={`tp-rail-badge${needsYou ? ' needs-you' : ''}`}>{count}</span>
+              )}
+            </div>
+          );
+        })}
+        {/* The user's agents, kept reachable when collapsed: a monogram avatar each
+            (agents are entities with identity + online state + ⌘1‒9, so unlike the
+            text-titled task lists they read fine as icons). Same order, same shortcuts. */}
+        {agentList.length > 0 && <div className="tp-rail-divider" />}
+        {agentList.map((a, i) => {
+          const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
+          return (
+            <div
+              key={a.id}
+              className={`tp-rail-item ${a.id === activeAgentId ? 'active' : ''}`}
+              onClick={() => openAgent(a)}
+              title={i < 9 ? `${a.name}  ⌘${i + 1}` : a.name}
+            >
+              <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
+              <span className={`tp-rail-adot ${online ? 'online' : ''}`} />
+            </div>
+          );
+        })}
       </div>
 
       <div className="tp-scroll">

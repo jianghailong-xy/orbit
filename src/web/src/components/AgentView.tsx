@@ -416,6 +416,15 @@ export function AgentView({ runner }: { runner: Runner }) {
   // so stepping back past the newest entry restores it (shell-style).
   const [histIdx, setHistIdx] = useState(-1);
   const [histDraft, setHistDraft] = useState('');
+  // Composer drafts are isolated per target — each session by its id, the new-session
+  // compose under the 'new' key — so switching sessions never drags one composer's text
+  // into another, and the new-session draft survives leaving and coming back. textRef
+  // mirrors `text` so the switch effect (below) can stash the *outgoing* draft without
+  // re-running on every keystroke; prevDraftKey tracks which target `text` belongs to.
+  const draftKey = selectedId ?? 'new';
+  const drafts = useRef<Map<string, string>>(new Map());
+  const textRef = useRef('');
+  const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState('claude-sonnet-4-6');
   const [effort, setEffort] = useState(() => localStorage.getItem(EFFORT_KEY) ?? '');
@@ -689,6 +698,24 @@ export function AgentView({ runner }: { runner: Runner }) {
   );
   const atCapacity = typeof runner.maxConcurrent === 'number' && liveSlots >= runner.maxConcurrent;
   const queuedForSlot = !!selected && selected.status === 'PENDING' && atCapacity;
+
+  // Mirror the live composer text into a ref. Declared before the switch effect so that
+  // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
+  // runs first and the switch effect reads the latest text.
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  // On a target switch, stash the outgoing draft under its key and restore the incoming
+  // one (empty if none). Resets the history cursor so recall starts fresh per target.
+  useEffect(() => {
+    if (prevDraftKey.current === draftKey) return;
+    drafts.current.set(prevDraftKey.current, textRef.current);
+    setText(drafts.current.get(draftKey) ?? '');
+    setHistIdx(-1);
+    setHistDraft('');
+    prevDraftKey.current = draftKey;
+  }, [draftKey]);
 
   // Subscribe to the session's event stream; reset only when the selection changes.
   useEffect(() => {
@@ -1213,7 +1240,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const goNew = (): void => {
     const a = scopeAgentId ?? agentsForRunner[0]?.id;
     navigate(a ? `/agents/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`);
-    setText('');
+    // No setText here: the per-target switch effect restores the saved 'new' draft, and
+    // blanking would instead clobber the *outgoing* session's draft (text hasn't moved yet).
   };
   // While the selected session is still loading we can't tell if it's live yet;
   // block send to avoid accidentally creating a duplicate session.

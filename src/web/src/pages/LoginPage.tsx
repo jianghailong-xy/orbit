@@ -18,8 +18,8 @@ export function LoginPage() {
         return;
       }
       // Brand-new accounts have no runner yet — drop them on the registration guide
-      // so onboarding starts there instead of an empty task list.
-      let dest = '/tasks';
+      // so onboarding starts there instead of an empty Active view.
+      let dest = '/active';
       try {
         const runners = await api<unknown[]>('/runners');
         if (runners.length === 0) dest = '/runners/register';

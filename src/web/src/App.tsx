@@ -32,7 +32,7 @@ export function App() {
   const authed = !!getToken();
   return (
     <Routes>
-      <Route path="/login" element={authed ? <Navigate to="/tasks" /> : <LoginPage />} />
+      <Route path="/login" element={authed ? <Navigate to="/active" /> : <LoginPage />} />
       <Route
         path="/enroll"
         element={
@@ -50,11 +50,12 @@ export function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       ) : (
         <>
-          {/* The app shell hosts one routed view at a time. The task list is the
-              default ("/" and "/tasks"); each other view wraps itself in its layout
+          {/* The app shell hosts one routed view at a time. The default landing is
+              Active ("/active") — login redirects there and so does the bare root;
+              the task list lives at "/tasks". Each view wraps itself in its layout
               contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           <Route element={<AppShell />}>
-            <Route index element={<TaskListView />} />
+            <Route index element={<Navigate to="/active" replace />} />
             <Route path="tasks" element={<TaskListView />} />
             <Route path="tasks/:id" element={<TaskListView />} />
             <Route path="lists/:key" element={<TaskListView />} />
