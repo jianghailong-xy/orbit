@@ -271,7 +271,7 @@ export interface ApprovalDecisionResponse {
 // 'reload' carries no user text: it tells the runner the session's model /
 // permission-mode changed, so it should re-spawn claude with --resume + the new
 // flags (full context preserved). The new config rides in the turn's `content` JSON.
-export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload';
+export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell';
 
 /** An image attachment as handed to the runner on the inbox: the id to fetch its bytes
  *  with (runner-scoped `GET /runner/sessions/:id/attachments/:attId`) plus its MIME type,

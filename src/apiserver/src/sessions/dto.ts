@@ -25,6 +25,9 @@ export interface SessionTurnDto {
   /** Client-supplied idempotency key (UUID); dedups double-clicks / cross-tab sends. */
   clientTurnId: string;
   content: string;
+  /** 'shell' runs `content` as a raw shell command on the runner (bypassing claude) and
+   *  echoes the output to the transcript; defaults to 'message' (a normal user prompt). */
+  kind?: 'message' | 'shell';
   /** Ids of pre-uploaded image attachments (`POST /api/attachments`) to attach to this
    *  turn. Only ids travel here — the bytes already live in the control plane. Each id
    *  must be the caller's and scoped to this session. Omitted/empty keeps it text-only. */

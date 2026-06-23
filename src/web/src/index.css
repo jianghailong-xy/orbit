@@ -49,20 +49,20 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg-base: #1a1a1d;
-  --bg-raised: #232327;
-  --bg-subtle: #1d1d20;
-  --bg-sunken: #131316;
-  --bg-hover: #2b2b2f;
-  --bg-hover-strong: #38383d;
-  --fill-muted: #2f2f34;
-  --border: #38383d;
-  --border-subtle: #2b2b2f;
+  --bg-base: #202023;
+  --bg-raised: #2b2b2e;
+  --bg-subtle: #252528;
+  --bg-sunken: #17171a;
+  --bg-hover: #343437;
+  --bg-hover-strong: #424246;
+  --fill-muted: #38383c;
+  --border: #424246;
+  --border-subtle: #343437;
   --scrollbar-hover: #565a62;
-  --text-1: #ced2d9;
-  --text-2: #a6acb4;
-  --text-3: #888d95;
-  --text-4: #686d75;
+  --text-1: #c9ced5;
+  --text-2: #a7adb6;
+  --text-3: #8b9099;
+  --text-4: #71767f;
   --dot-idle: #4a4e56;
   --brand: #5b8cff;
   --brand-strong: #7aa2ff;
@@ -88,8 +88,8 @@
 
 /* dark adjustments for things that can't be a single token */
 :root[data-theme='dark'] .chat-tool-card {
-  --tone: #3d3d43;
-  --tone-bg: #2b2b2f;
+  --tone: #47474c;
+  --tone-bg: #343437;
 }
 :root[data-theme='dark'] .chat-tone-read {
   --tone: #5b8cff;
