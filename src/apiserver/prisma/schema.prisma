@@ -287,6 +287,15 @@ model Session {
   baseSha           String?   @map("base_sha")
   changedFiles      Json?     @map("changed_files")
   isolationStatus   String?   @map("isolation_status")
+  // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
+  // The user can ask the runner to merge this session's `branch` into the repo's main.
+  // mergeStatus drives the button: 'pending' (queued for the next heartbeat of the
+  // session's assigned runner) → 'merged' (mergedAt set) | 'conflict' | 'error'
+  // (mergeError carries git's message / the failed precondition). All null until asked.
+  mergeStatus       String?   @map("merge_status")
+  mergeError        String?   @map("merge_error")
+  mergeRequestedAt  DateTime? @map("merge_requested_at")
+  mergedAt          DateTime? @map("merged_at")
   // Soft visibility: null = active. archivedAt hides the session into the Archived
   // view, deletedAt into the trash. Both retain all data (transcript, billing) and
   // are reversible — restore clears them. There is no hard delete.

@@ -44,6 +44,7 @@ import {
   interruptSession,
   listApprovals,
   listQueuedTurns,
+  mergeSessionToMain,
   type PermissionRule,
   restoreSession,
   resumeSession,
@@ -601,6 +602,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   const sessionDetailQ = useQuery({
     ...sessionQuery(selectedId),
     placeholderData: keepPreviousData,
+    // Poll the detail when either side has a live update the runner pushes via heartbeat:
+    // while the session is live, for the worktree status bar (isolation + uncommitted diff,
+    // reported mid-turn) to appear without waiting for turn_end; and while a "merge to main"
+    // is pending, for the runner's merge outcome (≤1 heartbeat away) to land. Idle otherwise.
+    refetchInterval: (q) =>
+      q.state.data?.mergeStatus === 'pending'
+        ? 3000
+        : selected && !TERMINAL.includes(selected.status)
+          ? 5000
+          : false,
   });
   const live = selected ? !TERMINAL.includes(selected.status) : false;
   // An ended session can be revived (--resume claude's context) only if it actually
@@ -1216,6 +1227,61 @@ export function AgentView({ runner }: { runner: Runner }) {
       // instead of leaving an unhandled promise rejection.
       onOk: () => enableIsoMut.mutateAsync(agentId).catch(() => {}),
     });
+  // Merge this session's worktree branch into main on the runner that ran it. Async: the
+  // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
+  // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
+  const mergeMut = useMutation({
+    mutationFn: (id: string) => mergeSessionToMain(id),
+    onSuccess: () => {
+      message.success('Merging to main — the result will appear on the status bar shortly.');
+      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askMergeToMain = (id: string, branch: string) =>
+    modal.confirm({
+      title: 'Merge to main?',
+      content:
+        `This merges ${branch} into main on the runner's repo. It only proceeds when the` +
+        ' repo is on a clean main; on a conflict it aborts cleanly and asks you to merge' +
+        ' manually. The branch is kept either way.',
+      okText: 'Merge',
+      onOk: () => mergeMut.mutateAsync(id).catch(() => {}),
+    });
+  // Resolve a merge conflict in-session: revive the session so its own agent merges the latest
+  // main into the branch and fixes the conflicts (it has the context for its own changes);
+  // afterwards the branch merges into main cleanly. resume() clears the stale mergeStatus, so
+  // the bar offers "Merge to main" again once the agent finishes.
+  const resolveMut = useMutation({
+    mutationFn: (vars: { id: string; branch: string }) =>
+      resumeSession(
+        vars.id,
+        'Merge the latest `main` into this branch and resolve any conflicts.\n\n' +
+          "You're in this session's isolated git worktree, checked out on `" +
+          vars.branch +
+          '`. Run `git merge main` — it will conflict. Resolve every conflict using your' +
+          ' knowledge of the changes made on this branch, then stage and `git commit` the' +
+          ' merge. Do not push. Once committed, the branch can be merged into main cleanly' +
+          ' from the status bar above the composer.',
+      ),
+    onSuccess: () => {
+      message.success('Resuming the session to resolve the conflict…');
+      if (selectedId) {
+        qc.invalidateQueries({ queryKey: ['session', selectedId] });
+        qc.invalidateQueries({ queryKey: ['sessions'] });
+      }
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askResolveInSession = (id: string, branch: string) =>
+    modal.confirm({
+      title: 'Resolve conflict in session?',
+      content:
+        `This resumes the session and asks its agent to merge the latest main into ${branch}` +
+        ' and resolve the conflicts, then commit. When it finishes, click Merge to main again.',
+      okText: 'Resume & resolve',
+      onOk: () => resolveMut.mutateAsync({ id, branch }).catch(() => {}),
+    });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -1574,7 +1640,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             const deleteItem = {
               key: 'delete',
               icon: <DeleteOutlined />,
-              label: ended ? 'Delete' : 'Delete & end session',
+              label: 'Delete',
               danger: true,
               onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                 domEvent.stopPropagation();
@@ -1703,7 +1769,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                       key: 'delete',
                       icon: <DeleteOutlined />,
                       danger: true,
-                      label: TERMINAL.includes(selected.status) ? 'Delete' : 'Delete & end session',
+                      label: 'Delete',
                       onClick: () => deleteMut.mutate(selected.id),
                     },
                   ],
@@ -1847,12 +1913,28 @@ export function AgentView({ runner }: { runner: Runner }) {
           </div>
         )}
         <SessionOutputs
-          detail={sessionDetailQ.data}
+          // Only the open session has a worktree to show. With nothing selected (new-session
+          // draft, empty list) `keepPreviousData` still holds the previously-open session's
+          // detail, which would render its stale branch/diff bar over a fresh draft — so gate
+          // on selectedId rather than the placeholder-backed query data.
+          detail={selectedId ? sessionDetailQ.data : null}
           committed={!live}
           enabling={enableIsoMut.isPending}
           onEnableIsolation={
             sessionDetailQ.data?.agent?.id
               ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
+              : undefined
+          }
+          merging={mergeMut.isPending}
+          onMergeToMain={
+            selectedId && sessionDetailQ.data?.branch
+              ? () => askMergeToMain(selectedId, sessionDetailQ.data!.branch!)
+              : undefined
+          }
+          resolving={resolveMut.isPending}
+          onResolveInSession={
+            selectedId && sessionDetailQ.data?.branch
+              ? () => askResolveInSession(selectedId, sessionDetailQ.data!.branch!)
               : undefined
           }
         />

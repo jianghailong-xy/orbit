@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Isolation outcomes reported back on /complete (Session.isolationStatus): the session
@@ -315,6 +316,94 @@ func removeWorktree(wt *Worktree) {
 		_, _ = git(wt.RepoDir, "worktree", "prune")
 	}
 	_, _ = git(wt.RepoDir, "update-ref", "-d", baseRefName(wt.Session))
+}
+
+// mergeLock serializes merges so two "merge to main" requests can't race on the same repo's
+// working tree / main ref.
+var mergeLock sync.Mutex
+
+// mergeOutcome is what mergeToMain reports: "merged" advanced main (MergedSha = new HEAD),
+// "conflict" means the merge was aborted cleanly, "error" means a precondition failed.
+// Message carries git's output / the failed precondition for the UI.
+type mergeOutcome struct {
+	Status    string
+	MergedSha string
+	Message   string
+}
+
+// mergeToMain merges a session's branch into the repo's main on the runner's local repo.
+// Conservative by design: it only auto-merges when the repo root is already on a CLEAN main
+// (the normal state — isolated sessions run in their own worktrees, so the primary checkout
+// sits on main between runs). Any other state returns an "error" outcome with an actionable
+// message; the UI keeps a copyable `git merge` fallback for those cases. The session branch
+// is never deleted. Serialized by mergeLock so concurrent merges don't race on the repo.
+func mergeToMain(req MergeCommand) mergeOutcome {
+	mergeLock.Lock()
+	defer mergeLock.Unlock()
+
+	repoRoot, err := git(expandTilde(req.WorkDir), "rev-parse", "--show-toplevel")
+	if err != nil || repoRoot == "" {
+		return mergeOutcome{Status: "error", Message: "workDir is not a git repository"}
+	}
+	// Detect the merge target: main, else master.
+	target := ""
+	for _, b := range []string{"main", "master"} {
+		if branchExists(repoRoot, b) {
+			target = b
+			break
+		}
+	}
+	if target == "" {
+		return mergeOutcome{Status: "error", Message: "no main or master branch in this repo"}
+	}
+	if !branchExists(repoRoot, req.Branch) {
+		return mergeOutcome{Status: "error", Message: fmt.Sprintf("branch %q not found", req.Branch)}
+	}
+	// Guard: only merge when the primary checkout is on a clean target branch, so we never
+	// disturb an in-progress checkout or leave a half-applied merge in the shared tree.
+	if cur, _ := git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD"); cur != target {
+		return mergeOutcome{Status: "error", Message: fmt.Sprintf("repo is on %q, not %q — switch to %s and merge manually", cur, target, target)}
+	}
+	// Block on modified tracked files (a merge would mix them in / could clobber); untracked
+	// files are fine — git itself refuses only if the merge would overwrite one, which the
+	// error path below catches.
+	if st, _ := git(repoRoot, "status", "--porcelain", "--untracked-files=no"); st != "" {
+		return mergeOutcome{Status: "error", Message: fmt.Sprintf("%s has uncommitted changes — commit/stash, or merge manually", target)}
+	}
+	// Inline identity so a merge commit never fails on a runner with no git user.* set.
+	out, err := git(repoRoot,
+		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
+		"merge", "--no-edit", req.Branch)
+	if err != nil {
+		// A failed merge (almost always a conflict, given the clean-tree pre-check). git
+		// writes "CONFLICT ..." to stdout (returned as `out`); ExitError carries stderr.
+		msg := strings.TrimSpace(out + "\n" + gitStderr(err))
+		_, _ = git(repoRoot, "merge", "--abort") // leave the working tree clean
+		return mergeOutcome{Status: "conflict", Message: clip(msg, 1000)}
+	}
+	sha, _ := git(repoRoot, "rev-parse", "HEAD")
+	logln(fmt.Sprintf("merged %s into %s (%s) for session %s", req.Branch, target, shortSha(sha), req.SessionID))
+	return mergeOutcome{Status: "merged", MergedSha: sha}
+}
+
+// gitStderr extracts git's stderr from a failed git() call (Output() puts it on ExitError).
+func gitStderr(err error) string {
+	if ee, ok := err.(*exec.ExitError); ok {
+		return strings.TrimSpace(string(ee.Stderr))
+	}
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// clip truncates s to at most n runes, appending an ellipsis when it cut anything.
+func clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // gcWorktrees removes leftover session checkouts whose session is no longer live — a crash

@@ -60,16 +60,6 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## 5. Worktree Per Feature
-
-**Each new feature gets its own worktree. Sync before, merge after.**
-
-For any new feature or requirement:
-- Create a dedicated git worktree instead of developing in place.
-- Merge `main` into the worktree first, so you start from the latest.
-- Before running the `upgrade` skill from a worktree, merge `main` first too, then upgrade.
-- When the work is complete and verified, merge it back into `main`.
-
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

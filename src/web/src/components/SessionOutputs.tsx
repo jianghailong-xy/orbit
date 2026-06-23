@@ -17,6 +17,10 @@ export function SessionOutputs({
   committed,
   onEnableIsolation,
   enabling,
+  onMergeToMain,
+  merging,
+  onResolveInSession,
+  resolving,
 }: {
   detail?: SessionDetail | null;
   /** True once the session has ended and the runner committed the work to the branch; while
@@ -25,6 +29,14 @@ export function SessionOutputs({
   /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
   onEnableIsolation?: () => void;
   enabling?: boolean;
+  /** Provided by the parent (owns the mutation + confirm); enables the "Merge to main" button.
+   *  The outcome surfaces via detail.mergeStatus/mergeError (the parent polls while pending). */
+  onMergeToMain?: () => void;
+  merging?: boolean;
+  /** Provided by the parent; on a conflict/error, resumes the session so its agent merges main
+   *  in and resolves the conflicts (after which the branch merges clean). */
+  onResolveInSession?: () => void;
+  resolving?: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [open, setOpen] = useState(false);
@@ -97,6 +109,15 @@ export function SessionOutputs({
           <span className="wt-stat wt-nochange">no changes</span>
         )}
         <span className="wt-spacer" />
+        {committed && hasChanges && (
+          <MergeButton
+            status={detail.mergeStatus}
+            busy={merging}
+            onMerge={onMergeToMain}
+            onResolveInSession={onResolveInSession}
+            resolving={resolving}
+          />
+        )}
         {hasChanges && (
           <button
             type="button"
@@ -118,12 +139,21 @@ export function SessionOutputs({
           ))}
           <div className="wt-merge">
             {committed ? (
-              <>
-                <span className="wt-merge-label">Committed to {branch} · merge with</span>
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
-                  git merge {branch}
-                </code>
-              </>
+              <div className="wt-merge-manual">
+                {(detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error') && (
+                  <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
+                    {detail.mergeStatus === 'conflict'
+                      ? 'Merge conflict — aborted, working tree left clean. Resolve manually:'
+                      : detail.mergeError || 'Merge failed. Merge manually:'}
+                  </span>
+                )}
+                <span className="wt-merge-or">
+                  {detail.mergeStatus === 'merged' ? 'Merged ✓ · or by hand:' : 'Or merge manually:'}
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
+                    git merge {branch}
+                  </code>
+                </span>
+              </div>
             ) : (
               <span className="wt-merge-label">Working changes (uncommitted) on {branch}</span>
             )}
@@ -131,6 +161,63 @@ export function SessionOutputs({
         </div>
       )}
     </div>
+  );
+}
+
+/** Compact "Merge to main" control sitting on the worktree bar itself (shown once the work is
+ *  committed). Drives off the server-reported mergeStatus: idle → a Merge button; pending →
+ *  "Merging…"; merged → a ✓ chip; conflict/error → "Resolve in session" (resume the session so
+ *  its agent merges main in and fixes the conflicts), falling back to "Retry merge" when the
+ *  parent can't resume. The failure detail + a copyable `git merge <branch>` fallback live in
+ *  the expandable file panel below. With no driver at all only the merged chip can show. */
+function MergeButton({
+  status,
+  busy,
+  onMerge,
+  onResolveInSession,
+  resolving,
+}: {
+  status?: SessionDetail['mergeStatus'];
+  busy?: boolean;
+  onMerge?: () => void;
+  onResolveInSession?: () => void;
+  resolving?: boolean;
+}) {
+  if (status === 'merged') {
+    return (
+      <span className="wt-merge-done" title="Merged into main">
+        ✓ Merged
+      </span>
+    );
+  }
+  const failed = status === 'conflict' || status === 'error';
+  // On a conflict/error, the best recovery is letting the session's own agent merge main in and
+  // resolve — it has the context for the changes it made. Falls back to a plain retry.
+  if (failed && onResolveInSession) {
+    return (
+      <button
+        type="button"
+        className="wt-merge-btn wt-merge-btn-failed"
+        disabled={resolving}
+        onClick={onResolveInSession}
+        title="Resume the session and have its agent merge main in and resolve the conflicts"
+      >
+        {resolving ? 'Resuming…' : 'Resolve in session'}
+      </button>
+    );
+  }
+  if (!onMerge) return null;
+  const pending = busy || status === 'pending';
+  return (
+    <button
+      type="button"
+      className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
+      disabled={pending}
+      onClick={onMerge}
+      title={failed ? 'Merge failed — expand the file list for details' : 'Merge this branch into main'}
+    >
+      {pending ? 'Merging…' : failed ? 'Retry merge' : 'Merge to main'}
+    </button>
   );
 }
 

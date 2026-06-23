@@ -160,6 +160,20 @@ export interface RunnerHeartbeatRequest {
    *  OAuth usage endpoint. Absent when the runner authenticates with an API key
    *  (no OAuth creds) or is too old to report it. */
   planUsage?: PlanUsage;
+  /** Live worktree state for each session this runner is currently running, so the
+   *  composer's status bar appears mid-turn — not just after a turn completes. Absent
+   *  from older runners (the bar then waits for the first turn-complete as before). */
+  sessions?: SessionLiveState[];
+}
+
+/** One running session's live worktree diff, reported on the heartbeat while a turn is
+ *  still in flight (cf. TurnCompleteRequest, which carries the same at turn boundaries). */
+export interface SessionLiveState {
+  sessionId: string;
+  /** What the runner did: 'worktree' | 'shared-nogit'. */
+  isolationStatus: string;
+  /** The worktree's current uncommitted diff vs base; empty when nothing changed yet. */
+  changedFiles: ChangedFile[];
 }
 
 export interface RunnerHeartbeatResponse {
@@ -169,6 +183,20 @@ export interface RunnerHeartbeatResponse {
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
   maxConcurrent: number;
+  /** Branch merges the user requested from the UI for sessions this runner ran. The
+   *  runner merges each session's branch into main on its local repo and reports the
+   *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
+   *  planes (older runners ignore the field → the merge stays pending). */
+  mergeRequests?: MergeCommand[];
+}
+
+/** Control plane → runner: merge one session's worktree branch into the repo's main. */
+export interface MergeCommand {
+  sessionId: string;
+  /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
+  branch: string;
+  /** The session agent's workDir; the runner resolves the repo root from it. */
+  workDir: string;
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -394,4 +422,16 @@ export interface SessionCompleteRequest {
   changedFiles?: ChangedFile[];
   /** What the runner did: 'worktree' (isolated) | 'shared-nogit' (no git → shared dir). */
   isolationStatus?: string;
+}
+
+/**
+ * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
+ * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
+ * means a precondition failed (workDir not on a clean main, branch missing, …). `message`
+ * carries git's stderr / the precondition for the UI.
+ */
+export interface SessionMergeResultRequest {
+  status: 'merged' | 'conflict' | 'error';
+  mergedSha?: string;
+  message?: string;
 }

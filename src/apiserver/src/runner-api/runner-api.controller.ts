@@ -38,6 +38,7 @@ import {
   RunnerRegisterResponse,
   SessionCompleteRequest,
   SessionEndReason,
+  SessionMergeResultRequest,
   TurnAttachment,
   TurnCompleteRequest,
 } from '@orbit/shared';
@@ -259,15 +260,38 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
+    // Persist each running session's live worktree diff so the composer's status bar can
+    // appear mid-turn, not just at turn-complete. The `status in LIVE` guard stops a
+    // straggler heartbeat from overwriting a just-finalized session's committed diff;
+    // the try/catch keeps a DB hiccup here from failing the heartbeat (→ reads as offline).
+    if (dto?.sessions?.length) {
+      try {
+        await Promise.all(
+          dto.sessions.map((s) =>
+            this.prisma.session.updateMany({
+              where: { id: s.sessionId, assignedRunnerId: runner.id, status: { in: LIVE } },
+              data: {
+                isolationStatus: s.isolationStatus,
+                changedFiles: (s.changedFiles ?? []) as unknown as Prisma.InputJsonValue,
+              },
+            }),
+          ),
+        );
+      } catch {
+        // Next heartbeat retries; the status bar tolerates a one-cycle lag.
+      }
+    }
     let cancelSessionIds: string[] = [];
+    let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
+      mergeRequests = await this.realtime.drainMergeRequests(runner.id);
     } catch {
-      // A transient DB hiccup shouldn't fail the heartbeat; cancels arrive next cycle.
+      // A transient DB hiccup shouldn't fail the heartbeat; both arrive next cycle.
     }
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart.
-    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent };
+    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent, mergeRequests };
   }
 
   // ── Interactive sessions (Route B) ──
@@ -801,6 +825,29 @@ export class RunnerApiController {
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
       payload: { status: effectiveStatus, final: true },
+    });
+    return { ok: true };
+  }
+
+  /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar
+   *  can show merged ✓ / conflict / error. mergedAt + cleared error on success; the message
+   *  (git stderr / failed precondition) is kept for conflict/error. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/merge-result')
+  async mergeResult(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: SessionMergeResultRequest,
+  ) {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const merged = dto.status === 'merged';
+    await this.prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        mergeStatus: dto.status,
+        mergeError: merged ? null : (dto.message ?? null),
+        mergedAt: merged ? new Date() : null,
+      },
     });
     return { ok: true };
   }

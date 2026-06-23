@@ -1895,6 +1895,51 @@ body {
 .wt-merge-cmd:hover {
   background: var(--bg-hover);
 }
+/* "Merge to main": a compact action button on the bar row; failure detail + the copyable
+   manual command live in the expandable panel below (.wt-merge-manual). */
+.wt-merge-btn {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wt-merge-btn:hover:not(:disabled) {
+  background: var(--brand-tint-hover);
+}
+.wt-merge-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.wt-merge-btn-failed {
+  border-color: var(--error-border, var(--error));
+  background: var(--error-bg);
+  color: var(--error);
+}
+.wt-merge-done {
+  flex: none;
+  font-weight: 600;
+  color: var(--success);
+}
+.wt-merge-manual {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wt-merge-err {
+  color: var(--error);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wt-merge-or {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 /* Non-git: ran in the shared dir; amber bar with the one-click enable. */
 .wt-bar-nogit {
   border-color: var(--warning-border);
@@ -2662,6 +2707,9 @@ body {
   margin: 0;
   max-width: 100%;
 }
+/* The whole meta row (copy + time) is hidden until hover — the time is not shown at rest,
+   per request. It still reserves height (occupies flow), so revealing it never overlaps the
+   next message and never shifts layout. */
 .chat-user-meta {
   display: flex;
   align-items: center;
@@ -2669,6 +2717,14 @@ body {
   margin-top: 3px;
   height: 18px;
   white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.chat-user-wrap:hover .chat-user-meta,
+.chat-user-meta:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 .chat-time {
   font-size: 12px;
@@ -2689,14 +2745,7 @@ body {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
-}
-.chat-user-wrap:hover .chat-copy,
-.chat-copy:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 .chat-copy:hover {
   color: var(--text-1);

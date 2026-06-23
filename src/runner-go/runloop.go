@@ -19,6 +19,14 @@ const heartbeatInterval = 30 * time.Second
 // TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
 const shutdownDrainTimeout = 120 * time.Second
 
+// liveSession pairs a running session's cancel func with its job, so the heartbeat
+// goroutine can report each session's live worktree diff (from job.WT) without reaching
+// into the session's own goroutine.
+type liveSession struct {
+	cancel context.CancelFunc
+	job    *ClaimedSession
+}
+
 func runLoop(cfg *RunnerConfig) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
 
@@ -38,7 +46,7 @@ func runLoop(cfg *RunnerConfig) {
 	}
 
 	var mu sync.Mutex
-	active := map[string]context.CancelFunc{}
+	active := map[string]*liveSession{}
 
 	// Server-authoritative concurrency cap. Seeded from the local config (the value
 	// `orbit register --max-concurrent` baked in), then kept in sync with the DB value
@@ -87,6 +95,10 @@ func runLoop(cfg *RunnerConfig) {
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		cycles := 0
+		// Sessions whose "merge to main" is in flight, so the at-least-once heartbeat
+		// redelivery doesn't kick off the same merge twice before the result is recorded.
+		var mergeMu sync.Mutex
+		mergingNow := map[string]bool{}
 		for {
 			select {
 			case <-hbStop:
@@ -102,8 +114,10 @@ func runLoop(cfg *RunnerConfig) {
 				mu.Lock()
 				idle := int(maxConcurrent.Load()) - len(active)
 				cancels := make(map[string]context.CancelFunc, len(active))
+				jobs := make([]*ClaimedSession, 0, len(active))
 				for k, v := range active {
-					cancels[k] = v
+					cancels[k] = v.cancel
+					jobs = append(jobs, v.job)
 				}
 				mu.Unlock()
 				if idle < 0 {
@@ -116,10 +130,25 @@ func runLoop(cfg *RunnerConfig) {
 				assetMu.Lock()
 				cmds, skills := hbCommands, hbSkills
 				assetMu.Unlock()
+				// Live worktree diff per running session, so the web's status bar appears
+				// mid-turn instead of only after a turn completes. Computed outside the lock
+				// (git can be slow); a just-finalized session is filtered server-side by status.
+				var liveSessions []SessionLiveState
+				for _, j := range jobs {
+					if j.IsolationStatus == "" {
+						continue
+					}
+					liveSessions = append(liveSessions, SessionLiveState{
+						SessionID:       j.SessionID,
+						IsolationStatus: j.IsolationStatus,
+						ChangedFiles:    liveDiffStat(j.WT),
+					})
+				}
 				resp, err := t.heartbeat(HeartbeatRequest{
 					Status: "ONLINE", IdleCapacity: idle, Version: version,
 					Commands: cmds, Skills: skills,
 					PlanUsage: usageProbe.snapshot(),
+					Sessions:  liveSessions,
 				})
 				if err != nil {
 					logln("heartbeat failed:", err)
@@ -137,6 +166,32 @@ func runLoop(cfg *RunnerConfig) {
 						c()
 					}
 				}
+				// Honor "merge to main" requests: merge each session's branch into main on
+				// our local repo and report the outcome. Each runs once (guarded against the
+				// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
+				// never stalls the heartbeat that keeps the reaper off our sessions.
+				for _, m := range resp.MergeRequests {
+					mergeMu.Lock()
+					busy := mergingNow[m.SessionID]
+					if !busy {
+						mergingNow[m.SessionID] = true
+					}
+					mergeMu.Unlock()
+					if busy {
+						continue
+					}
+					go func(req MergeCommand) {
+						res := mergeToMain(req)
+						if err := t.mergeResult(req.SessionID, MergeResultRequest{
+							Status: res.Status, MergedSha: res.MergedSha, Message: res.Message,
+						}); err != nil {
+							logln("merge-result POST failed for", req.SessionID+":", err)
+						}
+						mergeMu.Lock()
+						delete(mergingNow, req.SessionID)
+						mergeMu.Unlock()
+					}(m)
+				}
 			}
 		}
 	}()
@@ -152,7 +207,7 @@ func runLoop(cfg *RunnerConfig) {
 		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
 		jobCtx, cancel := context.WithCancel(context.Background())
 		mu.Lock()
-		active[job.SessionID] = cancel
+		active[job.SessionID] = &liveSession{cancel: cancel, job: job}
 		mu.Unlock()
 		go func(j *ClaimedSession, dir string) {
 			// loopCtx doubles as the shutdown signal: cancelled on SIGTERM/SIGINT, it tells
