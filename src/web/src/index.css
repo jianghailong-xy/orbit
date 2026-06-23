@@ -1866,6 +1866,119 @@ body {
   color: var(--text-4);
   font-style: italic;
 }
+/* In the expanded list and the diff drawer, each file row is a button that opens its diff. */
+.session-file-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 5px;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.session-file-btn:hover {
+  background: var(--bg-hover);
+}
+.session-file-btn.active {
+  background: var(--bg-active, var(--bg-hover));
+}
+.session-file-btn.active .session-file-path {
+  color: var(--text-1);
+}
+/* ── Worktree file-diff drawer (click a changed file → its unified diff) ─────── */
+.wt-diff-head {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.wt-diff-head-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.wt-diff-drawer .ant-drawer-body {
+  padding: 0;
+}
+.wt-diff-body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.wt-diff-list {
+  flex: none;
+  width: 248px;
+  border-right: 1px solid var(--border-subtle);
+  padding: 8px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wt-diff-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wt-diff-pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+}
+.wt-diff-pane-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-1);
+}
+.wt-diff-pane-stat {
+  flex: none;
+  display: inline-flex;
+  gap: 8px;
+}
+.wt-diff-pane-stat .add {
+  color: var(--success-solid);
+}
+.wt-diff-pane-stat .del {
+  color: var(--error-solid);
+}
+.wt-diff-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+}
+.wt-diff-empty {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+/* Narrow screens: stack the file list above the diff instead of a side rail. */
+@media (max-width: 700px) {
+  .wt-diff-body {
+    flex-direction: column;
+  }
+  .wt-diff-list {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: 30vh;
+  }
+}
 .wt-merge {
   margin-top: 7px;
   padding-top: 7px;

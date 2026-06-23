@@ -172,7 +172,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if job.WT != nil {
 		cr.Branch = job.WT.Branch
 		cr.BaseSha = job.WT.BaseSha
-		cr.ChangedFiles = finalizeWorktree(job.WT, job.Title)
+		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, job.Title)
 	}
 	if err := t.complete(job.SessionID, cr); err != nil {
 		logln("complete failed for", job.SessionID+":", err)
@@ -578,6 +578,9 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 			default:
 			}
 			if turnID != "" {
+				// Live worktree state for the composer's status bar: what this turn left in
+				// the worktree (uncommitted), so the diff updates each turn, not just at end.
+				liveFiles, livePatches := liveDiff(job.WT)
 				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 					TurnID:     turnID,
 					Status:     turnStatus,
@@ -587,10 +590,9 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					CostUsd:    r.CostUsd,
 					Usage:      r.Usage,
 					ModelUsage: r.ModelUsage,
-					// Live worktree state for the composer's status bar: what this turn left in
-					// the worktree (uncommitted), so the diff updates each turn, not just at end.
 					IsolationStatus: job.IsolationStatus,
-					ChangedFiles:    liveDiffStat(job.WT),
+					ChangedFiles:    liveFiles,
+					ChangedDiff:     livePatches,
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

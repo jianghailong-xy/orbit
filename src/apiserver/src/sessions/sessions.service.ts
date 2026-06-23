@@ -11,6 +11,7 @@ import {
   ApprovalDecisionRequest,
   ApprovalInfo,
   ApprovalStatus,
+  FilePatch,
   RunEventType,
   SessionEndReason,
 } from '@orbit/shared';
@@ -261,6 +262,25 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     return session;
+  }
+
+  /**
+   * The session's per-file unified diffs (FilePatch[]), kept in a side table so the patch
+   * text never rides the session detail/list payload — fetched only when the user opens a
+   * file's diff in the worktree status bar. The runner upserts it each turn (live) and at
+   * completion (committed). Returns an empty list for a session with no recorded diff.
+   */
+  async getDiff(ownerId: string, id: string): Promise<{ patches: FilePatch[] }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const row = await this.prisma.sessionDiff.findUnique({
+      where: { sessionId: id },
+      select: { patches: true },
+    });
+    return { patches: (row?.patches as unknown as FilePatch[]) ?? [] };
   }
 
   // The session list shows the last reply as a single ellipsised line, so it only

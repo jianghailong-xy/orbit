@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { api, getSession } from '../api';
+import { api, getSession, getSessionDiff } from '../api';
 
 /**
  * Single source of truth for the app's shared React Query *reads*: every query's key
@@ -84,5 +84,18 @@ export const sessionQuery = (id: string | null | undefined) =>
   queryOptions({
     queryKey: ['session', id ?? null] as const,
     queryFn: () => getSession(id!),
+    enabled: id != null,
+  });
+
+/**
+ * One session's per-file diffs, for the worktree status bar's file viewer. The key nests
+ * under the session's (`['session', id, 'diff']`) so invalidating `['session', id]` on a
+ * turn end refreshes an open diff too. Lazy: call sites set `enabled` (e.g. only while the
+ * diff drawer is open) so the patch payload is never fetched until a file is actually opened.
+ */
+export const sessionDiffQuery = (id: string | null | undefined) =>
+  queryOptions({
+    queryKey: ['session', id ?? null, 'diff'] as const,
+    queryFn: () => getSessionDiff(id!),
     enabled: id != null,
   });

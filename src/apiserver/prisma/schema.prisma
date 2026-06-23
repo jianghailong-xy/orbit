@@ -303,12 +303,27 @@ model Session {
   // Tasks an agent created from within this session (cf. Task.creatorSession).
   createdTasks Task[] @relation("TaskCreatorSession")
   attachments  Attachment[]
+  diff         SessionDiff?
 
   @@index([assignedRunnerId, status])
   @@index([batchId, status])
   @@index([ownerId])
   @@index([status])
   @@map("session")
+}
+
+// On-demand per-file unified diffs of a session's worktree changes, kept in a side table
+// (1:1 with Session) so the potentially large patch text NEVER rides the session detail or
+// list payload — it's fetched only when the user opens a file's diff (GET /sessions/:id/diff).
+// The runner upserts it each turn (live, uncommitted) and at completion (committed). `patches`
+// is a FilePatch[] ({ path, patch?, truncated? }) — see @orbit/shared.
+model SessionDiff {
+  sessionId String   @id @map("session_id") @db.Uuid
+  patches   Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("session_diff")
 }
 
 // A tool-permission request from claude's --permission-prompt-tool (served by the

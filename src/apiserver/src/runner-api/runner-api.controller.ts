@@ -577,6 +577,15 @@ export class RunnerApiController {
         },
       });
       if (parked.count === 0) return false; // session no longer live -> turn acked, no billing
+      // Per-file unified diffs to the side table (never on the session row, so the detail/
+      // list payload stays small) — fetched on demand when the user opens a file's diff.
+      if (dto.changedDiff !== undefined) {
+        await tx.sessionDiff.upsert({
+          where: { sessionId },
+          create: { sessionId, patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+          update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+        });
+      }
       if (dto.modelUsage) {
         const rows = Object.entries(dto.modelUsage).map(([model, mu]) => ({
           sessionId,
@@ -771,6 +780,15 @@ export class RunnerApiController {
         },
       });
       if (res.count === 0) return false;
+      // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
+      // off the session payload, fetched on demand when a file's diff is opened.
+      if (dto.changedDiff !== undefined) {
+        await tx.sessionDiff.upsert({
+          where: { sessionId },
+          create: { sessionId, patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+          update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+        });
+      }
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },

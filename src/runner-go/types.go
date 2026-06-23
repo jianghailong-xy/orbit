@@ -197,6 +197,9 @@ type TurnCompleteRequest struct {
 	// running diff) while the session is still going — not just at terminal /complete.
 	IsolationStatus string        `json:"isolationStatus,omitempty"`
 	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
+	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web
+	// can open a file's diff on demand without a round-trip back to this runner.
+	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`
 }
 
 type RunEvent struct {
@@ -227,6 +230,15 @@ type ChangedFile struct {
 	Status    string `json:"status"`
 }
 
+// FilePatch carries one changed file's full unified-diff text (git diff vs base), reported
+// alongside the ChangedFile stats so the web can show a file's diff on demand. Patch is
+// empty for binary/omitted files; Truncated marks a diff dropped for exceeding the size cap.
+type FilePatch struct {
+	Path      string `json:"path"`
+	Patch     string `json:"patch,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
+}
+
 type CompleteRequest struct {
 	Status          string                 `json:"status"`
 	Result          string                 `json:"result,omitempty"`
@@ -244,6 +256,8 @@ type CompleteRequest struct {
 	BaseSha         string        `json:"baseSha,omitempty"`
 	IsolationStatus string        `json:"isolationStatus,omitempty"`
 	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
+	// Per-file unified diffs (capped) of the committed branch vs base, for on-demand viewing.
+	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`
 }
 
 type Manifest struct {

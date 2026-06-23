@@ -51,6 +51,13 @@ export class SessionsController {
     return this.sessions.get(user.userId, id);
   }
 
+  // Per-file unified diffs for this session's worktree changes, fetched on demand when a
+  // file's diff is opened (kept off the session payload — see SessionsService.getDiff).
+  @Get(':id/diff')
+  diff(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.getDiff(user.userId, id);
+  }
+
   @Post(':id/turns')
   turn(
     @CurrentUser() user: AuthUser,

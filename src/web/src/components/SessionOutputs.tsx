@@ -1,16 +1,19 @@
-import { useState } from 'react';
-import { App as AntApp } from 'antd';
-import type { SessionChangedFile, SessionDetail } from '../api';
+import { useEffect, useMemo, useState } from 'react';
+import { App as AntApp, Drawer } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
+import { sessionDiffQuery } from '../lib/queries';
 
 /**
  * Worktree status bar shown directly above the composer: the branch this session's work
  * lives on + its diff, collapsed to one line by default and expandable to the changed-file
- * list. Reflects what the runner reported on completion (isolation_status + changed_files),
- * so it appears once a run has finished. For a session whose agent dir isn't a git repo it
+ * list. The diff updates live each turn (uncommitted working-tree state) and settles to the
+ * committed branch once the session ends. For a session whose agent dir isn't a git repo it
  * morphs into an amber "not isolated" nudge with a one-click enable.
  *
- * Step 1 (this) is terminal-only — the live +/− while a session is still RUNNING needs the
- * runner to report the working-tree diff per turn (a follow-up).
+ * Clicking a file opens a right-side drawer with that file's unified diff (lazily fetched
+ * from /sessions/:id/diff — the patch text never rides the session payload), with the file
+ * list alongside so you can flip between files without leaving the drawer.
  */
 export function SessionOutputs({
   detail,
@@ -28,6 +31,10 @@ export function SessionOutputs({
 }) {
   const { message } = AntApp.useApp();
   const [open, setOpen] = useState(false);
+  // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
+  // open session changes so a switched-to session never inherits the previous one's open file.
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  useEffect(() => setOpenFile(null), [detail?.id]);
   const copy = (text: string) => {
     void navigator.clipboard?.writeText(text)?.then(
       () => message.success('Copied'),
@@ -63,6 +70,7 @@ export function SessionOutputs({
   const del = files.reduce((s, f) => s + Math.max(0, f.deletions), 0);
 
   return (
+    <>
     <div className={`wt-bar${open ? ' wt-open' : ''}`}>
       <div className="wt-row">
         <button type="button" className="wt-branch" title="Copy branch name" onClick={() => copy(branch)}>
@@ -96,7 +104,7 @@ export function SessionOutputs({
       {open && hasChanges && (
         <div className="wt-files-panel">
           {files.map((f) => (
-            <FileRow key={f.path} file={f} />
+            <FileRow key={f.path} file={f} onClick={() => setOpenFile(f.path)} />
           ))}
           <div className="wt-merge">
             {committed ? (
@@ -113,6 +121,16 @@ export function SessionOutputs({
         </div>
       )}
     </div>
+      <WorktreeDiffDrawer
+        sessionId={detail.id}
+        files={files}
+        branch={branch}
+        committed={committed}
+        openPath={openFile}
+        onSelect={setOpenFile}
+        onClose={() => setOpenFile(null)}
+      />
+    </>
   );
 }
 
@@ -130,11 +148,24 @@ function BranchLabel({ branch }: { branch: string }) {
   );
 }
 
-function FileRow({ file }: { file: SessionChangedFile }) {
+function FileRow({
+  file,
+  active,
+  onClick,
+}: {
+  file: SessionChangedFile;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   const binary = file.additions < 0 || file.deletions < 0;
   const status = (file.status || 'M').slice(0, 1).toUpperCase();
   return (
-    <div className="session-file">
+    <button
+      type="button"
+      className={`session-file session-file-btn${active ? ' active' : ''}`}
+      onClick={onClick}
+      title={`View diff · ${file.path}`}
+    >
       <span className={`session-file-status st-${status.toLowerCase()}`} title={status}>
         {status}
       </span>
@@ -146,6 +177,190 @@ function FileRow({ file }: { file: SessionChangedFile }) {
           <span className="add">+{file.additions}</span>
           <span className="del">−{file.deletions}</span>
         </span>
+      )}
+    </button>
+  );
+}
+
+/** Right-side drawer showing one changed file's unified diff, with the full file list in a
+ *  left rail so you can flip between files without closing it. The patch set is fetched lazily
+ *  (only while the drawer is open) and cached under the session's query key, so reopening is
+ *  instant and a turn end refreshes it. */
+function WorktreeDiffDrawer({
+  sessionId,
+  files,
+  branch,
+  committed,
+  openPath,
+  onSelect,
+  onClose,
+}: {
+  sessionId: string;
+  files: SessionChangedFile[];
+  branch: string;
+  committed?: boolean;
+  openPath: string | null;
+  onSelect: (path: string) => void;
+  onClose: () => void;
+}) {
+  const q = useQuery({ ...sessionDiffQuery(sessionId), enabled: openPath != null });
+  const patchByPath = useMemo(() => {
+    const m = new Map<string, SessionFilePatch>();
+    for (const p of q.data?.patches ?? []) m.set(p.path, p);
+    return m;
+  }, [q.data]);
+  const active = files.find((f) => f.path === openPath) ?? null;
+
+  return (
+    <Drawer
+      className="wt-diff-drawer"
+      placement="right"
+      width="min(960px, 94vw)"
+      open={openPath != null}
+      onClose={onClose}
+      title={
+        <span className="wt-diff-head">
+          <BranchLabel branch={branch} />
+          <span className="wt-diff-head-sub">{committed ? 'committed' : 'working changes'}</span>
+        </span>
+      }
+    >
+      <div className="wt-diff-body">
+        <div className="wt-diff-list">
+          {files.map((f) => (
+            <FileRow
+              key={f.path}
+              file={f}
+              active={f.path === openPath}
+              onClick={() => onSelect(f.path)}
+            />
+          ))}
+        </div>
+        <div className="wt-diff-pane">
+          {active ? (
+            <DiffPane file={active} patch={patchByPath.get(active.path)} loading={q.isLoading} />
+          ) : (
+            <div className="wt-diff-empty">Select a file to view its diff</div>
+          )}
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+/** One file's header (path + stat) and its diff body, or the right placeholder for a binary,
+ *  oversized, still-loading, or empty diff. */
+function DiffPane({
+  file,
+  patch,
+  loading,
+}: {
+  file: SessionChangedFile;
+  patch?: SessionFilePatch;
+  loading?: boolean;
+}) {
+  const binary = file.additions < 0 || file.deletions < 0;
+  return (
+    <>
+      <div className="wt-diff-pane-head">
+        <span className="wt-diff-pane-path">{file.path}</span>
+        {!binary && (
+          <span className="wt-diff-pane-stat">
+            <span className="add">+{file.additions}</span>
+            <span className="del">−{file.deletions}</span>
+          </span>
+        )}
+      </div>
+      {binary ? (
+        <div className="wt-diff-empty">Binary file — no preview</div>
+      ) : patch?.patch ? (
+        <DiffView patch={patch.patch} />
+      ) : patch?.truncated ? (
+        <div className="wt-diff-empty">Diff too large to preview inline</div>
+      ) : loading ? (
+        <div className="wt-diff-empty">Loading diff…</div>
+      ) : (
+        <div className="wt-diff-empty">No diff to preview</div>
+      )}
+    </>
+  );
+}
+
+type PatchRow =
+  | { type: 'add' | 'del' | 'ctx'; text: string; oldNo?: number; newNo?: number }
+  | { type: 'hunk'; text: string };
+
+/** Parse a git unified diff for ONE file into render rows, carrying real file line numbers
+ *  from each `@@ -old +new @@` header. File-header noise (diff --git/index/+++/---/mode) is
+ *  dropped; only hunks and their lines remain. */
+function parseUnifiedDiff(patch: string): PatchRow[] {
+  const rows: PatchRow[] = [];
+  let oldNo = 0;
+  let newNo = 0;
+  for (const line of patch.split('\n')) {
+    if (line === '') continue; // trailing-newline artifact; real blank ctx lines are " "
+    if (line.startsWith('@@')) {
+      const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (m) {
+        oldNo = Number(m[1]);
+        newNo = Number(m[2]);
+      }
+      rows.push({ type: 'hunk', text: line });
+      continue;
+    }
+    if (
+      line.startsWith('diff --git') ||
+      line.startsWith('index ') ||
+      line.startsWith('--- ') ||
+      line.startsWith('+++ ') ||
+      line.startsWith('new file') ||
+      line.startsWith('deleted file') ||
+      line.startsWith('old mode') ||
+      line.startsWith('new mode') ||
+      line.startsWith('similarity ') ||
+      line.startsWith('rename ') ||
+      line.startsWith('\\') // "\ No newline at end of file"
+    ) {
+      continue;
+    }
+    if (line.startsWith('+')) {
+      rows.push({ type: 'add', text: line.slice(1), newNo: newNo++ });
+    } else if (line.startsWith('-')) {
+      rows.push({ type: 'del', text: line.slice(1), oldNo: oldNo++ });
+    } else {
+      rows.push({
+        type: 'ctx',
+        text: line.startsWith(' ') ? line.slice(1) : line,
+        oldNo: oldNo++,
+        newNo: newNo++,
+      });
+    }
+  }
+  return rows;
+}
+
+/** Render a parsed unified diff, reusing the transcript's .diff-* row styling (two line-number
+ *  gutters + sign + text); hunk headers render like the collapsed-context "gap" rows. */
+function DiffView({ patch }: { patch: string }) {
+  const rows = useMemo(() => parseUnifiedDiff(patch), [patch]);
+  return (
+    <div className="chat-diff wt-diff-view">
+      {rows.map((r, k) =>
+        r.type === 'hunk' ? (
+          <div key={k} className="diff-line diff-gap">
+            <span className="diff-gutter" />
+            <span className="diff-text">{r.text}</span>
+          </div>
+        ) : (
+          <div key={k} className={`diff-line diff-${r.type}`}>
+            <span className="diff-ln">{r.oldNo ?? ''}</span>
+            <span className="diff-ln">{r.newNo ?? ''}</span>
+            <span className="diff-sign">
+              {r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' '}
+            </span>
+            <span className="diff-text">{r.text}</span>
+          </div>
+        ),
       )}
     </div>
   );

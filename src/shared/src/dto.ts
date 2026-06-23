@@ -356,6 +356,8 @@ export interface TurnCompleteRequest {
   isolationStatus?: string;
   /** The worktree's current diff vs base (uncommitted), refreshed each turn. */
   changedFiles?: ChangedFile[];
+  /** Per-file unified diffs (capped) for the same uncommitted state, for on-demand viewing. */
+  changedDiff?: FilePatch[];
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner
@@ -366,6 +368,17 @@ export interface ChangedFile {
   additions: number;
   deletions: number;
   status: string;
+}
+
+/** One changed file's full unified-diff text (git diff vs base), reported by the runner
+ *  alongside the ChangedFile stats so the web can show a file's diff on demand. `patch` is
+ *  absent for binary/omitted files; `truncated` marks a diff dropped for exceeding the size
+ *  cap (the web shows a "too large to preview" placeholder). Stored server-side in a side
+ *  table (SessionDiff) and fetched only when a file is opened — never on the session payload. */
+export interface FilePatch {
+  path: string;
+  patch?: string;
+  truncated?: boolean;
 }
 
 /**
@@ -392,6 +405,8 @@ export interface SessionCompleteRequest {
   baseSha?: string;
   /** Per-file diff summary of the branch vs its base; empty when nothing changed. */
   changedFiles?: ChangedFile[];
+  /** Per-file unified diffs (capped) of the committed branch vs base, for on-demand viewing. */
+  changedDiff?: FilePatch[];
   /** What the runner did: 'worktree' (isolated) | 'shared-nogit' (no git → shared dir). */
   isolationStatus?: string;
 }

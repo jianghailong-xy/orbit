@@ -248,6 +248,20 @@ export interface SessionDetail {
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
 
+/** One changed file's full unified-diff text (git diff vs base). `patch` is absent for a
+ *  binary file (shown via the stat instead) or one dropped for size; `truncated` marks the
+ *  latter. Mirrors @orbit/shared FilePatch. Fetched lazily, only when a file's diff opens. */
+export interface SessionFilePatch {
+  path: string;
+  patch?: string;
+  truncated?: boolean;
+}
+
+/** The session's per-file diffs, kept off the session payload and fetched on demand when a
+ *  file in the worktree status bar is opened (GET /sessions/:id/diff). */
+export const getSessionDiff = (idOrPublicId: string) =>
+  api<{ patches: SessionFilePatch[] }>(`/sessions/${idOrPublicId}/diff`);
+
 /** Enable per-session worktree isolation for an agent whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline
  *  commit) on the agent's next run, after which sessions isolate on their own branch. */

@@ -190,9 +190,10 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 }
 
 // finalizeWorktree commits whatever the session changed onto its branch and returns the
-// per-file diff vs the base. Called once at terminal completion, before /complete, so the
-// work is captured on the branch even though the checkout dir may then be removed.
-func finalizeWorktree(wt *Worktree, title string) []ChangedFile {
+// per-file diff stats plus the per-file unified-diff patches vs the base. Called once at
+// terminal completion, before /complete, so the work is captured on the branch even though
+// the checkout dir may then be removed.
+func finalizeWorktree(wt *Worktree, title string) ([]ChangedFile, []FilePatch) {
 	if _, err := git(wt.Path, "add", "-A"); err != nil {
 		logln("worktree add failed for", wt.Session+":", err)
 	}
@@ -211,9 +212,11 @@ func finalizeWorktree(wt *Worktree, title string) []ChangedFile {
 		}
 	}
 	if wt.BaseSha == "" {
-		return nil
+		return nil, nil
 	}
-	return diffFiles(wt.Path, wt.BaseSha, "HEAD")
+	files := diffFiles(wt.Path, wt.BaseSha, "HEAD")
+	patchOut, _ := git(wt.Path, "diff", wt.BaseSha+"..HEAD")
+	return files, buildFilePatches(files, splitPatch(patchOut))
 }
 
 // gitEnv runs `git -C dir <args...>` with extra environment (e.g. GIT_INDEX_FILE).
@@ -236,17 +239,18 @@ func diffFiles(dir, base, head string) []ChangedFile {
 	return parseNumstat(numOut, statusOut)
 }
 
-// liveDiffStat returns the per-file diff of the worktree's CURRENT state (uncommitted +
-// untracked) vs its base, for the live status bar while a session is still running. It
-// stages into a throwaway temp index (GIT_INDEX_FILE) so it never touches the real index
-// claude may be using, and respects .gitignore so node_modules/build output don't show.
-func liveDiffStat(wt *Worktree) []ChangedFile {
+// liveDiff returns the per-file stat summary AND the per-file unified-diff patches of the
+// worktree's CURRENT state (uncommitted + untracked) vs its base, for the live status bar
+// (and on-demand file diffs) while a session is still running. It stages into a throwaway
+// temp index (GIT_INDEX_FILE) so it never touches the real index claude may be using, and
+// respects .gitignore so node_modules/build output don't show.
+func liveDiff(wt *Worktree) ([]ChangedFile, []FilePatch) {
 	if wt == nil || wt.BaseSha == "" {
-		return nil
+		return nil, nil
 	}
 	tmp, err := os.CreateTemp("", "orbit-idx-*")
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	idx := tmp.Name()
 	_ = tmp.Close()
@@ -256,14 +260,18 @@ func liveDiffStat(wt *Worktree) []ChangedFile {
 	defer os.Remove(idx)
 	env := append(os.Environ(), "GIT_INDEX_FILE="+idx)
 	if _, err := gitEnv(wt.Path, env, "add", "-A"); err != nil {
-		return nil
+		return nil, nil
 	}
 	numOut, err := gitEnv(wt.Path, env, "diff", "--cached", "--numstat", wt.BaseSha)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	statusOut, _ := gitEnv(wt.Path, env, "diff", "--cached", "--name-status", wt.BaseSha)
-	return parseNumstat(numOut, statusOut)
+	files := parseNumstat(numOut, statusOut)
+	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
+	// failure just leaves the file list without diffs, the status bar still works.
+	patchOut, _ := gitEnv(wt.Path, env, "diff", "--cached", wt.BaseSha)
+	return files, buildFilePatches(files, splitPatch(patchOut))
 }
 
 // parseNumstat zips `git diff --numstat` (+/-/path) with `git diff --name-status` (the
@@ -303,6 +311,84 @@ func parseStatInt(s string) int {
 	}
 	n, _ := strconv.Atoi(s)
 	return n
+}
+
+// Patch-size caps keep the per-turn upload (and the stored diff) bounded: a single file's
+// unified diff over maxFilePatchBytes, or any file once the running total passes
+// maxTotalPatchBytes, is reported as Truncated (no text) instead of shipped in full.
+const (
+	maxFilePatchBytes  = 64 * 1024
+	maxTotalPatchBytes = 512 * 1024
+)
+
+// splitPatch breaks a combined `git diff` into per-file unified-diff segments, keyed by each
+// file's new path (the `+++ b/…` header, falling back to the `diff --git …` line). Binary and
+// pure-rename sections carry no hunks and simply map to their header text.
+func splitPatch(full string) map[string]string {
+	out := map[string]string{}
+	if full == "" {
+		return out
+	}
+	var path string
+	var buf []string
+	flush := func() {
+		if path != "" {
+			out[path] = strings.Join(buf, "\n")
+		}
+		path, buf = "", nil
+	}
+	for _, ln := range strings.Split(full, "\n") {
+		if strings.HasPrefix(ln, "diff --git ") {
+			flush()
+			path = gitDiffNewPath(ln)
+			buf = []string{ln}
+			continue
+		}
+		if path == "" {
+			continue
+		}
+		// The `+++ b/<path>` header is the authoritative new name (handles renames); skip it
+		// for a deletion, whose +++ is /dev/null.
+		if strings.HasPrefix(ln, "+++ b/") {
+			path = ln[len("+++ b/"):]
+		}
+		buf = append(buf, ln)
+	}
+	flush()
+	return out
+}
+
+// gitDiffNewPath pulls the new path out of a `diff --git a/<old> b/<new>` header.
+func gitDiffNewPath(ln string) string {
+	if i := strings.Index(ln, " b/"); i >= 0 {
+		return ln[i+3:]
+	}
+	return ""
+}
+
+// buildFilePatches pairs each (non-binary) changed file with its unified-diff segment under
+// the per-file and running-total size caps. A file whose diff is too large — or that pushes
+// the total over the cap — is marked Truncated with no text; binary files are omitted (the
+// web shows "binary" from the ChangedFile stat).
+func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch {
+	var out []FilePatch
+	total := 0
+	for _, f := range files {
+		if f.Additions < 0 || f.Deletions < 0 {
+			continue // binary — no text preview
+		}
+		p := byPath[f.Path]
+		if p == "" {
+			continue
+		}
+		if len(p) > maxFilePatchBytes || total+len(p) > maxTotalPatchBytes {
+			out = append(out, FilePatch{Path: f.Path, Truncated: true})
+			continue
+		}
+		out = append(out, FilePatch{Path: f.Path, Patch: p})
+		total += len(p)
+	}
+	return out
 }
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
