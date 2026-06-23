@@ -88,6 +88,9 @@ export function SessionOutputs({
           <span className="wt-stat wt-nochange">no changes</span>
         )}
         <span className="wt-spacer" />
+        {committed && hasChanges && (
+          <MergeButton status={detail.mergeStatus} busy={merging} onMerge={onMergeToMain} />
+        )}
         {hasChanges && (
           <button
             type="button"
@@ -106,14 +109,21 @@ export function SessionOutputs({
           ))}
           <div className="wt-merge">
             {committed ? (
-              <MergeToMain
-                branch={branch}
-                status={detail.mergeStatus}
-                error={detail.mergeError}
-                busy={merging}
-                onMerge={onMergeToMain}
-                copy={copy}
-              />
+              <div className="wt-merge-manual">
+                {(detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error') && (
+                  <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
+                    {detail.mergeStatus === 'conflict'
+                      ? 'Merge conflict — aborted, working tree left clean. Resolve manually:'
+                      : detail.mergeError || 'Merge failed. Merge manually:'}
+                  </span>
+                )}
+                <span className="wt-merge-or">
+                  {detail.mergeStatus === 'merged' ? 'Merged ✓ · or by hand:' : 'Or merge manually:'}
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
+                    git merge {branch}
+                  </code>
+                </span>
+              </div>
             ) : (
               <span className="wt-merge-label">Working changes (uncommitted) on {branch}</span>
             )}
@@ -124,53 +134,40 @@ export function SessionOutputs({
   );
 }
 
-/** The "Merge to main" control on the committed status bar. Drives off the server-reported
- *  mergeStatus: idle → a Merge button; pending → "Merging…"; merged → a ✓; conflict/error →
- *  the reason + a Retry. The copyable `git merge <branch>` is always kept as a manual fallback
- *  (the runner only auto-merges a clean main; anything else comes back as an error to merge by
- *  hand). `onMerge` is absent when the parent can't drive it — then only the fallback shows. */
-function MergeToMain({
-  branch,
+/** Compact "Merge to main" control sitting on the worktree bar itself (shown once the work is
+ *  committed). Drives off the server-reported mergeStatus: idle → a Merge button; pending →
+ *  "Merging…"; merged → a ✓ chip; conflict/error → a red Retry. The failure detail and a
+ *  copyable `git merge <branch>` fallback live in the expandable file panel below. `onMerge`
+ *  is absent when the parent can't drive it (no branch) — then only the merged chip can show. */
+function MergeButton({
   status,
-  error,
   busy,
   onMerge,
-  copy,
 }: {
-  branch: string;
   status?: SessionDetail['mergeStatus'];
-  error?: string | null;
   busy?: boolean;
   onMerge?: () => void;
-  copy: (text: string) => void;
 }) {
   const pending = busy || status === 'pending';
+  if (status === 'merged') {
+    return (
+      <span className="wt-merge-done" title="Merged into main">
+        ✓ Merged
+      </span>
+    );
+  }
+  if (!onMerge) return null;
   const failed = status === 'conflict' || status === 'error';
   return (
-    <div className="wt-merge-row">
-      {status === 'merged' ? (
-        <span className="wt-merge-done" title="Merged into main">
-          ✓ Merged to main
-        </span>
-      ) : onMerge ? (
-        <button type="button" className="wt-merge-btn" disabled={pending} onClick={onMerge}>
-          {pending ? 'Merging…' : failed ? 'Retry merge' : 'Merge to main'}
-        </button>
-      ) : null}
-      {failed && (
-        <span className="wt-merge-err" title={error ?? undefined}>
-          {status === 'conflict' ? 'Conflict — merge manually' : error || 'Merge failed'}
-        </span>
-      )}
-      {status !== 'merged' && (
-        <span className="wt-merge-or">
-          or
-          <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
-            git merge {branch}
-          </code>
-        </span>
-      )}
-    </div>
+    <button
+      type="button"
+      className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
+      disabled={pending}
+      onClick={onMerge}
+      title={failed ? 'Merge failed — expand the file list for details' : 'Merge this branch into main'}
+    >
+      {pending ? 'Merging…' : failed ? 'Retry merge' : 'Merge to main'}
+    </button>
   );
 }
 
