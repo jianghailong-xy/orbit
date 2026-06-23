@@ -209,6 +209,11 @@ export const interruptSession = (sessionId: string) =>
 
 export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end`, { method: 'POST' });
 
+/** Ask the runner that ran this session to merge its worktree branch into main. Async:
+ *  the outcome lands on SessionDetail.mergeStatus within a heartbeat (~30s). */
+export const mergeSessionToMain = (sessionId: string) =>
+  api(`/sessions/${sessionId}/merge`, { method: 'POST' });
+
 // Soft visibility actions for ended sessions. Archive hides a session into the
 // Archived view; delete moves it to the trash. Both keep all data; restore (which
 // clears both) brings it back to the active list. There is no hard delete.
@@ -241,6 +246,12 @@ export interface SessionDetail {
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;
   isolationStatus?: string | null;
+  // "Merge to main" outcome (see mergeSessionToMain): 'pending' while the runner works,
+  // then 'merged' (mergedAt set) | 'conflict' | 'error' (mergeError carries why). Null
+  // until the user clicks merge.
+  mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
+  mergeError?: string | null;
+  mergedAt?: string | null;
 }
 
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to

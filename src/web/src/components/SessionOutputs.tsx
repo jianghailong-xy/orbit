@@ -17,6 +17,8 @@ export function SessionOutputs({
   committed,
   onEnableIsolation,
   enabling,
+  onMergeToMain,
+  merging,
 }: {
   detail?: SessionDetail | null;
   /** True once the session has ended and the runner committed the work to the branch; while
@@ -25,6 +27,10 @@ export function SessionOutputs({
   /** Provided by the parent (which owns the mutation); enables the non-git nudge's button. */
   onEnableIsolation?: () => void;
   enabling?: boolean;
+  /** Provided by the parent (owns the mutation + confirm); enables the "Merge to main" button.
+   *  The outcome surfaces via detail.mergeStatus/mergeError (the parent polls while pending). */
+  onMergeToMain?: () => void;
+  merging?: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [open, setOpen] = useState(false);
@@ -100,17 +106,69 @@ export function SessionOutputs({
           ))}
           <div className="wt-merge">
             {committed ? (
-              <>
-                <span className="wt-merge-label">Committed to {branch} · merge with</span>
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
-                  git merge {branch}
-                </code>
-              </>
+              <MergeToMain
+                branch={branch}
+                status={detail.mergeStatus}
+                error={detail.mergeError}
+                busy={merging}
+                onMerge={onMergeToMain}
+                copy={copy}
+              />
             ) : (
               <span className="wt-merge-label">Working changes (uncommitted) on {branch}</span>
             )}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** The "Merge to main" control on the committed status bar. Drives off the server-reported
+ *  mergeStatus: idle → a Merge button; pending → "Merging…"; merged → a ✓; conflict/error →
+ *  the reason + a Retry. The copyable `git merge <branch>` is always kept as a manual fallback
+ *  (the runner only auto-merges a clean main; anything else comes back as an error to merge by
+ *  hand). `onMerge` is absent when the parent can't drive it — then only the fallback shows. */
+function MergeToMain({
+  branch,
+  status,
+  error,
+  busy,
+  onMerge,
+  copy,
+}: {
+  branch: string;
+  status?: SessionDetail['mergeStatus'];
+  error?: string | null;
+  busy?: boolean;
+  onMerge?: () => void;
+  copy: (text: string) => void;
+}) {
+  const pending = busy || status === 'pending';
+  const failed = status === 'conflict' || status === 'error';
+  return (
+    <div className="wt-merge-row">
+      {status === 'merged' ? (
+        <span className="wt-merge-done" title="Merged into main">
+          ✓ Merged to main
+        </span>
+      ) : onMerge ? (
+        <button type="button" className="wt-merge-btn" disabled={pending} onClick={onMerge}>
+          {pending ? 'Merging…' : failed ? 'Retry merge' : 'Merge to main'}
+        </button>
+      ) : null}
+      {failed && (
+        <span className="wt-merge-err" title={error ?? undefined}>
+          {status === 'conflict' ? 'Conflict — merge manually' : error || 'Merge failed'}
+        </span>
+      )}
+      {status !== 'merged' && (
+        <span className="wt-merge-or">
+          or
+          <code className="wt-merge-cmd" title="Copy" onClick={() => copy(`git merge ${branch}`)}>
+            git merge {branch}
+          </code>
+        </span>
       )}
     </div>
   );

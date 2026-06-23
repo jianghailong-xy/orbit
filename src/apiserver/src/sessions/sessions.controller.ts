@@ -106,6 +106,12 @@ export class SessionsController {
     return this.sessions.end(user.userId, id);
   }
 
+  /** Ask the runner that ran this session to merge its worktree branch into main. */
+  @Post(':id/merge')
+  mergeToMain(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.mergeToMain(user.userId, id);
+  }
+
   @Post(':id/archive')
   archive(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.archive(user.userId, id);

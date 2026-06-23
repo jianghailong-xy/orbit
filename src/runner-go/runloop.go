@@ -95,6 +95,10 @@ func runLoop(cfg *RunnerConfig) {
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		cycles := 0
+		// Sessions whose "merge to main" is in flight, so the at-least-once heartbeat
+		// redelivery doesn't kick off the same merge twice before the result is recorded.
+		var mergeMu sync.Mutex
+		mergingNow := map[string]bool{}
 		for {
 			select {
 			case <-hbStop:
@@ -161,6 +165,32 @@ func runLoop(cfg *RunnerConfig) {
 					if c, ok := cancels[id]; ok {
 						c()
 					}
+				}
+				// Honor "merge to main" requests: merge each session's branch into main on
+				// our local repo and report the outcome. Each runs once (guarded against the
+				// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
+				// never stalls the heartbeat that keeps the reaper off our sessions.
+				for _, m := range resp.MergeRequests {
+					mergeMu.Lock()
+					busy := mergingNow[m.SessionID]
+					if !busy {
+						mergingNow[m.SessionID] = true
+					}
+					mergeMu.Unlock()
+					if busy {
+						continue
+					}
+					go func(req MergeCommand) {
+						res := mergeToMain(req)
+						if err := t.mergeResult(req.SessionID, MergeResultRequest{
+							Status: res.Status, MergedSha: res.MergedSha, Message: res.Message,
+						}); err != nil {
+							logln("merge-result POST failed for", req.SessionID+":", err)
+						}
+						mergeMu.Lock()
+						delete(mergingNow, req.SessionID)
+						mergeMu.Unlock()
+					}(m)
 				}
 			}
 		}
