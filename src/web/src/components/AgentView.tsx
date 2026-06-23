@@ -1356,14 +1356,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   // online to act on it). A change made mid-turn doesn't abort the running turn: the
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
   // same as a queued message. When not live they're freely editable (pre-session config).
-  // Agent stays fixed once live.
+  // Agent stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = live ? runner.online : true;
-  // A live session's agent is fixed; otherwise reflect the local pick.
-  const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
-  // The agent can't be switched once the session is live, nor when the view is locked to
-  // one agent. In those cases it's read-only info, so we surface it as a static pill in the
-  // controls row (see composer-pill-static) instead of a Select; otherwise it stays a Select.
-  const agentReadOnly = live || !!lockedAgentId;
+  // An existing session's agent is fixed (live or recycled/terminal); only a brand-new
+  // compose draft reflects the local pick.
+  const shownAgentId: string | undefined = selected ? (selected.agent?.id ?? undefined) : agentId;
+  // The agent can't be switched once the session exists (live or terminal), nor when the
+  // view is locked to one agent. In those cases it's read-only info, so we surface it as a
+  // static pill in the controls row (see composer-pill-static) instead of a Select; otherwise
+  // it stays a Select.
+  const agentReadOnly = !!selected || !!lockedAgentId;
   const shownAgentName =
     agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
     selected?.agent?.name ??
