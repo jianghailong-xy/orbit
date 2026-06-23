@@ -51,6 +51,10 @@ services:
     build:
       context: .
       dockerfile: src/web/Dockerfile
+      args:
+        # Public origin the install commands point at; baked into the bundle at build time.
+        # Defaults to the local gateway — set PUBLIC_ORIGIN in .env when serving on a domain.
+        PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
     container_name: orbit-web
     depends_on:
       apiserver:

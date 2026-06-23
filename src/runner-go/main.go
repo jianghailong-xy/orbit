@@ -28,7 +28,10 @@ func interactive() bool {
 // disables self-update.
 var version = "dev"
 
-const defaultServer = "https://orbit.wikova.com"
+// Control plane the runner defaults to (used by `orbit register` when no --server is given).
+// Overridden at build time with -ldflags "-X main.defaultServer=..." so a self-hosted web
+// image bakes its own PUBLIC_ORIGIN in; a plain `go build` keeps the hosted default.
+var defaultServer = "https://orbit.wikova.com"
 
 var usage = `orbit — register a machine and run Claude Code tasks for an Orbit control plane
 

@@ -7,13 +7,24 @@ import { api } from '../api';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
 
+// install.sh, the runner binaries (/dl) and the API are all served from the deployment's own
+// origin, and both the binary's defaultServer and install.sh's BASE_URL are baked to that
+// origin at build time (see src/web/Dockerfile + build-binaries.sh). So the commands need no
+// --server / ORBIT_BASE_URL override wherever this is deployed. __PUBLIC_ORIGIN__ is that
+// origin, injected at build time from the PUBLIC_ORIGIN env (.env → web build arg).
+declare const __PUBLIC_ORIGIN__: string;
+
 // Only the install line differs per OS; everything else is identical.
-const INSTALL_CMD: Record<OS, string> = {
-  macOS: 'curl -fsSL https://orbit.wikova.com/install.sh | bash',
-  Linux: 'curl -fsSL https://orbit.wikova.com/install.sh | bash',
-  Windows: 'irm https://orbit.wikova.com/install.ps1 | iex',
-};
-const REGISTER_CMD = 'orbit register';
+function buildCommands(origin: string): { install: Record<OS, string>; register: string } {
+  return {
+    install: {
+      macOS: `curl -fsSL ${origin}/install.sh | bash`,
+      Linux: `curl -fsSL ${origin}/install.sh | bash`,
+      Windows: `irm ${origin}/install.ps1 | iex`,
+    },
+    register: 'orbit register',
+  };
+}
 
 interface Runner {
   id: string;
@@ -75,6 +86,7 @@ export function RunnerRegisterGuide() {
   const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
   const [copied, setCopied] = useState<string | null>(null);
+  const { install: installCmd, register: registerCmd } = buildCommands(__PUBLIC_ORIGIN__);
 
   const copy = (key: string, text: string) => {
     void navigator.clipboard?.writeText(text)?.catch(() => {});
@@ -137,9 +149,9 @@ export function RunnerRegisterGuide() {
           desc="Installs the orbit CLI on this machine."
         >
           <CommandBox
-            cmd={INSTALL_CMD[os]}
+            cmd={installCmd[os]}
             copied={copied === 'install'}
-            onCopy={() => copy('install', INSTALL_CMD[os])}
+            onCopy={() => copy('install', installCmd[os])}
           />
         </Step>
 
@@ -151,9 +163,9 @@ export function RunnerRegisterGuide() {
           desc="Opens your browser to confirm this machine belongs to you."
         >
           <CommandBox
-            cmd={REGISTER_CMD}
+            cmd={registerCmd}
             copied={copied === 'register'}
-            onCopy={() => copy('register', REGISTER_CMD)}
+            onCopy={() => copy('register', registerCmd)}
           />
         </Step>
 

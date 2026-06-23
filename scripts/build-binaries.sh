@@ -26,6 +26,13 @@ TARGETS=(
   "darwin-arm64:darwin:arm64"
 )
 
+# Bake the deployment's public origin into the binary's defaultServer so a self-hosted
+# runner's `orbit register` connects there with no --server. Unset → keep the source default.
+LDFLAGS="-s -w -X main.version=$VER"
+if [ -n "${PUBLIC_ORIGIN:-}" ]; then
+  LDFLAGS="$LDFLAGS -X main.defaultServer=$PUBLIC_ORIGIN"
+fi
+
 mkdir -p "$OUT"
 for t in "${TARGETS[@]}"; do
   suffix="${t%%:*}"
@@ -34,7 +41,7 @@ for t in "${TARGETS[@]}"; do
   goarch="${rest##*:}"
   echo ">> orbit-$suffix ($goos/$goarch) v$VER"
   (cd "$SRC" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -trimpath -ldflags "-s -w -X main.version=$VER" -o "$ROOT/$OUT/orbit-$suffix" .)
+    go build -trimpath -ldflags "$LDFLAGS" -o "$ROOT/$OUT/orbit-$suffix" .)
   # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done

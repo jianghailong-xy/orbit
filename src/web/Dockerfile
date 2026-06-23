@@ -16,6 +16,10 @@ RUN npm ci
 COPY src/web ./src/web
 COPY src/shared ./src/shared
 RUN npm run build -w @orbit/shared
+# Public origin baked into the web bundle (the "Add a runner" install commands). Declared
+# here, after npm ci and the shared build, so changing it only rebuilds the web bundle.
+ARG PUBLIC_ORIGIN
+ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
 RUN npm run build -w @orbit/web
 
 # ───────────────────────── runner binaries (Go, static) ─────────────────────────
@@ -27,11 +31,22 @@ WORKDIR /app
 COPY src/runner-go ./src/runner-go
 COPY package.json ./package.json
 COPY scripts ./scripts
+# Bake this deployment's public origin into the runner binary's defaultServer (see
+# build-binaries.sh) so a self-hosted runner's `orbit register` needs no --server.
+ARG PUBLIC_ORIGIN
+ENV PUBLIC_ORIGIN=$PUBLIC_ORIGIN
 RUN bash scripts/build-binaries.sh dist-bin
 
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM nginx:alpine AS runtime
+ARG PUBLIC_ORIGIN
 COPY src/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/src/web/dist /usr/share/nginx/html
 COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
+# install.sh is a static asset (Vite copies it verbatim, no substitution), so rewrite its
+# baked-in default BASE_URL to this deployment's origin — then `curl .../install.sh | bash`
+# pulls the runner from here with no ORBIT_BASE_URL override.
+RUN if [ -n "$PUBLIC_ORIGIN" ]; then \
+      sed -i "s|https://orbit.wikova.com|$PUBLIC_ORIGIN|g" /usr/share/nginx/html/install.sh; \
+    fi
 EXPOSE 80
