@@ -81,6 +81,13 @@ export enum RunEventType {
   // Approval row, not a RunEvent — so they never collide with the runner's seq).
   APPROVAL_REQUEST = 'approval_request', // a tool call is awaiting a human allow/deny
   APPROVAL_RESOLVED = 'approval_resolved', // a pending approval was decided
+  // Background shells the agent launched with Bash(run_in_background). The runner derives
+  // these from Claude's stream: BACKGROUND_TASK is the durable lifecycle signal (parsed
+  // from the `<task-notification>` user message — status completed/failed/killed); it's the
+  // reliable "this background process finished" event. BACKGROUND_OUTPUT is the live tail of
+  // the process's output file (broadcast-only animation, like *_DELTA — not persisted).
+  BACKGROUND_TASK = 'background_task',
+  BACKGROUND_OUTPUT = 'background_output',
 }
 
 /** Lifecycle of a human-facing work item (Task). */

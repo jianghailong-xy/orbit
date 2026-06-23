@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntApp } from 'antd';
 import {
   CheckCircleFilled,
+  CloseCircleFilled,
   ConsoleSqlOutlined,
   DownOutlined,
   LoadingOutlined,
   MinusCircleOutlined,
   RightOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
 import type { RunEvent } from './Transcript';
 import { Pre } from './Transcript';
@@ -18,10 +20,10 @@ import { deriveBackgroundShells } from '../lib/backgroundShells';
  * surfaces the shell processes the agent launched with Bash(run_in_background) — which are
  * otherwise invisible (the session looks idle while a build runs in the background).
  *
- * Everything is derived from the session's existing event stream (see deriveBackgroundShells),
- * so there's no backend dependency. Phase-1 limits to be aware of: output only refreshes when
- * the agent itself polls the file with Read (not an independent live tail), and completion is
- * best-effort — see classifyShellStatus. Both are addressed in later plan phases.
+ * Derived from the session's event stream (see deriveBackgroundShells): the launch + the
+ * agent's Read polls, plus the runner's live output tail (background_output) and the reliable
+ * completion signal (background_task, from Claude's <task-notification>) that drives the
+ * terminal icon + this toast.
  */
 export function BackgroundShellsTray({ events, live }: { events: RunEvent[]; live?: boolean }) {
   const { message } = AntApp.useApp();
@@ -32,15 +34,19 @@ export function BackgroundShellsTray({ events, live }: { events: RunEvent[]; liv
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Toast the moment a process flips running → done. Phase 1's best-effort classifier never
-  // returns 'done' yet (no reliable signal — see classifyShellStatus), so this is wired and
-  // silent until phase 2 emits a real completion event; then it lights up with no other change.
+  // Toast the moment a process leaves 'running' for a terminal state (driven by the reliable
+  // background_task completion signal — see classifyShellStatus). Skips 'unknown' (the session
+  // just ended without a notification — not a real completion worth a toast).
   const lastStatus = useRef<Map<string, BgShellStatus>>(new Map());
   useEffect(() => {
     const seen = lastStatus.current;
     for (const s of shells) {
-      if (seen.get(s.shellId) === 'running' && s.status === 'done') {
-        message.success(`Background process ${s.shellId} finished`);
+      const was = seen.get(s.shellId);
+      if (was === 'running' && s.status !== 'running' && s.status !== 'unknown') {
+        const label = s.description || s.shellId;
+        if (s.status === 'failed') message.error(`Background process failed: ${label}`);
+        else if (s.status === 'killed') message.info(`Background process stopped: ${label}`);
+        else message.success(`Background process finished: ${label}`);
       }
       seen.set(s.shellId, s.status);
     }
@@ -140,6 +146,8 @@ function BgShellRow({
 function BgStatusIcon({ status }: { status: BgShellStatus }) {
   if (status === 'running') return <LoadingOutlined spin className="chat-tool-status running" />;
   if (status === 'done') return <CheckCircleFilled className="chat-tool-status ok" />;
+  if (status === 'failed') return <CloseCircleFilled className="chat-tool-status err" />;
+  if (status === 'killed') return <StopOutlined className="chat-tool-status pending" />;
   return <MinusCircleOutlined className="chat-tool-status pending" />;
 }
 

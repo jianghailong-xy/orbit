@@ -369,6 +369,10 @@ const (
 	evUser      = "user"
 	evTurnEnd   = "turn_end"
 	evInterrupt = "interrupt"
+	// Background shells (Bash run_in_background): durable lifecycle signal parsed from
+	// Claude's <task-notification> user message, and the live tail of the output file.
+	evBackgroundTask   = "background_task"
+	evBackgroundOutput = "background_output"
 )
 
 // Run statuses — mirror RunStatus in @orbit/shared.

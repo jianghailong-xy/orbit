@@ -21,7 +21,7 @@ type ExecResult struct {
 
 type emitFn func(eventType string, payload map[string]interface{})
 
-func handleMessage(msg map[string]interface{}, emit emitFn) {
+func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 	// A sub-agent's messages (spawned by the Task tool) carry the spawning Task's
 	// tool_use id here; stamp it onto every event so the UI can nest the sub-agent's
 	// transcript under that call. "" for the top-level agent.
@@ -65,6 +65,12 @@ func handleMessage(msg map[string]interface{}, emit emitFn) {
 		// those: the user's own typed turns are emitted from the inbox and echoed back
 		// here by --replay-user-messages, so re-emitting their text would double them.
 		message, _ := msg["message"].(map[string]interface{})
+		// A background-task lifecycle notification arrives as a user message whose content is
+		// a plain "<task-notification>…</task-notification>" string (not tool_result blocks) —
+		// turn it into a durable background_task event and stop that task's output tail.
+		if s, ok := message["content"].(string); ok && bgTaskFromNotification(s, emit, bg) {
+			break
+		}
 		content, _ := message["content"].([]interface{})
 		for _, c := range content {
 			block, _ := c.(map[string]interface{})
@@ -74,6 +80,13 @@ func handleMessage(msg map[string]interface{}, emit emitFn) {
 					"content":   block["content"],
 					"isError":   block["is_error"],
 				}))
+				// A Bash(run_in_background) result confirms "running in background with ID…"
+				// and the output file path — start tailing it for live output.
+				if bg != nil {
+					if cs, ok := block["content"].(string); ok {
+						bg.onToolResult(asString(block["tool_use_id"]), cs)
+					}
+				}
 			}
 		}
 	case "stream_event":

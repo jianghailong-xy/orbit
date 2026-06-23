@@ -273,6 +273,11 @@ model Session {
   // Only meaningful while RUNNING; the list gates display on status so a stale value
   // on a finished session is never shown.
   lastToolUse       String?   @map("last_tool_use")
+  // Denormalized set of the agent's still-running background shells (Bash run_in_background):
+  // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
+  // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
+  // header show "Background running" without scanning events. Only meaningful while live.
+  runningBgShells   String[]  @map("running_bg_shells")
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).

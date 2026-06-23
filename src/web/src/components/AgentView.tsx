@@ -266,6 +266,12 @@ const plainPreview = (md: string): string =>
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
+// "Background process running" / "N background processes running" — shown when a session is
+// parked at AWAITING_INPUT but still has live background shells (server-tracked
+// runningBgCount, from Session.runningBgShells), so it doesn't read as idle.
+const bgRunningLabel = (n: number): string =>
+  n > 1 ? `${n} background processes running` : 'Background process running';
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -280,6 +286,9 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
     return { text: 'Running…', tone: 'running' };
   }
   if (live && s.status === 'PENDING') return { text: 'Queued', tone: 'queued' };
+  // Parked (AWAITING_INPUT) but a background process is still running — not idle.
+  if (live && (s.runningBgCount ?? 0) > 0)
+    return { text: `${bgRunningLabel(s.runningBgCount)}…`, tone: 'running' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   return null;
 };
@@ -291,7 +300,10 @@ function statusLabel(session: any): string {
   const status: string = session.status;
   if (status === 'RUNNING')
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
-  if (status === 'AWAITING_INPUT') return 'Waiting for your reply';
+  if (status === 'AWAITING_INPUT')
+    return (session.runningBgCount ?? 0) > 0
+      ? bgRunningLabel(session.runningBgCount)
+      : 'Waiting for your reply';
   if (status === 'SUCCEEDED') return 'Completed';
   if (status === 'FAILED') {
     const err: string = typeof session.error === 'string' ? session.error : '';
@@ -345,7 +357,11 @@ function StatusIcon({ session, completed }: { session: any; completed?: boolean 
     );
   }
   if (status === 'AWAITING_INPUT')
-    return (
+    return (session.runningBgCount ?? 0) > 0 ? (
+      <Tooltip title={bgRunningLabel(session.runningBgCount)}>
+        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
+      </Tooltip>
+    ) : (
       <Tooltip title="Waiting for your reply">
         <MessageOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
