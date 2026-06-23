@@ -19,8 +19,13 @@ import (
 // and never disturbs the heartbeat.
 
 const (
-	planUsageURL      = "https://api.anthropic.com/api/oauth/usage"
-	planUsageInterval = 60 * time.Second
+	planUsageURL = "https://api.anthropic.com/api/oauth/usage"
+	// While the runner has ≥1 active session, refresh at most this often. Quota only
+	// moves while claude is running, so a fully idle runner isn't polled at all.
+	planUsageInterval = 2 * time.Minute
+	// Local (no-network) cadence for checking busy/idle edges and refresh-due. Cheap:
+	// it just reads an in-process counter.
+	planUsageCheckInterval = 15 * time.Second
 	// anthropic-beta value Claude Code sends on OAuth-authenticated requests. The
 	// endpoint accepts the token without it today; we send it to match the CLI in
 	// case the header is enforced later. If Anthropic rotates it, the request 4xx's
@@ -63,12 +68,18 @@ func (p *planUsageProbe) snapshot() *PlanUsage {
 	return v
 }
 
-// run refreshes the snapshot every planUsageInterval until ctx is done. Failures are
-// soft: the last good value is kept (so a transient blip doesn't blank the gauge) and
-// the same error is logged only once to avoid spamming an api-key runner's log.
-func (p *planUsageProbe) run(ctx context.Context) {
+// run polls the usage endpoint only while the runner is busy: it refreshes on the
+// idle→busy edge (so the gauge is fresh when work starts), every planUsageInterval
+// while sessions run, and once more on the busy→idle edge (to capture the just-
+// finished turn's usage). A fully idle runner makes no request — quota only moves
+// while claude runs. activeCount reports how many sessions are currently running.
+// Failures are soft (see fetchPlanUsage): the last good value is kept and a repeated
+// error is logged only once.
+func (p *planUsageProbe) run(ctx context.Context, activeCount func() int) {
 	var lastErr string
+	var lastFetch time.Time
 	refresh := func() {
+		lastFetch = time.Now()
 		u, err := fetchPlanUsage(ctx, p.client)
 		if err != nil {
 			if msg := err.Error(); msg != lastErr {
@@ -83,15 +94,21 @@ func (p *planUsageProbe) run(ctx context.Context) {
 		}
 		p.val.Store(u)
 	}
-	refresh()
-	ticker := time.NewTicker(planUsageInterval)
+	wasActive := false
+	ticker := time.NewTicker(planUsageCheckInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			refresh()
+			active := activeCount() > 0
+			// Refresh on a busy/idle transition (fresh on start, final capture on
+			// finish), or when a busy runner is due for its periodic poll.
+			if active != wasActive || (active && time.Since(lastFetch) >= planUsageInterval) {
+				refresh()
+			}
+			wasActive = active
 		}
 	}
 }

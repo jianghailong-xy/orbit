@@ -72,9 +72,14 @@ func runLoop(cfg *RunnerConfig) {
 
 	// Claude subscription quota for this machine's login, refreshed in the background
 	// so the heartbeat attaches the latest snapshot without ever blocking on the
-	// (undocumented) usage endpoint. Best-effort: a nil snapshot reports nothing.
+	// (undocumented) usage endpoint. Only polled while the runner has active sessions
+	// (quota moves only while claude runs); a nil snapshot reports nothing.
 	usageProbe := newPlanUsageProbe()
-	go usageProbe.run(loopCtx)
+	go usageProbe.run(loopCtx, func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(active)
+	})
 
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
