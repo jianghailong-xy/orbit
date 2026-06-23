@@ -851,8 +851,13 @@ export class RunnerApiController {
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
     const merged = dto.status === 'merged';
-    await this.prisma.session.update({
-      where: { id: sessionId },
+    // Only accept the outcome while the merge is still pending. The MergeCommand runs async on
+    // the runner and is redelivered each heartbeat, so its result can land after a "Resolve in
+    // session" resume has already cleared mergeStatus to null — an unconditional write would
+    // re-stamp the stale conflict/error and wedge the bar back on "Resolve in session" after
+    // the conflict was actually resolved. updateMany no-ops (count 0) when no longer pending.
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, mergeStatus: 'pending' },
       data: {
         mergeStatus: dto.status,
         mergeError: merged ? null : (dto.message ?? null),
@@ -875,8 +880,10 @@ export class RunnerApiController {
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
     const clean = dto.status === 'committed' || dto.status === 'nochange';
-    await this.prisma.session.update({
-      where: { id: sessionId },
+    // Same staleness guard as mergeResult: a resume clears commitStatus to null, and an
+    // in-flight commit-result landing afterward must not re-stamp it. No-ops when not pending.
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, commitStatus: 'pending' },
       data: {
         commitStatus: dto.status,
         commitError: dto.status === 'error' ? (dto.message ?? null) : null,
