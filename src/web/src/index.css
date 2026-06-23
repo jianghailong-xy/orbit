@@ -1741,6 +1741,13 @@ body {
   padding: 2px 6px 2px 10px;
   font-size: 12px;
 }
+/* Whole-row click target when there's a file list to expand. */
+.wt-row-toggle {
+  cursor: pointer;
+}
+.wt-row-toggle:hover {
+  background: var(--bg-hover);
+}
 .wt-branch {
   display: inline-flex;
   align-items: center;

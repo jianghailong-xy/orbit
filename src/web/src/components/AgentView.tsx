@@ -1817,16 +1817,8 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="agent-composer">
-        <SessionOutputs
-          detail={sessionDetailQ.data}
-          committed={!live}
-          enabling={enableIsoMut.isPending}
-          onEnableIsolation={
-            sessionDetailQ.data?.agent?.id
-              ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
-              : undefined
-          }
-        />
+        {/* Image previews sit above the worktree status bar so a staged screenshot reads
+            as part of the message you're about to send, not buried under the diff chip. */}
         {images.length > 0 && (
           <div className="composer-attachments">
             {images.map((im) => (
@@ -1854,6 +1846,16 @@ export function AgentView({ runner }: { runner: Runner }) {
             ))}
           </div>
         )}
+        <SessionOutputs
+          detail={sessionDetailQ.data}
+          committed={!live}
+          enabling={enableIsoMut.isPending}
+          onEnableIsolation={
+            sessionDetailQ.data?.agent?.id
+              ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
+              : undefined
+          }
+        />
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>

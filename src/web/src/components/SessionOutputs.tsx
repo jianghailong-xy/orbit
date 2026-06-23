@@ -34,6 +34,7 @@ export function SessionOutputs({
       () => message.error('Copy failed'),
     );
   };
+  const toggle = () => setOpen((v) => !v);
 
   const iso = detail?.isolationStatus;
   if (!iso) return null;
@@ -64,8 +65,22 @@ export function SessionOutputs({
 
   return (
     <div className={`wt-bar${open ? ' wt-open' : ''}`}>
-      <div className="wt-row">
-        <button type="button" className="wt-branch" title="Copy branch name" onClick={() => copy(branch)}>
+      {/* The whole row toggles the file list — the chevron is just an affordance. It stays a
+          plain div (not role=button) because it wraps the branch-copy and chevron buttons;
+          the chevron remains the keyboard-accessible toggle. */}
+      <div
+        className={`wt-row${hasChanges ? ' wt-row-toggle' : ''}`}
+        onClick={hasChanges ? toggle : undefined}
+      >
+        <button
+          type="button"
+          className="wt-branch"
+          title="Copy branch name"
+          onClick={(e) => {
+            e.stopPropagation();
+            copy(branch);
+          }}
+        >
           <span className="wt-branch-ico">⎇</span>
           <BranchLabel branch={branch} />
         </button>
@@ -86,7 +101,10 @@ export function SessionOutputs({
           <button
             type="button"
             className="wt-expand"
-            onClick={() => setOpen((v) => !v)}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggle();
+            }}
             aria-label={open ? 'Hide files' : 'Show files'}
           >
             {open ? '▾' : '▸'}
