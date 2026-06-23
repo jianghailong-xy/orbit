@@ -2436,27 +2436,35 @@ body {
 .cu-pop {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-width: 220px;
+  gap: 14px;
+  min-width: 280px;
+}
+/* In the popover the gauge spans the full card — drop the runner slot-meter's
+   200px cap it inherits from .runner-util, and run a touch taller than the
+   inline composer bar to suit this expanded view. */
+.cu-pop .runner-util {
+  max-width: none;
+  height: 6px;
 }
 .cu-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 .cu-label {
   font-size: 13px;
   color: var(--text-3);
 }
 .cu-pct {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-1);
 }
 .cu-reset {
-  margin-top: 5px;
+  margin-top: 6px;
   font-size: 12px;
   color: var(--text-4);
 }
