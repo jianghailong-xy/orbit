@@ -1239,16 +1239,6 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
-  const askMergeToMain = (id: string, branch: string) =>
-    modal.confirm({
-      title: 'Merge to main?',
-      content:
-        `This merges ${branch} into main on the runner's repo. It only proceeds when the` +
-        ' repo is on a clean main; on a conflict it aborts cleanly and asks you to merge' +
-        ' manually. The branch is kept either way.',
-      okText: 'Merge',
-      onOk: () => mergeMut.mutateAsync(id).catch(() => {}),
-    });
   // Resolve a merge conflict in-session: revive the session so its own agent merges the latest
   // main into the branch and fixes the conflicts (it has the context for its own changes);
   // afterwards the branch merges into main cleanly. resume() clears the stale mergeStatus, so
@@ -1274,15 +1264,6 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
-  const askResolveInSession = (id: string, branch: string) =>
-    modal.confirm({
-      title: 'Resolve conflict in session?',
-      content:
-        `This resumes the session and asks its agent to merge the latest main into ${branch}` +
-        ' and resolve the conflicts, then commit. When it finishes, click Merge to main again.',
-      okText: 'Resume & resolve',
-      onOk: () => resolveMut.mutateAsync({ id, branch }).catch(() => {}),
-    });
   // Commit a live session's uncommitted worktree changes onto its branch. Like merge it runs
   // on the runner (heartbeat round-trip) and the outcome lands on commitStatus/worktreeDirty;
   // committing is safe/local so it fires directly (no confirm). Invalidate detail so 'pending'
@@ -1944,13 +1925,13 @@ export function AgentView({ runner }: { runner: Runner }) {
           merging={mergeMut.isPending}
           onMergeToMain={
             selectedId && sessionDetailQ.data?.branch
-              ? () => askMergeToMain(selectedId, sessionDetailQ.data!.branch!)
+              ? () => mergeMut.mutate(selectedId)
               : undefined
           }
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && sessionDetailQ.data?.branch
-              ? () => askResolveInSession(selectedId, sessionDetailQ.data!.branch!)
+              ? () => resolveMut.mutate({ id: selectedId, branch: sessionDetailQ.data!.branch! })
               : undefined
           }
           committing={commitMut.isPending}
