@@ -53,8 +53,8 @@ services:
       dockerfile: src/web/Dockerfile
       args:
         # Public origin the install commands point at; baked into the bundle at build time.
-        # Defaults to the hosted instance — set PUBLIC_ORIGIN in .env for self-hosted deploys.
-        PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-https://orbit.wikova.com}"
+        # Defaults to the local gateway — set PUBLIC_ORIGIN in .env when serving on a domain.
+        PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
     container_name: orbit-web
     depends_on:
       apiserver:

@@ -7,25 +7,22 @@ import { api } from '../api';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
 
-// The deployment serves install.sh, the runner binaries (/dl) and the API all from its own
-// origin. __PUBLIC_ORIGIN__ is that origin, baked into the bundle at build time from the
-// PUBLIC_ORIGIN env (.env → web image build arg, see vite.config). It defaults to the hosted
-// host below, so self-hosted deploys just set PUBLIC_ORIGIN instead of being hardwired to it.
+// install.sh, the runner binaries (/dl) and the API are all served from the deployment's own
+// origin, and both the binary's defaultServer and install.sh's BASE_URL are baked to that
+// origin at build time (see src/web/Dockerfile + build-binaries.sh). So the commands need no
+// --server / ORBIT_BASE_URL override wherever this is deployed. __PUBLIC_ORIGIN__ is that
+// origin, injected at build time from the PUBLIC_ORIGIN env (.env → web build arg).
 declare const __PUBLIC_ORIGIN__: string;
-const DEFAULT_HOST = 'https://orbit.wikova.com';
 
 // Only the install line differs per OS; everything else is identical.
 function buildCommands(origin: string): { install: Record<OS, string>; register: string } {
-  // On the canonical hosted instance the CLI/script defaults already match its origin, so
-  // keep the commands clean there; on any other origin pass it through explicitly.
-  const custom = origin !== DEFAULT_HOST;
-  const sh = `curl -fsSL ${origin}/install.sh | ${custom ? `ORBIT_BASE_URL=${origin} ` : ''}bash`;
-  const ps = custom
-    ? `$env:ORBIT_BASE_URL='${origin}'; irm ${origin}/install.ps1 | iex`
-    : `irm ${origin}/install.ps1 | iex`;
   return {
-    install: { macOS: sh, Linux: sh, Windows: ps },
-    register: custom ? `orbit register --server ${origin}` : 'orbit register',
+    install: {
+      macOS: `curl -fsSL ${origin}/install.sh | bash`,
+      Linux: `curl -fsSL ${origin}/install.sh | bash`,
+      Windows: `irm ${origin}/install.ps1 | iex`,
+    },
+    register: 'orbit register',
   };
 }
 

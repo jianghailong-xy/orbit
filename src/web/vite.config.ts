@@ -7,9 +7,9 @@ export default defineConfig({
   plugins: [react()],
   // Public origin shown in the "Add a runner" install commands. Baked in at build time
   // from PUBLIC_ORIGIN (the web image's build arg, sourced from .env); falls back to the
-  // hosted instance when unset. Build-time so the static image carries no runtime config.
+  // local gateway when unset. Build-time so the static image carries no runtime config.
   define: {
-    __PUBLIC_ORIGIN__: JSON.stringify(process.env.PUBLIC_ORIGIN || 'https://orbit.wikova.com'),
+    __PUBLIC_ORIGIN__: JSON.stringify(process.env.PUBLIC_ORIGIN || 'http://localhost:2086'),
   },
   resolve: {
     alias: {
