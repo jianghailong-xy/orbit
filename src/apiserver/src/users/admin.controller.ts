@@ -20,8 +20,7 @@ import { createOrResetUser } from './users.util';
 /**
  * Role-gated operator area: managing user accounts from the web UI. Every route needs
  * a signed-in ADMIN — JwtAuthGuard sets the user, AdminRoleGuard checks the role per
- * request. Sits alongside the ADMIN_TOKEN `POST /users` used by the add-user script;
- * both share createOrResetUser so provisioning behaves identically either way.
+ * request.
  */
 @UseGuards(JwtAuthGuard, AdminRoleGuard)
 @Controller('admin')

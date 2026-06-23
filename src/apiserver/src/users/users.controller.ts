@@ -1,11 +1,9 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminAuthGuard } from './admin-auth.guard';
-import { CreateUserDto, UpdatePreferencesDto } from './dto';
-import { createOrResetUser } from './users.util';
+import { UpdatePreferencesDto } from './dto';
 
 @Controller('users')
 export class UsersController {
@@ -41,16 +39,5 @@ export class UsersController {
       data: { preferences: merged as Prisma.InputJsonValue },
       select: { id: true, email: true, name: true, createdAt: true, preferences: true, role: true },
     });
-  }
-
-  /**
-   * Provision a user. Self-registration was removed, so accounts are created
-   * here behind ADMIN_TOKEN — the API equivalent of the add-user script.
-   * Password hashing matches crypto.util so the account can log in normally.
-   */
-  @UseGuards(AdminAuthGuard)
-  @Post()
-  create(@Body() dto: CreateUserDto) {
-    return createOrResetUser(this.prisma, dto);
   }
 }

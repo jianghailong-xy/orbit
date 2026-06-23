@@ -62,8 +62,8 @@ applied — this is the only path that may recreate (restart) `postgres`.
   `docker-compose` v1 binary is used as a fallback, but `--wait` requires v2.
 - Run from a checkout of the repo (the script resolves the repo root relative
   to its own location).
-- The same environment the stack normally uses (e.g. `JWT_SECRET`,
-  `ADMIN_TOKEN`) should be present in the shell or repo-root `.env`.
+- The same environment the stack normally uses (e.g. `JWT_SECRET`) should be
+  present in the shell or repo-root `.env`.
 
 ## Notes
 

@@ -95,9 +95,10 @@ npm run dev:apiserver
 npm run dev:web
 ```
 
-There's no self-service signup. Provision the first account from the server side — `POST
-/api/users` is guarded by `ADMIN_TOKEN` (the `add-user` skill automates it) — then log in.
-Open the UI, create an agent, and follow the in-app guide to register a runner machine.
+There's no self-service signup. On a fresh deployment, the web UI sends the first visitor to
+a one-time `/setup` screen that creates the first account (which becomes ADMIN); provision
+any further users with the `add-user` skill. Then log in, open the UI, create an agent, and
+follow the in-app guide to register a runner machine.
 
 ### Deploy the full stack (Docker Compose)
 
@@ -106,7 +107,6 @@ gateway) behind one origin:
 
 ```bash
 export JWT_SECRET="$(openssl rand -base64 32)"    # required
-export ADMIN_TOKEN="$(openssl rand -base64 32)"   # guards account provisioning
 docker compose up -d --build                       # gateway listens on :2086
 ```
 

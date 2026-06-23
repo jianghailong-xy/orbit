@@ -10,8 +10,9 @@ interface AuthResponse {
 
 /**
  * First-run setup. Reachable only while the deployment has zero users: creates the
- * first account — guarded by the deploy-time ADMIN_TOKEN — and logs straight in, then
- * sends the operator to the runner-registration guide, the next onboarding step.
+ * first account (trust-on-first-use — the first visitor becomes ADMIN) and logs
+ * straight in, then sends the operator to the runner-registration guide, the next
+ * onboarding step.
  */
 export function SetupPage() {
   const { message } = AntApp.useApp();
@@ -27,13 +28,11 @@ export function SetupPage() {
     name?: string;
     email: string;
     password: string;
-    adminToken: string;
   }) => {
     try {
       const res = await api<AuthResponse>('/auth/bootstrap', {
         method: 'POST',
         body: { email: values.email, name: values.name, password: values.password },
-        headers: { 'x-admin-token': values.adminToken },
       });
       setToken(res.accessToken);
       // A brand-new system has no runner yet — start onboarding at the registration guide.
@@ -76,14 +75,6 @@ export function SetupPage() {
             ]}
           >
             <Input.Password autoComplete="new-password" />
-          </Form.Item>
-          <Form.Item
-            name="adminToken"
-            label="Admin token"
-            rules={[{ required: true }]}
-            extra="The ADMIN_TOKEN configured for this deployment (see your .env / docker-compose)."
-          >
-            <Input.Password autoComplete="off" />
           </Form.Item>
           <Button htmlType="submit" type="primary" block>
             Create account & sign in

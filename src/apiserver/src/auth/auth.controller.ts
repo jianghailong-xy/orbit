@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { AuthService } from './auth.service';
 import { BootstrapDto, ChangePasswordDto, LoginDto } from './dto';
@@ -19,11 +19,11 @@ export class AuthController {
     return this.auth.getSetupStatus();
   }
 
-  /** Public first-run endpoint: create the first user (guarded by ADMIN_TOKEN) and
-   *  return a session token. Self-closes once any user exists. */
+  /** Public first-run endpoint: create the first user and return a session token.
+   *  Self-closes once any user exists (trust-on-first-use). */
   @Post('bootstrap')
-  bootstrap(@Headers('x-admin-token') adminToken: string | undefined, @Body() dto: BootstrapDto) {
-    return this.auth.bootstrap(adminToken, dto.email, dto.name, dto.password);
+  bootstrap(@Body() dto: BootstrapDto) {
+    return this.auth.bootstrap(dto.email, dto.name, dto.password);
   }
 
   @UseGuards(JwtAuthGuard)

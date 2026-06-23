@@ -4,9 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto';
 
 /**
- * Create a user, or reset an existing user's password when `force` is set. Shared by
- * the ADMIN_TOKEN provisioning endpoint and the role-gated admin UI so both behave
- * identically. A freshly generated password is returned once when none was supplied.
+ * Create a user, or reset an existing user's password when `force` is set. Used by the
+ * role-gated admin UI. A freshly generated password is returned once when none was supplied.
  */
 export async function createOrResetUser(prisma: PrismaService, dto: CreateUserDto) {
   const email = dto.email.trim();
