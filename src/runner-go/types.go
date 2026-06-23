@@ -52,6 +52,9 @@ type HeartbeatRequest struct {
 	// `/` autocomplete. Empty slices are omitted so quiet heartbeats stay small.
 	Commands []SlashCommandInfo `json:"commands,omitempty"`
 	Skills   []SlashCommandInfo `json:"skills,omitempty"`
+	// Claude subscription quota for the account this runner uses (the `/usage`
+	// popover numbers). Nil when unavailable — never blocks or fails the heartbeat.
+	PlanUsage *PlanUsage `json:"planUsage,omitempty"`
 }
 
 // SlashCommandInfo mirrors @orbit/shared: one `/`-invocable asset (command or skill).

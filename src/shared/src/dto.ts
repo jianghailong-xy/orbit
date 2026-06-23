@@ -122,6 +122,31 @@ export interface SlashCommandInfo {
   agentId?: string;
 }
 
+/** One rate-limit window of Claude's subscription quota — e.g. the rolling 5-hour
+ *  session limit or a 7-day window. Mirrors the runner's PlanUsageWindow. */
+export interface PlanUsageWindow {
+  /** Percent of the window consumed, 0..100. */
+  utilization: number;
+  /** ISO-8601 timestamp when the window resets, if the endpoint reported one. */
+  resetsAt?: string;
+}
+
+/** Claude subscription quota for the account a runner is logged into — the same
+ *  numbers Claude Code's `/usage` popover shows, polled from the OAuth usage
+ *  endpoint. Any window may be absent (the plan doesn't have it, or it was null). */
+export interface PlanUsage {
+  /** Rolling 5-hour session limit. */
+  fiveHour?: PlanUsageWindow;
+  /** 7-day all-models limit. */
+  sevenDay?: PlanUsageWindow;
+  /** 7-day Opus-scoped limit (Max plans). */
+  sevenDayOpus?: PlanUsageWindow;
+  /** 7-day Sonnet-scoped limit. */
+  sevenDaySonnet?: PlanUsageWindow;
+  /** ISO-8601 when the runner fetched this. */
+  fetchedAt: string;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more concurrent sessions the runner can accept right now. */
@@ -131,6 +156,10 @@ export interface RunnerHeartbeatRequest {
   commands?: SlashCommandInfo[];
   /** Skills the runner found under ~/.claude + its workDirs. */
   skills?: SlashCommandInfo[];
+  /** Claude subscription quota for the account this runner uses, polled from the
+   *  OAuth usage endpoint. Absent when the runner authenticates with an API key
+   *  (no OAuth creds) or is too old to report it. */
+  planUsage?: PlanUsage;
 }
 
 export interface RunnerHeartbeatResponse {

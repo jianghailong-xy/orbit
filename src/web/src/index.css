@@ -859,6 +859,43 @@ body {
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
 }
+/* Per-runner Claude plan-usage gauges (runner detail page). Reuses .runner-util for
+   the bar; .rd-usage-bar widens it and drops the slot-meter's 200px cap. */
+.rd-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 420px;
+}
+.rd-usage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+}
+.rd-usage-label {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.rd-usage-pct {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.rd-usage-bar {
+  max-width: none;
+  height: 6px;
+}
+.rd-usage-reset {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-4);
+}
+.rd-usage-note {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-4);
+}
 .runner-tags {
   font-size: 12px;
   color: var(--text-4);

@@ -31,7 +31,7 @@ import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-quer
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
-import type { SlashCommandInfo } from '@orbit/shared';
+import type { PlanUsage, SlashCommandInfo } from '@orbit/shared';
 import { api, clearToken } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
@@ -74,6 +74,8 @@ export interface Runner {
   // Slash commands / skills the runner reported, for the composer's `/` autocomplete.
   commands?: SlashCommandInfo[];
   skills?: SlashCommandInfo[];
+  // Claude subscription quota for the account this runner uses (the `/usage` numbers).
+  planUsage?: PlanUsage | null;
 }
 
 interface Agent {

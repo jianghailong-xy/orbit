@@ -103,6 +103,9 @@ model Runner {
   // { name, description?, type? } (mirrors @orbit/shared SlashCommandInfo).
   availableCommands Json?      @map("available_commands")
   availableSkills   Json?      @map("available_skills")
+  // Latest Claude subscription quota for the account this runner uses (the `/usage`
+  // popover numbers), reported via heartbeat. Shape mirrors @orbit/shared PlanUsage.
+  planUsage         Json?      @map("plan_usage")
 
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).
