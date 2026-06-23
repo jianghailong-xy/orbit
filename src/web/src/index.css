@@ -1793,9 +1793,6 @@ body {
 .wt-del {
   color: var(--error-solid);
 }
-.wt-nochange {
-  color: var(--text-4);
-}
 .wt-spacer {
   flex: 1 1 auto;
 }

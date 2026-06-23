@@ -91,7 +91,8 @@ export function SessionOutputs({
 
   const branch = detail.branch;
   const files = detail.changedFiles ?? [];
-  const hasChanges = files.length > 0;
+  // A worktree with no diff has nothing actionable or informative to show — hide the bar entirely.
+  if (files.length === 0) return null;
   const add = files.reduce((s, f) => s + Math.max(0, f.additions), 0);
   const del = files.reduce((s, f) => s + Math.max(0, f.deletions), 0);
 
@@ -112,10 +113,7 @@ export function SessionOutputs({
       {/* The whole row toggles the file list — the chevron is just an affordance. It stays a
           plain div (not role=button) because it wraps the branch-copy and chevron buttons;
           the chevron remains the keyboard-accessible toggle. */}
-      <div
-        className={`wt-row${hasChanges ? ' wt-row-toggle' : ''}`}
-        onClick={hasChanges ? toggle : undefined}
-      >
+      <div className="wt-row wt-row-toggle" onClick={toggle}>
         <button
           type="button"
           className="wt-branch"
@@ -128,23 +126,19 @@ export function SessionOutputs({
           <span className="wt-branch-ico">⎇</span>
           <BranchLabel branch={branch} />
         </button>
-        {hasChanges ? (
-          <span className="wt-stat">
-            <span className="wt-add">+{add}</span>
-            <span className="wt-del">−{del}</span>
-            <span className="wt-files">
-              · {files.length} {files.length === 1 ? 'file' : 'files'}
-              {showMerge ? ' · committed' : ''}
-            </span>
+        <span className="wt-stat">
+          <span className="wt-add">+{add}</span>
+          <span className="wt-del">−{del}</span>
+          <span className="wt-files">
+            · {files.length} {files.length === 1 ? 'file' : 'files'}
+            {showMerge ? ' · committed' : ''}
           </span>
-        ) : (
-          <span className="wt-stat wt-nochange">no changes</span>
-        )}
+        </span>
         <span className="wt-spacer" />
-        {showCommit && hasChanges && (
+        {showCommit && (
           <CommitButton status={detail.commitStatus} busy={committing} onCommit={onCommit} />
         )}
-        {showMerge && hasChanges && (
+        {showMerge && (
           <MergeButton
             status={detail.mergeStatus}
             busy={merging}
@@ -153,21 +147,19 @@ export function SessionOutputs({
             resolving={resolving}
           />
         )}
-        {hasChanges && (
-          <button
-            type="button"
-            className="wt-expand"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggle();
-            }}
-            aria-label={open ? 'Hide files' : 'Show files'}
-          >
-            {open ? '▾' : '▸'}
-          </button>
-        )}
+        <button
+          type="button"
+          className="wt-expand"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle();
+          }}
+          aria-label={open ? 'Hide files' : 'Show files'}
+        >
+          {open ? '▾' : '▸'}
+        </button>
       </div>
-      {open && hasChanges && (
+      {open && (
         <div className="wt-files-panel">
           {files.map((f) => (
             <FileRow key={f.path} file={f} onClick={() => setOpenFile(f.path)} />
