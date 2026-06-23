@@ -216,7 +216,15 @@ func finalizeWorktree(wt *Worktree, title string) []ChangedFile {
 	return diffFiles(wt.Path, wt.BaseSha, "HEAD")
 }
 
-// diffFiles returns the per-file change summary for `git diff base..head` in dir.
+// gitEnv runs `git -C dir <args...>` with extra environment (e.g. GIT_INDEX_FILE).
+func gitEnv(dir string, env []string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = env
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// diffFiles returns the per-file change summary for the committed `git diff base..head`.
 func diffFiles(dir, base, head string) []ChangedFile {
 	rng := base + ".." + head
 	numOut, err := git(dir, "diff", "--numstat", rng)
@@ -224,14 +232,48 @@ func diffFiles(dir, base, head string) []ChangedFile {
 		logln("worktree diff failed in", dir+":", err)
 		return nil
 	}
-	// name-status (M/A/D/R...) keyed by path; for a rename take the new (last) path.
+	statusOut, _ := git(dir, "diff", "--name-status", rng)
+	return parseNumstat(numOut, statusOut)
+}
+
+// liveDiffStat returns the per-file diff of the worktree's CURRENT state (uncommitted +
+// untracked) vs its base, for the live status bar while a session is still running. It
+// stages into a throwaway temp index (GIT_INDEX_FILE) so it never touches the real index
+// claude may be using, and respects .gitignore so node_modules/build output don't show.
+func liveDiffStat(wt *Worktree) []ChangedFile {
+	if wt == nil || wt.BaseSha == "" {
+		return nil
+	}
+	tmp, err := os.CreateTemp("", "orbit-idx-*")
+	if err != nil {
+		return nil
+	}
+	idx := tmp.Name()
+	_ = tmp.Close()
+	// Remove the empty file first: git rejects a 0-byte index ("index file smaller than
+	// expected") — it creates a fresh index at this path instead.
+	_ = os.Remove(idx)
+	defer os.Remove(idx)
+	env := append(os.Environ(), "GIT_INDEX_FILE="+idx)
+	if _, err := gitEnv(wt.Path, env, "add", "-A"); err != nil {
+		return nil
+	}
+	numOut, err := gitEnv(wt.Path, env, "diff", "--cached", "--numstat", wt.BaseSha)
+	if err != nil {
+		return nil
+	}
+	statusOut, _ := gitEnv(wt.Path, env, "diff", "--cached", "--name-status", wt.BaseSha)
+	return parseNumstat(numOut, statusOut)
+}
+
+// parseNumstat zips `git diff --numstat` (+/-/path) with `git diff --name-status` (the
+// status letter, keyed by the new path for renames) into ChangedFile rows.
+func parseNumstat(numOut, statusOut string) []ChangedFile {
 	statusBy := map[string]string{}
-	if statusOut, err := git(dir, "diff", "--name-status", rng); err == nil {
-		for _, line := range strings.Split(statusOut, "\n") {
-			f := strings.Fields(line)
-			if len(f) >= 2 && len(f[0]) > 0 {
-				statusBy[f[len(f)-1]] = string(f[0][0])
-			}
+	for _, line := range strings.Split(statusOut, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 2 && len(f[0]) > 0 {
+			statusBy[f[len(f)-1]] = string(f[0][0])
 		}
 	}
 	var out []ChangedFile

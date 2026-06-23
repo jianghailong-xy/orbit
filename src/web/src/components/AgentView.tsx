@@ -812,7 +812,14 @@ export function AgentView({ runner }: { runner: Runner }) {
         }
         // Track turn boundaries live so the composer re-enables the instant a turn
         // ends, rather than waiting for the 4s session poll.
-        if (ev.type === 'turn_end') setIdle(true);
+        if (ev.type === 'turn_end') {
+          setIdle(true);
+          // Refresh the worktree status bar: the runner reports this turn's diff +
+          // isolation on /turn-complete. Delay a touch so that POST (which persists
+          // changed_files) lands before we refetch the detail, rather than racing the
+          // turn_end event broadcast.
+          setTimeout(() => qc.invalidateQueries({ queryKey: ['session', selectedId] }), 400);
+        }
         else if (ev.type === 'user') {
           setIdle(false);
           // The runner just picked up this turn — it's now in the transcript, so drop
@@ -1549,17 +1556,6 @@ export function AgentView({ runner }: { runner: Runner }) {
           )}
         </div>
 
-        {selected && !composing && (
-          <SessionOutputs
-            detail={sessionDetailQ.data}
-            enabling={enableIsoMut.isPending}
-            onEnableIsolation={
-              sessionDetailQ.data?.agent?.id
-                ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
-                : undefined
-            }
-          />
-        )}
 
         {stuck && (
           <button
@@ -1647,6 +1643,16 @@ export function AgentView({ runner }: { runner: Runner }) {
         </div>
 
       <div className="agent-composer">
+        <SessionOutputs
+          detail={sessionDetailQ.data}
+          committed={!live}
+          enabling={enableIsoMut.isPending}
+          onEnableIsolation={
+            sessionDetailQ.data?.agent?.id
+              ? () => askEnableIsolation(sessionDetailQ.data!.agent!.id)
+              : undefined
+          }
+        />
         {images.length > 0 && (
           <div className="composer-attachments">
             {images.map((im) => (

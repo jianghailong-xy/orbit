@@ -184,6 +184,10 @@ type TurnCompleteRequest struct {
 	CostUsd    float64                `json:"costUsd"`
 	Usage      *TokenUsage            `json:"usage,omitempty"`
 	ModelUsage map[string]interface{} `json:"modelUsage,omitempty"`
+	// Worktree isolation, reported each turn so the web can show a LIVE status bar (branch +
+	// running diff) while the session is still going — not just at terminal /complete.
+	IsolationStatus string        `json:"isolationStatus,omitempty"`
+	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
 }
 
 type RunEvent struct {
