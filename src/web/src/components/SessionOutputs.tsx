@@ -19,6 +19,8 @@ export function SessionOutputs({
   enabling,
   onMergeToMain,
   merging,
+  onResolveInSession,
+  resolving,
 }: {
   detail?: SessionDetail | null;
   /** True once the session has ended and the runner committed the work to the branch; while
@@ -31,6 +33,10 @@ export function SessionOutputs({
    *  The outcome surfaces via detail.mergeStatus/mergeError (the parent polls while pending). */
   onMergeToMain?: () => void;
   merging?: boolean;
+  /** Provided by the parent; on a conflict/error, resumes the session so its agent merges main
+   *  in and resolves the conflicts (after which the branch merges clean). */
+  onResolveInSession?: () => void;
+  resolving?: boolean;
 }) {
   const { message } = AntApp.useApp();
   const [open, setOpen] = useState(false);
@@ -89,7 +95,13 @@ export function SessionOutputs({
         )}
         <span className="wt-spacer" />
         {committed && hasChanges && (
-          <MergeButton status={detail.mergeStatus} busy={merging} onMerge={onMergeToMain} />
+          <MergeButton
+            status={detail.mergeStatus}
+            busy={merging}
+            onMerge={onMergeToMain}
+            onResolveInSession={onResolveInSession}
+            resolving={resolving}
+          />
         )}
         {hasChanges && (
           <button
@@ -136,19 +148,23 @@ export function SessionOutputs({
 
 /** Compact "Merge to main" control sitting on the worktree bar itself (shown once the work is
  *  committed). Drives off the server-reported mergeStatus: idle → a Merge button; pending →
- *  "Merging…"; merged → a ✓ chip; conflict/error → a red Retry. The failure detail and a
- *  copyable `git merge <branch>` fallback live in the expandable file panel below. `onMerge`
- *  is absent when the parent can't drive it (no branch) — then only the merged chip can show. */
+ *  "Merging…"; merged → a ✓ chip; conflict/error → "Resolve in session" (resume the session so
+ *  its agent merges main in and fixes the conflicts), falling back to "Retry merge" when the
+ *  parent can't resume. The failure detail + a copyable `git merge <branch>` fallback live in
+ *  the expandable file panel below. With no driver at all only the merged chip can show. */
 function MergeButton({
   status,
   busy,
   onMerge,
+  onResolveInSession,
+  resolving,
 }: {
   status?: SessionDetail['mergeStatus'];
   busy?: boolean;
   onMerge?: () => void;
+  onResolveInSession?: () => void;
+  resolving?: boolean;
 }) {
-  const pending = busy || status === 'pending';
   if (status === 'merged') {
     return (
       <span className="wt-merge-done" title="Merged into main">
@@ -156,8 +172,24 @@ function MergeButton({
       </span>
     );
   }
-  if (!onMerge) return null;
   const failed = status === 'conflict' || status === 'error';
+  // On a conflict/error, the best recovery is letting the session's own agent merge main in and
+  // resolve — it has the context for the changes it made. Falls back to a plain retry.
+  if (failed && onResolveInSession) {
+    return (
+      <button
+        type="button"
+        className="wt-merge-btn wt-merge-btn-failed"
+        disabled={resolving}
+        onClick={onResolveInSession}
+        title="Resume the session and have its agent merge main in and resolve the conflicts"
+      >
+        {resolving ? 'Resuming…' : 'Resolve in session'}
+      </button>
+    );
+  }
+  if (!onMerge) return null;
+  const pending = busy || status === 'pending';
   return (
     <button
       type="button"

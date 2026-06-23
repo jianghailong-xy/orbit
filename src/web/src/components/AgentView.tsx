@@ -1248,6 +1248,40 @@ export function AgentView({ runner }: { runner: Runner }) {
       okText: 'Merge',
       onOk: () => mergeMut.mutateAsync(id).catch(() => {}),
     });
+  // Resolve a merge conflict in-session: revive the session so its own agent merges the latest
+  // main into the branch and fixes the conflicts (it has the context for its own changes);
+  // afterwards the branch merges into main cleanly. resume() clears the stale mergeStatus, so
+  // the bar offers "Merge to main" again once the agent finishes.
+  const resolveMut = useMutation({
+    mutationFn: (vars: { id: string; branch: string }) =>
+      resumeSession(
+        vars.id,
+        'Merge the latest `main` into this branch and resolve any conflicts.\n\n' +
+          "You're in this session's isolated git worktree, checked out on `" +
+          vars.branch +
+          '`. Run `git merge main` — it will conflict. Resolve every conflict using your' +
+          ' knowledge of the changes made on this branch, then stage and `git commit` the' +
+          ' merge. Do not push. Once committed, the branch can be merged into main cleanly' +
+          ' from the status bar above the composer.',
+      ),
+    onSuccess: () => {
+      message.success('Resuming the session to resolve the conflict…');
+      if (selectedId) {
+        qc.invalidateQueries({ queryKey: ['session', selectedId] });
+        qc.invalidateQueries({ queryKey: ['sessions'] });
+      }
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askResolveInSession = (id: string, branch: string) =>
+    modal.confirm({
+      title: 'Resolve conflict in session?',
+      content:
+        `This resumes the session and asks its agent to merge the latest main into ${branch}` +
+        ' and resolve the conflicts, then commit. When it finishes, click Merge to main again.',
+      okText: 'Resume & resolve',
+      onOk: () => resolveMut.mutateAsync({ id, branch }).catch(() => {}),
+    });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -1866,6 +1900,12 @@ export function AgentView({ runner }: { runner: Runner }) {
           onMergeToMain={
             selectedId && sessionDetailQ.data?.branch
               ? () => askMergeToMain(selectedId, sessionDetailQ.data!.branch!)
+              : undefined
+          }
+          resolving={resolveMut.isPending}
+          onResolveInSession={
+            selectedId && sessionDetailQ.data?.branch
+              ? () => askResolveInSession(selectedId, sessionDetailQ.data!.branch!)
               : undefined
           }
         />

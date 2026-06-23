@@ -781,6 +781,11 @@ export class SessionsService {
         error: null,
         result: null,
         lastTurnAt: new Date(),
+        // Reviving will change the branch (more work / a conflict-resolution merge), so any
+        // prior "merge to main" outcome is stale — clear it so the bar offers Merge afresh.
+        mergeStatus: null,
+        mergeError: null,
+        mergedAt: null,
         // Re-apply any mode/model/effort changes made while the session was ended;
         // buildSession reads these when the runner re-claims and re-spawns claude.
         // Omitted fields keep their prior value (don't clobber to null).
