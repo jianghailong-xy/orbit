@@ -18,12 +18,15 @@ type assetRoot struct {
 
 // scanSlashAssets discovers custom slash commands (.claude/commands/*.md) and
 // skills (.claude/skills/<name>/SKILL.md) across the given roots plus the user's
-// global ~/.claude. The result feeds the web composer's `/` autocomplete, each asset
-// tagged with the agent it belongs to (empty = host-level, shared by all agents).
-// Dedup is by name, first occurrence wins. Host roots (~/.claude and the runner's
-// default dir) are scanned before agent project dirs, so a name shared with the host
-// stays host-level (visible to every agent) instead of being captured by one agent;
-// a name unique to an agent's project is attributed to that agent.
+// global ~/.claude, tagging each asset with the agent it belongs to (empty =
+// host-level, shared by all agents). The result feeds the web composer's `/`
+// autocomplete, which scopes the menu to host assets + the session's agent.
+//
+// Dedup is per scope, host-first: host-level names (~/.claude + the runner's default
+// dir) collapse by name and shadow the agents — a name found at host level is visible
+// to everyone, so it's emitted once and not re-tagged per agent. A name absent from
+// host is kept once per agent that has it, so two agents sharing a project skill name
+// (e.g. a dev and a prod checkout of the same repo) each surface their own scoped copy.
 func scanSlashAssets(roots []assetRoot) (commands, skills []SlashCommandInfo) {
 	var scan []assetRoot
 	seenRoot := map[string]bool{}
@@ -38,30 +41,55 @@ func scanSlashAssets(roots []assetRoot) (commands, skills []SlashCommandInfo) {
 		seenRoot[dir] = true
 		scan = append(scan, assetRoot{base: dir, agentID: agentID})
 	}
-	// Host-level first (the user's ~/.claude + the runner's default dir), then each
-	// agent's project dir, so host assets win same-name dedup and stay visible to all.
+	// All host-level roots (the user's ~/.claude + the runner's default dir) before any
+	// agent's, so host names are fully known and can shadow agents in the scoped dedup.
 	addRoot(userHome(), "")
 	for _, r := range roots {
-		addRoot(r.base, r.agentID)
+		if r.agentID == "" {
+			addRoot(r.base, r.agentID)
+		}
+	}
+	for _, r := range roots {
+		if r.agentID != "" {
+			addRoot(r.base, r.agentID)
+		}
 	}
 
-	cmdSeen := map[string]bool{}
-	skillSeen := map[string]bool{}
+	cmdHost, cmdSeen := map[string]bool{}, map[string]bool{}
+	skillHost, skillSeen := map[string]bool{}, map[string]bool{}
 	for _, r := range scan {
-		for _, c := range scanCommands(filepath.Join(r.base, "commands"), r.agentID) {
-			if !cmdSeen[c.Name] {
-				cmdSeen[c.Name] = true
-				commands = append(commands, c)
-			}
-		}
-		for _, s := range scanSkills(filepath.Join(r.base, "skills"), r.agentID) {
-			if !skillSeen[s.Name] {
-				skillSeen[s.Name] = true
-				skills = append(skills, s)
-			}
-		}
+		commands = dedupScoped(commands, scanCommands(filepath.Join(r.base, "commands"), r.agentID), cmdHost, cmdSeen)
+		skills = dedupScoped(skills, scanSkills(filepath.Join(r.base, "skills"), r.agentID), skillHost, skillSeen)
 	}
 	return commands, skills
+}
+
+// dedupScoped appends src into dst with scope-aware dedup. hostNames records names
+// already claimed at host level (agentID ""); seen records "<agentID>\x00<name>" pairs
+// already emitted. A host asset collapses by name and is recorded so a later agent asset
+// of the same name is dropped (host shadows project). An agent asset is kept unless its
+// name is host-level or already emitted for that same agent — so two agents can each keep
+// their own copy of a shared name. Host roots must be scanned before agent roots.
+func dedupScoped(dst, src []SlashCommandInfo, hostNames, seen map[string]bool) []SlashCommandInfo {
+	for _, a := range src {
+		if a.AgentID == "" {
+			if hostNames[a.Name] {
+				continue
+			}
+			hostNames[a.Name] = true
+		} else {
+			if hostNames[a.Name] {
+				continue
+			}
+			key := a.AgentID + "\x00" + a.Name
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+		}
+		dst = append(dst, a)
+	}
+	return dst
 }
 
 func scanCommands(dir, agentID string) []SlashCommandInfo {
