@@ -33,6 +33,7 @@ import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import { DEFAULT_MODEL, MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
+import { BackgroundShellsTray } from './BackgroundShellsTray';
 import {
   type ApprovalInfo,
   archiveSession,
@@ -1906,6 +1907,9 @@ export function AgentView({ runner }: { runner: Runner }) {
             ))}
           </div>
         )}
+        {/* Background processes the agent launched (Bash run_in_background) — invisible
+            otherwise. Derived from this session's events; hidden when there are none. */}
+        {selectedId && <BackgroundShellsTray events={events} live={live} />}
         <SessionOutputs
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's
