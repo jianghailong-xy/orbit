@@ -590,6 +590,15 @@ body {
    (which toggles on .open, not .collapsed) is never touched — there the panel
    always opens as the full list. */
 @media (min-width: 961px) {
+  /* Animate the collapse/expand width change so the panel glides between the full
+     list and the 56px rail. Suppressed during a drag-resize (.resizing) so the edge
+     tracks the cursor 1:1 instead of rubber-banding behind the transition. */
+  .app-nav {
+    transition: width 0.2s ease;
+  }
+  .app-nav.resizing {
+    transition: none;
+  }
   .app-nav.collapsed {
     width: 56px;
   }

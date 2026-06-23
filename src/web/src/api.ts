@@ -139,7 +139,9 @@ export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
  *  running session is reopened/deep-linked (queued turns aren't in the event stream
  *  until the runner delivers them). */
 export const listQueuedTurns = (sessionId: string) =>
-  api<{ turnId: string; content: string }[]>(`/sessions/${sessionId}/turns`);
+  api<{ turnId: string; content: string; attachments?: { id: string; mimeType: string }[] }[]>(
+    `/sessions/${sessionId}/turns`,
+  );
 
 /** Revive an ended session with a new message: the runner --resumes claude's
  *  existing context. Requires the session's runner to be online. `config` re-applies

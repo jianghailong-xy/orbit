@@ -52,7 +52,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { ChatImage, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, ChatImage, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import type { Runner } from './TasksSidePanel';
 
@@ -70,6 +70,9 @@ interface RunEvent {
 interface QueuedTurn {
   turnId: string;
   content: string;
+  // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
+  // image-only follow-up turn — the local turnImages previews don't survive a reload.
+  attachments?: { id: string; mimeType: string }[];
 }
 
 // An image staged in the composer: uploaded to the control plane (POST /api/attachments)
@@ -1711,13 +1714,22 @@ export function AgentView({ runner }: { runner: Runner }) {
             ))}
             {queued.map((q) => (
               <div className="chat-msg chat-user chat-queued" key={q.turnId}>
-                {turnImages[q.turnId]?.length > 0 && (
+                {turnImages[q.turnId]?.length ? (
+                  // Fresh local previews (object URLs) — instant, before a reload drops them.
                   <div className="chat-images">
                     {turnImages[q.turnId].map((im, i) => (
                       <ChatImage key={i} src={im.url} />
                     ))}
                   </div>
-                )}
+                ) : q.attachments?.length ? (
+                  // After a reload the local previews are gone; fetch the refs the queued-turn
+                  // list carries from the server, so an image-only turn stays visible.
+                  <div className="chat-images">
+                    {q.attachments.map((a) => (
+                      <AttachmentImage key={a.id} id={a.id} />
+                    ))}
+                  </div>
+                ) : null}
                 {q.content && <span className="chat-queued-text">{q.content}</span>}
                 <span className="chat-queued-meta">
                   <span className="chat-queued-tag">Queued</span>

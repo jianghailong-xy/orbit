@@ -374,29 +374,40 @@ export function RunnerDetailPage() {
       >
         Chat
       </Button>
-      <Button
-        size="small"
-        type={editing?.id === a.id ? 'primary' : 'text'}
-        icon={<EditOutlined />}
-        title={editing?.id === a.id ? 'Close editor' : 'Edit'}
-        onClick={() => (editing?.id === a.id ? closeForm() : openEdit(a))}
-      />
-      <Button
-        size="small"
-        type="text"
-        danger
-        icon={<DeleteOutlined />}
-        title="Delete"
-        onClick={() =>
-          modal.confirm({
-            title: `Delete agent “${a.name}”?`,
-            okText: 'Delete',
-            okButtonProps: { danger: true },
-            cancelText: 'Cancel',
-            onOk: () => removeAgentMut.mutateAsync(a.id),
-          })
-        }
-      />
+      <Dropdown
+        trigger={['click']}
+        placement="bottomRight"
+        menu={{
+          items: [
+            {
+              key: 'edit',
+              icon: <EditOutlined />,
+              label: editing?.id === a.id ? 'Close editor' : 'Edit',
+              onClick: () => (editing?.id === a.id ? closeForm() : openEdit(a)),
+            },
+            { type: 'divider' },
+            {
+              key: 'delete',
+              icon: <DeleteOutlined />,
+              label: 'Delete',
+              danger: true,
+              onClick: () =>
+                modal.confirm({
+                  title: `Delete agent “${a.name}”?`,
+                  content:
+                    'This removes the agent and unlinks its sessions and tasks. This can’t be undone.',
+                  okText: 'Delete',
+                  okButtonProps: { danger: true },
+                  cancelText: 'Cancel',
+                  autoFocusButton: 'cancel',
+                  onOk: () => removeAgentMut.mutateAsync(a.id),
+                }),
+            },
+          ],
+        }}
+      >
+        <Button size="small" type="text" icon={<MoreOutlined />} title="Actions" />
+      </Dropdown>
     </div>
     );
   };

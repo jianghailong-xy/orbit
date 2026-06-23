@@ -198,6 +198,11 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [toggleCollapsed]);
 
+  // True only while the right-edge handle is being dragged. The width transition
+  // (see .app-nav in index.css) is suppressed during a drag via the .resizing class
+  // so the panel tracks the cursor instead of lagging behind by the transition.
+  const [resizing, setResizing] = useState(false);
+
   // Drag the right-edge handle to resize; the final width is saved on release.
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -212,10 +217,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       window.removeEventListener('mouseup', onUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      setResizing(false);
       localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
     };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
+    setResizing(true);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
@@ -385,7 +392,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   return (
     <aside
-      className={`app-nav${open ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}
+      className={`app-nav${open ? ' open' : ''}${collapsed ? ' collapsed' : ''}${resizing ? ' resizing' : ''}`}
       style={{ width: collapsed ? undefined : sidebarWidth }}
     >
       <div className="tp-brand">

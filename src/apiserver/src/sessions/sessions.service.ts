@@ -502,9 +502,15 @@ export class SessionsService {
         clientTurnId: { not: SessionsService.initialTurnClientId(id) },
       },
       orderBy: { seq: 'asc' },
-      select: { id: true, content: true },
+      // Carry each queued turn's image refs so the composer can still render them after a
+      // reload (the local object-URL previews are gone by then) — e.g. an image-only turn.
+      select: { id: true, content: true, attachments: { select: { id: true, mimeType: true } } },
     });
-    return turns.map((t) => ({ turnId: t.id, content: t.content ?? '' }));
+    return turns.map((t) => ({
+      turnId: t.id,
+      content: t.content ?? '',
+      attachments: t.attachments.map((a) => ({ id: a.id, mimeType: a.mimeType })),
+    }));
   }
 
   /** Withdraw a queued user message. Only a still-PENDING message can be cancelled;

@@ -248,7 +248,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
 // Renders a past turn's image from its attachment id. The download endpoint is
 // bearer-guarded (an <img src> can't carry the token), so fetch the blob and show its
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
-function AttachmentImage({ id }: { id: string }) {
+export function AttachmentImage({ id }: { id: string }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
