@@ -30,7 +30,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
-import { MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
+import { DEFAULT_MODEL, MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
 import {
   type ApprovalInfo,
@@ -418,7 +418,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Default');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [effort, setEffort] = useState(() => localStorage.getItem(EFFORT_KEY) ?? '');
   // Which slice of the session list to show: active, archived, system, or trash.
   const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
@@ -654,7 +654,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // liveness, not the polled object, so the 4s refetch can't clobber a user's edit.
   useEffect(() => {
     if (!selected || live) return;
-    setModel(selected.model ?? 'claude-sonnet-4-6');
+    setModel(selected.model ?? DEFAULT_MODEL);
     setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
     setEffort(selected.effort ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1344,7 +1344,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
-  const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
+  const shownModel: string = live ? (selected.model ?? DEFAULT_MODEL) : model;
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;

@@ -24,5 +24,5 @@ export const AUTO_CAPABLE_MODELS = new Set(['claude-sonnet-4-6', 'claude-opus-4-
 export const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
 
 // App defaults used when the user has set no preference of their own.
-export const DEFAULT_MODEL = 'claude-sonnet-4-6';
+export const DEFAULT_MODEL = 'claude-opus-4-8';
 export const DEFAULT_PERMISSION_MODE = 'auto';

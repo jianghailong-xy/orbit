@@ -33,7 +33,7 @@ export class AgentsService {
         ownerId,
         name: dto.name,
         description: dto.description,
-        model: dto.model ?? 'claude-sonnet-4-6',
+        model: dto.model ?? 'claude-opus-4-8',
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         allowedTools: Array.from(

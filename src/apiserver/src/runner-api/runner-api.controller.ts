@@ -295,7 +295,7 @@ export class RunnerApiController {
       // Per-session override wins over the agent, then a server default — so a
       // resumed process keeps the model/permission-mode/tools it was created with.
       const agentCfg: AgentExecConfig = {
-        model: s.model ?? agent?.model ?? 'claude-sonnet-4-6',
+        model: s.model ?? agent?.model ?? 'claude-opus-4-8',
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
