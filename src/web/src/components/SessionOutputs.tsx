@@ -256,7 +256,10 @@ function MergeButton({
         type="button"
         className="wt-merge-btn wt-merge-btn-failed"
         disabled={resolving}
-        onClick={onResolveInSession}
+        onClick={(e) => {
+          e.stopPropagation();
+          onResolveInSession();
+        }}
         title="Resume the session and have its agent merge main in and resolve the conflicts"
       >
         {resolving ? 'Resuming…' : 'Resolve in session'}
@@ -270,7 +273,10 @@ function MergeButton({
       type="button"
       className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
       disabled={pending}
-      onClick={onMerge}
+      onClick={(e) => {
+        e.stopPropagation();
+        onMerge();
+      }}
       title={failed ? 'Merge failed — expand the file list for details' : 'Merge this branch into main'}
     >
       {pending ? 'Merging…' : failed ? 'Retry merge' : 'Merge to main'}
@@ -304,7 +310,11 @@ function CommitButton({
       type="button"
       className={`wt-merge-btn${failed ? ' wt-merge-btn-failed' : ''}`}
       disabled={pending || turnActive}
-      onClick={onCommit}
+      onClick={(e) => {
+        // Don't let the click bubble to the row's toggle — committing shouldn't expand the panel.
+        e.stopPropagation();
+        onCommit();
+      }}
       title={
         turnActive && !pending
           ? 'Wait for the current turn to finish before committing'
