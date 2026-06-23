@@ -44,12 +44,24 @@ function SkillRow({ item }: { item: SlashCommandInfo }) {
   );
 }
 
-// Runners report the slash commands (.claude/commands) and skills (.claude/skills)
-// they found on disk via heartbeat; GET /runners surfaces them as runner.commands /
-// runner.skills, each tagged with the agent whose workDir it came from (empty = host,
-// shared by all agents). This page groups that catalog by runner, then by scope —
-// host-level assets, then each agent — so a skill two agents share (e.g. a dev and a
-// prod checkout) reads as "both have it" instead of a bare duplicate.
+// One collapsible scope group: an agent's project assets, or a runner's host-level
+// "Shared" bucket. Skills come from a runner's filesystem (.claude/skills/commands),
+// tagged by the agent whose workDir they were found in (empty = host, shared by all
+// agents on that machine).
+type Group = {
+  key: string;
+  title: string;
+  runnerName: string;
+  online: boolean;
+  isHost: boolean;
+  skills: SlashCommandInfo[];
+  commands: SlashCommandInfo[];
+};
+
+// Runners report the slash commands/skills they found on disk via heartbeat; GET /runners
+// surfaces them per runner, each tagged with its agent. This page flattens that into one
+// collapsible group per agent (plus each runner's shared/host bucket) so the catalog reads
+// agent-first — what each agent can do — rather than buried under the machine.
 export function SkillsPage() {
   const runners = useQuery({
     queryKey: ['runners'],
@@ -59,7 +71,7 @@ export function SkillsPage() {
   const agents = useQuery(agentsQuery());
   const list = runners.data ?? [];
 
-  // agentId -> display name, so a project-scoped group reads as the agent, not a uuid.
+  // agentId -> display name, so a project group reads as the agent, not a uuid.
   const agentName = (id: string): string =>
     (agents.data ?? []).find((a: { id: string }) => a.id === id)?.name ?? id;
 
@@ -69,6 +81,16 @@ export function SkillsPage() {
     !q ||
     it.name.toLowerCase().includes(q) ||
     (it.description?.toLowerCase().includes(q) ?? false);
+
+  // Collapsed group keys; an active search forces every matching group open.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   const renderGroup = (title: string, items: SlashCommandInfo[], keyPrefix: string) => {
     if (items.length === 0) return null;
@@ -82,35 +104,42 @@ export function SkillsPage() {
     );
   };
 
-  // Split a runner's assets by scope: the host bucket (no agentId, shared by every agent)
-  // first, then one bucket per agent that owns project-level assets, sorted by name.
-  type Scope = { key: string; title: string; skills: SlashCommandInfo[]; commands: SlashCommandInfo[] };
-  const scopesFor = (skills: SlashCommandInfo[], commands: SlashCommandInfo[]): Scope[] => {
-    const map = new Map<string, Scope>();
-    const bucket = (agentId?: string): Scope => {
-      const key = agentId || '';
-      let s = map.get(key);
-      if (!s) {
-        s = { key, title: key === '' ? 'Host' : agentName(key), skills: [], commands: [] };
-        map.set(key, s);
+  // Flatten every runner's (search-filtered) assets into per-scope groups: one per agent
+  // that owns project assets, plus the runner's host bucket. Agents sort first by name;
+  // the shared/host buckets sink to the bottom.
+  const groups: Group[] = [];
+  for (const r of list) {
+    const skills = (r.skills ?? []).filter(match);
+    const commands = (r.commands ?? []).filter(match);
+    const byScope = new Map<string, Group>();
+    const bucket = (agentId?: string): Group => {
+      const id = agentId || '';
+      let g = byScope.get(id);
+      if (!g) {
+        g = {
+          key: `${r.id}:${id || 'host'}`,
+          title: id ? agentName(id) : 'Shared',
+          runnerName: r.displayName || r.name,
+          online: !!r.online,
+          isHost: !id,
+          skills: [],
+          commands: [],
+        };
+        byScope.set(id, g);
       }
-      return s;
+      return g;
     };
-    for (const sk of skills) bucket(sk.agentId).skills.push(sk);
+    for (const s of skills) bucket(s.agentId).skills.push(s);
     for (const c of commands) bucket(c.agentId).commands.push(c);
-    return [...map.values()].sort((a, b) =>
-      a.key === '' ? -1 : b.key === '' ? 1 : a.title.localeCompare(b.title),
-    );
-  };
-
-  // Per-runner filtered view; when searching, runners with no match drop out entirely.
-  const cards = list
-    .map((r) => ({
-      runner: r,
-      skills: (r.skills ?? []).filter(match),
-      commands: (r.commands ?? []).filter(match),
-    }))
-    .filter((c) => !q || c.skills.length > 0 || c.commands.length > 0);
+    groups.push(...byScope.values());
+  }
+  groups.sort((a, b) =>
+    a.isHost !== b.isHost
+      ? a.isHost
+        ? 1
+        : -1
+      : a.title.localeCompare(b.title) || a.runnerName.localeCompare(b.runnerName),
+  );
 
   return (
     <div className="skills-page">
@@ -134,45 +163,44 @@ export function SkillsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {cards.length === 0 ? (
-            <div className="skills-no-match">No skills or commands match "{query}".</div>
+          {groups.length === 0 ? (
+            <div className="skills-no-match">
+              {q
+                ? `No skills or commands match "${query}".`
+                : 'No skills or commands reported by any runner yet.'}
+            </div>
           ) : (
             <div className="skills-list">
-              {cards.map(({ runner: r, skills, commands }) => {
-                const empty = skills.length === 0 && commands.length === 0;
-                const scopes = scopesFor(skills, commands);
-                // Only surface scope headers when assets actually span agents; a runner
-                // whose assets are all host-level keeps the simple flat layout.
-                const flat = scopes.length <= 1;
+              {groups.map((g) => {
+                const open = !!q || !collapsed.has(g.key);
+                const count = g.skills.length + g.commands.length;
                 return (
-                  <div className="skills-runner" key={r.id}>
-                    <div className="skills-runner-head">
-                      <span
-                        className="runner-dot"
-                        style={{ background: r.online ? 'var(--success-solid)' : 'var(--dot-idle)' }}
-                        title={r.online ? 'Online' : 'Offline'}
-                      />
-                      <span className="skills-runner-name">{r.displayName || r.name}</span>
-                      <span className="skills-runner-status">
-                        {r.online ? 'Online' : 'Offline'}
+                  <div className="skills-group-card" key={g.key}>
+                    <button
+                      type="button"
+                      className="skills-group-head"
+                      onClick={() => toggle(g.key)}
+                      aria-expanded={open}
+                    >
+                      <span className={`skills-caret${open ? ' open' : ''}`} aria-hidden>
+                        ▸
                       </span>
-                    </div>
-                    {flat ? (
-                      <>
-                        {renderGroup('Skills', skills, 'skill')}
-                        {renderGroup('Commands', commands, 'cmd')}
-                      </>
-                    ) : (
-                      scopes.map((s) => (
-                        <div className="skills-scope" key={s.key}>
-                          <div className="skills-scope-title">{s.title}</div>
-                          {renderGroup('Skills', s.skills, `${s.key}:skill`)}
-                          {renderGroup('Commands', s.commands, `${s.key}:cmd`)}
-                        </div>
-                      ))
-                    )}
-                    {empty && (
-                      <div className="skills-runner-empty">No skills or commands reported.</div>
+                      <span className="skills-group-name">{g.title}</span>
+                      <span className="skills-group-meta">
+                        <span
+                          className="runner-dot"
+                          style={{ background: g.online ? 'var(--success-solid)' : 'var(--dot-idle)' }}
+                          title={g.online ? 'Online' : 'Offline'}
+                        />
+                        {g.runnerName}
+                      </span>
+                      <span className="skills-group-count">{count}</span>
+                    </button>
+                    {open && (
+                      <div className="skills-group-body">
+                        {renderGroup('Skills', g.skills, `${g.key}:s`)}
+                        {renderGroup('Commands', g.commands, `${g.key}:c`)}
+                      </div>
                     )}
                   </div>
                 );
