@@ -2552,6 +2552,42 @@ body {
      plain block would stretch the bubble background across 80% and trail blank space
      after a short message. fit-content shrinks to the text; margin-left:auto right-aligns. */
   width: fit-content;
+  /* anchor the hover-revealed copy button to the bubble's edge */
+  position: relative;
+}
+/* Copy button on a user message — sits just outside the bubble's left edge (the bubble is
+   right-aligned, so there's always room to its left), fades in on hover so it never
+   competes with the text. Absolute, so it adds no height and shifts nothing on the page. */
+.chat-copy {
+  position: absolute;
+  right: 100%;
+  bottom: 0;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.chat-user:hover .chat-copy,
+.chat-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.chat-copy:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
 }
 /* Images sent with a user turn — a wrapping row of thumbnails above the bubble's text
    (shared by the live user bubble and the queued bubble). */

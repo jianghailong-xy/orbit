@@ -1,10 +1,12 @@
 import {
   ApiOutlined,
   CheckCircleFilled,
+  CheckOutlined,
   CheckSquareOutlined,
   CloseCircleFilled,
   CodeOutlined,
   ConsoleSqlOutlined,
+  CopyOutlined,
   DownOutlined,
   EditOutlined,
   EyeOutlined,
@@ -204,31 +206,7 @@ export const Transcript = memo(function Transcript({
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
     case 'user':
-      // User input is kept verbatim (pre-wrap), not Markdown-parsed, so a literal
-      // '#' or '*' the user typed isn't reinterpreted. Any images sent with the turn
-      // render above the text (an image-only turn has empty text). Prefer the local
-      // preview (instant); fall back to fetching the durable refs when there's none.
-      return (
-        <div className="chat-msg chat-user" data-seq={node.seq}>
-          {node.images && node.images.length > 0 ? (
-            <div className="chat-images">
-              {node.images.map((im, i) => (
-                <ChatImage key={i} src={im.url} />
-              ))}
-            </div>
-          ) : (
-            node.imageRefs &&
-            node.imageRefs.length > 0 && (
-              <div className="chat-images">
-                {node.imageRefs.map((r) => (
-                  <AttachmentImage key={r.id} id={r.id} />
-                ))}
-              </div>
-            )
-          )}
-          {node.text}
-        </div>
-      );
+      return <UserBubble node={node} />;
     case 'assistant':
       return <AssistantBubble text={node.text} />;
     case 'thinking':
@@ -244,6 +222,52 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'error':
       return <div className="chat-error">✖ {node.message}</div>;
   }
+}
+
+// User message bubble. Input is kept verbatim (pre-wrap), not Markdown-parsed, so a
+// literal '#' or '*' the user typed isn't reinterpreted. Any images sent with the turn
+// render above the text (an image-only turn has empty text) — prefer the local preview
+// (instant), falling back to the durable refs when there's none. A copy button fades in
+// on hover (only when the turn has text) to lift the message text back out to the clipboard.
+function UserBubble({ node }: { node: TextNode }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(node.text)?.catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  return (
+    <div className="chat-msg chat-user" data-seq={node.seq}>
+      {node.images && node.images.length > 0 ? (
+        <div className="chat-images">
+          {node.images.map((im, i) => (
+            <ChatImage key={i} src={im.url} />
+          ))}
+        </div>
+      ) : (
+        node.imageRefs &&
+        node.imageRefs.length > 0 && (
+          <div className="chat-images">
+            {node.imageRefs.map((r) => (
+              <AttachmentImage key={r.id} id={r.id} />
+            ))}
+          </div>
+        )
+      )}
+      {node.text}
+      {node.text && (
+        <button
+          type="button"
+          className="chat-copy"
+          onClick={copy}
+          title={copied ? 'Copied' : 'Copy message'}
+          aria-label={copied ? 'Copied' : 'Copy message'}
+        >
+          {copied ? <CheckOutlined /> : <CopyOutlined />}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Renders a past turn's image from its attachment id. The download endpoint is
