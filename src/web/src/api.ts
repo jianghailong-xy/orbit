@@ -77,10 +77,20 @@ const uuid = (): string => {
  *  the message is queued (delivered when the current turn finishes); the returned
  *  turnId identifies it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are
  *  ids of images already uploaded via uploadAttachment, sent alongside the text. */
-export const sendTurn = (sessionId: string, content: string, attachmentIds?: string[]) =>
+export const sendTurn = (
+  sessionId: string,
+  content: string,
+  attachmentIds?: string[],
+  kind?: 'message' | 'shell',
+) =>
   api<{ turnId: string; seq: number }>(`/sessions/${sessionId}/turns`, {
     method: 'POST',
-    body: { clientTurnId: uuid(), content, ...(attachmentIds?.length ? { attachmentIds } : {}) },
+    body: {
+      clientTurnId: uuid(),
+      content,
+      ...(attachmentIds?.length ? { attachmentIds } : {}),
+      ...(kind === 'shell' ? { kind } : {}),
+    },
   });
 
 /** Upload one image to the control plane (multipart/form-data — the shared `api` helper

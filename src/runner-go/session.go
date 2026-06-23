@@ -341,6 +341,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	pollDone := make(chan struct{})
 	go func() {
 		defer close(pollDone)
+		// Buffered `!`-shell output: each shell turn appends command+output here; the next
+		// real message prepends + clears it so claude sees it as context (CLI `!` semantics).
+		// Poller-goroutine-local (no lock), and intentionally lost on respawn.
+		var pendingShellCtx []string
 		for pollCtx.Err() == nil {
 			resp, err := t.inbox(pollCtx, job.SessionID)
 			if err != nil {
@@ -397,9 +401,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					})
 					imgRefs = append(imgRefs, map[string]interface{}{"id": att.ID, "mime": att.MimeType})
 				}
-				// Keep the text block unless this is an image-only turn (empty text + images).
-				if resp.Content != "" || len(content) == 0 {
-					content = append(content, map[string]interface{}{"type": "text", "text": resp.Content})
+				// Prepend any buffered `!`-shell output as context — claude sees the
+				// command+output with this message (CLI `!` semantics), no turn spent on it.
+				feedText := resp.Content
+				if len(pendingShellCtx) > 0 {
+					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
+					pendingShellCtx = nil
+				}
+				// Keep the text block unless this is an image-only turn with nothing to feed.
+				if feedText != "" || len(content) == 0 {
+					content = append(content, map[string]interface{}{"type": "text", "text": feedText})
 				}
 				userEv := map[string]interface{}{"text": resp.Content}
 				if len(imgRefs) > 0 {
@@ -422,6 +433,31 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					logln("stdin write failed for", job.SessionID+":", err)
 					return
 				}
+			case "shell":
+				// `!`-prefixed shell command: run it on the runner (no claude), echo the
+				// output, and buffer it for the next message's context. Dedup on turnId so
+				// a lease re-delivery can't re-run side effects.
+				inflightMu.Lock()
+				if inflight[resp.TurnID] {
+					inflightMu.Unlock()
+					continue
+				}
+				inflight[resp.TurnID] = true
+				inflightMu.Unlock()
+				setTurn(resp.TurnID)
+				shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
+				pendingShellCtx = append(pendingShellCtx,
+					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
+				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+					TurnID: resp.TurnID, Status: stSucceeded,
+					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+				}); err != nil {
+					logln("shell turn-complete failed for", job.SessionID+":", err)
+				}
+				inflightMu.Lock()
+				delete(inflight, resp.TurnID)
+				inflightMu.Unlock()
+				setTurn("")
 			case "interrupt":
 				ctrl, _ := json.Marshal(map[string]interface{}{
 					"type":       "control_request",

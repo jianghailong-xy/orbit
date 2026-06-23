@@ -454,7 +454,9 @@ export class SessionsService {
     // delivery is serialized in the inbox (dequeueTurn releases the next message only
     // once the in-flight one is answered). The user can withdraw a still-queued one.
     const turn = await this.insertTurn(id, {
-      kind: 'message',
+      // Whitelist: the turns endpoint may only enqueue 'message' or 'shell' — never a
+      // control kind (interrupt/end/reload), which have their own dedicated routes.
+      kind: dto.kind === 'shell' ? 'shell' : 'message',
       content: dto.content,
       clientTurnId: dto.clientTurnId,
     });

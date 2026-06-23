@@ -387,15 +387,15 @@ export class RunnerApiController {
             ("kind" IN ('interrupt', 'end')
               AND ("status" = 'PENDING' OR ("status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())))
             -- A crashed in-flight message: re-deliver the same one (at-least-once lease).
-            OR ("kind" = 'message' AND "status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())
+            OR ("kind" IN ('message', 'shell') AND "status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())
             -- reload (a model/mode/effort change) and the next queued message both wait
             -- until no message is in flight, so a config change made mid-turn applies
             -- between turns (re-spawn) instead of aborting the running one. reload is
             -- ordered ahead of queued messages below, so the next turn runs under it.
-            OR ("kind" IN ('reload', 'message') AND "status" = 'PENDING' AND NOT EXISTS (
+            OR ("kind" IN ('reload', 'message', 'shell') AND "status" = 'PENDING' AND NOT EXISTS (
               SELECT 1 FROM "conversation_turn" inflight
               WHERE inflight."session_id" = ${sessionId}::uuid
-                AND inflight."kind" = 'message'
+                AND inflight."kind" IN ('message', 'shell')
                 AND inflight."status" = 'IN_FLIGHT'
             ))
           )
@@ -408,7 +408,9 @@ export class RunnerApiController {
     if (rows.length === 0) return null;
     const t = rows[0];
     let attachments: TurnAttachment[] | undefined;
-    if (t.kind === 'message') {
+    if (t.kind === 'message' || t.kind === 'shell') {
+      // A shell turn runs on the runner too, so flip RUNNING the same way — it serializes
+      // a concurrent send and keeps the idle reaper off while the command executes.
       await this.prisma.session.updateMany({
         where: {
           id: sessionId,
@@ -418,13 +420,15 @@ export class RunnerApiController {
       });
       // Hand the runner this turn's image refs (id + mime); it fetches the bytes via
       // GET /api/attachments/:id and builds the claude `image` content block. Text-only
-      // turns have none, so the field is omitted.
-      const atts = await this.prisma.attachment.findMany({
-        where: { turnId: t.id },
-        select: { id: true, mimeType: true },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (atts.length > 0) attachments = atts.map((a) => ({ id: a.id, mimeType: a.mimeType }));
+      // and shell turns have none, so the field is omitted.
+      if (t.kind === 'message') {
+        const atts = await this.prisma.attachment.findMany({
+          where: { turnId: t.id },
+          select: { id: true, mimeType: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (atts.length > 0) attachments = atts.map((a) => ({ id: a.id, mimeType: a.mimeType }));
+      }
     } else {
       // Control turns (interrupt/end) are fire-and-forget: ack on delivery so a
       // stale one can never re-fire ahead of real messages every lease window.

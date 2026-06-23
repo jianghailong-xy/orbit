@@ -9,6 +9,7 @@ import {
   CloseCircleFilled,
   CloseOutlined,
   CodeOutlined,
+  ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EyeOutlined,
@@ -917,9 +918,9 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const send = useMutation({
     mutationFn: async (
-      vars: { content: string; images: ComposerImage[] },
+      vars: { content: string; images: ComposerImage[]; shell?: boolean },
     ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn; created?: boolean }> => {
-      const { content, images: imgs } = vars;
+      const { content, images: imgs, shell } = vars;
       // Only fully-uploaded images carry an id to reference; onSend blocks while any is
       // still uploading, so this is the complete set.
       const attachmentIds = imgs.map((im) => im.id).filter((x): x is string => !!x);
@@ -929,11 +930,12 @@ export function AgentView({ runner }: { runner: Runner }) {
       // create path scopes them to the new session (server links them to the seeded first
       // turn), so a brand-new session composed from scratch can include screenshots too.
       if (selected && live) {
-        const res = await sendTurn(selected.id, content, attachmentIds);
+        const res = await sendTurn(selected.id, content, attachmentIds, shell ? 'shell' : undefined);
         // A turn already running ⇒ this message is queued (delivered once that turn
         // finishes); surface it as a pending bubble the user can withdraw. When idle
         // it's delivered right away, so it'll arrive via its own `user` event instead.
-        const queuedItem = idle ? undefined : { turnId: res.turnId, content };
+        // Shell turns never show a pending bubble — their output lands as a Bash card.
+        const queuedItem = idle || shell ? undefined : { turnId: res.turnId, content };
         return { id: selected.id, turnId: res.turnId, queuedItem };
       }
       if (selected && resumable) {
@@ -959,7 +961,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       return { id: created.id, created: true };
     },
     onSuccess: ({ id, turnId, queuedItem, created }, vars) => {
-      pushHistory(id, vars.content); // record under the resolved session id, new sessions included
+      pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
       // back to keepPreviousData — the previously open session's agent — and the
@@ -1225,6 +1227,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (send.isPending || uploading) return;
     if (!c && readyImages.length === 0) return;
     setHistIdx(-1);
+    // `!cmd` on a live session runs a raw shell command on the runner (bypassing claude).
+    // Its output echoes to the transcript and is fed to claude as context on your next
+    // message. A bare `!` is a no-op; images are ignored for a shell turn.
+    if (live && c.startsWith('!')) {
+      const cmd = c.slice(1).trim();
+      if (cmd) send.mutate({ content: cmd, images: [], shell: true });
+      else setText('');
+      return;
+    }
     send.mutate({ content: c, images: readyImages });
   };
   // Open the new-session draft for this agent. A /sessions/<id> URL carries no
@@ -1311,6 +1322,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashScope(scope);
     setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
     setSlashDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+  // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
+  // shell command (run on the runner, bypassing claude). The user types the command after.
+  const insertShell = (): void => {
+    setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
@@ -1769,6 +1786,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                   label: 'Skill',
                   disabled: (runner.skills?.length ?? 0) === 0,
                   onClick: () => insertSlash('skill'),
+                },
+                {
+                  key: 'shell',
+                  icon: <ConsoleSqlOutlined />,
+                  label: live ? 'Shell' : 'Shell (needs a started session)',
+                  disabled: !live,
+                  onClick: insertShell,
                 },
                 {
                   key: 'file',
