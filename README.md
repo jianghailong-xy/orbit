@@ -119,20 +119,25 @@ rebuild and recreate only the services that changed — the `upgrade` skill auto
 On a machine with Claude Code installed & authenticated (logged in via `/login`, or
 `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` set):
 
+No domain is baked into the build — point these at **your** deployment's origin (the
+UI's **Add a runner** page prints the exact commands, pre-filled from the host you opened
+it on). Substitute `https://orbit.example.com` below:
+
 ```bash
 # 1. install the static `orbit` binary (no Node needed)
-curl -fsSL https://orbit.wikova.com/install.sh | bash
+curl -fsSL https://orbit.example.com/install.sh | ORBIT_BASE_URL=https://orbit.example.com bash
 
-# 2. register this machine (opens your browser to approve)
+# 2. register this machine against your control plane (opens your browser to approve)
 #    this auto-installs + starts a background service (systemd / launchd)
-orbit register --labels sg,hdfs --max-concurrent 2
+orbit register --server https://orbit.example.com --labels sg,hdfs --max-concurrent 2
 
 #    ...or run it in the foreground instead of installing a service:
-orbit register --foreground --labels sg,hdfs
+orbit register --server https://orbit.example.com --foreground --labels sg,hdfs
 ```
 
 The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the runner
-self-updates from there at startup. Create a task in the UI, queue it, and watch the live
+self-updates from there at startup. To bake a default `--server` into the binaries instead
+of passing it each time, build with `ORBIT_DEFAULT_SERVER=https://orbit.example.com npm run build:runner`. Create a task in the UI, queue it, and watch the live
 stream — or start an interactive session and chat with the agent directly.
 
 ## Cost & tokens

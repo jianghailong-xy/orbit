@@ -28,7 +28,11 @@ func interactive() bool {
 // disables self-update.
 var version = "dev"
 
-const defaultServer = "https://orbit.wikova.com"
+// Control-plane URL baked into the binary. Empty by default — self-hosters either
+// pass `--server <url>` at register time (the UI's "Add a runner" guide fills this
+// in from the page's own origin) or bake a default at build time with
+// -ldflags "-X main.defaultServer=https://orbit.example.com".
+var defaultServer = ""
 
 var usage = `orbit — register a machine and run Claude Code tasks for an Orbit control plane
 
@@ -62,7 +66,7 @@ This machine becomes one runner (named by hostname); each coding agent installed
 here is registered as an agent "<name>/<agentkey>" that runs in this directory.
 
 Options:
-  --server <url>           Control plane base URL (default: ` + defaultServer + `)
+  --server <url>           Control plane base URL (required unless baked in at build time)
   --token <token>          Optional one-time enrollment token (skips browser approval)
   --name <name>            Base name for the agents (default: "<dir>@<hostname>"); the runner is named by hostname
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
@@ -198,6 +202,10 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	}
 
 	server := strings.TrimRight(getStr(flags, "server", defaultServer), "/")
+	if server == "" {
+		fmt.Fprintln(os.Stderr, "no control plane URL — pass --server <url> (e.g. --server https://orbit.example.com)")
+		os.Exit(1)
+	}
 	// Register just this machine as a runner; agents are registered separately.
 	// The name defaults to the hostname — confirm/edit it interactively unless
 	// --name was passed.
@@ -514,6 +522,10 @@ func cmdUpgrade() {
 	server := defaultServer
 	if cfg := loadConfig(); cfg != nil {
 		server = cfg.ServerURL
+	}
+	if server == "" {
+		fmt.Fprintln(os.Stderr, "no control plane URL — register first (orbit register --server <url>)")
+		os.Exit(1)
 	}
 	upgrade(strings.TrimRight(server, "/"))
 }

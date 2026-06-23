@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# Install the Orbit runner CLI:  curl -fsSL https://orbit.wikova.com/install.sh | bash
+# Install the Orbit runner CLI. Copy the exact command (with ORBIT_BASE_URL) from your
+# Orbit UI's "Add a runner" page, e.g.:
+#   curl -fsSL https://orbit.example.com/install.sh | ORBIT_BASE_URL=https://orbit.example.com bash
 set -euo pipefail
 
-BASE_URL="${ORBIT_BASE_URL:-https://orbit.wikova.com}"
+# Where to download the binary from — your Orbit server's origin. No domain is baked in;
+# the UI's install command sets this to the host you opened it on.
+BASE_URL="${ORBIT_BASE_URL:-}"
+if [ -z "$BASE_URL" ]; then
+  echo "orbit: set ORBIT_BASE_URL to your Orbit server URL (copy the command from your Orbit UI's 'Add a runner' page)" >&2
+  exit 1
+fi
 BIN_DIR="${ORBIT_BIN_DIR:-/usr/local/bin}"
 NAME="orbit"
 

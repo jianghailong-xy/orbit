@@ -18,6 +18,11 @@ SRC="src/runner-go"
 # Version of record: the root package.json.
 VER="$(grep -m1 '"version"' package.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
 
+# Optional control-plane URL baked in as the `--server` default. Leave unset to
+# force self-hosters to pass `--server` (or use the UI's origin-aware install guide);
+# set e.g. ORBIT_DEFAULT_SERVER=https://orbit.example.com to bake one in.
+DEFAULT_SERVER="${ORBIT_DEFAULT_SERVER:-}"
+
 # suffix:GOOS:GOARCH
 TARGETS=(
   "linux-x64:linux:amd64"
@@ -34,7 +39,7 @@ for t in "${TARGETS[@]}"; do
   goarch="${rest##*:}"
   echo ">> orbit-$suffix ($goos/$goarch) v$VER"
   (cd "$SRC" && CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-    go build -trimpath -ldflags "-s -w -X main.version=$VER" -o "$ROOT/$OUT/orbit-$suffix" .)
+    go build -trimpath -ldflags "-s -w -X main.version=$VER -X main.defaultServer=$DEFAULT_SERVER" -o "$ROOT/$OUT/orbit-$suffix" .)
   # Ship the binary gzip-compressed; -f replaces orbit-$suffix with orbit-$suffix.gz.
   gzip -9 -f "$ROOT/$OUT/orbit-$suffix"
 done
