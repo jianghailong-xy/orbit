@@ -10,6 +10,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
+import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { SkillsPage } from './pages/SkillsPage';
@@ -33,6 +34,9 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={authed ? <Navigate to="/active" /> : <LoginPage />} />
+      {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
+          login, and a signed-in visitor (so users exist) is sent to the app. */}
+      <Route path="/setup" element={authed ? <Navigate to="/active" replace /> : <SetupPage />} />
       <Route
         path="/enroll"
         element={

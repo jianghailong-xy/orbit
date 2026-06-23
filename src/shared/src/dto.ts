@@ -136,6 +136,10 @@ export interface RunnerHeartbeatRequest {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** The runner's authoritative max-concurrent (the editable DB value). The runner
+   *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
+   *  one heartbeat without restarting the runner. */
+  maxConcurrent: number;
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────

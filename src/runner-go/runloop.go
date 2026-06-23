@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -38,6 +39,14 @@ func runLoop(cfg *RunnerConfig) {
 
 	var mu sync.Mutex
 	active := map[string]context.CancelFunc{}
+
+	// Server-authoritative concurrency cap. Seeded from the local config (the value
+	// `orbit register --max-concurrent` baked in), then kept in sync with the DB value
+	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
+	// in the UI takes effect within one heartbeat, no restart. The local config value is
+	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
+	var maxConcurrent atomic.Int64
+	maxConcurrent.Store(int64(cfg.MaxConcurrent))
 
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 	sig := make(chan os.Signal, 1)
@@ -80,7 +89,7 @@ func runLoop(cfg *RunnerConfig) {
 					assetMu.Unlock()
 				}
 				mu.Lock()
-				idle := cfg.MaxConcurrent - len(active)
+				idle := int(maxConcurrent.Load()) - len(active)
 				cancels := make(map[string]context.CancelFunc, len(active))
 				for k, v := range active {
 					cancels[k] = v
@@ -103,6 +112,13 @@ func runLoop(cfg *RunnerConfig) {
 				if err != nil {
 					logln("heartbeat failed:", err)
 					continue
+				}
+				// Adopt the control plane's authoritative max-concurrent (the editable DB
+				// value). 0 means an older server that doesn't report it — keep current.
+				if resp.MaxConcurrent > 0 {
+					if prev := maxConcurrent.Swap(int64(resp.MaxConcurrent)); prev != int64(resp.MaxConcurrent) {
+						logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
+					}
 				}
 				for _, id := range resp.CancelSessionIDs {
 					if c, ok := cancels[id]; ok {
@@ -177,7 +193,7 @@ func runLoop(cfg *RunnerConfig) {
 		mu.Lock()
 		n := len(active)
 		mu.Unlock()
-		if n >= cfg.MaxConcurrent {
+		if n >= int(maxConcurrent.Load()) {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}

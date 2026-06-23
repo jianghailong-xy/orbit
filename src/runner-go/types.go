@@ -66,6 +66,9 @@ type SlashCommandInfo struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
+	// control plane that doesn't send it — the runner keeps its current value then.
+	MaxConcurrent int `json:"maxConcurrent"`
 }
 
 type MeResponse struct {

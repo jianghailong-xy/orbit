@@ -245,7 +245,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string; version: string | null },
     @Body() dto: RunnerHeartbeatRequest,
   ): Promise<RunnerHeartbeatResponse> {
-    await this.prisma.runner.update({
+    const updated = await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
         status: dto?.status ?? 'ONLINE',
@@ -263,7 +263,9 @@ export class RunnerApiController {
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; cancels arrive next cycle.
     }
-    return { cancelSessionIds };
+    // Hand back the authoritative max-concurrent (the editable DB value) so the runner
+    // syncs its self-gate to a UI/API change without needing a restart.
+    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent };
   }
 
   // ── Interactive sessions (Route B) ──
@@ -295,7 +297,7 @@ export class RunnerApiController {
       // Per-session override wins over the agent, then a server default — so a
       // resumed process keeps the model/permission-mode/tools it was created with.
       const agentCfg: AgentExecConfig = {
-        model: s.model ?? agent?.model ?? 'claude-sonnet-4-6',
+        model: s.model ?? agent?.model ?? 'claude-opus-4-8',
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],

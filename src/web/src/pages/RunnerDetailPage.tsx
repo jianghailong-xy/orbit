@@ -116,7 +116,7 @@ export function RunnerDetailPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
-  const [fModel, setFModel] = useState('claude-sonnet-4-6');
+  const [fModel, setFModel] = useState(DEFAULT_MODEL);
   const [fMode, setFMode] = useState('auto');
   const [fDesc, setFDesc] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
@@ -178,7 +178,7 @@ export function RunnerDetailPage() {
   const openEdit = (a: Agent) => {
     setEditing(a);
     setFName(a.name);
-    setFModel(a.model ?? 'claude-sonnet-4-6');
+    setFModel(a.model ?? DEFAULT_MODEL);
     setFMode(a.permissionMode ?? 'dontAsk');
     setFDesc(a.description ?? '');
     setFWorkDir(a.workDir ?? '');
@@ -301,7 +301,7 @@ export function RunnerDetailPage() {
   const agentRow = (a: Agent) => {
     // When an agent overrides the endpoint/model via env (e.g. a DeepSeek-compatible
     // base URL), the static `model` field is stale — show the effective model instead.
-    const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || 'claude-sonnet-4-6';
+    const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || DEFAULT_MODEL;
     return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">

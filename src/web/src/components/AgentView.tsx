@@ -31,7 +31,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
-import { MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
+import { DEFAULT_MODEL, MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
 import {
   type ApprovalInfo,
@@ -419,7 +419,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Default');
-  const [model, setModel] = useState('claude-sonnet-4-6');
+  const [model, setModel] = useState(DEFAULT_MODEL);
   const [effort, setEffort] = useState(() => localStorage.getItem(EFFORT_KEY) ?? '');
   // Which slice of the session list to show: active, archived, system, or trash.
   const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
@@ -427,6 +427,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
+  // "Chat about this" on a pending AskUserQuestion routes the next composer send back to
+  // that approval as a deny+message (resolving the blocking question) instead of a fresh
+  // turn. Null = normal send; `question` is just the reply-chip's label.
+  const [replyTo, setReplyTo] = useState<{ id: string; question: string } | null>(null);
   const [streamingText, setStreamingText] = useState(''); // live assistant text from text_delta
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
@@ -498,10 +502,18 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // The list is scoped by `view`. A selected session (its transcript is open) is
   // resolved from the loaded set, so force a view that contains it: `system` when
-  // browsing the System tab (system sessions live there), otherwise `active` — that's
-  // where live sessions and the runner's slot accounting live. (active also includes
-  // system sessions server-side, so deep-linking one still resolves.)
-  const effectiveView = selectedId ? (view === 'system' ? 'system' : 'active') : view;
+  // browsing the System tab (system sessions live there), `archived` when browsing
+  // Completed (so an opened completed session resolves and stays highlighted),
+  // otherwise `active` — where live sessions and the runner's slot accounting live.
+  // (active also includes system sessions server-side, so deep-linking one still
+  // resolves.)
+  const effectiveView = selectedId
+    ? view === 'system'
+      ? 'system'
+      : view === 'archived'
+        ? 'archived'
+        : 'active'
+    : view;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
@@ -573,11 +585,11 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Step the open session up/down the visible list. Shared by the window-level Up/Down
   // handler and the Segmented's capture handler below. Returns false (a no-op) at the
-  // list ends, on an empty list, or on the archived/trash tabs with nothing open. With
+  // list ends, on an empty list, or on the trash tab with nothing open. With
   // nothing selected, Down enters from the top, Up from the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view !== 'active' && view !== 'system') return false;
+      if (!selectedId && view !== 'active' && view !== 'system' && view !== 'archived') return false;
       if (visibleSessions.length === 0) return false;
       const cur = visibleSessions.findIndex((s) => s.id === selectedId);
       let next: number;
@@ -651,7 +663,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // liveness, not the polled object, so the 4s refetch can't clobber a user's edit.
   useEffect(() => {
     if (!selected || live) return;
-    setModel(selected.model ?? 'claude-sonnet-4-6');
+    setModel(selected.model ?? DEFAULT_MODEL);
     setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
     setEffort(selected.effort ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -716,6 +728,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setStreamingText('');
     setStreamingThink('');
     setApprovals([]);
+    setReplyTo(null);
     setQueued([]);
     setIdle(false);
     setStuck(null);
@@ -915,6 +928,13 @@ export function AgentView({ runner }: { runner: Runner }) {
         .catch(() => undefined);
     }
   };
+
+  // If the approval the composer is replying to gets resolved another way (the user picks
+  // an option, or an SSE approval_resolved arrives), drop the reply context so the chip
+  // can't dangle over a question that's already gone.
+  useEffect(() => {
+    if (replyTo && !approvals.some((a) => a.id === replyTo.id)) setReplyTo(null);
+  }, [approvals, replyTo]);
 
   const send = useMutation({
     mutationFn: async (
@@ -1225,6 +1245,24 @@ export function AgentView({ runner }: { runner: Runner }) {
   const onSend = (): void => {
     const c = text.trim();
     if (send.isPending || uploading) return;
+    // Replying to a pending AskUserQuestion: resolve it with the text as a deny+message
+    // (claude reads it as feedback and continues) instead of a fresh turn. The deny channel
+    // is text-only — a blocking question can only be answered with text — so attached images
+    // can't ride it; deliver them as the immediately-following turn via the normal image path
+    // (send.mutate, whose onSuccess also clears the staged chips). An image-only reply still
+    // needs a text resolution, hence the stand-in message.
+    if (replyTo) {
+      const imgs = readyImages;
+      if (!c && imgs.length === 0) return;
+      void decide(replyTo.id, 'deny', undefined, c || '(see attached image)');
+      setReplyTo(null);
+      setText('');
+      if (imgs.length > 0) {
+        setHistIdx(-1);
+        send.mutate({ content: '', images: imgs });
+      }
+      return;
+    }
     if (!c && readyImages.length === 0) return;
     setHistIdx(-1);
     // `!cmd` on a live session runs a raw shell command on the runner (bypassing claude).
@@ -1263,7 +1301,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
-  const showStop = selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0;
+  const showStop =
+    selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0 && !replyTo;
 
   // ── `/` command & skill autocomplete ──────────────────────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -1330,9 +1369,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // "Chat about this" on a question card hands the reply off to the main composer: show the
+  // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
+  const startChatReply = (id: string, question: string): void => {
+    setReplyTo({ id, question });
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
-  const shownModel: string = live ? (selected.model ?? 'claude-sonnet-4-6') : model;
+  const shownModel: string = live ? (selected.model ?? DEFAULT_MODEL) : model;
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
@@ -1344,14 +1389,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   // online to act on it). A change made mid-turn doesn't abort the running turn: the
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
   // same as a queued message. When not live they're freely editable (pre-session config).
-  // Agent stays fixed once live.
+  // Agent stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = live ? runner.online : true;
-  // A live session's agent is fixed; otherwise reflect the local pick.
-  const shownAgentId: string | undefined = live ? (selected.agent?.id ?? undefined) : agentId;
-  // The agent can't be switched once the session is live, nor when the view is locked to
-  // one agent. In those cases it's read-only info, so we surface it as a static pill in the
-  // controls row (see composer-pill-static) instead of a Select; otherwise it stays a Select.
-  const agentReadOnly = live || !!lockedAgentId;
+  // An existing session's agent is fixed (live or recycled/terminal); only a brand-new
+  // compose draft reflects the local pick.
+  const shownAgentId: string | undefined = selected ? (selected.agent?.id ?? undefined) : agentId;
+  // The agent can't be switched once the session exists (live or terminal), nor when the
+  // view is locked to one agent. In those cases it's read-only info, so we surface it as a
+  // static pill in the controls row (see composer-pill-static) instead of a Select; otherwise
+  // it stays a Select.
+  const agentReadOnly = !!selected || !!lockedAgentId;
   const shownAgentName =
     agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
     selected?.agent?.name ??
@@ -1419,8 +1466,8 @@ export function AgentView({ runner }: { runner: Runner }) {
             const next = v as 'active' | 'archived' | 'deleted' | 'system';
             setView(next);
             // Switching tabs while a session transcript is open closes it: the open
-            // session lives in the active set and archived/trash rows aren't openable,
-            // so browsing another tab means leaving the conversation.
+            // session belongs to the tab it was opened from, so browsing another tab
+            // means leaving the conversation.
             if (selectedId) {
               const a = scopeAgentId ?? agentsForRunner[0]?.id;
               navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
@@ -1471,8 +1518,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 : view === 'system'
                   ? [deleteItem]
                   : [restoreItem];
-            // System sessions are openable like active ones; archived/trash rows aren't.
-            const openable = view === 'active' || view === 'system';
+            // Active, System and Completed (archived) rows open their transcript; only
+            // Trash (deleted) rows stay closed.
+            const openable = view !== 'deleted';
             const line = sessionLine(s, openable);
             return (
               <div
@@ -1653,7 +1701,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             {approvals.map((a, i) => (
               // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
               // it's decided the next card becomes first, so the key walks the queue in order.
-              <ApprovalPanel key={a.id} approval={a} onDecide={decide} active={i === 0} />
+              <ApprovalPanel
+                key={a.id}
+                approval={a}
+                onDecide={decide}
+                active={i === 0}
+                onChatAbout={startChatReply}
+              />
             ))}
             {queued.map((q) => (
               <div className="chat-msg chat-user chat-queued" key={q.turnId}>
@@ -1721,6 +1775,22 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </button>
               </span>
             ))}
+          </div>
+        )}
+        {replyTo && (
+          <div className="composer-replyto">
+            <span className="composer-replyto-icon">↩</span>
+            <span className="composer-replyto-text">
+              Replying to Claude’s question{replyTo.question ? `: ${replyTo.question}` : ''}
+            </span>
+            <button
+              type="button"
+              className="composer-replyto-cancel"
+              onClick={() => setReplyTo(null)}
+              aria-label="Cancel reply"
+            >
+              <CloseOutlined />
+            </button>
           </div>
         )}
         <div className="composer-box">
@@ -1816,7 +1886,13 @@ export function AgentView({ runner }: { runner: Runner }) {
             variant="borderless"
             autoSize={{ minRows: 1, maxRows: 6 }}
             placeholder={
-              !runner.online ? 'Runner offline' : selectedId ? 'Reply…' : 'Send this agent a task…'
+              !runner.online
+                ? 'Runner offline'
+                : replyTo
+                  ? 'Reply to Claude’s question…'
+                  : selectedId
+                    ? 'Reply…'
+                    : 'Send this agent a task…'
             }
             value={text}
             disabled={!runner.online}
@@ -2010,7 +2086,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (drop) setMode('Default');
                   }
                 }}
-                options={MODEL_OPTIONS.map((m) => ({ value: m.value, label: m.short }))}
+                options={MODEL_OPTIONS}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />

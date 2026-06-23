@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useLocation, useMatch } from 'react-router-dom';
+import { Navigate, useLocation, useMatch } from 'react-router-dom';
 import { getToken } from '../api';
 import { decodeId } from '../lib/idCodec';
-import { agentsQuery, meQuery, runnersQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import {
+  agentsQuery,
+  meQuery,
+  runnersQuery,
+  sessionQuery,
+  sessionsQuery,
+  setupStatusQuery,
+} from '../lib/queries';
 
 // Routes that render their own loaders and have no first-screen data to wait on.
-const BYPASS = ['/login', '/enroll'];
+const BYPASS = ['/login', '/enroll', '/setup'];
 
 type BootWindow = Window & {
   __bootProgress?: (pct: number) => void;
@@ -35,15 +42,26 @@ type DeepLink = { kind: 'session' | 'agent'; id: string };
  * the runner-scoped active-session list AgentView reads on open — otherwise the splash
  * dismisses too early and the console flashes a spinner / "Starting…" while that lands.
  *
- * Only the authenticated app waits — login/enroll pass straight through. The decision is
- * latched on mount, so the 4s/15s background refetches and later in-app navigations never
- * bring the splash back.
+ * Only the authenticated app pre-warms. A signed-out visitor on a real route instead
+ * waits on a single check — setup-status — so a fresh, zero-user deployment can be routed
+ * to first-run /setup before any page renders. The bypass routes (login/enroll/setup)
+ * pass straight through. The decision is latched on mount, so the 4s/15s background
+ * refetches and later in-app navigations never bring the splash back.
  */
 export function BootGate({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const sessionMatch = useMatch('/sessions/:id');
   const agentMatch = useMatch('/agents/:id/*');
-  const [gated] = useState(() => !!getToken() && !BYPASS.includes(loc.pathname));
+  const hasToken = !!getToken();
+  const onBypass = BYPASS.includes(loc.pathname);
+  // Signed-out boot on a real route: the deployment may have zero users (fresh install),
+  // in which case every path must funnel to /setup. The client can't know that locally,
+  // so the splash holds while we ask the server. A token implies users exist, so only the
+  // signed-out path runs this check.
+  const [needsSetupCheck] = useState(() => !hasToken && !onBypass);
+  // Hold the splash for any non-bypass route — signed-in to pre-warm the first screen,
+  // signed-out to resolve setup-status before routing.
+  const [gated] = useState(() => !onBypass);
   // The deep-link the very first paint must cover, latched on mount so later in-app
   // navigations (and the background refetches) never re-gate the splash.
   const [deep] = useState<DeepLink | null>(() => {
@@ -55,21 +73,27 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   });
   const [booted, setBooted] = useState(() => !gated);
 
+  // Signed-out: the only thing the splash waits on is whether this is a zero-user system.
+  const setupStatus = useQuery({ ...setupStatusQuery(), enabled: needsSetupCheck });
+  // Business pre-warm is for the signed-in app only; firing these while signed out would
+  // 401 (and bounce to /login), so they gate on `warm`, not `gated`.
+  const warm = gated && hasToken;
+
   // Every query below reuses the shared factory keys (lib/queries) so the data the splash
   // pre-warms lands under the exact keys the page/console then read from cache.
-  const runners = useQuery({ ...runnersQuery(), enabled: gated });
+  const runners = useQuery({ ...runnersQuery(), enabled: warm });
   // Warm the signed-in user so the nav footer's name paints with the first frame.
   // Not a readiness milestone — it must never hold the splash open.
-  useQuery({ ...meQuery(), enabled: gated });
+  useQuery({ ...meQuery(), enabled: warm });
   // Home/list routes wait on the global session list (shared with the Active view/sidebar).
-  const sessionsGlobal = useQuery({ ...sessionsQuery(), enabled: gated && !deep });
+  const sessionsGlobal = useQuery({ ...sessionsQuery(), enabled: warm && !deep });
   // A /sessions/<id> deep link carries no runner — its session detail resolves one.
   const sessionDetail = useQuery({
     ...sessionQuery(deep?.kind === 'session' ? deep.id : null),
-    enabled: gated && deep?.kind === 'session',
+    enabled: warm && deep?.kind === 'session',
   });
   // An /agents/<id> deep link resolves its runner from the agents list.
-  const agents = useQuery({ ...agentsQuery(), enabled: gated && deep?.kind === 'agent' });
+  const agents = useQuery({ ...agentsQuery(), enabled: warm && deep?.kind === 'agent' });
   const runnerId =
     deep?.kind === 'session'
       ? (sessionDetail.data?.assignedRunnerId ?? null)
@@ -80,14 +104,17 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // cache under the same key and the console paints in one shot instead of flashing "Starting…".
   const scopedSessions = useQuery({
     ...sessionsQuery({ runnerId, view: 'active' }),
-    enabled: gated && !!deep && !!runnerId,
+    enabled: warm && !!deep && !!runnerId,
   });
 
-  // Per-route readiness milestones (besides the mounted app). For a deep link the third
-  // milestone waits on the scoped list once the runner resolves, or — if there is no
-  // runner to wait on — on the resolver itself, so it can never trap the splash.
+  // Per-route readiness milestones (besides the mounted app). The signed-out setup check
+  // waits on a single query. For a deep link the third milestone waits on the scoped list
+  // once the runner resolves, or — if there is no runner to wait on — on the resolver
+  // itself, so it can never trap the splash.
   let checks: boolean[];
-  if (deep?.kind === 'session') {
+  if (needsSetupCheck) {
+    checks = [setupStatus.isFetched];
+  } else if (deep?.kind === 'session') {
     const resolved = sessionDetail.isFetched;
     checks = [runners.isFetched, resolved, runnerId ? scopedSessions.isFetched : resolved];
   } else if (deep?.kind === 'agent') {
@@ -121,5 +148,11 @@ export function BootGate({ children }: { children: React.ReactNode }) {
     if (booted) finishBoot();
   }, [booted]);
 
-  return booted ? <>{children}</> : null;
+  if (!booted) return null;
+  // Fresh, zero-user deployment → send the signed-out visitor into first-run setup. Guard
+  // on the live path so that, once redirected, we render /setup instead of looping on it.
+  if (needsSetupCheck && setupStatus.data?.needsSetup && loc.pathname !== '/setup') {
+    return <Navigate to="/setup" replace />;
+  }
+  return <>{children}</>;
 }

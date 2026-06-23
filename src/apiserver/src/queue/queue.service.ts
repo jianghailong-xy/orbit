@@ -149,7 +149,7 @@ export class QueueService {
       taskId: session.taskId ?? undefined,
       agent: {
         // Per-session override wins over the agent, then a server default.
-        model: session.model ?? agent?.model ?? 'claude-sonnet-4-6',
+        model: session.model ?? agent?.model ?? 'claude-opus-4-8',
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
