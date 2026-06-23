@@ -112,6 +112,12 @@ export class SessionsController {
     return this.sessions.mergeToMain(user.userId, id);
   }
 
+  /** Ask the runner to commit this live session's uncommitted worktree changes onto its branch. */
+  @Post(':id/commit')
+  commitWorktree(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.commitWorktree(user.userId, id);
+  }
+
   @Post(':id/archive')
   archive(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.archive(user.userId, id);

@@ -66,6 +66,10 @@ type SessionLiveState struct {
 	SessionID       string        `json:"sessionId"`
 	IsolationStatus string        `json:"isolationStatus"`
 	ChangedFiles    []ChangedFile `json:"changedFiles"`
+	// WorktreeDirty is the worktree's current `git status` (true → uncommitted changes). No
+	// omitempty: a clean worktree must report false so the server flips the bar to Merge,
+	// rather than dropping the field (which an older server reads as "not reported").
+	WorktreeDirty bool `json:"worktreeDirty"`
 }
 
 // SlashCommandInfo mirrors @orbit/shared: one `/`-invocable asset (command or skill).
@@ -87,6 +91,10 @@ type HeartbeatResponse struct {
 	// branch into the repo's main, then POST the outcome to /merge-result. Omitted by
 	// older control planes (the field is simply absent → no merges).
 	MergeRequests []MergeCommand `json:"mergeRequests,omitempty"`
+	// Commits the user requested for live sessions: commit each one's uncommitted worktree
+	// changes onto its branch, then POST the outcome to /commit-result. Omitted by older
+	// control planes (absent → no commits).
+	CommitRequests []CommitCommand `json:"commitRequests,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into
@@ -104,6 +112,21 @@ type MergeResultRequest struct {
 	Status    string `json:"status"` // "merged" | "conflict" | "error"
 	MergedSha string `json:"mergedSha,omitempty"`
 	Message   string `json:"message,omitempty"`
+}
+
+// CommitCommand mirrors @orbit/shared: a request to commit a live session's uncommitted
+// worktree changes onto its branch. The runner locates the checkout from SessionID (its
+// per-session worktree dir); Branch is for logging.
+type CommitCommand struct {
+	SessionID string `json:"sessionId"`
+	Branch    string `json:"branch"`
+}
+
+// CommitResultRequest mirrors @orbit/shared SessionCommitResultRequest: the outcome of a
+// CommitCommand, POSTed back so the UI status bar can flip from Commit to Merge.
+type CommitResultRequest struct {
+	Status  string `json:"status"` // "committed" | "nochange" | "error"
+	Message string `json:"message,omitempty"`
 }
 
 type MeResponse struct {
@@ -229,6 +252,9 @@ type TurnCompleteRequest struct {
 	// running diff) while the session is still going — not just at terminal /complete.
 	IsolationStatus string        `json:"isolationStatus,omitempty"`
 	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
+	// Whether the worktree has uncommitted changes (drives Commit vs Merge). No omitempty
+	// (false must be sent so a just-committed tree flips the bar to Merge).
+	WorktreeDirty bool `json:"worktreeDirty"`
 }
 
 type RunEvent struct {

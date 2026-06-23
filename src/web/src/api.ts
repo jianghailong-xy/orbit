@@ -214,6 +214,11 @@ export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end
 export const mergeSessionToMain = (sessionId: string) =>
   api(`/sessions/${sessionId}/merge`, { method: 'POST' });
 
+/** Ask the runner to commit a live session's uncommitted worktree changes onto its branch.
+ *  Async: the outcome lands on SessionDetail.commitStatus / worktreeDirty within a heartbeat. */
+export const commitSession = (sessionId: string) =>
+  api(`/sessions/${sessionId}/commit`, { method: 'POST' });
+
 // Soft visibility actions for ended sessions. Archive hides a session into the
 // Archived view; delete moves it to the trash. Both keep all data; restore (which
 // clears both) brings it back to the active list. There is no hard delete.
@@ -252,6 +257,13 @@ export interface SessionDetail {
   mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
   mergeError?: string | null;
   mergedAt?: string | null;
+  // Live-worktree commit state (see commitSession). worktreeDirty drives the bar's primary
+  // action — true → Commit, false → Merge — when the runner reports it (null = not reported,
+  // so the bar falls back to the session lifecycle). commitStatus is 'pending' while the
+  // runner commits, then 'committed' | 'nochange' | 'error' (commitError carries why).
+  worktreeDirty?: boolean | null;
+  commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
+  commitError?: string | null;
 }
 
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to

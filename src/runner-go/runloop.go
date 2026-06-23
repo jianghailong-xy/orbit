@@ -95,10 +95,12 @@ func runLoop(cfg *RunnerConfig) {
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		cycles := 0
-		// Sessions whose "merge to main" is in flight, so the at-least-once heartbeat
-		// redelivery doesn't kick off the same merge twice before the result is recorded.
+		// Sessions whose "merge to main" / "commit" is in flight, so the at-least-once
+		// heartbeat redelivery doesn't kick off the same operation twice before its result
+		// is recorded.
 		var mergeMu sync.Mutex
 		mergingNow := map[string]bool{}
+		committingNow := map[string]bool{}
 		for {
 			select {
 			case <-hbStop:
@@ -142,6 +144,7 @@ func runLoop(cfg *RunnerConfig) {
 						SessionID:       j.SessionID,
 						IsolationStatus: j.IsolationStatus,
 						ChangedFiles:    liveDiffStat(j.WT),
+						WorktreeDirty:   worktreeIsDirty(j.WT),
 					})
 				}
 				resp, err := t.heartbeat(HeartbeatRequest{
@@ -191,6 +194,30 @@ func runLoop(cfg *RunnerConfig) {
 						delete(mergingNow, req.SessionID)
 						mergeMu.Unlock()
 					}(m)
+				}
+				// Honor "commit" requests: commit each live session's uncommitted worktree
+				// changes onto its branch (guarded against redelivery, in its own goroutine).
+				for _, c := range resp.CommitRequests {
+					mergeMu.Lock()
+					busy := committingNow[c.SessionID]
+					if !busy {
+						committingNow[c.SessionID] = true
+					}
+					mergeMu.Unlock()
+					if busy {
+						continue
+					}
+					go func(req CommitCommand) {
+						res := commitWorktree(req)
+						if err := t.commitResult(req.SessionID, CommitResultRequest{
+							Status: res.Status, Message: res.Message,
+						}); err != nil {
+							logln("commit-result POST failed for", req.SessionID+":", err)
+						}
+						mergeMu.Lock()
+						delete(committingNow, req.SessionID)
+						mergeMu.Unlock()
+					}(c)
 				}
 			}
 		}

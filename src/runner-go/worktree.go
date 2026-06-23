@@ -267,6 +267,17 @@ func liveDiffStat(wt *Worktree) []ChangedFile {
 	return parseNumstat(numOut, statusOut)
 }
 
+// worktreeIsDirty reports whether the worktree has uncommitted changes right now — tracked
+// or untracked, respecting .gitignore (`git status --porcelain` non-empty). Drives the
+// status bar's Commit-vs-Merge action. False for a nil/missing worktree.
+func worktreeIsDirty(wt *Worktree) bool {
+	if wt == nil {
+		return false
+	}
+	out, err := git(wt.Path, "status", "--porcelain")
+	return err == nil && out != ""
+}
+
 // parseNumstat zips `git diff --numstat` (+/-/path) with `git diff --name-status` (the
 // status letter, keyed by the new path for renames) into ChangedFile rows.
 func parseNumstat(numOut, statusOut string) []ChangedFile {
@@ -384,6 +395,42 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	sha, _ := git(repoRoot, "rev-parse", "HEAD")
 	logln(fmt.Sprintf("merged %s into %s (%s) for session %s", req.Branch, target, shortSha(sha), req.SessionID))
 	return mergeOutcome{Status: "merged", MergedSha: sha}
+}
+
+// commitOutcome is what commitWorktree reports: "committed" advanced the branch, "nochange"
+// means the tree was already clean, "error" means a precondition failed / git errored.
+type commitOutcome struct {
+	Status  string
+	Message string
+}
+
+// commitWorktree commits a live session's uncommitted worktree changes onto its branch, so
+// the user can checkpoint (and then merge) without ending the session. It operates on the
+// session's own checkout (worktreesDir()/SessionID), which is separate from the primary repo
+// on main, so it never disturbs main or another session. Returns "nochange" when the tree is
+// already clean, "committed" on a new commit, "error" if the checkout is missing or git
+// fails. Serialized per session by the runloop's in-flight guard.
+func commitWorktree(req CommitCommand) commitOutcome {
+	wtPath := filepath.Join(worktreesDir(), req.SessionID)
+	if !isGitRepo(wtPath) {
+		return commitOutcome{Status: "error", Message: "no live worktree for this session"}
+	}
+	if _, err := git(wtPath, "add", "-A"); err != nil {
+		return commitOutcome{Status: "error", Message: clip(gitStderr(err), 1000)}
+	}
+	// `diff --cached --quiet` exits 0 when nothing is staged → the tree is already clean.
+	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
+		return commitOutcome{Status: "nochange"}
+	}
+	// Inline identity + --no-verify so the commit never fails on a runner with no git user.*
+	// set or a repo pre-commit hook (mirrors finalizeWorktree).
+	if _, err := git(wtPath,
+		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
+		"commit", "--no-verify", "-m", "orbit: commit "+req.Branch); err != nil {
+		return commitOutcome{Status: "error", Message: clip(gitStderr(err), 1000)}
+	}
+	logln(fmt.Sprintf("committed worktree changes for session %s onto %s", req.SessionID, req.Branch))
+	return commitOutcome{Status: "committed"}
 }
 
 // gitStderr extracts git's stderr from a failed git() call (Output() puts it on ExitError).

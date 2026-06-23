@@ -591,6 +591,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					// the worktree (uncommitted), so the diff updates each turn, not just at end.
 					IsolationStatus: job.IsolationStatus,
 					ChangedFiles:    liveDiffStat(job.WT),
+					WorktreeDirty:   worktreeIsDirty(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

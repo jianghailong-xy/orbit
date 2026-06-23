@@ -296,6 +296,16 @@ model Session {
   mergeError        String?   @map("merge_error")
   mergeRequestedAt  DateTime? @map("merge_requested_at")
   mergedAt          DateTime? @map("merged_at")
+  // ── "Commit" (UI button on the worktree status bar, for a live session) ─────
+  // worktreeDirty is the runner's last-reported `git status` for the live worktree: true
+  // → the bar shows Commit (commit the uncommitted work onto `branch`), false → Merge.
+  // commitStatus drives the Commit button while it runs: 'pending' (queued for the next
+  // heartbeat) → 'committed' | 'nochange' | 'error' (commitError carries git's message).
+  // All null until the runner reports / the user clicks commit.
+  worktreeDirty     Boolean?  @map("worktree_dirty")
+  commitStatus      String?   @map("commit_status")
+  commitError       String?   @map("commit_error")
+  commitRequestedAt DateTime? @map("commit_requested_at")
   // Soft visibility: null = active. archivedAt hides the session into the Archived
   // view, deletedAt into the trash. Both retain all data (transcript, billing) and
   // are reversible — restore clears them. There is no hard delete.

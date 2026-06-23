@@ -37,6 +37,7 @@ import {
   type ApprovalInfo,
   archiveSession,
   cancelQueuedTurn,
+  commitSession,
   createInteractiveSession,
   decideApproval,
   deleteSession,
@@ -605,9 +606,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     // Poll the detail when either side has a live update the runner pushes via heartbeat:
     // while the session is live, for the worktree status bar (isolation + uncommitted diff,
     // reported mid-turn) to appear without waiting for turn_end; and while a "merge to main"
-    // is pending, for the runner's merge outcome (≤1 heartbeat away) to land. Idle otherwise.
+    // or "commit" is pending, for the runner's outcome (≤1 heartbeat away) to land. Idle else.
     refetchInterval: (q) =>
-      q.state.data?.mergeStatus === 'pending'
+      q.state.data?.mergeStatus === 'pending' || q.state.data?.commitStatus === 'pending'
         ? 3000
         : selected && !TERMINAL.includes(selected.status)
           ? 5000
@@ -1282,6 +1283,18 @@ export function AgentView({ runner }: { runner: Runner }) {
       okText: 'Resume & resolve',
       onOk: () => resolveMut.mutateAsync({ id, branch }).catch(() => {}),
     });
+  // Commit a live session's uncommitted worktree changes onto its branch. Like merge it runs
+  // on the runner (heartbeat round-trip) and the outcome lands on commitStatus/worktreeDirty;
+  // committing is safe/local so it fires directly (no confirm). Invalidate detail so 'pending'
+  // shows immediately and the poll above picks up the runner's outcome.
+  const commitMut = useMutation({
+    mutationFn: (id: string) => commitSession(id),
+    onSuccess: () => {
+      message.success('Committing worktree changes — the result will appear on the status bar shortly.');
+      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -1935,6 +1948,12 @@ export function AgentView({ runner }: { runner: Runner }) {
           onResolveInSession={
             selectedId && sessionDetailQ.data?.branch
               ? () => askResolveInSession(selectedId, sessionDetailQ.data!.branch!)
+              : undefined
+          }
+          committing={commitMut.isPending}
+          onCommit={
+            selectedId && sessionDetailQ.data?.branch
+              ? () => commitMut.mutate(selectedId)
               : undefined
           }
         />

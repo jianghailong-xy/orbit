@@ -174,6 +174,10 @@ export interface SessionLiveState {
   isolationStatus: string;
   /** The worktree's current uncommitted diff vs base; empty when nothing changed yet. */
   changedFiles: ChangedFile[];
+  /** Whether the worktree has uncommitted changes right now (`git status` non-empty). Drives
+   *  the status bar's primary action: dirty → Commit, clean-but-ahead → Merge. Absent from
+   *  older runners (the bar then falls back to the session lifecycle). */
+  worktreeDirty?: boolean;
 }
 
 export interface RunnerHeartbeatResponse {
@@ -188,6 +192,10 @@ export interface RunnerHeartbeatResponse {
    *  outcome back via POST /runner/sessions/:id/merge-result. Absent on older control
    *  planes (older runners ignore the field → the merge stays pending). */
   mergeRequests?: MergeCommand[];
+  /** Commits the user requested for live sessions this runner is running: commit the
+   *  worktree's uncommitted changes onto its branch, then POST the outcome via
+   *  /runner/sessions/:id/commit-result. Absent on older control planes. */
+  commitRequests?: CommitCommand[];
 }
 
 /** Control plane → runner: merge one session's worktree branch into the repo's main. */
@@ -197,6 +205,15 @@ export interface MergeCommand {
   branch: string;
   /** The session agent's workDir; the runner resolves the repo root from it. */
   workDir: string;
+}
+
+/** Control plane → runner: commit a live session's uncommitted worktree changes onto its
+ *  branch. The runner locates the checkout from the session id (its per-session worktree
+ *  dir); `branch` is for logging only. */
+export interface CommitCommand {
+  sessionId: string;
+  /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
+  branch: string;
 }
 
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
@@ -384,6 +401,8 @@ export interface TurnCompleteRequest {
   isolationStatus?: string;
   /** The worktree's current diff vs base (uncommitted), refreshed each turn. */
   changedFiles?: ChangedFile[];
+  /** Whether the worktree has uncommitted changes (drives Commit vs Merge in the bar). */
+  worktreeDirty?: boolean;
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner
@@ -433,5 +452,15 @@ export interface SessionCompleteRequest {
 export interface SessionMergeResultRequest {
   status: 'merged' | 'conflict' | 'error';
   mergedSha?: string;
+  message?: string;
+}
+
+/**
+ * Runner → control plane: the outcome of a {@link CommitCommand}. `committed` advanced the
+ * branch (the worktree is now clean); `nochange` means there was nothing to commit; `error`
+ * means the commit failed (no worktree, git error). `message` carries git's stderr.
+ */
+export interface SessionCommitResultRequest {
+  status: 'committed' | 'nochange' | 'error';
   message?: string;
 }

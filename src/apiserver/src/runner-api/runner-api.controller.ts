@@ -36,6 +36,7 @@ import {
   RunnerHeartbeatResponse,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
+  SessionCommitResultRequest,
   SessionCompleteRequest,
   SessionEndReason,
   SessionMergeResultRequest,
@@ -273,6 +274,9 @@ export class RunnerApiController {
               data: {
                 isolationStatus: s.isolationStatus,
                 changedFiles: (s.changedFiles ?? []) as unknown as Prisma.InputJsonValue,
+                // Drives the status bar's Commit-vs-Merge action (older runners omit it →
+                // left untouched, so the bar falls back to the session lifecycle).
+                ...(s.worktreeDirty !== undefined ? { worktreeDirty: s.worktreeDirty } : {}),
               },
             }),
           ),
@@ -283,15 +287,17 @@ export class RunnerApiController {
     }
     let cancelSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
+    let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       mergeRequests = await this.realtime.drainMergeRequests(runner.id);
+      commitRequests = await this.realtime.drainCommitRequests(runner.id);
     } catch {
-      // A transient DB hiccup shouldn't fail the heartbeat; both arrive next cycle.
+      // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart.
-    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent, mergeRequests };
+    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent, mergeRequests, commitRequests };
   }
 
   // ── Interactive sessions (Route B) ──
@@ -591,6 +597,7 @@ export class RunnerApiController {
           ...(dto.changedFiles !== undefined
             ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
             : {}),
+          ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
           lastTurnAt: new Date(),
           numTurns: { increment: dto.numTurns ?? 1 },
           costUsd: { increment: dto.costUsd ?? 0 },
@@ -792,6 +799,9 @@ export class RunnerApiController {
           ...(dto.changedFiles !== undefined
             ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
             : {}),
+          // finalizeWorktree committed everything onto the branch before /complete, so the
+          // checkout is clean — the bar shows Merge (not Commit) for the ended session.
+          worktreeDirty: false,
         },
       });
       if (res.count === 0) return false;
@@ -847,6 +857,30 @@ export class RunnerApiController {
         mergeStatus: dto.status,
         mergeError: merged ? null : (dto.message ?? null),
         mergedAt: merged ? new Date() : null,
+      },
+    });
+    return { ok: true };
+  }
+
+  /** Outcome of a heartbeat-delivered CommitCommand — persist it so the worktree status bar
+   *  can flip from Commit to Merge. On success the worktree is clean (worktreeDirty=false),
+   *  so the bar shows Merge without waiting for the next live-diff heartbeat; 'nochange' is
+   *  also clean. An error keeps the Commit button (commitError carries git's message). */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/commit-result')
+  async commitResult(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: SessionCommitResultRequest,
+  ) {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const clean = dto.status === 'committed' || dto.status === 'nochange';
+    await this.prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        commitStatus: dto.status,
+        commitError: dto.status === 'error' ? (dto.message ?? null) : null,
+        ...(clean ? { worktreeDirty: false } : {}),
       },
     });
     return { ok: true };
