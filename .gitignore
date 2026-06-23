@@ -24,6 +24,9 @@ tmp/
 # prisma local db
 *.db
 
+# postgres bind-mount data
+/data/
+
 # os
 .DS_Store
 Thumbs.db
