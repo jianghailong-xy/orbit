@@ -6,13 +6,14 @@ export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
 
 export async function api<T = unknown>(
   path: string,
-  options: { method?: string; body?: unknown } = {},
+  options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: options.method ?? 'GET',
     headers: {
       'content-type': 'application/json',
       ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
+      ...options.headers,
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
