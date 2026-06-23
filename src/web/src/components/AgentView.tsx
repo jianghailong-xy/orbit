@@ -501,10 +501,18 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // The list is scoped by `view`. A selected session (its transcript is open) is
   // resolved from the loaded set, so force a view that contains it: `system` when
-  // browsing the System tab (system sessions live there), otherwise `active` — that's
-  // where live sessions and the runner's slot accounting live. (active also includes
-  // system sessions server-side, so deep-linking one still resolves.)
-  const effectiveView = selectedId ? (view === 'system' ? 'system' : 'active') : view;
+  // browsing the System tab (system sessions live there), `archived` when browsing
+  // Completed (so an opened completed session resolves and stays highlighted),
+  // otherwise `active` — where live sessions and the runner's slot accounting live.
+  // (active also includes system sessions server-side, so deep-linking one still
+  // resolves.)
+  const effectiveView = selectedId
+    ? view === 'system'
+      ? 'system'
+      : view === 'archived'
+        ? 'archived'
+        : 'active'
+    : view;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
@@ -576,11 +584,11 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Step the open session up/down the visible list. Shared by the window-level Up/Down
   // handler and the Segmented's capture handler below. Returns false (a no-op) at the
-  // list ends, on an empty list, or on the archived/trash tabs with nothing open. With
+  // list ends, on an empty list, or on the trash tab with nothing open. With
   // nothing selected, Down enters from the top, Up from the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view !== 'active' && view !== 'system') return false;
+      if (!selectedId && view !== 'active' && view !== 'system' && view !== 'archived') return false;
       if (visibleSessions.length === 0) return false;
       const cur = visibleSessions.findIndex((s) => s.id === selectedId);
       let next: number;
@@ -1433,8 +1441,8 @@ export function AgentView({ runner }: { runner: Runner }) {
             const next = v as 'active' | 'archived' | 'deleted' | 'system';
             setView(next);
             // Switching tabs while a session transcript is open closes it: the open
-            // session lives in the active set and archived/trash rows aren't openable,
-            // so browsing another tab means leaving the conversation.
+            // session belongs to the tab it was opened from, so browsing another tab
+            // means leaving the conversation.
             if (selectedId) {
               const a = scopeAgentId ?? agentsForRunner[0]?.id;
               navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
@@ -1485,8 +1493,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 : view === 'system'
                   ? [deleteItem]
                   : [restoreItem];
-            // System sessions are openable like active ones; archived/trash rows aren't.
-            const openable = view === 'active' || view === 'system';
+            // Active, System and Completed (archived) rows open their transcript; only
+            // Trash (deleted) rows stay closed.
+            const openable = view !== 'deleted';
             const line = sessionLine(s, openable);
             return (
               <div
