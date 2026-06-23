@@ -1,12 +1,12 @@
-// Model + default options shared across the app — the runner-detail "add agent"
-// form, the Settings "Agent defaults" section, and the AgentView composer — so the
-// set of models and their order never drift between pickers. `label` is the raw id
-// (shown on the agent-default forms); `short` is the friendly name the composer
-// shows. Ordered Opus-first to match Claude Code's model picker.
+// Model options shared across the app — the runner-detail "add agent" form, the
+// Settings "Agent defaults" section, and the AgentView composer — so the set of
+// models, their order, and their labels never drift between pickers. `value` is the
+// claude --model id; `label` is the friendly display name shown in every picker.
+// Ordered Opus-first to match Claude Code's model picker.
 export const MODEL_OPTIONS = [
-  { value: 'claude-opus-4-8', label: 'claude-opus-4-8', short: 'Opus 4.8' },
-  { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6', short: 'Sonnet 4.6' },
-  { value: 'claude-haiku-4-5', label: 'claude-haiku-4-5', short: 'Haiku 4.5' },
+  { value: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
 
 // The permission mode a new session of the agent starts in.
