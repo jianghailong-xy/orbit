@@ -86,7 +86,7 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string) {
 // output going to a file, tails that file for live output, and emits a background_task on exit
 // (the runner owns the process, so completion + exit code are exact — no notification needed).
 // Bound to the session context, so the process is killed when the session ends.
-func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPath string) error {
+func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPath string, env map[string]string) error {
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return err
 	}
@@ -96,6 +96,7 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 	}
 	cmd := exec.CommandContext(b.ctx, "bash", "-lc", command)
 	cmd.Dir = execDir
+	cmd.Env = envWithAgent(env)
 	cmd.Stdout = f
 	cmd.Stderr = f
 	if err := cmd.Start(); err != nil {

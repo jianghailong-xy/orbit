@@ -14,11 +14,12 @@ import (
 // nothing else on the session advances until it returns or the context is cancelled.
 const shellTurnTimeout = 2 * time.Minute
 
-// runShellTurn executes `command` with bash in execDir, bypassing claude entirely. It
+// runShellTurn executes `command` with bash in execDir — with the agent's configured env
+// layered on the runner's own, matching the claude process — bypassing claude entirely. It
 // emits a Bash tool_use/tool_result pair — the same shape claude's own Bash tool emits,
 // so the transcript renders it identically (a `$ command` card + output) with no UI
 // changes — and returns the combined stdout+stderr plus the process exit code.
-func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string) (string, int) {
+func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, turnID string, env map[string]string) (string, int) {
 	toolUseID := "shell-" + turnID
 	emit(evToolUse, map[string]interface{}{
 		"id": toolUseID, "name": "Bash", "input": map[string]interface{}{"command": command},
@@ -27,6 +28,7 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "bash", "-lc", command)
 	cmd.Dir = execDir
+	cmd.Env = envWithAgent(env)
 	out, err := cmd.CombinedOutput()
 	exit := 0
 	if err != nil {
@@ -70,7 +72,7 @@ func shortShellID(turnID string) string {
 // in background with ID…" result), so the existing Background-processes tray, the live status,
 // and the completion toast all pick it up unchanged; bgTailer owns the spawn, the output tail,
 // and the exit report.
-func runShellTurnBackground(bg *bgTailer, execDir, scratchDir, command, turnID string, emit emitFn) {
+func runShellTurnBackground(bg *bgTailer, execDir, scratchDir, command, turnID string, emit emitFn, env map[string]string) {
 	toolUseID := "shell-" + turnID
 	shellID := shortShellID(turnID)
 	outputPath := filepath.Join(scratchDir, shellID+".output")
@@ -78,7 +80,7 @@ func runShellTurnBackground(bg *bgTailer, execDir, scratchDir, command, turnID s
 		"id": toolUseID, "name": "Bash",
 		"input": map[string]interface{}{"command": command, "run_in_background": true},
 	})
-	if err := bg.startUserShell(execDir, command, toolUseID, shellID, outputPath); err != nil {
+	if err := bg.startUserShell(execDir, command, toolUseID, shellID, outputPath, env); err != nil {
 		emit(evToolResult, map[string]interface{}{
 			"toolUseId": toolUseID, "content": "[failed to start: " + err.Error() + "]", "isError": true,
 		})

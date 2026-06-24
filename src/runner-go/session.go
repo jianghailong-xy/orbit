@@ -211,6 +211,17 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 	return out
 }
 
+// envWithAgent returns the runner's own environment with the agent's custom env vars
+// layered on top. Shared by the claude process and `!`-shells so a command run either
+// way sees the same configured environment.
+func envWithAgent(agentEnv map[string]string) []string {
+	env := os.Environ()
+	for k, v := range agentEnv {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
 // runSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
 // ended=false means an unexpected crash that the caller should --resume.
@@ -294,10 +305,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	cmd := exec.CommandContext(procCtx, "claude", args...)
 	cmd.Dir = execDir
 	// Start from the runner's own env, then layer the agent's custom env vars on top.
-	cmd.Env = os.Environ()
-	for k, v := range job.Agent.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = envWithAgent(job.Agent.Env)
 	// Inject session context so the built-in `orbit mcp` server (a child of claude)
 	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
 	// from config.json so it never lands in the claude process environment.
@@ -492,7 +500,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					// `!cmd &`: launch detached and finish the turn now — the process keeps
 					// running, surfaced in the Background-processes tray (output + completion),
 					// not buffered into the next message's context.
-					runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit)
+					runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
 					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
@@ -500,7 +508,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
 				} else {
-					shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
+					shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
 					pendingShellCtx = append(pendingShellCtx,
 						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
 					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
