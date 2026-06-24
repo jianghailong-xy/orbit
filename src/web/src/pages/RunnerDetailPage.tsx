@@ -39,7 +39,7 @@ import {
 interface Agent {
   id: string;
   name: string;
-  description?: string | null;
+  appendSystemPrompt?: string | null;
   model?: string;
   permissionMode?: string;
   workDir?: string | null;
@@ -168,7 +168,7 @@ export function RunnerDetailPage() {
   const [fName, setFName] = useState('');
   const [fModel, setFModel] = useState(DEFAULT_MODEL);
   const [fMode, setFMode] = useState('auto');
-  const [fDesc, setFDesc] = useState('');
+  const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
@@ -192,7 +192,7 @@ export function RunnerDetailPage() {
         name: fName.trim(),
         model: fModel,
         permissionMode: fMode,
-        description: fDesc.trim() || undefined,
+        appendSystemPrompt: fAppend.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
@@ -220,7 +220,7 @@ export function RunnerDetailPage() {
     setFName('');
     setFModel(prefModel);
     setFMode(prefMode);
-    setFDesc('');
+    setFAppend('');
     setFWorkDir('');
     setFEnv([]);
     setFormOpen(true);
@@ -230,7 +230,7 @@ export function RunnerDetailPage() {
     setFName(a.name);
     setFModel(a.model ?? DEFAULT_MODEL);
     setFMode(a.permissionMode ?? 'dontAsk');
-    setFDesc(a.description ?? '');
+    setFAppend(a.appendSystemPrompt ?? '');
     setFWorkDir(a.workDir ?? '');
     setFEnv(Object.entries(a.env ?? {}).map(([key, value]) => ({ key, value })));
     setFormOpen(true);
@@ -290,12 +290,12 @@ export function RunnerDetailPage() {
         </div>
       </div>
       <div className="rd-form-field">
-        <div className="rd-form-label">Description</div>
+        <div className="rd-form-label">Instructions</div>
         <Input.TextArea
-          value={fDesc}
-          onChange={(e) => setFDesc(e.target.value)}
-          rows={2}
-          placeholder="What this agent is for (optional)"
+          value={fAppend}
+          onChange={(e) => setFAppend(e.target.value)}
+          rows={4}
+          placeholder="Added to this agent's system prompt on every run (optional)"
         />
       </div>
       <div className="rd-form-field">
