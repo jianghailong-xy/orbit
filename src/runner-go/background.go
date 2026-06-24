@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -62,15 +65,88 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if idM == nil || pathM == nil {
 		return
 	}
-	shellID, path := idM[1], pathM[1]
+	b.startTail(toolUseID, idM[1], pathM[1])
+}
+
+// startTail begins tailing path for the given background shell (no-op if already tailing
+// toolUseID). Shared by agent shells (file parsed from a tool_result) and user `!`-shells
+// (file the runner owns).
+func (b *bgTailer) startTail(toolUseID, shellID, path string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, ok := b.live[toolUseID]; ok {
-		return // already tailing
+		return
 	}
 	ctx, cancel := context.WithCancel(b.ctx)
 	b.live[toolUseID] = cancel
 	go b.tail(ctx, toolUseID, shellID, path)
+}
+
+// startUserShell runs a user `!cmd &` shell in the background: it spawns the process with its
+// output going to a file, tails that file for live output, and emits a background_task on exit
+// (the runner owns the process, so completion + exit code are exact — no notification needed).
+// Bound to the session context, so the process is killed when the session ends.
+func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPath string) error {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(b.ctx, "bash", "-lc", command)
+	cmd.Dir = execDir
+	cmd.Stdout = f
+	cmd.Stderr = f
+	if err := cmd.Start(); err != nil {
+		f.Close()
+		return err
+	}
+	b.startTail(toolUseID, shellID, outputPath)
+	go func() {
+		werr := cmd.Wait()
+		f.Close()
+		b.stop(toolUseID) // stop the live tail
+		if b.ctx.Err() != nil {
+			return // session ending — the kill isn't a real completion, don't report it
+		}
+		exit := 0
+		if werr != nil {
+			if ee, ok := werr.(*exec.ExitError); ok {
+				exit = ee.ExitCode()
+			} else {
+				exit = -1
+			}
+		}
+		status := "completed"
+		if exit != 0 {
+			status = "failed"
+		}
+		// `output` carries the final snapshot so it survives a reload (background_output is
+		// broadcast-only); for agent shells this field is absent and the agent's Read snapshots
+		// persist instead.
+		b.emit(evBackgroundTask, map[string]interface{}{
+			"shellId":   shellID,
+			"toolUseId": toolUseID,
+			"status":    status,
+			"summary":   fmt.Sprintf("Background command completed (exit code %d)", exit),
+			"output":    readCapped(outputPath),
+		})
+	}()
+	return nil
+}
+
+// readCapped reads a file, returning at most the last bgTailCap bytes ("" on any error).
+func readCapped(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	s := string(data)
+	if len(s) > bgTailCap {
+		s = s[len(s)-bgTailCap:]
+	}
+	return s
 }
 
 // stop ends the tail for a completed/failed/killed background task.

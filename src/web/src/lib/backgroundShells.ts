@@ -133,6 +133,10 @@ export function deriveBackgroundShells(
     } else {
       const t = terminalFromStatus(String(p.status ?? ''));
       if (t) shell.terminal = t;
+      // User `!`-shells carry their final output on the (persisted) background_task, since the
+      // live background_output tail is broadcast-only. Agent shells omit it (their Read
+      // snapshots persist instead).
+      if (typeof p.output === 'string' && p.output) applyOutput(shell, p.output, ev.seq, ev.ts);
     }
   }
 

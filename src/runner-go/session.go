@@ -451,14 +451,27 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				inflight[resp.TurnID] = true
 				inflightMu.Unlock()
 				setTurn(resp.TurnID)
-				shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
-				pendingShellCtx = append(pendingShellCtx,
-					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
-					TurnID: resp.TurnID, Status: stSucceeded,
-					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
-				}); err != nil {
-					logln("shell turn-complete failed for", job.SessionID+":", err)
+				if shCmd, isBg := splitBackground(resp.Content); isBg {
+					// `!cmd &`: launch detached and finish the turn now — the process keeps
+					// running, surfaced in the Background-processes tray (output + completion),
+					// not buffered into the next message's context.
+					runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit)
+					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+						TurnID: resp.TurnID, Status: stSucceeded,
+						Result: "started in background", Subtype: "shell",
+					}); err != nil {
+						logln("shell turn-complete failed for", job.SessionID+":", err)
+					}
+				} else {
+					shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
+					pendingShellCtx = append(pendingShellCtx,
+						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
+					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+						TurnID: resp.TurnID, Status: stSucceeded,
+						Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+					}); err != nil {
+						logln("shell turn-complete failed for", job.SessionID+":", err)
+					}
 				}
 				inflightMu.Lock()
 				delete(inflight, resp.TurnID)
