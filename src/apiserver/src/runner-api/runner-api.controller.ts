@@ -586,6 +586,15 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) return false;
+      // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
+      // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
+      // would make a shell-first session (claude never received a message) try to --resume a
+      // conversation that was never established, failing with "No conversation found".
+      const completed = await tx.conversationTurn.findUnique({
+        where: { id: dto.turnId },
+        select: { kind: true },
+      });
+      const turnInc = completed?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
       // Park (or, on a failed task turn, finalize) + bill ONLY if the session is still
       // live and not being torn down, so a late/retried turn-complete can never
       // resurrect a finalized/cancelled session or double-bill it.
@@ -609,7 +618,7 @@ export class RunnerApiController {
             : {}),
           ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
           lastTurnAt: new Date(),
-          numTurns: { increment: dto.numTurns ?? 1 },
+          numTurns: { increment: turnInc },
           costUsd: { increment: dto.costUsd ?? 0 },
           sumInputTokens: { increment: usage?.input_tokens ?? 0 },
           sumOutputTokens: { increment: usage?.output_tokens ?? 0 },

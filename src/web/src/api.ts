@@ -52,12 +52,18 @@ export const createInteractiveSession = (body: {
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
+  /** Compose from a `!cmd` draft: the server seeds the first turn as a shell command
+   *  (run on the runner, bypassing claude) instead of a normal message. */
+  shell?: boolean;
 }) =>
   api<{ id: string }>('/sessions', {
     method: 'POST',
     body: {
       ...body,
-      title: body.prompt.trim().slice(0, 80) || 'Interactive session',
+      // Mark a shell-launched session in the list with a `$` prefix so it reads as a command.
+      title: body.shell
+        ? `$ ${body.prompt.trim()}`.slice(0, 80)
+        : body.prompt.trim().slice(0, 80) || 'Interactive session',
     },
   });
 

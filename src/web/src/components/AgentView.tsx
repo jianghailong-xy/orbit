@@ -1068,6 +1068,8 @@ export function AgentView({ runner }: { runner: Runner }) {
         permissionMode: MODE_TO_PERMISSION[mode],
         effort: effort || undefined,
         attachmentIds,
+        // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
+        shell,
       });
       return { id: created.id, created: true };
     },
@@ -1410,10 +1412,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     }
     if (!c && readyImages.length === 0) return;
     setHistIdx(-1);
-    // `!cmd` on a live session runs a raw shell command on the runner (bypassing claude).
-    // Its output echoes to the transcript and is fed to claude as context on your next
-    // message. A bare `!` is a no-op; images are ignored for a shell turn.
-    if (live && c.startsWith('!')) {
+    // `!cmd` runs a raw shell command on the runner (bypassing claude): on a live session,
+    // or as the first turn of a brand-new draft (no selection) — the server seeds it as a
+    // shell turn and the runner runs it once it claims the session. Its output echoes to the
+    // transcript and feeds claude as context on the next message. A bare `!` is a no-op;
+    // images are ignored. An ended-but-resumable session is excluded (revive it first).
+    if (c.startsWith('!') && (live || !selected)) {
       const cmd = c.slice(1).trim();
       if (cmd) send.mutate({ content: cmd, images: [], shell: true });
       else setText('');
@@ -2068,8 +2072,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {
                   key: 'shell',
                   icon: <ConsoleSqlOutlined />,
-                  label: live ? 'Shell' : 'Shell (needs a started session)',
-                  disabled: !live,
+                  // Works on a live session and on a brand-new draft (sent as the first turn,
+                  // run once the runner claims it). Only an ended session blocks it — revive
+                  // it first so claude's context is back before mixing in shell output.
+                  label: selected && !live ? 'Shell (resume the session first)' : 'Shell',
+                  disabled: !!selected && !live,
                   onClick: insertShell,
                 },
                 {

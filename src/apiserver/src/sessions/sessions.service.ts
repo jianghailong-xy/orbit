@@ -131,6 +131,17 @@ export class SessionsService {
         data: { sessionId: session.id },
       });
     }
+    // A shell-first session (composed from a `!cmd` draft): seed its first turn as a 'shell'
+    // turn now, using the SAME fixed clientTurnId the claim uses, so buildSession sees a turn
+    // already exists and skips its default message seed. The command runs on the runner and
+    // is never fed to claude as a prompt; claude still spawns (with --session-id) and idles.
+    if (dto.shell) {
+      await this.insertTurn(session.id, {
+        kind: 'shell',
+        content: dto.prompt,
+        clientTurnId: SessionsService.initialTurnClientId(session.id),
+      });
+    }
     this.queue.notifySessionQueued();
     return session;
   }
