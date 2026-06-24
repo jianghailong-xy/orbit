@@ -112,6 +112,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 	}()
 
+	// Watches background-shell output files for live output and turns Claude's
+	// <task-notification> messages into durable completion events. Shared across respawns;
+	// all tails stop when this session run returns.
+	bg := newBgTailer(ctx, emit)
+	defer bg.stopAll()
+
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
 	// A reclaimed or revived session's claude session already exists, so even its
@@ -122,7 +128,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if ctx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
-		st, ended, reload := runSessionProcess(ctx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn)
+		st, ended, reload := runSessionProcess(ctx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg)
 		firstSpawn = false
 		if ended {
 			status = st
@@ -211,7 +217,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 // Returns (status, ended, reload). ended=false means the caller should re-spawn:
 // reload=true for a requested model/permission-mode change (re-spawn with the new
 // flags now on job.Agent), reload=false for an unexpected crash.
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
@@ -482,14 +488,27 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				inflight[resp.TurnID] = true
 				inflightMu.Unlock()
 				setTurn(resp.TurnID)
-				shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
-				pendingShellCtx = append(pendingShellCtx,
-					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
-					TurnID: resp.TurnID, Status: stSucceeded,
-					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
-				}); err != nil {
-					logln("shell turn-complete failed for", job.SessionID+":", err)
+				if shCmd, isBg := splitBackground(resp.Content); isBg {
+					// `!cmd &`: launch detached and finish the turn now — the process keeps
+					// running, surfaced in the Background-processes tray (output + completion),
+					// not buffered into the next message's context.
+					runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit)
+					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+						TurnID: resp.TurnID, Status: stSucceeded,
+						Result: "started in background", Subtype: "shell",
+					}); err != nil {
+						logln("shell turn-complete failed for", job.SessionID+":", err)
+					}
+				} else {
+					shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID)
+					pendingShellCtx = append(pendingShellCtx,
+						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
+					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+						TurnID: resp.TurnID, Status: stSucceeded,
+						Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+					}); err != nil {
+						logln("shell turn-complete failed for", job.SessionID+":", err)
+					}
 				}
 				inflightMu.Lock()
 				delete(inflight, resp.TurnID)
@@ -598,7 +617,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		if json.Unmarshal([]byte(line), &msg) != nil {
 			continue
 		}
-		handleMessage(msg, emit)
+		handleMessage(msg, emit, bg)
 		if msg["type"] == "assistant" {
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt

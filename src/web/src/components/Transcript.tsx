@@ -769,7 +769,8 @@ function ToolResult({
 // Pre renders monospace text and collapses past `threshold` lines (Read output,
 // long commands, JSON blobs) so one tool call can't flood the transcript.
 // `prompt` prefixes a shell `$` for Bash commands.
-function Pre({
+// Exported so the background-process tray can reuse the same collapsing output block.
+export function Pre({
   text,
   threshold = 16,
   muted,
@@ -1011,7 +1012,8 @@ const safeJson = (v: any): string => {
 
 // A tool_result's content is either a string or an array of content blocks
 // (text/image/...). Flatten it to displayable text.
-function resultText(content: any): string {
+// Exported so the background-process tray can flatten a Read-on-output result the same way.
+export function resultText(content: any): string {
   if (content == null) return '';
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {

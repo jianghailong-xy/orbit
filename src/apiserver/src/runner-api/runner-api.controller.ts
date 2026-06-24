@@ -695,9 +695,14 @@ export class RunnerApiController {
     // text_delta / thinking_delta are streaming-animation increments: broadcast them
     // live (below) but DON'T persist them — the full reply is durably saved as the
     // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
-    // text without piling up rows.
+    // text without piling up rows. background_output is the live tail of a background
+    // shell's file — same deal (ephemeral animation; the durable record is the agent's
+    // own Read snapshots + the background_task completion event).
     const durable = events.filter(
-      (e) => e.type !== RunEventType.TEXT_DELTA && e.type !== RunEventType.THINKING_DELTA,
+      (e) =>
+        e.type !== RunEventType.TEXT_DELTA &&
+        e.type !== RunEventType.THINKING_DELTA &&
+        e.type !== RunEventType.BACKGROUND_OUTPUT,
     );
     if (durable.length > 0) {
       await this.prisma.runEvent.createMany({
@@ -760,6 +765,48 @@ export class RunnerApiController {
           startedAt: new Date(e.ts),
         })),
       });
+    }
+
+    // Maintain the running background-shell set (Session.runningBgShells), which drives the
+    // "Background running" status on the list + header. Added on a Bash(run_in_background)
+    // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>,
+    // and cleared on a (re)spawn (Claude restarted → any prior background children are gone).
+    // Atomic array ops stay idempotent under event-batch retries.
+    const bgStarted = events
+      .filter(
+        (e) =>
+          e.type === RunEventType.TOOL_USE &&
+          (e.payload as { name?: string }).name === 'Bash' &&
+          (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background ===
+            true,
+      )
+      .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
+      .filter(Boolean);
+    const bgEnded = events
+      .filter(
+        (e) =>
+          e.type === RunEventType.BACKGROUND_TASK &&
+          ['completed', 'failed', 'killed', 'stopped'].includes(
+            String((e.payload as { status?: unknown }).status ?? ''),
+          ),
+      )
+      .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+      .filter(Boolean);
+    const bgReset = events.some(
+      (e) =>
+        e.type === RunEventType.SYSTEM &&
+        String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
+    );
+    if (bgReset) {
+      await this.prisma.session.update({ where: { id: sessionId }, data: { runningBgShells: [] } });
+    }
+    for (const id of bgStarted) {
+      await this.prisma
+        .$executeRaw`UPDATE "session" SET "running_bg_shells" = array_append(array_remove("running_bg_shells", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
+    }
+    for (const id of bgEnded) {
+      await this.prisma
+        .$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}) WHERE "id" = ${sessionId}::uuid`;
     }
 
     // Broadcast to live subscribers while the session is active (any LIVE status);
@@ -830,6 +877,9 @@ export class RunnerApiController {
           // finalizeWorktree committed everything onto the branch before /complete, so the
           // checkout is clean — the bar shows Merge (not Commit) for the ended session.
           worktreeDirty: false,
+          // The session is ending — Claude (and its background children) are gone, so the
+          // running-background set can't still be live.
+          runningBgShells: [],
         },
       });
       if (res.count === 0) return false;

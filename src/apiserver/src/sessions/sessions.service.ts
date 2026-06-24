@@ -187,6 +187,7 @@ export class SessionsService {
       effort: string | null;
       lastAssistantText: string | null;
       lastToolUse: string | null;
+      runningBgCount: number;
       agentId: string | null;
       agentName: string | null;
       agentModel: string | null;
@@ -210,6 +211,7 @@ export class SessionsService {
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
+        cardinality(s.running_bg_shells)::int AS "runningBgCount",
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
@@ -244,6 +246,7 @@ export class SessionsService {
       effort: r.effort,
       lastAssistantText: r.lastAssistantText,
       lastToolUse: r.lastToolUse,
+      runningBgCount: r.runningBgCount,
       agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
       assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
       taskId: r.taskId,

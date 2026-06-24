@@ -1724,6 +1724,120 @@ body {
   margin-top: 2px;
 }
 
+/* Background-process tray above the composer (BackgroundShellsTray.tsx): the shells the
+   agent launched with Bash(run_in_background), collapsed to one line, expandable to a list
+   of processes (command · id · age) each showing its latest polled output. Shares the
+   collapsed-bar visual language with .wt-bar below. */
+.bg-tray {
+  margin: 0 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.bg-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 6px 2px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.bg-tray-row:hover {
+  background: var(--bg-hover);
+}
+.bg-tray-ico {
+  flex: none;
+  color: var(--text-3);
+}
+.bg-tray-title {
+  color: var(--text-1);
+  font-weight: 500;
+}
+.bg-tray-count {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.bg-tray-list {
+  border-top: 1px solid var(--border-subtle);
+  padding: 4px 8px 6px;
+  max-height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bg-shell {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.bg-shell-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.bg-shell-head:hover {
+  background: var(--bg-hover);
+}
+.bg-shell-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.bg-shell-id {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.bg-shell-age {
+  flex: none;
+  color: var(--text-3);
+}
+.bg-shell-caret {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-3);
+}
+.bg-shell-peek {
+  padding: 0 8px 5px 30px;
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bg-shell-detail {
+  border-top: 1px solid var(--border-subtle);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bg-shell-empty {
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: italic;
+}
+.bg-shell-meta {
+  color: var(--text-3);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Worktree status bar above the composer (SessionOutputs.tsx): the branch this session's
    work lives on + its diff, collapsed to one line, expandable to the changed files. */
 .wt-bar {
