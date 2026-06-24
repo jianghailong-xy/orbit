@@ -1069,11 +1069,14 @@ export function AgentView({ runner }: { runner: Runner }) {
       if (selected && resumable) {
         // The pills were seeded from this session's stored config, so an untouched
         // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
+        // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
+        // runner runs the command, buffering its output for the next message.
         const res = await resumeSession(
           selected.id,
           content,
           { model, permissionMode: MODE_TO_PERMISSION[mode], effort: effort || undefined },
           attachmentIds,
+          shell ? 'shell' : undefined,
         );
         return { id: selected.id, turnId: res.turnId };
       }
@@ -1430,11 +1433,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (!c && readyImages.length === 0) return;
     setHistIdx(-1);
     // `!cmd` runs a raw shell command on the runner (bypassing claude): on a live session,
-    // or as the first turn of a brand-new draft (no selection) — the server seeds it as a
-    // shell turn and the runner runs it once it claims the session. Its output echoes to the
-    // transcript and feeds claude as context on the next message. A bare `!` is a no-op;
-    // images are ignored. An ended-but-resumable session is excluded (revive it first).
-    if (c.startsWith('!') && (live || !selected)) {
+    // as the first turn of a brand-new draft (no selection), or as the revive turn of an
+    // ended-but-resumable session — the server seeds it as a shell turn and the runner runs
+    // it once it claims the session (a resume --resumes claude first, so its context is back
+    // before the command runs). Its output echoes to the transcript and feeds claude as
+    // context on the next message. A bare `!` is a no-op; images are ignored. Only an
+    // unresumable ended session falls through (no claude to wake — start fresh instead).
+    if (c.startsWith('!') && (live || resumable || !selected)) {
       const cmd = c.slice(1).trim();
       if (cmd) send.mutate({ content: cmd, images: [], shell: true });
       else setText('');
@@ -2092,11 +2097,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {
                   key: 'shell',
                   icon: <ConsoleSqlOutlined />,
-                  // Works on a live session and on a brand-new draft (sent as the first turn,
-                  // run once the runner claims it). Only an ended session blocks it — revive
-                  // it first so claude's context is back before mixing in shell output.
-                  label: selected && !live ? 'Shell (resume the session first)' : 'Shell',
-                  disabled: !!selected && !live,
+                  // Works on a live session, a brand-new draft (sent as the first turn), and
+                  // an ended-but-resumable session (sent as the revive turn — the runner
+                  // --resumes claude, runs the command, and buffers its output for the next
+                  // message). Only an unresumable ended session blocks it (never started, or
+                  // its runner is offline) — there's no claude context to wake.
+                  label: !!selected && !live && !resumable ? 'Shell (resume the session first)' : 'Shell',
+                  disabled: !!selected && !live && !resumable,
                   onClick: insertShell,
                 },
                 {

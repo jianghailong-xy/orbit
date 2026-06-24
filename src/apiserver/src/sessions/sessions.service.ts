@@ -855,8 +855,12 @@ export class SessionsService {
     const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
     // Append the message, then flip the row back to PENDING so the runner re-claims
     // it; buildSession sees the existing turns and re-spawns claude with --resume.
+    // A `!cmd` revive seeds a 'shell' turn instead: the runner --resumes claude (context
+    // restored) AND runs the command, buffering its output for the next message — exactly
+    // like a shell turn on a live session. Whitelist kind, mirroring createTurn; a shell
+    // turn never advances numTurns (turn-complete), so --resume keeps working on respawn.
     const turn = await this.insertTurn(id, {
-      kind: 'message',
+      kind: dto.kind === 'shell' ? 'shell' : 'message',
       content: dto.content,
       clientTurnId: dto.clientTurnId,
     });

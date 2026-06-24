@@ -151,16 +151,25 @@ export const listQueuedTurns = (sessionId: string) =>
 
 /** Revive an ended session with a new message: the runner --resumes claude's
  *  existing context. Requires the session's runner to be online. `config` re-applies
- *  mode/model/effort changes made while ended (omitted fields keep the prior value). */
+ *  mode/model/effort changes made while ended (omitted fields keep the prior value).
+ *  `kind: 'shell'` revives via a `!cmd` shell turn (run on the runner, output buffered
+ *  for the next message) instead of a normal prompt — claude still --resumes and idles. */
 export const resumeSession = (
   sessionId: string,
   content: string,
   config?: { model?: string; permissionMode?: string; effort?: string },
   attachmentIds?: string[],
+  kind?: 'message' | 'shell',
 ) =>
   api<{ turnId: string; seq: number }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
-    body: { clientTurnId: uuid(), content, ...config, ...(attachmentIds?.length ? { attachmentIds } : {}) },
+    body: {
+      clientTurnId: uuid(),
+      content,
+      ...config,
+      ...(attachmentIds?.length ? { attachmentIds } : {}),
+      ...(kind === 'shell' ? { kind } : {}),
+    },
   });
 
 export interface ApprovalInfo {
