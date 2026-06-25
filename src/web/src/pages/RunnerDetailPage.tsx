@@ -290,15 +290,6 @@ export function RunnerDetailPage() {
         </div>
       </div>
       <div className="rd-form-field">
-        <div className="rd-form-label">Instructions</div>
-        <Input.TextArea
-          value={fAppend}
-          onChange={(e) => setFAppend(e.target.value)}
-          rows={4}
-          placeholder="Added to this agent's system prompt on every run (optional)"
-        />
-      </div>
-      <div className="rd-form-field">
         <div className="rd-form-label">Environment variables</div>
         {fEnv.map((row, i) => (
           <div className="rd-env-row" key={i}>
@@ -331,6 +322,15 @@ export function RunnerDetailPage() {
         >
           Add variable
         </Button>
+      </div>
+      <div className="rd-form-field">
+        <div className="rd-form-label">Instructions</div>
+        <Input.TextArea
+          value={fAppend}
+          onChange={(e) => setFAppend(e.target.value)}
+          rows={4}
+          placeholder="Added to this agent's system prompt on every run (optional)"
+        />
       </div>
       <div className="rd-form-actions">
         <Button onClick={closeForm}>Cancel</Button>
