@@ -3,6 +3,7 @@ import OrbitKit
 
 struct MainView: View {
     @Environment(AppModel.self) private var model
+    @State private var showRunner = false
 
     var body: some View {
         @Bindable var model = model
@@ -21,6 +22,12 @@ struct MainView: View {
             }
         }
         .toolbar {
+            ToolbarItem {
+                Button { showRunner = true } label: {
+                    Label("Local runner", systemImage: "desktopcomputer")
+                }
+                .help("Manage the runner on this Mac")
+            }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     if let email = model.user?.email { Text(email) }
@@ -31,6 +38,11 @@ struct MainView: View {
             }
         }
         .task { model.startPolling() }
+        .sheet(isPresented: $showRunner) {
+            if let url = model.baseURL {
+                RunnerControlPane(baseURL: url, tokenStore: model.tokenStore)
+            }
+        }
     }
 }
 

@@ -8,6 +8,16 @@ The SwiftUI shell on top of [`OrbitKit`](../OrbitKit).
   send / queue / interrupt), the three **approval cards** (tool-permission with "allow &
   remember", AskUserQuestion form, ExitPlanMode), the **worktree bar** (changed-file count,
   diff sheet, Commit / Merge) and a **background-process tray**.
+- **Phase 3 — native shell:** a **MenuBarExtra** (glanceable summary + jump into "needs you"),
+  **actionable notifications** (Allow / Deny / Reply right on the banner — the killer feature:
+  fire a session, close the window, get pinged to approve), a **Dock badge**, and **`orbit://`
+  deep links**. Notifications are driven by a poll-to-poll diff of the Active list
+  (`SessionDelta`), so they cover *all* sessions, not just the open one.
+- **Phase 4 — local runner control** (the "two-in-one" native-only half): detect the runner
+  this Mac hosts (`~/.orbit/config.json`), show service status, **Start / Stop / Restart** via
+  `launchctl`, tail `runner.log`, show the server-side online/slots, and **enroll this Mac in
+  one app** (device flow + self-approve, since we're already the signed-in user). Reached from
+  the toolbar; the launchd `Process` calls are why distribution is Developer-ID, not MAS.
 
 ## Build & run (macOS only)
 
@@ -40,11 +50,32 @@ Sources/OrbitApp/
     ComposerView.swift  input + model/permission pickers + shell toggle + send/interrupt
     ApprovalCards.swift ToolApprovalCard · QuestionCard · PlanCard (the 3 kinds)
     WorktreeBar.swift   change summary + Commit/Merge + DiffSheet + BackgroundTrayView
+    MenuBarContent.swift  the menu-bar dropdown (summary + quick items)
+    RunnerControlPane.swift  local-runner status/controls/log + enroll-this-Mac (sheet)
+  NotificationManager.swift  UNUserNotificationCenter shell (auth, categories, post, responses)
+  RunnerControl.swift   launchctl via Process + config/log IO + one-app device enrollment
 ```
 
-All the tricky Phase-2 logic — bash remember-rule (`git commit -m x` → `Bash(git commit:*)`),
-AskUserQuestion parsing, send/queue gating, multipart upload framing — lives in OrbitKit and
-is unit-tested (25 tests). These views are the unverified (macOS-only) layer over it.
+All the tricky logic — bash remember-rule (`git commit -m x` → `Bash(git commit:*)`),
+AskUserQuestion parsing, send/queue gating, multipart framing, **deep-link routing, the
+poll-diff that decides what to notify, notification text/actions, the menu-bar/Dock summary,
+and the runner path/config/launchctl-output/device-flow parsing** — lives in OrbitKit and is
+unit-tested (**41 tests**). These views + managers are the unverified (macOS-only) shell over it.
+
+### Phase 3 needs a real app bundle
+
+`swift run` is fine for the window, menu bar, and Dock badge, but **`UNUserNotificationCenter`
+and the `orbit://` URL scheme require a proper `.app` bundle** (bundle id, `Info.plist` with
+`CFBundleURLTypes`, the notification entitlement). In-app notification *routing* (tap → intent →
+action) is wired and the logic is tested, but banners won't actually deliver until this is
+built as an **Xcode app target** (the Phase 5 packaging step). Until then, treat Phase 3's
+delivery as code-complete-but-undelivered; its decision logic is verified.
+
+### Deferred: global hotkey
+
+A true system-wide "summon quick composer" hotkey needs Carbon `RegisterEventHotKey` (or an
+Accessibility-permissioned event tap) — fragile glue that can't be verified here, so it's left
+for the Xcode-target phase rather than shipped untested. Everything else in Phase 3 is in.
 
 ## Design notes
 

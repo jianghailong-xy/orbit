@@ -82,6 +82,25 @@ public final class APIClient: @unchecked Sendable {
 
     public func agents() async throws -> [Agent] { try await get("agents") }
     public func runners() async throws -> [Runner] { try await get("runners") }
+    public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+
+    // MARK: runner enrollment (Phase 4 — one-app device flow)
+
+    /// Start a device enrollment (acts as the would-be runner; this endpoint needs no auth).
+    public func deviceStart(_ req: DeviceStartRequest) async throws -> DeviceStartResponse {
+        try await post("runner/device/start", body: req)
+    }
+
+    /// Poll for the enrollment result; `approved` carries the runner credential.
+    public func devicePoll(deviceCode: String) async throws -> DevicePollResponse {
+        try await post("runner/device/poll", body: ["deviceCode": deviceCode])
+    }
+
+    /// Approve a device enrollment as the signed-in user (JWT) — lets the app enroll its own
+    /// host runner without a browser round-trip.
+    public func approveDevice(userCode: String) async throws {
+        _ = try await postRaw("runners/device/\(userCode)/approve", body: Optional<Empty>.none)
+    }
 
     // MARK: turns / lifecycle (Phase 2)
 

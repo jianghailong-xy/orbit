@@ -1,0 +1,58 @@
+# CI for the native macOS client (src/macos). Two jobs, mirroring how the code is split:
+#
+#   • orbitkit-linux — runs the OrbitKit unit tests on Linux (the pure protocol/logic core is
+#     platform-agnostic). Fast, and the same `swift test` the package was developed against.
+#   • macos — the FIRST real compile of the Apple-only code: it `swift test`s OrbitKit on macOS
+#     (so the `#if os(macOS)` Keychain + URLSession-SSE paths are actually built) and
+#     `swift build`s OrbitApp (the SwiftUI app, which can't compile on Linux at all).
+#
+# This does NOT produce a distributable .app/.dmg — that needs an Xcode app target + Developer
+# ID signing/notarization (see src/macos/OrbitApp/README.md). This workflow is the build/test
+# gate those release steps would build on.
+name: macOS client
+
+on:
+  push:
+    paths:
+      - "src/macos/**"
+      - ".github/workflows/macos-client.yml"
+  pull_request:
+    paths:
+      - "src/macos/**"
+      - ".github/workflows/macos-client.yml"
+
+# Newer pushes on the same ref supersede in-flight runs.
+concurrency:
+  group: macos-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  orbitkit-linux:
+    name: OrbitKit (Linux · swift test)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test OrbitKit
+        working-directory: src/macos/OrbitKit
+        run: swift test
+
+  macos:
+    name: macOS (build + test)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
+      # that the Linux job's `#if` guards skip.
+      - name: Test OrbitKit (macOS)
+        working-directory: src/macos/OrbitKit
+        run: swift test
+      # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
+      # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
+      - name: Build OrbitApp
+        working-directory: src/macos/OrbitApp
+        run: swift build

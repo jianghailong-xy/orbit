@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Observation
 import OrbitKit
 
@@ -20,11 +21,14 @@ final class AppModel {
     var sessions: [Session] = []
     var groups: SessionGroups = .empty
     var selectedSessionID: String?
+    var menuSummary: MenuBarSummary = .empty
 
     let tokenStore: TokenStore
+    let notifications = NotificationManager()
     private(set) var baseURL: URL?
     private var api: APIClient?
     private var pollTask: Task<Void, Never>?
+    private var lastSnapshot: [Session]?
 
     private static let instanceKey = "orbit.instance"
 
@@ -80,6 +84,15 @@ final class AppModel {
         sessions = []
         groups = .empty
         selectedSessionID = nil
+        lastSnapshot = nil
+        menuSummary = .empty
+        updateDockBadge(nil)
+    }
+
+    /// Wire up notifications. Call once at launch.
+    func bootstrap() {
+        notifications.configure()
+        notifications.onIntent = { [weak self] intent in self?.handle(intent) }
     }
 
     /// Poll the Active list every 4s (the same cadence the web UI uses) to catch status changes
@@ -98,12 +111,59 @@ final class AppModel {
         guard let api else { return }
         do {
             let list = try await api.listSessions(view: "active")
+            // Notify on poll-to-poll transitions (skip the first load, which only primes).
+            if let prev = lastSnapshot {
+                for event in SessionDelta.diff(previous: prev, current: list, focusedSessionID: selectedSessionID) {
+                    notifications.post(Notifications.content(for: event))
+                }
+            }
+            lastSnapshot = list
             sessions = list
             groups = SessionGrouping.group(list)
+            menuSummary = MenuBar.summary(from: list)
+            updateDockBadge(menuSummary.badge)
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+    }
+
+    // MARK: routing + notification intents
+
+    func route(to route: Route) {
+        switch route {
+        case .session(let id): selectedSessionID = id
+        case .active, .task, .runner: break   // Phase 3 routes sessions; tasks/runners later
+        }
+    }
+
+    func handle(_ intent: AppIntent) {
+        switch intent {
+        case .open(let route): self.route(to: route)
+        case let .approve(sid, behavior): Task { await approveAll(sessionID: sid, behavior: behavior) }
+        case let .reply(sid, text): Task { await reply(sessionID: sid, text: text) }
+        }
+    }
+
+    /// A notification Allow/Deny decides every pending approval on that session (the
+    /// notification doesn't carry a specific approval id).
+    private func approveAll(sessionID: String, behavior: ApprovalBehavior) async {
+        guard let api,
+              let pending = try? await api.approvals(sessionID: sessionID, status: "PENDING") else { return }
+        for approval in pending {
+            try? await api.decideApproval(sessionID: sessionID, approvalID: approval.id,
+                                          ApprovalDecisionRequest(behavior: behavior))
+        }
+    }
+
+    private func reply(sessionID: String, text: String) async {
+        guard let api else { return }
+        _ = try? await api.sendTurn(sessionID: sessionID,
+                                    SessionTurnRequest(clientTurnId: UUID().uuidString, content: text))
+    }
+
+    private func updateDockBadge(_ badge: String?) {
+        NSApp.dockTile.badgeLabel = badge
     }
 }
