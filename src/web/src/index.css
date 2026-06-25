@@ -4683,3 +4683,20 @@ body {
 .wt-diff-view .diff-del .diff-text {
   color: var(--text-1);
 }
+/* Maximize / Restore toggle in the drawer header (sits in AntD's `extra` slot, left of ✕). */
+.wt-diff-max-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.wt-diff-max-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}

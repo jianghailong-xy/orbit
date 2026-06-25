@@ -1,6 +1,7 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntApp, Drawer, Dropdown, Segmented, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
+import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
@@ -495,8 +496,9 @@ function BranchLabel({ branch }: { branch: string }) {
 
 const WT_DIFF_WIDTH_KEY = 'wt-diff-width';
 const WT_DIFF_WIDTH_MIN = 560;
-const WT_DIFF_WIDTH_DEFAULT = 'min(1100px, 94vw)';
+const WT_DIFF_WIDTH_DEFAULT = 'min(1400px, 94vw)';
 const WT_DIFF_MODE_KEY = 'wt-diff-mode';
+const WT_DIFF_MAX_KEY = 'wt-diff-max';
 // Render at most this many rows of a single file's diff up front; a giant file (e.g. a
 // 2k-line new file) then offers a "show more" button rather than laying out everything at once.
 const DIFF_ROW_CAP = 600;
@@ -806,13 +808,24 @@ function WorktreeDiffDrawer({
     localStorage.removeItem(WT_DIFF_WIDTH_KEY);
   };
 
-  // Unified (default) vs side-by-side split rendering of the diff, remembered across reloads.
+  // Split (default) vs unified rendering of the diff, remembered across reloads.
   const [viewMode, setViewMode] = useState<'unified' | 'split'>(() =>
-    localStorage.getItem(WT_DIFF_MODE_KEY) === 'split' ? 'split' : 'unified',
+    localStorage.getItem(WT_DIFF_MODE_KEY) === 'unified' ? 'unified' : 'split',
   );
   const changeViewMode = (m: 'unified' | 'split'): void => {
     setViewMode(m);
     localStorage.setItem(WT_DIFF_MODE_KEY, m);
+  };
+
+  // Panel (the resizable side rail) vs a full-screen review surface. Defaults to full so the
+  // split view has room; Restore drops back to the side panel and is remembered.
+  const [maximized, setMaximized] = useState<boolean>(() => localStorage.getItem(WT_DIFF_MAX_KEY) !== '0');
+  const toggleMax = (): void => {
+    setMaximized((m) => {
+      const next = !m;
+      localStorage.setItem(WT_DIFF_MAX_KEY, next ? '1' : '0');
+      return next;
+    });
   };
 
   // Prev/next file nav follows the grouped display order and skips binary files (no diff to show).
@@ -859,9 +872,9 @@ function WorktreeDiffDrawer({
 
   return (
     <Drawer
-      className="wt-diff-drawer"
+      className={`wt-diff-drawer${maximized ? ' wt-diff-max' : ''}`}
       placement="right"
-      width={width ?? WT_DIFF_WIDTH_DEFAULT}
+      width={maximized ? '100vw' : (width ?? WT_DIFF_WIDTH_DEFAULT)}
       open={openPath != null}
       onClose={onClose}
       title={
@@ -870,14 +883,27 @@ function WorktreeDiffDrawer({
           <span className="wt-diff-head-sub">{committed ? 'committed' : 'working changes'}</span>
         </span>
       }
+      extra={
+        <button
+          type="button"
+          className="wt-diff-max-btn"
+          onClick={toggleMax}
+          title={maximized ? 'Restore to side panel' : 'Maximize to full screen'}
+        >
+          {maximized ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+          {maximized ? 'Restore' : 'Maximize'}
+        </button>
+      }
     >
       <div className="wt-diff-body" ref={bodyRef}>
-        <div
-          className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
-          onMouseDown={startResize}
-          onDoubleClick={resetWidth}
-          title="Drag to resize · double-click to reset"
-        />
+        {!maximized && (
+          <div
+            className={`wt-diff-resizer${resizing ? ' resizing' : ''}`}
+            onMouseDown={startResize}
+            onDoubleClick={resetWidth}
+            title="Drag to resize · double-click to reset"
+          />
+        )}
         <div className="wt-diff-list">
           <FileTree files={files} activePath={openPath} onSelect={onSelect} />
         </div>
