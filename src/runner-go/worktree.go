@@ -287,7 +287,8 @@ func liveDiffStat(wt *Worktree) []ChangedFile {
 // stagedLiveDiff stages the worktree's current state into a throwaway temp index and computes
 // the per-file stat summary vs base; with withPatch it also captures the per-file unified-diff
 // patches (capped). The temp index (GIT_INDEX_FILE) never touches the real index claude may be
-// using, and .gitignore is respected so node_modules/build output don't show.
+// using, and .gitignore is respected so node_modules/build output don't show. The index is
+// pre-seeded from base (read-tree) so a tracked-but-ignored file isn't misreported as deleted.
 func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 	if wt == nil || wt.BaseSha == "" {
 		return nil, nil
@@ -303,6 +304,14 @@ func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 	_ = os.Remove(idx)
 	defer os.Remove(idx)
 	env := append(os.Environ(), "GIT_INDEX_FILE="+idx)
+	// Seed the temp index from base first: a file that's tracked in base but also matches a
+	// .gitignore rule (force-committed with `git add -f`) would otherwise be dropped by
+	// `add -A` — which honors .gitignore for paths it sees as untracked — and reported as a
+	// phantom deletion vs base. Pre-loaded as tracked, it survives and `add -A` only layers
+	// the worktree's real changes on top.
+	if _, err := gitEnv(wt.Path, env, "read-tree", wt.BaseSha); err != nil {
+		return nil, nil
+	}
 	if _, err := gitEnv(wt.Path, env, "add", "-A"); err != nil {
 		return nil, nil
 	}
