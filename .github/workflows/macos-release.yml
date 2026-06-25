@@ -1,0 +1,82 @@
+# Release workflow for the native macOS client: produces a distributable, **signed +
+# notarized + stapled** Orbit.dmg that opens on any Mac with no Gatekeeper warning.
+#
+# This is the release counterpart to macos-client.yml (which only build/tests). It does on a
+# throwaway runner exactly what scripts/build-dmg.sh does locally: rebuild the cert + notary
+# credentials into a temporary keychain, then run the script with Developer ID signing.
+#
+# Trigger: manual (workflow_dispatch) or pushing a v* tag. The .dmg lands in the run's Artifacts.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEVID_CERT_P12_BASE64  base64 of the Developer ID Application cert+key exported as .p12
+#   DEVID_CERT_PASSWORD    password set when exporting that .p12
+#   KEYCHAIN_PASSWORD      any random string — password for the runner's temporary keychain
+#   APPLE_ID               Apple ID email used for notarization
+#   APPLE_TEAM_ID          Developer Team ID (e.g. S27N9A88JC)
+#   APPLE_APP_PASSWORD     app-specific password from appleid.apple.com
+name: macOS release (signed DMG)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dmg:
+    name: Build signed + notarized DMG
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rebuild the Developer ID identity into a throwaway keychain so codesign can find it.
+      - name: Import Developer ID certificate
+        env:
+          DEVID_CERT_P12_BASE64: ${{ secrets.DEVID_CERT_P12_BASE64 }}
+          DEVID_CERT_PASSWORD:   ${{ secrets.DEVID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD:     ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$DEVID_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DEVID_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Make the temp keychain default + searchable so codesign and notarytool find it.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      # Store the notary credentials under the profile name build-dmg.sh expects.
+      - name: Store notarization profile
+        env:
+          APPLE_ID:           ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials orbit-notary \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD"
+
+      - name: Build signed + notarized DMG
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          SIGN_ID="Developer ID Application: Wikova HQ ($APPLE_TEAM_ID)" \
+          NOTARIZE_PROFILE=orbit-notary \
+          ARCHS=arm64 \
+          ./src/macos/scripts/build-dmg.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orbit-dmg
+          path: src/macos/build/Orbit.dmg
+          if-no-files-found: error
