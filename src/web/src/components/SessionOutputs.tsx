@@ -481,50 +481,98 @@ function splitPath(path: string): { dir: string; name: string } {
   return i < 0 ? { dir: '', name: path } : { dir: path.slice(0, i + 1), name: path.slice(i + 1) };
 }
 
-type FileGroup = {
-  dir: string;
-  files: SessionChangedFile[];
-  add: number;
-  del: number;
-  binaryOnly: boolean;
-};
-
-/** Bucket changed files by directory, summing per-folder stats, so the drawer can show a
- *  collapsible folder list instead of a flat wall of near-identical truncated paths. Groups are
- *  sorted by directory and files within each. A folder whose files are all binary (e.g. a build
- *  output dir like `.build/debug`) is flagged so the list can fold it away by default. */
-function groupChangedFiles(files: SessionChangedFile[]): FileGroup[] {
-  const byDir = new Map<string, SessionChangedFile[]>();
-  for (const f of files) {
-    const key = splitPath(f.path).dir || './';
-    const arr = byDir.get(key);
-    if (arr) arr.push(f);
-    else byDir.set(key, [f]);
-  }
-  const groups: FileGroup[] = [];
-  for (const [dir, gfiles] of byDir) {
-    let add = 0;
-    let del = 0;
-    for (const f of gfiles) {
-      if (f.additions > 0) add += f.additions;
-      if (f.deletions > 0) del += f.deletions;
+type TreeNode =
+  | {
+      kind: 'dir';
+      /** Display segment — a compacted single-child chain like `Sources/OrbitApp`. */
+      name: string;
+      /** Full path from the root; the stable key for collapse state. */
+      path: string;
+      children: TreeNode[];
+      add: number;
+      del: number;
+      fileCount: number;
+      binaryOnly: boolean;
     }
-    groups.push({
-      dir,
-      files: gfiles.sort((a, b) => a.path.localeCompare(b.path)),
-      add,
-      del,
-      binaryOnly: gfiles.every((f) => f.additions < 0 || f.deletions < 0),
-    });
+  | { kind: 'file'; name: string; file: SessionChangedFile };
+
+/** Build a nested directory tree from the changed-file paths, with two readability tricks: a
+ *  chain of single-child directories is compacted into one node (VS Code "compact folders", so
+ *  `a/b/c` is one row not three), and per-directory stats / binary-only flags are rolled up so a
+ *  folder shows a summary and can fold away (build-output dirs like `.build/debug` default shut).
+ *  Directories sort before files; both alphabetical. */
+function buildFileTree(files: SessionChangedFile[]): TreeNode[] {
+  type Raw = { dirs: Map<string, Raw>; files: SessionChangedFile[] };
+  const root: Raw = { dirs: new Map(), files: [] };
+  for (const f of files) {
+    const segs = f.path.split('/');
+    segs.pop(); // basename — the file lives in the dir named by the remaining segments
+    let cur = root;
+    for (const seg of segs) {
+      let next = cur.dirs.get(seg);
+      if (!next) {
+        next = { dirs: new Map(), files: [] };
+        cur.dirs.set(seg, next);
+      }
+      cur = next;
+    }
+    cur.files.push(f);
   }
-  return groups.sort((a, b) => a.dir.localeCompare(b.dir));
+  const convert = (raw: Raw, prefix: string): TreeNode[] => {
+    const nodes: TreeNode[] = [];
+    for (const dirName of [...raw.dirs.keys()].sort((a, b) => a.localeCompare(b))) {
+      let seg = dirName;
+      let node = raw.dirs.get(dirName)!;
+      let path = prefix + dirName;
+      // Compact a single-child chain (one subdir, no files of its own) into this row.
+      while (node.files.length === 0 && node.dirs.size === 1) {
+        const [childName, childRaw] = [...node.dirs.entries()][0];
+        seg += '/' + childName;
+        path += '/' + childName;
+        node = childRaw;
+      }
+      const children = convert(node, path + '/');
+      let add = 0;
+      let del = 0;
+      let fileCount = 0;
+      let binaryOnly = true;
+      for (const c of children) {
+        if (c.kind === 'file') {
+          fileCount += 1;
+          if (c.file.additions > 0) add += c.file.additions;
+          if (c.file.deletions > 0) del += c.file.deletions;
+          if (c.file.additions >= 0 && c.file.deletions >= 0) binaryOnly = false;
+        } else {
+          fileCount += c.fileCount;
+          add += c.add;
+          del += c.del;
+          if (!c.binaryOnly) binaryOnly = false;
+        }
+      }
+      nodes.push({ kind: 'dir', name: seg, path, children, add, del, fileCount, binaryOnly });
+    }
+    for (const f of raw.files.sort((a, b) => a.path.localeCompare(b.path))) {
+      nodes.push({ kind: 'file', name: f.path.slice(f.path.lastIndexOf('/') + 1), file: f });
+    }
+    return nodes;
+  };
+  return convert(root, '');
 }
 
-/** The changed-file list for the drawer rail: files grouped by folder. A single-file folder
- *  renders as one flat row (no header noise); a multi-file folder gets a collapsible header with
- *  its count + summed stats. Binary-only folders start folded so build artifacts don't bury the
- *  real diff — the user's manual toggles win and persist while live heartbeats refresh `files`. */
-function ChangedFileList({
+/** Files in tree (depth-first display) order — used for prev/next nav so it follows the list. */
+function treeFiles(nodes: TreeNode[]): SessionChangedFile[] {
+  const out: SessionChangedFile[] = [];
+  for (const n of nodes) {
+    if (n.kind === 'file') out.push(n.file);
+    else out.push(...treeFiles(n.children));
+  }
+  return out;
+}
+
+/** The changed-file list for the drawer rail, rendered as a collapsible directory tree. Collapse
+ *  state is keyed by each directory's full path; binary-only dirs (build artifacts) default shut,
+ *  and the user's manual toggles win and persist while live heartbeats refresh `files`. */
+function FileTree({
   files,
   activePath,
   onSelect,
@@ -533,56 +581,89 @@ function ChangedFileList({
   activePath?: string | null;
   onSelect: (path: string) => void;
 }) {
-  const groups = useMemo(() => groupChangedFiles(files), [files]);
-  // Per-folder open/closed overrides keyed by dir; absent → the default (binary-only folds shut).
+  const tree = useMemo(() => buildFileTree(files), [files]);
   const [override, setOverride] = useState<Record<string, boolean>>({});
-  const isCollapsed = (g: FileGroup) => override[g.dir] ?? (g.binaryOnly && g.files.length > 1);
+  const collapsed = (node: Extract<TreeNode, { kind: 'dir' }>) => override[node.path] ?? node.binaryOnly;
+  const toggle = (node: Extract<TreeNode, { kind: 'dir' }>) =>
+    setOverride((o) => ({ ...o, [node.path]: !collapsed(node) }));
   return (
     <div className="wt-diff-files">
-      {groups.map((g) =>
-        g.files.length === 1 ? (
+      <TreeNodes
+        nodes={tree}
+        depth={0}
+        activePath={activePath}
+        onSelect={onSelect}
+        collapsed={collapsed}
+        toggle={toggle}
+      />
+    </div>
+  );
+}
+
+function TreeNodes({
+  nodes,
+  depth,
+  activePath,
+  onSelect,
+  collapsed,
+  toggle,
+}: {
+  nodes: TreeNode[];
+  depth: number;
+  activePath?: string | null;
+  onSelect: (path: string) => void;
+  collapsed: (node: Extract<TreeNode, { kind: 'dir' }>) => boolean;
+  toggle: (node: Extract<TreeNode, { kind: 'dir' }>) => void;
+}) {
+  return (
+    <>
+      {nodes.map((node) =>
+        node.kind === 'file' ? (
           <FileRow
-            key={g.files[0].path}
-            file={g.files[0]}
-            active={g.files[0].path === activePath}
-            onClick={() => onSelect(g.files[0].path)}
+            key={node.file.path}
+            file={node.file}
+            display="name"
+            indent={depth}
+            active={node.file.path === activePath}
+            onClick={() => onSelect(node.file.path)}
           />
         ) : (
-          <div key={g.dir} className="wt-diff-group">
+          <div key={node.path} className="wt-tree-dir">
             <button
               type="button"
               className="wt-diff-group-head"
-              onClick={() => setOverride((o) => ({ ...o, [g.dir]: !isCollapsed(g) }))}
-              title={g.dir}
+              style={{ paddingLeft: 8 + depth * 16 }}
+              onClick={() => toggle(node)}
+              title={node.path}
             >
-              <span className="wt-diff-group-caret">{isCollapsed(g) ? '▸' : '▾'}</span>
-              <span className="wt-diff-group-dir">{g.dir}</span>
+              <span className="wt-diff-group-caret">{collapsed(node) ? '▸' : '▾'}</span>
+              <span className="wt-diff-group-dir">{node.name}/</span>
               <span className="wt-diff-group-meta">
-                <span className="wt-diff-group-n">{g.files.length}</span>
-                {g.binaryOnly ? (
+                <span className="wt-diff-group-n">{node.fileCount}</span>
+                {node.binaryOnly ? (
                   <span className="session-file-bin">binary</span>
                 ) : (
                   <>
-                    <span className="add">+{g.add}</span>
-                    <span className="del">−{g.del}</span>
+                    <span className="add">+{node.add}</span>
+                    <span className="del">−{node.del}</span>
                   </>
                 )}
               </span>
             </button>
-            {!isCollapsed(g) &&
-              g.files.map((f) => (
-                <FileRow
-                  key={f.path}
-                  file={f}
-                  display="name"
-                  active={f.path === activePath}
-                  onClick={() => onSelect(f.path)}
-                />
-              ))}
+            {!collapsed(node) && (
+              <TreeNodes
+                nodes={node.children}
+                depth={depth + 1}
+                activePath={activePath}
+                onSelect={onSelect}
+                collapsed={collapsed}
+                toggle={toggle}
+              />
+            )}
           </div>
         ),
       )}
-    </div>
+    </>
   );
 }
 
@@ -590,6 +671,7 @@ function FileRow({
   file,
   active,
   display = 'full',
+  indent,
   onClick,
 }: {
   file: SessionChangedFile;
@@ -597,6 +679,8 @@ function FileRow({
   /** 'full' shows the dimmed directory + bold basename; 'name' shows only the basename (for a
    *  row under a folder header that already carries the directory). */
   display?: 'full' | 'name';
+  /** Tree depth — indents the row so it aligns under its folder. Omitted = flat (inline panel). */
+  indent?: number;
   onClick?: () => void;
 }) {
   const binary = file.additions < 0 || file.deletions < 0;
@@ -606,6 +690,7 @@ function FileRow({
     <button
       type="button"
       className={`session-file session-file-btn${active ? ' active' : ''}`}
+      style={indent != null ? { paddingLeft: 8 + indent * 16 } : undefined}
       onClick={onClick}
       title={`View diff · ${file.path}`}
     >
@@ -707,8 +792,7 @@ function WorktreeDiffDrawer({
   // Prev/next file nav follows the grouped display order and skips binary files (no diff to show).
   const orderedPaths = useMemo(
     () =>
-      groupChangedFiles(files)
-        .flatMap((g) => g.files)
+      treeFiles(buildFileTree(files))
         .filter((f) => f.additions >= 0 && f.deletions >= 0)
         .map((f) => f.path),
     [files],
@@ -769,7 +853,7 @@ function WorktreeDiffDrawer({
           title="Drag to resize · double-click to reset"
         />
         <div className="wt-diff-list">
-          <ChangedFileList files={files} activePath={openPath} onSelect={onSelect} />
+          <FileTree files={files} activePath={openPath} onSelect={onSelect} />
         </div>
         <div className="wt-diff-pane">
           {active ? (

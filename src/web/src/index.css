@@ -4550,7 +4550,7 @@ body {
   flex-direction: column;
   gap: 2px;
 }
-.wt-diff-group {
+.wt-tree-dir {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -4600,9 +4600,6 @@ body {
 }
 .wt-diff-group-n {
   color: var(--text-4);
-}
-.wt-diff-group .session-file-btn {
-  padding-left: 22px;
 }
 /* Pane head: prev/next file nav + Unified/Split toggle */
 .wt-diff-nav {
