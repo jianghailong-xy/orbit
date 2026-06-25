@@ -873,8 +873,11 @@ function WorktreeDiffDrawer({
   return (
     <Drawer
       className={`wt-diff-drawer${maximized ? ' wt-diff-max' : ''}`}
-      placement="right"
-      width={maximized ? '100vw' : (width ?? WT_DIFF_WIDTH_DEFAULT)}
+      // Full screen rises up from the bottom (a takeover sheet); the side panel slides in from
+      // the right (a full-height rail next to the chat).
+      placement={maximized ? 'bottom' : 'right'}
+      width={maximized ? undefined : (width ?? WT_DIFF_WIDTH_DEFAULT)}
+      height={maximized ? '100vh' : undefined}
       open={openPath != null}
       onClose={onClose}
       title={
