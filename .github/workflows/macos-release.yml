@@ -28,9 +28,18 @@ concurrency:
 jobs:
   dmg:
     name: Build signed + notarized DMG
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      # The app relies on newer-Swift MainActor-isolation inference (SwiftUI View + @Observable),
+      # so pin the latest stable Xcode to match the toolchain it compiles under locally.
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
 
       # Rebuild the Developer ID identity into a throwaway keychain so codesign can find it.
       - name: Import Developer ID certificate
