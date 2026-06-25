@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#e9ecf2;display:flex;gap:24px;align-items:flex-start}
+  .panel{flex:1;border-radius:18px;padding:24px 30px}
+  .panel.light{--bg:#fff;--text:#1f2329;--sub:#8a9099;background:var(--bg);border:1px solid #e3e6eb}
+  .panel.dark{--bg:#16171a;--text:#e6e8eb;--sub:#8b9097;background:var(--bg)}
+  .ptitle{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--sub);margin:0 0 18px;font-weight:600}
+  .row{display:flex;align-items:center;gap:28px;padding:18px 0;border-top:1px solid}
+  .light .row{border-color:#eef0f3}.dark .row{border-color:#232427}
+  .row:first-of-type{border-top:none}
+  .label{width:26px;font-size:13px;font-weight:700;color:var(--sub)}
+  .big svg{width:74px;height:74px;display:block}
+  .fav{display:flex;align-items:center;gap:10px}
+  .fav svg{width:22px;height:22px;display:block}
+  .chip{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+  .light .chip{background:#f4f6fa}.dark .chip{background:#222428}
+  .chip svg{width:19px;height:19px}
+  .lockup{display:flex;align-items:center;gap:11px;margin-left:2px}
+  .lockup svg{width:30px;height:30px;display:block}
+  .name{font-size:24px;font-weight:600;letter-spacing:.2px;color:var(--text)}
+</style></head>
+<body>
+<div class="panel light"><p class="ptitle">Light</p><div id="rows-l"></div></div>
+<div class="panel dark"><p class="ptitle">Dark</p><div id="rows-d"></div></div>
+<script>
+const grad=(id)=>`<linearGradient id="${id}" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient>`;
+const SVG=(inner)=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">${inner}</svg>`;
+const marks={
+  V1:(g)=>SVG(`<defs>${grad(g)}</defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="25" ry="10" stroke="url(#${g})" stroke-width="3" opacity="0.5"/><circle cx="53.2" cy="26.7" r="5" fill="url(#${g})"/></g><circle cx="32" cy="32" r="11" fill="url(#${g})"/><path d="M29 26.5 L34.5 32 L29 37.5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`),
+  V2:(g)=>SVG(`<defs>${grad(g)}</defs><g transform="rotate(-18 32 32)"><ellipse cx="32" cy="32" rx="24" ry="9" stroke="url(#${g})" stroke-width="2.5" opacity="0.35"/></g><path d="M19 21 L10 32 L19 43" stroke="url(#${g})" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M45 21 L54 32 L45 43" stroke="url(#${g})" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="32" cy="32" r="7.5" fill="url(#${g})"/>`),
+  V3:(g)=>SVG(`<defs>${grad(g)}</defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="27" ry="12" stroke="url(#${g})" stroke-width="3" opacity="0.5"/><circle cx="55.4" cy="26" r="5" fill="url(#${g})"/></g><rect x="21" y="22" width="22" height="20" rx="5" fill="url(#${g})"/><path d="M26 29 L30 32 L26 35" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><line x1="32" y1="35.4" x2="38" y2="35.4" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>`),
+};
+let n=0;const uid=()=>'g'+(n++);
+function row(key){return `<div class="row"><div class="label">${key}</div><div class="big">${marks[key](uid())}</div><div class="fav">${marks[key](uid())}<div class="chip">${marks[key](uid())}</div></div><div class="lockup">${marks[key](uid())}<span class="name">Orbit</span></div></div>`;}
+for(const s of['l','d']){document.getElementById('rows-'+s).innerHTML=['V1','V2','V3'].map(row).join('');}
+</script>
+</body></html>

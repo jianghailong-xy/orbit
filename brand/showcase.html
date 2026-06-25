@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background: #e9ecf2;
+    display: flex; gap: 24px; align-items: flex-start;
+  }
+  .panel { flex: 1; border-radius: 18px; padding: 26px 30px; }
+  .panel.light { --bg: #ffffff; --text: #1f2329; --sub: #8a9099; background: var(--bg); border: 1px solid #e3e6eb; }
+  .panel.dark  { --bg: #16171a; --text: #e6e8eb; --sub: #8b9097; background: var(--bg); }
+  .ptitle { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--sub); margin: 0 0 22px; font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 30px; padding: 20px 0; border-top: 1px solid; }
+  .light .row { border-color: #eef0f3; }
+  .dark .row  { border-color: #232427; }
+  .row:first-of-type { border-top: none; }
+  .label { width: 30px; font-size: 13px; font-weight: 700; color: var(--sub); }
+  .big svg { width: 76px; height: 76px; display: block; }
+  .fav { display: flex; align-items: center; gap: 10px; }
+  .fav svg { width: 22px; height: 22px; display: block; }
+  .fav .chip { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+  .light .chip { background: #f4f6fa; }
+  .dark .chip  { background: #222428; }
+  .fav .chip svg { width: 19px; height: 19px; }
+  .lockup { display: flex; align-items: center; gap: 11px; margin-left: 4px; }
+  .lockup svg { width: 30px; height: 30px; display: block; }
+  .lockup .name { font-size: 25px; font-weight: 600; letter-spacing: .2px; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="panel light"><p class="ptitle">Light</p><div id="rows-l"></div></div>
+<div class="panel dark"><p class="ptitle">Dark</p><div id="rows-d"></div></div>
+
+<script>
+const grad = (id) => `<linearGradient id="${id}" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#5b8bff"/><stop offset="1" stop-color="#3370ff"/></linearGradient>`;
+
+const marks = {
+  A: (g) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><defs>${grad(g)}</defs><g transform="rotate(-26 32 32)"><ellipse cx="32" cy="32" rx="25" ry="10" stroke="url(#${g})" stroke-width="3" opacity="0.5"/><circle cx="53.2" cy="26.7" r="5" fill="url(#${g})"/></g><circle cx="32" cy="32" r="8" fill="url(#${g})"/></svg>`,
+  B: (g) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><defs>${grad(g)}</defs><circle cx="32" cy="32" r="21" stroke="url(#${g})" stroke-width="5"/><circle cx="32" cy="32" r="4.5" fill="url(#${g})"/><circle cx="46.85" cy="17.15" r="6" fill="url(#${g})" stroke="var(--bg)" stroke-width="2.5"/></svg>`,
+  C: (g) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none"><defs>${grad(g)}</defs><g transform="rotate(-20 32 32)"><ellipse cx="32" cy="32" rx="25" ry="11" stroke="url(#${g})" stroke-width="2.5" opacity="0.45"/><circle cx="55.5" cy="28.2" r="5" fill="url(#${g})"/><circle cx="13.4" cy="38.5" r="4" fill="url(#${g})" opacity="0.85"/><circle cx="40.6" cy="42.0" r="3.2" fill="url(#${g})" opacity="0.7"/></g><circle cx="32" cy="32" r="7" fill="url(#${g})"/></svg>`,
+};
+
+let n = 0;
+const uid = () => 'g' + (n++);
+function row(side, key) {
+  return `<div class="row">
+    <div class="label">${key}</div>
+    <div class="big">${marks[key](uid())}</div>
+    <div class="fav">${marks[key](uid())}<div class="chip">${marks[key](uid())}</div></div>
+    <div class="lockup">${marks[key](uid())}<span class="name">Orbit</span></div>
+  </div>`;
+}
+for (const side of ['l','d']) {
+  document.getElementById('rows-'+side).innerHTML = ['A','B','C'].map(k => row(side,k)).join('');
+}
+</script>
+</body>
+</html>
