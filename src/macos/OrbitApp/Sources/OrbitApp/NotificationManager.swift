@@ -7,17 +7,19 @@ import OrbitKit
 /// this only does delivery: auth, category registration, posting, and forwarding responses.
 @MainActor
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
-    private let center = UNUserNotificationCenter.current()
     /// Fired (on the main actor) when the user acts on a notification.
     var onIntent: ((AppIntent) -> Void)?
 
-    func configure() {
-        center.delegate = self
-        registerCategories()
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-    }
+    // UNUserNotificationCenter requires a real .app bundle (a bundle identifier). Under
+    // `swift run` the binary is unbundled and even *touching* the center throws — so every call
+    // is gated on a bundle being present. The app runs fine for dev without it (no banners);
+    // notifications light up once it's packaged as a signed .app (Phase 5).
+    private var available: Bool { Bundle.main.bundleIdentifier != nil }
+    private var center: UNUserNotificationCenter? { available ? .current() : nil }
 
-    private func registerCategories() {
+    func configure() {
+        guard let center else { return }
+        center.delegate = self
         let allow = UNNotificationAction(identifier: Notifications.actionAllow, title: "Allow",
                                          options: [.authenticationRequired])
         let deny = UNNotificationAction(identifier: Notifications.actionDeny, title: "Deny",
@@ -30,9 +32,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         let session = UNNotificationCategory(identifier: Notifications.sessionCategory,
                                              actions: [reply], intentIdentifiers: [], options: [])
         center.setNotificationCategories([approval, session])
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
     func post(_ content: NotificationContent) {
+        guard let center else { return }
         let c = UNMutableNotificationContent()
         c.title = content.title
         c.body = content.body
@@ -45,7 +49,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func clear(identifier: String) {
-        center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        center?.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
     // MARK: UNUserNotificationCenterDelegate
