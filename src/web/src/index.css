@@ -4676,3 +4676,10 @@ body {
 .wt-diff-split .diff-split-hunk {
   display: flex;
 }
+/* With syntax highlighting on, the add/del background + sign carry the change; the line text
+   itself stays normal code color so the hljs token colors read cleanly (GitHub-style) rather than
+   being flattened to green/red. Scoped to the drawer so transcript inline diffs keep their tint. */
+.wt-diff-view .diff-add .diff-text,
+.wt-diff-view .diff-del .diff-text {
+  color: var(--text-1);
+}

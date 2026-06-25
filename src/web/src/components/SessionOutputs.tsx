@@ -5,6 +5,32 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { sessionDiffQuery } from '../lib/queries';
+import hljs from 'highlight.js/lib/core';
+import typescript from 'highlight.js/lib/languages/typescript';
+import javascript from 'highlight.js/lib/languages/javascript';
+import python from 'highlight.js/lib/languages/python';
+import go from 'highlight.js/lib/languages/go';
+import rust from 'highlight.js/lib/languages/rust';
+import swift from 'highlight.js/lib/languages/swift';
+import json from 'highlight.js/lib/languages/json';
+import css from 'highlight.js/lib/languages/css';
+import scss from 'highlight.js/lib/languages/scss';
+import xml from 'highlight.js/lib/languages/xml';
+import yaml from 'highlight.js/lib/languages/yaml';
+import bash from 'highlight.js/lib/languages/bash';
+import markdown from 'highlight.js/lib/languages/markdown';
+import sql from 'highlight.js/lib/languages/sql';
+import java from 'highlight.js/lib/languages/java';
+import c from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
+
+// Register only the languages this repo (and common config) actually uses; anything else falls
+// back to plain text. Keeps the highlighter to a focused subset rather than all ~37 grammars.
+for (const [name, lang] of Object.entries({
+  typescript, javascript, python, go, rust, swift, json, css, scss, xml, yaml, bash, markdown, sql, java, c, cpp,
+})) {
+  hljs.registerLanguage(name, lang);
+}
 
 /**
  * Worktree status bar shown directly above the composer: the branch this session's work
@@ -902,6 +928,7 @@ function DiffPane({
   onNext?: () => void;
 }) {
   const binary = file.additions < 0 || file.deletions < 0;
+  const lang = useMemo(() => langFor(file.path), [file.path]);
   return (
     <>
       <div className="wt-diff-pane-head">
@@ -936,7 +963,11 @@ function DiffPane({
       {binary ? (
         <div className="wt-diff-empty">Binary file — no preview</div>
       ) : patch?.patch ? (
-        viewMode === 'split' ? <SplitDiffView patch={patch.patch} /> : <DiffView patch={patch.patch} />
+        viewMode === 'split' ? (
+          <SplitDiffView patch={patch.patch} lang={lang} />
+        ) : (
+          <DiffView patch={patch.patch} lang={lang} />
+        )
       ) : patch?.truncated ? (
         <div className="wt-diff-empty">Diff too large to preview inline</div>
       ) : loading ? (
@@ -1004,8 +1035,43 @@ function parseUnifiedDiff(patch: string): PatchRow[] {
 
 /** Render a parsed unified diff, reusing the transcript's .diff-* row styling (two line-number
  *  gutters + sign + text); hunk headers render like the collapsed-context "gap" rows. */
-function DiffView({ patch }: { patch: string }) {
+// File extension → highlight.js language (only those in the common build; unknown → no
+// highlighting). Reuses the same hljs + global `.hljs-*` theme as the transcript code blocks,
+// so it adds no real bundle weight.
+const EXT_LANG: Record<string, string> = {
+  ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  py: 'python', go: 'go', rs: 'rust', java: 'java', kt: 'kotlin', swift: 'swift',
+  rb: 'ruby', php: 'php', c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp', cs: 'csharp',
+  json: 'json', css: 'css', scss: 'scss', less: 'less', html: 'xml', xml: 'xml',
+  yml: 'yaml', yaml: 'yaml', toml: 'ini', ini: 'ini', md: 'markdown',
+  sh: 'bash', bash: 'bash', zsh: 'bash', sql: 'sql',
+};
+function langFor(path: string): string | null {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  const lang = EXT_LANG[ext];
+  return lang && hljs.getLanguage(lang) ? lang : null;
+}
+/** Syntax-highlight one diff line to hljs token HTML (already escaped → safe to inject). Done per
+ *  line, so a rare multi-line construct (an unterminated string) won't carry state across lines —
+ *  an acceptable trade for a review preview. Returns null on failure → caller renders plain text. */
+function hlLine(text: string, lang: string): string | null {
+  if (!text) return '';
+  try {
+    return hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+  } catch {
+    return null;
+  }
+}
+
+function DiffView({ patch, lang }: { patch: string; lang: string | null }) {
   const rows = useMemo(() => parseUnifiedDiff(patch), [patch]);
+  // Token HTML per row (null for hunk rows; the whole array null when the language is unknown →
+  // plain text). Memoized so highlighting runs once per file, not on every scroll/re-render.
+  const html = useMemo(
+    () => (lang ? rows.map((r) => (r.type === 'hunk' ? null : hlLine(r.text, lang))) : null),
+    [rows, lang],
+  );
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [patch]); // a freshly opened file starts capped again
   const capped = !expanded && rows.length > DIFF_ROW_CAP;
@@ -1025,7 +1091,11 @@ function DiffView({ patch }: { patch: string }) {
             <span className="diff-sign">
               {r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' '}
             </span>
-            <span className="diff-text">{r.text}</span>
+            {html?.[k] != null ? (
+              <span className="diff-text" dangerouslySetInnerHTML={{ __html: html[k]! }} />
+            ) : (
+              <span className="diff-text">{r.text}</span>
+            )}
           </div>
         ),
       )}
@@ -1083,7 +1153,7 @@ function toSplitRows(rows: PatchRow[]): SplitRow[] {
   return out;
 }
 
-function SplitSide({ cell }: { cell: SplitCell }) {
+function SplitSide({ cell, html }: { cell: SplitCell; html?: string | null }) {
   if (!cell) {
     return (
       <div className="diff-split-cell diff-split-empty">
@@ -1096,14 +1166,29 @@ function SplitSide({ cell }: { cell: SplitCell }) {
     <div className={`diff-split-cell diff-${cell.kind}`}>
       <span className="diff-ln">{cell.no ?? ''}</span>
       <span className="diff-sign">{cell.kind === 'add' ? '+' : cell.kind === 'del' ? '-' : ' '}</span>
-      <span className="diff-text">{cell.text}</span>
+      {html != null ? (
+        <span className="diff-text" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <span className="diff-text">{cell.text}</span>
+      )}
     </div>
   );
 }
 
 /** Side-by-side counterpart to DiffView: old on the left, new on the right. Shares the row cap. */
-function SplitDiffView({ patch }: { patch: string }) {
+function SplitDiffView({ patch, lang }: { patch: string; lang: string | null }) {
   const rows = useMemo(() => toSplitRows(parseUnifiedDiff(patch)), [patch]);
+  const html = useMemo(
+    () =>
+      lang
+        ? rows.map((r) =>
+            r.type === 'pair'
+              ? { left: r.left ? hlLine(r.left.text, lang) : null, right: r.right ? hlLine(r.right.text, lang) : null }
+              : null,
+          )
+        : null,
+    [rows, lang],
+  );
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [patch]);
   const capped = !expanded && rows.length > DIFF_ROW_CAP;
@@ -1117,8 +1202,8 @@ function SplitDiffView({ patch }: { patch: string }) {
           </div>
         ) : (
           <div key={k} className="diff-split-row">
-            <SplitSide cell={r.left} />
-            <SplitSide cell={r.right} />
+            <SplitSide cell={r.left} html={html?.[k]?.left} />
+            <SplitSide cell={r.right} html={html?.[k]?.right} />
           </div>
         ),
       )}
