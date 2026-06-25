@@ -396,7 +396,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       style={{ width: collapsed ? undefined : sidebarWidth }}
     >
       <div className="tp-brand">
-        <span className="tp-brand-logo">🛰</span>
+        <span className="tp-brand-logo">
+          <svg width={22} height={22} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="og-nav" x1="14" y1="12" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#5b8bff" />
+                <stop offset="1" stopColor="#3370ff" />
+              </linearGradient>
+            </defs>
+            <g transform="rotate(-26 32 32)">
+              <ellipse cx="32" cy="32" rx="28" ry="12.5" stroke="url(#og-nav)" strokeWidth="3.4" opacity="0.6" />
+              <circle cx="56" cy="25.6" r="5.4" fill="url(#og-nav)" />
+            </g>
+            <rect x="19" y="20" width="26" height="24" rx="6" fill="url(#og-nav)" />
+            <path d="M25 27.5 L30 32 L25 36.5" stroke="#fff" strokeWidth="2.9" strokeLinecap="round" strokeLinejoin="round" />
+            <line x1="33" y1="35.8" x2="39.5" y2="35.8" stroke="#fff" strokeWidth="2.9" strokeLinecap="round" />
+          </svg>
+        </span>
         <span className="tp-brand-name">Orbit</span>
         <button
           type="button"
