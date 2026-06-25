@@ -174,11 +174,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// compute the diff, so the branch is usable for a manual merge even after the checkout
 	// is removed. A SUCCEEDED/FAILED run is done — drop the checkout (the branch stays); a
 	// CANCELLED one keeps its checkout for a possible resume and is reaped by gcWorktrees.
+	// A cancelled run is still resumable (server settles it PARKED for idle/user-end), so its
+	// finalize commit is a *park checkpoint* — tagged for undo-on-resume rather than permanent.
 	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus}
 	if job.WT != nil {
 		cr.Branch = job.WT.Branch
 		cr.BaseSha = job.WT.BaseSha
-		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, job.Title)
+		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, job.Title, status == stCancelled)
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		cr.MergeTargets = mergeTargetsForWT(job.WT)
 	}

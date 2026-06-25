@@ -233,6 +233,64 @@ func TestMergeToMainRebaseNonRootTarget(t *testing.T) {
 	}
 }
 
+// TestParkCheckpointRoundTrip: a park finalize (checkpoint=true) commits the in-progress work
+// tagged with the park trailer, and a later resume (uncommitParkCheckpoint) soft-resets it back
+// to an uncommitted working tree with content intact — leaving no checkpoint commit in history.
+func TestParkCheckpointRoundTrip(t *testing.T) {
+	repo := initRepo(t)
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+	wt := &Worktree{Path: repo, Branch: "main", BaseSha: base, RepoDir: repo, Session: "sP"}
+
+	// The agent left an uncommitted change behind when the session was parked.
+	if err := os.WriteFile(filepath.Join(repo, "work.txt"), []byte("in progress\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	finalizeWorktree(wt, "wip title", true) // park → checkpoint commit
+	if st, _ := git(repo, "status", "--porcelain"); st != "" {
+		t.Fatalf("checkpoint should commit all work, tree not clean:\n%s", st)
+	}
+	if msg := mustGit(t, repo, "log", "-1", "--format=%B"); !strings.Contains(msg, parkCheckpointTrailer+": sP") {
+		t.Fatalf("checkpoint commit should carry the park trailer, got:\n%s", msg)
+	}
+	if _, err := git(repo, "cat-file", "-e", "HEAD:work.txt"); err != nil {
+		t.Fatalf("checkpoint must capture work.txt: %v", err)
+	}
+
+	uncommitParkCheckpoint(wt) // resume → undo the checkpoint
+	if after := mustGit(t, repo, "rev-parse", "HEAD"); after != base {
+		t.Fatalf("resume should soft-reset the checkpoint back to base %s, HEAD=%s", base, after)
+	}
+	if st, _ := git(repo, "status", "--porcelain"); !strings.Contains(st, "work.txt") {
+		t.Fatalf("work should return as a pending change after undo, status:\n%s", st)
+	}
+	if content, err := os.ReadFile(filepath.Join(repo, "work.txt")); err != nil || string(content) != "in progress\n" {
+		t.Fatalf("work.txt content must survive the undo: %q (%v)", content, err)
+	}
+}
+
+// TestPermanentEndNotUndone: a real end (SUCCEEDED/FAILED → checkpoint=false) commits WITHOUT the
+// park trailer, so uncommitParkCheckpoint is a no-op and the commit stays permanent on resume.
+func TestPermanentEndNotUndone(t *testing.T) {
+	repo := initRepo(t)
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+	wt := &Worktree{Path: repo, Branch: "main", BaseSha: base, RepoDir: repo, Session: "sE"}
+
+	if err := os.WriteFile(filepath.Join(repo, "done.txt"), []byte("done\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	finalizeWorktree(wt, "final", false) // permanent end
+	endSha := mustGit(t, repo, "rev-parse", "HEAD")
+	if endSha == base {
+		t.Fatal("end commit should advance HEAD past base")
+	}
+
+	uncommitParkCheckpoint(wt) // no park trailer → must not touch the commit
+	if after := mustGit(t, repo, "rev-parse", "HEAD"); after != endSha {
+		t.Fatalf("permanent end commit must not be undone: %s → %s", endSha, after)
+	}
+}
+
 func keys(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

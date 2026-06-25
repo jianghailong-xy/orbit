@@ -218,11 +218,21 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 	return execDir
 }
 
+// parkCheckpointTrailer marks a finalize commit as a *park checkpoint*: the snapshot taken when
+// a still-resumable session (idle-recycled or user-ended, which the server settles PARKED) is
+// torn down, so its in-progress work is durable on the branch even after the checkout is GC'd.
+// It is NOT a real end. On the next resume, uncommitParkCheckpoint soft-resets it so the work
+// returns to an uncommitted working tree and the agent continues without a stray checkpoint
+// polluting the branch history. A genuine end (SUCCEEDED/FAILED) commits WITHOUT this trailer,
+// so its commit is permanent.
+const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
+
 // finalizeWorktree commits whatever the session changed onto its branch and returns the
 // per-file diff stats plus the per-file unified-diff patches vs the base. Called once at
 // terminal completion, before /complete, so the work is captured on the branch even though
-// the checkout dir may then be removed.
-func finalizeWorktree(wt *Worktree, title string) ([]ChangedFile, []FilePatch) {
+// the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
+// checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
+func finalizeWorktree(wt *Worktree, title string, checkpoint bool) ([]ChangedFile, []FilePatch) {
 	if _, err := git(wt.Path, "add", "-A"); err != nil {
 		logln("worktree add failed for", wt.Session+":", err)
 	}
@@ -231,6 +241,9 @@ func finalizeWorktree(wt *Worktree, title string) ([]ChangedFile, []FilePatch) {
 		msg := strings.TrimSpace(title)
 		if msg == "" {
 			msg = "orbit session " + wt.Session
+		}
+		if checkpoint {
+			msg += "\n\n" + parkCheckpointTrailer + ": " + wt.Session
 		}
 		// Inline identity so the commit never fails on a runner with no git user.* set;
 		// --no-verify so a repo's pre-commit hook can't block finalization.
@@ -246,6 +259,25 @@ func finalizeWorktree(wt *Worktree, title string) ([]ChangedFile, []FilePatch) {
 	files := diffFiles(wt.Path, wt.BaseSha, "HEAD")
 	patchOut, _ := git(wt.Path, "diff", wt.BaseSha+"..HEAD")
 	return files, buildFilePatches(files, splitPatch(patchOut))
+}
+
+// uncommitParkCheckpoint undoes a park checkpoint (see parkCheckpointTrailer) at the start of a
+// resumed session: if the worktree's HEAD is THIS session's checkpoint, soft-reset it so the
+// snapshot returns to an uncommitted working tree and the agent continues where it left off, with
+// no checkpoint commit left in the branch's history. A no-op when HEAD isn't our checkpoint —
+// a fresh session, a permanent SUCCEEDED/FAILED end commit, or a branch merged/rebased since —
+// so it's safe to call unconditionally before every isolated session start. --soft never touches
+// the working tree or index, so the snapshot's content is preserved as a pending change.
+func uncommitParkCheckpoint(wt *Worktree) {
+	msg, err := git(wt.Path, "log", "-1", "--format=%B")
+	if err != nil || !strings.Contains(msg, parkCheckpointTrailer+": "+wt.Session) {
+		return
+	}
+	if _, err := git(wt.Path, "reset", "--soft", "HEAD~1"); err != nil {
+		logln("park-checkpoint un-commit failed for", wt.Session+":", err)
+		return
+	}
+	logln(fmt.Sprintf("session %s — undid park checkpoint (work restored to working tree)", wt.Session))
 }
 
 // gitEnv runs `git -C dir <args...>` with extra environment (e.g. GIT_INDEX_FILE).

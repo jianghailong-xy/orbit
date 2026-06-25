@@ -233,6 +233,12 @@ func runLoop(cfg *RunnerConfig) {
 		// claude in its own checkout on job.Branch instead of the shared dir. Falls back to
 		// the shared dir (recording why on job.IsolationStatus) for non-git workDirs.
 		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
+		// A resumed/reclaimed session whose last act was a park checkpoint: undo it so the
+		// agent continues from an uncommitted working tree, not a committed snapshot — no
+		// stray checkpoint left in history. No-op for fresh sessions and permanent ends.
+		if job.WT != nil {
+			uncommitParkCheckpoint(job.WT)
+		}
 		jobCtx, cancel := context.WithCancel(context.Background())
 		mu.Lock()
 		active[job.SessionID] = &liveSession{cancel: cancel, job: job}
