@@ -69,6 +69,8 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # On a v* tag the tag drives the DMG version; manual runs keep the script default.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then export VERSION="${GITHUB_REF_NAME#v}"; fi
           SIGN_ID="Developer ID Application: Wikova HQ ($APPLE_TEAM_ID)" \
           NOTARIZE_PROFILE=orbit-notary \
           ARCHS=arm64 \
