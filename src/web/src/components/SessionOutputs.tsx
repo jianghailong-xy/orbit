@@ -347,7 +347,11 @@ function MergeButton({
   const defaultTarget =
     remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   const primaryTarget = failed ? (mergeTarget ?? undefined) : defaultTarget;
-  const primaryLabel = pending ? 'Merging…' : failed ? 'Retry merge' : `Merge to ${defaultTarget ?? 'main'}`;
+  const primaryLabel = pending
+    ? 'Merging…'
+    : failed
+      ? `Retry merge to ${mergeTarget ?? defaultTarget ?? 'main'}`
+      : `Merge to ${defaultTarget ?? 'main'}`;
   const hasMenu = targets.length > 0 && !pending;
 
   const mainBtn = (
