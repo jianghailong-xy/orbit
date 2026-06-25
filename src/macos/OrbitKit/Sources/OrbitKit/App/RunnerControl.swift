@@ -45,6 +45,16 @@ public struct RunnerConfig: Codable, Equatable, Sendable {
     public let labels: [String]?
     public let maxConcurrent: Int?
     public let workDir: String?
+    public init(serverUrl: String, runnerId: String, runnerToken: String, name: String,
+                labels: [String]? = nil, maxConcurrent: Int? = nil, workDir: String? = nil) {
+        self.serverUrl = serverUrl
+        self.runnerId = runnerId
+        self.runnerToken = runnerToken
+        self.name = name
+        self.labels = labels
+        self.maxConcurrent = maxConcurrent
+        self.workDir = workDir
+    }
 }
 
 /// Reads the local runner's config + logs. `Data(contentsOf:)` is cross-platform Foundation, so

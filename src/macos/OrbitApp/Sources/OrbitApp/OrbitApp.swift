@@ -1,4 +1,5 @@
 import SwiftUI
+import OrbitKit
 
 @main
 struct OrbitApp: App {
