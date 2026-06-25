@@ -2,11 +2,23 @@
   "": {
     "swift-dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/master.swiftdeps"
   },
+  "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/AppLogicTests.swift": {
+    "dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.d",
+    "object": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o",
+    "swiftmodule": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests~partial.swiftmodule",
+    "swift-dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swiftdeps"
+  },
   "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/ModelsCodableTests.swift": {
     "dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.d",
     "object": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o",
     "swiftmodule": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests~partial.swiftmodule",
     "swift-dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swiftdeps"
+  },
+  "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/Phase2LogicTests.swift": {
+    "dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.d",
+    "object": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o",
+    "swiftmodule": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests~partial.swiftmodule",
+    "swift-dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swiftdeps"
   },
   "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/SSEFrameParserTests.swift": {
     "dependencies": "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/SSEFrameParserTests.d",

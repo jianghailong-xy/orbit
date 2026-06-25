@@ -113,19 +113,84 @@ public enum ApprovalBehavior: String, Codable, Sendable {
     case deny
 }
 
+/// A session-scoped claude permission rule to add on "allow + remember same kind", so future
+/// calls auto-allow without re-prompting. `toolName` is the gated tool ("Bash", "Edit"…);
+/// `ruleContent` narrows it (Bash uses a command prefix like `git commit:*`) — omit to allow
+/// every call to that tool. Mirrors `PermissionRule` in src/shared/src/dto.ts.
+public struct PermissionRule: Codable, Equatable, Sendable {
+    public let toolName: String
+    public let ruleContent: String?
+    public init(toolName: String, ruleContent: String? = nil) {
+        self.toolName = toolName
+        self.ruleContent = ruleContent
+    }
+}
+
 /// POST /sessions/:id/approvals/:approvalId/decision
 public struct ApprovalDecisionRequest: Codable, Sendable {
     public let behavior: ApprovalBehavior
     public let message: String?
     /// AskUserQuestion answers: question text → selected labels.
     public let answers: [String: [String]]?
-    /// Optional "remember this kind" rule (tool/prefix). Kept as JSON to track the server shape.
-    public let rememberRule: JSONValue?
+    /// Optional "remember this kind" rule.
+    public let rememberRule: PermissionRule?
     public init(behavior: ApprovalBehavior, message: String? = nil,
-                answers: [String: [String]]? = nil, rememberRule: JSONValue? = nil) {
+                answers: [String: [String]]? = nil, rememberRule: PermissionRule? = nil) {
         self.behavior = behavior
         self.message = message
         self.answers = answers
         self.rememberRule = rememberRule
     }
+}
+
+/// A single file's unified diff (GET /sessions/:id/diff → `{ patches: [FilePatch] }`).
+/// Mirrors `FilePatch` in src/shared/src/dto.ts.
+public struct FilePatch: Codable, Equatable, Sendable, Identifiable {
+    public let path: String
+    public let patch: String?
+    public let truncated: Bool?
+    public var id: String { path }
+}
+
+public struct SessionDiff: Codable, Equatable, Sendable {
+    public let patches: [FilePatch]
+}
+
+public struct AttachmentRef: Codable, Sendable {
+    public let id: String
+}
+
+/// POST /sessions/:id/resume — revive a terminal-but-resumable session with a new turn.
+public struct ResumeRequest: Codable, Sendable {
+    public let clientTurnId: String
+    public let content: String
+    public let kind: String?
+    public let model: String?
+    public let permissionMode: String?
+    public init(clientTurnId: String, content: String, kind: String? = nil,
+                model: String? = nil, permissionMode: String? = nil) {
+        self.clientTurnId = clientTurnId
+        self.content = content
+        self.kind = kind
+        self.model = model
+        self.permissionMode = permissionMode
+    }
+}
+
+/// PATCH /sessions/:id/config — change model / permission-mode / effort mid-session.
+public struct ConfigUpdateRequest: Codable, Sendable {
+    public let model: String?
+    public let permissionMode: String?
+    public let effort: String?
+    public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil) {
+        self.model = model
+        self.permissionMode = permissionMode
+        self.effort = effort
+    }
+}
+
+/// POST /sessions/:id/merge — merge the session branch into `targetBranch` (default when nil).
+public struct MergeRequest: Codable, Sendable {
+    public let targetBranch: String?
+    public init(targetBranch: String? = nil) { self.targetBranch = targetBranch }
 }

@@ -83,6 +83,54 @@ public final class APIClient: @unchecked Sendable {
     public func agents() async throws -> [Agent] { try await get("agents") }
     public func runners() async throws -> [Runner] { try await get("runners") }
 
+    // MARK: turns / lifecycle (Phase 2)
+
+    public func withdrawTurn(sessionID: String, turnId: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/turns/\(turnId)", method: "DELETE",
+                                       body: Optional<Empty>.none))
+    }
+
+    public func resume(sessionID: String, _ req: ResumeRequest) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/resume", body: req)
+    }
+
+    public func updateConfig(sessionID: String, _ req: ConfigUpdateRequest) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/config", method: "PATCH", body: req))
+    }
+
+    // MARK: worktree
+
+    public func diff(sessionID: String) async throws -> SessionDiff {
+        try await get("sessions/\(sessionID)/diff")
+    }
+
+    public func refreshDiff(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/diff/refresh", body: Optional<Empty>.none)
+    }
+
+    public func commit(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
+    }
+
+    public func merge(sessionID: String, targetBranch: String?) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch))
+    }
+
+    // MARK: attachments
+
+    @discardableResult
+    public func uploadAttachment(sessionID: String?, filename: String, mimeType: String,
+                                 data: Data) async throws -> String {
+        let boundary = "orbit.\(UUID().uuidString)"
+        let query = sessionID.map { [URLQueryItem(name: "sessionId", value: $0)] } ?? []
+        var req = try makeRequest("attachments", method: "POST", query: query, body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file",
+                                      filename: filename, mimeType: mimeType, fileData: data)
+        let respData = try await send(req)
+        return try decoder.decode(AttachmentRef.self, from: respData).id
+    }
+
     // MARK: - request plumbing
 
     private struct Empty: Codable {}

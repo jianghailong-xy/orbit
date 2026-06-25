@@ -1,4 +1,7 @@
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/APIClient.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/AgentDefaults.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Approvals.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Composer.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/DTOs.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Enums.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/EventStream.swift.o
@@ -6,6 +9,8 @@
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/OrbitKit.swiftmodule.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/RunEvent.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SSEFrameParser.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/ServerURL.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SessionGrouping.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SessionStore.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/TokenStore.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Transcript.swift.o
@@ -15,7 +20,9 @@
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitPackageDiscoveredTests.build/all-discovered-tests.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitPackageTests.build/OrbitKitPackageTests.swiftmodule.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitPackageTests.build/runner.swift.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/OrbitKitTests.swiftmodule.o
+/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/SSEFrameParserTests.swift.o
 /root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/TranscriptReducerTests.swift.o

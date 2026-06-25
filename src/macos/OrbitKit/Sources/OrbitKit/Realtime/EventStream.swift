@@ -31,10 +31,10 @@ public struct MockEventStream: EventStreaming {
 /// Foundation, and this is a macOS app — Linux only builds the pure parser + reducer.
 public struct URLSessionEventStream: EventStreaming {
     let baseURL: URL
-    let token: () -> String?
+    let token: @Sendable () -> String?
     let session: URLSession
 
-    public init(baseURL: URL, token: @escaping () -> String?, session: URLSession = .shared) {
+    public init(baseURL: URL, token: @escaping @Sendable () -> String?, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.token = token
         self.session = session

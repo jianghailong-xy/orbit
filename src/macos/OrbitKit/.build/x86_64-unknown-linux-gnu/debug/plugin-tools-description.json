@@ -28,6 +28,26 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/AgentDefaults.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Approvals.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Composer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/ServerURL.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Auth/TokenStore.swift"
         },
         {
@@ -83,6 +103,11 @@
       "moduleName" : "OrbitKit",
       "moduleOutputPath" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/Modules/OrbitKit.swiftmodule",
       "objects" : [
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/AgentDefaults.swift.o",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Approvals.swift.o",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Composer.swift.o",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/ServerURL.swift.o",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SessionGrouping.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/TokenStore.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/DTOs.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Enums.swift.o",
@@ -124,6 +149,26 @@
       ],
       "outputFileMapPath" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/output-file-map.json",
       "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/AgentDefaults.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Approvals.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Composer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/ServerURL.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SessionGrouping.swift.o"
+        },
         {
           "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/TokenStore.swift.o"
@@ -175,6 +220,11 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/AgentDefaults.swift",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Approvals.swift",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Composer.swift",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/ServerURL.swift",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Auth/TokenStore.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Models/DTOs.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Models/Enums.swift",
@@ -357,7 +407,15 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/AppLogicTests.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/ModelsCodableTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/Phase2LogicTests.swift"
         },
         {
           "kind" : "file",
@@ -384,7 +442,9 @@
       "moduleName" : "OrbitKitTests",
       "moduleOutputPath" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/Modules/OrbitKitTests.swiftmodule",
       "objects" : [
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/SSEFrameParserTests.swift.o",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/TranscriptReducerTests.swift.o"
       ],
@@ -421,7 +481,15 @@
       "outputs" : [
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o"
         },
         {
           "kind" : "file",
@@ -438,7 +506,9 @@
       ],
       "prepareForIndexing" : false,
       "sources" : [
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/AppLogicTests.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/ModelsCodableTests.swift",
+        "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/Phase2LogicTests.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/SSEFrameParserTests.swift",
         "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptReducerTests.swift"
       ],
@@ -458,6 +528,11 @@
       "orbitkit",
       "-incremental",
       "-c",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/AgentDefaults.swift",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Approvals.swift",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Composer.swift",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/ServerURL.swift",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Auth/TokenStore.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Models/DTOs.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/Models/Enums.swift",
@@ -586,7 +661,9 @@
       "orbitkit",
       "-incremental",
       "-c",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/AppLogicTests.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/ModelsCodableTests.swift",
+      "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/Phase2LogicTests.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/SSEFrameParserTests.swift",
       "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/TranscriptReducerTests.swift",
       "-I",
@@ -644,7 +721,15 @@
       "inputs" : [
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o"
         },
         {
           "kind" : "file",
@@ -693,6 +778,26 @@
         {
           "kind" : "virtual",
           "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/AgentDefaults.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Approvals.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/Composer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/ServerURL.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Sources/OrbitKit/App/SessionGrouping.swift"
         },
         {
           "kind" : "file",
@@ -786,6 +891,18 @@
         },
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/AgentDefaults.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Approvals.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/Composer.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/DTOs.swift.o"
         },
         {
@@ -811,6 +928,14 @@
         {
           "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SSEFrameParser.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/ServerURL.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKit.build/SessionGrouping.swift.o"
         },
         {
           "kind" : "file",
@@ -850,11 +975,19 @@
         },
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/AppLogicTests.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/ModelsCodableTests.swift.o"
         },
         {
           "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/OrbitKitTests.swiftmodule.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/.build/x86_64-unknown-linux-gnu/debug/OrbitKitTests.build/Phase2LogicTests.swift.o"
         },
         {
           "kind" : "file",
@@ -876,7 +1009,15 @@
         },
         {
           "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/AppLogicTests.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/ModelsCodableTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/root/.orbit/worktrees/019efe89-db7a-7963-86bb-7129cd1c56c4/src/macos/OrbitKit/Tests/OrbitKitTests/Phase2LogicTests.swift"
         },
         {
           "kind" : "file",
