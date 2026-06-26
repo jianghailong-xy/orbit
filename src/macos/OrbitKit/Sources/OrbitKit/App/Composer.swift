@@ -65,6 +65,15 @@ public enum ComposerLogic {
                            kind: shell ? "shell" : "message",
                            attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
     }
+
+    /// Split a composer draft into the text to send and whether it's a raw shell command. A
+    /// leading `!` (the web composer's convention) routes the remainder to the runner shell,
+    /// bypassing claude; the result is trimmed and a bare `!` yields empty text (a no-op send).
+    public static func parseShell(_ raw: String) -> (text: String, shell: Bool) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("!") else { return (trimmed, false) }
+        return (String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines), true)
+    }
 }
 
 /// `/`-autocomplete for the composer, mirroring the web composer. The runner reports its on-disk

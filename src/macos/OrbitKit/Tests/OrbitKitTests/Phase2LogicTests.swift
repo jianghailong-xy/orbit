@@ -179,6 +179,20 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(shell.attachmentIds, ["a1"])
     }
 
+    func testParseShell() {
+        // Plain text: not a shell command, trimmed.
+        XCTAssertEqual(ComposerLogic.parseShell("  hello  ").text, "hello")
+        XCTAssertFalse(ComposerLogic.parseShell("hello").shell)
+        // `!`-prefixed: shell command with the bang stripped and re-trimmed.
+        let cmd = ComposerLogic.parseShell("  !ls -la ")
+        XCTAssertTrue(cmd.shell)
+        XCTAssertEqual(cmd.text, "ls -la")
+        // A bare `!` is a shell no-op (empty text), so send() clears without dispatching.
+        let bare = ComposerLogic.parseShell("!")
+        XCTAssertTrue(bare.shell)
+        XCTAssertEqual(bare.text, "")
+    }
+
     // MARK: `/` autocomplete (mirrors the web composer's slash menu)
 
     func testSlashToken() {

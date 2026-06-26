@@ -3,11 +3,22 @@ import AppKit
 import UniformTypeIdentifiers
 import OrbitKit
 
+/// Bridges the composer's live focus + current-session attach action to the long-lived ⌘V paste
+/// monitor. A monitor closure captures its values once at install, but the `console` swaps under
+/// this view when the user switches sessions (ConsoleView carries no `.id`), so the monitor reads
+/// the *current* console through this reference instead of a stale captured one.
+private final class ComposerPasteState {
+    var focused = false
+    var attach: ((Data) -> Void)?
+}
+
 struct ComposerView: View {
     @Bindable var console: ConsoleModel
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
     @FocusState private var inputFocused: Bool
+    @State private var pasteMonitor: Any?
+    @State private var pasteState = ComposerPasteState()
 
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
     private var showSlash: Bool {
@@ -16,8 +27,7 @@ struct ComposerView: View {
     }
 
     private var placeholder: String {
-        if console.replyContext != nil { return "Type your reply to Claude…" }
-        return console.shellMode ? "Shell command…" : "Message…"
+        console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
     }
 
     var body: some View {
@@ -37,35 +47,22 @@ struct ComposerView: View {
             }
 
             if !console.pendingAttachments.isEmpty {
-                HStack {
-                    ForEach(console.pendingAttachments) { att in
-                        HStack(spacing: 4) {
-                            Image(systemName: "paperclip")
-                            Text(att.filename).lineLimit(1)
-                            Button { console.removeAttachment(att) } label: { Image(systemName: "xmark.circle.fill") }
-                                .buttonStyle(.plain).foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                        .padding(.horizontal, 6).padding(.vertical, 3)
-                        .background(.gray.opacity(0.12), in: Capsule())
-                    }
-                    Spacer()
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(console.pendingAttachments) { attachmentChip($0) }
+                    Spacer(minLength: 0)
                 }
             }
 
             if showSlash { slashMenu }
 
-            HStack(alignment: .bottom, spacing: 8) {
+            // One rounded box wrapping the + menu, the growing field, and send — mirrors the web
+            // composer's single bordered `.composer-box` instead of three separate controls. Shell
+            // mode is reached by a `!` prefix (the + menu's Shell item inserts it), not a toggle.
+            HStack(alignment: .bottom, spacing: 6) {
                 addMenu
 
-                Toggle(isOn: $console.shellMode) {
-                    Image(systemName: "terminal")
-                }
-                .toggleStyle(.button)
-                .help("Run as a shell command")
-
                 TextField(placeholder, text: $console.composerText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .focused($inputFocused)
                     .onSubmit { onReturn() }
@@ -88,22 +85,12 @@ struct ComposerView: View {
                             console.composerText = String(text.prefix(ComposerLogic.maxPromptChars))
                         }
                     }
-                    // Paste an image straight from the clipboard (e.g. a screenshot). Declaring
-                    // image content types means a text-only paste isn't claimed here and falls
-                    // through to the field's normal paste — mirrors the web composer's onPaste.
-                    .onPasteCommand(of: [.image]) { providers in
-                        for provider in providers where provider.canLoadObject(ofClass: NSImage.self) {
-                            provider.loadObject(ofClass: NSImage.self) { object, _ in
-                                guard let image = object as? NSImage, let png = image.orbitPNGData() else { return }
-                                Task { @MainActor in await console.attachPastedImage(pngData: png) }
-                            }
-                        }
-                    }
 
                 if console.state.status == .running {
                     Button { Task { await console.interrupt() } } label: {
                         Image(systemName: "stop.fill")
                     }
+                    .buttonStyle(.plain)
                     .help("Interrupt the current turn")
                 }
                 Button { Task { await console.send() } } label: {
@@ -111,6 +98,13 @@ struct ComposerView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!console.canSend)
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(inputFocused ? Color.accentColor : Color.secondary.opacity(0.35),
+                                  lineWidth: 1)
             }
 
             // Footer controls, laid out like the web composer: permission mode on the left,
@@ -160,6 +154,33 @@ struct ComposerView: View {
         }
         .padding(10)
         .background(.bar)
+        // A focused field editor consumes ⌘V before any SwiftUI .onPasteCommand fires, so intercept
+        // the keystroke here: when the composer is focused and the clipboard holds an image, attach
+        // it (web parity) and swallow the paste; anything else falls through to normal text paste.
+        .onAppear {
+            guard pasteMonitor == nil else { return }
+            pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard pasteState.focused,
+                      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                      event.charactersIgnoringModifiers?.lowercased() == "v",
+                      let attach = pasteState.attach,
+                      NSPasteboard.general.canReadObject(forClasses: [NSImage.self], options: nil),
+                      let image = NSImage(pasteboard: NSPasteboard.general),
+                      let png = image.orbitPNGData()
+                else { return event }
+                attach(png)
+                return nil
+            }
+        }
+        .onDisappear {
+            if let monitor = pasteMonitor { NSEvent.removeMonitor(monitor); pasteMonitor = nil }
+        }
+        .onChange(of: inputFocused) { _, focused in pasteState.focused = focused }
+        // Rebind the attach action to the *current* console — it swaps under this view on a session
+        // switch; `initial` seeds it on first appearance.
+        .onChange(of: console.sessionID, initial: true) { _, _ in
+            pasteState.attach = { png in Task { @MainActor in await console.attachPastedImage(pngData: png) } }
+        }
     }
 
     // MARK: + menu (mirrors the web composer's `+` dropdown)
@@ -174,7 +195,7 @@ struct ComposerView: View {
                 Label("Skill", systemImage: "bolt")
             }
             .disabled(!console.hasSkills)
-            Button { console.shellMode = true } label: {
+            Button { console.insertShell() } label: {
                 Label("Shell", systemImage: "terminal")
             }
             Divider()
@@ -187,6 +208,51 @@ struct ComposerView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Add a command, skill, shell command, or attachment")
+    }
+
+    // MARK: staged attachment chips (mirror the web composer's image thumbnails / file chips)
+
+    @ViewBuilder
+    private func attachmentChip(_ att: PendingAttachment) -> some View {
+        if let data = att.previewImageData, let image = NSImage(data: data) {
+            // Inline image: a 48×48 thumbnail with a corner remove button (web's .composer-attach).
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                .overlay(alignment: .topTrailing) {
+                    Button { console.removeAttachment(att) } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.white, .black.opacity(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(2)
+                    .help("Remove image")
+                }
+        } else {
+            // Other file: a name + size chip (web's .composer-file).
+            HStack(spacing: 6) {
+                Image(systemName: "paperclip").foregroundStyle(.secondary)
+                Text(att.filename).lineLimit(1).truncationMode(.middle)
+                Text(byteString(att.byteCount)).foregroundStyle(.secondary)
+                Button { console.removeAttachment(att) } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove file")
+            }
+            .font(.caption)
+            .padding(.vertical, 4).padding(.horizontal, 8)
+            .frame(maxWidth: 220, alignment: .leading)
+            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func byteString(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     // MARK: `/` autocomplete menu

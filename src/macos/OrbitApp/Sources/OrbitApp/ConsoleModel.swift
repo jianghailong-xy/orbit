@@ -1,11 +1,16 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
+import AppKit
 import OrbitKit
 
 struct PendingAttachment: Identifiable, Equatable, Sendable {
     let id: String
     let filename: String
+    let byteCount: Int
+    /// A small PNG thumbnail for an inline image, downsampled once at attach time so SwiftUI
+    /// isn't re-decoding the full-resolution source on every body pass; nil for a non-image file.
+    let previewImageData: Data?
 }
 
 /// Active "Chat about this" reply: the composer's next send resolves this pending question as a
@@ -36,7 +41,6 @@ final class ConsoleModel {
 
     // composer
     var composerText = ""
-    var shellMode = false
     var modelID = AgentDefaults.defaultModelID
     var permissionMode: PermissionMode = .default
     var effort: Effort = .default
@@ -262,9 +266,21 @@ final class ConsoleModel {
         slashScope = nil
     }
 
+    /// `+` menu → Shell: prefix the draft with `!` so send() routes the rest as a raw shell command
+    /// run on the runner, bypassing claude. The user types the command after. Mirrors web's insertShell.
+    func insertShell() {
+        if !composerText.hasPrefix("!") { composerText = "!" + composerText }
+    }
+
     func send() async {
-        let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending else { return }
+        guard !sending else { return }
+        // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
+        // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
+        let (text, shell) = ComposerLogic.parseShell(composerText)
+        guard !text.isEmpty else {
+            if shell { composerText = "" }
+            return
+        }
         // "Chat about this": resolve the pending question as a deny+message so claude reads the
         // text as in-turn feedback and continues — not a fresh turn. (Mirrors the web reroute.)
         if let reply = replyContext {
@@ -288,7 +304,7 @@ final class ConsoleModel {
             if ComposerLogic.shouldResume(status: sessionStatus) {
                 _ = try await api.resume(sessionID: sessionID,
                                          ResumeRequest(clientTurnId: clientTurnId, content: text,
-                                                       kind: shellMode ? "shell" : "message",
+                                                       kind: shell ? "shell" : "message",
                                                        model: modelID, permissionMode: permissionMode.rawValue,
                                                        effort: effort.wire))
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
@@ -298,7 +314,7 @@ final class ConsoleModel {
             } else {
                 _ = try await api.sendTurn(sessionID: sessionID,
                                            ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
-                                                                  shell: shellMode, attachmentIds: attachmentIds))
+                                                                  shell: shell, attachmentIds: attachmentIds))
             }
         } catch {
             statusMessage = "Send failed — \(error)"
@@ -341,7 +357,11 @@ final class ConsoleModel {
         do {
             let id = try await api.uploadAttachment(sessionID: sessionID, filename: filename,
                                                     mimeType: mimeType, data: data)
-            pendingAttachments.append(PendingAttachment(id: id, filename: filename))
+            // Inline images carry a downsampled thumbnail for the composer chip; other files show
+            // as a name + size chip instead (web parity).
+            let preview = Attachments.isInlineImage(mimeType: mimeType) ? composerThumbnail(from: data) : nil
+            pendingAttachments.append(PendingAttachment(id: id, filename: filename,
+                                                        byteCount: data.count, previewImageData: preview))
         } catch {
             statusMessage = "Upload failed"
         }
@@ -428,4 +448,22 @@ final class ConsoleModel {
         do { try await api.merge(sessionID: sessionID, targetBranch: target); statusMessage = "Merge requested" }
         catch { statusMessage = "Merge failed" }
     }
+}
+
+/// Downsample an image to a small PNG for the composer's thumbnail chip. Done once at attach time
+/// so SwiftUI isn't decoding the full-resolution source on every body pass — a multi-MB screenshot
+/// re-decoded per keystroke would jank typing. Best-effort: nil falls back to a name + size chip.
+private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
+    guard let source = NSImage(data: data) else { return nil }
+    let size = source.size
+    guard size.width > 0, size.height > 0 else { return nil }
+    let scale = min(1, maxDimension / max(size.width, size.height))
+    let target = NSSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
+    let thumb = NSImage(size: target)
+    thumb.lockFocus()
+    source.draw(in: NSRect(origin: .zero, size: target),
+                from: NSRect(origin: .zero, size: size), operation: .copy, fraction: 1)
+    thumb.unlockFocus()
+    guard let tiff = thumb.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+    return rep.representation(using: .png, properties: [:])
 }
