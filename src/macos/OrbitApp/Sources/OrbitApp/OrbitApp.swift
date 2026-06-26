@@ -17,6 +17,13 @@ struct OrbitApp: App {
                 .task { model.bootstrap() }
         }
         .defaultSize(width: 1100, height: 720)
+        // Standard "Check for Updates…" in the app menu (right after "About Orbit").
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+            }
+        }
 
         // Always-present menu-bar item: glanceable summary + quick jump into "needs you".
         MenuBarExtra {
