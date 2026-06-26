@@ -180,11 +180,22 @@ private struct CodeBlockView: View {
 /// Inline-only Markdown (bold/italic/code/links/strikethrough), newlines preserved. Used for the
 /// text inside a single block; block structure is handled by `MarkdownBlockView`.
 func inlineMarkdown(_ s: String) -> Text {
-    if let attributed = try? AttributedString(
+    guard var attributed = try? AttributedString(
         markdown: s,
         options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    ) {
-        return Text(attributed)
+    ) else {
+        return Text(s)
     }
-    return Text(s)
+    // SwiftUI renders the `.code` inline intent as monospace but draws no fill, so inline code
+    // blends into prose. Mirror the web `.md code` chip by tinting those runs. Ranges are captured
+    // before mutating: attribute-only edits leave the text — and thus these indices — stable, and a
+    // single Text keeps wrapping/selection intact. SwiftUI can't round or pad a per-run background,
+    // so this is a flat tint rather than web's rounded, bordered pill.
+    let codeRanges = attributed.runs
+        .filter { $0.inlinePresentationIntent?.contains(.code) == true }
+        .map(\.range)
+    for range in codeRanges {
+        attributed[range].backgroundColor = Color.secondary.opacity(0.2)
+    }
+    return Text(attributed)
 }
