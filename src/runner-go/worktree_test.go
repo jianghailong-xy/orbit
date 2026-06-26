@@ -277,6 +277,116 @@ func TestBranchMergedInto(t *testing.T) {
 	}
 }
 
+// addOriginBare wires a throwaway bare repo as 'origin' and pushes repo's main to it, so
+// origin/<branch> remote-tracking refs exist for the merge-sync tests.
+func addOriginBare(t *testing.T, repo string) string {
+	t.Helper()
+	bare := t.TempDir()
+	mustGit(t, bare, "init", "--bare", "-b", "main")
+	mustGit(t, repo, "remote", "add", "origin", bare)
+	mustGit(t, repo, "push", "origin", "main")
+	return bare
+}
+
+// advanceOriginMain lands a new commit on origin/main WITHOUT moving the repo's local main —
+// simulating other work pushed upstream (an agent's `git push origin HEAD:main`, another merge)
+// while this runner's local main stays behind.
+func advanceOriginMain(t *testing.T, repo, file, content string) {
+	t.Helper()
+	mustGit(t, repo, "checkout", "-b", "_up")
+	commitFile(t, repo, file, content, "upstream "+file)
+	mustGit(t, repo, "push", "origin", "_up:main")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "branch", "-D", "_up")
+}
+
+// TestMergeToMainSyncsStaleLocalTargetFromOrigin: when origin/main has advanced past the runner's
+// local main, the merge fast-forwards local main to origin FIRST, then rebases the branch on top —
+// so main ends up with both the upstream commit and the branch's work, never replaying onto a
+// stale base. This is the fix for the phantom conflict the "Resolve in session" loop couldn't clear.
+func TestMergeToMainSyncsStaleLocalTargetFromOrigin(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	addOriginBare(t, repo)
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	featBefore := mustGit(t, repo, "rev-parse", "orbit/feat")
+
+	mustGit(t, repo, "checkout", "main")
+	advanceOriginMain(t, repo, "upstream.txt", "upstream\n") // origin/main ahead; local main stale
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s4"})
+	if out.Status != "merged" {
+		t.Fatalf("expected merged, got %q (%s)", out.Status, out.Message)
+	}
+	if merges, _ := git(repo, "log", "--merges", "--format=%H", "main"); merges != "" {
+		t.Errorf("main should be linear, found merge commits:\n%s", merges)
+	}
+	for _, f := range []string{"upstream.txt", "feat.txt"} {
+		if _, err := git(repo, "cat-file", "-e", "main:"+f); err != nil {
+			t.Errorf("main should carry %s after sync+rebase: %v", f, err)
+		}
+	}
+	if featAfter, _ := git(repo, "rev-parse", "orbit/feat"); featAfter != featBefore {
+		t.Errorf("session branch must not be rewritten: %s → %s", featBefore, featAfter)
+	}
+}
+
+// TestMergeToMainAlreadyMergedUpstreamNoConflict: the exact reported case — the branch's commits
+// are ALREADY in origin/main (an agent pushed them) but local main lagged. Syncing local main to
+// origin first makes the rebase a no-op, so it merges cleanly instead of re-conflicting on commits
+// already reconciled upstream.
+func TestMergeToMainAlreadyMergedUpstreamNoConflict(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	addOriginBare(t, repo)
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "shared.txt", "branch version\n", "feat edits shared")
+	mustGit(t, repo, "push", "origin", "orbit/feat:main") // origin/main now contains the branch
+	mustGit(t, repo, "checkout", "main")                  // local main still at base (stale)
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s5"})
+	if out.Status != "merged" {
+		t.Fatalf("expected clean merge (branch already upstream), got %q (%s)", out.Status, out.Message)
+	}
+	if _, err := git(repo, "cat-file", "-e", "main:shared.txt"); err != nil {
+		t.Errorf("main should carry the branch's file: %v", err)
+	}
+}
+
+// TestMergeToMainDivergedLocalTargetErrors: a local main carrying commits that aren't on origin
+// (e.g. a prior local-only "merge to main") has genuinely diverged from origin/main; rather than
+// rebase onto the wrong base, the merge reports an actionable error and leaves main untouched.
+func TestMergeToMainDivergedLocalTargetErrors(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	addOriginBare(t, repo)
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+
+	mustGit(t, repo, "checkout", "main")
+	advanceOriginMain(t, repo, "upstream.txt", "upstream\n") // origin/main = base+upstream
+	commitFile(t, repo, "local.txt", "local only\n", "local-only commit on main") // local main = base+local
+	mainBefore := mustGit(t, repo, "rev-parse", "main")
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s6"})
+	if out.Status != "error" {
+		t.Fatalf("expected error on diverged local target, got %q (%s)", out.Status, out.Message)
+	}
+	if !strings.Contains(out.Message, "diverged") {
+		t.Errorf("error message should name the divergence, got: %s", out.Message)
+	}
+	if mainAfter, _ := git(repo, "rev-parse", "main"); mainAfter != mainBefore {
+		t.Errorf("main must be untouched on a diverged-target error: %s → %s", mainBefore, mainAfter)
+	}
+	if st, _ := git(repo, "status", "--porcelain"); st != "" {
+		t.Errorf("working tree should stay clean, got:\n%s", st)
+	}
+}
+
 // TestParkCheckpointRoundTrip: a park finalize (checkpoint=true) commits the in-progress work
 // tagged with the park trailer, and a later resume (uncommitParkCheckpoint) soft-resets it back
 // to an uncommitted working tree with content intact — leaving no checkpoint commit in history.

@@ -546,6 +546,14 @@ type mergeOutcome struct {
 // with no merge commit. The target is req.TargetBranch (the branch the user picked from the
 // status bar's dropdown), or auto-detected (main, else master) when empty.
 //
+// Before rebasing, the local target is brought up to date with origin/<target> (fetch +
+// fast-forward) when an 'origin' remote tracks it. Agents and "Resolve in session" reconcile
+// against origin/<target>, so a local target that lagged upstream would otherwise replay the
+// branch onto a stale base and conflict on lines already resolved upstream — a phantom conflict
+// no in-session resolve can clear. A target that has DIVERGED from origin (local-only commits) is
+// reported as an "error" to reconcile manually, rather than silently merged onto the wrong base.
+// Repos with no 'origin' (e.g. an auto-init'd workDir) skip this and behave exactly as before.
+//
 // The branch's commits are replayed on a temp copy in a throwaway worktree, so the session's own
 // branch is never rewritten (a resumable session keeps its original commits). The target is then
 // advanced to the rebased result, two paths, both conservative:
@@ -587,6 +595,13 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	}
 	if req.Branch == target {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("can't merge %q into itself", target)}
+	}
+
+	// Bring the local target up to date with origin before deciding how to advance it (see the
+	// function comment): a target that lagged origin/<target> would replay the branch onto a stale
+	// base and conflict on lines already reconciled upstream.
+	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
+		return *out
 	}
 
 	// Decide how we'll advance the target after the rebase. If the repo root has the target checked
@@ -656,6 +671,58 @@ func rebaseFastForward(repoRoot, source, target, sessionID string, ffAtRoot bool
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
 	return mergeOutcome{Status: "merged", MergedSha: sha}
+}
+
+// reconcileTargetWithOrigin fast-forwards the local target branch to origin/<target> before a
+// merge so the rebase replays onto the same tip agents and "Resolve in session" reconcile against
+// (origin/<target>), not a stale local ref. Returns nil when there's nothing to do (no 'origin'
+// remote, the target isn't tracked on origin, or it's already in sync / already ahead of origin),
+// and an *mergeOutcome{error} when the local target has diverged from origin or the fast-forward
+// fails — both surfaced rather than merged onto the wrong base. Best-effort on the network: a
+// failed fetch just proceeds against whatever origin ref the repo already has.
+func reconcileTargetWithOrigin(repoRoot, target string) *mergeOutcome {
+	// No 'origin' remote (e.g. an auto-init'd local repo) → nothing to reconcile; behave as before.
+	if _, err := git(repoRoot, "remote", "get-url", "origin"); err != nil {
+		return nil
+	}
+	_, _ = git(repoRoot, "fetch", "origin", target) // read-only; transient failures fall through
+	remoteRef := "origin/" + target
+	if _, err := git(repoRoot, "rev-parse", "--verify", "--quiet", remoteRef); err != nil {
+		return nil // target isn't tracked on origin (a local-only branch) → nothing to reconcile
+	}
+	localSha, _ := git(repoRoot, "rev-parse", target)
+	remoteSha, _ := git(repoRoot, "rev-parse", remoteRef)
+	if localSha == remoteSha {
+		return nil // already in sync
+	}
+	// Local already contains origin (local is ahead) → the rebase base is fine as-is.
+	if _, err := git(repoRoot, "merge-base", "--is-ancestor", remoteRef, target); err == nil {
+		return nil
+	}
+	// Local is behind origin (origin is a strict descendant) → fast-forward the local target up to
+	// origin so the branch replays onto the up-to-date tip.
+	if _, err := git(repoRoot, "merge-base", "--is-ancestor", target, remoteRef); err == nil {
+		if cur, _ := git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD"); cur == target {
+			// Target is checked out at the repo root: fast-forward in place, guarding a clean tree
+			// (an ff could clobber modified tracked files).
+			if st, _ := git(repoRoot, "status", "--porcelain", "--untracked-files=no"); st != "" {
+				return &mergeOutcome{Status: "error", Message: fmt.Sprintf("%s has uncommitted changes — commit/stash, or merge manually", target)}
+			}
+			if out, err := git(repoRoot, "merge", "--ff-only", remoteRef); err != nil {
+				return &mergeOutcome{Status: "error", Message: clip(strings.TrimSpace(out+"\n"+gitStderr(err)), 1000)}
+			}
+		} else if branchWorktree(repoRoot, target) != "" {
+			return &mergeOutcome{Status: "error", Message: fmt.Sprintf("%q is checked out in another worktree — can't sync it with origin", target)}
+		} else if _, err := git(repoRoot, "branch", "-f", target, remoteRef); err != nil {
+			return &mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not fast-forward %s to origin: %s", target, gitStderr(err)), 1000)}
+		}
+		return nil
+	}
+	// Neither is an ancestor of the other → genuinely diverged. Rebasing onto the stale local
+	// target is exactly the phantom-conflict bug, so surface it instead of merging blindly.
+	return &mergeOutcome{Status: "error", Message: fmt.Sprintf(
+		"local %s has diverged from origin/%s — reconcile it with origin first (git checkout %s && git merge origin/%s), then retry the merge",
+		target, target, target, target)}
 }
 
 // branchWorktree returns the path of the worktree that has `branch` checked out, or "" if none
