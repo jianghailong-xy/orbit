@@ -23,10 +23,11 @@ tag="v$ver"
 
 cd "$(git rev-parse --show-toplevel)"
 
-# The tag must point at a fully committed state.
-if [ -n "$(git status --porcelain)" ]; then
-  echo "✗ working tree is not clean — commit or stash first:" >&2
-  git status --short >&2
+# The tag must point at a fully committed state. Untracked files don't enter the tag, so only
+# tracked (staged/unstaged) changes block a release.
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "✗ tracked changes are uncommitted — commit or stash first:" >&2
+  git status --short --untracked-files=no >&2
   exit 1
 fi
 
