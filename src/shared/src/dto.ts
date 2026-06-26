@@ -182,6 +182,11 @@ export interface SessionLiveState {
    *  session branches), so the status bar's "Merge to…" dropdown can offer targets besides
    *  main. Absent from older runners (the dropdown then offers only the auto-detected default). */
   mergeTargets?: string[];
+  /** Whether the branch tip is already an ancestor of the repo's default merge target (main,
+   *  else master) — i.e. the work already landed there. Drives the bar's "✓ In main" chip in
+   *  place of a redundant Merge button. Always sent (false when not), so the server can clear a
+   *  stale true; absent only from older runners (the bar keeps its mergeStatus behavior). */
+  branchMerged?: boolean;
 }
 
 export interface RunnerHeartbeatResponse {
@@ -421,6 +426,10 @@ export interface TurnCompleteRequest {
   changedDiff?: FilePatch[];
   /** Whether the worktree has uncommitted changes (drives Commit vs Merge in the bar). */
   worktreeDirty?: boolean;
+  /** Whether the branch already landed in the default merge target (see SessionLiveState). The
+   *  turn-end snapshot an idle session shows until its next turn, so a branch merged out-of-band
+   *  is reflected here. Always sent (false when not); absent only from older runners. */
+  branchMerged?: boolean;
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner
@@ -510,4 +519,7 @@ export interface SessionDiffResultRequest {
   changedFiles?: ChangedFile[];
   changedDiff?: FilePatch[];
   worktreeDirty?: boolean;
+  /** Whether the branch already landed in the default merge target (see SessionLiveState).
+   *  Recomputed with the diff, so opening the diff drawer refreshes it for an idle session. */
+  branchMerged?: boolean;
 }

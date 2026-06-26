@@ -79,6 +79,32 @@ func mergeTargetsForWT(wt *Worktree) []string {
 	return listMergeTargets(wt.RepoDir)
 }
 
+// branchMergedInto reports whether the worktree's branch tip is already an ancestor of the repo's
+// default merge target (main, else master) — i.e. the work already landed there, e.g. via an
+// out-of-band command-line merge. The status bar shows a "✓ In main" chip instead of a redundant
+// Merge button when true. Mirrors mergeToMain's auto-detected default (it judges the same target
+// the plain "Merge to main" button would use). False when nothing's isolated, no target exists,
+// or git can't decide — a conservative default that keeps the actionable Merge button.
+func branchMergedInto(wt *Worktree) bool {
+	if wt == nil || wt.Branch == "" {
+		return false
+	}
+	var target string
+	for _, b := range []string{"main", "master"} {
+		if branchExists(wt.RepoDir, b) {
+			target = b
+			break
+		}
+	}
+	if target == "" || target == wt.Branch {
+		return false
+	}
+	// `merge-base --is-ancestor A B` exits 0 when A is contained in B, 1 when not, 128 on error;
+	// git() returns a non-nil error for any non-zero exit, so err == nil ⇔ already merged.
+	_, err := git(wt.RepoDir, "merge-base", "--is-ancestor", wt.Branch, target)
+	return err == nil
+}
+
 // defaultGitignore is written into a non-git workDir before its baseline commit (only when
 // the dir has no .gitignore of its own), so auto-init doesn't sweep dependencies, build
 // output, or secrets into version control.

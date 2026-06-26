@@ -193,6 +193,7 @@ export function SessionOutputs({
             targets={detail.mergeTargets ?? []}
             mergeTarget={detail.mergeTarget}
             agentDefaultTarget={detail.agent?.defaultMergeTarget}
+            alreadyMerged={detail.branchMerged === true}
             onMerge={onMergeToMain}
             onResolveInSession={onResolveInSession}
             resolving={resolving}
@@ -264,6 +265,7 @@ function MergeButton({
   targets,
   mergeTarget,
   agentDefaultTarget,
+  alreadyMerged,
   onMerge,
   onResolveInSession,
   resolving,
@@ -280,6 +282,10 @@ function MergeButton({
    *  Wins over main/master as the left-segment default — but only while it's still a reported
    *  target, so a renamed/deleted branch falls back cleanly. */
   agentDefaultTarget?: string | null;
+  /** The branch tip is already in the default target (the runner's is-ancestor check). With no
+   *  Orbit merge in flight (idle status) this shows a quiet "✓ In main" chip instead of a Merge
+   *  button — the work already landed (e.g. an out-of-band command-line push). */
+  alreadyMerged?: boolean;
   onMerge?: (target?: string) => void;
   onResolveInSession?: () => void;
   resolving?: boolean;
@@ -290,6 +296,20 @@ function MergeButton({
     return (
       <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
         ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
+      </span>
+    );
+  }
+  // The branch already landed in its target (merged out-of-band — a command-line push, or an
+  // earlier session whose Orbit merge record was cleared on resume), and no Orbit merge is in
+  // flight (idle status). A Merge button here would only re-run a redundant no-op, so show a
+  // quiet "already there" chip instead. A pending/conflict/error status takes precedence — those
+  // reflect an Orbit merge actually in progress / just failed and stay actionable below.
+  if (alreadyMerged && !status) {
+    const landed =
+      mergeTarget || (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : 'main');
+    return (
+      <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
+        ✓ In {landed}
       </span>
     );
   }

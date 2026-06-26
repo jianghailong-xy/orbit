@@ -73,6 +73,10 @@ type SessionLiveState struct {
 	// MergeTargets is the repo's candidate merge-target branches (local heads minus orbit/*),
 	// for the status bar's "Merge to…" dropdown. Omitted when none / not isolated.
 	MergeTargets []string `json:"mergeTargets,omitempty"`
+	// BranchMerged: the branch tip is already an ancestor of the default merge target (main, else
+	// master) — the work already landed there. Drives the bar's "✓ In main" chip over a redundant
+	// Merge button. No omitempty (false must be sent so the server can clear a stale true).
+	BranchMerged bool `json:"branchMerged"`
 }
 
 // SlashCommandInfo mirrors @orbit/shared: one `/`-invocable asset (command or skill).
@@ -142,6 +146,9 @@ type DiffResultRequest struct {
 	ChangedFiles  []ChangedFile `json:"changedFiles,omitempty"`
 	ChangedDiff   []FilePatch   `json:"changedDiff,omitempty"`
 	WorktreeDirty bool          `json:"worktreeDirty"`
+	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
+	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
+	BranchMerged bool `json:"branchMerged"`
 }
 
 type MeResponse struct {
@@ -276,6 +283,10 @@ type TurnCompleteRequest struct {
 	// Whether the worktree has uncommitted changes (drives Commit vs Merge). No omitempty
 	// (false must be sent so a just-committed tree flips the bar to Merge).
 	WorktreeDirty bool `json:"worktreeDirty"`
+	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
+	// The turn-end snapshot an idle session shows, so an out-of-band merge is reflected here too.
+	// No omitempty (false must be sent so the server can clear a stale true).
+	BranchMerged bool `json:"branchMerged"`
 }
 
 type RunEvent struct {

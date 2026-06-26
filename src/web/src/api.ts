@@ -286,6 +286,11 @@ export interface SessionDetail {
   // Candidate merge-target branches the runner reported for this session's repo (local
   // branches minus orbit/*), populating the dropdown. Empty for older runners → no dropdown.
   mergeTargets?: string[] | null;
+  // Whether the branch already landed in the default target (main, else master) — the runner's
+  // `git merge-base --is-ancestor` result. True → the bar shows a "✓ In main" chip instead of a
+  // redundant Merge button (the work merged out-of-band, e.g. a command-line push). Null = not
+  // reported (older runner / not recomputed since) → the bar keeps its mergeStatus behavior.
+  branchMerged?: boolean | null;
   // Live-worktree commit state (see commitSession). worktreeDirty drives the bar's primary
   // action — true → Commit, false → Merge — when the runner reports it (null = not reported,
   // so the bar falls back to the session lifecycle). commitStatus is 'pending' while the

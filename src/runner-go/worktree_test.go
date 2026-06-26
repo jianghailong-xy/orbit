@@ -233,6 +233,50 @@ func TestMergeToMainRebaseNonRootTarget(t *testing.T) {
 	}
 }
 
+// TestBranchMergedInto: the status bar's "✓ In main" signal. True only when the branch tip is
+// already contained in the repo's default target (main, else master) — e.g. merged out-of-band
+// on the command line — so the bar drops the redundant Merge button. Conservative false when the
+// branch is ahead, there's no default target, the branch is the target, or there's no worktree.
+func TestBranchMergedInto(t *testing.T) {
+	repo := initRepo(t) // main + base commit
+
+	// A branch forked from main with its own commit is AHEAD of main → not yet merged.
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	feat := &Worktree{Branch: "orbit/feat", RepoDir: repo}
+	if branchMergedInto(feat) {
+		t.Error("a branch ahead of main must report not-merged")
+	}
+
+	// Land it in main (fast-forward) — the branch tip is now an ancestor of main → merged.
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+	if !branchMergedInto(feat) {
+		t.Error("a branch already contained in main must report merged")
+	}
+
+	// The branch IS the default target (main into main): can't merge into itself → not-merged.
+	if branchMergedInto(&Worktree{Branch: "main", RepoDir: repo}) {
+		t.Error("branch == target must report not-merged")
+	}
+
+	// No main/master at all (default branch renamed away) → no target to compare → not-merged.
+	noMain := initRepo(t)
+	mustGit(t, noMain, "branch", "-m", "trunk") // rename current 'main' → 'trunk'
+	mustGit(t, noMain, "checkout", "-b", "orbit/x")
+	if branchMergedInto(&Worktree{Branch: "orbit/x", RepoDir: noMain}) {
+		t.Error("with no main/master, must report not-merged (no default target)")
+	}
+
+	// Degenerate inputs fall back to not-merged.
+	if branchMergedInto(nil) {
+		t.Error("nil worktree must report not-merged")
+	}
+	if branchMergedInto(&Worktree{Branch: "", RepoDir: repo}) {
+		t.Error("empty branch must report not-merged")
+	}
+}
+
 // TestParkCheckpointRoundTrip: a park finalize (checkpoint=true) commits the in-progress work
 // tagged with the park trailer, and a later resume (uncommitParkCheckpoint) soft-resets it back
 // to an uncommitted working tree with content intact — leaving no checkpoint commit in history.

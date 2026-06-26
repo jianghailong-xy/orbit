@@ -280,6 +280,9 @@ export class RunnerApiController {
                 ...(s.worktreeDirty !== undefined ? { worktreeDirty: s.worktreeDirty } : {}),
                 // Candidate branches for the "Merge to…" dropdown (older runners omit it).
                 ...(s.mergeTargets !== undefined ? { mergeTargets: s.mergeTargets } : {}),
+                // Whether the branch already landed in main → bar shows "✓ In main", not a
+                // redundant Merge button (older runners omit it → left untouched).
+                ...(s.branchMerged !== undefined ? { branchMerged: s.branchMerged } : {}),
               },
             }),
           ),
@@ -619,6 +622,9 @@ export class RunnerApiController {
             ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
             : {}),
           ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
+          // Whether the branch already landed in main — the turn-end snapshot an idle session
+          // shows, so the bar offers "✓ In main" not a redundant Merge (older runners omit it).
+          ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
           costUsd: { increment: dto.costUsd ?? 0 },
@@ -1005,6 +1011,9 @@ export class RunnerApiController {
           ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
           : {}),
         ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
+        // Recomputed with the diff, so opening the drawer refreshes "✓ In main" for an idle
+        // session merged out-of-band (older runners omit it → left untouched).
+        ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
       },
     });
     // Only persist the patches once we've confirmed the session is still live (count > 0);

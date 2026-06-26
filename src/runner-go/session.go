@@ -574,6 +574,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					ChangedFiles:  liveFiles,
 					ChangedDiff:   livePatches,
 					WorktreeDirty: worktreeIsDirty(job.WT),
+					BranchMerged:  branchMergedInto(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}
@@ -678,6 +679,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					ChangedFiles:    liveFiles,
 					ChangedDiff:     livePatches,
 					WorktreeDirty:   worktreeIsDirty(job.WT),
+					BranchMerged:    branchMergedInto(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}
