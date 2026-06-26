@@ -272,7 +272,10 @@ struct AssistantBubbleView: View {
     // `padding: 0 12px` and keeps the left edge aligned with the tool-card rail.
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            MarkdownView(source: bubble.displayText).textSelection(.enabled)
+            MarkdownView(source: bubble.displayText)
+                .font(.system(size: 14))
+                .foregroundStyle(Color.transcriptInk)
+                .textSelection(.enabled)
             if !bubble.isFinalized { TypingDots() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
