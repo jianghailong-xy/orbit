@@ -6,6 +6,10 @@ VERSION="${VERSION:-0.1.0}"
 SIGN_ID="${SIGN_ID:--}"        # "-" = ad-hoc (本机用). Developer ID 才能分发给别人
 ARCHS="${ARCHS:-arm64}"        # 设 "arm64 x86_64" 出通用二进制
 here="$(cd "$(dirname "$0")" && pwd)"
+# CFBundleVersion must be monotonic for Sparkle's update comparison; the commit count is monotonic
+# and identical locally and in CI (CI needs full history → fetch-depth: 0). The marketing version
+# (which may carry a -beta suffix) stays in CFBundleShortVersionString for display only.
+BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$here" rev-list --count HEAD 2>/dev/null || echo 1)}"
 pkg="$here/../OrbitApp"; out="$here/../build"; app="$out/$APP_NAME.app"
 archflags=""; for a in $ARCHS; do archflags="$archflags --arch $a"; done
 # The .app keeps a stable name; the distributable DMG is versioned + arch-tagged.
@@ -38,7 +42,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>${APP_NAME}</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
-  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>

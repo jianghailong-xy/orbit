@@ -36,6 +36,8 @@ jobs:
       contents: write          # create the GitHub Release + push the gh-pages appcast
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history so build-dmg.sh's commit-count CFBundleVersion is monotonic
 
       # The app relies on newer-Swift MainActor-isolation inference (SwiftUI View + @Observable),
       # so pin the latest stable Xcode to match the toolchain it compiles under locally.
