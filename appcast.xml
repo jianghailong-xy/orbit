@@ -3,6 +3,17 @@
     <channel>
         <title>Orbit</title>
         <item>
+            <title>0.1.1-beta.4</title>
+            <pubDate>Fri, 26 Jun 2026 06:06:54 +0000</pubDate>
+            <link>https://github.com/jianghailong-xy/orbit</link>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>608</sparkle:version>
+            <sparkle:shortVersionString>0.1.1-beta.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.4/Orbit-v0.1.1-beta.4-arm64.zip" length="2151370" type="application/octet-stream" sparkle:edSignature="3EN31h5X6uIVAtYvXTGFxGVRxf2pRBghCGKkBjuwYmVZkqL89ercfNQAXm2moZ/KE4E1/PGAlVcJ81i5wd9YCQ=="/>
+        </item>
+        <item>
             <title>0.1.1-beta.3</title>
             <pubDate>Fri, 26 Jun 2026 05:34:58 +0000</pubDate>
             <link>https://github.com/jianghailong-xy/orbit</link>
