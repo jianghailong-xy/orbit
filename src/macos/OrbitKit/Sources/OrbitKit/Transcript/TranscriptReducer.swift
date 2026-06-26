@@ -210,15 +210,26 @@ public struct TranscriptReducer: Sendable {
     }
 
     private mutating func resolveApproval(_ ev: RunEvent) {
-        let id = str(ev, "id") ?? str(ev, "approvalId")
+        if let id = str(ev, "id") ?? str(ev, "approvalId") { removeApproval(id: id) }
+    }
+
+    /// Merge durable pending approvals fetched via REST — the source of truth on (re)connect,
+    /// since `approval_request` nudges ride seq 0 and are never replayed. Add-only (by id) so a
+    /// live nudge already folded in is neither duplicated nor clobbered.
+    public mutating func seedApprovals(_ approvals: [PendingApproval]) {
+        for appr in approvals where !state.pendingApprovals.contains(where: { $0.id == appr.id }) {
+            state.pendingApprovals.append(appr)
+        }
+    }
+
+    /// Drop a pending approval by id. The SSE `approval_resolved` echoes a human decision, but
+    /// the UI also removes optimistically on submit to keep the card snappy.
+    public mutating func removeApproval(id: String) {
         state.pendingApprovals.removeAll { $0.id == id }
     }
 
     private func approvalKind(_ ev: RunEvent) -> PendingApproval.Kind {
-        if ev.payload["question"] != nil || ev.payload["questions"] != nil { return .question }
-        let name = str(ev, "toolName") ?? str(ev, "name")
-        if name == "ExitPlanMode" || ev.payload["plan"] != nil { return .plan }
-        return .tool
+        Approvals.kind(toolName: str(ev, "toolName") ?? str(ev, "name"))
     }
 
     // MARK: - background processes

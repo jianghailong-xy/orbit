@@ -28,6 +28,17 @@ public enum Approvals {
     public static func isQuestion(toolName: String) -> Bool { toolName == "AskUserQuestion" }
     public static func isPlan(toolName: String) -> Bool { toolName == "ExitPlanMode" }
 
+    /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable
+    /// signal the control plane always sends — because the question/plan data is nested under
+    /// `input` (`input.questions` / `input.plan`), not a top-level field. Mirrors the web's
+    /// `toolName === 'AskUserQuestion'` / `=== 'ExitPlanMode'` checks.
+    public static func kind(toolName: String?) -> PendingApproval.Kind {
+        let name = toolName ?? ""
+        if isQuestion(toolName: name) { return .question }
+        if isPlan(toolName: name) { return .plan }
+        return .tool
+    }
+
     /// Parse `input.questions` → structured questions for the form. Empty when not an
     /// AskUserQuestion (or malformed).
     public static func parseQuestions(from input: JSONValue) -> [AskQuestion] {

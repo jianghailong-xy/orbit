@@ -83,4 +83,10 @@ public struct PendingApproval: Equatable, Sendable, Identifiable {
     public var kind: Kind
     public var toolName: String?
     public var input: JSONValue?
+    public init(id: String, kind: Kind, toolName: String?, input: JSONValue?) {
+        self.id = id
+        self.kind = kind
+        self.toolName = toolName
+        self.input = input
+    }
 }

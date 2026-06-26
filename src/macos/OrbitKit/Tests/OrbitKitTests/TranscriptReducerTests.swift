@@ -107,6 +107,45 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.count, 1)
         XCTAssertEqual(r.state.items[0].asAssistant?.displayText, "partial answer")
     }
+
+    /// A live AskUserQuestion nudge carries its questions nested under `input` (the control plane
+    /// sends `{id, toolName, input, toolUseId}`). It must classify as `.question` so the form
+    /// renders — not as a generic `.tool` allow/deny — and `input` must still parse the questions.
+    func testLiveAskUserQuestionClassifiesAsQuestion() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 0, type: .approvalRequest, payload: .object([
+            "id": .string("ap-q"),
+            "toolName": .string("AskUserQuestion"),
+            "input": .object(["questions": .array([
+                .object(["question": .string("Which DB?"),
+                         "options": .array([.object(["label": .string("Postgres")])])]),
+            ])]),
+        ])))
+        XCTAssertEqual(r.state.pendingApprovals.count, 1)
+        let appr = r.state.pendingApprovals[0]
+        XCTAssertEqual(appr.kind, .question)
+        XCTAssertEqual(appr.toolName, "AskUserQuestion")
+        XCTAssertEqual(appr.input.map { Approvals.parseQuestions(from: $0) }?.first?.question, "Which DB?")
+    }
+
+    /// Durable approvals fetched via REST seed the state (add-only, deduped by id), and a human
+    /// decision removes one optimistically — mirroring the live-only seq-0 nudges that aren't replayed.
+    func testSeedAndRemoveApprovals() {
+        var r = TranscriptReducer()
+        // A live nudge already folded in for ap1.
+        r.apply(RunEvent(seq: 0, type: .approvalRequest, payload: .object([
+            "id": .string("ap1"), "toolName": .string("Bash"),
+            "input": .object(["command": .string("ls")])])))
+
+        r.seedApprovals([
+            PendingApproval(id: "ap1", kind: .tool, toolName: "Bash", input: nil),         // dup → skipped
+            PendingApproval(id: "ap2", kind: .question, toolName: "AskUserQuestion", input: nil),
+        ])
+        XCTAssertEqual(r.state.pendingApprovals.map(\.id), ["ap1", "ap2"], "ap1 not duplicated")
+
+        r.removeApproval(id: "ap2")
+        XCTAssertEqual(r.state.pendingApprovals.map(\.id), ["ap1"])
+    }
 }
 
 // Test-only convenience accessors (kept out of the library surface).
