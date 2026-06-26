@@ -80,7 +80,10 @@ struct SectionSidebar: View {
                 case .section(let s):
                     model.selectedSection = s
                 case .agent(let id):
-                    if model.selectedAgentID != id { model.selectedAgentSessionID = nil }
+                    if model.selectedAgentID != id {
+                        model.selectedAgentSessionID = nil
+                        model.composingAgentSession = false
+                    }
                     model.selectedSection = .agents
                     model.selectedAgentID = id
                 case nil:

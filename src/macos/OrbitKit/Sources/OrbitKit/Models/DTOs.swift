@@ -145,15 +145,23 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let assignedRunnerId: String?
     public let model: String?
     public let permissionMode: String?
+    /// Claude effort level (low|medium|high|xhigh|max); nil omits the field (model default).
+    public let effort: String?
+    /// Seed the first turn as a `!cmd` shell turn (run on the runner, bypassing claude) instead
+    /// of a normal message; nil/false → a normal prompt.
+    public let shell: Bool?
     public let attachmentIds: [String]?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
-                model: String? = nil, permissionMode: String? = nil, attachmentIds: [String]? = nil) {
+                model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
+                shell: Bool? = nil, attachmentIds: [String]? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
         self.model = model
         self.permissionMode = permissionMode
+        self.effort = effort
+        self.shell = shell
         self.attachmentIds = attachmentIds
     }
 }

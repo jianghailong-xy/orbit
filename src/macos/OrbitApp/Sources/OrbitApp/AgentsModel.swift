@@ -56,6 +56,14 @@ final class AgentsModel {
         catch { errorText = friendly(error) }
     }
 
+    /// Start a new session for an agent from the draft composer. The runner is derived server-side
+    /// from the agent (no `assignedRunnerId` needed). Returns the new session on success, nil on
+    /// failure (the message lands in `errorText`).
+    func createSession(_ req: CreateSessionRequest) async -> Session? {
+        do { return try await api.createSession(req) }
+        catch { errorText = friendly(error); return nil }
+    }
+
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
     /// the agent client-side (the payload nests `agent.id`), mirroring the web agent console.
     ///

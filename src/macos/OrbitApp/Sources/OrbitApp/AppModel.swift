@@ -34,6 +34,10 @@ final class AppModel {
     var selectedRunnerID: String?
     var selectedAgentID: String?
     var selectedAgentSessionID: String?   // the agent session whose console fills the detail pane
+    /// True while composing a brand-new session for the selected agent (the detail pane shows the
+    /// draft composer instead of a console). Cleared once a session is selected/created or the
+    /// agent changes. See `NewSessionView`.
+    var composingAgentSession = false
     var selectedUserID: String?
     var menuSummary: MenuBarSummary = .empty
 
@@ -143,6 +147,7 @@ final class AppModel {
         selectedRunnerID = nil
         selectedAgentID = nil
         selectedAgentSessionID = nil
+        composingAgentSession = false
         selectedUserID = nil
         lastSnapshot = nil
         menuSummary = .empty
