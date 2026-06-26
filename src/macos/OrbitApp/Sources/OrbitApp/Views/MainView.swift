@@ -103,7 +103,8 @@ struct SectionDetail: View {
         switch section {
         case .active:
             if let id = model.selectedSessionID, let baseURL = model.baseURL {
-                ConsoleView(sessionID: id, baseURL: baseURL, tokenStore: model.tokenStore)
+                ConsoleView(sessionID: id, agentID: model.agentID(for: id),
+                            baseURL: baseURL, tokenStore: model.tokenStore)
                     .id(id)   // rebuild (restart the stream) when the selection changes
             } else {
                 ContentUnavailableView("Select a session",

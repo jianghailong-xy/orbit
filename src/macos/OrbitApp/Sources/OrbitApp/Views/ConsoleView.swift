@@ -5,6 +5,7 @@ import OrbitKit
 /// reduced transcript. No composer yet — that's Phase 2.
 struct ConsoleView: View {
     let sessionID: String
+    var agentID: String? = nil
     let baseURL: URL
     let tokenStore: TokenStore
     @State private var console: ConsoleModel?
@@ -35,7 +36,7 @@ struct ConsoleView: View {
             }
         }
         .task {
-            let c = ConsoleModel(sessionID: sessionID, baseURL: baseURL, tokenStore: tokenStore)
+            let c = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL, tokenStore: tokenStore)
             console = c
             await c.run()   // lives until this view's .task is cancelled (selection change / disappear)
         }

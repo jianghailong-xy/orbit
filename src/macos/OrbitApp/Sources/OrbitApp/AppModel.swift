@@ -172,6 +172,13 @@ final class AppModel {
         }
     }
 
+    /// The agent a session runs as, for scoping the composer's `/` autocomplete. The active list
+    /// nests `agent`; fall back to the flat `agentId` if present.
+    func agentID(for sessionID: String) -> String? {
+        guard let s = sessions.first(where: { $0.id == sessionID }) else { return nil }
+        return s.agent?.id ?? s.agentId
+    }
+
     // MARK: routing + notification intents
 
     func route(to route: Route) {

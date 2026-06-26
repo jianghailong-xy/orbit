@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UniformTypeIdentifiers
 import OrbitKit
 
 struct PendingAttachment: Identifiable, Equatable, Sendable {
@@ -15,6 +16,7 @@ struct PendingAttachment: Identifiable, Equatable, Sendable {
 @Observable
 final class ConsoleModel {
     let sessionID: String
+    let agentID: String?
     private(set) var state = TranscriptState()
     private(set) var connected = false
 
@@ -26,6 +28,11 @@ final class ConsoleModel {
     private(set) var pendingAttachments: [PendingAttachment] = []
     private(set) var sending = false
 
+    // `/` command & skill autocomplete (the `+` menu opens it scoped). `slashItems` is the
+    // runner-reported set already narrowed to host-level + this session's agent (see loadSlashItems).
+    private(set) var slashItems: [SlashCommandInfo] = []
+    var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
+
     // worktree
     private(set) var diff: [FilePatch] = []
     private(set) var worktreeBusy = false
@@ -36,8 +43,9 @@ final class ConsoleModel {
     private let stream: EventStreaming
     private let api: APIClient
 
-    init(sessionID: String, baseURL: URL, tokenStore: TokenStore) {
+    init(sessionID: String, agentID: String? = nil, baseURL: URL, tokenStore: TokenStore) {
         self.sessionID = sessionID
+        self.agentID = agentID
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         #if os(macOS)
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
@@ -49,6 +57,7 @@ final class ConsoleModel {
     // MARK: live stream
 
     func run() async {
+        Task { await loadSlashItems() }   // one-shot; concurrent with the stream connect
         var attempt = 0
         while !Task.isCancelled {
             do {
@@ -104,6 +113,35 @@ final class ConsoleModel {
             && availability != .blocked
     }
 
+    // MARK: `/` autocomplete
+
+    var hasCommands: Bool { slashItems.contains { $0.type == "command" } }
+    var hasSkills: Bool { slashItems.contains { $0.type == "skill" } }
+    var slashToken: String? { ComposerSlash.token(in: composerText) }
+    var slashMatches: [SlashCommandInfo] {
+        ComposerSlash.matches(items: slashItems, token: slashToken, scope: slashScope)
+    }
+
+    /// Fold every runner's reported commands + skills, scoped to host-level + this session's
+    /// agent (web parity). Best-effort: a failure just leaves the menu empty.
+    func loadSlashItems() async {
+        guard let runners = try? await api.runners() else { return }
+        let all = runners.flatMap { ($0.commands ?? []) + ($0.skills ?? []) }
+        slashItems = ComposerSlash.scoped(items: all, agentID: agentID)
+    }
+
+    /// `+` menu → Command/Skill: pop the menu scoped to one kind by inserting a `/`.
+    func openSlash(scope: String) {
+        slashScope = scope
+        composerText = ComposerSlash.opening(text: composerText)
+    }
+
+    /// Replace the active `/token` with `/name `; clears the scope so the next manual `/` shows both.
+    func pickSlash(_ name: String) {
+        composerText = ComposerSlash.pick(text: composerText, name: name)
+        slashScope = nil
+    }
+
     func send() async {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !sending else { return }
@@ -137,6 +175,22 @@ final class ConsoleModel {
     func interrupt() async {
         do { try await api.interrupt(sessionID: sessionID) }
         catch { statusMessage = "Interrupt failed" }
+    }
+
+    /// `+` menu → Attach image / Upload file: read a picked file, enforce the size cap (web
+    /// parity), and upload it via the existing attachment path.
+    func attachFile(url: URL) async {
+        guard let data = try? Data(contentsOf: url) else {
+            statusMessage = "Couldn't read \(url.lastPathComponent)"
+            return
+        }
+        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        if let reason = Attachments.rejectReason(mimeType: mime, byteCount: data.count) {
+            statusMessage = reason
+            return
+        }
+        await attach(filename: url.lastPathComponent, mimeType: mime, data: data)
     }
 
     func attach(filename: String, mimeType: String, data: Data) async {

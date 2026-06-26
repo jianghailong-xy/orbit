@@ -82,6 +82,64 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(shell.attachmentIds, ["a1"])
     }
 
+    // MARK: `/` autocomplete (mirrors the web composer's slash menu)
+
+    func testSlashToken() {
+        XCTAssertNil(ComposerSlash.token(in: ""))
+        XCTAssertNil(ComposerSlash.token(in: "hello"))
+        XCTAssertNil(ComposerSlash.token(in: "hello/foo"))      // `/` not at a word boundary
+        XCTAssertNil(ComposerSlash.token(in: "/foo bar"))       // token isn't the trailing word
+        XCTAssertEqual(ComposerSlash.token(in: "/"), "")
+        XCTAssertEqual(ComposerSlash.token(in: "/foo"), "foo")
+        XCTAssertEqual(ComposerSlash.token(in: "hello /com"), "com")
+        XCTAssertEqual(ComposerSlash.token(in: "hi\n/de"), "de") // newline counts as whitespace
+    }
+
+    func testSlashScopedAndMatches() {
+        let items = [
+            SlashCommandInfo(name: "commit", description: nil, type: "command", agentId: nil),
+            SlashCommandInfo(name: "deploy", description: nil, type: "command", agentId: "a1"),
+            SlashCommandInfo(name: "review", description: nil, type: "skill", agentId: "a2"),
+            SlashCommandInfo(name: "compose", description: nil, type: "skill", agentId: nil),
+        ]
+        // host-level + this agent's assets only
+        let scoped = ComposerSlash.scoped(items: items, agentID: "a1")
+        XCTAssertEqual(scoped.map(\.name).sorted(), ["commit", "compose", "deploy"])
+
+        // prefix-matches sort ahead of substring matches; capped to scope
+        let m = ComposerSlash.matches(items: scoped, token: "com", scope: nil)
+        XCTAssertEqual(m.map(\.name), ["commit", "compose"])
+
+        let onlyCommands = ComposerSlash.matches(items: scoped, token: "", scope: "command")
+        XCTAssertEqual(onlyCommands.map(\.name).sorted(), ["commit", "deploy"])
+
+        XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
+    }
+
+    func testSlashPickAndOpening() {
+        XCTAssertEqual(ComposerSlash.pick(text: "/com", name: "commit"), "/commit ")
+        XCTAssertEqual(ComposerSlash.pick(text: "hello /com", name: "commit"), "hello /commit ")
+        XCTAssertEqual(ComposerSlash.pick(text: "no token", name: "commit"), "no token")
+
+        XCTAssertEqual(ComposerSlash.opening(text: ""), "/")
+        XCTAssertEqual(ComposerSlash.opening(text: "hi "), "hi /")
+        XCTAssertEqual(ComposerSlash.opening(text: "hi"), "hi /")
+    }
+
+    // MARK: attachment limits
+
+    func testAttachmentLimits() {
+        XCTAssertTrue(Attachments.isInlineImage(mimeType: "image/png"))
+        XCTAssertFalse(Attachments.isInlineImage(mimeType: "application/pdf"))
+        XCTAssertNil(Attachments.rejectReason(mimeType: "image/png", byteCount: 1_000))
+        XCTAssertEqual(Attachments.rejectReason(mimeType: "image/png", byteCount: 0), "File is empty")
+        XCTAssertEqual(Attachments.rejectReason(mimeType: "image/png", byteCount: 6 * 1024 * 1024),
+                       "Image exceeds the 5MB limit")
+        XCTAssertEqual(Attachments.rejectReason(mimeType: "application/zip", byteCount: 26 * 1024 * 1024),
+                       "File exceeds the 25MB limit")
+        XCTAssertNil(Attachments.rejectReason(mimeType: "application/zip", byteCount: 20 * 1024 * 1024))
+    }
+
     // MARK: multipart
 
     func testMultipartBody() {
