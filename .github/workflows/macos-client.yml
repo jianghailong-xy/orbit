@@ -41,9 +41,15 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
+      # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - name: Toolchain
         run: swift --version && xcodebuild -version
       # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
