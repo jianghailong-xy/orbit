@@ -4,6 +4,7 @@ import OrbitKit
 @main
 struct OrbitApp: App {
     @State private var model = AppModel()
+    @StateObject private var updater = UpdaterModel()
 
     var body: some Scene {
         WindowGroup {
@@ -19,7 +20,7 @@ struct OrbitApp: App {
 
         // Always-present menu-bar item: glanceable summary + quick jump into "needs you".
         MenuBarExtra {
-            MenuBarContent().environment(model)
+            MenuBarContent().environment(model).environmentObject(updater)
         } label: {
             if let badge = model.menuSummary.badge {
                 Label(badge, systemImage: "circle.hexagongrid.fill")

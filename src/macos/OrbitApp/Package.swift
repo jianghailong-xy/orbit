@@ -11,11 +11,15 @@ let package = Package(
     platforms: [.macOS(.v14)],          // MenuBarExtra/Observation land here; v14 is the floor
     dependencies: [
         .package(path: "../OrbitKit"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
     ],
     targets: [
         .executableTarget(
             name: "OrbitApp",
-            dependencies: [.product(name: "OrbitKit", package: "OrbitKit")]
+            dependencies: [
+                .product(name: "OrbitKit", package: "OrbitKit"),
+                .product(name: "Sparkle", package: "Sparkle"),
+            ]
         ),
     ]
 )
