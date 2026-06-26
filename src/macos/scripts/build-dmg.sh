@@ -25,6 +25,12 @@ bin="$(cd "$pkg" && swift build -c release $archflags --show-bin-path)/OrbitApp"
 echo "▶ assemble $APP_NAME.app"
 rm -rf "$app"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin" "$app/Contents/MacOS/$APP_NAME"
+# Compile the AppIcon set into AppIcon.icns so Finder/Dock/the DMG show the branded icon.
+# The .appiconset PNG filenames already match iconutil's .iconset naming convention, so they
+# feed straight in — no Xcode/actool needed, so local ad-hoc builds get the icon too.
+iconset="$out/AppIcon.iconset"; rm -rf "$iconset"; mkdir -p "$iconset"
+cp "$here/../Assets.xcassets/AppIcon.appiconset/"icon_*.png "$iconset/"
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 sparkle_keys=""
 if [ -n "$SU_PUBLIC_ED_KEY" ]; then
   sparkle_keys="  <key>SUFeedURL</key><string>$SU_FEED_URL</string>
@@ -40,6 +46,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
   <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
   <key>CFBundleExecutable</key><string>${APP_NAME}</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>${VERSION}</string>
   <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
