@@ -84,8 +84,26 @@ if [ -n "${NOTARIZE_PROFILE:-}" ]; then
   xcrun notarytool submit "$out/$APP_NAME.zip" --keychain-profile "$NOTARIZE_PROFILE" --wait
   xcrun stapler staple "$app"; rm -f "$out/$APP_NAME.zip"
 fi
-echo "▶ create DMG"; rm -f "$dmg"
-hdiutil create -volname "$APP_NAME" -srcfolder "$app" -ov -format UDZO "$dmg"
+echo "▶ create DMG (drag-to-Applications layout)"; rm -f "$dmg"
+# Retina background: pack the 1x + 2x PNGs into one HiDPI tiff so the art is crisp on Retina yet
+# maps to the 660x400-pt window (a bare 2x PNG would overflow the window and show only its corner).
+bgtiff="$out/dmg-background.tiff"
+tiffutil -cathidpicheck "$here/assets/dmg-background.png" "$here/assets/dmg-background@2x.png" -out "$bgtiff"
+# create-dmg lays out the window: Orbit.app on the left + an /Applications drop-link on the right
+# (the arrow + wording live in the background art). It can exit non-zero on CI Finder/AppleScript
+# hiccups while still producing the DMG, so verify the artifact rather than trusting the exit code.
+create-dmg \
+  --volname "$APP_NAME" \
+  --background "$bgtiff" \
+  --window-pos 200 120 \
+  --window-size 660 400 \
+  --icon-size 120 \
+  --icon "$APP_NAME.app" 175 190 \
+  --app-drop-link 485 190 \
+  --hide-extension "$APP_NAME.app" \
+  --no-internet-enable \
+  "$dmg" "$app" || true
+[ -s "$dmg" ] || { echo "✗ create-dmg did not produce $dmg" >&2; exit 1; }
 if [ -n "${NOTARIZE_PROFILE:-}" ]; then
   echo "▶ notarize + staple DMG ($NOTARIZE_PROFILE)"   # DMG 自身也要公证,否则 stapler 报 Error 65
   xcrun notarytool submit "$dmg" --keychain-profile "$NOTARIZE_PROFILE" --wait

@@ -47,6 +47,8 @@ jobs:
           xcode-version: latest-stable
       - name: Toolchain
         run: swift --version && xcodebuild -version
+      - name: Install create-dmg
+        run: brew install create-dmg
 
       # Rebuild the Developer ID identity into a throwaway keychain so codesign can find it.
       - name: Import Developer ID certificate
