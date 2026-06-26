@@ -134,7 +134,7 @@ struct PlanCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label("Plan", systemImage: "list.bullet.clipboard").font(.callout.bold())
-            markdownText(plan).font(.callout).textSelection(.enabled)
+            MarkdownView(source: plan).font(.callout).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack {
                 Button("Approve") { Task { await console.decide(approval, behavior: .allow) } }
