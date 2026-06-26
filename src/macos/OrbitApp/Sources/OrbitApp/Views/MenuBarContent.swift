@@ -7,6 +7,7 @@ import OrbitKit
 /// `MenuBar.summary`).
 struct MenuBarContent: View {
     @Environment(AppModel.self) private var model
+    @EnvironmentObject private var updater: UpdaterModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -33,8 +34,13 @@ struct MenuBarContent: View {
                 }
                 Divider()
                 Button("Open Orbit") { activate() }
-                Button("Quit") { NSApp.terminate(nil) }
             }
+            Divider()
+            Button("Check for Updates…") { updater.checkForUpdates() }
+                .disabled(!updater.canCheckForUpdates)
+            Toggle("Receive beta updates", isOn: $updater.betaChannel)
+                .toggleStyle(.checkbox)
+            Button("Quit Orbit") { NSApp.terminate(nil) }
         }
         .padding(12)
         .frame(width: 300)
