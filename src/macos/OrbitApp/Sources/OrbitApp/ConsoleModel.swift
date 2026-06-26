@@ -58,6 +58,11 @@ final class ConsoleModel {
 
     func run() async {
         Task { await loadSlashItems() }   // one-shot; concurrent with the stream connect
+        // Durable approvals aren't in the replayed stream (the `approval_request` nudge rides
+        // seq 0, live-only) — fetch them once on open so a prompt already pending (e.g. an
+        // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
+        let approvalsSeed = Task { [weak self] in await self?.refreshApprovals() }
+        defer { approvalsSeed.cancel() }
         var attempt = 0
         while !Task.isCancelled {
             do {
@@ -215,9 +220,28 @@ final class ConsoleModel {
         if remember, behavior == .allow, let input = approval.input {
             rule = Approvals.rememberRule(toolName: approval.toolName ?? "", input: input)
         }
+        // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,
+        // re-seed from REST so it reappears rather than silently vanishing.
+        reducer.removeApproval(id: approval.id)
+        publishStateNow()
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
-        catch { statusMessage = "Approval failed" }
+        catch {
+            statusMessage = "Approval failed"
+            await refreshApprovals()
+        }
+    }
+
+    /// Fetch durable pending approvals (the REST source of truth) and fold them in. Without this
+    /// a prompt that predates the stream — or whose seq-0 nudge landed during a reconnect gap —
+    /// never surfaces, since those nudges aren't replayed.
+    private func refreshApprovals() async {
+        guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
+        reducer.seedApprovals(infos.map {
+            PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
+                            toolName: $0.toolName, input: $0.input)
+        })
+        publishStateNow()
     }
 
     // MARK: worktree

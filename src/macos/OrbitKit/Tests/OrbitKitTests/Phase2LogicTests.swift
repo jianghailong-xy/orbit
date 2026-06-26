@@ -61,6 +61,16 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(Approvals.parseQuestions(from: .object(["foo": .string("bar")])).isEmpty)
     }
 
+    // MARK: approval kind classification (keyed on toolName — data is nested under `input`)
+
+    func testApprovalKind() {
+        XCTAssertEqual(Approvals.kind(toolName: "AskUserQuestion"), .question)
+        XCTAssertEqual(Approvals.kind(toolName: "ExitPlanMode"), .plan)
+        XCTAssertEqual(Approvals.kind(toolName: "Bash"), .tool)
+        XCTAssertEqual(Approvals.kind(toolName: "Edit"), .tool)
+        XCTAssertEqual(Approvals.kind(toolName: nil), .tool)
+    }
+
     // MARK: composer gating
 
     func testSendAvailability() {

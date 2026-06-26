@@ -123,7 +123,7 @@ struct AssistantBubbleView: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
-                markdownText(bubble.displayText).textSelection(.enabled)
+                MarkdownView(source: bubble.displayText).textSelection(.enabled)
                 if !bubble.isFinalized { TypingDots() }
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -138,7 +138,7 @@ struct ThinkingView: View {
     @State private var expanded = false
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            markdownText(block.displayText).font(.callout).foregroundStyle(.secondary)
+            MarkdownView(source: block.displayText).font(.callout).foregroundStyle(.secondary)
                 .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             Label("Thinking", systemImage: "brain").font(.caption).foregroundStyle(.secondary)
@@ -206,16 +206,4 @@ struct TypingDots: View {
         .foregroundStyle(.secondary)
         .onAppear { animating = true }
     }
-}
-
-/// Inline-markdown rendering (bold/italic/code/links), preserving newlines. Phase 1 keeps it
-/// simple; full block markdown + syntax-highlighted code fences is a Phase 2 polish item.
-func markdownText(_ s: String) -> Text {
-    if let attributed = try? AttributedString(
-        markdown: s,
-        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    ) {
-        return Text(attributed)
-    }
-    return Text(s)
 }
