@@ -452,3 +452,59 @@ func keys(m map[string]string) []string {
 	}
 	return out
 }
+
+// TestCleanCommitMessage: the model's reply is stripped of fences/quotes the prompt told it to
+// omit, trimmed, and reduced to "" when nothing usable remains (so the caller can fall back).
+func TestCleanCommitMessage(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"plain", "fix: handle nil session\n", "fix: handle nil session"},
+		{"fenced", "```\nfeat: add commit summaries\n```", "feat: add commit summaries"},
+		{"fenced-lang", "```text\nchore: bump deps\n```\n", "chore: bump deps"},
+		{"double-quoted", "\"fix: trim output\"", "fix: trim output"},
+		{"backtick-wrapped", "`fix: trim output`", "fix: trim output"},
+		{"with-body", "feat: x\n\nWhy this matters.", "feat: x\n\nWhy this matters."},
+		{"blank", "   \n  ", ""},
+	}
+	for _, c := range cases {
+		if got := cleanCommitMessage(c.in); got != c.want {
+			t.Errorf("%s: cleanCommitMessage(%q) = %q, want %q", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+// TestDiffstatFallbackMessage: the deterministic fallback names the staged files (capped at a
+// summary past three) and degrades to the bare branch slug when nothing is staged.
+func TestDiffstatFallbackMessage(t *testing.T) {
+	repo := initRepo(t)
+
+	if got := diffstatFallbackMessage(repo, "orbit/x"); got != "orbit: commit orbit/x" {
+		t.Errorf("no staged changes: got %q", got)
+	}
+
+	mustWrite(t, repo, "alpha.txt")
+	mustGit(t, repo, "add", "alpha.txt")
+	if got := diffstatFallbackMessage(repo, "orbit/x"); got != "Update alpha.txt" {
+		t.Errorf("one file: got %q", got)
+	}
+
+	mustWrite(t, repo, "bravo.txt")
+	mustWrite(t, repo, "charlie.txt")
+	mustGit(t, repo, "add", ".")
+	if got := diffstatFallbackMessage(repo, "orbit/x"); got != "Update alpha.txt, bravo.txt, charlie.txt" {
+		t.Errorf("three files: got %q", got)
+	}
+
+	mustWrite(t, repo, "delta.txt")
+	mustGit(t, repo, "add", ".")
+	if got := diffstatFallbackMessage(repo, "orbit/x"); got != "Update alpha.txt and 3 more files" {
+		t.Errorf("four files: got %q", got)
+	}
+}
+
+// mustWrite creates repo/name with throwaway content (the fallback only counts/names files).
+func mustWrite(t *testing.T, repo, name string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(repo, name), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

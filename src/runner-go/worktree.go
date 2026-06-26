@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Isolation outcomes reported back on /complete (Session.isolationStatus): the session
@@ -770,15 +772,121 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	if _, err := git(wtPath, "diff", "--cached", "--quiet"); err == nil {
 		return commitOutcome{Status: "nochange"}
 	}
+	// Summarize the staged diff into a real Conventional-Commits message (one-shot headless
+	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
+	// reads like hand-written commits instead of "orbit: commit <branch>".
+	msg := generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch))
 	// Inline identity + --no-verify so the commit never fails on a runner with no git user.*
 	// set or a repo pre-commit hook (mirrors finalizeWorktree).
 	if _, err := git(wtPath,
 		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-		"commit", "--no-verify", "-m", "orbit: commit "+req.Branch); err != nil {
+		"commit", "--no-verify", "-m", msg); err != nil {
 		return commitOutcome{Status: "error", Message: clip(gitStderr(err), 1000)}
 	}
 	logln(fmt.Sprintf("committed worktree changes for session %s onto %s", req.SessionID, req.Branch))
 	return commitOutcome{Status: "committed"}
+}
+
+// commitMsgModel is the Claude alias used to summarize a commit's diff — a fast, cheap tier is
+// plenty for a one-line message, and the call runs on the user's own subscription.
+const commitMsgModel = "sonnet"
+
+// commitMsgPrompt instructs the one-shot Claude; the staged diff is appended verbatim.
+const commitMsgPrompt = `Generate a git commit message for the staged changes below.
+
+Rules:
+- Use Conventional Commits format (feat:, fix:, chore:, refactor:, docs:, test:, etc.).
+- Subject line: imperative mood, max 72 chars, no trailing period.
+- Output ONLY the raw commit message. No markdown, no code fences, no surrounding quotes, no preamble like "Here is".
+- Add a short body after a blank line only if the change is non-trivial.
+
+Diff:
+`
+
+// generateCommitMessage asks a one-shot headless Claude to summarize the session's staged
+// worktree diff into a Conventional-Commits message, so a user-initiated checkpoint commit
+// reads like a hand-written one instead of "orbit: commit <branch>". Best-effort: on any
+// failure (claude missing / not signed in / timeout / empty reply) it returns `fallback`.
+// Runs in a throwaway temp dir so the target repo's CLAUDE.md / .mcp.json can't slow it down
+// or pull in tools, and bounds the diff so the call stays fast and cheap.
+func generateCommitMessage(wtPath, fallback string) string {
+	diff, err := git(wtPath, "diff", "--cached")
+	if err != nil || strings.TrimSpace(diff) == "" {
+		return fallback
+	}
+	const maxDiffRunes = 12000 // a few thousand tokens characterizes any change; keeps it quick
+	if r := []rune(diff); len(r) > maxDiffRunes {
+		diff = string(r[:maxDiffRunes]) + "\n…(diff truncated)"
+	}
+	tmp, err := os.MkdirTemp("", "orbit-cmsg-")
+	if err != nil {
+		return fallback
+	}
+	defer os.RemoveAll(tmp)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "claude", "-p", commitMsgPrompt+diff,
+		"--model", commitMsgModel, "--output-format", "text")
+	cmd.Dir = tmp
+	out, err := cmd.Output()
+	if err != nil {
+		return fallback
+	}
+	if msg := cleanCommitMessage(string(out)); msg != "" {
+		return msg
+	}
+	return fallback
+}
+
+// cleanCommitMessage normalizes the model's reply into a commit message: it strips a ```-fenced
+// wrapper and a single layer of surrounding quotes/backticks the model may add despite the
+// instructions, trims whitespace, and caps the length so a runaway body can't bloat history.
+// Returns "" when nothing usable remains (caller then falls back).
+func cleanCommitMessage(raw string) string {
+	s := strings.TrimSpace(raw)
+	if strings.HasPrefix(s, "```") {
+		if i := strings.IndexByte(s, '\n'); i >= 0 {
+			s = s[i+1:]
+		}
+		if j := strings.LastIndex(s, "```"); j >= 0 {
+			s = s[:j]
+		}
+		s = strings.TrimSpace(s)
+	}
+	for _, q := range []string{`"`, "'", "`"} {
+		if len(s) >= 2 && strings.HasPrefix(s, q) && strings.HasSuffix(s, q) {
+			s = strings.TrimSpace(s[1 : len(s)-1])
+			break
+		}
+	}
+	const maxRunes = 2000
+	if r := []rune(s); len(r) > maxRunes {
+		s = strings.TrimSpace(string(r[:maxRunes]))
+	}
+	return s
+}
+
+// diffstatFallbackMessage builds a deterministic subject from the staged file list, so even
+// without the LLM the message beats the bare branch slug. Falls back to "orbit: commit
+// <branch>" when git can't enumerate the staged diff.
+func diffstatFallbackMessage(wtPath, branch string) string {
+	names, err := git(wtPath, "diff", "--cached", "--name-only")
+	if err != nil || strings.TrimSpace(names) == "" {
+		return "orbit: commit " + branch
+	}
+	files := strings.Split(strings.TrimSpace(names), "\n")
+	switch {
+	case len(files) == 1:
+		return "Update " + filepath.Base(files[0])
+	case len(files) <= 3:
+		bases := make([]string, len(files))
+		for i, f := range files {
+			bases[i] = filepath.Base(f)
+		}
+		return "Update " + strings.Join(bases, ", ")
+	default:
+		return fmt.Sprintf("Update %s and %d more files", filepath.Base(files[0]), len(files)-1)
+	}
 }
 
 // gitStderr extracts git's stderr from a failed git() call (Output() puts it on ExitError).
