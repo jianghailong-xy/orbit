@@ -14,7 +14,10 @@ struct OrbitApp: App {
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }
-                .task { model.bootstrap() }
+                .task {
+                    model.bootstrap()
+                    HotKeyManager.register { HotKeyManager.summonApp() }   // ⌥Space summons Orbit
+                }
         }
         .defaultSize(width: 1100, height: 720)
         // Standard "Check for Updates…" in the app menu (right after "About Orbit").
