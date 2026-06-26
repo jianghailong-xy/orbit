@@ -159,16 +159,18 @@ struct UserBubbleView: View {
 
 struct AssistantBubbleView: View {
     let bubble: AssistantBubble
+    // Assistant turns are long-form Markdown — render them as a full-width document on the window
+    // background (no bubble), mirroring web's `.chat-assistant`. A tinted panel here would sit
+    // gray-on-gray behind the code blocks' own surface and box long content into a narrow column;
+    // only the short, conversational user turn keeps a bubble. Horizontal padding matches web's
+    // `padding: 0 12px` and keeps the left edge aligned with the tool-card rail.
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 6) {
-                MarkdownView(source: bubble.displayText).textSelection(.enabled)
-                if !bubble.isFinalized { TypingDots() }
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-            Spacer(minLength: 60)
+        VStack(alignment: .leading, spacing: 6) {
+            MarkdownView(source: bubble.displayText).textSelection(.enabled)
+            if !bubble.isFinalized { TypingDots() }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
     }
 }
 
