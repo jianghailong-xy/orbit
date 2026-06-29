@@ -62,30 +62,16 @@ struct RunnerControlPane: View {
                     .font(.caption)
                 }
 
-                if c.serviceInstalled {
-                    HStack {
-                        Button { Task { await c.start() } } label: { Label("Start", systemImage: "play.fill") }
-                            .disabled(c.status.running)
-                        Button { Task { await c.stop() } } label: { Label("Stop", systemImage: "stop.fill") }
-                            .disabled(!c.status.running)
-                        Button { Task { await c.restart() } } label: { Label("Restart", systemImage: "arrow.clockwise") }
-                        Spacer()
-                        Button { Task { await c.refresh() } } label: { Image(systemName: "arrow.clockwise.circle") }
-                            .help("Refresh")
-                    }
-                } else {
-                    Text("This Mac is enrolled, but the background runner service isn't installed yet. "
-                         + "Install it to start running agents here — no Terminal needed.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    HStack {
-                        Button { Task { await c.installService() } } label: {
-                            Label("Install service", systemImage: "arrow.down.circle.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Spacer()
-                        Button { Task { await c.refresh() } } label: { Image(systemName: "arrow.clockwise.circle") }
-                            .help("Refresh")
-                    }
+                HStack {
+                    Button { Task { await c.start() } } label: { Label("Start", systemImage: "play.fill") }
+                        .disabled(c.status.running)
+                    Button { Task { await c.stop() } } label: { Label("Stop", systemImage: "stop.fill") }
+                        .disabled(!c.status.running)
+                    Button { Task { await c.restart() } } label: { Label("Restart", systemImage: "arrow.clockwise") }
+                        .disabled(!c.serviceInstalled)
+                    Spacer()
+                    Button { Task { await c.refresh() } } label: { Image(systemName: "arrow.clockwise.circle") }
+                        .help("Refresh")
                 }
 
                 Divider()

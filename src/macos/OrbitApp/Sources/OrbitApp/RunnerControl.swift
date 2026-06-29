@@ -60,7 +60,14 @@ final class RunnerControl {
         }
     }
 
+    /// Start the runner. First run on this Mac: the service isn't installed yet, so install it
+    /// (copy the bundled binary + write the LaunchAgent) — which also starts it. There's no separate
+    /// "Install" step in the UI; Start just does the right thing.
     func start() async {
+        if !serviceInstalled {
+            await installService()
+            return
+        }
         _ = await Self.launchctl(Launchctl.bootstrap(uid: uid, plistPath: paths.plistFile.path))
         await refresh()
     }

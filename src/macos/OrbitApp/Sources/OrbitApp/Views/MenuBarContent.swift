@@ -120,14 +120,7 @@ private struct RunnerTraySection: View {
                 Text(LocalRunnerStatus.line(hasConfig: control.hasLocalRunner, installed: control.serviceInstalled, status: control.status))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
-            if control.hasLocalRunner && !control.serviceInstalled {
-                HStack(spacing: 6) {
-                    Button("Install service") { Task { await control.installService() } }
-                    Spacer(minLength: 0)
-                    Button("Manage…") { openManager() }
-                }
-                .controlSize(.small)
-            } else if control.hasLocalRunner {
+            if control.hasLocalRunner {
                 HStack(spacing: 6) {
                     Button("Start") { Task { await control.start() } }.disabled(control.status.running)
                     Button("Stop") { Task { await control.stop() } }.disabled(!control.status.running)
