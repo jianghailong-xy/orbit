@@ -16,7 +16,7 @@ export interface CreateSessionDto {
   /** Per-session overrides; null falls back to the agent, then a server default. */
   model?: string;
   permissionMode?: string;
-  /** Claude effort level (low|medium|high|xhigh|max); '' / omitted → model default. */
+  /** Provider reasoning effort; '' / omitted → model default. Codex maps max to xhigh. */
   effort?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a

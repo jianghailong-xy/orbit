@@ -5,7 +5,7 @@ import { api } from '../api';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import {
-  MODEL_OPTIONS,
+  CLAUDE_MODEL_OPTIONS,
   MODE_OPTIONS,
   AUTO_CAPABLE_MODELS,
   DEFAULT_MODEL,
@@ -90,7 +90,7 @@ export function SettingsPage() {
           <Select
             style={{ width: 200 }}
             value={defaultModel}
-            options={MODEL_OPTIONS}
+            options={CLAUDE_MODEL_OPTIONS}
             onChange={onModelChange}
             loading={save.isPending}
           />

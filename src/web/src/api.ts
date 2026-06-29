@@ -265,10 +265,11 @@ export interface SessionChangedFile {
 export interface SessionDetail {
   id: string;
   assignedRunnerId: string | null;
+  provider?: string | null;
   // `defaultMergeTarget` is the branch this agent's sessions merge into by default,
   // remembered from the last target the user switched to in the merge dropdown (null = the
   // runner's auto-detected default). Agent-scoped, so it sticks across the agent's sessions.
-  agent: { id: string; defaultMergeTarget?: string | null } | null;
+  agent: { id: string; provider?: string | null; defaultMergeTarget?: string | null } | null;
   branch?: string | null;
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;

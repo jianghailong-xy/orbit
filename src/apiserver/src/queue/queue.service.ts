@@ -1,7 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
-import { ClaimedSession, PermissionMode } from '@orbit/shared';
+import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+
+const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
+  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
+  [AgentProvider.CODEX]: 'gpt-5.5',
+};
+
+function normalizeProvider(value?: string | null): AgentProvider {
+  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+}
+
+function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
+  if (effort == null) return undefined;
+  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
+}
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -91,10 +105,10 @@ export class QueueService {
       where: { id: sessionId },
       include: { agent: true },
     });
-    // Resume claude only when it actually established its conversation — i.e. the
+    // Resume only when the runtime actually established its conversation — i.e. the
     // session has at least one completed turn (numTurns > 0). A first spawn that
-    // died before claude ever ran (bad PATH, missing cwd, …) still leaves a seeded
-    // turn behind, so "has any turn" would wrongly --resume a claude session that
+    // died before the runtime ever ran (bad PATH, missing cwd, …) still leaves a seeded
+    // turn behind, so "has any turn" would wrongly resume a session that
     // was never created, failing forever with "No conversation found".
     const turnCount = await this.prisma.conversationTurn.count({
       where: { sessionId: session.id },
@@ -129,27 +143,35 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const agent = session.agent;
+    const provider = normalizeProvider(session.provider ?? agent?.provider);
+    const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
+    const sessionUuid =
+      provider === AgentProvider.CLAUDE
+        ? (session.claudeSessionId ?? runtimeSessionId ?? session.id)
+        : (runtimeSessionId ?? session.id);
     return {
       sessionId: session.id,
+      provider,
+      runtimeSessionId,
       title: session.title,
       prompt: session.prompt,
-      // The project directory claude runs in comes from the session's agent.
+      // The project directory the runtime runs in comes from the session's agent.
       workDir: agent?.workDir ?? undefined,
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
       // Agent opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: agent?.autoInitGit ?? undefined,
-      // We spawn claude with --session-id = claudeSessionId, so it's known up front.
-      sessionUuid: session.claudeSessionId ?? session.id,
+      sessionUuid,
       maxSeq,
       resume,
-      // Injected into the claude process so the `orbit mcp` server knows its context.
+      // Injected into the runtime process so the `orbit mcp` server knows its context.
       agentId: session.agentId ?? undefined,
       taskId: session.taskId ?? undefined,
       agent: {
+        provider,
         // Per-session override wins over the agent, then a server default.
-        model: session.model ?? agent?.model ?? 'claude-opus-4-8',
+        model: session.model ?? agent?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
@@ -158,7 +180,7 @@ export class QueueService {
           (session.permissionMode as PermissionMode) ??
           (agent?.permissionMode as PermissionMode) ??
           PermissionMode.DONT_ASK,
-        effort: session.effort ?? undefined,
+        effort: normalizeEffortForProvider(provider, session.effort),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,

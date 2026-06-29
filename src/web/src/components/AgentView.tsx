@@ -31,7 +31,14 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
 import { agentsQuery, sessionQuery, sessionsQuery } from '../lib/queries';
-import { DEFAULT_MODEL, MODEL_OPTIONS, supportsAuto } from '../lib/agentDefaults';
+import {
+  DEFAULT_MODEL,
+  DEFAULT_MODEL_BY_PROVIDER,
+  effortOptionsForProvider,
+  modelOptionsForProvider,
+  normalizeEffortForProvider,
+  supportsAuto,
+} from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import {
@@ -125,15 +132,6 @@ const PERMISSION_TO_MODE: Record<string, string> = Object.fromEntries(
   Object.entries(MODE_TO_PERMISSION).map(([label, value]) => [value, label]),
 );
 const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
-// Claude effort level. '' = Default (omit --effort, model picks its own).
-const EFFORT_OPTIONS = [
-  { value: '', label: 'Default' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'xHigh' },
-  { value: 'max', label: 'Max' },
-];
 // Last-picked reasoning effort, remembered across reloads so a new session starts
 // at the effort you last chose instead of resetting to Default. ('' = Default.)
 const EFFORT_KEY = 'orbit.effort';
@@ -793,9 +791,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // liveness, not the polled object, so the 4s refetch can't clobber a user's edit.
   useEffect(() => {
     if (!selected || live) return;
-    setModel(selected.model ?? DEFAULT_MODEL);
+    const provider = selected.provider ?? sessionDetailQ.data?.provider ?? 'claude';
+    setModel(selected.model ?? DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL);
     setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
-    setEffort(selected.effort ?? '');
+    setEffort(normalizeEffortForProvider(provider, selected.effort ?? ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, live]);
 
@@ -803,17 +802,25 @@ export function AgentView({ runner }: { runner: Runner }) {
   // picked agent's configured default (set on the Runner page). A selected
   // session instead seeds from its own stored config (effect above).
   useEffect(() => {
-    if (selectedId || !pickedAgent?.model) return;
-    setModel(pickedAgent.model);
-  }, [selectedId, pickedAgent?.id, pickedAgent?.model]);
+    if (selectedId || !pickedAgent) return;
+    setModel(
+      pickedAgent.model ??
+        DEFAULT_MODEL_BY_PROVIDER[pickedAgent.provider ?? 'claude'] ??
+        DEFAULT_MODEL,
+    );
+  }, [selectedId, pickedAgent?.id, pickedAgent?.model, pickedAgent?.provider]);
 
   // Effort has no agent-level default, so a fresh session restores the last-picked
   // effort from localStorage (see EFFORT_KEY) instead. Keeps the pill consistent with
   // Model/Mode when switching back to compose after viewing a resumed session.
   useEffect(() => {
     if (selectedId) return;
-    setEffort(localStorage.getItem(EFFORT_KEY) ?? '');
-  }, [selectedId]);
+    const provider = pickedAgent?.provider ?? 'claude';
+    const stored = localStorage.getItem(EFFORT_KEY) ?? '';
+    const normalized = normalizeEffortForProvider(provider, stored);
+    if (normalized !== stored) localStorage.setItem(EFFORT_KEY, normalized);
+    setEffort(normalized);
+  }, [selectedId, pickedAgent?.provider]);
 
   // Likewise seed the Mode pill from the picked agent's configured default. Without
   // this the pill stays at the hardcoded 'Default', so a new session always sends
@@ -1100,22 +1107,26 @@ export function AgentView({ runner }: { runner: Runner }) {
         // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
         // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
         // runner runs the command, buffering its output for the next message.
+        const provider = selected.provider ?? sessionDetailQ.data?.provider ?? 'claude';
+        const wireEffort = normalizeEffortForProvider(provider, effort);
         const res = await resumeSession(
           selected.id,
           content,
-          { model, permissionMode: MODE_TO_PERMISSION[mode], effort: effort || undefined },
+          { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort || undefined },
           attachmentIds,
           shell ? 'shell' : undefined,
         );
         return { id: selected.id, turnId: res.turnId };
       }
+      const provider = pickedAgent?.provider ?? 'claude';
+      const wireEffort = normalizeEffortForProvider(provider, effort);
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
         agentId,
         model,
         permissionMode: MODE_TO_PERMISSION[mode],
-        effort: effort || undefined,
+        effort: wireEffort || undefined,
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -1583,10 +1594,20 @@ export function AgentView({ runner }: { runner: Runner }) {
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const shownModel: string = live ? (selected.model ?? DEFAULT_MODEL) : model;
+  const shownProvider: string = selected
+    ? (selected.provider ??
+        sessionDetailQ.data?.provider ??
+        sessionDetailQ.data?.agent?.provider ??
+        'claude')
+    : (pickedAgent?.provider ?? 'claude');
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
-  const shownEffort: string = live ? (selected.effort ?? '') : effort;
+  const shownEffort: string = normalizeEffortForProvider(
+    shownProvider,
+    live ? (selected.effort ?? '') : effort,
+  );
+  const shownEffortOptions = effortOptionsForProvider(shownProvider);
   // Auto is offered only on models that support it (see supportsAuto); the option
   // is greyed out otherwise so an unsupported model can't pick a mode claude rejects.
   const autoOk = supportsAuto(shownModel);
@@ -2381,7 +2402,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (drop) setMode('Default');
                   }
                 }}
-                options={MODEL_OPTIONS}
+                options={modelOptionsForProvider(shownProvider)}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
@@ -2395,11 +2416,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                 suffixIcon={null}
                 value={shownEffort}
                 onChange={(v) => {
-                  localStorage.setItem(EFFORT_KEY, v);
-                  if (live) configMut.mutate({ effort: v });
-                  else setEffort(v);
+                  const normalized = normalizeEffortForProvider(shownProvider, v);
+                  localStorage.setItem(EFFORT_KEY, normalized);
+                  if (live) configMut.mutate({ effort: normalized });
+                  else setEffort(normalized);
                 }}
-                options={EFFORT_OPTIONS}
+                options={shownEffortOptions}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />

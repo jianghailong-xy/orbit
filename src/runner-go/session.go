@@ -19,6 +19,11 @@ import (
 
 const maxRespawns = 5
 
+const (
+	providerClaude = "claude"
+	providerCodex  = "codex"
+)
+
 var ctrlReqCounter int64
 
 func nextReqID() string {
@@ -32,19 +37,65 @@ func nextReqID() string {
 // sessionMeta is written to the scratch directory so `orbit resume` can find
 // the claude session UUID and work directory without querying the server.
 type sessionMeta struct {
-	SessionUUID string `json:"sessionUuid"`
-	WorkDir     string `json:"workDir"`
-	Title       string `json:"title"`
+	Provider         string `json:"provider,omitempty"`
+	SessionUUID      string `json:"sessionUuid"`
+	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
+	WorkDir          string `json:"workDir"`
+	Title            string `json:"title"`
+}
+
+func runtimeProvider(job *ClaimedSession) string {
+	p := strings.ToLower(strings.TrimSpace(job.Provider))
+	if p == "" {
+		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
+	}
+	if p == providerCodex {
+		return providerCodex
+	}
+	return providerClaude
+}
+
+func syncJobProvider(job *ClaimedSession) {
+	p := runtimeProvider(job)
+	job.Provider = p
+	if job.Agent.Provider == "" {
+		job.Agent.Provider = p
+	}
+	if p == providerClaude && job.RuntimeSessionID == "" {
+		job.RuntimeSessionID = job.SessionUUID
+	}
+}
+
+func currentRuntimeSessionID(job *ClaimedSession) string {
+	if job.RuntimeSessionID != "" {
+		return job.RuntimeSessionID
+	}
+	if runtimeProvider(job) == providerClaude {
+		return job.SessionUUID
+	}
+	return ""
+}
+
+func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	meta := sessionMeta{
+		Provider:         runtimeProvider(job),
+		SessionUUID:      job.SessionUUID,
+		RuntimeSessionID: currentRuntimeSessionID(job),
+		WorkDir:          execDir,
+		Title:            job.Title,
+	}
+	if b, err := json.Marshal(meta); err == nil {
+		_ = os.WriteFile(filepath.Join(scratch, "meta.json"), b, 0o644)
+	}
 }
 
 func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string) {
+	syncJobProvider(job)
 	scratch := filepath.Join(runsDir(), job.SessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 
 	// Persist enough metadata for `orbit resume` to work offline.
-	if b, err := json.Marshal(sessionMeta{SessionUUID: job.SessionUUID, WorkDir: execDir, Title: job.Title}); err == nil {
-		_ = os.WriteFile(filepath.Join(scratch, "meta.json"), b, 0o644)
-	}
+	writeSessionMeta(scratch, job, execDir)
 
 	// Session-scoped, monotonic event seq that survives respawn. Continues from the
 	// server's high-water mark so post-respawn events don't collide (skipDuplicates).
@@ -176,7 +227,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// CANCELLED one keeps its checkout for a possible resume and is reaped by gcWorktrees.
 	// A cancelled run is still resumable (server settles it PARKED for idle/user-end), so its
 	// finalize commit is a *park checkpoint* — tagged for undo-on-resume rather than permanent.
-	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus}
+	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
+	if runtimeProvider(job) == providerClaude {
+		cr.ClaudeSessionID = job.SessionUUID
+	}
 	if job.WT != nil {
 		cr.Branch = job.WT.Branch
 		cr.BaseSha = job.WT.BaseSha
@@ -226,13 +280,18 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-// runSessionProcess spawns ONE claude process and drives it until the session
-// ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended);
-// ended=false means an unexpected crash that the caller should --resume.
-// Returns (status, ended, reload). ended=false means the caller should re-spawn:
-// reload=true for a requested model/permission-mode change (re-spawn with the new
-// flags now on job.Agent), reload=false for an unexpected crash.
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
+	if runtimeProvider(job) == providerCodex {
+		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
+	}
+	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
+}
+
+// runClaudeSessionProcess spawns ONE claude process and drives it until the session
+// ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
+// reload). ended=false means the caller should re-spawn: reload=true for a requested
+// model/permission-mode change, reload=false for an unexpected crash.
+func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
@@ -518,6 +577,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
+						RuntimeSessionID: currentRuntimeSessionID(job),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -528,6 +588,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
+						RuntimeSessionID: currentRuntimeSessionID(job),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -662,6 +723,10 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
+			if r.ClaudeSessionID != "" {
+				job.RuntimeSessionID = r.ClaudeSessionID
+				writeSessionMeta(scratchDir, job, execDir)
+			}
 			emit(evTurnEnd, map[string]interface{}{
 				"subtype":  r.Subtype,
 				"numTurns": r.NumTurns,
@@ -677,19 +742,20 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 				// the worktree (uncommitted), so the diff updates each turn, not just at end.
 				liveFiles, livePatches := liveDiff(job.WT)
 				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
-					TurnID:          turnID,
-					Status:          turnStatus,
-					Result:          r.Result,
-					Subtype:         r.Subtype,
-					NumTurns:        r.NumTurns,
-					CostUsd:         r.CostUsd,
-					Usage:           r.Usage,
-					ModelUsage:      r.ModelUsage,
-					IsolationStatus: job.IsolationStatus,
-					ChangedFiles:    liveFiles,
-					ChangedDiff:     livePatches,
-					WorktreeDirty:   worktreeIsDirty(job.WT),
-					BranchMerged:    branchMergedInto(job.WT),
+					TurnID:           turnID,
+					Status:           turnStatus,
+					Result:           r.Result,
+					Subtype:          r.Subtype,
+					NumTurns:         r.NumTurns,
+					CostUsd:          r.CostUsd,
+					Usage:            r.Usage,
+					ModelUsage:       r.ModelUsage,
+					RuntimeSessionID: currentRuntimeSessionID(job),
+					IsolationStatus:  job.IsolationStatus,
+					ChangedFiles:     liveFiles,
+					ChangedDiff:      livePatches,
+					WorktreeDirty:    worktreeIsDirty(job.WT),
+					BranchMerged:     branchMergedInto(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

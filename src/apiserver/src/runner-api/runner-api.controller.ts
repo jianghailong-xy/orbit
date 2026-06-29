@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
+  AgentProvider,
   AgentExecConfig,
   ApprovalCreateRequest,
   ApprovalDecisionResponse,
@@ -66,6 +67,20 @@ const INBOX_LEASE_MS = 300_000;
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
+
+const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
+  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
+  [AgentProvider.CODEX]: 'gpt-5.5',
+};
+
+function normalizeProvider(value?: string | null): AgentProvider {
+  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+}
+
+function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
+  if (effort == null) return undefined;
+  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
+}
 
 @Controller('runner')
 export class RunnerApiController {
@@ -325,17 +340,21 @@ export class RunnerApiController {
     });
     const out: ReclaimSession[] = [];
     for (const s of sessions) {
-      const sessionUuid = s.claudeSessionId;
-      if (!sessionUuid) continue;
+      const agent = s.agent;
+      const provider = normalizeProvider(s.provider ?? agent?.provider);
+      const runtimeSessionId = s.runtimeSessionId ?? s.claudeSessionId;
+      if (!runtimeSessionId) continue;
+      const sessionUuid =
+        provider === AgentProvider.CLAUDE ? (s.claudeSessionId ?? runtimeSessionId) : runtimeSessionId;
       const agg = await this.prisma.runEvent.aggregate({
         where: { sessionId: s.id },
         _max: { seq: true },
       });
-      const agent = s.agent;
       // Per-session override wins over the agent, then a server default — so a
       // resumed process keeps the model/permission-mode/tools it was created with.
       const agentCfg: AgentExecConfig = {
-        model: s.model ?? agent?.model ?? 'claude-opus-4-8',
+        provider,
+        model: s.model ?? agent?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
@@ -344,7 +363,7 @@ export class RunnerApiController {
           (s.permissionMode as PermissionMode) ??
           (agent?.permissionMode as PermissionMode) ??
           PermissionMode.DONT_ASK,
-        effort: s.effort ?? undefined,
+        effort: normalizeEffortForProvider(provider, s.effort),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
@@ -352,6 +371,8 @@ export class RunnerApiController {
       };
       out.push({
         sessionId: s.id,
+        provider,
+        runtimeSessionId,
         title: s.title,
         sessionUuid,
         maxSeq: agg._max.seq ?? 0,
@@ -625,6 +646,7 @@ export class RunnerApiController {
           // Whether the branch already landed in main — the turn-end snapshot an idle session
           // shows, so the bar offers "✓ In main" not a redundant Merge (older runners omit it).
           ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
+          runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
           costUsd: { increment: dto.costUsd ?? 0 },
@@ -872,6 +894,7 @@ export class RunnerApiController {
           result: dto.result,
           error: dto.error,
           claudeSessionId: dto.claudeSessionId ?? undefined,
+          runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
           // Worktree isolation outcome reported by the runner: the branch it committed
           // the work to, the base it forked from, what it did (worktree/shared-nogit),
@@ -1028,22 +1051,32 @@ export class RunnerApiController {
     return { ok: true };
   }
 
-  /** Return the claude session UUID + workDir so `orbit resume` can launch claude --resume. */
+  /** Return the runtime session UUID + workDir so `orbit resume` can reattach locally. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/:id/meta')
   async getSessionMeta(
     @CurrentRunner() runner: { id: string },
     @Param('id', Base62UuidPipe) sessionId: string,
-  ): Promise<{ sessionUuid: string; workDir: string | null; title: string }> {
+  ): Promise<{
+    provider: AgentProvider;
+    sessionUuid: string;
+    runtimeSessionId?: string;
+    workDir: string | null;
+    title: string;
+  }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
-    if (!session.claudeSessionId) {
-      throw new NotFoundException('session has no claude session ID');
+    const provider = normalizeProvider(session.provider);
+    const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
+    if (!runtimeSessionId) {
+      throw new NotFoundException('session has no runtime session ID');
     }
     const agent = session.agentId
       ? await this.prisma.agent.findUnique({ where: { id: session.agentId } })
       : null;
     return {
-      sessionUuid: session.claudeSessionId,
+      provider,
+      sessionUuid: provider === AgentProvider.CLAUDE ? (session.claudeSessionId ?? runtimeSessionId) : runtimeSessionId,
+      runtimeSessionId,
       workDir: agent?.workDir ?? null,
       title: session.title,
     };

@@ -1,11 +1,16 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { AgentProvider } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
 
 // The `orbit mcp` server is injected into every session, but under DONT_ASK its tools
 // are blocked unless allow-listed. Default new agents to allow the whole orbit server.
 const ORBIT_MCP_TOOL = 'mcp__orbit__*';
+const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
+  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
+  [AgentProvider.CODEX]: 'gpt-5.5',
+};
 
 @Injectable()
 export class AgentsService {
@@ -28,12 +33,14 @@ export class AgentsService {
   async create(ownerId: string, dto: CreateAgentDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
+    const provider = dto.provider ?? AgentProvider.CLAUDE;
     return this.prisma.agent.create({
       data: {
         ownerId,
         name: dto.name,
         description: dto.description,
-        model: dto.model ?? 'claude-opus-4-8',
+        provider,
+        model: dto.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         allowedTools: Array.from(
@@ -105,6 +112,7 @@ export class AgentsService {
       appendSystemPrompt: dto.appendSystemPrompt,
       systemPrompt: dto.systemPrompt,
       permissionMode: dto.permissionMode,
+      provider: dto.provider,
       maxTurns: dto.maxTurns,
       maxBudgetUsd: dto.maxBudgetUsd,
       workDir: dto.workDir,

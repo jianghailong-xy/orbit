@@ -11,6 +11,7 @@ import {
   ApprovalDecisionRequest,
   ApprovalInfo,
   ApprovalStatus,
+  AgentProvider,
   FilePatch,
   MAX_PROMPT_CHARS,
   RunEventType,
@@ -31,6 +32,15 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
       `${field} is too long: ${text.length} characters (max ${MAX_PROMPT_CHARS})`,
     );
   }
+}
+
+function agentProvider(value?: string | null): AgentProvider {
+  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+}
+
+function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
+  if (effort == null) return undefined;
+  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
 }
 
 @Injectable()
@@ -80,13 +90,22 @@ export class SessionsService {
     // the chosen agent's machine (agents belong to a runner) — picking an agent is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
+    let provider = AgentProvider.CLAUDE;
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId },
-        select: { runnerId: true },
+        select: { runnerId: true, provider: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
+      provider = agentProvider(agent.provider);
+    } else if (dto.agentId) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: dto.agentId, ownerId },
+        select: { provider: true },
+      });
+      if (!agent) throw new ForbiddenException('agent not found');
+      provider = agentProvider(agent.provider);
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
@@ -114,17 +133,21 @@ export class SessionsService {
     // then commits the work here for a manual merge — harmless for non-git/shared runs.
     const naming = await generateNaming({ prompt: dto.prompt, title: dto.title });
     const title = dto.title ?? naming.title ?? dto.prompt.slice(0, 80);
+    const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {
         title,
         branch: naming.branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
+        provider,
+        runtimeSessionId: provider === AgentProvider.CLAUDE ? runtimeSessionId : null,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
-        claudeSessionId: randomUUID(),
+        // Codex creates/returns its own thread id after the first exec turn.
+        claudeSessionId: provider === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         permissionMode: dto.permissionMode,
-        effort: dto.effort,
+        effort: normalizeEffortForProvider(provider, dto.effort),
         agentId: dto.agentId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -195,6 +218,7 @@ export class SessionsService {
       error: string | null;
       endReason: string | null;
       source: string;
+      provider: string;
       model: string | null;
       permissionMode: string | null;
       effort: string | null;
@@ -220,7 +244,7 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
-        s.source, s.model,
+        s.source, s.provider, s.model,
         s.permission_mode AS "permissionMode",
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
@@ -256,6 +280,7 @@ export class SessionsService {
       error: r.error,
       endReason: r.endReason,
       source: r.source,
+      provider: r.provider,
       model: r.model,
       permissionMode: r.permissionMode,
       effort: r.effort,
@@ -892,7 +917,7 @@ export class SessionsService {
     if (!SessionsService.TERMINAL.includes(session.status)) {
       throw new ConflictException('the session has not started yet');
     }
-    if (!session.startedAt || !session.claudeSessionId) {
+    if (!session.startedAt || !(session.runtimeSessionId ?? session.claudeSessionId)) {
       throw new ConflictException('this session never ran and cannot be resumed');
     }
     // Idempotent: a retried send with the same clientTurnId returns the same turn.
@@ -918,8 +943,8 @@ export class SessionsService {
     // Validate image refs before reviving, mirroring createTurn.
     const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
     // Append the message, then flip the row back to PENDING so the runner re-claims
-    // it; buildSession sees the existing turns and re-spawns claude with --resume.
-    // A `!cmd` revive seeds a 'shell' turn instead: the runner --resumes claude (context
+    // it; buildSession sees the existing turns and resumes the runtime conversation.
+    // A `!cmd` revive seeds a 'shell' turn instead: the runner resumes the runtime (context
     // restored) AND runs the command, buffering its output for the next message — exactly
     // like a shell turn on a live session. Whitelist kind, mirroring createTurn; a shell
     // turn never advances numTurns (turn-complete), so --resume keeps working on respawn.
@@ -929,6 +954,9 @@ export class SessionsService {
       clientTurnId: dto.clientTurnId,
     });
     await this.linkAttachments(turn.id, attachmentIds);
+    const provider = agentProvider(session.provider);
+    const normalizedEffort =
+      dto.effort !== undefined ? normalizeEffortForProvider(provider, dto.effort) : undefined;
     await this.prisma.session.update({
       where: { id },
       data: {
@@ -949,11 +977,11 @@ export class SessionsService {
         commitStatus: null,
         commitError: null,
         // Re-apply any mode/model/effort changes made while the session was ended;
-        // buildSession reads these when the runner re-claims and re-spawns claude.
+        // buildSession reads these when the runner re-claims and re-spawns the runtime.
         // Omitted fields keep their prior value (don't clobber to null).
         ...(dto.model !== undefined ? { model: dto.model } : {}),
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
-        ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
+        ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
         // Batch membership for this revival: a batch run re-stamps it (object), a
         // single re-run clears it (null) so it escapes any prior batch's cap; a plain
         // user resume passes nothing and leaves it as-is.
@@ -1001,13 +1029,16 @@ export class SessionsService {
     if (SessionsService.TERMINAL.includes(session.status)) {
       throw new ConflictException('the session has ended');
     }
+    const provider = agentProvider(session.provider);
+    const normalizedEffort =
+      dto.effort !== undefined ? normalizeEffortForProvider(provider, dto.effort) : undefined;
     await this.prisma.session.update({
       where: { id },
       data: {
         lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
         ...(dto.model !== undefined ? { model: dto.model } : {}),
         ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
-        ...(dto.effort !== undefined ? { effort: dto.effort } : {}),
+        ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
       },
     });
     if (session.status !== RunStatus.PENDING) {
@@ -1022,7 +1053,7 @@ export class SessionsService {
         content: JSON.stringify({
           model: dto.model,
           permissionMode: dto.permissionMode,
-          effort: dto.effort,
+          effort: normalizedEffort,
         }),
         clientTurnId: randomUUID(),
       });

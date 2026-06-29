@@ -30,16 +30,19 @@ import { meQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
 import {
   AUTO_CAPABLE_MODELS,
+  DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_MODEL,
   DEFAULT_PERMISSION_MODE,
   MODE_OPTIONS,
-  MODEL_OPTIONS,
+  PROVIDER_OPTIONS,
+  modelOptionsForProvider,
 } from '../lib/agentDefaults';
 
 interface Agent {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
+  provider?: string;
   model?: string;
   permissionMode?: string;
   workDir?: string | null;
@@ -166,6 +169,7 @@ export function RunnerDetailPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
+  const [fProvider, setFProvider] = useState('claude');
   const [fModel, setFModel] = useState(DEFAULT_MODEL);
   const [fMode, setFMode] = useState('auto');
   const [fAppend, setFAppend] = useState('');
@@ -185,11 +189,18 @@ export function RunnerDetailPage() {
     setFModel(m);
     if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(m)) setFMode('default');
   };
+  const onProviderChange = (provider: string) => {
+    setFProvider(provider);
+    const nextModel = DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL;
+    setFModel(nextModel);
+    if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(nextModel)) setFMode('default');
+  };
 
   const saveMut = useMutation({
     mutationFn: () => {
       const body = {
         name: fName.trim(),
+        provider: fProvider,
         model: fModel,
         permissionMode: fMode,
         appendSystemPrompt: fAppend.trim() || undefined,
@@ -218,6 +229,7 @@ export function RunnerDetailPage() {
   const openCreate = () => {
     setEditing(null);
     setFName('');
+    setFProvider('claude');
     setFModel(prefModel);
     setFMode(prefMode);
     setFAppend('');
@@ -228,7 +240,8 @@ export function RunnerDetailPage() {
   const openEdit = (a: Agent) => {
     setEditing(a);
     setFName(a.name);
-    setFModel(a.model ?? DEFAULT_MODEL);
+    setFProvider(a.provider ?? 'claude');
+    setFModel(a.model ?? DEFAULT_MODEL_BY_PROVIDER[a.provider ?? 'claude'] ?? DEFAULT_MODEL);
     setFMode(a.permissionMode ?? 'dontAsk');
     setFAppend(a.appendSystemPrompt ?? '');
     setFWorkDir(a.workDir ?? '');
@@ -261,11 +274,20 @@ export function RunnerDetailPage() {
           />
         </div>
         <div className="rd-form-field">
+          <div className="rd-form-label">Runtime</div>
+          <Select
+            value={fProvider}
+            onChange={onProviderChange}
+            options={PROVIDER_OPTIONS}
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div className="rd-form-field">
           <div className="rd-form-label">Model</div>
           <Select
             value={fModel}
             onChange={onModelChange}
-            options={MODEL_OPTIONS}
+            options={modelOptionsForProvider(fProvider)}
             style={{ width: '100%' }}
           />
         </div>
@@ -352,6 +374,7 @@ export function RunnerDetailPage() {
     // When an agent overrides the endpoint/model via env (e.g. a DeepSeek-compatible
     // base URL), the static `model` field is stale — show the effective model instead.
     const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || DEFAULT_MODEL;
+    const providerLabel = a.provider === 'codex' ? 'Codex' : 'Claude';
     return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">
@@ -363,7 +386,7 @@ export function RunnerDetailPage() {
           {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
         </div>
         <div className="rd-agent-meta">
-          {effectiveModel}
+          {providerLabel} · {effectiveModel}
           {a.workDir ? ` · ${a.workDir}` : ''}
         </div>
       </div>

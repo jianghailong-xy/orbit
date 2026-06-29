@@ -439,7 +439,12 @@ func cmdResume(args []string) {
 			fmt.Fprintf(os.Stderr, "session %q not found: %v\n", sessionID, err)
 			os.Exit(1)
 		}
-		meta = &sessionMeta{SessionUUID: resp.SessionUUID, Title: resp.Title}
+		meta = &sessionMeta{
+			Provider:         resp.Provider,
+			SessionUUID:      resp.SessionUUID,
+			RuntimeSessionID: resp.RuntimeSessionID,
+			Title:            resp.Title,
+		}
 		if resp.WorkDir != nil {
 			meta.WorkDir = *resp.WorkDir
 		}
@@ -456,7 +461,21 @@ func cmdResume(args []string) {
 	}
 	fmt.Println()
 
-	cmd := exec.Command("claude", "--resume", meta.SessionUUID)
+	var cmd *exec.Cmd
+	if strings.ToLower(strings.TrimSpace(meta.Provider)) == providerCodex {
+		sessionID := meta.RuntimeSessionID
+		if sessionID == "" {
+			sessionID = meta.SessionUUID
+		}
+		args := []string{"-s", "workspace-write", "-a", "never"}
+		if meta.WorkDir != "" {
+			args = append(args, "-C", expandTilde(meta.WorkDir))
+		}
+		args = append(args, "resume", "--include-non-interactive", sessionID)
+		cmd = exec.Command("codex", args...)
+	} else {
+		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
+	}
 	if meta.WorkDir != "" {
 		cmd.Dir = expandTilde(meta.WorkDir)
 	}

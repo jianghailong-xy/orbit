@@ -253,9 +253,11 @@ func taskCreateHeaders(agentID, sessionID string) map[string]string {
 }
 
 type SessionMetaResponse struct {
-	SessionUUID string  `json:"sessionUuid"`
-	WorkDir     *string `json:"workDir"`
-	Title       string  `json:"title"`
+	Provider         string  `json:"provider,omitempty"`
+	SessionUUID      string  `json:"sessionUuid"`
+	RuntimeSessionID string  `json:"runtimeSessionId,omitempty"`
+	WorkDir          *string `json:"workDir"`
+	Title            string  `json:"title"`
 }
 
 func (t *Transport) sessionMeta(sessionID string) (*SessionMetaResponse, error) {

@@ -165,6 +165,9 @@ model Agent {
   id                 String   @id @default(uuid(7)) @db.Uuid
   name               String
   description        String?
+  // Which local coding runtime drives this agent. "claude" keeps the existing
+  // Claude Code path; "codex" uses the Codex runtime on the runner.
+  provider           String   @default("claude")
   model              String   @default("claude-sonnet-4-6")
   appendSystemPrompt String?  @map("append_system_prompt")
   systemPrompt       String?  @map("system_prompt")
@@ -237,6 +240,10 @@ model Session {
   // Pre-generated Claude session id: --session-id on first spawn, --resume on
   // reclaim/respawn.
   claudeSessionId   String?   @map("claude_session_id")
+  // Provider-neutral runtime thread/session id. For Claude rows this mirrors
+  // claudeSessionId; for Codex it stores the Codex thread id returned by the runtime.
+  runtimeSessionId  String?   @map("runtime_session_id")
+  provider          String    @default("claude")
   model             String? // per-session override; null -> agent -> server default
   permissionMode    String?   @map("permission_mode")
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude

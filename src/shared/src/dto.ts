@@ -1,4 +1,4 @@
-import { PermissionMode, RunnerStatus, RunStatus } from './enums';
+import { AgentProvider, PermissionMode, RunnerStatus, RunStatus } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 
 /**
@@ -6,13 +6,14 @@ import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
  * relevant `@anthropic-ai/claude-agent-sdk` `query()` options.
  */
 export interface AgentExecConfig {
+  provider?: AgentProvider;
   model: string;
   appendSystemPrompt?: string;
   systemPrompt?: string;
   allowedTools: string[];
   disallowedTools: string[];
   permissionMode: PermissionMode;
-  /** Claude effort level (low|medium|high|xhigh|max). Omitted → model default. */
+  /** Provider reasoning effort. Claude supports max; Codex maps max to xhigh. */
   effort?: string;
   maxTurns?: number;
   maxBudgetUsd?: number;
@@ -235,6 +236,8 @@ export interface CommitCommand {
 export interface ClaimedSession {
   sessionId: string;
   title: string;
+  /** Local runtime that should drive this session. Omitted by old servers => Claude. */
+  provider?: AgentProvider;
   /** First-turn seed (the prompt the session was created with). */
   prompt: string;
   agent: AgentExecConfig;
@@ -249,6 +252,8 @@ export interface ClaimedSession {
   autoInitGit?: boolean;
   /** Pre-generated Claude session id to pass via --session-id (and --resume on respawn). */
   sessionUuid: string;
+  /** Provider-neutral runtime session/thread id. For Claude this mirrors sessionUuid. */
+  runtimeSessionId?: string;
   /** Highest RunEvent.seq already persisted, so a respawned runner continues the
    *  monotonic counter instead of colliding (events use skipDuplicates). */
   maxSeq: number;
@@ -379,7 +384,9 @@ export interface RunInboxResponse {
 export interface ReclaimSession {
   sessionId: string;
   title: string;
+  provider?: AgentProvider;
   sessionUuid: string;
+  runtimeSessionId?: string;
   /** Highest persisted RunEvent.seq, so the runner continues the seq counter. */
   maxSeq: number;
   /** How to re-drive `claude` — same shape a fresh claim hands the runner, so the
@@ -417,6 +424,8 @@ export interface TurnCompleteRequest {
   costUsd?: number;
   usage?: TokenUsage;
   modelUsage?: Record<string, ModelUsage>;
+  /** Provider-neutral runtime session/thread id discovered during this turn. */
+  runtimeSessionId?: string;
   // ── Live worktree state (so the composer's status bar updates each turn) ──
   /** What the runner did: 'worktree' | 'shared-nogit'. */
   isolationStatus?: string;
@@ -465,6 +474,7 @@ export interface SessionCompleteRequest {
   subtype?: string;
   error?: string;
   claudeSessionId?: string;
+  runtimeSessionId?: string;
   numTurns?: number;
   durationMs?: number;
   costUsd?: number;

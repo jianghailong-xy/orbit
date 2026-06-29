@@ -107,3 +107,9 @@ export enum CreatorType {
   USER = 'USER',
   AGENT = 'AGENT',
 }
+
+/** Local coding runtime used by an Orbit agent/session. */
+export enum AgentProvider {
+  CLAUDE = 'claude',
+  CODEX = 'codex',
+}

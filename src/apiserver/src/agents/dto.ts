@@ -8,9 +8,10 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { PermissionMode } from '@orbit/shared';
+import { AgentProvider, PermissionMode } from '@orbit/shared';
 
 const PERMISSION_MODES = Object.values(PermissionMode);
+const AGENT_PROVIDERS = Object.values(AgentProvider);
 
 export class CreateAgentDto {
   @IsString()
@@ -18,6 +19,7 @@ export class CreateAgentDto {
   name!: string;
 
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsIn(AGENT_PROVIDERS) provider?: AgentProvider;
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
@@ -41,6 +43,7 @@ export class CreateAgentDto {
 export class UpdateAgentDto {
   @IsOptional() @IsString() @MinLength(1) name?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsIn(AGENT_PROVIDERS) provider?: AgentProvider;
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
