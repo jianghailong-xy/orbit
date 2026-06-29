@@ -30,6 +30,13 @@ struct QuestionReply: Equatable, Sendable {
 final class ConsoleModel {
     let sessionID: String
     let agentID: String?
+    /// Non-nil when this is a draft (pre-session) console backing the "new session" composer: it
+    /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
+    /// (see `createDraftSession`). A live console leaves this nil.
+    private let draftAgent: Agent?
+    var isDraft: Bool { draftAgent != nil }
+    /// Draft only: fired with the freshly created session so the caller can open its live console.
+    var onSessionCreated: ((Session) -> Void)?
     private(set) var state = TranscriptState()
     private(set) var connected = false
 
@@ -77,6 +84,7 @@ final class ConsoleModel {
          attachments: AttachmentImageStore, restoring reducer: TranscriptReducer? = nil) {
         self.sessionID = sessionID
         self.agentID = agentID
+        self.draftAgent = nil
         self.attachments = attachments
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         #if os(macOS)
@@ -88,6 +96,28 @@ final class ConsoleModel {
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
+    }
+
+    /// Draft (pre-session) console backing the "new session" composer. There's no session yet, so it
+    /// runs no stream; the first `send()` calls `createSession` for `agent` and hands the new session
+    /// to `onSessionCreated`, after which the caller opens its live console. The model/permission
+    /// pills are seeded from the agent's saved config — web parity: leaving them at "Default" would
+    /// make the server treat that as an explicit override and ignore the agent's configured mode.
+    init(draftFor agent: Agent, baseURL: URL, tokenStore: TokenStore, attachments: AttachmentImageStore) {
+        self.sessionID = ""
+        self.agentID = agent.id
+        self.draftAgent = agent
+        self.attachments = attachments
+        self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        #if os(macOS)
+        self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
+        #else
+        self.stream = MockEventStream([])
+        #endif
+        self.agentName = agent.name
+        let m = agent.model ?? AgentDefaults.defaultModelID
+        self.modelID = AgentDefaults.models.contains { $0.id == m } ? m : AgentDefaults.defaultModelID
+        self.permissionMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
     }
 
     /// Snapshot the full reducer (state + dedup/cursor internals) for the local store. Restoring
@@ -168,10 +198,11 @@ final class ConsoleModel {
     /// terminal status when the stream missed the (un-replayable) terminal transition.
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
 
-    var availability: SendAvailability { ComposerLogic.availability(status: sessionStatus) }
+    var availability: SendAvailability { isDraft ? .sendNow : ComposerLogic.availability(status: sessionStatus) }
 
-    /// Non-terminal session → composer config edits apply immediately (see `applyConfig`).
-    var isLive: Bool { ComposerLogic.isLive(status: sessionStatus) }
+    /// Non-terminal session → composer config edits apply immediately (see `applyConfig`). A draft
+    /// has no session to PATCH, so it's never "live": the picked pills ride along in createSession.
+    var isLive: Bool { isDraft ? false : ComposerLogic.isLive(status: sessionStatus) }
 
     var canSend: Bool {
         guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !sending else { return false }
@@ -273,6 +304,7 @@ final class ConsoleModel {
 
     func send() async {
         guard !sending else { return }
+        if isDraft { await createDraftSession(); return }
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(composerText)
@@ -334,6 +366,44 @@ final class ConsoleModel {
         }
     }
 
+    /// Draft send: create a brand-new session for the agent (mirrors the web composer's create path
+    /// when there's no live/resumable selection). A leading `!` seeds a shell first turn; staged
+    /// attachments (uploaded session-less) ride along via `attachmentIds`. On success the caller
+    /// opens the live console; the pills already carry the agent's seeded config.
+    private func createDraftSession() async {
+        guard let agent = draftAgent else { return }
+        let (text, shell) = ComposerLogic.parseShell(composerText)
+        guard !text.isEmpty else {
+            if shell { composerText = "" }
+            return
+        }
+        let attachmentIds = pendingAttachments.map(\.id)
+        sending = true
+        defer { sending = false }
+        do {
+            let session = try await api.createSession(CreateSessionRequest(
+                prompt: text, agentId: agent.id, model: modelID,
+                permissionMode: permissionMode.rawValue, effort: effort.wire,
+                shell: shell ? true : nil,
+                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+            composerText = ""
+            pendingAttachments = []
+            onSessionCreated?(session)
+        } catch {
+            statusMessage = "Couldn't start the session — \(error)"
+        }
+    }
+
+    /// Draft footer/slash seed (no stream): load the `/` command + skill set for the agent and,
+    /// best-effort, the agent's runner plan usage — mirrors the live `run()`'s context load.
+    func prepareDraft() async {
+        await loadSlashItems()
+        if let rid = draftAgent?.runnerId,
+           let r = (try? await api.runners())?.first(where: { $0.id == rid }) {
+            planUsage = r.planUsage
+        }
+    }
+
     func interrupt() async {
         do { try await api.interrupt(sessionID: sessionID) }
         catch { statusMessage = "Interrupt failed" }
@@ -368,7 +438,8 @@ final class ConsoleModel {
 
     func attach(filename: String, mimeType: String, data: Data) async {
         do {
-            let id = try await api.uploadAttachment(sessionID: sessionID, filename: filename,
+            // A draft has no session yet — upload session-less; createSession links the ids later.
+            let id = try await api.uploadAttachment(sessionID: isDraft ? nil : sessionID, filename: filename,
                                                     mimeType: mimeType, data: data)
             // Inline images carry a downsampled thumbnail for the composer chip; other files show
             // as a name + size chip instead (web parity).

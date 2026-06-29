@@ -166,12 +166,13 @@ struct AgentSettingsSheet: View {
 struct AgentConsoleDetail: View {
     @Environment(AppModel.self) private var app
     var body: some View {
-        if app.composingAgentSession, let agents = app.agents,
+        if app.composingAgentSession, let registry = app.consoleRegistry, let agents = app.agents,
            let id = app.selectedAgentID, let agent = agents.agent(id) {
-            // Draft compose state: send creates a new session, then opens its console.
-            NewSessionView(agent: agent, agents: agents) { newID in
+            // Draft compose state: the same ComposerView a live console uses, but its send creates a
+            // new session, after which we open that session's console.
+            NewSessionView(agent: agent, registry: registry) { session in
                 app.composingAgentSession = false
-                app.selectedAgentSessionID = newID
+                app.selectedAgentSessionID = session.id
             }
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
@@ -186,27 +187,18 @@ struct AgentConsoleDetail: View {
 }
 
 /// The draft composer shown in the Agents detail pane while composing a new session. Mirrors the
-/// web "new session" state: an empty-transcript hint over a composer whose send calls
-/// `createSession` (not `sendTurn`). On success it hands the new session id back so the console
-/// takes over. The model/permission pills are seeded from the agent's own config — matching web,
-/// where leaving them at "Default" would make the server treat that as an explicit override and
-/// ignore the agent's configured mode. Slash autocomplete + attachments are follow-ups.
+/// web "new session" state: an empty-transcript hint over the *same* `ComposerView` a live console
+/// uses, backed by a draft `ConsoleModel` whose send calls `createSession` (not `sendTurn`) and then
+/// hands the new session back so the console takes over. Reusing `ComposerView` keeps the new-session
+/// input at full parity — the `+` menu, `!`-shell, slash autocomplete, attachments, and the
+/// model/permission/effort footer — instead of the simplified field it used to carry.
 struct NewSessionView: View {
     let agent: Agent
-    let agents: AgentsModel
-    let onCreated: (String) -> Void
+    @State private var draft: ConsoleModel
 
-    @State private var text = ""
-    @State private var shellMode = false
-    @State private var modelID = AgentDefaults.defaultModelID
-    @State private var mode: PermissionMode = .dontAsk
-    @State private var effort: Effort = .default
-    @State private var sending = false
-    @State private var failed: String?
-    @FocusState private var focused: Bool
-
-    private var canSend: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending
+    init(agent: Agent, registry: ConsoleRegistry, onCreated: @escaping (Session) -> Void) {
+        self.agent = agent
+        _draft = State(initialValue: registry.draftModel(for: agent, onCreated: onCreated))
     }
 
     var body: some View {
@@ -220,100 +212,20 @@ struct NewSessionView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
-            composer
-        }
-        .onAppear { prefill(); focused = true }
-    }
-
-    private var composer: some View {
-        VStack(spacing: 6) {
-            if let failed {
-                Label(failed, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(.orange).lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
+            if let msg = draft.statusMessage {
+                HStack {
+                    Text(msg).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Spacer()
+                    Button { draft.statusMessage = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 4)
+                .background(.bar)
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                Toggle(isOn: $shellMode) { Image(systemName: "terminal") }
-                    .toggleStyle(.button)
-                    .help("Run as a shell command")
-
-                TextField(shellMode ? "Shell command…" : "Message…", text: $text, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...6)
-                    .focused($focused)
-                    .onSubmit { start() }
-                    // Clamp length like the live composer: an oversized prompt stalls SwiftUI's
-                    // synchronous text layout.
-                    .onChange(of: text) { _, t in
-                        if failed != nil { failed = nil }   // editing dismisses a prior error
-                        if t.count > ComposerLogic.maxPromptChars {
-                            text = String(t.prefix(ComposerLogic.maxPromptChars))
-                        }
-                    }
-
-                Button { start() } label: {
-                    if sending {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill").font(.title2)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(!canSend)
-            }
-
-            HStack(spacing: 8) {
-                Picker("", selection: $mode) {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
-                }
-                .labelsHidden().fixedSize()
-
-                Spacer()
-
-                Text(agent.name).foregroundStyle(.secondary).lineLimit(1)
-
-                Picker("", selection: $modelID) {
-                    ForEach(AgentDefaults.models) { Text($0.name).tag($0.id) }
-                }
-                .labelsHidden().fixedSize()
-
-                Picker("", selection: $effort) {
-                    ForEach(Effort.allCases) { Text($0.label).tag($0) }
-                }
-                .labelsHidden().fixedSize()
-            }
-            .font(.caption)
+            ComposerView(console: draft, autoFocus: true)
         }
-        .padding(10)
-        .background(.bar)
-    }
-
-    /// Seed the pills from the agent's configured defaults (web parity). A non-standard saved model
-    /// (e.g. an env-overridden endpoint not in the picker) would blank the Picker, so fall back to
-    /// the default in that case.
-    private func prefill() {
-        let m = agent.model ?? AgentDefaults.defaultModelID
-        modelID = AgentDefaults.models.contains { $0.id == m } ? m : AgentDefaults.defaultModelID
-        mode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
-    }
-
-    private func start() {
-        let prompt = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty, !sending else { return }
-        sending = true
-        failed = nil
-        // `@MainActor in` so the post-await @State / app mutations stay on the main thread
-        // (a bare Task wouldn't inherit it in Swift 5 mode) — mirrors ComposerView.
-        Task { @MainActor in
-            let req = CreateSessionRequest(
-                prompt: prompt, agentId: agent.id, model: modelID,
-                permissionMode: mode.rawValue, effort: effort.wire,
-                shell: shellMode ? true : nil)
-            let created = await agents.createSession(req)
-            sending = false
-            if let created { onCreated(created.id) }
-            else { failed = agents.errorText ?? "Couldn't start the session." }
-        }
+        .task { await draft.prepareDraft() }
     }
 }
 

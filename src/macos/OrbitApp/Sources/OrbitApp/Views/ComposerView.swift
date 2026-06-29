@@ -14,6 +14,9 @@ private final class ComposerPasteState {
 
 struct ComposerView: View {
     @Bindable var console: ConsoleModel
+    /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
+    /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
+    var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
     @FocusState private var inputFocused: Bool
@@ -158,6 +161,7 @@ struct ComposerView: View {
         // the keystroke here: when the composer is focused and the clipboard holds an image, attach
         // it (web parity) and swallow the paste; anything else falls through to normal text paste.
         .onAppear {
+            if autoFocus { inputFocused = true }
             guard pasteMonitor == nil else { return }
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard pasteState.focused,
