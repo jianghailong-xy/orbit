@@ -27,7 +27,8 @@ public final class InMemoryTokenStore: TokenStore, @unchecked Sendable {
 #if canImport(Security)
 import Security
 
-/// macOS Keychain-backed token store (one generic-password item per instance host).
+/// Keychain-backed token store (one generic-password item per instance host). Shared by the
+/// macOS and iOS shells — the Security API is identical on both.
 public final class KeychainTokenStore: TokenStore, @unchecked Sendable {
     private let service: String
     public init(service: String = "com.orbit.client") { self.service = service }
@@ -54,6 +55,10 @@ public final class KeychainTokenStore: TokenStore, @unchecked Sendable {
         guard let token, let data = token.data(using: .utf8) else { return }
         var add = query(account)
         add[kSecValueData as String] = data
+        // Readable after first unlock so a push-launched iOS app can reconnect in the
+        // background; device-bound (no iCloud Keychain sync) since this is an auth credential.
+        // Harmless on macOS, where the default is already broadly accessible.
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
     }
 

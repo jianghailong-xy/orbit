@@ -24,11 +24,11 @@ public struct MockEventStream: EventStreaming {
     }
 }
 
-#if os(macOS)
+#if os(macOS) || os(iOS)
 /// Live SSE transport over `URLSession.bytes`. Native clients set the `Authorization` header
 /// directly (unlike browser `EventSource`, which can only pass `?access_token=`), keeping the
-/// token out of URLs and logs. macOS-only: `bytes(for:)` isn't reliably present on Linux
-/// Foundation, and this is a macOS app — Linux only builds the pure parser + reducer.
+/// token out of URLs and logs. Apple-only (macOS + iOS): `bytes(for:)` isn't reliably present
+/// on Linux Foundation, so Linux only builds the pure parser + reducer.
 public struct URLSessionEventStream: EventStreaming {
     let baseURL: URL
     let token: @Sendable () -> String?
