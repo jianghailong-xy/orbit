@@ -13,26 +13,23 @@ struct MarkdownView: View {
     let source: String
 
     var body: some View {
-        // Very large strings: skip block + inline Markdown parsing — both run synchronously on
-        // the main actor and stall the UI on huge replies. Plain text suffices at that size.
-        if source.count > 8000 {
-            Text(source)
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            let blocks = parseMarkdownBlocks(source)
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(blocks.indices, id: \.self) { i in
-                    MarkdownBlockView(block: blocks[i])
-                }
+        // Parse unconditionally — no length cap. The transcript renders in a `List` (NSTableView-
+        // backed real row recycling), so a long reply is one row whose Markdown is parsed once when
+        // it scrolls into view, not per frame. The earlier freezes were scroll mechanics (animated
+        // LazyVStack re-layout, then scrollPosition/scrollTargetLayout), proven by samples that
+        // showed zero parseMarkdownBlocks calls — capping length here only dropped formatting on
+        // long messages without fixing anything.
+        let blocks = parseMarkdownBlocks(source)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(blocks.indices, id: \.self) { i in
+                MarkdownBlockView(block: blocks[i])
             }
-            // Opens the lines up to ~1.55 (SF's default leading is a cramped ~1.17), mirroring
-            // web's `.md { line-height: 1.6 }`. Propagates to all prose Text; code blocks tighten
-            // it back down to stay dense.
-            .lineSpacing(5)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        // Opens the lines up to ~1.55 (SF's default leading is a cramped ~1.17), mirroring
+        // web's `.md { line-height: 1.6 }`. Propagates to all prose Text; code blocks tighten
+        // it back down to stay dense.
+        .lineSpacing(5)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
