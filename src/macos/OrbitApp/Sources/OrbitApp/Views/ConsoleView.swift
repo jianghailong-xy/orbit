@@ -172,6 +172,11 @@ struct UserBubbleView: View {
                 meta
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
+            // contentShape makes the WHOLE column rect (incl. the 3pt spacing gaps and the meta's
+            // reserved height) one contiguous hover region; without it `.onHover` only fires over
+            // the children's drawn glyphs, so moving the cursor down toward the copy button crosses
+            // a dead gap, drops hover, and dismisses the row before the click can land.
+            .contentShape(Rectangle())
             .onHover { hovering = $0 }
         }
     }
