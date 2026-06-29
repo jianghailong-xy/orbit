@@ -34,6 +34,13 @@ struct OrbitApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!model.signedIn || model.orderedAgents.isEmpty)
             }
+            // ⌘D → complete (archive) the open session, the keyboard twin of the web's ✓ on a
+            // session row. Disabled unless a session's console is actually showing.
+            CommandGroup(after: .newItem) {
+                Button("Complete Session") { model.completeCurrentSession() }
+                    .keyboardShortcut("d", modifiers: .command)
+                    .disabled(!model.signedIn || model.currentSessionID == nil)
+            }
             // Standard "Check for Updates…" in the app menu (right after "About Orbit").
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { updater.checkForUpdates() }

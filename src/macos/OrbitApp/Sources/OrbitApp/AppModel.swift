@@ -276,6 +276,37 @@ final class AppModel {
         }
     }
 
+    /// The session whose console fills the detail pane right now — the ⌘D ("Complete Session")
+    /// target. In Active that's the mounted console; in Agents it's the selected agent session
+    /// (nil while drafting a new one). nil in every other section, which disables the command.
+    var currentSessionID: String? {
+        switch selectedSection {
+        case .active: return activeConsoleSessionID ?? selectedSessionID
+        case .agents: return composingAgentSession ? nil : selectedAgentSessionID
+        default:      return nil
+        }
+    }
+
+    /// ⌘D: complete (archive) the open session — the keyboard twin of the web's ✓ on a session row.
+    /// The server's archive ends a live session first (reason COMPLETED), so this works whether the
+    /// session is running or already idle. Clears the selection so the console pane drops the
+    /// archived session, then refreshes the Active list.
+    func completeCurrentSession() {
+        guard let api, let id = currentSessionID else { return }
+        Task { @MainActor in
+            do {
+                try await api.archiveSession(id)
+            } catch {
+                errorText = "Couldn't complete the session."
+                return
+            }
+            if selectedSessionID == id { selectedSessionID = nil }
+            if activeConsoleSessionID == id { activeConsoleSessionID = nil }
+            if selectedAgentSessionID == id { selectedAgentSessionID = nil }
+            await loadSessions()
+        }
+    }
+
     // MARK: routing + notification intents
 
     func route(to route: Route) {
