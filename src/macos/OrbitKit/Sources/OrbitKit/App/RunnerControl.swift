@@ -99,6 +99,17 @@ public struct ServiceStatus: Equatable, Sendable {
     public static let notLoaded = ServiceStatus(loaded: false, pid: nil, lastExitCode: nil)
 }
 
+/// Compact, glanceable status text for the local runner. Shared by the menu-bar tray and the
+/// runner manager so both phrase the same launchd states identically.
+public enum LocalRunnerStatus {
+    public static func line(hasConfig: Bool, status: ServiceStatus) -> String {
+        guard hasConfig else { return "Not set up on this Mac" }
+        if status.running { return "Running · pid \(status.pid ?? 0)" }
+        if status.loaded { return "Loaded · stopped" }
+        return "Service not installed"
+    }
+}
+
 /// `launchctl` output parsing + argument-vector builders. The argv builders capture the exact
 /// commands `orbit register`/the app run, so they're verified without a launchd to run them.
 public enum Launchctl {

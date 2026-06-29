@@ -73,6 +73,9 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
+    /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
+    /// Start/Stop) and the runner-manager window (log + enroll). Created per instance.
+    private(set) var runnerControl: RunnerControl?
 
     private func configure(_ url: URL) {
         baseURL = url
@@ -83,6 +86,7 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
+        runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
     }
 
     // MARK: settings (preferences + password live on the user; no separate store needed)

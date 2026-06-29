@@ -7,7 +7,6 @@ import OrbitKit
 /// placeholders filled in by later batches (C Tasks, D Agents, E the rest).
 struct MainView: View {
     @Environment(AppModel.self) private var model
-    @State private var showRunner = false
 
     var body: some View {
         @Bindable var model = model
@@ -21,23 +20,10 @@ struct MainView: View {
         } detail: {
             SectionDetail(section: model.selectedSection)
         }
-        .toolbar {
-            ToolbarItem {
-                Button { showRunner = true } label: {
-                    Label("Local runner", systemImage: "desktopcomputer")
-                }
-                .help("Manage the runner on this Mac")
-            }
-        }
         .task { model.startPolling() }
         // Drive the debounced console mount off the list selection (covers arrow-key navigation,
         // clicks, and a restored selection on appear).
         .onChange(of: model.selectedSessionID, initial: true) { _, _ in model.scheduleConsoleActivate() }
-        .sheet(isPresented: $showRunner) {
-            if let url = model.baseURL {
-                RunnerControlPane(baseURL: url, tokenStore: model.tokenStore)
-            }
-        }
     }
 }
 

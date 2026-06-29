@@ -1,33 +1,40 @@
 import SwiftUI
 import OrbitKit
 
+/// Content of the runner-manager `Window` (opened from the menu-bar tray). Binds to the app's
+/// shared `RunnerControl`; before sign-in there's no instance, so it prompts to sign in.
+struct RunnerManagerWindow: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let control = model.runnerControl {
+            RunnerControlPane(control: control)
+        } else {
+            ContentUnavailableView("Sign in to manage the runner",
+                                   systemImage: "desktopcomputer")
+                .frame(minWidth: 540, minHeight: 480)
+        }
+    }
+}
+
 /// The local-runner pane (Phase 4): detect → status + Start/Stop/Restart + live log, or enroll
-/// this Mac if no runner is configured here. Presented as a sheet from the main window.
+/// this Mac if no runner is configured here. Shown in the runner-manager window, opened from the
+/// menu-bar tray; drives the shared `RunnerControl` so its state stays in sync with the tray.
 struct RunnerControlPane: View {
-    let baseURL: URL
-    let tokenStore: TokenStore
-    @State private var control: RunnerControl?
+    let control: RunnerControl
     @State private var enrollName = Host.current().localizedName ?? "My Mac"
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Group {
-                if let control {
-                    if control.hasLocalRunner { detected(control) } else { notDetected(control) }
-                } else {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                if control.hasLocalRunner { detected(control) } else { notDetected(control) }
             }
             .navigationTitle("Local runner")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .frame(minWidth: 540, minHeight: 480)
-        .task {
-            let c = RunnerControl(baseURL: baseURL, tokenStore: tokenStore)
-            control = c
-            await c.refresh()
-        }
+        .task { await control.refresh() }
     }
 
     @ViewBuilder
@@ -41,7 +48,8 @@ struct RunnerControlPane: View {
                         Text(c.config?.serverUrl ?? "").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(statusText(c)).font(.callout).foregroundStyle(.secondary)
+                    Text(LocalRunnerStatus.line(hasConfig: c.hasLocalRunner, status: c.status))
+                        .font(.callout).foregroundStyle(.secondary)
                 }
 
                 if let r = c.serverRunner {
@@ -108,11 +116,5 @@ struct RunnerControlPane: View {
         }
         .padding(30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func statusText(_ c: RunnerControl) -> String {
-        if c.status.running { return "Running · pid \(c.status.pid ?? 0)" }
-        if c.status.loaded { return "Loaded · stopped" }
-        return "Service not installed"
     }
 }

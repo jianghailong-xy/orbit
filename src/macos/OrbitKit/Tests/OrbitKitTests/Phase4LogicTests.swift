@@ -63,6 +63,15 @@ final class Phase4LogicTests: XCTestCase {
         XCTAssertEqual(Launchctl.kickstartRestart(uid: 501), ["kickstart", "-k", "gui/501/com.orbit.runner"])
     }
 
+    func testRunnerStatusLine() {
+        XCTAssertEqual(LocalRunnerStatus.line(hasConfig: false, status: .notLoaded), "Not set up on this Mac")
+        XCTAssertEqual(LocalRunnerStatus.line(hasConfig: true, status: .notLoaded), "Service not installed")
+        XCTAssertEqual(LocalRunnerStatus.line(hasConfig: true, status: ServiceStatus(loaded: true, pid: nil, lastExitCode: 0)),
+                       "Loaded · stopped")
+        XCTAssertEqual(LocalRunnerStatus.line(hasConfig: true, status: ServiceStatus(loaded: true, pid: 832, lastExitCode: 0)),
+                       "Running · pid 832")
+    }
+
     // MARK: log tail
 
     func testLogTail() {

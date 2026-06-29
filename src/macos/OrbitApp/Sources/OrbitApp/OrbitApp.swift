@@ -4,6 +4,9 @@ import OrbitKit
 
 @main
 struct OrbitApp: App {
+    /// Window id for the runner-manager window, opened from the menu-bar tray's "Manage…".
+    static let runnerWindowID = "runner-manager"
+
     @State private var model = AppModel()
     @StateObject private var updater = UpdaterModel()
     @Environment(\.scenePhase) private var scenePhase
@@ -76,6 +79,12 @@ struct OrbitApp: App {
                 .environment(model)
                 .environmentObject(updater)
                 .frame(width: 480, height: 560)
+        }
+
+        // The local-runner manager (log + enroll + Start/Stop). A dedicated window — not a sheet —
+        // so the menu-bar tray's "Manage…" can open it whether or not the main window is around.
+        Window("Local runner", id: Self.runnerWindowID) {
+            RunnerManagerWindow().environment(model)
         }
 
         // Always-present menu-bar item: glanceable summary + quick jump into "needs you".

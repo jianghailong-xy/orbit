@@ -31,6 +31,10 @@ struct MenuBarContent: View {
                         .buttonStyle(.plain)
                     }
                 }
+                if let control = model.runnerControl {
+                    Divider()
+                    RunnerTraySection(control: control)
+                }
                 Divider()
                 Button("Open Orbit") { activate() }
             }
@@ -53,6 +57,49 @@ struct MenuBarContent: View {
     }
 
     private func activate() {
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+/// The local-runner status block in the menu-bar dropdown — the runner's home now that it's off the
+/// window toolbar. Glanceable state + Start/Stop/Restart for the runner on this Mac, plus "Manage…"
+/// for the detailed window (log + enroll). Refreshes its launchd/server state each time the menu
+/// opens. Hidden entirely when this Mac hosts no runner config (only "Set up…" remains).
+private struct RunnerTraySection: View {
+    let control: RunnerControl
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Runner").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Circle().fill(control.status.running ? .green : .secondary).frame(width: 8, height: 8)
+                Text(control.hasLocalRunner ? (control.config?.name ?? "Runner") : "No runner on this Mac")
+                    .fontWeight(.medium).lineLimit(1)
+                Spacer(minLength: 4)
+                Text(LocalRunnerStatus.line(hasConfig: control.hasLocalRunner, status: control.status))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            if control.hasLocalRunner {
+                HStack(spacing: 6) {
+                    Button("Start") { Task { await control.start() } }.disabled(control.status.running)
+                    Button("Stop") { Task { await control.stop() } }.disabled(!control.status.running)
+                    Button("Restart") { Task { await control.restart() } }.disabled(!control.status.running)
+                    Spacer(minLength: 0)
+                    Button("Manage…") { openManager() }
+                }
+                .controlSize(.small)
+            } else {
+                Button("Set up runner…") { openManager() }
+                    .controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await control.refresh() }
+    }
+
+    private func openManager() {
+        openWindow(id: OrbitApp.runnerWindowID)
         NSApp.activate(ignoringOtherApps: true)
     }
 }

@@ -28,6 +28,10 @@ final class RunnerControl {
         self.paths = RunnerEnvironment.paths(environment: ProcessInfo.processInfo.environment,
                                              userHome: NSHomeDirectory())
         self.uid = Int(getuid())
+        // Read the local config up front (a tiny file read) so `hasLocalRunner` is correct on the
+        // first render — the tray shows the runner's name immediately and the manager doesn't flash
+        // its enroll screen before the async `refresh()` lands.
+        self.config = RunnerEnvironment.readConfig(at: paths)
     }
 
     var hasLocalRunner: Bool { config != nil }
