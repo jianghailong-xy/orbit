@@ -535,6 +535,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // an instant paint and resumes the SSE just past the cached seq, instead of replaying
   // each session's full history from seq 0 on every visit.
   const transcriptCache = useRef<Map<string, RunEvent[]>>(new Map());
+  // Re-opens the transcript SSE after a `final` event paused it and the session was
+  // resumed in place (set by the SSE effect, called by the liveness watcher below).
+  const resumeStreamRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
   // The user's prompt for the turn currently in view, surfaced as a sticky bar when a long
@@ -900,6 +903,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+    // Set when a `final` event arrives: the connection is dropped (don't hold an idle
+    // stream to a finished session) but NOT permanently — unlike `closed`, a paused
+    // stream can be re-opened in place when the session resumes (see resumeStreamRef).
+    let paused = false;
     let fails = 0;
     // Resume just past what's cached so only the gap is fetched, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
@@ -926,8 +933,16 @@ export function AgentView({ runner }: { runner: Runner }) {
           lastSeq = Math.max(lastSeq, ev.seq);
         }
         if (ev.payload?.final) {
-          stop();
-          return; // session finalized — nothing more to stream
+          // Session finalized (turn-complete failure, idle-recycle to PARKED, or a user
+          // end). Drop the live connection so we don't hold an idle stream — but a
+          // PARKED/ended session is resumable IN PLACE (same selectedId, so this effect
+          // doesn't re-run), and a resumed turn's events would be published to a stream
+          // we'd have permanently closed, leaving the open transcript stale while the
+          // polled sidebar advances. So pause instead of closing for good; the liveness
+          // watcher re-opens it (replaying the missed seq) once the session is live again.
+          paused = true;
+          es?.close();
+          return;
         }
         // Streaming increment: append to the in-progress assistant bubble. Don't
         // dedup or store it — it's pure animation; the trailing `assistant` event
@@ -1000,12 +1015,21 @@ export function AgentView({ runner }: { runner: Runner }) {
       };
       es.onerror = () => {
         es?.close();
-        if (closed) return;
+        if (closed || paused) return;
         // Auto-reconnect, resuming after lastSeq — survives long idle / redeploy
         // drops (the seq dedup set makes any replay overlap harmless).
         if (++fails > 12) return;
         retry = setTimeout(connect, Math.min(2000 * fails, 15000) + Math.random() * 500);
       };
+    };
+    // Bridge for the liveness watcher: re-open a stream paused by a `final` event once the
+    // session is live again. No-op unless paused (so it's safe to call on any status tick);
+    // reconnect resumes from lastSeq, so the server replays the turns missed while paused.
+    resumeStreamRef.current = () => {
+      if (closed || !paused) return;
+      paused = false;
+      fails = 0;
+      connect();
     };
     // Debounce the network work: scrubbing the list with the arrow keys shouldn't open
     // (and tear down) a connection — nor re-fetch approvals/queued turns — for each
@@ -1025,6 +1049,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       connect();
     }, SWITCH_DEBOUNCE_MS);
     return () => {
+      resumeStreamRef.current = null;
       clearTimeout(start);
       stop();
     };
@@ -1036,6 +1061,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (runStatus === 'AWAITING_INPUT') setIdle(true);
     else if (runStatus === 'RUNNING') setIdle(false);
   }, [runStatus]);
+
+  // A finalized session can be resumed in place (same selectedId, so the SSE effect above
+  // doesn't re-run and its stream was paused on `final`). When the polled status shows it
+  // live again, re-open the paused stream so the open transcript catches the resumed turn —
+  // otherwise only the sidebar (separately polled) would advance and the conversation would
+  // look stuck until a manual refresh.
+  useEffect(() => {
+    if (live) resumeStreamRef.current?.();
+  }, [live]);
 
   useEffect(() => {
     const el = scrollRef.current;
