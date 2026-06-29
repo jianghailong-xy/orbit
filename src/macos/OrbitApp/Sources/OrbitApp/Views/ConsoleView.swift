@@ -46,31 +46,43 @@ struct ConsoleView: View {
 
 struct TranscriptView: View {
     let console: ConsoleModel
+    private let bottomID = "transcript-bottom"
 
     var body: some View {
-        // A `List` is NSTableView-backed on macOS, so it recycles rows: a long transcript stays
-        // cheap to lay out no matter how many items it holds. A `LazyVStack` can't — pairing it
-        // with `scrollPosition(id:anchor:)`/`scrollTargetLayout()` (needed to anchor the bottom)
-        // made SwiftUI re-measure and re-place *every* row on each streamed update, which froze the
-        // UI on long sessions. `.defaultScrollAnchor(.bottom)` keeps the newest message pinned as
-        // content streams without that per-row tracking.
-        List {
-            ForEach(console.state.items) { item in
-                TranscriptItemView(item: item)
-                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+        // `List` is NSTableView-backed on macOS → true row recycling, so a long transcript stays
+        // cheap to lay out. (A `LazyVStack` paired with `scrollPosition(id:anchor:)` /
+        // `scrollTargetLayout()` re-measured and re-placed *every* row on each streamed update and
+        // froze the UI — never reintroduce those here.)
+        //
+        // `.defaultScrollAnchor(.bottom)` only positions the bottom on *first* appearance; it does
+        // not follow new content. So an explicit, non-animated `scrollTo` on every content change
+        // keeps the latest message — and a streaming reply — in view, and re-pins the bottom when
+        // you switch sessions (the view is reused, only `console` swaps). This is cheap on a
+        // recycling List: a single one-shot scroll per change, not the per-frame *animated* scroll
+        // that froze the old LazyVStack build.
+        ScrollViewReader { proxy in
+            List {
+                ForEach(console.state.items) { item in
+                    TranscriptItemView(item: item)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
+                // Zero-height tail row: a stable `scrollTo` target that always sits below the last
+                // message (the last item's own id moves as it streams).
+                Color.clear.frame(height: 1)
+                    .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
                     .listRowBackground(Color.clear)
+                    .id(bottomID)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)   // show the window background, not the List's own
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: console.state.items) { proxy.scrollTo(bottomID, anchor: .bottom) }
+            .onChange(of: console.sessionID) { proxy.scrollTo(bottomID, anchor: .bottom) }
+            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom) }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)   // show the window background, not the List's own
-        .defaultScrollAnchor(.bottom)
-        // `defaultScrollAnchor` only anchors the bottom on first appearance. This view is reused
-        // across session switches (only `console` swaps), so without a fresh identity it keeps the
-        // previous session's scroll offset. Keying the List on `sessionID` makes each switch a fresh
-        // appearance → it opens at the latest message. The data layer stays warm (the registry isn't
-        // rebuilt), so this only resets scrolling, not the transcript.
-        .id(console.sessionID)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
     }
 
