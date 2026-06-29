@@ -142,22 +142,34 @@ struct AccountFooter: View {
     var body: some View {
         let display = model.user?.name ?? model.user?.email
         Menu {
-            if let email = model.user?.email { Text(email) }
-            Button("Sign out", role: .destructive) { model.logout() }
+            // Menu items must be real controls — a bare `Text` gets dropped by AppKit, so the email
+            // rides along as a Section header above the one action.
+            if let email = model.user?.email {
+                Section(email) {
+                    Button("Sign out", role: .destructive) { model.logout() }
+                }
+            } else {
+                Button("Sign out", role: .destructive) { model.logout() }
+            }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 AvatarMonogram(name: display)
                 Text(display ?? "Account")
+                    .fontWeight(.semibold)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        // `.button` style + plain button + hidden indicator renders the custom label as-is (no
+        // chevron, no swallowed label) — unlike `.borderlessButton`, which dropped the whole row.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 }
 
@@ -173,10 +185,10 @@ struct AvatarMonogram: View {
     var body: some View {
         Circle()
             .fill(Color.accentColor)
-            .frame(width: 28, height: 28)
+            .frame(width: 32, height: 32)
             .overlay(
                 Text(initial)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
             )
     }
