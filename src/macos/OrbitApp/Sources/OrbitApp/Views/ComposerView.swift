@@ -66,7 +66,12 @@ struct ComposerView: View {
 
                 TextField(placeholder, text: $console.composerText, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 14))
                     .lineLimit(1...6)
+                    // Give the empty box real height with the text pinned top-left, so it reads as a
+                    // writing surface (placeholder top, + and send sitting at the bottom corners via
+                    // the HStack's .bottom alignment) instead of a thin single-line search pill.
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
                     .focused($inputFocused)
                     .onSubmit { onReturn() }
                     .onKeyPress(.upArrow) { moveSlash(-1) }
@@ -97,30 +102,54 @@ struct ComposerView: View {
                     .help("Interrupt the current turn")
                 }
                 Button { Task { await console.send() } } label: {
-                    Image(systemName: "arrow.up.circle.fill").font(.title2)
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!console.canSend)
             }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 8)
+            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
+            // Elevated, softly-rounded surface so the field reads as a premium floating card
+            // rather than a hairline box: a `.continuous` (squircle) curve, an own fill, and a
+            // soft drop shadow. Focus deepens the border toward the accent and lifts the shadow
+            // a touch instead of flipping to a hard blue outline.
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .textBackgroundColor))
+                    .shadow(color: .black.opacity(inputFocused ? 0.12 : 0.06),
+                            radius: inputFocused ? 7 : 4, y: 1.5)
+            )
             .overlay {
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(inputFocused ? Color.accentColor : Color.secondary.opacity(0.35),
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(inputFocused ? Color.accentColor.opacity(0.55)
+                                              : Color.primary.opacity(0.10),
                                   lineWidth: 1)
             }
+            .animation(.easeOut(duration: 0.15), value: inputFocused)
 
             // Footer controls, laid out like the web composer: permission mode on the left,
-            // then the agent identity · model · effort · plan-usage cluster on the right. A
-            // change on a live session is pushed immediately (applyConfig → PATCH /config).
-            HStack(spacing: 8) {
-                Picker("", selection: $console.permissionMode) {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
+            // then the agent identity · model · effort · plan-usage cluster on the right. Each
+            // control is a borderless "text · chevron" menu (web parity, like the reference
+            // composer's "Auto") rather than a macOS bordered popup button. A change on a live
+            // session is pushed immediately in the menu action (applyConfig → PATCH /config);
+            // doing it there instead of via .onChange means a server config sync writing these
+            // values back doesn't echo a redundant PATCH.
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(AgentDefaults.permissionModes, id: \.self) { mode in
+                        Button {
+                            console.permissionMode = mode
+                            Task { await console.applyConfig(permissionMode: mode.rawValue) }
+                        } label: {
+                            menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
+                        }
+                    }
+                } label: {
+                    menuLabel(AgentDefaults.label(console.permissionMode))
                 }
-                .labelsHidden().fixedSize()
-                .onChange(of: console.permissionMode) { _, m in
-                    Task { await console.applyConfig(permissionMode: m.rawValue) }
-                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
 
                 if console.availability == .queue {
                     Label("Will queue", systemImage: "tray.and.arrow.down")
@@ -133,21 +162,33 @@ struct ComposerView: View {
                     Text(name).foregroundStyle(.secondary).lineLimit(1)
                 }
 
-                Picker("", selection: $console.modelID) {
-                    ForEach(AgentDefaults.models) { Text($0.name).tag($0.id) }
+                Menu {
+                    ForEach(AgentDefaults.models) { m in
+                        Button {
+                            console.modelID = m.id
+                            Task { await console.applyConfig(model: m.id) }
+                        } label: {
+                            menuItemLabel(m.name, selected: m.id == console.modelID)
+                        }
+                    }
+                } label: {
+                    menuLabel(AgentDefaults.models.first { $0.id == console.modelID }?.name ?? console.modelID)
                 }
-                .labelsHidden().fixedSize()
-                .onChange(of: console.modelID) { _, m in
-                    Task { await console.applyConfig(model: m) }
-                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
 
-                Picker("", selection: $console.effort) {
-                    ForEach(Effort.allCases) { Text($0.label).tag($0) }
+                Menu {
+                    ForEach(Effort.allCases) { e in
+                        Button {
+                            console.effort = e
+                            Task { await console.applyConfig(effort: e.rawValue) }
+                        } label: {
+                            menuItemLabel(e.label, selected: e == console.effort)
+                        }
+                    }
+                } label: {
+                    menuLabel(console.effort.label)
                 }
-                .labelsHidden().fixedSize()
-                .onChange(of: console.effort) { _, e in
-                    Task { await console.applyConfig(effort: e.rawValue) }
-                }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
 
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
@@ -207,11 +248,35 @@ struct ComposerView: View {
             Button { pickFiles(images: false) } label: { Label("Upload file", systemImage: "paperclip") }
         } label: {
             Image(systemName: "plus")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Add a command, skill, shell command, or attachment")
+    }
+
+    // MARK: borderless footer menus (mirror the web composer's plain dropdowns)
+
+    /// The "text · chevron" trigger for a footer menu, styled like the reference composer's "Auto"
+    /// instead of macOS's default bordered popup button.
+    private func menuLabel(_ text: String) -> some View {
+        HStack(spacing: 3) {
+            Text(text).lineLimit(1)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 8))
+                .foregroundStyle(.tertiary)
+        }
+        .foregroundStyle(.secondary)
+        .contentShape(Rectangle())
+    }
+
+    /// A menu row with a leading checkmark on the current selection — a Picker draws this for free,
+    /// a Menu of Buttons has to render it explicitly.
+    @ViewBuilder
+    private func menuItemLabel(_ text: String, selected: Bool) -> some View {
+        if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
     }
 
     // MARK: staged attachment chips (mirror the web composer's image thumbnails / file chips)
