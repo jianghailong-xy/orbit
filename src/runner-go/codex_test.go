@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestNormalizeCodexReasoningEffort(t *testing.T) {
 	tests := []struct {
@@ -80,5 +83,54 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	roots, ok := sandbox["writableRoots"].([]string)
 	if !ok || len(roots) != 1 || roots[0] != "/tmp/uploads" {
 		t.Fatalf("writableRoots = %#v", sandbox["writableRoots"])
+	}
+}
+
+func TestCodexUsageMapsOnlyTokenCounters(t *testing.T) {
+	got := codexUsage(map[string]interface{}{
+		"input_tokens":                float64(11),
+		"output_tokens":               float64(7),
+		"cache_creation_input_tokens": float64(3),
+		"cached_input_tokens":         float64(5),
+		"cost_usd":                    1.23,
+		"modelUsage":                  map[string]interface{}{"gpt-5.5": map[string]interface{}{"costUSD": 1.23}},
+	})
+	if got == nil {
+		t.Fatalf("codexUsage = nil")
+	}
+	if got.InputTokens != 11 || got.OutputTokens != 7 || got.CacheCreationInputTokens != 3 || got.CacheReadInputTokens != 5 {
+		t.Fatalf("codexUsage = %#v", got)
+	}
+}
+
+func TestCodexAppInterruptWaitsForTurnID(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1", startSent: true}
+	if got, beforeStart := requestCodexAppInterrupt(&mu, &active); got != "" || beforeStart {
+		t.Fatalf("requestCodexAppInterrupt before turn id = %q, want empty", got)
+	}
+	if !active.interruptRequested {
+		t.Fatalf("interruptRequested = false, want true")
+	}
+	if got := markCodexAppTurnStarted(&mu, &active, "orbit-turn-1", "codex-turn-1"); got != "codex-turn-1" {
+		t.Fatalf("markCodexAppTurnStarted = %q, want codex-turn-1", got)
+	}
+	if got, beforeStart := requestCodexAppInterrupt(&mu, &active); got != "" || beforeStart {
+		t.Fatalf("duplicate requestCodexAppInterrupt = %q, want empty", got)
+	}
+}
+
+func TestCodexAppInterruptBeforeStartSkipsTurnStart(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1"}
+	if got, beforeStart := requestCodexAppInterrupt(&mu, &active); got != "" || !beforeStart {
+		t.Fatalf("requestCodexAppInterrupt before start = %q, want empty", got)
+	}
+	ok, interrupted := beginCodexAppTurnStart(&mu, &active, "orbit-turn-1")
+	if !ok || !interrupted {
+		t.Fatalf("beginCodexAppTurnStart = (%v, %v), want (true, true)", ok, interrupted)
+	}
+	if active.startSent {
+		t.Fatalf("startSent = true, want false")
 	}
 }

@@ -44,11 +44,14 @@ type codexAppServer struct {
 }
 
 type codexAppActiveTurn struct {
-	orbitTurnID string
-	codexTurnID string
-	result      codexTurnResult
-	fullText    strings.Builder
-	deltaText   strings.Builder
+	orbitTurnID        string
+	codexTurnID        string
+	startSent          bool
+	interruptRequested bool
+	interruptSent      bool
+	result             codexTurnResult
+	fullText           strings.Builder
+	deltaText          strings.Builder
 }
 
 func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer) (string, bool, bool) {
@@ -158,6 +161,32 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		setTurn("")
 	}
 
+	sendInterrupt := func(codexTurnID string) {
+		if codexTurnID == "" {
+			return
+		}
+		go func(turnID string) {
+			reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			if _, err := app.request(reqCtx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": turnID}); err != nil {
+				logln("codex turn/interrupt failed for", job.SessionID+":", err)
+			}
+		}(codexTurnID)
+	}
+
+	requestActiveInterrupt := func(finalizeBeforeStart bool) {
+		codexTurnID, beforeStart := requestCodexAppInterrupt(&activeMu, &active)
+		if beforeStart && finalizeBeforeStart {
+			finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+			return
+		}
+		sendInterrupt(codexTurnID)
+	}
+
+	recordCodexTurnID := func(orbitTurnID, codexTurnID string) {
+		sendInterrupt(markCodexAppTurnStarted(&activeMu, &active, orbitTurnID, codexTurnID))
+	}
+
 	notificationsDone := make(chan struct{})
 	go func() {
 		defer close(notificationsDone)
@@ -168,7 +197,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
-				handleCodexAppNotification(msg, emit, &activeMu, &active, finalizeActive)
+				handleCodexAppNotification(msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
+					recordCodexTurnID("", codexTurnID)
+				})
 			}
 		}
 	}()
@@ -186,13 +217,6 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	}()
 
 	startTurn := func(resp *RunInboxResponse, pendingShellCtx []string) {
-		prepared := prepareCodexTurn(ctx, t, job, resp, pendingShellCtx)
-		userEv := map[string]interface{}{"text": resp.Content}
-		if len(prepared.AttachmentRefs) > 0 {
-			userEv["attachments"] = prepared.AttachmentRefs
-		}
-		emit(evUser, userEv)
-
 		activeMu.Lock()
 		if active != nil {
 			activeMu.Unlock()
@@ -207,22 +231,50 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 		activeMu.Unlock()
 
-		codexTurnID, err := app.startTurn(ctx, threadID, job, execDir, upDir, resp.TurnID, prepared.Prompt, prepared.ImagePaths)
-		if err != nil {
-			emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
-			finalizeActive(codexTurnResult{
-				Status:  stFailed,
-				Subtype: "turn_start_failed",
-				Error:   err.Error(),
-				Result:  err.Error(),
-			})
-			return
+		userEv := map[string]interface{}{"text": resp.Content}
+		if refs := turnAttachmentRefs(resp.Attachments); len(refs) > 0 {
+			userEv["attachments"] = refs
 		}
-		activeMu.Lock()
-		if active != nil && active.orbitTurnID == resp.TurnID && active.codexTurnID == "" {
-			active.codexTurnID = codexTurnID
-		}
-		activeMu.Unlock()
+		emit(evUser, userEv)
+
+		respCopy := *resp
+		shellCtx := append([]string(nil), pendingShellCtx...)
+		go func() {
+			prepared := prepareCodexTurn(ctx, t, job, &respCopy, shellCtx)
+
+			ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, respCopy.TurnID)
+			if !ok {
+				return
+			}
+			if interrupted {
+				finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+				return
+			}
+
+			codexTurnID, err := app.startTurn(ctx, threadID, job, execDir, upDir, respCopy.TurnID, prepared.Prompt, prepared.ImagePaths)
+			if err != nil {
+				activeMu.Lock()
+				same := active != nil && active.orbitTurnID == respCopy.TurnID
+				interrupted := same && active.interruptRequested
+				activeMu.Unlock()
+				if !same {
+					return
+				}
+				if interrupted {
+					finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+					return
+				}
+				emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
+				finalizeActive(codexTurnResult{
+					Status:  stFailed,
+					Subtype: "turn_start_failed",
+					Error:   err.Error(),
+					Result:  err.Error(),
+				})
+				return
+			}
+			recordCodexTurnID(respCopy.TurnID, codexTurnID)
+		}()
 	}
 
 	waitForIdle := func() {
@@ -328,18 +380,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			setTurn("")
 
 		case "interrupt":
-			activeMu.Lock()
-			var codexTurnID string
-			if active != nil {
-				codexTurnID = active.codexTurnID
-			}
-			activeMu.Unlock()
-			if codexTurnID != "" {
-				if _, err := app.request(ctx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": codexTurnID}); err != nil {
-					logln("codex turn/interrupt failed for", job.SessionID+":", err)
-				}
-			}
 			emit(evInterrupt, map[string]interface{}{})
+			requestActiveInterrupt(true)
 
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
@@ -357,18 +399,71 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			}
 
 		case "end":
-			activeMu.Lock()
-			var codexTurnID string
-			if active != nil {
-				codexTurnID = active.codexTurnID
-			}
-			activeMu.Unlock()
-			if codexTurnID != "" {
-				_, _ = app.request(ctx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": codexTurnID})
-			}
+			requestActiveInterrupt(false)
 			return stSucceeded, true, false
 		}
 	}
+}
+
+func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn) (string, bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	if *active == nil {
+		return "", false
+	}
+	(*active).interruptRequested = true
+	if !(*active).startSent && (*active).codexTurnID == "" {
+		return "", true
+	}
+	if (*active).codexTurnID == "" || (*active).interruptSent {
+		return "", false
+	}
+	(*active).interruptSent = true
+	return (*active).codexTurnID, false
+}
+
+func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, codexTurnID string) string {
+	if codexTurnID == "" {
+		return ""
+	}
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	if *active == nil {
+		return ""
+	}
+	if orbitTurnID != "" && (*active).orbitTurnID != orbitTurnID {
+		return ""
+	}
+	(*active).codexTurnID = codexTurnID
+	if !(*active).interruptRequested || (*active).interruptSent {
+		return ""
+	}
+	(*active).interruptSent = true
+	return codexTurnID
+}
+
+func beginCodexAppTurnStart(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID string) (bool, bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	if *active == nil || (*active).orbitTurnID != orbitTurnID {
+		return false, false
+	}
+	if (*active).interruptRequested {
+		return true, true
+	}
+	(*active).startSent = true
+	return true, false
+}
+
+func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
+	if len(atts) == 0 {
+		return nil
+	}
+	refs := make([]map[string]interface{}, 0, len(atts))
+	for _, att := range atts {
+		refs = append(refs, map[string]interface{}{"id": att.ID, "mime": att.MimeType, "name": att.FileName})
+	}
+	return refs
 }
 
 func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scratchDir string, emit emitFn) (*codexAppServer, error) {
@@ -390,6 +485,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID,
 		"ORBIT_TASK_ID="+job.TaskID,
+		envMCPPermissionPrompt+"=0",
 	)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -662,7 +758,7 @@ func (a *codexAppServer) close() {
 	a.closeDone()
 }
 
-func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult)) {
+func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string)) {
 	params := rawObject(msg.Params)
 	switch msg.Method {
 	case "thread/started":
@@ -672,11 +768,15 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 	case "turn/started":
 		turnID := nestedString(params, "turn", "id")
 		if turnID != "" {
-			activeMu.Lock()
-			if *active != nil {
-				(*active).codexTurnID = turnID
+			if onTurnStarted != nil {
+				onTurnStarted(turnID)
+			} else {
+				activeMu.Lock()
+				if *active != nil {
+					(*active).codexTurnID = turnID
+				}
+				activeMu.Unlock()
 			}
-			activeMu.Unlock()
 		}
 	case "item/agentMessage/delta":
 		if delta := firstString(params, "delta"); delta != "" {

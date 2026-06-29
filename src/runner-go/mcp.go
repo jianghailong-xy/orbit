@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // orbit mcp — a minimal Model Context Protocol server (JSON-RPC 2.0 over stdio,
@@ -25,19 +26,32 @@ func cmdMcp() {
 		os.Exit(1)
 	}
 	srv := &mcpServer{
-		t:         NewTransport(cfg.ServerURL, cfg.RunnerToken),
-		sessionID: os.Getenv("ORBIT_SESSION_ID"),
-		agentID:   os.Getenv("ORBIT_AGENT_ID"),
-		taskID:    os.Getenv("ORBIT_TASK_ID"),
+		t:                     NewTransport(cfg.ServerURL, cfg.RunnerToken),
+		sessionID:             os.Getenv("ORBIT_SESSION_ID"),
+		agentID:               os.Getenv("ORBIT_AGENT_ID"),
+		taskID:                os.Getenv("ORBIT_TASK_ID"),
+		allowPermissionPrompt: mcpPermissionPromptEnabled(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
 
 type mcpServer struct {
-	t         *Transport
-	sessionID string
-	agentID   string // attributes created tasks/comments; "" => server falls back to USER
-	taskID    string // the "current task" default for get/update/comment
+	t                     *Transport
+	sessionID             string
+	agentID               string // attributes created tasks/comments; "" => server falls back to USER
+	taskID                string // the "current task" default for get/update/comment
+	allowPermissionPrompt bool   // Claude-only live approval bridge
+}
+
+const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
+
+func mcpPermissionPromptEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envMCPPermissionPrompt))) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 // ── JSON-RPC 2.0 wire types ────────────────────────────────────────────────
@@ -104,7 +118,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors()}), true
+		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt)}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -224,6 +238,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult(prettyJSON(raw), false)
 
 	case "permission_prompt":
+		if !s.allowPermissionPrompt {
+			return toolResult(denyJSON("permission approvals are disabled for this provider"), false)
+		}
 		return s.permissionPrompt(args)
 
 	default:
@@ -356,7 +373,7 @@ func (s *mcpServer) resolveTaskID(args map[string]interface{}) (string, bool) {
 
 // toolDescriptors is the tools/list payload. Claude namespaces these as
 // mcp__orbit__<name> for the allowlist; the agent allowlist defaults to mcp__orbit__*.
-func toolDescriptors() []map[string]interface{} {
+func toolDescriptors(includePermissionPrompt bool) []map[string]interface{} {
 	str := map[string]interface{}{"type": "string"}
 	taskIDProp := map[string]interface{}{"type": "string", "description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted"}
 	promptDesc := map[string]interface{}{"type": "string", "description": "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."}
@@ -368,7 +385,7 @@ func toolDescriptors() []map[string]interface{} {
 		}
 		return schema
 	}
-	return []map[string]interface{}{
+	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
 			"description": "List the caller's tasks. Optionally filter by status or listId.",
@@ -418,7 +435,9 @@ func toolDescriptors() []map[string]interface{} {
 			"description": "Create a task list (group).",
 			"inputSchema": obj(map[string]interface{}{"title": str}, "title"),
 		},
-		{
+	}
+	if includePermissionPrompt {
+		tools = append(tools, map[string]interface{}{
 			// Claude Code's --permission-prompt-tool target. Claude calls it (not the
 			// agent) when a tool needs permission; it blocks on a human allow/deny.
 			"name":        "permission_prompt",
@@ -428,8 +447,9 @@ func toolDescriptors() []map[string]interface{} {
 				"input":       map[string]interface{}{"type": "object"},
 				"tool_use_id": str,
 			}),
-		},
+		})
 	}
+	return tools
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────

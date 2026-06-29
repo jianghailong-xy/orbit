@@ -265,6 +265,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID,
 		"ORBIT_TASK_ID="+job.TaskID,
+		envMCPPermissionPrompt+"=0",
 	)
 	cmd.Stdin = strings.NewReader(prompt)
 	stdout, err := cmd.StdoutPipe()
@@ -449,10 +450,13 @@ func codexUsage(v interface{}) *TokenUsage {
 	if u == nil {
 		return nil
 	}
+	// Codex billing is not normalized yet: keep cost/modelUsage at zero/nil and
+	// only carry token counters into Orbit's aggregate usage fields.
 	return &TokenUsage{
-		InputTokens:          toInt(firstPresent(u, "input_tokens", "inputTokens")),
-		OutputTokens:         toInt(firstPresent(u, "output_tokens", "outputTokens")),
-		CacheReadInputTokens: toInt(firstPresent(u, "cached_input_tokens", "cache_read_input_tokens", "cacheReadInputTokens")),
+		InputTokens:              toInt(firstPresent(u, "input_tokens", "inputTokens")),
+		OutputTokens:             toInt(firstPresent(u, "output_tokens", "outputTokens")),
+		CacheCreationInputTokens: toInt(firstPresent(u, "cache_creation_input_tokens", "cacheCreationInputTokens")),
+		CacheReadInputTokens:     toInt(firstPresent(u, "cached_input_tokens", "cache_read_input_tokens", "cacheReadInputTokens")),
 	}
 }
 
