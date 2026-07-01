@@ -2774,14 +2774,6 @@ body {
   padding-inline-start: 2px;
   resize: none;
 }
-/* Expand-to-fullscreen button, styled to match the muted + attach button. */
-.composer-box .composer-expand-btn.ant-btn {
-  width: 24px;
-  color: var(--text-3);
-}
-.composer-box .composer-expand-btn.ant-btn:hover:not(:disabled) {
-  color: var(--text-1);
-}
 /* Top-edge grip to drag the composer taller/shorter; double-click resets to auto-grow.
    Sits over the box's top border so it reads as an affordance without stealing text room.
    The pill only shows on hover to stay out of the way. */
@@ -2810,20 +2802,6 @@ body {
 .composer-box:hover .composer-resize-handle::before,
 .composer-resize-handle:hover::before {
   opacity: 1;
-}
-/* Fullscreen editor modal footer: hint on the left, buttons on the right. */
-.composer-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.composer-modal-hint {
-  font-size: 12px;
-  color: var(--text-3);
-}
-.composer-modal-footer .ant-btn + .ant-btn {
-  margin-inline-start: 8px;
 }
 
 /* `/` command & skill autocomplete — floats just above the composer box */

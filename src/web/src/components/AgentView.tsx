@@ -12,7 +12,6 @@ import {
   ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
-  ExpandAltOutlined,
   EyeOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -27,7 +26,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Modal, Popover, Segmented, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   type MouseEvent as ReactMouseEvent,
   useCallback,
@@ -1711,9 +1710,6 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Manual composer height (px). null = autoSize auto-grow (up to maxRows); once the user
   // drags the top handle, that height wins over autoSize until they double-click to reset.
   const [composerHeight, setComposerHeight] = useState<number | null>(null);
-  // Fullscreen editor for long, multi-line input (long SQL / code blocks). Shares the same
-  // `text` state as the inline box, so edits sync both ways.
-  const [expanded, setExpanded] = useState(false);
   // Drag the top handle to set an explicit composer height. Drag up = taller; the height is
   // clamped so it can't collapse away or swallow the transcript.
   const startComposerResize = useCallback((e: ReactMouseEvent): void => {
@@ -2678,16 +2674,6 @@ export function AgentView({ runner }: { runner: Runner }) {
               }
             }}
           />
-          <Tooltip title="Expand editor">
-            <Button
-              className="composer-expand-btn"
-              type="text"
-              icon={<ExpandAltOutlined />}
-              disabled={composerDisabled}
-              onClick={() => setExpanded(true)}
-              aria-label="Expand editor"
-            />
-          </Tooltip>
           {showStop ? (
             <Tooltip title="Stop the current turn">
               <Button
@@ -2708,59 +2694,6 @@ export function AgentView({ runner }: { runner: Runner }) {
             />
           )}
         </div>
-        {/* Fullscreen editor for long, multi-line input — same `text` state as the inline box.
-            Enter inserts a newline here (comfortable editing); ⌘/Ctrl+Enter sends. */}
-        <Modal
-          open={expanded}
-          onCancel={() => setExpanded(false)}
-          title="Edit message"
-          width="min(900px, 92vw)"
-          destroyOnClose
-          footer={
-            <div className="composer-modal-footer">
-              <span className="composer-modal-hint">Enter for newline · ⌘/Ctrl+Enter to send</span>
-              <div>
-                <Button onClick={() => setExpanded(false)}>Close</Button>
-                <Button
-                  type="primary"
-                  icon={<ArrowUpOutlined />}
-                  disabled={!canSend}
-                  loading={send.isPending}
-                  onClick={() => {
-                    setExpanded(false);
-                    onSend();
-                  }}
-                >
-                  Send
-                </Button>
-              </div>
-            </div>
-          }
-        >
-          <Input.TextArea
-            autoFocus
-            autoSize={{ minRows: 12, maxRows: 24 }}
-            maxLength={MAX_PROMPT_CHARS}
-            placeholder={composerPlaceholder}
-            value={text}
-            disabled={composerDisabled}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (histIdx !== -1) setHistIdx(-1);
-            }}
-            onKeyDown={(e) => {
-              if (
-                e.key === 'Enter' &&
-                (e.metaKey || e.ctrlKey) &&
-                !e.nativeEvent.isComposing
-              ) {
-                e.preventDefault();
-                setExpanded(false);
-                onSend();
-              }
-            }}
-          />
-        </Modal>
         <div className="composer-pills">
           {/* The agent is only a Select when it can actually be picked (new, unlocked
               session); once read-only it shows as a static pill left of Model below. */}
