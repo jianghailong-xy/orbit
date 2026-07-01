@@ -4729,3 +4729,127 @@ body {
   background: var(--bg-hover);
   color: var(--text-1);
 }
+
+/* ── Public read-only share page (/s/<token>) ─────────────────────────────────
+   Standalone (no app shell): a branded header bar, a centered scrolling transcript
+   reusing the global .chat-* bubble styles, and a small footer. */
+.share-page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--bg-base);
+  color: var(--text-1);
+}
+.share-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.share-brand {
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+  color: var(--text-1);
+  flex: none;
+}
+.share-titlebar {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.share-badge {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+}
+.share-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.share-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 20px 48px;
+}
+.share-footer {
+  flex: none;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.share-state {
+  margin: auto;
+  text-align: center;
+  color: var(--text-3);
+  padding: 40px;
+}
+.share-state-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.share-state-desc {
+  font-size: 13px;
+}
+
+/* ── Share dialog (ShareModal) ───────────────────────────────────────────────── */
+.share-modal-desc {
+  color: var(--text-2);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+.share-modal-link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.share-modal-url {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+}
+.share-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.share-modal-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}

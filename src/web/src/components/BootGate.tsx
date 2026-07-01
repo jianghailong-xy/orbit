@@ -14,6 +14,9 @@ import {
 
 // Routes that render their own loaders and have no first-screen data to wait on.
 const BYPASS = ['/login', '/enroll', '/setup'];
+// The public share page (/s/<token>) is signed-out and self-loading — never gate it behind
+// the splash or the setup-status check.
+const isBypass = (pathname: string) => BYPASS.includes(pathname) || pathname.startsWith('/s/');
 
 type BootWindow = Window & {
   __bootProgress?: (pct: number) => void;
@@ -53,7 +56,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const sessionMatch = useMatch('/sessions/:id');
   const agentMatch = useMatch('/agents/:id/*');
   const hasToken = !!getToken();
-  const onBypass = BYPASS.includes(loc.pathname);
+  const onBypass = isBypass(loc.pathname);
   // Signed-out boot on a real route: the deployment may have zero users (fresh install),
   // in which case every path must funnel to /setup. The client can't know that locally,
   // so the splash holds while we ask the server. A token implies users exist, so only the

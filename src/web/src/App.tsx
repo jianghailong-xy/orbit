@@ -13,6 +13,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
+import { SharedSessionPage } from './pages/SharedSessionPage';
 import { SkillsPage } from './pages/SkillsPage';
 import { TaskListView } from './pages/TaskListView';
 
@@ -33,6 +34,8 @@ export function App() {
   const authed = !!getToken();
   return (
     <Routes>
+      {/* Public read-only share link — works signed-out, so it sits outside the auth gate. */}
+      <Route path="/s/:token" element={<SharedSessionPage />} />
       <Route path="/login" element={authed ? <Navigate to="/active" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}

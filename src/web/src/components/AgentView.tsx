@@ -21,6 +21,7 @@ import {
   PauseCircleOutlined,
   PictureOutlined,
   PlusOutlined,
+  ShareAltOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -64,6 +65,7 @@ import {
 } from '../api';
 import { AttachmentImage, ChatImage, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
+import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import type { PlanUsage } from '@orbit/shared';
 import { MAX_PROMPT_CHARS } from '@orbit/shared';
@@ -514,6 +516,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Which slice of the session list to show: active, archived, system, or trash.
   const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
+  const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
@@ -1899,6 +1902,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                 menu={{
                   items: [
                     {
+                      key: 'share',
+                      icon: <ShareAltOutlined />,
+                      label: sessionDetailQ.data?.shareToken ? 'Share · link active' : 'Share…',
+                      onClick: () => setShareOpen(true),
+                    },
+                    {
                       key: 'delete',
                       icon: <DeleteOutlined />,
                       danger: true,
@@ -1913,6 +1922,15 @@ export function AgentView({ runner }: { runner: Runner }) {
             </>
           )}
         </div>
+
+        {selected && !composing && (
+          <ShareModal
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            sessionId={selected.id}
+            initialToken={sessionDetailQ.data?.shareToken ?? null}
+          />
+        )}
 
 
         {stuck && (

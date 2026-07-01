@@ -12,6 +12,7 @@ import { TaskListsModule } from './task-lists/task-lists.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { SharedModule } from './shared/shared.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AttachmentsModule } from './attachments/attachments.module';
     RunnersModule,
     RunnerApiModule,
     AttachmentsModule,
+    SharedModule,
   ],
 })
 export class AppModule {}

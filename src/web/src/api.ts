@@ -250,6 +250,55 @@ export const deleteSession = (sessionId: string) =>
 export const restoreSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/restore`, { method: 'POST' });
 
+// ── Public read-only sharing ──
+// Enable sharing mints (or returns) an unguessable token; the public link is `/s/<token>`.
+// Disable revokes it (the old link 404s). The current token also rides on SessionDetail.shareToken.
+export const enableSessionShare = (sessionId: string) =>
+  api<{ shareToken: string; sharedAt: string }>(`/sessions/${sessionId}/share`, { method: 'POST' });
+
+export const disableSessionShare = (sessionId: string) =>
+  api(`/sessions/${sessionId}/share`, { method: 'DELETE' });
+
+/** One event in a public shared transcript (mirrors the owner SSE payload, sans live state). */
+export interface SharedEvent {
+  seq: number;
+  type: string;
+  payload: any;
+  turnId: string | null;
+  ts: string;
+}
+
+/** A session's sanitized, read-only transcript as served to a public share-link viewer. */
+export interface SharedSession {
+  title: string;
+  agentName: string | null;
+  status: string;
+  createdAt: string;
+  events: SharedEvent[];
+}
+
+/** Fetch a shared session by its public token. No auth — the token is the capability; a
+ *  revoked/unknown token 404s. Bypasses the bearer `api()` helper so a logged-out viewer
+ *  isn't bounced to /login. */
+export const getSharedSession = async (token: string): Promise<SharedSession> => {
+  const res = await fetch(`/api/shared/${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new Error(msg.message || res.statusText);
+  }
+  return (await res.json()) as SharedSession;
+};
+
+/** Object URL for an inline image in a shared transcript, via the public attachment route
+ *  (no bearer). Caller revokes it. Mirrors fetchAttachmentObjectUrl for the shared page. */
+export const fetchSharedAttachmentObjectUrl = async (token: string, id: string): Promise<string> => {
+  const res = await fetch(
+    `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
+  );
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+};
+
 /** One file a worktree-isolated session changed (git diff baseSha..branch); additions/
  *  deletions are -1 for binary files. Mirrors @orbit/shared ChangedFile. */
 export interface SessionChangedFile {
@@ -299,6 +348,10 @@ export interface SessionDetail {
   worktreeDirty?: boolean | null;
   commitStatus?: 'pending' | 'committed' | 'nochange' | 'error' | null;
   commitError?: string | null;
+  // Public read-only sharing: the unguessable token behind the `/s/<token>` link, or null when
+  // not shared. Set/cleared by enable/disableSessionShare; drives the Share dialog's state.
+  shareToken?: string | null;
+  sharedAt?: string | null;
 }
 
 /** Fetch one session by id (accepts a base62 public id or a raw UUID). Used to

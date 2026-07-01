@@ -341,6 +341,14 @@ model Session {
   // are reversible — restore clears them. There is no hard delete.
   archivedAt        DateTime? @map("archived_at")
   deletedAt         DateTime? @map("deleted_at")
+  // ── Public read-only share link ─────────────────────────────────────────────
+  // shareToken is an unguessable token embedded in a public URL (/s/<token>); anyone
+  // with the link can view this session's transcript read-only, no login. null = not
+  // shared. Revoking sets it back to null (old links 404); re-sharing mints a fresh
+  // token. sharedAt records when the current link was minted. Only the transcript is
+  // exposed via the token (see SharedController) — never ownership/billing/runner internals.
+  shareToken        String?   @unique @map("share_token")
+  sharedAt          DateTime? @map("shared_at")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 

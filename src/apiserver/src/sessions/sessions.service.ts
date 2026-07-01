@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import {
   ApprovalDecisionRequest,
   ApprovalInfo,
@@ -317,6 +317,73 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     return session;
+  }
+
+  /**
+   * Enable a public read-only share link for this session: mint an unguessable `shareToken`
+   * (idempotent — returns the existing one if already shared). The token alone is the
+   * capability; anyone with the link can read the transcript with no login (see getShared).
+   */
+  async enableShare(ownerId: string, id: string): Promise<{ shareToken: string; sharedAt: Date }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { shareToken: true, sharedAt: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    if (session.shareToken && session.sharedAt) {
+      return { shareToken: session.shareToken, sharedAt: session.sharedAt };
+    }
+    const updated = await this.prisma.session.update({
+      where: { id },
+      data: { shareToken: randomBytes(24).toString('base64url'), sharedAt: new Date() },
+      select: { shareToken: true, sharedAt: true },
+    });
+    return { shareToken: updated.shareToken!, sharedAt: updated.sharedAt! };
+  }
+
+  /** Revoke the public share link (the token 404s afterwards). No-op if not shared. */
+  async disableShare(ownerId: string, id: string): Promise<void> {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    if (!session) throw new NotFoundException('session not found');
+    await this.prisma.session.update({ where: { id }, data: { shareToken: null, sharedAt: null } });
+  }
+
+  /**
+   * Resolve a public share token to its sanitized, read-only transcript. NO ownerId — the
+   * unguessable token IS the capability. Returns only what a viewer needs to render the
+   * conversation (title, agent name, status, the event stream); never ownership, billing,
+   * runner internals, or worktree/merge state. A trashed (deletedAt) session stops resolving.
+   */
+  async getShared(token: string) {
+    const session = await this.prisma.session.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        agent: { select: { name: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('shared session not found');
+    const events = await this.prisma.runEvent.findMany({
+      where: { sessionId: session.id },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
+    });
+    return {
+      title: session.title,
+      agentName: session.agent?.name ?? null,
+      status: session.status,
+      createdAt: session.createdAt,
+      events: events.map((e) => ({
+        seq: e.seq,
+        type: e.type,
+        payload: e.payload,
+        turnId: e.turnId ?? null,
+        ts: e.createdAt,
+      })),
+    };
   }
 
   /**

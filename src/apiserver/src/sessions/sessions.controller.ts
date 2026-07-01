@@ -138,6 +138,18 @@ export class SessionsController {
     return this.sessions.commitWorktree(user.userId, id);
   }
 
+  /** Enable a public read-only share link for this session (mints/returns its shareToken). */
+  @Post(':id/share')
+  share(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.enableShare(user.userId, id);
+  }
+
+  /** Revoke the public share link (the token stops resolving). */
+  @Delete(':id/share')
+  unshare(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.disableShare(user.userId, id);
+  }
+
   @Post(':id/archive')
   archive(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.archive(user.userId, id);

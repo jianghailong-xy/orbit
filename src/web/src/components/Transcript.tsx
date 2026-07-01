@@ -24,10 +24,16 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import { Image } from 'antd';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl } from '../api';
+
+// How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
+// bearer-guarded owner route; the public shared page overrides it with the share-token route
+// so a logged-out viewer can still see inline images. See SharedSessionPage.
+export const AttachmentResolverContext =
+  createContext<(id: string) => Promise<string>>(fetchAttachmentObjectUrl);
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -343,11 +349,12 @@ function relTime(iso: string): string {
 // bearer-guarded (an <img src> can't carry the token), so fetch the blob and show its
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
 export function AttachmentImage({ id }: { id: string }) {
+  const resolve = useContext(AttachmentResolverContext);
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     let made: string | null = null;
-    fetchAttachmentObjectUrl(id)
+    resolve(id)
       .then((u) => {
         if (active) {
           made = u;
@@ -361,7 +368,7 @@ export function AttachmentImage({ id }: { id: string }) {
       active = false;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [id]);
+  }, [id, resolve]);
   if (!url) return <span className="chat-image chat-image-loading" />;
   return <ChatImage src={url} />;
 }
@@ -370,13 +377,14 @@ export function AttachmentImage({ id }: { id: string }) {
 // endpoint is bearer-guarded, so a plain <a href> would 401 — fetch with the token, then
 // trigger a download from the object URL). The bytes are fetched only when clicked.
 export function AttachmentFile({ id, name }: { id: string; name?: string }) {
+  const resolve = useContext(AttachmentResolverContext);
   const [busy, setBusy] = useState(false);
   const label = name || 'file';
   const download = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
     try {
-      const objUrl = await fetchAttachmentObjectUrl(id);
+      const objUrl = await resolve(id);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = label;
