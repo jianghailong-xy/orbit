@@ -28,7 +28,15 @@ import {
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Segmented, Select, Tooltip } from 'antd';
-import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile } from '../lib/useMediaQuery';
@@ -494,6 +502,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const cancelTitleEdit = useRef(false);
+  // Size the rename input to its text (via an off-screen mirror) so the underline hugs the
+  // title instead of spanning the whole header; CSS caps it at the available width.
+  const titleMirrorRef = useRef<HTMLSpanElement>(null);
+  const [titleInputW, setTitleInputW] = useState(0);
+  useLayoutEffect(() => {
+    if (editingTitle) setTitleInputW((titleMirrorRef.current?.offsetWidth ?? 0) + 2);
+  }, [editingTitle, titleDraft]);
   // /agents/<id> names the agent this console is scoped to: the picker is locked
   // to it and the session list is filtered to that agent's conversations.
   // /agents/<id>/new is the "compose a new session" draft state (the splat is 'new').
@@ -1912,38 +1927,44 @@ export function AgentView({ runner }: { runner: Runner }) {
               </button>
             )}
             {editingTitle && selected && !composing ? (
-              <input
-                className="agent-name-input"
-                autoFocus
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onFocus={(e) => {
-                  // Select all (double-click-to-rename = type replaces), but anchor the
-                  // caret at the START so a long title shows its head, not its tail.
-                  const el = e.currentTarget;
-                  el.setSelectionRange(0, el.value.length, 'backward');
-                }}
-                onKeyDown={(e) => {
-                  if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelTitleEdit.current = true;
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={() => {
-                  setEditingTitle(false);
-                  if (cancelTitleEdit.current) {
-                    cancelTitleEdit.current = false;
-                    return;
-                  }
-                  const t = titleDraft.trim();
-                  if (t && t !== selected.title) renameMut.mutate({ id: selected.id, title: t });
-                }}
-              />
+              <>
+                <span ref={titleMirrorRef} className="agent-name-mirror" aria-hidden="true">
+                  {titleDraft || ' '}
+                </span>
+                <input
+                  className="agent-name-input"
+                  style={{ width: titleInputW }}
+                  autoFocus
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onFocus={(e) => {
+                    // Select all (double-click-to-rename = type replaces), but anchor the
+                    // caret at the START so a long title shows its head, not its tail.
+                    const el = e.currentTarget;
+                    el.setSelectionRange(0, el.value.length, 'backward');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelTitleEdit.current = true;
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onBlur={() => {
+                    setEditingTitle(false);
+                    if (cancelTitleEdit.current) {
+                      cancelTitleEdit.current = false;
+                      return;
+                    }
+                    const t = titleDraft.trim();
+                    if (t && t !== selected.title) renameMut.mutate({ id: selected.id, title: t });
+                  }}
+                />
+              </>
             ) : (
               <div
                 className="agent-name"

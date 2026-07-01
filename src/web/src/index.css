@@ -1700,8 +1700,11 @@ body {
    type so the swap is seamless, with a brand underline to signal edit mode. */
 .agent-name-input {
   display: block;
-  box-sizing: border-box;
-  width: 100%;
+  box-sizing: content-box;
+  /* width is set inline from the mirror (fits the text); cap so a long title stops at the
+     header edge and scrolls instead of overflowing. */
+  max-width: 100%;
+  min-width: 3ch;
   font-family: inherit;
   font-size: 18px;
   font-weight: 600;
@@ -1712,6 +1715,18 @@ body {
   border-bottom: 1px solid var(--brand);
   background: transparent;
   outline: none;
+}
+/* Off-screen twin of .agent-name-input used only to measure the text width. */
+.agent-name-mirror {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  white-space: pre;
+  pointer-events: none;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
 }
 .agent-header-task {
   display: inline-flex;
