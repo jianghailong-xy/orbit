@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Spin } from 'antd';
+import { Button, Result, Spin } from 'antd';
 import { useRef } from 'react';
-import { useMatch } from 'react-router-dom';
+import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { sessionQuery } from '../lib/queries';
@@ -12,6 +12,7 @@ import { AgentView } from './AgentView';
 // between those paths — so AgentView never unmounts (and never loses its SSE stream /
 // transcript or reloads the session list) on an in-console navigation.
 export function AgentConsole() {
+  const navigate = useNavigate();
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
   // Poll while the console is open so the composer's plan-usage gauge stays current
   // (the runner refreshes its usage roughly every 2 min while busy).
@@ -42,12 +43,28 @@ export function AgentConsole() {
   const lastRunner = useRef<any>(null);
   if (selectedRunner) lastRunner.current = selectedRunner;
   const viewRunner = selectedRunner ?? lastRunner.current;
+  // A /sessions/:id deep link to a session that doesn't exist (or was deleted) can never
+  // resolve a runner, so getSession 404s. Without this we'd sit on the loading spinner
+  // below forever; instead surface a clear not-found state with a way out. Gated on a
+  // failed session fetch so a genuinely in-flight load still shows the spinner.
+  const sessionNotFound = !!selectedSessionId && !viewRunner && sessionQ.isError;
 
   return (
     <main className="app-main">
       <div className="app-view">
         {viewRunner ? (
           <AgentView runner={viewRunner} />
+        ) : sessionNotFound ? (
+          <Result
+            status="404"
+            title="Session not found"
+            subTitle="This session doesn't exist or has been deleted."
+            extra={
+              <Button type="primary" onClick={() => navigate('/active')}>
+                Go to Active
+              </Button>
+            }
+          />
         ) : (
           <div style={{ padding: 48, textAlign: 'center' }}>
             <Spin />
