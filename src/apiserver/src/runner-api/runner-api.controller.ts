@@ -53,6 +53,7 @@ import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
+import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
 const LONG_POLL_MS = 25_000;
@@ -750,6 +751,23 @@ export class RunnerApiController {
         })),
         skipDuplicates: true,
       });
+    }
+
+    // Codex reports its runtime session id in the app-server `system` init/resumed
+    // event; unlike Claude (seeded at session creation) it's otherwise only persisted
+    // at /turn-complete. Capture it as soon as it lands so the reaper's codex startup
+    // watchdog (reaper.service.ts) can tell a live-but-slow first turn from a runtime
+    // that never came up — without this a first turn longer than the startup grace is
+    // force-failed as "codex runtime not initialized". Fill only while unset (the id is
+    // stable per session), so this is a one-shot, retry-idempotent write.
+    if (!session.runtimeSessionId) {
+      const runtimeId = runtimeInitSessionId(durable);
+      if (runtimeId) {
+        await this.prisma.session.updateMany({
+          where: { id: sessionId, runtimeSessionId: null },
+          data: { runtimeSessionId: runtimeId },
+        });
+      }
     }
 
     // Denormalize the latest assistant reply onto the session for the list's preview
