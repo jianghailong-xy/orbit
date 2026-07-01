@@ -117,11 +117,13 @@ rebuild and recreate only the services that changed — the `upgrade` skill auto
 ### Run a runner (on the machine that should execute tasks)
 
 On a machine with Claude Code installed & authenticated (logged in via `/login`, or
-`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` set):
+`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` set). Replace `orbit.example.com` with your
+deployment's origin (baked in at build time via `PUBLIC_ORIGIN`; the UI's **Add a runner**
+page prints these commands pre-filled for you):
 
 ```bash
 # 1. install the static `orbit` binary (no Node needed)
-curl -fsSL https://orbit.wikova.com/install.sh | bash
+curl -fsSL https://orbit.example.com/install.sh | bash
 
 # 2. register this machine (opens your browser to approve)
 #    this auto-installs + starts a background service (systemd / launchd)

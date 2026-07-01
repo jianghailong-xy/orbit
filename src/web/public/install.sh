@@ -31,10 +31,14 @@ gzip -dc "$tmp.gz" > "$tmp"
 chmod +x "$tmp"
 
 target="${BIN_DIR}/${NAME}"
+# BIN_DIR may not exist yet (e.g. /usr/local/bin is absent on a fresh Apple Silicon Mac),
+# so create it before moving. A missing dir isn't writable, hence falls to the sudo branch.
 if [ -w "$BIN_DIR" ] || [ "$(id -u)" = "0" ]; then
+  mkdir -p "$BIN_DIR"
   mv "$tmp" "$target"
 else
   echo "Installing to ${target} (needs sudo)..."
+  sudo mkdir -p "$BIN_DIR"
   sudo mv "$tmp" "$target"
 fi
 trap - EXIT
