@@ -281,7 +281,14 @@ func envWithAgent(agentEnv map[string]string) []string {
 }
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
-	if runtimeProvider(job) == providerCodex {
+	provider := runtimeProvider(job)
+	// Fail fast with an actionable message if the engine CLI isn't on PATH — the
+	// provider constants match the binary names. ended=true so we don't respawn.
+	if _, err := exec.LookPath(provider); err != nil {
+		emit(evError, map[string]interface{}{"message": engineMissingMessage(provider)})
+		return stFailed, true, false
+	}
+	if provider == providerCodex {
 		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
 	}
 	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)

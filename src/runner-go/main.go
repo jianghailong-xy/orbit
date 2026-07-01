@@ -40,6 +40,7 @@ Usage:
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
+  orbit doctor                      Check the Claude/Codex CLIs are installed, signed in, and on the service PATH
   orbit resume [session-id]         Resume a session in this terminal via claude --resume
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
@@ -103,6 +104,16 @@ Options:
 
 Usage:
   orbit status
+`,
+	"doctor": `orbit doctor — check the coding-engine CLIs this runner needs
+
+Usage:
+  orbit doctor
+
+Reports, for Claude Code and Codex, whether the CLI is installed, its version, a
+best-effort sign-in check, and whether the background service's PATH can see it —
+with the exact install/sign-in command for anything that's missing. Exits non-zero
+when no engine is installed. Runs automatically at the end of 'orbit register'.
 `,
 	"resume": `orbit resume — resume a session in this terminal
 
@@ -173,6 +184,8 @@ func main() {
 		cmdUnregister(bools)
 	case "status":
 		cmdStatus()
+	case "doctor":
+		cmdDoctor()
 	case "resume":
 		cmdResume(args[1:])
 	case "upgrade":
@@ -292,6 +305,12 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 		os.Exit(1)
 	}
 	fmt.Printf("\n✓ registered runner %q (%s).\n", cfg.Name, cfg.RunnerID)
+
+	// Registration doesn't install the coding CLIs — check them here (and offer to
+	// install what's missing) so the gap is closed now, not hit as a "failed to
+	// spawn" the first time a session runs. Runs before setupService so a freshly
+	// installed engine gets baked into the service PATH. Best-effort; never blocks.
+	runDoctor(true, proxyVars)
 
 	if foreground {
 		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
