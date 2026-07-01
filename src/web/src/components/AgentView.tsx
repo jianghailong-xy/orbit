@@ -1153,11 +1153,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   }, [selectedId]);
 
   // Polled fallback for idleness, in case an SSE turn_end was missed / reconnected.
+  // Also keyed on selectedId so it re-syncs on a session switch: the SSE effect above
+  // resets idle→false for the freshly opened session, but switching between two sessions
+  // that share a status (both AWAITING_INPUT) wouldn't change `runStatus`, so without the
+  // selectedId dep this effect wouldn't re-run and idle would stay wrongly false — flipping
+  // turnActive on and hiding the worktree bar's "committed"/merge state until a refresh.
   const runStatus: string | undefined = selected?.status;
   useEffect(() => {
     if (runStatus === 'AWAITING_INPUT') setIdle(true);
     else if (runStatus === 'RUNNING') setIdle(false);
-  }, [runStatus]);
+  }, [runStatus, selectedId]);
 
   // A finalized session can be resumed in place (same selectedId, so the SSE effect above
   // doesn't re-run and its stream was paused on `final`). When the polled status shows it
