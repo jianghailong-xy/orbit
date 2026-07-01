@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: orbit-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
@@ -21,6 +22,7 @@ services:
       context: .
       dockerfile: src/apiserver/Dockerfile
     container_name: orbit-apiserver
+    restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
@@ -53,6 +55,7 @@ services:
         # Defaults to the local gateway — set PUBLIC_ORIGIN in .env when serving on a domain.
         PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
     container_name: orbit-web
+    restart: unless-stopped
     depends_on:
       apiserver:
         condition: service_healthy
@@ -68,6 +71,7 @@ services:
   gateway:
     image: nginx:alpine
     container_name: orbit-gateway
+    restart: unless-stopped
     depends_on:
       web:
         condition: service_healthy
