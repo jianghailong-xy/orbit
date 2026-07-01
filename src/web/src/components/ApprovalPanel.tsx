@@ -64,9 +64,16 @@ const ENTER_HINT = 'Enter';
  *  By default requires ⌘/Ctrl + Enter; pass { requireMod: false } for a plain Enter — and
  *  then the modifier chord is ignored, so a separate mod-Enter binding can own it. Skipped
  *  while a field is focused (so it never clashes with the composer); plain Enter also yields
- *  to a focused button so it doesn't double-fire with that button's own Enter. */
-function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requireMod?: boolean }): void {
+ *  to a focused button so it doesn't double-fire with that button's own Enter — unless
+ *  { overButtons: true }, which submits even from a focused button (the preventDefault below
+ *  suppresses that button's own activation) so a just-picked option can't swallow the Enter. */
+function useApproveHotkey(
+  active: boolean,
+  onTrigger: () => void,
+  opts?: { requireMod?: boolean; overButtons?: boolean },
+): void {
   const requireMod = opts?.requireMod ?? true;
+  const overButtons = opts?.overButtons ?? false;
   const fn = useRef(onTrigger);
   fn.current = onTrigger;
   useEffect(() => {
@@ -80,13 +87,13 @@ function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requi
         el instanceof HTMLElement &&
         (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
       const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
-      if (isField || (!requireMod && isButton)) return;
+      if (isField || (!requireMod && isButton && !overButtons)) return;
       e.preventDefault();
       fn.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, requireMod]);
+  }, [active, requireMod, overButtons]);
 }
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
@@ -227,8 +234,9 @@ function QuestionForm({
     onDecide(approval.id, 'allow', answers);
   };
 
-  // Enter submits once every question has a pick (matches the plain approval card).
-  useApproveHotkey(active && complete, submit, { requireMod: false });
+  // Enter submits once every question has a pick. overButtons: a just-clicked option keeps
+  // focus, so without it the plain-Enter hook would yield to that button and swallow the Enter.
+  useApproveHotkey(active && complete, submit, { requireMod: false, overButtons: true });
 
   return (
     <div className="approval-card">
