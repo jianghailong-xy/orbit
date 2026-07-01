@@ -64,16 +64,9 @@ const ENTER_HINT = 'Enter';
  *  By default requires ⌘/Ctrl + Enter; pass { requireMod: false } for a plain Enter — and
  *  then the modifier chord is ignored, so a separate mod-Enter binding can own it. Skipped
  *  while a field is focused (so it never clashes with the composer); plain Enter also yields
- *  to a focused button so it doesn't double-fire with that button's own Enter — unless
- *  { overButtons: true }, which submits even from a focused button (the preventDefault below
- *  suppresses that button's own activation) so a just-picked option can't swallow the Enter. */
-function useApproveHotkey(
-  active: boolean,
-  onTrigger: () => void,
-  opts?: { requireMod?: boolean; overButtons?: boolean },
-): void {
+ *  to a focused button so it doesn't double-fire with that button's own Enter. */
+function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: { requireMod?: boolean }): void {
   const requireMod = opts?.requireMod ?? true;
-  const overButtons = opts?.overButtons ?? false;
   const fn = useRef(onTrigger);
   fn.current = onTrigger;
   useEffect(() => {
@@ -87,13 +80,13 @@ function useApproveHotkey(
         el instanceof HTMLElement &&
         (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
       const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
-      if (isField || (!requireMod && isButton && !overButtons)) return;
+      if (isField || (!requireMod && isButton)) return;
       e.preventDefault();
       fn.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, requireMod, overButtons]);
+  }, [active, requireMod]);
 }
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
@@ -115,14 +108,14 @@ export function ApprovalPanel({
   // compound Bash line yields one rule per distinct sub-command.
   const rules = isQuestion ? [] : rememberRulesFor(approval);
   // Plain card: Enter approves; ⌘/Ctrl + Enter approves-and-remembers (only when that
-  // option exists). Questions submit via QuestionForm's own ⌘/Ctrl + Enter hook.
+  // option exists). Questions have no submit hotkey — they submit only via the Submit button.
   useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'), { requireMod: false });
   useApproveHotkey(active && !isQuestion && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   });
   if (isQuestion) {
     return (
-      <QuestionForm approval={approval} onDecide={onDecide} active={active} onChatAbout={onChatAbout} />
+      <QuestionForm approval={approval} onDecide={onDecide} onChatAbout={onChatAbout} />
     );
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
@@ -178,12 +171,10 @@ function questionsOf(input: unknown): QItem[] {
 function QuestionForm({
   approval,
   onDecide,
-  active = false,
   onChatAbout,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
-  active?: boolean;
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const questions = questionsOf(approval.input);
@@ -234,10 +225,6 @@ function QuestionForm({
     onDecide(approval.id, 'allow', answers);
   };
 
-  // Enter submits once every question has a pick. overButtons: a just-clicked option keeps
-  // focus, so without it the plain-Enter hook would yield to that button and swallow the Enter.
-  useApproveHotkey(active && complete, submit, { requireMod: false, overButtons: true });
-
   return (
     <div className="approval-card">
       <div className="approval-head">❓ Claude has a question for you</div>
@@ -274,12 +261,6 @@ function QuestionForm({
                   placeholder="Or type your own answer…"
                   value={custom[q] ?? ''}
                   onChange={(e) => onCustom(q, e.target.value, multi)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && complete) {
-                      e.preventDefault();
-                      submit();
-                    }
-                  }}
                 />
                 {multi && <div className="chat-q-multi">Multiple choice</div>}
               </div>
@@ -290,7 +271,6 @@ function QuestionForm({
       <div className="approval-actions">
         <button className="approval-btn approve" disabled={!complete} onClick={submit}>
           Submit
-          {active && complete && <span className="approval-btn-kbd">{ENTER_HINT}</span>}
         </button>
         <button className="approval-btn chat" onClick={() => onChatAbout?.(approval.id, chatLabel)}>
           💬 Chat about this
