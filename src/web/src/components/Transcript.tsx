@@ -57,6 +57,16 @@ export interface TurnImage {
   mime: string;
 }
 
+// When present, the transcript is being serialized to a standalone HTML file (see
+// lib/sessionExport). A static file has no JS, so collapsibles must render expanded —
+// otherwise their content sits behind a dead, un-clickable fold and is simply lost — and
+// images must resolve from a pre-fetched data-URL map instead of the live bearer fetch.
+// The context is null in the running app, so every reader below is a no-op there.
+export interface ExportMode {
+  images: Map<string, string>; // attachment id → base64 data URL
+}
+export const ExportCtx = createContext<ExportMode | null>(null);
+
 // ── grouped transcript tree ────────────────────────────────────────────────
 // The raw event stream is flat. Two relationships have to be reconstructed to
 // render like Claude Code: a tool_result belongs to its tool_use, and every
@@ -261,10 +271,11 @@ const USER_BUBBLE_TRUNCATE = 6000;
 // it's absolutely positioned so it never adds height, and lives inside the hover wrap so
 // the pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
 function UserBubble({ node }: { node: TextNode }) {
+  const exp = useContext(ExportCtx);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const longText = node.text.length > USER_BUBBLE_TRUNCATE;
-  const shownText = longText && !expanded ? node.text.slice(0, USER_BUBBLE_TRUNCATE) : node.text;
+  const shownText = longText && !expanded && !exp ? node.text.slice(0, USER_BUBBLE_TRUNCATE) : node.text;
   const copy = () => {
     void navigator.clipboard?.writeText(node.text)?.catch(() => {});
     setCopied(true);
@@ -302,7 +313,7 @@ function UserBubble({ node }: { node: TextNode }) {
         )}
         {shownText}
       </div>
-      {longText && (
+      {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
           {expanded
             ? 'Show less'
@@ -350,8 +361,10 @@ function relTime(iso: string): string {
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
 export function AttachmentImage({ id }: { id: string }) {
   const resolve = useContext(AttachmentResolverContext);
+  const exp = useContext(ExportCtx);
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
+    if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
     let made: string | null = null;
     resolve(id)
@@ -368,7 +381,11 @@ export function AttachmentImage({ id }: { id: string }) {
       active = false;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [id, resolve]);
+  }, [id, resolve, exp]);
+  if (exp) {
+    const data = exp.images.get(id);
+    return data ? <ChatImage src={data} /> : <span className="chat-image chat-image-loading" />;
+  }
   if (!url) return <span className="chat-image chat-image-loading" />;
   return <ChatImage src={url} />;
 }
@@ -378,8 +395,19 @@ export function AttachmentImage({ id }: { id: string }) {
 // trigger a download from the object URL). The bytes are fetched only when clicked.
 export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const resolve = useContext(AttachmentResolverContext);
+  const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
   const label = name || 'file';
+  // Static export: the download endpoint is bearer-guarded and non-image files aren't
+  // embedded, so surface the attachment's name as an inert chip rather than a dead button.
+  if (exp) {
+    return (
+      <span className="chat-file" title={label}>
+        <PaperClipOutlined />
+        <span className="chat-file-name">{label}</span>
+      </span>
+    );
+  }
   const download = async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
@@ -411,6 +439,10 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
 // so the lightbox shows it at native size with no extra fetch. The hover mask is the
 // click affordance — without it a bare <img> gives no hint it's interactive.
 export function ChatImage({ src }: { src: string }) {
+  const exp = useContext(ExportCtx);
+  // Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a
+  // plain <img> (the src is already the full-resolution data URL).
+  if (exp) return <img className="chat-image" src={src} alt="" />;
   return (
     <Image
       className="chat-image"
@@ -522,7 +554,8 @@ function useThrottled(value: string, ms: number): string {
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
 function Thinking({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
+  const exp = useContext(ExportCtx);
+  const [open, setOpen] = useState(!!exp);
   return (
     <div className="chat-think">
       <div className="chat-think-head" onClick={() => setOpen((o) => !o)}>
@@ -552,13 +585,15 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => describeTool(node.name, node.input, isShell),
     [node.name, node.input, isShell],
   );
+  const exp = useContext(ExportCtx);
   const isSubAgent = node.name === 'Task' || node.name === 'Agent';
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // A plan or a question to the user is the point of the turn — open it by
-  // default; errors also auto-open.
+  // default; errors also auto-open. A static export opens every card (nothing can
+  // be un-folded after the fact).
   const [open, setOpen] = useState(
-    !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion' || isShell,
+    !!exp || !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion' || isShell,
   );
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
   // interactive card (ApprovalPanel) is shown separately — don't also render this
@@ -804,7 +839,8 @@ export function Pre({
   muted?: boolean;
   prompt?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const exp = useContext(ExportCtx);
+  const [open, setOpen] = useState(!!exp);
   const lines = text.split('\n');
   const hidden = Math.max(0, lines.length - threshold);
   const long = hidden > 0;

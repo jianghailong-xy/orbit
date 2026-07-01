@@ -137,6 +137,23 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   return URL.createObjectURL(await res.blob());
 };
 
+/** Fetch an attachment's bytes as a base64 data URL — used by the HTML export, where the
+ *  bytes must be embedded inline (an object URL dies with the page, and the endpoint is
+ *  bearer-guarded so a plain `<img src>` in the saved file would 401). */
+export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
+  const res = await fetch(`/api/attachments/${encodeURIComponent(id)}`, {
+    headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
+  });
+  if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+};
+
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
