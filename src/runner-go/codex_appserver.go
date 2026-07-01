@@ -52,6 +52,7 @@ type codexAppActiveTurn struct {
 	result             codexTurnResult
 	fullText           strings.Builder
 	deltaText          strings.Builder
+	thinkText          strings.Builder
 }
 
 func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer) (string, bool, bool) {
@@ -788,8 +789,16 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 			activeMu.Unlock()
 		}
 	case "item/reasoning/textDelta", "item/reasoning/summaryTextDelta":
+		// Streaming increment: animate it live via thinking_delta (ephemeral, not
+		// persisted) and accumulate it — the completed reasoning item carries no
+		// text of its own, so the durable `thinking` event is flushed from here.
 		if delta := firstString(params, "delta"); delta != "" {
-			emit(evThinking, map[string]interface{}{"text": delta})
+			emit(evThinkingDelta, map[string]interface{}{"text": delta})
+			activeMu.Lock()
+			if *active != nil {
+				(*active).thinkText.WriteString(delta)
+			}
+			activeMu.Unlock()
 		}
 	case "item/started":
 		activeMu.Lock()
@@ -798,9 +807,23 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 		}
 		activeMu.Unlock()
 	case "item/completed":
+		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
-			handleCodexItem(map[string]interface{}{"item": firstPresent(params, "item")}, emit, &(*active).result, &(*active).fullText, true)
+			if strings.Contains(strings.ToLower(firstString(item, "type", "kind")), "reasoning") {
+				// Flush the streamed reasoning as ONE durable thinking event so it
+				// survives turn end / reload, instead of a persisted row per delta.
+				text := strings.TrimSpace((*active).thinkText.String())
+				(*active).thinkText.Reset()
+				if text == "" {
+					text = codexText(item)
+				}
+				if text != "" {
+					emit(evThinking, map[string]interface{}{"text": text})
+				}
+			} else {
+				handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true)
+			}
 		}
 		activeMu.Unlock()
 	case "error":

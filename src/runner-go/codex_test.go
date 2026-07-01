@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -132,5 +134,157 @@ func TestCodexAppInterruptBeforeStartSkipsTurnStart(t *testing.T) {
 	}
 	if active.startSent {
 		t.Fatalf("startSent = true, want false")
+	}
+}
+
+type emittedEvent struct {
+	typ     string
+	payload map[string]interface{}
+}
+
+func captureCodexItem(item map[string]interface{}, completed bool) []emittedEvent {
+	var got []emittedEvent
+	emit := func(eventType string, payload map[string]interface{}) {
+		got = append(got, emittedEvent{eventType, payload})
+	}
+	var result codexTurnResult
+	var last strings.Builder
+	handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, completed)
+	return got
+}
+
+// The app-server (thread) protocol tags a completed reply item with the
+// camelCase type "agentMessage" (see item/agentMessage/delta), not the CLI's
+// snake_case "agent_message". handleCodexItem must emit a durable `assistant`
+// event for it — otherwise the reply is only ever streamed and vanishes at
+// turn end / on reload.
+func TestHandleCodexItemAppServerAgentMessage(t *testing.T) {
+	for _, itemType := range []string{"agentMessage", "agent_message", "message"} {
+		t.Run(itemType, func(t *testing.T) {
+			var got []string
+			var result codexTurnResult
+			var last strings.Builder
+			emit := func(eventType string, payload map[string]interface{}) {
+				if eventType == evAssistant {
+					got = append(got, payload["text"].(string))
+				}
+			}
+			item := map[string]interface{}{"type": itemType, "id": "msg_1", "text": "hello world"}
+			handleCodexItem(map[string]interface{}{"item": item}, emit, &result, &last, true)
+			if len(got) != 1 || got[0] != "hello world" {
+				t.Fatalf("assistant events = %v, want [\"hello world\"]", got)
+			}
+			if result.Result != "hello world" {
+				t.Fatalf("result.Result = %q, want %q", result.Result, "hello world")
+			}
+		})
+	}
+}
+
+// The app-server carries shell output under `aggregatedOutput`, not
+// output/stdout/stderr — the tool_result must read it or the shell card is blank.
+func TestHandleCodexItemAppServerCommand(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "commandExecution", "id": "call_1",
+		"command": "/bin/bash -lc 'echo hi'", "aggregatedOutput": "hi\n", "exitCode": float64(0),
+	}
+	got := captureCodexItem(item, true)
+	if len(got) != 1 || got[0].typ != evToolResult {
+		t.Fatalf("events = %+v, want one tool_result", got)
+	}
+	if got[0].payload["content"] != "hi\n" {
+		t.Fatalf("content = %q, want %q", got[0].payload["content"], "hi\n")
+	}
+}
+
+// mcpToolCall (camelCase, capital T) must still hit the tool branch — a
+// case-sensitive Contains(itemType, "tool") missed it entirely.
+func TestHandleCodexItemAppServerMcpTool(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "mcpToolCall", "id": "call_9", "toolName": "orbit__task_create",
+		"arguments": map[string]interface{}{"title": "x"},
+	}
+	started := captureCodexItem(item, false)
+	if len(started) != 1 || started[0].typ != evToolUse || started[0].payload["name"] != "orbit__task_create" {
+		t.Fatalf("started events = %+v, want tool_use named orbit__task_create", started)
+	}
+}
+
+// fileChange renders as an apply_patch tool: paths on the call, diff on the result.
+func TestHandleCodexItemAppServerFileChange(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "fileChange", "id": "call_2",
+		"changes": []interface{}{
+			map[string]interface{}{"path": "/tmp/a.txt", "kind": map[string]interface{}{"type": "add"}, "diff": "hello\n"},
+		},
+	}
+	started := captureCodexItem(item, false)
+	if len(started) != 1 || started[0].typ != evToolUse || started[0].payload["name"] != "apply_patch" {
+		t.Fatalf("started = %+v, want apply_patch tool_use", started)
+	}
+	files, _ := started[0].payload["input"].(map[string]interface{})["files"].([]string)
+	if len(files) != 1 || files[0] != "/tmp/a.txt" {
+		t.Fatalf("files = %v, want [/tmp/a.txt]", files)
+	}
+	done := captureCodexItem(item, true)
+	if len(done) != 1 || done[0].typ != evToolResult || done[0].payload["content"] != "hello\n" {
+		t.Fatalf("completed = %+v, want tool_result with the diff", done)
+	}
+}
+
+// The thread protocol streams reasoning only as deltas; the completed reasoning
+// item carries no text. The deltas must animate live (thinking_delta, ephemeral)
+// and be flushed as ONE durable `thinking` on completion — not one persisted row
+// per delta, and not lost entirely.
+func TestCodexAppServerReasoningFlushesOnceOnComplete(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{orbitTurnID: "t1"}
+	var events []emittedEvent
+	emit := func(typ string, payload map[string]interface{}) {
+		events = append(events, emittedEvent{typ, payload})
+	}
+	notify := func(method string, params interface{}) {
+		raw, _ := json.Marshal(params)
+		handleCodexAppNotification(codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil)
+	}
+
+	notify("item/reasoning/summaryTextDelta", map[string]interface{}{"delta": "Think"})
+	notify("item/reasoning/summaryTextDelta", map[string]interface{}{"delta": "ing…"})
+	notify("item/completed", map[string]interface{}{"item": map[string]interface{}{"type": "reasoning", "id": "rs_1", "summary": []interface{}{}, "content": []interface{}{}}})
+
+	var deltas, thinking []string
+	for _, e := range events {
+		switch e.typ {
+		case evThinkingDelta:
+			deltas = append(deltas, e.payload["text"].(string))
+		case evThinking:
+			thinking = append(thinking, e.payload["text"].(string))
+		default:
+			t.Fatalf("unexpected event %q", e.typ)
+		}
+	}
+	if len(deltas) != 2 {
+		t.Fatalf("thinking_delta count = %d, want 2", len(deltas))
+	}
+	if len(thinking) != 1 || thinking[0] != "Thinking…" {
+		t.Fatalf("durable thinking = %v, want [\"Thinking…\"]", thinking)
+	}
+	if active.thinkText.Len() != 0 {
+		t.Fatalf("thinkText not reset after flush: %q", active.thinkText.String())
+	}
+}
+
+// webSearch has no result body — render the query/opened page as the summary.
+func TestHandleCodexItemAppServerWebSearch(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "webSearch", "id": "ws_1", "query": "latest Go release",
+		"action": map[string]interface{}{"type": "search", "query": "latest Go release"},
+	}
+	done := captureCodexItem(item, true)
+	if len(done) != 1 || done[0].typ != evToolResult {
+		t.Fatalf("completed = %+v, want one tool_result", done)
+	}
+	if done[0].payload["content"] != "Searched: latest Go release" {
+		t.Fatalf("content = %q", done[0].payload["content"])
 	}
 }

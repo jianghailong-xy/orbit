@@ -398,9 +398,14 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 		item = msg
 	}
 	itemType := firstString(item, "type", "kind")
+	// Codex speaks two protocols with different item-type casing: the CLI/exec
+	// stream uses snake_case (agent_message, file_change, …) while the app-server
+	// "thread" stream uses camelCase (agentMessage, fileChange, webSearch,
+	// mcpToolCall). Match on the lowercased type so both render.
+	lower := strings.ToLower(itemType)
 	id := firstString(item, "id", "item_id", "call_id")
 	switch {
-	case itemType == "agent_message" || itemType == "message":
+	case lower == "agent_message" || lower == "agentmessage" || lower == "message":
 		if text := codexText(item); text != "" {
 			emit(evAssistant, map[string]interface{}{"text": text})
 			if lastAssistant.Len() > 0 {
@@ -409,11 +414,11 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			lastAssistant.WriteString(text)
 			result.Result = text
 		}
-	case itemType == "reasoning" || strings.Contains(itemType, "reasoning"):
+	case strings.Contains(lower, "reasoning"):
 		if text := codexText(item); text != "" {
 			emit(evThinking, map[string]interface{}{"text": text})
 		}
-	case strings.Contains(itemType, "command") || strings.Contains(itemType, "shell"):
+	case strings.Contains(lower, "command") || strings.Contains(lower, "shell"):
 		if !completed {
 			emit(evToolUse, map[string]interface{}{
 				"id":    fallbackID(id, itemType),
@@ -424,11 +429,42 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 		}
 		emit(evToolResult, map[string]interface{}{
 			"toolUseId": fallbackID(id, itemType),
-			"content":   firstString(item, "output", "stdout", "stderr", "text"),
+			// The app-server carries shell output under `aggregatedOutput`; the
+			// exec stream under output/stdout/stderr.
+			"content": firstString(item, "aggregatedOutput", "output", "stdout", "stderr", "text"),
+			"isError": codexItemIsError(item),
+		})
+	case strings.Contains(lower, "filechange") || strings.Contains(lower, "file_change") || strings.Contains(lower, "patch"):
+		files, diff := codexFileChange(item)
+		if !completed {
+			emit(evToolUse, map[string]interface{}{
+				"id":    fallbackID(id, itemType),
+				"name":  "apply_patch",
+				"input": map[string]interface{}{"files": files},
+			})
+			return
+		}
+		emit(evToolResult, map[string]interface{}{
+			"toolUseId": fallbackID(id, itemType),
+			"content":   diff,
 			"isError":   codexItemIsError(item),
 		})
-	case strings.Contains(itemType, "tool"):
-		name := firstString(item, "name", "tool_name", "toolName")
+	case strings.Contains(lower, "websearch") || strings.Contains(lower, "web_search"):
+		if !completed {
+			emit(evToolUse, map[string]interface{}{
+				"id":    fallbackID(id, itemType),
+				"name":  "web_search",
+				"input": map[string]interface{}{"query": firstString(item, "query")},
+			})
+			return
+		}
+		emit(evToolResult, map[string]interface{}{
+			"toolUseId": fallbackID(id, itemType),
+			"content":   codexWebSearchSummary(item),
+			"isError":   codexItemIsError(item),
+		})
+	case strings.Contains(lower, "tool"):
+		name := firstString(item, "toolName", "name", "tool_name")
 		if !completed {
 			emit(evToolUse, map[string]interface{}{
 				"id":    fallbackID(id, itemType),
@@ -443,6 +479,47 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			"isError":   codexItemIsError(item),
 		})
 	}
+}
+
+// codexFileChange pulls the touched paths and a combined diff out of an
+// app-server `fileChange` item (changes: [{path, kind, diff}]).
+func codexFileChange(item map[string]interface{}) ([]string, string) {
+	changes, _ := item["changes"].([]interface{})
+	var files []string
+	var diff strings.Builder
+	for _, c := range changes {
+		cm := mapValue(c)
+		if cm == nil {
+			continue
+		}
+		if p := firstString(cm, "path"); p != "" {
+			files = append(files, p)
+		}
+		if d := firstString(cm, "diff", "unifiedDiff", "content"); d != "" {
+			if diff.Len() > 0 {
+				diff.WriteString("\n")
+			}
+			diff.WriteString(d)
+		}
+	}
+	return files, diff.String()
+}
+
+// codexWebSearchSummary renders an app-server `webSearch` item (a search query
+// or an opened page — it has no result body) as a one-line result string.
+func codexWebSearchSummary(item map[string]interface{}) string {
+	if action := mapValue(item["action"]); action != nil {
+		if url := firstString(action, "url"); url != "" {
+			return "Opened " + url
+		}
+		if q := firstString(action, "query"); q != "" {
+			return "Searched: " + q
+		}
+	}
+	if q := firstString(item, "query"); q != "" {
+		return "Searched: " + q
+	}
+	return ""
 }
 
 func codexUsage(v interface{}) *TokenUsage {
