@@ -12,6 +12,7 @@ import {
   ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
+  DownloadOutlined,
   EyeOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -1898,6 +1899,20 @@ export function AgentView({ runner }: { runner: Runner }) {
                 placement="bottomRight"
                 menu={{
                   items: [
+                    {
+                      key: 'export',
+                      icon: <DownloadOutlined />,
+                      label: 'Export as HTML',
+                      disabled: events.length === 0,
+                      onClick: () => {
+                        // Lazy-loaded: react-dom/server + the inlined stylesheet only load
+                        // when someone actually exports, keeping them out of the app bundle.
+                        void import('../lib/sessionExport')
+                          .then((m) => m.exportSessionHtml(selected, events))
+                          .catch((e: Error) => message.error(`Export failed: ${e.message}`));
+                      },
+                    },
+                    { type: 'divider' },
                     {
                       key: 'delete',
                       icon: <DeleteOutlined />,
