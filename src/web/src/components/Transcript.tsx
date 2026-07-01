@@ -228,14 +228,61 @@ export const Transcript = memo(function Transcript({
   turnImages?: Record<string, TurnImage[]>;
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
+  return <NodeList nodes={nodes} live={live} />;
+});
+
+const TOOL_GROUP_MIN = 3;
+
+type NodeListItem = { kind: 'node'; node: Node } | { kind: 'toolGroup'; key: string; nodes: ToolNode[] };
+
+function NodeList({ nodes, live }: { nodes: Node[]; live?: boolean }) {
+  const items = useMemo(() => groupToolRuns(nodes), [nodes]);
   return (
     <>
-      {nodes.map((n) => (
-        <NodeView key={n.seq} node={n} live={live} />
-      ))}
+      {items.map((item) =>
+        item.kind === 'toolGroup' ? (
+          <ToolGroupView key={item.key} nodes={item.nodes} live={live} />
+        ) : (
+          <NodeView key={item.node.seq} node={item.node} live={live} />
+        ),
+      )}
     </>
   );
-});
+}
+
+function groupToolRuns(nodes: Node[]): NodeListItem[] {
+  const out: NodeListItem[] = [];
+  let run: ToolNode[] = [];
+  const flush = () => {
+    if (run.length >= TOOL_GROUP_MIN) {
+      out.push({ kind: 'toolGroup', key: `tool-group-${run[0].seq}`, nodes: run });
+    } else {
+      out.push(...run.map((node) => ({ kind: 'node' as const, node })));
+    }
+    run = [];
+  };
+
+  for (const node of nodes) {
+    if (isGroupableTool(node)) {
+      run.push(node);
+      continue;
+    }
+    flush();
+    out.push({ kind: 'node', node });
+  }
+  flush();
+  return out;
+}
+
+function isGroupableTool(node: Node): node is ToolNode {
+  return (
+    node.kind === 'tool' &&
+    node.children.length === 0 &&
+    !node.id.startsWith('shell-') &&
+    node.name !== 'AskUserQuestion' &&
+    node.name !== 'ExitPlanMode'
+  );
+}
 
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
@@ -592,9 +639,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A plan or a question to the user is the point of the turn — open it by
   // default; errors also auto-open. A static export opens every card (nothing can
   // be un-folded after the fact).
-  const [open, setOpen] = useState(
-    !!exp || !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion' || isShell,
-  );
+  const defaultOpen =
+    !!exp || !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion' || isShell;
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const open = manualOpen ?? defaultOpen;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
   // interactive card (ApprovalPanel) is shown separately — don't also render this
   // read-only copy in the transcript (it would duplicate the question/plan). Once
@@ -609,7 +657,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     >
       <div
         className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
-        onClick={hasDetail ? () => setOpen((o) => !o) : undefined}
+        onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
       >
         {hasDetail && (
           <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
@@ -632,9 +680,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           {body && <div className="chat-tool-body">{body}</div>}
           {node.children.length > 0 && (
             <div className="chat-subagent">
-              {node.children.map((c) => (
-                <NodeView key={c.seq} node={c} live={live} />
-              ))}
+              <NodeList nodes={node.children} live={live} />
             </div>
           )}
           {node.result && (
@@ -644,6 +690,123 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
       )}
     </div>
   );
+}
+
+type ToolGroupSummary = {
+  title: string;
+  summary: string;
+  breakdown?: string;
+  latest?: string;
+  latestMono?: boolean;
+  icon: ReactNode;
+  tone: Tone;
+  status: 'running' | 'error' | 'pending' | 'ok';
+  urgent: boolean;
+};
+
+function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
+  const exp = useContext(ExportCtx);
+  const summary = useMemo(() => summarizeToolGroup(nodes, live), [nodes, live]);
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const open = manualOpen ?? (!!exp || summary.urgent);
+  const toggle = () => setManualOpen((prev) => !(prev ?? (!!exp || summary.urgent)));
+  return (
+    <div
+      className={`chat-tool-card chat-tool-group chat-tone-${summary.tone}${open ? ' is-open' : ''}`}
+    >
+      <div className="chat-tool-row" onClick={toggle}>
+        <span className="chat-tool-caret">{open ? <DownOutlined /> : <RightOutlined />}</span>
+        <span className="chat-tool-icon">{summary.icon}</span>
+        <span className="chat-tool-name">{summary.title}</span>
+        <span
+          className="chat-tool-summary"
+          title={summary.latest ? `${summary.summary} · Latest: ${summary.latest}` : summary.summary}
+        >
+          {summary.summary}
+          {summary.latest && (
+            <span className="chat-tool-group-latest">
+              {' '}
+              · Latest:{' '}
+              <span className={summary.latestMono ? 'mono' : undefined}>{summary.latest}</span>
+            </span>
+          )}
+        </span>
+        {summary.breakdown && <span className="chat-tool-meta chat-tool-group-breakdown">{summary.breakdown}</span>}
+        <ToolGroupStatus status={summary.status} />
+      </div>
+      {open && (
+        <div className="chat-tool-group-detail">
+          {nodes.map((node) => (
+            <ToolView key={node.seq} node={node} live={live} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary {
+  const described = nodes.map((node) => {
+    const desc = describeTool(node.name, node.input, node.id.startsWith('shell-'));
+    const latest = latestToolSummary(node, desc);
+    return {
+      desc,
+      latest: latest?.text,
+      latestMono: latest?.mono,
+    };
+  });
+  const counts = new Map<string, number>();
+  for (const item of described) counts.set(item.desc.label, (counts.get(item.desc.label) ?? 0) + 1);
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const sameKind = entries.length === 1;
+  const title = sameKind ? `${entries[0][0]} × ${nodes.length}` : `Tools × ${nodes.length}`;
+  const latestItem = [...described].reverse().find((item) => item.latest);
+  const running = nodes.filter((node) => live && !node.result).length;
+  const pending = nodes.filter((node) => !live && !node.result).length;
+  const failed = nodes.filter((node) => !!node.result?.isError).length;
+  const succeeded = nodes.length - running - pending - failed;
+  const parts: string[] = [];
+  if (running) parts.push(`${running} running`);
+  if (failed) parts.push(`${failed} failed`);
+  if (pending) parts.push(`${pending} pending`);
+  if (succeeded) parts.push(`${succeeded} succeeded`);
+  const first = described[0]?.desc;
+  const status: ToolGroupSummary['status'] = running ? 'running' : failed ? 'error' : pending ? 'pending' : 'ok';
+  return {
+    title,
+    summary: parts.join(' · '),
+    breakdown: sameKind ? undefined : entries.map(([label, count]) => `${label} × ${count}`).join(' · '),
+    latest: latestItem?.latest,
+    latestMono: latestItem?.latestMono,
+    icon: sameKind ? first?.icon : <ToolOutlined />,
+    tone: sameKind ? (first?.tone ?? 'default') : 'default',
+    status,
+    urgent: running > 0 || failed > 0,
+  };
+}
+
+function latestToolSummary(node: ToolNode, desc: ToolDesc): { text: string; mono: boolean } | undefined {
+  const input = node.input ?? {};
+  if (node.name === 'Bash' && typeof input.command === 'string' && input.command) {
+    return { text: input.command, mono: true };
+  }
+  if (desc.path) return { text: desc.path, mono: true };
+  if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
+  if (desc.meta) return { text: desc.meta, mono: true };
+  return undefined;
+}
+
+function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
+  switch (status) {
+    case 'running':
+      return <LoadingOutlined className="chat-tool-status running" spin />;
+    case 'error':
+      return <CloseCircleFilled className="chat-tool-status err" />;
+    case 'pending':
+      return <MinusCircleOutlined className="chat-tool-status pending" />;
+    case 'ok':
+      return <CheckCircleFilled className="chat-tool-status ok" />;
+  }
 }
 
 // Folded-row status: spinner while a result is still pending on a live session,

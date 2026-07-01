@@ -3662,6 +3662,36 @@ body {
 .chat-tool-task .chat-tool-row:hover {
   background: #f4eefe;
 }
+.chat-tool-group .chat-tool-row {
+  min-height: 32px;
+}
+.chat-tool-group:not(.is-open) .chat-tool-row {
+  background: transparent;
+}
+.chat-tool-group:not(.is-open) .chat-tool-row:hover {
+  background: var(--bg-sunken);
+}
+.chat-tool-group-latest {
+  color: var(--text-3);
+}
+.chat-tool-group-latest .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.chat-tool-group-breakdown {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-tool-group-detail {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  padding: 4px 8px 8px;
+}
+.chat-tool-group-detail .chat-tool-card {
+  margin: 4px 0;
+}
 .chat-tool-detail {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-raised);
