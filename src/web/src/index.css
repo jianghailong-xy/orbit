@@ -392,6 +392,12 @@ body {
 .tp-item.inset.menu-open .tp-count {
   display: none;
 }
+/* ...but the "needs you" attention badge stays put on hover — you hover the row to
+   click into it, and the whole point is to keep that count visible while you do. */
+.tp-item.inset:hover .tp-count.needs-you,
+.tp-item.inset.menu-open .tp-count.needs-you {
+  display: inline;
+}
 .tp-item.inset:hover .tp-kebab,
 .tp-item.inset.menu-open .tp-kebab {
   display: flex;

@@ -308,6 +308,21 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const needsReplyCount = (activeSessions.data ?? []).filter(
     (s: any) => (s.pendingApprovals ?? 0) > 0,
   ).length;
+  // The same "needs you" signal decomposed per agent: how many of each agent's active
+  // sessions are blocked on an approval. Lets an agent row show its own attention count
+  // (and hide its ⌘ shortcut) so you can jump straight to the agent that needs you.
+  // Same active-sessions cache, no extra request; keyed by nested agent.id (flat
+  // agentId as fallback). System/host sessions carry no agent and roll up only into Active.
+  const agentNeedsYou = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of (activeSessions.data ?? []) as any[]) {
+      if ((s.pendingApprovals ?? 0) <= 0) continue;
+      const id = s.agent?.id ?? s.agentId;
+      if (!id) continue;
+      m.set(id, (m.get(id) ?? 0) + 1);
+    }
+    return m;
+  }, [activeSessions.data]);
 
   // Open an agent's console — the same destination the runner detail page uses.
   // Config-only agents (no runner) have no console to open.
@@ -525,6 +540,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                     index={i}
                     active={a.id === activeAgentId}
                     online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
+                    needsYou={agentNeedsYou.get(a.id) ?? 0}
                     onOpen={openAgent}
                   />
                 ))}
@@ -653,12 +669,14 @@ function SortableAgentRow({
   index,
   active,
   online,
+  needsYou,
   onOpen,
 }: {
   agent: Agent;
   index: number;
   active: boolean;
   online: boolean;
+  needsYou: number;
   onOpen: (a: Agent) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -689,7 +707,17 @@ function SortableAgentRow({
         }}
       />
       <span className="tp-label">{agent.name}</span>
-      {index < 9 && <span className="tp-count">⌘{index + 1}</span>}
+      {/* When one of this agent's sessions is waiting on you, the right slot shows an
+          amber attention count instead of the ⌘ shortcut — the "it's your turn" signal
+          wins over the discoverability hint. Falls back to the shortcut when nothing's
+          waiting. */}
+      {needsYou > 0 ? (
+        <span className="tp-count needs-you" title={`${needsYou} session(s) need your reply`}>
+          {needsYou}
+        </span>
+      ) : (
+        index < 9 && <span className="tp-count">⌘{index + 1}</span>
+      )}
     </div>
   );
 }
