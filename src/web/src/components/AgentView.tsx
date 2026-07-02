@@ -1676,6 +1676,20 @@ export function AgentView({ runner }: { runner: Runner }) {
     // No setText here: the per-target switch effect restores the saved 'new' draft, and
     // blanking would instead clobber the *outgoing* session's draft (text hasn't moved yet).
   };
+  // ⌘/Ctrl+N opens the new-session draft — the keyboard twin of the "New session" button,
+  // and the web mirror of the macOS client's ⌘N. Like ⌘D it fires even while the composer
+  // is focused. Heads-up: most desktop browsers reserve ⌘N for "New Window" and won't let
+  // the page override it, so preventDefault is best-effort (works in standalone/PWA).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== 'n' || e.shiftKey || e.altKey) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      goNew();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goNew]);
   // While the selected session is still loading we can't tell if it's live yet;
   // block send to avoid accidentally creating a duplicate session.
   const loadingSession = !!selectedId && !selected && !selectedMissing;
