@@ -11,7 +11,12 @@ export const CLAUDE_MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
 
-export const CODEX_MODEL_OPTIONS = [{ value: 'gpt-5.5', label: 'GPT-5.5' }];
+export const CODEX_MODEL_OPTIONS = [
+  { value: 'gpt-5.5', label: 'GPT-5.5' },
+  { value: 'gpt-5.4', label: 'GPT-5.4' },
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
+  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' },
+];
 
 export const MODEL_OPTIONS_BY_PROVIDER: Record<string, { value: string; label: string }[]> = {
   claude: CLAUDE_MODEL_OPTIONS,
