@@ -4923,6 +4923,18 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.share-download-icon {
+  flex: none;
+}
+.share-download-spin {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-1);
+  animation: runner-spin 0.7s linear infinite;
+}
 .share-title {
   font-size: 14px;
   font-weight: 600;
@@ -4962,6 +4974,23 @@ body {
   text-align: center;
   font-size: 12px;
   color: var(--text-3);
+}
+/* Phone: the header runs out of room, so tighten it and collapse the download
+   button to a square icon — the title keeps the space instead of the action. */
+@media (max-width: 600px) {
+  .share-header {
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .share-download {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  .share-download-label {
+    display: none;
+  }
 }
 .share-state {
   margin: auto;
