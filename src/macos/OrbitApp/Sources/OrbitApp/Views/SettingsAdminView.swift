@@ -10,7 +10,9 @@ import OrbitKit
 /// and change-password. Lives in the middle column; the detail stays a neutral hint.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
-    @EnvironmentObject private var updater: UpdaterModel
+    #if os(macOS)
+    @EnvironmentObject private var updater: UpdaterModel   // Sparkle; iOS updates via the App Store
+    #endif
 
     @State private var theme = "system"
     @State private var defaultModel = AgentDefaults.defaultModelID
@@ -67,11 +69,13 @@ struct SettingsView: View {
                 }
             }
 
+            #if os(macOS)
             Section("Updates") {
                 Toggle("Receive beta updates", isOn: $updater.betaChannel)
                 Text("Beta releases ship earlier and may be less stable.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            #endif
         }
         .formStyle(.grouped)
         .navigationTitle("Settings")

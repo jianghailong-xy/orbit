@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Phase B: no entitlements needed yet — a single app reads/writes its own Keychain items
+	  (the JWT via KeychainTokenStore) without a keychain-access-group.
+
+	  Phase E (APNs) will add:
+	    <key>aps-environment</key><string>development</string>   (release build flips to production)
+	  and Info.plist will gain UIBackgroundModes → remote-notification. Kept as an empty dict so the
+	  CODE_SIGN_ENTITLEMENTS wiring is already in place.
+	-->
+</dict>
+</plist>

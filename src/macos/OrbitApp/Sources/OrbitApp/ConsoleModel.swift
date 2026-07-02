@@ -1,8 +1,12 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
-import AppKit
 import OrbitKit
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 struct PendingAttachment: Identifiable, Equatable, Sendable {
     let id: String
@@ -552,11 +556,12 @@ final class ConsoleModel {
 /// so SwiftUI isn't decoding the full-resolution source on every body pass — a multi-MB screenshot
 /// re-decoded per keystroke would jank typing. Best-effort: nil falls back to a name + size chip.
 private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
-    guard let source = NSImage(data: data) else { return nil }
+    guard let source = PlatformImage(data: data) else { return nil }
     let size = source.size
     guard size.width > 0, size.height > 0 else { return nil }
     let scale = min(1, maxDimension / max(size.width, size.height))
-    let target = NSSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
+    let target = CGSize(width: max(1, size.width * scale), height: max(1, size.height * scale))
+    #if os(macOS)
     let thumb = NSImage(size: target)
     thumb.lockFocus()
     source.draw(in: NSRect(origin: .zero, size: target),
@@ -564,4 +569,8 @@ private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> D
     thumb.unlockFocus()
     guard let tiff = thumb.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
     return rep.representation(using: .png, properties: [:])
+    #elseif os(iOS)
+    let renderer = UIGraphicsImageRenderer(size: target)
+    return renderer.pngData { _ in source.draw(in: CGRect(origin: .zero, size: target)) }
+    #endif
 }
