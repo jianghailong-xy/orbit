@@ -1,16 +1,23 @@
 import SwiftUI
-import AppKit
 import UniformTypeIdentifiers
 import OrbitKit
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
+#if os(macOS)
 /// Bridges the composer's live focus + current-session attach action to the long-lived ⌘V paste
 /// monitor. A monitor closure captures its values once at install, but the `console` swaps under
 /// this view when the user switches sessions (ConsoleView carries no `.id`), so the monitor reads
-/// the *current* console through this reference instead of a stale captured one.
+/// the *current* console through this reference instead of a stale captured one. macOS-only: the
+/// ⌘V key monitor is an AppKit `NSEvent` API; iOS paste is Phase D.
 private final class ComposerPasteState {
     var focused = false
     var attach: ((Data) -> Void)?
 }
+#endif
 
 struct ComposerView: View {
     @Bindable var console: ConsoleModel
@@ -20,8 +27,10 @@ struct ComposerView: View {
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
     @FocusState private var inputFocused: Bool
+    #if os(macOS)
     @State private var pasteMonitor: Any?
     @State private var pasteState = ComposerPasteState()
+    #endif
 
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
     private var showSlash: Bool {
@@ -148,7 +157,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(AgentDefaults.label(console.permissionMode))
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
 
                 if console.availability == .queue {
                     Label("Will queue", systemImage: "tray.and.arrow.down")
@@ -173,7 +182,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(AgentDefaults.models.first { $0.id == console.modelID }?.name ?? console.modelID)
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
 
                 Menu {
                     ForEach(Effort.allCases) { e in
@@ -187,7 +196,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(console.effort.label)
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
 
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
@@ -202,6 +211,7 @@ struct ComposerView: View {
         // it (web parity) and swallow the paste; anything else falls through to normal text paste.
         .onAppear {
             if autoFocus { inputFocused = true }
+            #if os(macOS)
             guard pasteMonitor == nil else { return }
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard pasteState.focused,
@@ -215,7 +225,9 @@ struct ComposerView: View {
                 attach(png)
                 return nil
             }
+            #endif
         }
+        #if os(macOS)
         .onDisappear {
             if let monitor = pasteMonitor { NSEvent.removeMonitor(monitor); pasteMonitor = nil }
         }
@@ -225,6 +237,7 @@ struct ComposerView: View {
         .onChange(of: console.sessionID, initial: true) { _, _ in
             pasteState.attach = { png in Task { @MainActor in await console.attachPastedImage(pngData: png) } }
         }
+        #endif
     }
 
     // MARK: + menu (mirrors the web composer's `+` dropdown)
@@ -250,7 +263,7 @@ struct ComposerView: View {
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
         }
-        .menuStyle(.borderlessButton)
+        .borderlessMenuStyle()
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Add a command, skill, shell command, or attachment")
@@ -282,9 +295,9 @@ struct ComposerView: View {
 
     @ViewBuilder
     private func attachmentChip(_ att: PendingAttachment) -> some View {
-        if let data = att.previewImageData, let image = NSImage(data: data) {
+        if let data = att.previewImageData, let image = PlatformImage(data: data) {
             // Inline image: a 48×48 thumbnail with a corner remove button (web's .composer-attach).
-            Image(nsImage: image)
+            Image(platformImage: image)
                 .resizable()
                 .scaledToFill()
                 .frame(width: 48, height: 48)
@@ -380,6 +393,7 @@ struct ComposerView: View {
     }
 
     private func pickFiles(images: Bool) {
+        #if os(macOS)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
@@ -387,15 +401,9 @@ struct ComposerView: View {
         if images { panel.allowedContentTypes = [.png, .jpeg, .webP, .gif] }
         guard panel.runModal() == .OK else { return }
         for url in panel.urls { Task { await console.attachFile(url: url) } }
-    }
-}
-
-private extension NSImage {
-    /// Re-encode to PNG. The clipboard commonly carries TIFF (or JPEG), neither of which the
-    /// server accepts as an inline image; PNG is in `Attachments.allowedImageTypes`.
-    func orbitPNGData() -> Data? {
-        guard let tiff = tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .png, properties: [:])
+        #endif
+        // iOS: photo/file picking (PHPicker + `.fileImporter`) is Phase D; the `+` menu items are
+        // inert there until then. `orbitPNGData()` for pasted/attached images lives in Platform.swift.
     }
 }
 

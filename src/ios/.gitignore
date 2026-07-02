@@ -1,0 +1,7 @@
+# The Xcode project is generated from project.yml by XcodeGen — never checked in.
+Orbit.xcodeproj/
+# Resolved SwiftPM state / Xcode user data
+*.xcworkspace/xcuserdata/
+.swiftpm/
+build/
+DerivedData/

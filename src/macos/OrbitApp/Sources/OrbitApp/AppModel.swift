@@ -1,7 +1,11 @@
 import Foundation
-import AppKit
 import Observation
 import OrbitKit
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 /// Top-level app state: instance + auth + the Active session list. All UI-driving state lives
 /// here; the heavy protocol logic stays in OrbitKit (APIClient, SessionGrouping, ServerURL).
@@ -73,9 +77,13 @@ final class AppModel {
     private(set) var admin: AdminModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
+    #if os(macOS)
     /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
-    /// Start/Stop) and the runner-manager window (log + enroll). Created per instance.
+    /// Start/Stop) and the runner-manager window (log + enroll). Created per instance. macOS-only:
+    /// controlling a launchd service is impossible in the iOS sandbox, so the iOS client is a
+    /// pure remote console with no local-runner surface.
     private(set) var runnerControl: RunnerControl?
+    #endif
 
     private func configure(_ url: URL) {
         baseURL = url
@@ -86,7 +94,9 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
+        #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
+        #endif
     }
 
     // MARK: settings (preferences + password live on the user; no separate store needed)
@@ -353,6 +363,10 @@ final class AppModel {
     }
 
     private func updateDockBadge(_ badge: String?) {
+        #if os(macOS)
         NSApp.dockTile.badgeLabel = badge
+        #endif
+        // iOS: the app-icon badge is set by the push payload once APNs lands (Phase E); a
+        // foreground SSE session doesn't drive it, so this is a no-op there for now.
     }
 }

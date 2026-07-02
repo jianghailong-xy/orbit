@@ -1,0 +1,71 @@
+# XcodeGen spec for the Orbit iOS client. The .xcodeproj is generated (not checked in) so the
+# project lives as a reviewable text file: on a Mac / in CI run `xcodegen generate` here, then
+# `xcodebuild`. iOS apps can't be built with `swift run` (they need Info.plist, entitlements,
+# code signing and an asset catalog), which is why iOS gets a real Xcode project while the macOS
+# shell stays on its SPM + build-dmg flow untouched.
+#
+# The app REUSES the macOS shell's shared SwiftUI sources in place (Structure B): the target pulls
+# in ../macos/OrbitApp/Sources/OrbitApp and excludes the macOS-only files. OrbitKit — the shared,
+# cross-platform core — comes in as a local Swift package.
+name: Orbit
+options:
+  bundleIdPrefix: com.orbit
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  OrbitKit:
+    path: ../macos/OrbitKit
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"            # Swift 5 language mode — matches OrbitKit/OrbitApp (relaxed concurrency)
+    DEVELOPMENT_TEAM: ""           # injected locally / in CI (App Store Connect team id)
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  Orbit:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+      - path: Support/Assets.xcassets
+      # Shared SwiftUI + view-models from the macOS shell, minus the macOS-only files (app entry,
+      # menu-bar tray, local-runner control, Sparkle updater, global hotkey). Keep this exclude
+      # list in sync with the macOS-only files in OrbitApp/Sources/OrbitApp.
+      - path: ../macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.ios
+        PRODUCT_NAME: Orbit
+        INFOPLIST_FILE: Support/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Support/Orbit.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"   # 1 = iPhone, 2 = iPad — universal
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+
+# Explicit shared scheme so `xcodebuild -scheme Orbit` resolves the SwiftPM dependencies
+# (OrbitKit + swift-markdown) reliably — `-target` can miss package resolution.
+schemes:
+  Orbit:
+    build:
+      targets:
+        Orbit: all

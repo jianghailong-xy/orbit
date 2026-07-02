@@ -273,8 +273,7 @@ struct UserBubbleView: View {
     }
 
     private func copy() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(bubble.text, forType: .string)
+        PlatformPasteboard.copyString(bubble.text)
         copied = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_600_000_000)

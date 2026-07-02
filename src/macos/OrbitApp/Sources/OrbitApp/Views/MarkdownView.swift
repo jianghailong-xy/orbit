@@ -1,5 +1,5 @@
 import SwiftUI
-import AppKit
+import Foundation
 import OrbitKit
 
 /// Renders a Markdown string as stacked block elements — headings, paragraphs, lists, fenced
@@ -179,8 +179,7 @@ private struct CodeBlockView: View {
     }
 
     private func copy() {
-        NSPasteboard.general.clearContents()
-        _ = NSPasteboard.general.setString(code, forType: .string)
+        PlatformPasteboard.copyString(code)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
     }
@@ -213,9 +212,8 @@ extension Color {
     /// Long-form transcript ink, matching web's `--text-1` (#1f2329 light / #c9ced5 dark). A hair
     /// softer and cooler than the system label — over a long reply, full-strength label reads
     /// harsher, and on dark the system white is brighter than web's muted grey.
-    static let transcriptInk = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 0xC9 / 255, green: 0xCE / 255, blue: 0xD5 / 255, alpha: 1)
-            : NSColor(srgbRed: 0x1F / 255, green: 0x23 / 255, blue: 0x29 / 255, alpha: 1)
-    })
+    static let transcriptInk = Color(
+        light: Color(red: 0x1F / 255, green: 0x23 / 255, blue: 0x29 / 255),
+        dark:  Color(red: 0xC9 / 255, green: 0xCE / 255, blue: 0xD5 / 255)
+    )
 }
