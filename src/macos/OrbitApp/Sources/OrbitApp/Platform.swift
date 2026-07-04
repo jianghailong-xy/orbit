@@ -92,6 +92,23 @@ extension View {
         #endif
     }
 
+    /// iOS: lower the software keyboard when the user taps this area (e.g. taps a message in the
+    /// transcript) instead of only on a scroll drag. A `simultaneousGesture` so it rides alongside
+    /// the List's own scrolling and row/button taps rather than swallowing them, and a `TapGesture`
+    /// never fires during a scroll drag, so pulling the transcript still scrolls. `resignFirstResponder`
+    /// is sent app-wide so it works without threading the composer's `@FocusState` down here. No-op on
+    /// macOS — there's no software keyboard to dismiss.
+    @ViewBuilder func dismissesKeyboardOnTap() -> some View {
+        #if os(iOS)
+        self.simultaneousGesture(TapGesture().onEnded {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        })
+        #else
+        self
+        #endif
+    }
+
     /// A link-style button — borderless blue text. macOS has `.link`; iOS has no `LinkButtonStyle`,
     /// so it approximates with a plain button tinted to the accent colour.
     @ViewBuilder func linkButtonStyle() -> some View {

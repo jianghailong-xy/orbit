@@ -97,6 +97,7 @@ struct TranscriptView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
+            .dismissesKeyboardOnTap()   // iOS: tapping a message also lowers the keyboard
             .defaultScrollAnchor(.bottom)
             .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
             // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
