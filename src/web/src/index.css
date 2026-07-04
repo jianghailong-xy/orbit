@@ -3021,6 +3021,14 @@ body {
     width: 40px;
     height: 40px;
   }
+  /* The 40px buttons make the row taller than a single line of text; the box aligns
+     items to flex-end (so buttons stay pinned to the bottom as the textarea grows), so
+     a resting one-line input would otherwise sit low against the bottom. Centre just
+     the textarea: single-line text is vertically centred, and once it grows multiline
+     the textarea is the tallest item, making this a no-op. */
+  .composer-box textarea.ant-input {
+    align-self: center;
+  }
   .composer-pills {
     flex-wrap: nowrap;
     gap: 4px;
