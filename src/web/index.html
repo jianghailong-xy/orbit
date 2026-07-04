@@ -21,6 +21,21 @@
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
         } catch (e) {}
       })();
+      // Mirror the visual viewport height into --app-vh. CSS `100dvh` ignores the
+      // iOS software keyboard (it overlays the viewport rather than shrinking it),
+      // which strands the bottom-pinned composer behind the keyboard with a large
+      // gap above it. The mobile layout reads --app-vh in place of 100dvh so the
+      // shell shrinks when the keyboard opens. Desktop is unaffected — the var is
+      // only consumed under the mobile media query.
+      (function () {
+        var vv = window.visualViewport;
+        if (!vv) return;
+        var set = function () {
+          document.documentElement.style.setProperty('--app-vh', vv.height + 'px');
+        };
+        vv.addEventListener('resize', set);
+        set();
+      })();
     </script>
     <style>
       /* First-paint boot splash: rendered before the JS bundle loads and removed

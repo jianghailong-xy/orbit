@@ -4689,6 +4689,13 @@ body {
     background: rgba(0, 0, 0, 0.4);
   }
 
+  /* Shrink the shell to the visual viewport (set by --app-vh in index.html) so the
+     bottom composer rides just above the iOS keyboard instead of being stranded
+     behind it with a gap. Falls back to 100dvh when VisualViewport is unavailable. */
+  .app-shell,
+  .app-main {
+    height: var(--app-vh, 100dvh);
+  }
   /* Content clears the fixed top bar. */
   .app-main {
     padding-top: 48px;
