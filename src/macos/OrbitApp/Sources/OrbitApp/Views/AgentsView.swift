@@ -119,6 +119,7 @@ struct AgentPanes: View {
             }
             #endif
         }
+        .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
         #if os(iOS)
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.

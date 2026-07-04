@@ -13,9 +13,11 @@ struct MainView: View {
                 .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
         } content: {
             SectionContent(section: model.selectedSection)
+                .orbitPaneBackground()
                 .navigationSplitViewColumnWidth(min: 240, ideal: 300, max: 420)
         } detail: {
             SectionDetail(section: model.selectedSection)
+                .orbitPaneBackground()
         }
         .task { model.startPolling() }
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the

@@ -34,6 +34,7 @@ struct SkillsView: View {
                     }
                 }
             }
+            .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .searchable(text: $search)
             .overlay {
                 if groups.isEmpty {
@@ -79,6 +80,7 @@ struct RunnersListView: View {
                     RunnerRow(runner: r).tag(r.id)
                 }
             }
+            .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .overlay {
                 if runners.runners.isEmpty {
                     ContentUnavailableView(runners.loading ? "Loading…" : "No runners",
@@ -222,6 +224,7 @@ struct RunnerDetailContent: View {
                 }
             }
         }
+        .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
         .navigationTitle(runner.displayName?.isEmpty == false ? runner.displayName! : runner.name)
         .onAppear {

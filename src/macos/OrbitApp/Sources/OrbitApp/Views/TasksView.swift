@@ -38,6 +38,7 @@ struct TasksListView: View {
                             .contextMenu { rowMenu(tasks, task) }
                     }
                 }
+                .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
                 .overlay {
                     if tasks.visible.isEmpty {
                         ContentUnavailableView(tasks.loading ? "Loading…" : "No tasks",

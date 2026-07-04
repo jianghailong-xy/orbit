@@ -89,6 +89,16 @@ extension Color {
         Color(uiColor: .systemBackground)
         #endif
     }
+
+    /// The unified content backdrop for the middle + detail panes: a soft off-white (light) / soft
+    /// near-black (dark), deliberately *not* the flat system `windowBackgroundColor` (a colder grey).
+    /// The sidebar keeps its native translucency, so this calm solid tone behind the content lets
+    /// the frosted sidebar read by contrast — the restrained "ChatGPT" look (vibrant rail + soft
+    /// content) rather than a whole-window desktop blur.
+    static var orbitSurface: Color {
+        Color(light: Color(red: 0.965, green: 0.965, blue: 0.957),
+              dark:  Color(red: 0.12,  green: 0.12,  blue: 0.13))
+    }
 }
 
 extension View {
@@ -97,6 +107,27 @@ extension View {
     @ViewBuilder func borderlessMenuStyle() -> some View {
         #if os(macOS)
         self.menuStyle(.borderlessButton)
+        #else
+        self
+        #endif
+    }
+
+    /// macOS: paint the unified soft `orbitSurface` behind a content/detail pane, so the panes read
+    /// as one calm surface and the translucent sidebar stands out by contrast. No-op on iOS/iPadOS,
+    /// which keep their own native pane backgrounds — this unification is macOS-only.
+    @ViewBuilder func orbitPaneBackground() -> some View {
+        #if os(macOS)
+        self.background(Color.orbitSurface)
+        #else
+        self
+        #endif
+    }
+
+    /// macOS: hide a `List`/`Form`'s own scroll background so the `orbitPaneBackground` behind it
+    /// shows through, unifying the pane surface. No-op on iOS/iPadOS.
+    @ViewBuilder func orbitRevealSurface() -> some View {
+        #if os(macOS)
+        self.scrollContentBackground(.hidden)
         #else
         self
         #endif

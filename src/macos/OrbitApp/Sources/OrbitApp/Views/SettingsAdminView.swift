@@ -108,6 +108,7 @@ struct SettingsView: View {
             RunnersSettingsList()
         }
         #endif
+        .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
         .navigationTitle("Settings")
         #if os(iOS)
@@ -163,6 +164,7 @@ struct AdminUsersView: View {
                     .tag(u.id)
                 }
             }
+            .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .overlay {
                 if admin.users.isEmpty {
                     ContentUnavailableView(admin.loading ? "Loading…" : "No users", systemImage: "person.3")
@@ -212,6 +214,7 @@ struct AdminUserDetailView: View {
                     }
                 }
             }
+            .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
             .formStyle(.grouped)
             .navigationTitle(u.name?.isEmpty == false ? u.name! : u.email)
         } else {
