@@ -4751,6 +4751,18 @@ body {
   .tdp-resizer {
     display: none;
   }
+
+  /* iOS Safari force-zooms the whole page when a focused input has font-size < 16px
+     (and never zooms back out). Lift every focusable input to 16px on mobile so the
+     keyboard opens without the jarring zoom; desktop keeps the compact 13–14px sizes.
+     Not touching the viewport meta — pinch-to-zoom stays enabled for accessibility. */
+  .ant-input,
+  .ant-input-affix-wrapper input,
+  textarea.ant-input,
+  .skills-search,
+  .share-modal-url {
+    font-size: 16px;
+  }
 }
 
 /* ── Worktree diff drawer: resizable width, folder-grouped list, file nav, split view ──────── */
