@@ -363,60 +363,67 @@ private extension View {
 }
 
 #if os(iOS)
-/// Full-screen, pinch-to-zoom viewer for a sent image, opened by tapping its transcript thumbnail —
-/// the native client previously had no way to enlarge a sent screenshot. Fit-to-screen by default;
-/// pinch or double-tap to zoom, drag to pan while zoomed, and a close button, a background tap, or a
-/// downward swipe (at fit scale) to dismiss.
+/// Full-screen viewer for a sent image, opened by tapping its transcript thumbnail — the native
+/// client previously had no way to enlarge a sent screenshot. The image is centred and fit to the
+/// whole screen; pinch or double-tap to zoom, drag to pan while zoomed. To dismiss: the close button,
+/// or — at fit scale — an interactive drag where the image tracks the finger and shrinks while the
+/// backdrop fades to reveal the transcript underneath (the standard Photos/Messages feel), snapping
+/// back if released short of the threshold.
 struct FullScreenImageView: View {
     let image: PlatformImage
     @Environment(\.dismiss) private var dismiss
 
     @GestureState private var pinch: CGFloat = 1
     @State private var scale: CGFloat = 1
-    @State private var offset: CGSize = .zero      // committed pan (only meaningful while zoomed)
-    @State private var dragOffset: CGSize = .zero  // live drag translation
+    @State private var offset: CGSize = .zero   // committed pan, only meaningful while zoomed
+    @State private var drag: CGSize = .zero      // live drag translation
 
     private var liveScale: CGFloat { max(1, scale * pinch) }
     private var zoomed: Bool { liveScale > 1.01 }
+    // 0 while zoomed or idle; 0→1 as a fit-scale downward drag approaches the dismiss threshold.
+    private var dismissProgress: CGFloat { zoomed ? 0 : min(1, max(0, drag.height) / 260) }
 
     var body: some View {
         let magnify = MagnificationGesture()
             .updating($pinch) { value, state, _ in state = value }
             .onEnded { value in scale = min(max(1, scale * value), 6) }
 
-        // While zoomed the drag pans the image; at fit scale a far-enough downward flick dismisses,
-        // otherwise the image springs back to centre.
         let pan = DragGesture()
-            .onChanged { value in dragOffset = value.translation }
+            .onChanged { value in drag = value.translation }
             .onEnded { value in
                 if zoomed {
-                    offset.width += value.translation.width
+                    offset.width += value.translation.width      // commit the pan
                     offset.height += value.translation.height
-                    dragOffset = .zero
-                } else if value.translation.height > 120 {
+                    drag = .zero
+                } else if value.translation.height > 150 {
                     dismiss()
                 } else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { dragOffset = .zero }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { drag = .zero }
                 }
             }
 
-        ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
-                .onTapGesture { dismiss() }
+        ZStack {
+            // Fades out as the dismiss drag progresses; presentationBackground(.clear) lets the
+            // transcript show through the gap so the swipe reads as peeling the image away.
+            Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
 
             Image(platformImage: image)
                 .resizable()
                 .scaledToFit()
-                .scaleEffect(liveScale)
-                .offset(x: offset.width + dragOffset.width, y: offset.height + dragOffset.height)
+                .scaleEffect(liveScale * (1 - dismissProgress * 0.12))
+                .offset(x: offset.width + drag.width, y: offset.height + drag.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)   // fill → scaledToFit centres it
+                .contentShape(Rectangle())
                 .gesture(pan)
                 .simultaneousGesture(magnify)
                 .onTapGesture(count: 2) {
-                    withAnimation(.easeOut(duration: 0.2)) {
+                    withAnimation(.easeOut(duration: 0.22)) {
                         if zoomed { scale = 1; offset = .zero } else { scale = 2.6 }
                     }
                 }
-
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 15, weight: .semibold))
@@ -424,9 +431,12 @@ struct FullScreenImageView: View {
                     .padding(11)
                     .background(.ultraThinMaterial, in: Circle())
             }
-            .padding(.top, 12).padding(.trailing, 16)
+            .padding(.trailing, 16).padding(.top, 4)
+            .opacity(1 - dismissProgress)
             .accessibilityLabel("Close")
         }
+        .statusBarHidden(true)
+        .presentationBackground(.clear)
     }
 }
 #endif
