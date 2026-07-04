@@ -1743,10 +1743,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
   const mergeMut = useMutation({
     mutationFn: (vars: { id: string; target?: string }) => mergeSessionToMain(vars.id, vars.target),
-    onSuccess: (_data, vars) => {
-      message.success(
-        `Merging to ${vars.target ?? 'main'} — the result will appear on the status bar shortly.`,
-      );
+    onSuccess: () => {
+      // No success toast: the status bar reflects the pending merge and its outcome.
       if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
     },
     onError: (e: Error) => message.error(e.message),
@@ -1785,7 +1783,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const commitMut = useMutation({
     mutationFn: (id: string) => commitSession(id),
     onSuccess: () => {
-      message.success('Committing worktree changes — the result will appear on the status bar shortly.');
+      // No success toast: the status bar reflects the pending commit and its outcome.
       if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
     },
     onError: (e: Error) => message.error(e.message),
