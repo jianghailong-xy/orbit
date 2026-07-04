@@ -19,6 +19,10 @@ struct OrbitiOSApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                // Tap anywhere outside a text field to lower the keyboard (installed once on the
+                // window). The transcript's `List` swallows a SwiftUI tap gesture, so this is done
+                // with a window-level UIKit recognizer instead.
+                .dismissesKeyboardOnBackgroundTap()
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }

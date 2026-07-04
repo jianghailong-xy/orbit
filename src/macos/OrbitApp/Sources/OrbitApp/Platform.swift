@@ -92,18 +92,14 @@ extension View {
         #endif
     }
 
-    /// iOS: lower the software keyboard when the user taps this area (e.g. taps a message in the
-    /// transcript) instead of only on a scroll drag. A `simultaneousGesture` so it rides alongside
-    /// the List's own scrolling and row/button taps rather than swallowing them, and a `TapGesture`
-    /// never fires during a scroll drag, so pulling the transcript still scrolls. `resignFirstResponder`
-    /// is sent app-wide so it works without threading the composer's `@FocusState` down here. No-op on
-    /// macOS — there's no software keyboard to dismiss.
-    @ViewBuilder func dismissesKeyboardOnTap() -> some View {
+    /// iOS: install the "tap outside a text field lowers the keyboard" convention the transcript was
+    /// missing. A SwiftUI `simultaneousGesture` on the `List` is unreliable — the collection view's
+    /// own recognizers swallow taps that land on a row, so tapping a message never fired one. A
+    /// `UITapGestureRecognizer` on the host window is reliable where the SwiftUI gesture isn't. Attach
+    /// once at the app root; no-op on macOS (no software keyboard). See `KeyboardDismissInstaller`.
+    @ViewBuilder func dismissesKeyboardOnBackgroundTap() -> some View {
         #if os(iOS)
-        self.simultaneousGesture(TapGesture().onEnded {
-            UIApplication.shared.sendAction(
-                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        })
+        self.background(KeyboardDismissInstaller())
         #else
         self
         #endif
@@ -143,6 +139,60 @@ private struct TitlebarSeparatorRemover: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             window?.titlebarSeparatorStyle = .none
+        }
+    }
+}
+#endif
+
+#if os(iOS)
+/// Adds a single window-level tap recognizer that lowers the keyboard on a tap outside any text
+/// input — the iOS convention the transcript needs (a SwiftUI gesture on the `List` doesn't fire on
+/// row taps). The backing view exists only to reach the `UIWindow`; the recognizer does the work.
+private struct KeyboardDismissInstaller: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> UIView {
+        // Non-interactive so this zero-size view never intercepts touches itself.
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // The window isn't attached yet in makeUIView; install on the first update that has one.
+        guard let window = uiView.window else { return }
+        context.coordinator.install(on: window)
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private static let recognizerName = "orbit.keyboardDismissTap"
+
+        func install(on window: UIWindow) {
+            // Idempotent: a rebuild of this representable must not stack duplicate recognizers.
+            if window.gestureRecognizers?.contains(where: { $0.name == Self.recognizerName }) == true { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(dismiss))
+            tap.name = Self.recognizerName
+            tap.cancelsTouchesInView = false   // the same tap still reaches buttons, list rows, scrolling
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+        }
+
+        @objc private func dismiss() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+
+        // Never block another recognizer (scroll, buttons, the drawer's swipes) — only observe taps.
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+        // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
+        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view = touch.view
+            while let current = view {
+                if current is UITextField || current is UITextView { return false }
+                view = current.superview
+            }
+            return true
         }
     }
 }
