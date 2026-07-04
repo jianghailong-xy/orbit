@@ -2026,7 +2026,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             const line = sessionLine(s, openable);
             return (
               <div
-                className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
+                className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'active' && s.pinnedAt ? ' has-pin' : ''}`}
                 key={s.id}
                 onClick={openable ? () => navigate(`/sessions/${encodeId(s.id)}`) : undefined}
               >
@@ -2035,9 +2035,6 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </span>
                 <div className="session-main">
                   <div className="session-title-row">
-                    {s.pinnedAt ? (
-                      <PushpinFilled className="session-pin-flag" title="Pinned" />
-                    ) : null}
                     <div className="session-title">{s.title}</div>
                     {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
                       <Tooltip
