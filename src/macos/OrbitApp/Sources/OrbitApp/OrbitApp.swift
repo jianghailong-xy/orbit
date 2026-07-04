@@ -17,6 +17,7 @@ struct OrbitApp: App {
                 .environment(model)
                 .environmentObject(updater)
                 .frame(minWidth: 820, minHeight: 520)
+                .hidesTitlebarSeparator()   // seamless, ChatGPT-style floating top (no hard rule)
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }

@@ -101,4 +101,32 @@ extension View {
         self.buttonStyle(.plain).foregroundStyle(Color.accentColor)
         #endif
     }
+
+    /// Drop the hairline macOS draws under the title bar / toolbar once content scrolls beneath it,
+    /// so the top chrome reads as a single seamless bar floating over the content (ChatGPT-style)
+    /// instead of a boxed row with a hard rule under it. It's a window property, so setting it once
+    /// at the root covers every section's toolbar. No-op on iOS (no window titlebar there).
+    @ViewBuilder func hidesTitlebarSeparator() -> some View {
+        #if os(macOS)
+        self.background(TitlebarSeparatorRemover())
+        #else
+        self
+        #endif
+    }
 }
+
+#if os(macOS)
+/// Reaches the hosting `NSWindow` to clear its title-bar separator. `viewDidMoveToWindow` is the
+/// reliable hook — the window isn't attached yet inside `makeNSView`.
+private struct TitlebarSeparatorRemover: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { HookView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class HookView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.titlebarSeparatorStyle = .none
+        }
+    }
+}
+#endif
