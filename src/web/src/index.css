@@ -1247,6 +1247,17 @@ body {
   .rd-form-grid {
     grid-template-columns: 1fr;
   }
+  /* Composer footer controls can't all fit on one phone-width line. The desktop
+     spacer right-aligns Model/Effort/Usage, but once the row wraps that greedy
+     spacer fills line 1 and orphans the plan-usage pill onto a lonely second
+     line. Drop the spacer so the controls pack left and wrap as one tidy group,
+     and tighten the gap to fit more on the first line. */
+  .composer-pill-spacer {
+    display: none;
+  }
+  .composer-pills {
+    gap: 6px;
+  }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
    it, the two merged into one bordered card. */
