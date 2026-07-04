@@ -55,7 +55,7 @@ API key for both signing (`-allowProvisioningUpdates` creates the cert + profile
 upload (`ExportOptions.plist`'s `destination = upload`). No manual certificates, no fastlane.
 
 **One-time setup**
-1. In App Store Connect, create the app with bundle id **`com.wikova.orbit`** (the same id in `project.yml`).
+1. In App Store Connect, create the app with bundle id **`com.orbit.mobile`** (the same id in `project.yml`).
 2. Generate an API key: *Users and Access → Integrations → App Store Connect API → +*, role **App Manager**. Download the `AuthKey_XXXXXXXXXX.p8` (one-time download).
 3. Add repo secrets (*Settings → Secrets and variables → Actions*):
    - `ASC_KEY_ID` — the key's Key ID
