@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +14,7 @@ import (
 
 type artifactUploader func(ctx context.Context, path, mimeType string) (string, error)
 
-var markdownImageRE = regexp.MustCompile(`!\[([^\]]*)\]\((<?[^)\s]+>?)(\s+(?:"[^"]*"|'[^']*'))?\)`)
+var markdownAttachmentRE = regexp.MustCompile(`(!?)\[([^\]]*)\]\((<?[^)\s]+>?)(\s+(?:"[^"]*"|'[^']*'))?\)`)
 
 func rewriteLocalMarkdownImages(ctx context.Context, t *Transport, sessionID, text string, roots []string) string {
 	return rewriteLocalMarkdownImagesWithUploader(ctx, text, roots, func(ctx context.Context, path, mimeType string) (string, error) {
@@ -30,21 +31,22 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 		return text
 	}
 	uploaded := map[string]string{}
-	return markdownImageRE.ReplaceAllStringFunc(text, func(match string) string {
-		parts := markdownImageRE.FindStringSubmatch(match)
-		if len(parts) < 4 {
+	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
+		parts := markdownAttachmentRE.FindStringSubmatch(match)
+		if len(parts) < 5 {
 			return match
 		}
-		raw := strings.Trim(parts[2], "<>")
-		if skipMarkdownImageSrc(raw) {
+		raw := strings.Trim(parts[3], "<>")
+		if skipMarkdownAttachmentSrc(raw) {
 			return match
 		}
 		path := localMarkdownImagePath(raw, cleanRoots[0])
 		if path == "" || !pathWithinRoots(path, cleanRoots) {
 			return match
 		}
-		mimeType, ok := imageMime(path)
-		if !ok {
+		isImage := parts[1] == "!"
+		mimeType := attachmentMime(path)
+		if isImage && !strings.HasPrefix(mimeType, "image/") {
 			return match
 		}
 		id := uploaded[path]
@@ -52,16 +54,19 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 			var err error
 			id, err = upload(ctx, path, mimeType)
 			if err != nil {
-				logln("assistant image upload failed for", path+":", err)
+				logln("assistant attachment upload failed for", path+":", err)
 				return match
 			}
 			uploaded[path] = id
 		}
-		return fmt.Sprintf("![%s](orbit-attachment:%s%s)", parts[1], id, parts[3])
+		if isImage {
+			return fmt.Sprintf("![%s](orbit-attachment:%s%s)", parts[2], id, parts[4])
+		}
+		return fmt.Sprintf("[%s](orbit-attachment:%s %q)", parts[2], id, filepath.Base(path))
 	})
 }
 
-func skipMarkdownImageSrc(src string) bool {
+func skipMarkdownAttachmentSrc(src string) bool {
 	lower := strings.ToLower(strings.TrimSpace(src))
 	return lower == "" ||
 		strings.HasPrefix(lower, "data:") ||
@@ -124,26 +129,19 @@ func pathWithinRoots(path string, roots []string) bool {
 	return false
 }
 
-func imageMime(path string) (string, bool) {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png":
-		return "image/png", true
-	case ".jpg", ".jpeg":
-		return "image/jpeg", true
-	case ".gif":
-		return "image/gif", true
-	case ".webp":
-		return "image/webp", true
-	case ".svg":
-		return "image/svg+xml", true
+func attachmentMime(path string) string {
+	if typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path))); typ != "" {
+		return typ
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "", false
+		return "application/octet-stream"
 	}
 	defer f.Close()
 	buf := make([]byte, 512)
 	n, _ := f.Read(buf)
-	mimeType := http.DetectContentType(buf[:n])
-	return mimeType, strings.HasPrefix(mimeType, "image/")
+	if n == 0 {
+		return "application/octet-stream"
+	}
+	return http.DetectContentType(buf[:n])
 }

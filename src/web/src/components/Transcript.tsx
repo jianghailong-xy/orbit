@@ -24,7 +24,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import { Image } from 'antd';
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl } from '../api';
@@ -578,6 +578,10 @@ function isLocalImageSrc(src: string): boolean {
   return /^\/(?:root|home|tmp|Users)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
 }
 
+function isLocalFileSrc(src: string): boolean {
+  return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
+}
+
 function fileLabel(src: string): string {
   try {
     const clean = decodeURIComponent(src);
@@ -610,13 +614,42 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
 }
 
+function nodeText(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join('');
+  if (isValidElement<{ children?: ReactNode }>(node)) return nodeText(node.props.children);
+  return '';
+}
+
+function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
+  const id = attachmentIdFromSrc(href);
+  if (id) {
+    const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
+    return <AttachmentFile id={id} name={name} />;
+  }
+  if (typeof href === 'string' && isLocalFileSrc(href)) {
+    return (
+      <span className="md-image-unavailable" title={href}>
+        <PaperClipOutlined />
+        <code>{fileLabel(href)}</code>
+      </span>
+    );
+  }
+  return (
+    <a {...rest} href={href} title={title}>
+      {children}
+    </a>
+  );
+}
+
 export const MD = memo(function MD({ children, highlight = true }: { children: string; highlight?: boolean }) {
   return (
     <div className="md">
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
-        components={{ pre: CodeBlock, img: MarkdownImage }}
+        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}
       >
         {children}
       </Markdown>

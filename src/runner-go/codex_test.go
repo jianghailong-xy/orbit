@@ -327,6 +327,34 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedImage(t *testing.T) {
 	}
 }
 
+func TestRewriteLocalMarkdownImagesUploadsAllowedFileLink(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tool-group-success-mockup.svg")
+	if err := os.WriteFile(path, []byte("<svg></svg>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var uploadedPath, uploadedMime string
+	got := rewriteLocalMarkdownImagesWithUploader(
+		context.Background(),
+		"files: [SVG source]("+path+")",
+		[]string{dir},
+		func(ctx context.Context, path, mimeType string) (string, error) {
+			uploadedPath = path
+			uploadedMime = mimeType
+			return "att-1", nil
+		},
+	)
+	if uploadedPath != path {
+		t.Fatalf("uploaded path = %q, want %q", uploadedPath, path)
+	}
+	if uploadedMime != "image/svg+xml" {
+		t.Fatalf("uploaded mime = %q, want image/svg+xml", uploadedMime)
+	}
+	if got != `files: [SVG source](orbit-attachment:att-1 "tool-group-success-mockup.svg")` {
+		t.Fatalf("rewritten = %q", got)
+	}
+}
+
 func TestRewriteLocalMarkdownImagesSkipsOutsideRoot(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "mockup.png")
@@ -341,6 +369,26 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRoot(t *testing.T) {
 	})
 	if called {
 		t.Fatalf("uploader called for outside-root image")
+	}
+	if got != text {
+		t.Fatalf("rewritten = %q, want unchanged", got)
+	}
+}
+
+func TestRewriteLocalMarkdownImagesSkipsOutsideRootFileLink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "mockup.svg")
+	if err := os.WriteFile(outside, []byte("<svg></svg>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	text := "files: [SVG](" + outside + ")"
+	got := rewriteLocalMarkdownImagesWithUploader(context.Background(), text, []string{dir}, func(ctx context.Context, path, mimeType string) (string, error) {
+		called = true
+		return "att-1", nil
+	})
+	if called {
+		t.Fatalf("uploader called for outside-root file link")
 	}
 	if got != text {
 		t.Fatalf("rewritten = %q, want unchanged", got)
