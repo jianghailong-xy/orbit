@@ -52,15 +52,17 @@ struct TranscriptView: View {
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
-    // Id of the user turn the sticky header names — the newest question whose bottom sits above the
-    // viewport top — or nil at the very top where none do. Recomputed from `ruler` on every scroll.
+    // Id of the user turn the sticky header names — the newest question above the fold — or nil at the
+    // very top where none is. Derived from the top anchor + the message list by `recomputeStuck`.
     @State private var stuckID: String?
-    // Scroll + per-row geometry the header derives from. A reference type held in @State: rows and the
-    // scroll tracker mutate it every frame WITHOUT invalidating the view — only `stuckID`, assigned when
-    // the answer actually changes, redraws. This is a *stateless recompute* from cached positions, not a
-    // crossing-observer set: a recycling List destroys a row the instant it clears the top edge, so it
-    // can never report "I'm now above" — an accumulating set only grows and the header dies. See
-    // `recomputeStuck` / `QuestionRuler`.
+    // The scroll state the header derives from. A reference type held in @State: rows and the scroll
+    // tracker mutate it every frame WITHOUT invalidating the view — only `stuckID`, assigned when the
+    // answer changes, redraws. Its ONLY scroll input is `topAnchorID`: the id of the item currently
+    // under the viewport top, always set by a row that IS on screen. That's the key to robustness — the
+    // header is a pure function of (top anchor, message list), recomputed each scroll, so it can't
+    // accumulate the corruption a per-row crossing set did (a recycling List destroys a row the instant
+    // it clears the top edge, so "I scrolled above" can never be observed; an accumulating set only
+    // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
     @State private var ruler = QuestionRuler()
 
     var body: some View {
@@ -82,7 +84,7 @@ struct TranscriptView: View {
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                        .modifier(QuestionRow(item: item, ruler: ruler))
+                        .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
                 }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
@@ -97,9 +99,9 @@ struct TranscriptView: View {
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
             .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
-            // The transcript viewport's top edge in global space — the reference `QuestionRow` uses to
-            // convert a row's on-screen frame into a scroll-invariant content offset. Stable during a
-            // scroll (only shifts on layout, e.g. the keyboard), so reading it here doesn't churn.
+            // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
+            // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
+            // the keyboard), so reading it here doesn't churn.
             .background {
                 GeometryReader { g in
                     Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
@@ -147,25 +149,25 @@ struct TranscriptView: View {
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
     }
 
-    // Recompute which question is "stuck" to the top: the newest user turn whose cached bottom sits at
-    // or above the viewport top (`bottomY <= contentOffset`). Above-fold turns form a prefix (each turn
-    // is higher than the next), so we scan oldest→newest and keep the last one that qualifies. A turn we
-    // never measured is assumed above *until* we pass a measured below-fold turn (`seenBelow`) — that
-    // covers a freshly opened session (all unmeasured ⇒ names the last question at once) without letting
-    // an unmeasured turn *below* the fold (e.g. one queued while scrolled up) wrongly win. Stateless —
-    // derived fresh from `ruler` each call — so, unlike a crossing-observer set, it can't be left
-    // permanently wrong when the List recycles a row before it can report clearing the top edge.
-    // Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
+    // Which question is "stuck" to the top = the last user turn that sits ABOVE the item currently under
+    // the viewport top (`topAnchorID`). Everything before that anchor item is above the fold, so the last
+    // user turn among them is web's `.chat-user` bottom-above-top answer — and it steps back through
+    // earlier questions as the anchor moves up. Pure data: we only read the anchor id (set by an on-screen
+    // row) and the message list, so nothing here can be left stale by recycling. If no row has claimed the
+    // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
+    // back to naming the last question so the header shows at once; at the very top / short transcripts it
+    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
     private func recomputeStuck() {
-        let off = ruler.contentOffset
+        let items = console.state.items
         var found: String? = nil
-        var seenBelow = false
-        for item in console.state.items {
-            guard case .user(let b) = item, !b.queued else { continue }
-            if let by = ruler.bottomY[b.id] {
-                if by <= off + 1 { found = b.id } else { seenBelow = true }
-            } else if !seenBelow {
-                found = b.id   // never measured, still in the above-fold run ⇒ assume above
+        if let anchor = ruler.topAnchorID {
+            for item in items {
+                if item.id == anchor { break }                       // reached the top item; stop
+                if case .user(let b) = item, !b.queued { found = b.id }
+            }
+        } else if ruler.contentOffset > 40 {
+            for item in items.reversed() {
+                if case .user(let b) = item, !b.queued { found = b.id; break }
             }
         }
         if found != stuckID { stuckID = found }
@@ -278,25 +280,26 @@ private struct ScrollTracker: ViewModifier {
     }
 }
 
-/// Caches each user turn's *content-space* bottom offset while its row is on-screen, for the header's
-/// stateless recompute. content-space = (row bottom − viewport top, in global space) + scroll offset,
-/// which is invariant under scrolling, so the value stays valid after the row recycles — the header can
-/// then tell the turn is above the top arithmetically (`bottomY <= contentOffset`) without ever
-/// observing the crossing, which a recycling List destroys the row too early to report. `.global` is
-/// used deliberately (not `.scrollView`, whose meaning inside a `List` is ambiguous): it is
-/// unambiguously screen-space, converted to content-space via the viewport top + offset the parent
-/// captures. Only user rows carry this — they're sparse, so it's a handful of passive observers, never
-/// the per-row scroll-target tracking that froze the List. iOS 18+/macOS 15+.
-private struct QuestionRow: ViewModifier {
-    let item: TranscriptItem
+/// Publishes the id of the item currently under the transcript's top edge (`ruler.topAnchorID`). Every
+/// row carries this — the anchor can be any kind of turn — and the one whose frame straddles the viewport
+/// top claims it. Because that row is by definition on screen, the anchor is always read from live
+/// geometry and never has to survive recycling; the header then derives the last question above it purely
+/// from the message list (see `recomputeStuck`). `.global` (not the List-ambiguous `.scrollView`) gives
+/// an unambiguous screen frame, compared against the viewport top the parent captures. Passive
+/// `onGeometryChange` observers, not the per-row scroll-target tracking that froze the List — and the
+/// action fires only on the rare frame a row crosses the top line, not every frame. iOS 18+/macOS 15+.
+private struct AnchorRow: ViewModifier {
+    let itemID: String
     let ruler: QuestionRuler
+    let recompute: () -> Void
 
     func body(content: Content) -> some View {
-        if #available(iOS 18, macOS 15, *), case .user(let b) = item, !b.queued {
-            content.onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .global).maxY
-            } action: { globalMaxY in
-                ruler.bottomY[b.id] = globalMaxY - ruler.viewportTop + ruler.contentOffset
+        if #available(iOS 18, macOS 15, *) {
+            content.onGeometryChange(for: Bool.self) { proxy in
+                let f = proxy.frame(in: .global)
+                return f.minY <= ruler.viewportTop && ruler.viewportTop < f.maxY
+            } action: { straddlesTop in
+                if straddlesTop, ruler.topAnchorID != itemID { ruler.topAnchorID = itemID; recompute() }
             }
         } else {
             content
@@ -304,15 +307,15 @@ private struct QuestionRow: ViewModifier {
     }
 }
 
-/// Backing store for the sticky-header geometry (see `TranscriptView.recomputeStuck`). A plain
-/// reference type, held in `@State`: the rows and the scroll tracker mutate it every frame without
-/// invalidating the view; only the recomputed `stuckID` drives redraws.
+/// Backing store for the sticky header (see `TranscriptView.recomputeStuck`). A plain reference type,
+/// held in `@State`: the rows and the scroll tracker mutate it every frame without invalidating the
+/// view; only the recomputed `stuckID` drives redraws.
 final class QuestionRuler {
-    var contentOffset: CGFloat = 0            // viewport top, in content space (from onScrollGeometryChange)
-    var viewportTop: CGFloat = 0              // transcript viewport's top edge, in global space
-    var bottomY: [String: CGFloat] = [:]      // per user-turn id: bottom edge in content space (scroll-invariant)
+    var viewportTop: CGFloat = 0      // transcript viewport's top edge, in global space
+    var contentOffset: CGFloat = 0    // scroll offset (from onScrollGeometryChange) — only for the initial fallback
+    var topAnchorID: String?          // id of the item straddling the viewport top — the header's sole scroll input
 
-    func reset() { bottomY.removeAll(); contentOffset = 0 }
+    func reset() { topAnchorID = nil; contentOffset = 0 }
 }
 
 struct TranscriptItemView: View {
