@@ -3165,6 +3165,10 @@ body {
   font-size: 13px;
   padding: 10px 4px;
 }
+.chat-loading-older {
+  text-align: center;
+  opacity: 0.75;
+}
 .chat-msg {
   max-width: 80%;
   padding: 8px 12px;

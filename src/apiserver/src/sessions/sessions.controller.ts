@@ -234,6 +234,31 @@ export class SessionsController {
     return this.sessions.decideApproval(user.userId, id, approvalId, dto);
   }
 
+  /**
+   * A page of a session's persisted events for tail-first lazy loading. `tail=N` returns the
+   * newest N (initial paint, so a long transcript opens straight at the latest message instead
+   * of replaying its whole history); `before=<seq>&limit=N` returns the N events just older
+   * than a seq (scroll-up). `hasMore` signals older events remain.
+   */
+  @Get(':id/events/page')
+  eventPage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Query('tail') tail?: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const num = (s?: string): number | undefined => {
+      const n = Number(s);
+      return s !== undefined && s !== '' && Number.isFinite(n) ? n : undefined;
+    };
+    return this.sessions.getEventPage(user.userId, id, {
+      tail: num(tail),
+      before: num(before),
+      limit: num(limit),
+    });
+  }
+
   /** Replays a session's persisted events, then streams live ones over SSE. */
   @AllowQueryToken()
   @Sse(':id/events')

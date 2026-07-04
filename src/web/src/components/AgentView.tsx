@@ -68,6 +68,7 @@ import {
   type PermissionRule,
   pinSession,
   purgeSession,
+  getSessionEventPage,
   renameSession,
   restoreSession,
   resumeSession,
@@ -273,6 +274,20 @@ const SWITCH_DEBOUNCE_MS = 150;
 // Cap on cached transcripts (mount-scoped), so a long browsing session can't grow
 // the cache without bound. Least-recently-selected entries are evicted first.
 const TRANSCRIPT_CACHE_MAX = 20;
+// Tail-first lazy loading: open a fresh transcript with only its newest page (so a long
+// session lands straight at the latest message instead of replaying its whole history), then
+// prepend older pages as the user scrolls up. TAIL_PAGE is deliberately large enough to fill
+// any viewport in one shot, so no auto-load fires until the user actually scrolls up.
+const TAIL_PAGE = 200;
+const OLDER_PAGE = 200;
+// Distance from the top (px) at which scrolling up pulls in the next older page.
+const LOAD_OLDER_AT = 400;
+
+interface TranscriptCacheEntry {
+  events: RunEvent[];
+  oldestSeq: number | null; // seq of the earliest loaded event (null = nothing loaded)
+  hasMoreOlder: boolean; // older events exist before oldestSeq on the server
+}
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -558,6 +573,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
   const selectedId = decodeId(useMatch('/sessions/:id')?.params.id);
+  // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
+  // switched sessions since the request was issued — so a late page never lands in the wrong
+  // transcript. Assigning during render is safe for a "current value" ref.
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
   // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
   // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
@@ -624,8 +644,21 @@ export function AgentView({ runner }: { runner: Runner }) {
   const seen = useRef<Set<number>>(new Set());
   // Per-session transcript cache (mount-scoped): switching seeds events from here for
   // an instant paint and resumes the SSE just past the cached seq, instead of replaying
-  // each session's full history from seq 0 on every visit.
-  const transcriptCache = useRef<Map<string, RunEvent[]>>(new Map());
+  // each session's full history from seq 0 on every visit. Stores the older-pagination
+  // boundary too, so a reopened session keeps its "load earlier" state.
+  const transcriptCache = useRef<Map<string, TranscriptCacheEntry>>(new Map());
+  // Live mirror of `events`, so the SSE handler (append) and loadOlder (prepend) both mutate
+  // one source of truth without racing stale closures — see the load effect below.
+  const accRef = useRef<RunEvent[]>([]);
+  // Tail-first lazy loading state for the open session. Refs drive the (deps-free) scroll
+  // handler; loadingOlder (state) drives the top "loading earlier" spinner.
+  const oldestSeqRef = useRef<number | null>(null); // earliest loaded seq
+  const hasMoreOlderRef = useRef(false); // older events exist before oldestSeq on the server
+  const loadingOlderRef = useRef(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
+  // scrollTop so the viewport stays put instead of jumping when older content grows above.
+  const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
   // Re-opens the transcript SSE after a `final` event paused it and the session was
   // resumed in place (set by the SSE effect, called by the liveness watcher below).
   const resumeStreamRef = useRef<(() => void) | null>(null);
@@ -643,6 +676,40 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Last observed scrollTop, so the scroll handler can tell a genuine user scroll-up from a
   // programmatic re-pin or a late scroll event fired after streaming grew the container.
   const lastTopRef = useRef(0);
+  // Tail-first lazy loading: pull in the next older page when the user scrolls near the top.
+  // Guarded to one request in flight; prepends the page and stamps prependAnchorRef so the
+  // layout effect below holds the viewport steady while older content grows above it.
+  const loadOlder = useCallback(() => {
+    if (!selectedId || loadingOlderRef.current || !hasMoreOlderRef.current) return;
+    const before = oldestSeqRef.current;
+    if (before == null) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    getSessionEventPage(selectedId, { before, limit: OLDER_PAGE })
+      .then((page) => {
+        if (selectedIdRef.current !== selectedId) return; // user switched sessions mid-fetch
+        const fresh = page.events.filter((e) => !seen.current.has(e.seq));
+        for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
+        if (fresh.length) {
+          const el = scrollRef.current;
+          if (el) prependAnchorRef.current = { prevHeight: el.scrollHeight, prevTop: el.scrollTop };
+          accRef.current = [...fresh, ...accRef.current];
+          setEvents(accRef.current);
+        }
+        oldestSeqRef.current = page.events.length ? page.events[0].seq : before;
+        hasMoreOlderRef.current = page.hasMore;
+        transcriptCache.current.set(selectedId, {
+          events: accRef.current,
+          oldestSeq: oldestSeqRef.current,
+          hasMoreOlder: page.hasMore,
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      });
+  }, [selectedId]);
   // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
   // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
   const measure = useCallback(() => {
@@ -661,6 +728,8 @@ export function AgentView({ runner }: { runner: Runner }) {
     else if (top < lastTopRef.current - 1) atBottomRef.current = false;
     lastTopRef.current = top;
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
+    // Near the top with older history still on the server → pull in the next page.
+    if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued)'),
@@ -671,7 +740,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       else break;
     }
     setStuck(cur ? { seq: cur.getAttribute('data-seq'), text: cur.textContent || '' } : null);
-  }, []);
+  }, [loadOlder]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -999,21 +1068,36 @@ export function AgentView({ runner }: { runner: Runner }) {
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
     lastTopRef.current = 0;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
+    // Reset tail-first lazy-loading state for the session being opened.
+    prependAnchorRef.current = null;
+    loadingOlderRef.current = false;
+    setLoadingOlder(false);
     if (!selectedId) {
+      accRef.current = [];
       setEvents([]);
       seen.current = new Set();
+      oldestSeqRef.current = null;
+      hasMoreOlderRef.current = false;
       return;
     }
-    // Seed from cache for an instant paint; touch the entry so it's most-recently-used.
-    const cache = transcriptCache.current;
-    const cached = cache.get(selectedId) ?? [];
-    cache.delete(selectedId);
-    cache.set(selectedId, cached);
-    let acc = cached;
-    setEvents(acc);
     const isSeq = (s: unknown): s is number =>
       typeof s === 'number' && s !== Number.MAX_SAFE_INTEGER;
+    // Seed from cache for an instant paint; touch the entry so it's most-recently-used. On a
+    // cache miss the transcript stays empty until boot() fetches the newest page below (no more
+    // replaying the whole history over SSE — that's what caused a long session to "fast-forward"
+    // on open). The older-pagination boundary is restored from cache, or established by boot().
+    const cache = transcriptCache.current;
+    const entry = cache.get(selectedId);
+    const cached = entry?.events ?? [];
+    if (entry) {
+      cache.delete(selectedId);
+      cache.set(selectedId, entry);
+    }
+    accRef.current = cached;
+    setEvents(cached);
     seen.current = new Set(cached.map((e) => e.seq).filter(isSeq));
+    oldestSeqRef.current = entry ? entry.oldestSeq : null;
+    hasMoreOlderRef.current = entry ? entry.hasMoreOlder : false;
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
@@ -1022,21 +1106,28 @@ export function AgentView({ runner }: { runner: Runner }) {
     // stream can be re-opened in place when the session resumes (see resumeStreamRef).
     let paused = false;
     let fails = 0;
-    // Resume just past what's cached so only the gap is fetched, not the whole history.
+    // Resume just past what's loaded so only the gap is streamed, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
+    const writeCache = (): void => {
+      cache.set(selectedId, {
+        events: accRef.current,
+        oldestSeq: oldestSeqRef.current,
+        hasMoreOlder: hasMoreOlderRef.current,
+      });
+      if (cache.size > TRANSCRIPT_CACHE_MAX) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
+      }
+    };
     const stop = (): void => {
       closed = true;
       if (retry) clearTimeout(retry);
       es?.close();
     };
     const push = (ev: RunEvent): void => {
-      acc = [...acc, ev];
-      cache.set(selectedId, acc);
-      if (cache.size > TRANSCRIPT_CACHE_MAX) {
-        const oldest = cache.keys().next().value;
-        if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
-      }
-      setEvents(acc);
+      accRef.current = [...accRef.current, ev];
+      writeCache();
+      setEvents(accRef.current);
     };
     const connect = (): void => {
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
@@ -1160,7 +1251,30 @@ export function AgentView({ runner }: { runner: Runner }) {
       listQueuedTurns(selectedId)
         .then(setQueued)
         .catch(() => undefined);
-      connect();
+      // Tail-first: on a cache miss, fetch just the newest page so the transcript opens
+      // straight at the latest message, then open the SSE from that page's max seq so it
+      // streams only new events (no full-history replay). With a cached transcript already on
+      // screen, skip straight to the SSE, which replays only the gap after the cached seq.
+      const boot = async (): Promise<void> => {
+        if (cached.length === 0) {
+          try {
+            const page = await getSessionEventPage(selectedId, { tail: TAIL_PAGE });
+            if (closed) return;
+            accRef.current = page.events;
+            for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+            oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+            hasMoreOlderRef.current = page.hasMore;
+            lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+            setEvents(accRef.current);
+            writeCache();
+          } catch {
+            // Fall through to the SSE, which will replay from seq 0 as before.
+          }
+          if (closed) return;
+        }
+        connect();
+      };
+      void boot();
     }, SWITCH_DEBOUNCE_MS);
     return () => {
       resumeStreamRef.current = null;
@@ -1189,6 +1303,18 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (live) resumeStreamRef.current?.();
   }, [live]);
+
+  // Tail-first prepend: after loadOlder grows older content above the viewport, restore the
+  // scroll position so what the user was reading stays put instead of jumping down. Runs before
+  // paint (layout effect), and before the at-bottom follow below (a passive effect) — which
+  // no-ops here anyway since prepending only happens while scrolled up (atBottomRef false).
+  useLayoutEffect(() => {
+    const anchor = prependAnchorRef.current;
+    if (!anchor) return;
+    prependAnchorRef.current = null;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight - anchor.prevHeight + anchor.prevTop;
+  }, [events]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -2331,6 +2457,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             </div>
           ) : selectedId ? (
             <div className="agent-sessions" ref={scrollRef}>
+              {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
               {selected && !selectedDeleted && selected.status === 'PENDING' && events.length === 0 && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">

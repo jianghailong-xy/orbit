@@ -426,6 +426,50 @@ export class SessionsService {
     };
   }
 
+  /**
+   * A page of a session's persisted events for tail-first lazy loading. `tail` returns the
+   * newest N events (initial paint); `before`+`limit` return the N events immediately older
+   * than a seq (scroll-up). Both share one newest-first query that takes one extra row to
+   * report `hasMore`, then returns the page in chronological (seq asc) order.
+   */
+  async getEventPage(
+    userId: string,
+    id: string,
+    opts: { tail?: number; before?: number; limit?: number },
+  ): Promise<{
+    events: { seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }[];
+    hasMore: boolean;
+  }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? opts.tail ?? 200), 1), 500);
+    const where: { sessionId: string; seq?: { lt: number } } = { sessionId: id };
+    if (typeof opts.before === 'number' && Number.isFinite(opts.before)) {
+      where.seq = { lt: opts.before };
+    }
+    const rows = await this.prisma.runEvent.findMany({
+      where,
+      orderBy: { seq: 'desc' },
+      take: take + 1, // one extra row: its presence means older events remain
+      select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
+    });
+    const hasMore = rows.length > take;
+    const page = (hasMore ? rows.slice(0, take) : rows).reverse(); // back to seq asc
+    return {
+      hasMore,
+      events: page.map((e) => ({
+        seq: e.seq,
+        type: e.type,
+        payload: e.payload,
+        turnId: e.turnId ?? null,
+        ts: e.createdAt,
+      })),
+    };
+  }
+
   async getLegacyArtifactForOwner(
     ownerId: string,
     id: string,
