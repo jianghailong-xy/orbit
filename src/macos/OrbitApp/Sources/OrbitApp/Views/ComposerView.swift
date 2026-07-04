@@ -173,11 +173,6 @@ struct ComposerView: View {
                 }
                 .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
 
-                if console.availability == .queue {
-                    Label("Will queue", systemImage: "tray.and.arrow.down")
-                        .foregroundStyle(.secondary)
-                }
-
                 Spacer()
 
                 if let name = console.agentName {
