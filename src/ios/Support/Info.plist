@@ -48,7 +48,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.orbit.ios.deeplink</string>
+			<string>com.wikova.orbit.deeplink</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>orbit</string>

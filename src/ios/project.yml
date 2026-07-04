@@ -9,7 +9,7 @@
 # cross-platform core — comes in as a local Swift package.
 name: Orbit
 options:
-  bundleIdPrefix: com.orbit
+  bundleIdPrefix: com.wikova
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -52,7 +52,7 @@ targets:
         product: OrbitKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.wikova.orbit
         PRODUCT_NAME: Orbit
         INFOPLIST_FILE: Support/Info.plist
         CODE_SIGN_ENTITLEMENTS: Support/Orbit.entitlements
