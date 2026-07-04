@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
 import {
   ApprovalDecisionRequest,
   ApprovalInfo,
@@ -20,6 +22,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { generateNaming } from './naming';
 
@@ -41,6 +44,36 @@ function agentProvider(value?: string | null): AgentProvider {
 function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
   if (effort == null) return undefined;
   return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
+}
+
+function legacyArtifactMime(filePath: string): string {
+  switch (path.extname(filePath).toLowerCase()) {
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.pdf':
+      return 'application/pdf';
+    case '.json':
+      return 'application/json';
+    case '.txt':
+    case '.md':
+      return 'text/plain; charset=utf-8';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+function legacyArtifactDisposition(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7E]|["\\\r\n]/g, '_') || 'download';
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 @Injectable()
@@ -387,6 +420,102 @@ export class SessionsService {
         ts: e.createdAt,
       })),
     };
+  }
+
+  async getLegacyArtifactForOwner(
+    ownerId: string,
+    id: string,
+    rawPath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return this.getLegacyArtifact(session.id, rawPath);
+  }
+
+  async getLegacyArtifactForShared(
+    token: string,
+    rawPath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const session = await this.prisma.session.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('artifact not found');
+    return this.getLegacyArtifact(session.id, rawPath);
+  }
+
+  private async getLegacyArtifact(
+    sessionId: string,
+    rawPath: string | undefined,
+  ): Promise<{ data: Buffer; mimeType: string; disposition: string }> {
+    const resolved = await this.resolveLegacyArtifactPath(sessionId, rawPath);
+    const mentioned = await this.legacyArtifactPathIsMentioned(sessionId, resolved.original);
+    if (!mentioned) throw new NotFoundException('artifact not found');
+
+    let st: Awaited<ReturnType<typeof fs.stat>>;
+    try {
+      st = await fs.stat(resolved.file);
+    } catch {
+      throw new NotFoundException('artifact not found');
+    }
+    if (!st.isFile() || st.size <= 0 || st.size > MAX_UPLOAD_BYTES) {
+      throw new NotFoundException('artifact not found');
+    }
+    const data = await fs.readFile(resolved.file);
+    return {
+      data,
+      mimeType: legacyArtifactMime(resolved.file),
+      disposition: legacyArtifactDisposition(path.basename(resolved.file)),
+    };
+  }
+
+  private async resolveLegacyArtifactPath(
+    sessionId: string,
+    rawPath: string | undefined,
+  ): Promise<{ original: string; file: string }> {
+    const original = (rawPath ?? '').trim();
+    if (!original) throw new NotFoundException('artifact not found');
+    let decoded = original;
+    try {
+      decoded = decodeURIComponent(original);
+    } catch {
+      // Keep the raw value; the path checks below reject malformed or unsafe values.
+    }
+    if (!path.isAbsolute(decoded) || decoded.split(/[\\/]+/).includes('..')) {
+      throw new NotFoundException('artifact not found');
+    }
+    const normalized = path.normalize(decoded);
+    const parts = normalized.split(path.sep).filter(Boolean);
+    const marker = parts.findIndex(
+      (part, i) => part === '.orbit' && parts[i + 1] === 'uploads' && parts[i + 2] === sessionId,
+    );
+    if (marker < 0 || parts.length <= marker + 3) {
+      throw new NotFoundException('artifact not found');
+    }
+    const root = path.join(path.sep, ...parts.slice(0, marker + 3));
+    let realRoot: string;
+    let realFile: string;
+    try {
+      realRoot = await fs.realpath(root);
+      realFile = await fs.realpath(normalized);
+    } catch {
+      throw new NotFoundException('artifact not found');
+    }
+    if (realFile !== realRoot && !realFile.startsWith(realRoot + path.sep)) {
+      throw new NotFoundException('artifact not found');
+    }
+    return { original: decoded, file: realFile };
+  }
+
+  private async legacyArtifactPathIsMentioned(sessionId: string, artifactPath: string): Promise<boolean> {
+    const rows = await this.prisma.runEvent.findMany({
+      where: { sessionId },
+      select: { payload: true },
+    });
+    return rows.some((row) => (JSON.stringify(row.payload) ?? '').includes(artifactPath));
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Controller, Get, Param, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Param, Query, StreamableFile } from '@nestjs/common';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { SessionsService } from '../sessions/sessions.service';
 
@@ -29,5 +29,15 @@ export class SharedController {
   ): Promise<StreamableFile> {
     const { data, mimeType } = await this.attachments.getForSharedSession(token, id);
     return new StreamableFile(data, { type: mimeType, disposition: 'inline', length: data.length });
+  }
+
+  /** Download a legacy runner-local artifact path already present in the shared transcript. */
+  @Get(':token/artifacts')
+  async artifact(
+    @Param('token') token: string,
+    @Query('path') artifactPath?: string,
+  ): Promise<StreamableFile> {
+    const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForShared(token, artifactPath);
+    return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
   }
 }

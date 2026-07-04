@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Sse,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { concat, concatMap, from, map, Observable, switchMap, throwError } from 'rxjs';
@@ -56,6 +57,16 @@ export class SessionsController {
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.get(user.userId, id);
+  }
+
+  @Get(':id/artifacts')
+  async artifact(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Query('path') artifactPath?: string,
+  ): Promise<StreamableFile> {
+    const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForOwner(user.userId, id, artifactPath);
+    return new StreamableFile(data, { type: mimeType, disposition, length: data.length });
   }
 
   // Per-file unified diffs for this session's worktree changes, fetched on demand when a

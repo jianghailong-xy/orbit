@@ -137,6 +137,17 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
   return URL.createObjectURL(await res.blob());
 };
 
+export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
+    {
+      headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
+    },
+  );
+  if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+};
+
 /** Fetch an attachment's bytes as a base64 data URL — used by the HTML export, where the
  *  bytes must be embedded inline (an object URL dies with the page, and the endpoint is
  *  bearer-guarded so a plain `<img src>` in the saved file would 401). */
@@ -330,6 +341,14 @@ export const fetchSharedAttachmentObjectUrl = async (token: string, id: string):
     `/api/shared/${encodeURIComponent(token)}/attachments/${encodeURIComponent(id)}`,
   );
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+};
+
+export const fetchSharedArtifactObjectUrl = async (token: string, artifactPath: string): Promise<string> => {
+  const res = await fetch(
+    `/api/shared/${encodeURIComponent(token)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
+  );
+  if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
   return URL.createObjectURL(await res.blob());
 };
 

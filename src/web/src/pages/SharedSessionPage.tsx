@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchSharedAttachmentDataUrl, fetchSharedAttachmentObjectUrl, getSharedSession } from '../api';
-import { AttachmentResolverContext, Transcript } from '../components/Transcript';
+import {
+  fetchSharedArtifactObjectUrl,
+  fetchSharedAttachmentDataUrl,
+  fetchSharedAttachmentObjectUrl,
+  getSharedSession,
+} from '../api';
+import { ArtifactResolverContext, AttachmentResolverContext, Transcript } from '../components/Transcript';
 
 /**
  * Public, read-only view of a session shared via its token (`/s/<token>`). No auth, no app
@@ -18,6 +23,7 @@ export function SharedSessionPage() {
     retry: false,
   });
   const resolve = useMemo(() => (id: string) => fetchSharedAttachmentObjectUrl(token, id), [token]);
+  const resolveArtifact = useMemo(() => (artifactPath: string) => fetchSharedArtifactObjectUrl(token, artifactPath), [token]);
   const [downloading, setDownloading] = useState(false);
 
   // Build the same self-contained HTML the app's export produces, but embed images through
@@ -108,7 +114,9 @@ export function SharedSessionPage() {
       <main className="share-scroll">
         <div className="share-inner">
           <AttachmentResolverContext.Provider value={resolve}>
-            <Transcript events={data.events} />
+            <ArtifactResolverContext.Provider value={resolveArtifact}>
+              <Transcript events={data.events} />
+            </ArtifactResolverContext.Provider>
           </AttachmentResolverContext.Provider>
         </div>
       </main>

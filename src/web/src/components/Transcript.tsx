@@ -27,13 +27,16 @@ import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
-import { fetchAttachmentObjectUrl } from '../api';
+import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
 // so a logged-out viewer can still see inline images. See SharedSessionPage.
 export const AttachmentResolverContext =
   createContext<(id: string) => Promise<string>>(fetchAttachmentObjectUrl);
+
+export const ArtifactResolverContext =
+  createContext<((artifactPath: string) => Promise<string>) | null>(null);
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -222,13 +225,25 @@ export const Transcript = memo(function Transcript({
   events,
   live,
   turnImages,
+  artifactSessionId,
 }: {
   events: RunEvent[];
   live?: boolean;
   turnImages?: Record<string, TurnImage[]>;
+  artifactSessionId?: string;
 }) {
   const nodes = useMemo(() => buildNodes(events, turnImages), [events, turnImages]);
-  return <NodeList nodes={nodes} live={live} />;
+  const artifactResolve = useMemo(
+    () =>
+      artifactSessionId ? (artifactPath: string) => fetchSessionArtifactObjectUrl(artifactSessionId, artifactPath) : null,
+    [artifactSessionId],
+  );
+  const body = <NodeList nodes={nodes} live={live} />;
+  return artifactResolve ? (
+    <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
+  ) : (
+    body
+  );
 });
 
 const TOOL_GROUP_MIN = 3;
@@ -570,7 +585,7 @@ function attachmentIdFromSrc(src: unknown): string | null {
   if (typeof src !== 'string') return null;
   const trimmed = src.trim();
   if (!trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX)) return null;
-  const id = trimmed.slice(ORBIT_ATTACHMENT_PREFIX.length).trim();
+  const id = trimmed.slice(ORBIT_ATTACHMENT_PREFIX.length).trim().split(/\s+/, 1)[0];
   return id || null;
 }
 
@@ -580,6 +595,10 @@ function isLocalImageSrc(src: string): boolean {
 
 function isLocalFileSrc(src: string): boolean {
   return /^\/(?:root|home|tmp|Users)\/[^?#]+$/i.test(src);
+}
+
+function isLegacyArtifactSrc(src: string): boolean {
+  return isLocalFileSrc(src) && /\/\.orbit\/uploads\/[0-9a-f-]{36}\//i.test(src);
 }
 
 function fileLabel(src: string): string {
@@ -603,6 +622,9 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
       />
     );
   }
+  if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
+    return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
+  }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
       <span className="md-image-unavailable" title={src}>
@@ -612,6 +634,54 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   return <img {...rest} className="md-image" src={src} alt={alt ?? ''} />;
+}
+
+function LocalArtifactFile({
+  artifactPath,
+  label,
+  downloadName,
+}: {
+  artifactPath: string;
+  label?: string;
+  downloadName?: string;
+}) {
+  const resolve = useContext(ArtifactResolverContext);
+  const exp = useContext(ExportCtx);
+  const [busy, setBusy] = useState(false);
+  const shown = label || fileLabel(artifactPath);
+  const filename = downloadName || fileLabel(artifactPath);
+  if (!resolve || exp) {
+    return (
+      <span className="md-image-unavailable" title={artifactPath}>
+        <PaperClipOutlined />
+        <code>{shown}</code>
+      </span>
+    );
+  }
+  const download = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const objUrl = await resolve(artifactPath);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
+    } catch {
+      /* keep the chip retryable */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" className="chat-file" onClick={download} title={`Download ${filename}`}>
+      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+      <span className="chat-file-name">{shown}</span>
+    </button>
+  );
 }
 
 function nodeText(node: ReactNode): string {
@@ -627,6 +697,15 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
     return <AttachmentFile id={id} name={name} />;
+  }
+  if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
+    return (
+      <LocalArtifactFile
+        artifactPath={href}
+        label={nodeText(children).trim() || fileLabel(href)}
+        downloadName={fileLabel(href)}
+      />
+    );
   }
   if (typeof href === 'string' && isLocalFileSrc(href)) {
     return (
