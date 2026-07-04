@@ -4717,6 +4717,20 @@ body {
   .agent-split:not(.show-conversation) .agent-view {
     display: none;
   }
+  /* When a conversation is open, its in-pane header (← · title · ⋯) already carries the
+     back nav, identity, live state, and actions — so the global "Orbit" bar stacked above
+     it is pure redundancy. Drop it and reclaim its 48px band (the ← returns to the session
+     list, where the ☰ menu still lives, so global nav stays one tap away). */
+  .app-shell:has(.agent-split.show-conversation) .app-topbar {
+    display: none;
+  }
+  .app-shell:has(.agent-split.show-conversation) .app-main {
+    padding-top: 0;
+  }
+  /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */
+  .agent-split.show-conversation .agent-header {
+    padding-bottom: 10px;
+  }
   /* In-pane back button: leaves the open conversation for the session list. */
   .agent-back-mobile {
     display: flex;
