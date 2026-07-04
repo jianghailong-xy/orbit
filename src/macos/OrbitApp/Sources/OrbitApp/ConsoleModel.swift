@@ -92,11 +92,10 @@ final class ConsoleModel {
         self.draftAgent = nil
         self.attachments = attachments
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
-        #if os(macOS)
+        // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
+        // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
+        // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
-        #else
-        self.stream = MockEventStream([])
-        #endif
         if let reducer {
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
@@ -114,11 +113,10 @@ final class ConsoleModel {
         self.draftAgent = agent
         self.attachments = attachments
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
-        #if os(macOS)
+        // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
+        // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
+        // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
-        #else
-        self.stream = MockEventStream([])
-        #endif
         self.agentName = agent.name
         self.provider = agent.provider ?? "claude"
         let m = agent.model ?? AgentDefaults.defaultModelID
