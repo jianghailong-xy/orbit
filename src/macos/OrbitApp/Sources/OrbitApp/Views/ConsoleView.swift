@@ -284,19 +284,31 @@ struct UserBubbleView: View {
 }
 
 /// A user-turn image attachment: fetched once via the shared cache and shown as a rounded thumbnail
-/// (web's `.chat-image`). Falls back to a file chip if the bytes don't decode as an image.
+/// (web's `.chat-image`). Falls back to a file chip if the bytes don't decode as an image. On iOS,
+/// tapping the thumbnail opens a full-screen, pinch-to-zoom viewer (web-preview parity).
 struct ChatAttachmentImage: View {
     let attachment: TurnAttachment
     @Environment(AttachmentImageStore.self) private var store
+    @State private var preview = false
+
+    // Thumbnail cap. iOS enlarges the sent image so a screenshot reads on a phone, and allows extra
+    // height so a portrait shot isn't squeezed into a thin sliver; macOS keeps a compact 220² since
+    // thumbnails sit in a wide window. A tap opens the full-screen viewer for anything finer.
+    #if os(iOS)
+    private static let cap = CGSize(width: 300, height: 360)
+    #else
+    private static let cap = CGSize(width: 220, height: 220)
+    #endif
 
     var body: some View {
         Group {
             if let img = store.image(for: attachment.id) {
                 Image(platformImage: img)
                     .resizable().scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 220)
+                    .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                    .tappableImagePreview(img, $preview)
             } else if store.isNotImage(attachment.id) {
                 ChatAttachmentFile(attachment: attachment)   // not an image after all
             } else {
@@ -324,6 +336,89 @@ struct ChatAttachmentFile: View {
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 }
+
+/// iOS: make a transcript image thumbnail tappable to open a full-screen, pinch-to-zoom viewer
+/// (parity with web's tap-to-preview). macOS: no-op — the thumbnail stays a static rounded image.
+private extension View {
+    @ViewBuilder func tappableImagePreview(_ image: PlatformImage, _ presented: Binding<Bool>) -> some View {
+        #if os(iOS)
+        self.contentShape(Rectangle())
+            .onTapGesture { presented.wrappedValue = true }
+            .fullScreenCover(isPresented: presented) { FullScreenImageView(image: image) }
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(iOS)
+/// Full-screen, pinch-to-zoom viewer for a sent image, opened by tapping its transcript thumbnail —
+/// the native client previously had no way to enlarge a sent screenshot. Fit-to-screen by default;
+/// pinch or double-tap to zoom, drag to pan while zoomed, and a close button, a background tap, or a
+/// downward swipe (at fit scale) to dismiss.
+struct FullScreenImageView: View {
+    let image: PlatformImage
+    @Environment(\.dismiss) private var dismiss
+
+    @GestureState private var pinch: CGFloat = 1
+    @State private var scale: CGFloat = 1
+    @State private var offset: CGSize = .zero      // committed pan (only meaningful while zoomed)
+    @State private var dragOffset: CGSize = .zero  // live drag translation
+
+    private var liveScale: CGFloat { max(1, scale * pinch) }
+    private var zoomed: Bool { liveScale > 1.01 }
+
+    var body: some View {
+        let magnify = MagnificationGesture()
+            .updating($pinch) { value, state, _ in state = value }
+            .onEnded { value in scale = min(max(1, scale * value), 6) }
+
+        // While zoomed the drag pans the image; at fit scale a far-enough downward flick dismisses,
+        // otherwise the image springs back to centre.
+        let pan = DragGesture()
+            .onChanged { value in dragOffset = value.translation }
+            .onEnded { value in
+                if zoomed {
+                    offset.width += value.translation.width
+                    offset.height += value.translation.height
+                    dragOffset = .zero
+                } else if value.translation.height > 120 {
+                    dismiss()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { dragOffset = .zero }
+                }
+            }
+
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+                .onTapGesture { dismiss() }
+
+            Image(platformImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(liveScale)
+                .offset(x: offset.width + dragOffset.width, y: offset.height + dragOffset.height)
+                .gesture(pan)
+                .simultaneousGesture(magnify)
+                .onTapGesture(count: 2) {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        if zoomed { scale = 1; offset = .zero } else { scale = 2.6 }
+                    }
+                }
+
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(11)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .padding(.top, 12).padding(.trailing, 16)
+            .accessibilityLabel("Close")
+        }
+    }
+}
+#endif
 
 struct AssistantBubbleView: View {
     let bubble: AssistantBubble
