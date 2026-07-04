@@ -30,6 +30,7 @@ import {
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
@@ -1776,6 +1777,42 @@ export function AgentView({ runner }: { runner: Runner }) {
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }, [composerHeight]);
+  // Drag-and-drop files onto the composer — same upload path as the picker/paste, gated on
+  // canAttach. dragDepth counts enter/leave across child elements (each fires its own events)
+  // so the drop hint doesn't flicker as the pointer crosses the textarea, button, etc.
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
+  const dragHasFiles = (e: ReactDragEvent): boolean =>
+    Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const onComposerDragEnter = (e: ReactDragEvent): void => {
+    if (!canAttach || !dragHasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+  const onComposerDragOver = (e: ReactDragEvent): void => {
+    if (!canAttach || !dragHasFiles(e)) return;
+    // preventDefault marks the box a valid drop target; without it the browser opens the file.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onComposerDragLeave = (): void => {
+    if (!dragging) return;
+    dragDepth.current -= 1;
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0;
+      setDragging(false);
+    }
+  };
+  const onComposerDrop = (e: ReactDragEvent): void => {
+    dragDepth.current = 0;
+    setDragging(false);
+    if (!canAttach) return;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (!files.length) return;
+    e.preventDefault();
+    files.forEach((f) => void addImage(f));
+  };
   const [slashIndex, setSlashIndex] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
   // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
@@ -2509,7 +2546,19 @@ export function AgentView({ runner }: { runner: Runner }) {
             </button>
           </div>
         )}
-        <div className="composer-box">
+        <div
+          className={`composer-box${dragging ? ' is-dragover' : ''}`}
+          onDragEnter={onComposerDragEnter}
+          onDragOver={onComposerDragOver}
+          onDragLeave={onComposerDragLeave}
+          onDrop={onComposerDrop}
+        >
+          {/* Drop-to-upload hint, shown only while dragging files over the composer. */}
+          {dragging && (
+            <div className="composer-dropzone">
+              <PaperClipOutlined /> Drop files to upload
+            </div>
+          )}
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset. */}
           <div
             className="composer-resize-handle"
@@ -2641,17 +2690,18 @@ export function AgentView({ runner }: { runner: Runner }) {
               setText(e.target.value);
               if (histIdx !== -1) setHistIdx(-1);
             }}
-            // Paste an image straight from the clipboard (e.g. a screenshot). Only swallow
-            // the paste when it actually carries image files, so pasting text is untouched.
+            // Paste a file straight from the clipboard — a screenshot, or a file copied in the
+            // OS file manager (best-effort: only where the browser exposes it as a clipboard
+            // file). Only swallow the paste when it carries files, so pasting text is untouched.
             onPaste={(e) => {
               if (!canAttach) return;
               const files = Array.from(e.clipboardData?.items ?? [])
-                .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+                .filter((it) => it.kind === 'file')
                 .map((it) => it.getAsFile())
                 .filter((f): f is File => !!f);
               if (files.length) {
                 e.preventDefault();
-                files.forEach(addImage);
+                files.forEach((f) => void addImage(f));
               }
             }}
             // One keydown handler: drive the menu while open, else Up/Down recall

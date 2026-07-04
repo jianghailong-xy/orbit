@@ -2762,6 +2762,26 @@ body {
 .composer-box:focus-within {
   border-color: var(--brand);
 }
+.composer-box.is-dragover {
+  border-color: var(--brand);
+}
+/* Drop-to-upload hint: covers the whole box while files are dragged over it. */
+.composer-dropzone {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px dashed var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+}
 /* Reply-context chip: shown above the box when "Chat about this" hands a question reply
    off to the composer. Brand-tinted to echo the approval card it came from. */
 .composer-replyto {
