@@ -80,7 +80,7 @@ struct AgentPanes: View {
         // rather than stacking chrome bands above the list.
         List(selection: $selectedSessionID) {
             ForEach(agents.agentSessions) { s in
-                AgentSessionRow(session: s, completed: view == .completed).tag(s.id)
+                AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
             }
         }
         .focused($listFocused)
@@ -239,12 +239,22 @@ struct AgentSessionRow: View {
     /// True when the Completed (archived) tab is showing this row — mirrors web's
     /// `completed={view === 'archived'}`, so a filed session reads as done, not "Cancelled".
     var completed: Bool = false
+    /// True in the Active view, where pinning applies — mirrors web's `view === 'active'` gate on the
+    /// pinned marker. Completed/System rows never show the bar (they can't be pinned).
+    var showsPin: Bool = false
+    private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). Rows here
     // are always openable (macOS has no Trash tab), so `live: true` — matching web's `openable`.
     private var line: SessionLine? { SessionLine.make(for: session, live: true) }
 
     var body: some View {
         HStack(spacing: 8) {
+            // A pinned session is marked at rest by a thin leading accent bar — the native port of
+            // web's `.session-row.pinned` inset bar (deliberately not a floating pushpin). A clear bar
+            // of the same width holds the layout steady on unpinned rows so titles stay aligned.
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(isPinned ? Color.accentColor : .clear)
+                .frame(width: 3)
             StatusGlyphView(glyph: .make(for: session, completed: completed))
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title ?? "Untitled session").lineLimit(1)

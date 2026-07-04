@@ -84,6 +84,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let pendingApprovals: Int?
     public let branch: String?
     public let updatedAt: String?
+    /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
+    /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
+    /// mark the state at rest, mirroring web's `.session-row.pinned`.
+    public let pinnedAt: String?
     /// The session's stored config. A LIVE session's composer shows these (the server's
     /// choice); before the session exists the pills reflect local picks instead.
     public let model: String?
@@ -113,7 +117,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, runningBgCount: Int? = nil,
-                error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil) {
+                error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
+                pinnedAt: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -133,6 +138,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.error = error
         self.endReason = endReason
         self.agent = agent
+        self.pinnedAt = pinnedAt
     }
 }
 
