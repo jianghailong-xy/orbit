@@ -84,6 +84,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let pendingApprovals: Int?
     public let branch: String?
     public let updatedAt: String?
+    /// When the session was created / last had a turn (ISO-8601 strings). These drive the Agent
+    /// console's ordering — most-recent activity first, falling back to `createdAt` for a
+    /// never-run (queued) session — mirroring web's client-side sort. See `SessionFilter`.
+    public let createdAt: String?
+    public let lastTurnAt: String?
     /// When this session was pinned to the top of its list (ISO-8601 string), or nil if unpinned.
     /// The list payload already sorts pinned sessions first; the row draws a leading accent bar to
     /// mark the state at rest, mirroring web's `.session-row.pinned`.
@@ -118,7 +123,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, runningBgCount: Int? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
-                pinnedAt: String? = nil) {
+                pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -139,6 +144,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.endReason = endReason
         self.agent = agent
         self.pinnedAt = pinnedAt
+        self.createdAt = createdAt
+        self.lastTurnAt = lastTurnAt
     }
 }
 

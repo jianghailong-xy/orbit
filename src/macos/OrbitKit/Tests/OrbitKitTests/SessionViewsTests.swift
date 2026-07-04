@@ -43,4 +43,28 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .completed).map(\.id), ["s1", "s2", "s3"])
         XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .system).map(\.id), ["s1", "s2", "s3"])
     }
+
+    /// The Agent console orders like web's `AgentView`: pinned first, then most-recent activity
+    /// first — a never-run (queued) session ranks by `createdAt`, so a freshly queued session sits
+    /// among recent work rather than sinking to the bottom (the server's `NULLS LAST` order).
+    func testForAgentViewSortsLikeWebConsole() throws {
+        let json = """
+        [{"id":"run","status":"RUNNING","source":"user","agent":{"id":"a1","name":"dev"},
+          "createdAt":"2026-07-04T04:00:00.000Z","lastTurnAt":"2026-07-04T05:00:00.000Z"},
+         {"id":"queued","status":"PENDING","source":"user","agent":{"id":"a1","name":"dev"},
+          "createdAt":"2026-07-04T05:25:00.000Z"},
+         {"id":"old","status":"AWAITING_INPUT","source":"user","agent":{"id":"a1","name":"dev"},
+          "createdAt":"2026-07-04T02:00:00.000Z","lastTurnAt":"2026-07-04T03:00:00.000Z"},
+         {"id":"pinned","status":"SUCCEEDED","source":"user","agent":{"id":"a1","name":"dev"},
+          "createdAt":"2026-07-04T01:00:00.000Z","lastTurnAt":"2026-07-04T01:30:00.000Z",
+          "pinnedAt":"2026-07-04T06:00:00.000Z"}]
+        """
+        let sessions = try JSONDecoder().decode([Session].self, from: Data(json.utf8))
+        // Pinned floats first despite being oldest; the queued session (ranked by createdAt 05:25)
+        // sits above the running one (lastTurnAt 05:00); the older awaiting session sinks last.
+        XCTAssertEqual(
+            SessionFilter.forAgent(sessions, agentID: "a1", view: .active).map(\.id),
+            ["pinned", "queued", "run", "old"]
+        )
+    }
 }
