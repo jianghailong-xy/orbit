@@ -744,7 +744,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // The user's prompt for the turn currently in view, surfaced as a sticky bar when a long
   // answer has pushed that bubble off the top — so what was asked stays findable. null hides it.
-  const [stuck, setStuck] = useState<{ seq: string | null; text: string } | null>(null);
+  const [stuck, setStuck] = useState<{ seq: string | null; text: string; loading?: boolean } | null>(null);
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
@@ -817,7 +817,18 @@ export function AgentView({ runner }: { runner: Runner }) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
       else break;
     }
-    setStuck(cur ? { seq: cur.getAttribute('data-seq'), text: cur.textContent || '' } : null);
+    if (cur) {
+      setStuck({ seq: cur.getAttribute('data-seq'), text: cur.textContent || '' });
+    } else if (hasMoreOlderRef.current) {
+      // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
+      // the content now in view is in an unloaded page. Don't blank the bar — show a loading
+      // state and pull the earlier page in (no-op if one is already in flight), so measure
+      // re-runs after the prepend and resolves the real question.
+      setStuck({ seq: null, text: '', loading: true });
+      loadOlder();
+    } else {
+      setStuck(null);
+    }
   }, [loadOlder]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
@@ -2538,7 +2549,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
         {stuck && (
           <button
-            className="chat-sticky-question"
+            className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
             title={stuck.text}
             onClick={() => {
               const seq = stuck?.seq;
@@ -2549,7 +2560,9 @@ export function AgentView({ runner }: { runner: Runner }) {
             }}
           >
             <span className="chat-sticky-label">↑ Your question</span>
-            <span className="chat-sticky-text">{stuck.text}</span>
+            <span className="chat-sticky-text">
+              {stuck.loading ? 'Loading earlier messages…' : stuck.text}
+            </span>
           </button>
         )}
 

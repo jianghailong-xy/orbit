@@ -3444,6 +3444,15 @@ body {
 .chat-sticky-question:hover {
   background: var(--bg-hover);
 }
+/* Tail-first: the question for the content in view is still loading from an older page —
+   show the bar muted and non-interactive until it resolves. */
+.chat-sticky-loading {
+  cursor: default;
+  color: var(--text-3);
+}
+.chat-sticky-loading:hover {
+  background: var(--bg-sunken);
+}
 .chat-sticky-label {
   flex: none;
   font-size: 12px;
