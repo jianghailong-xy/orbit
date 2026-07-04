@@ -634,7 +634,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [swipeOpenId, setSwipeOpenId] = useState<string | null>(null); // row held open by a swipe
   const [swipeDragId, setSwipeDragId] = useState<string | null>(null); // row currently under a finger drag
   const [swipeDx, setSwipeDx] = useState(0); // live drag offset (px; negative = leftward)
-  const swipeRef = useRef<{ id: string; x: number; y: number; axis: '' | 'h' | 'v' } | null>(null);
+  // mx (live horizontal delta) and wasOpen live on the ref so touchend reads them synchronously:
+  // React defers continuous touchmove state, so swipeDx state can be stale when discrete touchend fires.
+  const swipeRef = useRef<{
+    id: string;
+    x: number;
+    y: number;
+    axis: '' | 'h' | 'v';
+    mx: number;
+    wasOpen: boolean;
+  } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
@@ -683,7 +692,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const onRowTouchStart = (e: ReactTouchEvent, id: string): void => {
     if (!isMobile) return;
     const t = e.touches[0];
-    swipeRef.current = { id, x: t.clientX, y: t.clientY, axis: '' };
+    // Clear any guard left set by a prior swipe that fired no trailing click, so the next
+    // genuine tap isn't swallowed.
+    swipeClickGuard.current = false;
+    swipeRef.current = { id, x: t.clientX, y: t.clientY, axis: '', mx: 0, wasOpen: swipeOpenId === id };
   };
   const onRowTouchMove = (e: ReactTouchEvent): void => {
     const st = swipeRef.current;
@@ -702,7 +714,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       }
     }
     if (st.axis !== 'h') return;
-    const base = swipeOpenId === st.id ? -swipeReveal : 0;
+    st.mx = mx; // synchronous truth for the touchend decision
+    const base = st.wasOpen ? -swipeReveal : 0;
     setSwipeDx(Math.max(-swipeReveal - 20, Math.min(0, base + mx))); // clamp with a little left-side rubber-band
   };
   const onRowTouchEnd = (): void => {
@@ -712,8 +725,19 @@ export function AgentView({ runner }: { runner: Runner }) {
       setSwipeDragId(null);
       return;
     }
-    swipeClickGuard.current = true; // the trailing click must not navigate
-    setSwipeOpenId(swipeDx <= -swipeReveal / 2 ? st.id : null);
+    swipeClickGuard.current = true; // the trailing click (if any) must not navigate
+    // Decide by gesture direction, not absolute position: a deliberate left drag opens a closed
+    // row; any clear right drag dismisses an open one. Reading st.mx (a ref) avoids the stale
+    // swipeDx state that React's deferred touchmove updates would otherwise leave at touchend.
+    const open = st.wasOpen ? st.mx <= 16 : st.mx < -swipeReveal / 2;
+    setSwipeOpenId(open ? st.id : null);
+    setSwipeDragId(null);
+    setSwipeDx(0);
+  };
+  // An OS-interrupted gesture (system swipe, incoming call) fires touchcancel, not touchend —
+  // drop the drag and let the row settle back to its committed open/closed state.
+  const onRowTouchCancel = (): void => {
+    swipeRef.current = null;
     setSwipeDragId(null);
     setSwipeDx(0);
   };
@@ -2276,6 +2300,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 onTouchStart={(e) => onRowTouchStart(e, s.id)}
                 onTouchMove={onRowTouchMove}
                 onTouchEnd={onRowTouchEnd}
+                onTouchCancel={onRowTouchCancel}
               >
                 <div
                   className={`session-swipe${dragging ? ' dragging' : ''}`}
