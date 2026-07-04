@@ -20,6 +20,7 @@ private final class ComposerPasteState {
 #endif
 
 struct ComposerView: View {
+    @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
@@ -87,8 +88,15 @@ struct ComposerView: View {
                     .onKeyPress(.upArrow) { moveSlash(-1) }
                     .onKeyPress(.downArrow) { moveSlash(1) }
                     .onKeyPress(.escape) {
-                        guard showSlash else { return .ignored }
-                        slashDismissed = console.slashToken
+                        if showSlash {
+                            slashDismissed = console.slashToken
+                            return .handled
+                        }
+                        // No slash menu open: blur the field and hand ↑/↓ back to the session list,
+                        // so the user can keep switching sessions from the keyboard without having to
+                        // click the list first.
+                        inputFocused = false
+                        app.focusSessionList()
                         return .handled
                     }
                     .onChange(of: console.slashToken) { _, new in

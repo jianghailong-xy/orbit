@@ -70,6 +70,9 @@ struct AgentPanes: View {
     @Binding var selectedSessionID: String?
     @State private var view: SessionView = .active
     @State private var showSettings = false
+    // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
+    // without a click; the binding also tracks click-to-focus.
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         // Option B: the column is just the session list. The scope switcher and New-session action
@@ -80,6 +83,8 @@ struct AgentPanes: View {
                 AgentSessionRow(session: s).tag(s.id)
             }
         }
+        .focused($listFocused)
+        .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
         .overlay {
             if agents.agentSessions.isEmpty {
                 ContentUnavailableView(

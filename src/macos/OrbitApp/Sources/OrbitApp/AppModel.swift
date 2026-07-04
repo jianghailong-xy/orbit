@@ -44,6 +44,11 @@ final class AppModel {
     var composingAgentSession = false
     var selectedUserID: String?
     var menuSummary: MenuBarSummary = .empty
+    /// Bumped to ask the visible session list (the Active sidebar or an agent's session list) to
+    /// take keyboard focus so ↑/↓ resume switching sessions. The composer raises this on Escape,
+    /// handing arrow-key control back to the list without the user having to click it first.
+    var sessionListFocusRequest = 0
+    func focusSessionList() { sessionListFocusRequest &+= 1 }
 
     let tokenStore: TokenStore
     let notifications = NotificationManager()

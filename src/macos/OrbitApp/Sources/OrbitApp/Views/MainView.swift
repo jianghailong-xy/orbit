@@ -253,6 +253,9 @@ struct ComingSoon: View {
 struct ActiveSidebar: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: String?
+    // Drives the List's keyboard focus. Set true when the composer hands ↑/↓ back on Escape, so the
+    // list can be arrow-navigated without a click; the binding also tracks click-to-focus.
+    @FocusState private var listFocused: Bool
 
     var body: some View {
         List(selection: $selection) {
@@ -260,6 +263,8 @@ struct ActiveSidebar: View {
             bucket("Running", model.groups.running, tint: .green)
             bucket("Queued", model.groups.queued, tint: .secondary)
         }
+        .focused($listFocused)
+        .onChange(of: model.sessionListFocusRequest) { _, _ in listFocused = true }
         .overlay {
             if model.groups.isEmpty {
                 ContentUnavailableView("No active sessions", systemImage: "moon.zzz")
