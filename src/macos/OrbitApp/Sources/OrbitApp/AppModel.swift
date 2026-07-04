@@ -323,11 +323,99 @@ final class AppModel {
                 errorText = "Couldn't complete the session."
                 return
             }
-            if selectedSessionID == id { selectedSessionID = nil }
-            if activeConsoleSessionID == id { activeConsoleSessionID = nil }
-            if selectedAgentSessionID == id { selectedAgentSessionID = nil }
+            dropIfOpen(id)
             await loadSessions()
         }
+    }
+
+    /// Clear a session out of every pane that has it open (list selection + mounted console), so a
+    /// completed/deleted session can't linger in the detail view. Used by ⌘D and the row actions.
+    private func dropIfOpen(_ id: String) {
+        if selectedSessionID == id { selectedSessionID = nil }
+        if activeConsoleSessionID == id { activeConsoleSessionID = nil }
+        if selectedAgentSessionID == id { selectedAgentSessionID = nil }
+    }
+
+    // MARK: session row actions (shared by the Active sidebar + the agent session lists)
+
+    /// A just-performed reversible action, surfaced as an Undo toast for a few seconds. Restore is
+    /// the universal undo — the server's `restore` clears both archive and trash state.
+    struct SessionUndo: Identifiable, Equatable {
+        let id = UUID()
+        let message: String
+        let sessionID: String
+    }
+    var sessionUndo: SessionUndo?
+    private var undoDismiss: Task<Void, Never>?
+
+    /// Refresh whichever session lists are on screen (the Active sidebar always; the agent list if
+    /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
+    private func reloadSessionLists() async {
+        await loadSessions()
+        await agents?.reloadCurrentSessions()
+    }
+
+    private func offerUndo(_ message: String, sessionID: String) {
+        sessionUndo = SessionUndo(message: message, sessionID: sessionID)
+        undoDismiss?.cancel()
+        undoDismiss = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.sessionUndo = nil
+        }
+    }
+
+    func dismissUndo() { undoDismiss?.cancel(); sessionUndo = nil }
+
+    /// Complete (archive) a session — the server ends a live one first (reason COMPLETED). Drops it
+    /// from any open pane and offers Undo.
+    func completeSession(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { try await api.archiveSession(id) }
+            catch { errorText = "Couldn't complete the session."; return }
+            dropIfOpen(id)
+            await reloadSessionLists()
+            offerUndo("Completed", sessionID: id)
+        }
+    }
+
+    /// Restore an archived/trashed session back to Active (also the Undo target).
+    func restoreSession(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            try? await api.restoreSession(id)
+            await reloadSessionLists()
+        }
+    }
+
+    /// Soft-delete a session to the trash — reversible via Undo (or the web Trash view).
+    func deleteSession(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            try? await api.deleteSession(id)
+            dropIfOpen(id)
+            await reloadSessionLists()
+            offerUndo("Deleted", sessionID: id)
+        }
+    }
+
+    /// Pin or unpin a session; the server floats pinned sessions to the top of every list.
+    func setPinned(_ session: Session, pinned: Bool) {
+        guard let api else { return }
+        Task { @MainActor in
+            do {
+                if pinned { try await api.pinSession(session.id) }
+                else { try await api.unpinSession(session.id) }
+            } catch { return }
+            await reloadSessionLists()
+        }
+    }
+
+    func undoSessionAction() {
+        guard let undo = sessionUndo else { return }
+        restoreSession(undo.sessionID)
+        dismissUndo()
     }
 
     // MARK: routing + notification intents

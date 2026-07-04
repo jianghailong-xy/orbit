@@ -81,6 +81,7 @@ struct AgentPanes: View {
         List(selection: $selectedSessionID) {
             ForEach(agents.agentSessions) { s in
                 AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
+                    .sessionRowActions(s, scope: view)
             }
         }
         .focused($listFocused)

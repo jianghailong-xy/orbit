@@ -62,6 +62,7 @@ struct CompactShell: View {
                 }
             }
             .task { model.startPolling() }
+            .sessionUndoToast()
         }
     }
 
