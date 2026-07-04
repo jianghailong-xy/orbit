@@ -56,7 +56,7 @@ upload (`ExportOptions.plist`'s `destination = upload`). No manual certificates,
 
 **One-time setup**
 1. In App Store Connect, create the app with bundle id **`io.orbitd.app`** (the same id in `project.yml`).
-2. Generate an API key: *Users and Access → Integrations → App Store Connect API → +*, role **App Manager**. Download the `AuthKey_XXXXXXXXXX.p8` (one-time download).
+2. Generate an API key: *Users and Access → Integrations → App Store Connect API → +*, role **Admin**. (App Manager can't create the App Store *distribution* certificate cloud signing needs — you'll hit `exportArchive Cloud signing permission error`; only Admin / Account Holder have Certificates access.) Download the `AuthKey_XXXXXXXXXX.p8` (one-time download).
 3. Add repo secrets (*Settings → Secrets and variables → Actions*):
    - `ASC_KEY_ID` — the key's Key ID
    - `ASC_ISSUER_ID` — the Issuer ID above the key list
