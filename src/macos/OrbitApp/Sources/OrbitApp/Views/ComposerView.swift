@@ -336,6 +336,10 @@ struct ComposerView: View {
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                // iOS: tap the staged thumbnail to open the full-screen viewer before sending
+                // (the tiny 48² chip is hard to read otherwise). The remove button is overlaid
+                // *after* this, so it stays on top and its taps aren't captured by the preview.
+                .modifier(ComposerImageTap(image: image))
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -460,6 +464,27 @@ struct ComposerView: View {
         }
     }
     #endif
+}
+
+/// iOS: make a staged composer image thumbnail tappable to open the shared full-screen viewer
+/// (`FullScreenImageView` from ConsoleView) — parity with the sent-message thumbnails and web's
+/// tap-to-preview. macOS: no-op, matching the transcript thumbnails there.
+private struct ComposerImageTap: ViewModifier {
+    let image: PlatformImage
+    #if os(iOS)
+    @State private var preview = false
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { preview = true }
+            .fullScreenCover(isPresented: $preview) { FullScreenImageView(image: image) }
+        #else
+        content
+        #endif
+    }
 }
 
 /// Compact plan-usage pill for the composer footer (mirrors web's PlanUsageIndicator): a mini
