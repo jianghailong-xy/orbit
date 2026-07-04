@@ -12,9 +12,9 @@ import OrbitKit
 /// left closes it. The current section is highlighted, and Active's "needs you" count rides on the
 /// hamburger as a dot so the signal survives while the drawer is closed.
 ///
-/// Under the hood the sections stay a `TabView` (its tab bar hidden) so each section keeps its own
-/// live navigation stack across switches — the drawer just drives `selectedSection`. Every existing
-/// `List(selection:)` sidebar + detail pair from the iPad shell is reused verbatim.
+/// Under the hood the drawer just drives `selectedSection`, and `CompactSections` renders that one
+/// section's navigation stack. Every existing `List(selection:)` sidebar + detail pair from the iPad
+/// shell is reused verbatim.
 struct CompactShell: View {
     @Environment(AppModel.self) private var model
 
@@ -123,9 +123,12 @@ struct CompactShell: View {
     }
 }
 
-/// The sections, as a `TabView` with its bar hidden — kept (rather than swapping a single pane) so
-/// each section preserves its own navigation stack when the drawer switches away and back. Selection
-/// is bound to `selectedSection`, so the drawer and deep links drive it identically.
+/// The selected section's navigation stack, switched on `selectedSection`. A hidden-tab-bar `TabView`
+/// was tried first (to keep every section's stack alive across switches) but its *programmatic*
+/// selection didn't move the pane on device — tapping a drawer row closed the drawer without
+/// navigating. Rendering one section at a time via a plain `switch` (like the iPad `MainView`) makes
+/// the drawer and deep links switch reliably. The trade: switching away resets the *other* sections'
+/// stacks; drilling *within* the current section is still preserved.
 private struct CompactSections: View {
     @Environment(AppModel.self) private var model
     let needsYou: Int
@@ -133,8 +136,9 @@ private struct CompactSections: View {
 
     var body: some View {
         @Bindable var model = model
-        TabView(selection: $model.selectedSection) {
-            // ACTIVE — live sessions → console
+        switch model.selectedSection {
+        // ACTIVE — live sessions → console
+        case .active:
             NavigationSplitView {
                 SectionContent(section: .active, sessionSelection: $model.selectedSessionID)
                     .drawerToggle(open: openDrawer, badge: needsYou)
@@ -145,10 +149,9 @@ private struct CompactSections: View {
             } detail: {
                 SectionDetail(section: .active)
             }
-            .tag(AppSection.active)
-            .toolbar(.hidden, for: .tabBar)
 
-            // TASKS — task list → detail
+        // TASKS — task list → detail
+        case .tasks:
             NavigationSplitView {
                 TasksListView()
                     .drawerToggle(open: openDrawer)
@@ -156,10 +159,9 @@ private struct CompactSections: View {
             } detail: {
                 TaskDetailView()
             }
-            .tag(AppSection.tasks)
-            .toolbar(.hidden, for: .tabBar)
 
-            // AGENTS — agent list → the agent's sessions → console (three levels, like the iPad)
+        // AGENTS — agent list → the agent's sessions → console (three levels, like the iPad)
+        case .agents:
             NavigationSplitView {
                 AgentListCompact()
                     .drawerToggle(open: openDrawer)
@@ -168,10 +170,9 @@ private struct CompactSections: View {
             } detail: {
                 AgentConsoleDetail()
             }
-            .tag(AppSection.agents)
-            .toolbar(.hidden, for: .tabBar)
 
-            // RUNNERS — runner list → detail
+        // RUNNERS — runner list → detail
+        case .runners:
             NavigationSplitView {
                 RunnersListView()
                     .drawerToggle(open: openDrawer)
@@ -179,30 +180,17 @@ private struct CompactSections: View {
             } detail: {
                 RunnerDetailView()
             }
-            .tag(AppSection.runners)
-            .toolbar(.hidden, for: .tabBar)
 
-            // SKILLS / SETTINGS / ADMIN — single-pane sections, now first-class drawer destinations
-            // (they used to hide behind a "More" tab).
-            NavigationStack {
-                SkillsView().drawerToggle(open: openDrawer)
-            }
-            .tag(AppSection.skills)
-            .toolbar(.hidden, for: .tabBar)
+        // SKILLS / SETTINGS / ADMIN — single-pane sections, first-class drawer destinations. Admin is
+        // reachable only for admins (the drawer hides it otherwise), so it needs no extra role gate.
+        case .skills:
+            NavigationStack { SkillsView().drawerToggle(open: openDrawer) }
 
-            NavigationStack {
-                SettingsView().drawerToggle(open: openDrawer)
-            }
-            .tag(AppSection.settings)
-            .toolbar(.hidden, for: .tabBar)
+        case .settings:
+            NavigationStack { SettingsView().drawerToggle(open: openDrawer) }
 
-            if model.user?.role == "ADMIN" {
-                NavigationStack {
-                    AdminUsersView().drawerToggle(open: openDrawer)
-                }
-                .tag(AppSection.admin)
-                .toolbar(.hidden, for: .tabBar)
-            }
+        case .admin:
+            NavigationStack { AdminUsersView().drawerToggle(open: openDrawer) }
         }
     }
 }
