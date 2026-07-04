@@ -49,13 +49,19 @@ struct TranscriptView: View {
     private let bottomID = "transcript-bottom"
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
-    // history isn't yanked back down by streaming updates. Maintained by `BottomTracker` (macOS 15+);
+    // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
-    // Ids of user turns whose bottom is NOT above the transcript's top (scrolled into view or below),
-    // learned from `QuestionAboveTracker`. Everything else defaults to "above", so the sticky header
-    // names the last question above the fold and steps back through earlier ones as you scroll up.
-    @State private var belowTop: Set<String> = []
+    // Id of the user turn the sticky header names — the newest question whose bottom sits above the
+    // viewport top — or nil at the very top where none do. Recomputed from `ruler` on every scroll.
+    @State private var stuckID: String?
+    // Scroll + per-row geometry the header derives from. A reference type held in @State: rows and the
+    // scroll tracker mutate it every frame WITHOUT invalidating the view — only `stuckID`, assigned when
+    // the answer actually changes, redraws. This is a *stateless recompute* from cached positions, not a
+    // crossing-observer set: a recycling List destroys a row the instant it clears the top edge, so it
+    // can never report "I'm now above" — an accumulating set only grows and the header dies. See
+    // `recomputeStuck` / `QuestionRuler`.
+    @State private var ruler = QuestionRuler()
 
     var body: some View {
         // `List` is NSTableView-backed on macOS → true row recycling, so a long transcript stays
@@ -76,7 +82,7 @@ struct TranscriptView: View {
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                        .modifier(QuestionAboveTracker(item: item, belowTop: $belowTop))
+                        .modifier(QuestionRow(item: item, ruler: ruler))
                 }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
@@ -90,14 +96,28 @@ struct TranscriptView: View {
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
-            .modifier(BottomTracker(atBottom: $atBottom))
+            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
+            // The transcript viewport's top edge in global space — the reference `QuestionRow` uses to
+            // convert a row's on-screen frame into a scroll-invariant content offset. Stable during a
+            // scroll (only shifts on layout, e.g. the keyboard), so reading it here doesn't churn.
+            .background {
+                GeometryReader { g in
+                    Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
+                }
+            }
             // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
             // if the user has scrolled up to read, don't drag them back. A session switch always
             // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
             // the old build.
-            .onChange(of: console.state.items) { if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) } }
-            .onChange(of: console.sessionID) { atBottom = true; belowTop = []; proxy.scrollTo(bottomID, anchor: .bottom) }
-            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom) }
+            .onChange(of: console.state.items) {
+                if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) }
+                recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
+            }
+            .onChange(of: console.sessionID) {
+                atBottom = true; ruler.reset(); stuckID = nil
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
+            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
                 if !atBottom {
@@ -105,15 +125,16 @@ struct TranscriptView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the last question
+            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
             // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
-            // back; it steps back through earlier questions as you scroll up (see `stuckQuestion`/
-            // `QuestionAboveTracker`) and hides only at the very top where no question is above. Shown
-            // whenever such a question exists — including at the bottom — exactly like web, not gated on
-            // `atBottom`. In-flow inset (not an overlay) so it pushes content down like web: a
-            // `scrollTo(anchor: .top)` then lands the target just *below* the header, not hidden under it.
+            // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
+            // hides only at the very top where no question is above. Shown whenever such a question
+            // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
+            // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
+            // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
+            // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
             .safeAreaInset(edge: .top, spacing: 0) {
-                if let q = stuckQuestion {
+                if #available(iOS 18, macOS 15, *), let q = stuckBubble {
                     stickyQuestion(q, proxy: proxy)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
@@ -121,19 +142,39 @@ struct TranscriptView: View {
             .animation(.easeOut(duration: 0.15), value: atBottom)
             // Only fires when the header appears/disappears (not on every text swap), so animating it
             // can't churn during a scroll.
-            .animation(.easeOut(duration: 0.15), value: stuckQuestion == nil)
+            .animation(.easeOut(duration: 0.15), value: stuckID == nil)
         }
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
     }
 
-    // The last user turn still above the transcript's top — the sticky header's target. Scans newest
-    // first and skips turns that have scrolled into view or below (`belowTop`), so it walks back from
-    // the latest question to earlier ones as you scroll up (web's `.chat-user` bottom-above-top scan).
-    // Unobserved turns default to "above", so a freshly opened session names the last question at once.
-    // Still skips queued turns (web's `:not(.chat-queued)`) — they haven't been asked yet.
-    private var stuckQuestion: UserBubble? {
+    // Recompute which question is "stuck" to the top: the newest user turn whose cached bottom sits at
+    // or above the viewport top (`bottomY <= contentOffset`). Above-fold turns form a prefix (each turn
+    // is higher than the next), so we scan oldest→newest and keep the last one that qualifies. A turn we
+    // never measured is assumed above *until* we pass a measured below-fold turn (`seenBelow`) — that
+    // covers a freshly opened session (all unmeasured ⇒ names the last question at once) without letting
+    // an unmeasured turn *below* the fold (e.g. one queued while scrolled up) wrongly win. Stateless —
+    // derived fresh from `ruler` each call — so, unlike a crossing-observer set, it can't be left
+    // permanently wrong when the List recycles a row before it can report clearing the top edge.
+    // Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
+    private func recomputeStuck() {
+        let off = ruler.contentOffset
+        var found: String? = nil
+        var seenBelow = false
+        for item in console.state.items {
+            guard case .user(let b) = item, !b.queued else { continue }
+            if let by = ruler.bottomY[b.id] {
+                if by <= off + 1 { found = b.id } else { seenBelow = true }
+            } else if !seenBelow {
+                found = b.id   // never measured, still in the above-fold run ⇒ assume above
+            }
+        }
+        if found != stuckID { stuckID = found }
+    }
+
+    private var stuckBubble: UserBubble? {
+        guard let id = stuckID else { return nil }
         for item in console.state.items.reversed() {
-            if case .user(let b) = item, !b.queued, !belowTop.contains(b.id) { return b }
+            if case .user(let b) = item, b.id == id { return b }
         }
         return nil
     }
@@ -203,14 +244,17 @@ struct TranscriptView: View {
     }
 }
 
-/// Tracks whether the transcript is pinned to the bottom, to drive the jump-to-latest button and
-/// the auto-follow gate. `onScrollGeometryChange` (macOS 15+) is a read-only geometry observer —
-/// unlike `scrollPosition(id:)` + `scrollTargetLayout()` it registers no per-row scroll targets, so
-/// it won't re-break `List` virtualization (see the transcript-freeze history). On the macOS 14 floor
-/// it's a no-op, leaving `atBottom` true. Mirrors web's `measure()`: pin while near the bottom, and
-/// un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
-private struct BottomTracker: ViewModifier {
+/// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
+/// header by stashing the live content offset into `ruler` and asking for a recompute each frame.
+/// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
+/// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
+/// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
+/// `atBottom` true and the header hidden. `atBottom` mirrors web's `measure()`: pin while near the
+/// bottom, un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
+private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
+    let ruler: QuestionRuler
+    let recompute: () -> Void
     @State private var lastOffset: CGFloat = 0
     // Within this many points of the bottom still counts as pinned (web uses 80px).
     private let nearBottom: CGFloat = 80
@@ -225,6 +269,8 @@ private struct BottomTracker: ViewModifier {
                 if m.distance <= nearBottom { atBottom = true }
                 else if m.offset < lastOffset - 1 { atBottom = false }   // genuine upward scroll
                 lastOffset = m.offset
+                ruler.contentOffset = m.offset
+                recompute()
             }
         } else {
             content
@@ -232,34 +278,41 @@ private struct BottomTracker: ViewModifier {
     }
 }
 
-/// Reports when a user turn's bottom edge scrolls above the transcript's top, so the sticky header can
-/// name the *last question above the fold* (web's per-bubble `getBoundingClientRect().bottom <= top`
-/// scan) instead of always the final one. Attached only to user rows — they're sparse, so this is a
-/// handful of passive `onGeometryChange` observers, NOT the per-row scroll-target tracking that froze
-/// the List (`scrollTargetLayout()`; see the transcript-freeze history). A 0…48pt hysteresis band
-/// absorbs the sticky header's own inset shift, so its appearance can't flip the boundary bubble and
-/// strobe the header. iOS 18+/macOS 15+ (matches `BottomTracker`; the header only shows while scrolled
-/// up, which never happens on the earlier floor). `.scrollView` space is viewport-relative: a row's
-/// `maxY` goes negative once its bottom clears the top edge.
-private struct QuestionAboveTracker: ViewModifier {
+/// Caches each user turn's *content-space* bottom offset while its row is on-screen, for the header's
+/// stateless recompute. content-space = (row bottom − viewport top, in global space) + scroll offset,
+/// which is invariant under scrolling, so the value stays valid after the row recycles — the header can
+/// then tell the turn is above the top arithmetically (`bottomY <= contentOffset`) without ever
+/// observing the crossing, which a recycling List destroys the row too early to report. `.global` is
+/// used deliberately (not `.scrollView`, whose meaning inside a `List` is ambiguous): it is
+/// unambiguously screen-space, converted to content-space via the viewport top + offset the parent
+/// captures. Only user rows carry this — they're sparse, so it's a handful of passive observers, never
+/// the per-row scroll-target tracking that froze the List. iOS 18+/macOS 15+.
+private struct QuestionRow: ViewModifier {
     let item: TranscriptItem
-    @Binding var belowTop: Set<String>
+    let ruler: QuestionRuler
 
     func body(content: Content) -> some View {
         if #available(iOS 18, macOS 15, *), case .user(let b) = item, !b.queued {
             content.onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .scrollView).maxY
-            } action: { maxY in
-                if maxY <= 0 {
-                    if belowTop.contains(b.id) { belowTop.remove(b.id) }        // bottom cleared the top → above
-                } else if maxY >= 48 {
-                    if !belowTop.contains(b.id) { belowTop.insert(b.id) }       // well below the top → in view / below
-                }                                                              // 0…48: hysteresis, keep as-is
+                proxy.frame(in: .global).maxY
+            } action: { globalMaxY in
+                ruler.bottomY[b.id] = globalMaxY - ruler.viewportTop + ruler.contentOffset
             }
         } else {
             content
         }
     }
+}
+
+/// Backing store for the sticky-header geometry (see `TranscriptView.recomputeStuck`). A plain
+/// reference type, held in `@State`: the rows and the scroll tracker mutate it every frame without
+/// invalidating the view; only the recomputed `stuckID` drives redraws.
+final class QuestionRuler {
+    var contentOffset: CGFloat = 0            // viewport top, in content space (from onScrollGeometryChange)
+    var viewportTop: CGFloat = 0              // transcript viewport's top edge, in global space
+    var bottomY: [String: CGFloat] = [:]      // per user-turn id: bottom edge in content space (scroll-invariant)
+
+    func reset() { bottomY.removeAll(); contentOffset = 0 }
 }
 
 struct TranscriptItemView: View {
