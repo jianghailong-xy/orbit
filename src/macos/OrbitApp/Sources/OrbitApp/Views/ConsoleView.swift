@@ -105,19 +105,23 @@ struct TranscriptView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): while scrolled up off
-            // the tail, pin the last question *above the fold* to the top so it stays in view during a
-            // long reply, and tap it to jump back; it steps back through earlier questions as you keep
-            // scrolling up (see `stuckQuestion`/`QuestionAboveTracker`). In-flow inset (not an overlay)
-            // so it pushes content down like web — a `scrollTo(anchor: .top)` then lands the target
-            // just *below* the header, not hidden under it.
+            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the last question
+            // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
+            // back; it steps back through earlier questions as you scroll up (see `stuckQuestion`/
+            // `QuestionAboveTracker`) and hides only at the very top where no question is above. Shown
+            // whenever such a question exists — including at the bottom — exactly like web, not gated on
+            // `atBottom`. In-flow inset (not an overlay) so it pushes content down like web: a
+            // `scrollTo(anchor: .top)` then lands the target just *below* the header, not hidden under it.
             .safeAreaInset(edge: .top, spacing: 0) {
-                if !atBottom, let q = stuckQuestion {
+                if let q = stuckQuestion {
                     stickyQuestion(q, proxy: proxy)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .animation(.easeOut(duration: 0.15), value: atBottom)
+            // Only fires when the header appears/disappears (not on every text swap), so animating it
+            // can't churn during a scroll.
+            .animation(.easeOut(duration: 0.15), value: stuckQuestion == nil)
         }
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
     }
