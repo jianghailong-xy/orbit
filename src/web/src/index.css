@@ -1247,38 +1247,6 @@ body {
   .rd-form-grid {
     grid-template-columns: 1fr;
   }
-  /* Composer footer controls are wider than one phone-width line, so a plain
-     wrap drops the plan-usage pill onto a lonely second row. Force the row onto
-     a single line and let only the (widest) agent label give up width — it
-     truncates with an ellipsis — so Mode / Model / Effort / Usage all stay put
-     on that one line. The desktop right-aligning spacer is meaningless here. */
-  .composer-pills {
-    flex-wrap: nowrap;
-    gap: 4px;
-  }
-  .composer-pill-spacer {
-    display: none;
-  }
-  .composer-pills .composer-pill {
-    padding-left: 3px;
-  }
-  /* Every control keeps its natural width except the agent label. */
-  .composer-pills > .composer-pill:not(.composer-pill-agent),
-  .composer-usage {
-    flex: none;
-  }
-  .composer-pill-agent {
-    min-width: 0;
-    flex-shrink: 1;
-  }
-  .composer-pill-agent .ant-select {
-    min-width: 0;
-  }
-  .composer-pill-static-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
    it, the two merged into one bordered card. */
@@ -3005,6 +2973,41 @@ body {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
+}
+/* Phone footer: the five controls are wider than one line, so the base `flex-wrap:
+   wrap` above drops the plan-usage pill onto a lonely second row. Keep the row on a
+   single line and let only the (widest) agent label give up width — it truncates
+   with an ellipsis — so Mode / Model / Effort / Usage all stay put. This block must
+   live AFTER the base .composer-pills rules: media queries add no specificity, so a
+   later same-specificity rule would otherwise override these. */
+@media (max-width: 600px) {
+  .composer-pills {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  .composer-pill-spacer {
+    display: none;
+  }
+  .composer-pills .composer-pill {
+    padding-left: 3px;
+  }
+  /* Every control keeps its natural width except the agent label. */
+  .composer-pills > .composer-pill:not(.composer-pill-agent),
+  .composer-usage {
+    flex: none;
+  }
+  .composer-pill-agent {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .composer-pill-agent .ant-select {
+    min-width: 0;
+  }
+  .composer-pill-static-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
 .cu-pop {
