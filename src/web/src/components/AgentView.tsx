@@ -604,10 +604,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Installed-PWA / standalone is the only mode where ⌘N actually reaches the page
   // (a normal tab hands it to the browser). Gate the on-button shortcut hint on it.
   const isStandalone = useMediaQuery('(display-mode: standalone)');
-  // Touch devices have no hover, so a tap on a composer pill fires its Tooltip AND opens
-  // its Select at once — stacking the "Tips" bubble over the dropdown. Suppress those
-  // tooltips where hover is unavailable; the pill's own label already names its value.
-  const pillTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
+  // Touch devices have no hover, so a tap that shows a Tooltip never gets the mouseleave
+  // that dismisses it — the bubble lingers on screen (e.g. an "Unpin" tip stuck after a
+  // pin tap, or a composer pill's tip stacked over the Select it just opened). Suppress
+  // these tooltips where hover is unavailable; every gated control already labels itself.
+  const hoverTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
   const [text, setText] = useState('');
   // Composer history cursor: -1 = editing the live draft; otherwise an index into the
   // session's stored history. `histDraft` stashes what was typed before recall started,
@@ -2318,6 +2319,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                             s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'
                           }
                           placement="top"
+                          open={hoverTipOpen}
                         >
                           <span className="session-merge-badge">⚠</span>
                         </Tooltip>
@@ -2337,7 +2339,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   <div className="session-actions" onClick={(e) => e.stopPropagation()}>
                     {view === 'active' ? (
                       <>
-                        <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top">
+                        <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
                           <span
                             className="session-kebab session-pin-toggle"
                             onClick={(e) => {
@@ -2349,7 +2351,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                             {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
                           </span>
                         </Tooltip>
-                        <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top">
+                        <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top" open={hoverTipOpen}>
                           <span
                             className="session-kebab session-complete"
                             onClick={(e) => {
@@ -3033,7 +3035,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* The agent is only a Select when it can actually be picked (new, unlocked
               session); once read-only it shows as a static pill left of Model below. */}
           {!agentReadOnly && (
-            <Tooltip title="Agent" open={pillTipOpen}>
+            <Tooltip title="Agent" open={hoverTipOpen}>
               <span className="composer-pill composer-pill-agent">
                 <Select
                   size="small"
@@ -3052,7 +3054,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
               events, so the parent span is what surfaces the reason on hover. With the
               icons gone, the tooltip also names what each pill controls. */}
-          <Tooltip title={configHint || 'Permission mode'} open={pillTipOpen}>
+          <Tooltip title={configHint || 'Permission mode'} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"
@@ -3076,13 +3078,13 @@ export function AgentView({ runner }: { runner: Runner }) {
           </Tooltip>
           <span className="composer-pill-spacer" />
           {agentReadOnly && shownAgentName && (
-            <Tooltip title="Agent" open={pillTipOpen}>
+            <Tooltip title="Agent" open={hoverTipOpen}>
               <span className="composer-pill composer-pill-static composer-pill-agent">
                 <span className="composer-pill-static-label">{shownAgentName}</span>
               </span>
             </Tooltip>
           )}
-          <Tooltip title={configHint || 'Model'} open={pillTipOpen}>
+          <Tooltip title={configHint || 'Model'} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"
@@ -3106,7 +3108,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          <Tooltip title={configHint || 'Reasoning effort'} open={pillTipOpen}>
+          <Tooltip title={configHint || 'Reasoning effort'} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"
