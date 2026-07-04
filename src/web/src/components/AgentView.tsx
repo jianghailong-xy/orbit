@@ -2326,7 +2326,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   </div>
                 </div>
               )}
-              <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selected.id} />
+              <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
               {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
               {streamingText && <StreamingMessage text={streamingText} />}
               {!selectedDeleted && approvals.map((a, i) => (
