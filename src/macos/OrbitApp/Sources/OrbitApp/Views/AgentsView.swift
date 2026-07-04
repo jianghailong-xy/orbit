@@ -121,8 +121,36 @@ struct AgentPanes: View {
                 }
                 .help("Start a new session with \(agent.name)")
             }
-            // Scope switcher — centered (principal), content-hugging via fixedSize so it renders as a
-            // compact native segmented control instead of the old full-width band above the list.
+            #if os(iOS)
+            // Compact nav bar can't fit a 3-way segmented control beside the back button, compose,
+            // and a gear. Collapse both the scope switcher *and* the agent-settings gear into a
+            // single trailing menu: the label shows the current scope (so it still reads at a
+            // glance) and "Agent settings" folds in as a menu action instead of a separate button.
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    // Scope options as checkmarked buttons (the repo's menu idiom — see
+                    // ComposerView — rather than a nested Picker), so the current scope reads clearly.
+                    ForEach(SessionView.allCases) { v in
+                        Button { view = v } label: {
+                            if v == view { Label(v.title, systemImage: "checkmark") }
+                            else { Text(v.title) }
+                        }
+                    }
+                    Divider()
+                    Button { showSettings = true } label: {
+                        Label("Agent settings", systemImage: "gearshape")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(view.title)
+                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                    }
+                }
+                .accessibilityLabel("Session scope, \(view.title)")
+            }
+            #else
+            // macOS: the wide window toolbar keeps the platform-idiomatic layout — a compact,
+            // content-hugging segmented control centered (principal) and a separate settings gear.
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $view) {
                     ForEach(SessionView.allCases) { Text($0.title).tag($0) }
@@ -131,13 +159,13 @@ struct AgentPanes: View {
                 .labelsHidden()
                 .fixedSize()
             }
-            // Agent settings — trailing gear → sheet (unchanged).
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings = true } label: {
                     Label("Agent settings", systemImage: "gearshape")
                 }
                 .help("Edit this agent")
             }
+            #endif
         }
         .sheet(isPresented: $showSettings) {
             AgentSettingsSheet(agents: agents, agent: agent)
