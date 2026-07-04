@@ -194,13 +194,21 @@ private struct CompactSections: View {
         // SKILLS / SETTINGS / ADMIN — single-pane sections, first-class drawer destinations. Admin is
         // reachable only for admins (the drawer hides it otherwise), so it needs no extra role gate.
         case .skills:
-            NavigationStack { SkillsView().drawerToggle(open: openDrawer) }
+            NavigationStack {
+                SkillsView()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.runners?.load() }
+            }
 
         case .settings:
             NavigationStack { SettingsView().drawerToggle(open: openDrawer) }
 
         case .admin:
-            NavigationStack { AdminUsersView().drawerToggle(open: openDrawer) }
+            NavigationStack {
+                AdminUsersView()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.admin?.load() }
+            }
         }
     }
 }

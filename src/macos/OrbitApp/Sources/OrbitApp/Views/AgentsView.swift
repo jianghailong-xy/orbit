@@ -96,6 +96,12 @@ struct AgentPanes: View {
         .onChange(of: selectedSessionID) { _, new in
             if new != nil { app.composingAgentSession = false }
         }
+        #if os(iOS)
+        // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
+        // Active/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
+        // `reset:` to update the rows in place rather than blanking the list mid-gesture.
+        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces),
         // then poll every 4s — the same cadence as the Active sidebar — so external changes (new
         // sessions, status transitions made from the web) show up without reopening the agent.
