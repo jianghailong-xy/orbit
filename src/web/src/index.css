@@ -3011,6 +3011,18 @@ body {
    live AFTER the base .composer-pills rules: media queries add no specificity, so a
    later same-specificity rule would otherwise override these. */
 @media (max-width: 600px) {
+  /* Bump the composer's icon buttons to a 44px touch target on phones (Apple HIG
+     minimum). The + is narrowed to 24px on desktop for a tight icon-to-text gap; on
+     touch that's too small to hit, so restore it to a full square here. Icons stay
+     centred, so only the hit area grows. */
+  .composer-box .composer-attach-btn.ant-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .composer-box .ant-btn-icon-only {
+    width: 44px;
+    height: 44px;
+  }
   .composer-pills {
     flex-wrap: nowrap;
     gap: 4px;
