@@ -248,28 +248,41 @@ struct AgentSessionRow: View {
     private var line: SessionLine? { SessionLine.make(for: session, live: true) }
 
     var body: some View {
-        HStack(spacing: 8) {
-            // A pinned session is marked at rest by a thin leading accent bar — the native port of
-            // web's `.session-row.pinned` inset bar (deliberately not a floating pushpin). A clear bar
-            // of the same width holds the layout steady on unpinned rows so titles stay aligned.
-            RoundedRectangle(cornerRadius: 1.5)
+        HStack(spacing: 0) {
+            // A pinned session is marked at rest by a full-height leading accent bar, flush to the
+            // row's leading edge — the native port of web's `.session-row.pinned` inset bar
+            // (deliberately not a floating pushpin). It sits *outside* the content padding, with the
+            // cell's `listRowInsets` zeroed below, so it bleeds to the top/bottom/leading edges like
+            // web instead of floating short and inset. A clear bar of the same width keeps unpinned
+            // rows aligned.
+            Rectangle()
                 .fill(isPinned ? Color.accentColor : .clear)
                 .frame(width: 3)
-            StatusGlyphView(glyph: .make(for: session, completed: completed))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title ?? "Untitled session").lineLimit(1)
-                if let line {
-                    Text(line.text).font(.caption).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+            HStack(spacing: 8) {
+                StatusGlyphView(glyph: .make(for: session, completed: completed))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    if let line {
+                        Text(line.text).font(.caption).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                    }
+                }
+                Spacer()
+                if let n = session.pendingApprovals, n > 0 {
+                    Text("\(n)").font(.caption2.bold())
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.orange, in: Capsule()).foregroundStyle(.white)
                 }
             }
-            Spacer()
-            if let n = session.pendingApprovals, n > 0 {
-                Text("\(n)").font(.caption2.bold())
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(.orange, in: Capsule()).foregroundStyle(.white)
-            }
+            // Re-add the standard cell insets the zeroed `listRowInsets` removed: 3 (bar) + 13 = the
+            // usual 16pt leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
+            .padding(.leading, 13)
+            .padding(.trailing, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.vertical, 2)
+        .listRowInsets(EdgeInsets())
+        // Keep the separator aligned under the title now that the cell insets are zeroed, rather than
+        // letting it run full-bleed: bar(3) + leading pad(13) + glyph(20) + spacing(8) = 44.
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
     }
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
