@@ -159,7 +159,7 @@ private struct BottomTracker: ViewModifier {
     private struct Metrics: Equatable { let distance: CGFloat; let offset: CGFloat }
 
     func body(content: Content) -> some View {
-        if #available(macOS 15, *) {
+        if #available(macOS 15, iOS 18, *) {
             content.onScrollGeometryChange(for: Metrics.self) { geo in
                 Metrics(distance: geo.contentSize.height - geo.visibleRect.maxY, offset: geo.contentOffset.y)
             } action: { _, m in
@@ -291,7 +291,7 @@ struct ChatAttachmentImage: View {
     var body: some View {
         Group {
             if let img = store.image(for: attachment.id) {
-                Image(nsImage: img)
+                Image(platformImage: img)
                     .resizable().scaledToFit()
                     .frame(maxWidth: 220, maxHeight: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
