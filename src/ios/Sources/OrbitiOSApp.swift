@@ -33,8 +33,8 @@ struct OrbitiOSApp: App {
 }
 
 /// Sign-in gate. Defined here (not shared) because the macOS `RootView` lives in the excluded
-/// `OrbitApp.swift`. Once signed in, the shell adapts to width: iPhone (compact) gets a tab bar
-/// (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split.
+/// `OrbitApp.swift`. Once signed in, the shell adapts to width: iPhone (compact) gets a left-drawer
+/// shell (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split.
 private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
