@@ -300,12 +300,23 @@ struct ChatAttachmentImage: View {
     private static let cap = CGSize(width: 220, height: 220)
     #endif
 
+    /// Scale the source down (or up) to touch the cap while keeping its aspect ratio, and give the
+    /// thumbnail that exact size. A `maxWidth/maxHeight` frame is greedy — it fills the whole cap box
+    /// and letterboxes a mismatched-aspect image inside, so the rounded border wraps empty space
+    /// around a portrait shot. An exact frame makes the border hug the image with no blank margin.
+    private static func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return cap }
+        let k = min(cap.width / src.width, cap.height / src.height)
+        return CGSize(width: src.width * k, height: src.height * k)
+    }
+
     var body: some View {
         Group {
             if let img = store.image(for: attachment.id) {
+                let size = Self.fitted(img.size)
                 Image(platformImage: img)
                     .resizable().scaledToFit()
-                    .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height)
+                    .frame(width: size.width, height: size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                     .tappableImagePreview(img, $preview)
