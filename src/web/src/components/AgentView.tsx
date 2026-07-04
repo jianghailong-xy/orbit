@@ -1203,7 +1203,29 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (!el) return;
     const onScroll = (): void => measure();
     el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    // The events-driven pin above only re-scrolls when the transcript's *content* changes, so
+    // it misses growth the container itself causes. On mobile the conversation pane is
+    // display:none until a session is opened, so the open-time scroll runs against a
+    // zero-height box and never lands at the tail; and the composer's worktree status bar
+    // loads in async, shrinking the scroll area after the fact. Re-pin to the tail on any such
+    // resize while the user is still at the bottom.
+    const ro = new ResizeObserver(() => {
+      if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
+    });
+    ro.observe(el);
+    // Screenshots load after their <img> lays out at zero height, so the content grows *below*
+    // the tail without an events change. `load` doesn't bubble but fires in the capture phase,
+    // so one listener on the scroller catches every image and re-pins.
+    const onLoad = (e: Event): void => {
+      if (atBottomRef.current && e.target instanceof HTMLImageElement)
+        el.scrollTo({ top: el.scrollHeight });
+    };
+    el.addEventListener('load', onLoad, { capture: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      el.removeEventListener('load', onLoad, { capture: true });
+      ro.disconnect();
+    };
   }, [selectedId, measure]);
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
