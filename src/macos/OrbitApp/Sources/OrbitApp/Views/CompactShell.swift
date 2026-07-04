@@ -205,6 +205,10 @@ private struct NavigationDrawer: View {
     @Environment(AppModel.self) private var model
     let needsYou: Int
     let close: () -> Void
+    /// Whether the Agents row is expanded to its runner-grouped agents. Persisted (defaults collapsed)
+    /// so nav-only users keep a clean drawer while power users who hop between agents keep the
+    /// quick-jump list open across launches.
+    @AppStorage("drawerAgentsExpanded") private var agentsExpanded = false
 
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
@@ -217,34 +221,19 @@ private struct NavigationDrawer: View {
 
             List {
                 ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
-                    let selected = section == model.selectedSection
-                    Button {
-                        model.selectedSection = section
-                        close()
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: section.systemImage)
-                                .frame(width: 24)
-                                .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                            Text(section.title)
-                                .fontWeight(selected ? .semibold : .regular)
-                                .foregroundStyle(.primary)
-                            Spacer(minLength: 0)
-                            if section == .active && needsYou > 0 {
-                                Text("\(needsYou)")
-                                    .font(.caption2.bold())
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(.orange, in: Capsule())
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                        .contentShape(Rectangle())
+                    // Agents folds into the drawer as an expandable quick-jump (mirroring the macOS
+                    // sidebar disclosure); every other section is a plain destination row.
+                    if section == .agents {
+                        agentsRows
+                    } else {
+                        sectionRow(section)
                     }
-                    .listRowBackground(selected ? Color.accentColor.opacity(0.12) : Color.clear)
                 }
             }
             .listStyle(.plain)
+            // Load the runner-grouped agents lazily — only once the quick-jump section is first
+            // opened, so the default (collapsed) drawer adds no fetch at launch.
+            .task(id: agentsExpanded) { if agentsExpanded { await model.agents?.load() } }
 
             Divider()
             AccountFooter()
@@ -252,6 +241,144 @@ private struct NavigationDrawer: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(uiColor: .systemBackground))
+    }
+
+    /// A plain destination row: tapping switches section and closes the drawer. Active carries the
+    /// amber "needs you" count.
+    private func sectionRow(_ section: AppSection) -> some View {
+        let selected = section == model.selectedSection
+        return Button {
+            model.selectedSection = section
+            close()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: section.systemImage)
+                    .frame(width: 24)
+                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                Text(section.title)
+                    .fontWeight(selected ? .semibold : .regular)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                if section == .active && needsYou > 0 {
+                    Text("\(needsYou)")
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange, in: Capsule())
+                        .foregroundStyle(.white)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .listRowBackground(selected ? Color.accentColor.opacity(0.12) : Color.clear)
+    }
+
+    /// The Agents row plus, when expanded, its runner-grouped agents. Emitted as sibling list rows.
+    @ViewBuilder
+    private var agentsRows: some View {
+        agentsHeaderRow
+        if agentsExpanded {
+            if let agents = model.agents, !agents.items.isEmpty {
+                ForEach(agents.groups) { group in
+                    Text(agents.runnerLabel(group.runnerId))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 36)
+                        .padding(.vertical, 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .listRowBackground(Color.clear)
+                    ForEach(group.agents) { agent in
+                        agentRow(agent)
+                    }
+                }
+            } else {
+                Text(model.agents?.loading == true ? "Loading…" : "No agents")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 36)
+                    .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    /// Two disjoint hit targets: the label navigates to the full Agents page (unchanged behavior,
+    /// where model · workDir + edit + New session live); the trailing caret only expands/collapses
+    /// the quick-jump list in place.
+    private var agentsHeaderRow: some View {
+        let selected = model.selectedSection == .agents
+        return HStack(spacing: 0) {
+            Button {
+                model.selectedSection = .agents
+                close()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.agents.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    Text(AppSection.agents.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                withAnimation(.snappy(duration: 0.2)) { agentsExpanded.toggle() }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(agentsExpanded ? 90 : 0))
+                    .frame(width: 40, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(agentsExpanded ? "Collapse agents" : "Expand agents")
+        }
+        .listRowBackground(selected ? Color.accentColor.opacity(0.12) : Color.clear)
+    }
+
+    /// A compact agent row: just the name (which already carries the "@ provider" suffix, so it
+    /// disambiguates on its own) plus a disabled pill. Tapping jumps straight to the agent.
+    private func agentRow(_ agent: Agent) -> some View {
+        let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
+        return Button {
+            openAgent(agent.id)
+        } label: {
+            HStack(spacing: 6) {
+                Text(agent.name)
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+                if agent.enabled == false {
+                    Text("disabled")
+                        .font(.caption2)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 46)
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(selected ? Color.accentColor.opacity(0.12) : Color.clear)
+    }
+
+    /// Jump straight to an agent from the drawer: mirror the Agents-list selection (clear stale
+    /// session / compose state), enter the Agents section, and close the drawer. The compact split
+    /// then surfaces that agent's sessions.
+    private func openAgent(_ id: String) {
+        if model.selectedAgentID != id {
+            model.selectedAgentSessionID = nil
+            model.composingAgentSession = false
+        }
+        model.selectedSection = .agents
+        model.selectedAgentID = id
+        close()
     }
 }
 
