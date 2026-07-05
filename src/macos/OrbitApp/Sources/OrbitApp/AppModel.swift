@@ -274,6 +274,16 @@ final class AppModel {
         return all.first?.id
     }
 
+    /// A draft composer just created `session`: surface it in the agent's list (so the `List`
+    /// selection that pushes its console has a matching row) and open its console. Registering *before*
+    /// arming the selection is what keeps the iPhone push from bouncing back to the "Select a session"
+    /// empty state — see `AgentsModel.registerCreatedSession`.
+    func openCreatedAgentSession(_ session: Session) {
+        agents?.registerCreatedSession(session)
+        composingAgentSession = false
+        selectedAgentSessionID = session.id
+    }
+
     /// ⌘N: open the draft composer for `currentAgentID`, navigating into the Agents section.
     /// Mirrors the "New session" button in `AgentPanes`.
     func newSessionInCurrentAgent() {

@@ -214,8 +214,7 @@ struct AgentConsoleDetail: View {
             // Draft compose state: the same ComposerView a live console uses, but its send creates a
             // new session, after which we open that session's console.
             NewSessionView(agent: agent, registry: registry) { session in
-                app.composingAgentSession = false
-                app.selectedAgentSessionID = session.id
+                app.openCreatedAgentSession(session)
             }
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.

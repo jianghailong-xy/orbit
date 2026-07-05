@@ -67,6 +67,17 @@ final class AgentsModel {
         catch { errorText = friendly(error); return nil }
     }
 
+    /// Prepend a just-created session to the current list so the selection that opens its console has
+    /// a matching row *immediately*. The session list is bound to `List(selection:)`, which doubles as
+    /// the collapsed-split detail-push driver on iPhone; a selection whose id isn't a row can be reset
+    /// back to nil by the List, dropping the freshly-pushed console to the "Select a session" empty
+    /// state until the next poll. Deduped; the 4s poll reconciles ordering/fields (the session is
+    /// Active, so it re-appears there naturally).
+    func registerCreatedSession(_ session: Session) {
+        guard !agentSessions.contains(where: { $0.id == session.id }) else { return }
+        agentSessions.insert(session, at: 0)
+    }
+
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
     /// the agent client-side (the payload nests `agent.id`), mirroring the web agent console.
     ///
