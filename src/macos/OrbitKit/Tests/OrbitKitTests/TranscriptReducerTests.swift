@@ -120,6 +120,45 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.background.first?.status, "completed")
     }
 
+    /// A background shell must appear in the tray as soon as its launch is confirmed by the
+    /// tool_result ("…running in background with ID…") — WITHOUT waiting for a background_task,
+    /// which may never arrive (still running, or its completion notification was never recorded as
+    /// an event). Regression: iOS built the tray only from background_task events, so a running
+    /// shell that web showed (web builds from the launch) was invisible on iOS.
+    func testRunningBackgroundShellVisibleFromLaunchAlone() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 10, type: .toolUse, payload: .object([
+            "toolUseId": .string("tu5"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm run dev"), "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 11, type: .toolResult, payload: .object([
+            "toolUseId": .string("tu5"),
+            "content": .string("Command running in background with ID: dev123. Output is being written to: /t/dev123.output.")])))
+        // No background_task yet — the shell is still running.
+        XCTAssertEqual(r.state.background.count, 1, "running shell must be visible from the launch alone")
+        XCTAssertEqual(r.state.background.first?.command, "npm run dev")
+        XCTAssertEqual(r.state.background.first?.status, "running")
+
+        // A later completion (background_task) updates the SAME row, correlated by toolUseId.
+        r.apply(RunEvent(seq: 20, type: .backgroundTask, payload: .object([
+            "shellId": .string("dev123"), "toolUseId": .string("tu5"), "status": .string("completed")])))
+        XCTAssertEqual(r.state.background.count, 1, "completion updates, not duplicates")
+        XCTAssertEqual(r.state.background.first?.status, "completed")
+        XCTAssertEqual(r.state.background.first?.command, "npm run dev")
+    }
+
+    /// A failed background launch (its tool_result lacks the confirmation) must NOT create a phantom
+    /// tray row.
+    func testFailedBackgroundLaunchCreatesNoTrayRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 10, type: .toolUse, payload: .object([
+            "toolUseId": .string("tu6"), "name": .string("Bash"),
+            "input": .object(["command": .string("bad &"), "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 11, type: .toolResult, payload: .object([
+            "toolUseId": .string("tu6"), "isError": .bool(true),
+            "content": .string("bash: bad: command not found")])))
+        XCTAssertTrue(r.state.background.isEmpty, "no confirmation ⇒ no tray row")
+    }
+
     func testDurableDedupKeepsSingleItem() {
         var r = TranscriptReducer()
         let ev = RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hi")]))

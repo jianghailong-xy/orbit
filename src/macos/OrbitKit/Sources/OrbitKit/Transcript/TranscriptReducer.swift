@@ -217,6 +217,16 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
         let isError = ev.payload["isError"]?.boolValue ?? ev.payload["is_error"]?.boolValue ?? false
         let result = str(ev, "content") ?? str(ev, "result") ?? ev.payload["content"]?.asString
+        // A confirmed background-shell launch ("…running in background with ID…") must surface in the
+        // tray NOW, keyed by its tool_use id — not wait for a background_task that may never arrive
+        // (the shell is still running, or its completion notification was never recorded as an event).
+        // Mirrors web's deriveBackgroundShells, which builds the shell list from the launch, not the
+        // completion. background_task/output then update this same row (correlated by toolUseId).
+        if let id, !isError, let cmd = bgLaunch[id], let result,
+           result.contains("running in background with ID"),
+           !state.background.contains(where: { $0.id == id }) {
+            state.background.append(BackgroundProc(id: id, command: cmd, status: "running", outputTail: ""))
+        }
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
             if case .toolCall(var card) = state.items[idx], card.result == nil, id == nil || card.id == id {
                 card.result = result
@@ -336,12 +346,13 @@ public struct TranscriptReducer: Sendable, Codable {
 
     // MARK: - background processes
 
-    // Runner keys background events by `shellId` (Claude's shell id) and `toolUseId` (the launching
-    // Bash call) — NOT `id`/`taskId`. Read those first (older aliases kept as a fallback) so events
-    // correlate to one process instead of each minting a throwaway synthetic id.
+    // Correlate every background event to one process by `toolUseId` (the launching Bash call) — the
+    // one id present on the launch tool_use/result AND on every background_* event, so a shell
+    // surfaced from its launch (see closeTool) and its later completion are the SAME row. `shellId`
+    // and the older `id`/`taskId` are fallbacks. (Runner sends `shellId`/`toolUseId`, never `id`.)
     private mutating func upsertBackground(_ ev: RunEvent) {
         let toolUseID = str(ev, "toolUseId")
-        let id = str(ev, "shellId") ?? toolUseID ?? str(ev, "id") ?? str(ev, "taskId") ?? nextID()
+        let id = toolUseID ?? str(ev, "shellId") ?? str(ev, "id") ?? str(ev, "taskId") ?? nextID()
         let status = str(ev, "status") ?? "running"
         // The command isn't on this event; correlate it from the launching Bash tool_use (bgLaunch).
         let command = str(ev, "command") ?? toolUseID.flatMap { bgLaunch[$0] }
@@ -357,7 +368,7 @@ public struct TranscriptReducer: Sendable, Codable {
     // each change under the `content` key), not an incremental delta — so replace, don't append.
     private mutating func applyBackgroundOutput(_ ev: RunEvent) {
         let toolUseID = str(ev, "toolUseId")
-        guard let id = str(ev, "shellId") ?? toolUseID ?? str(ev, "id") ?? str(ev, "taskId") else { return }
+        guard let id = toolUseID ?? str(ev, "shellId") ?? str(ev, "id") ?? str(ev, "taskId") else { return }
         let snapshot = str(ev, "content") ?? str(ev, "output") ?? str(ev, "chunk") ?? str(ev, "text") ?? ""
         guard !snapshot.isEmpty else { return }
         if let i = state.background.firstIndex(where: { $0.id == id }) {
