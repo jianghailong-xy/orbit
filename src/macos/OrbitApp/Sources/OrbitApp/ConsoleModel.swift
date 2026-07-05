@@ -47,6 +47,10 @@ final class ConsoleModel {
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
     private(set) var state = TranscriptState()
+    /// Bumped once per published `state` snapshot. Views that only need "the transcript changed"
+    /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
+    /// `onChange(of: state.items)` that Equatable-compares the whole item array every publish.
+    private(set) var stateRevision = 0
     private(set) var connected = false
 
     // Reconnect-loop state (see `run()`). `reconnectAttempt` ramps the exponential backoff;
@@ -274,21 +278,23 @@ final class ConsoleModel {
     // Coalesce transcript publishes. A busy replay or live stream would otherwise copy the full
     // state and re-render the whole transcript PER event (≈ O(N²) over the session), pegging the
     // main actor — opening a busy session froze the app near 100% CPU. Events still fold into the
-    // reducer eagerly; the rendered snapshot is pushed to the view at most ~20×/sec.
+    // reducer eagerly; the rendered snapshot is pushed to the view at most ~5×/sec. (Was ~20×/sec:
+    // every publish re-lays-out the streaming row and re-runs the List diff, and on iPhone that
+    // cadence alone kept the CPU pegged for a whole watched turn — a top battery/heat hotspot.
+    // 200ms still reads as live typing.)
     private var publishScheduled = false
     private func scheduleStatePublish() {
         guard !publishScheduled else { return }
         publishScheduled = true
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try? await Task.sleep(nanoseconds: 200_000_000)
             guard let self else { return }
-            self.publishScheduled = false
-            self.state = self.reducer.state
-            self.reconcileReplyContext()
+            self.publishStateNow()
         }
     }
     private func publishStateNow() {
         publishScheduled = false
+        stateRevision &+= 1
         state = reducer.state
         reconcileReplyContext()
     }
@@ -455,7 +461,7 @@ final class ConsoleModel {
         // tagged below once POST returns — the runner echoes turnId, not clientTurnId).
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,
                                   queued: willQueue)
-        state = reducer.state
+        publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         composerText = ""
         pendingAttachments = []
 
@@ -483,7 +489,7 @@ final class ConsoleModel {
             // clientTurnId). The POST response always precedes that event — see setOptimisticTurnId.
             if let tid = accepted.turnId {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
-                state = reducer.state
+                publishStateNow()
             }
         } catch {
             statusMessage = "Send failed — \(error)"

@@ -13,13 +13,15 @@ struct MarkdownView: View {
     let source: String
 
     var body: some View {
-        // Parse unconditionally — no length cap. The transcript renders in a `List` (NSTableView-
-        // backed real row recycling), so a long reply is one row whose Markdown is parsed once when
-        // it scrolls into view, not per frame. The earlier freezes were scroll mechanics (animated
-        // LazyVStack re-layout, then scrollPosition/scrollTargetLayout), proven by samples that
-        // showed zero parseMarkdownBlocks calls — capping length here only dropped formatting on
-        // long messages without fixing anything.
-        let blocks = parseMarkdownBlocks(source)
+        // No length cap (capping only dropped formatting on long messages — the historic freezes
+        // were scroll mechanics, not parsing). But do NOT parse unconditionally either: a row's
+        // body re-evaluates whenever anything it observes republishes (~5×/sec during a streaming
+        // turn, plus whole-tree diffs), and `parseMarkdownBlocks` builds a full swift-markdown AST
+        // per call — on iPhone that repeated re-parse was a top battery/heat hotspot. The cache
+        // keys on the exact source string, so re-evaluations of unchanged text cost a hash lookup.
+        // Streaming rows don't reach here at all — they render plain until finalized (see
+        // AssistantBubbleView / ThinkingView), so the cache holds one entry per finalized text.
+        let blocks = cachedMarkdownBlocks(source)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(blocks.indices, id: \.self) { i in
                 MarkdownBlockView(block: blocks[i])
@@ -31,6 +33,19 @@ struct MarkdownView: View {
         .lineSpacing(5)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
+
+/// Parse cache backing `MarkdownView` (main-actor only, like the view bodies that call it).
+/// Bounded as a leak backstop: past the cap it resets wholesale — visible rows repopulate it
+/// lazily on their next body pass, so a reset costs one parse per on-screen Markdown row.
+@MainActor private var markdownBlockCache: [String: [MarkdownBlock]] = [:]
+
+@MainActor private func cachedMarkdownBlocks(_ source: String) -> [MarkdownBlock] {
+    if let hit = markdownBlockCache[source] { return hit }
+    if markdownBlockCache.count >= 512 { markdownBlockCache.removeAll(keepingCapacity: true) }
+    let blocks = parseMarkdownBlocks(source)
+    markdownBlockCache[source] = blocks
+    return blocks
 }
 
 private struct MarkdownBlockView: View {

@@ -122,8 +122,10 @@ struct TranscriptView: View {
             // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
             // if the user has scrolled up to read, don't drag them back. A session switch always
             // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
-            // the old build.
-            .onChange(of: console.state.items) {
+            // the old build. Keyed on `stateRevision`, not `state.items`: the revision is an O(1)
+            // compare bumped once per published snapshot, where the items array would be
+            // Equatable-compared in full on every publish just to learn "something changed".
+            .onChange(of: console.stateRevision) {
                 if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) }
                 recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
             }
@@ -893,10 +895,24 @@ struct AssistantBubbleView: View {
     // `padding: 0 12px` and keeps the left edge aligned with the tool-card rail.
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            MarkdownView(source: bubble.displayText)
-                .font(.system(size: 14))
-                .foregroundStyle(Color.transcriptInk)
-                .textSelection(.enabled)
+            Group {
+                if bubble.isFinalized {
+                    MarkdownView(source: bubble.displayText)
+                } else {
+                    // Streaming: render the growing text plain. The full Markdown pass (a GFM AST
+                    // plus an AttributedString parse per block) would re-run over the WHOLE message
+                    // on every published snapshot for the entire turn — the main battery/heat
+                    // hotspot on iPhone. Finalize swaps in the parsed rendering once, when the
+                    // text stops changing. lineSpacing matches MarkdownView's prose leading so
+                    // the swap doesn't shift the layout.
+                    Text(bubble.displayText)
+                        .lineSpacing(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .font(.system(size: 14))
+            .foregroundStyle(Color.transcriptInk)
+            .textSelection(.enabled)
             if !bubble.isFinalized { TypingDots() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -909,8 +925,17 @@ struct ThinkingView: View {
     @State private var expanded = false
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            MarkdownView(source: block.displayText).font(.callout).foregroundStyle(.secondary)
-                .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            // Same streaming degrade as AssistantBubbleView: plain text while the block grows,
+            // full Markdown only once finalized (this body only runs while expanded).
+            Group {
+                if block.isFinalized {
+                    MarkdownView(source: block.displayText)
+                } else {
+                    Text(block.displayText).lineSpacing(5)
+                }
+            }
+            .font(.callout).foregroundStyle(.secondary)
+            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             Label("Thinking", systemImage: "brain").font(.caption).foregroundStyle(.secondary)
         }

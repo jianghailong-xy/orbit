@@ -110,6 +110,7 @@ public struct ThinkingBlock: Equatable, Sendable, Codable {
     public var text: String
     public var streamingText: String
     public var seq: Int?
+    public var isFinalized: Bool { seq != nil }
     public var displayText: String { text.isEmpty ? streamingText : text }
 }
 
