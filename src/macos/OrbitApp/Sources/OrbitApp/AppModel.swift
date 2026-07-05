@@ -42,6 +42,12 @@ final class AppModel {
     /// draft composer instead of a console). Cleared once a session is selected/created or the
     /// agent changes. See `NewSessionView`.
     var composingAgentSession = false
+    /// On compact, the session a *pushed* compose page created and is now hosting the console for in
+    /// place (`AgentComposePush`). It's deliberately not the list selection, and `composingAgentSession`
+    /// stays true so that page stays pushed — so the normal `.agents` focus rule would resolve to nil
+    /// and never stream it. Surfacing it here makes it the focused (streaming) console. Set when the
+    /// draft creates the session, cleared when that page is dismissed. See `focusedConsoleSessionID`.
+    var composedConsoleSessionID: String?
     var selectedUserID: String?
     var menuSummary: MenuBarSummary = .empty
     /// Bumped to ask the visible session list (the Active sidebar or an agent's session list) to
@@ -181,6 +187,7 @@ final class AppModel {
         selectedAgentID = nil
         selectedAgentSessionID = nil
         composingAgentSession = false
+        composedConsoleSessionID = nil
         selectedUserID = nil
         lastSnapshot = nil
         menuSummary = .empty
@@ -236,7 +243,10 @@ final class AppModel {
     var focusedConsoleSessionID: String? {
         switch selectedSection {
         case .active: return activeConsoleSessionID
-        case .agents: return composingAgentSession ? nil : selectedAgentSessionID
+        // A compose page hosting its just-created console in place (`composedConsoleSessionID`) wins
+        // over the compose/selection rule: `composingAgentSession` is still true there, so without this
+        // the session would render but never stream.
+        case .agents: return composedConsoleSessionID ?? (composingAgentSession ? nil : selectedAgentSessionID)
         default:      return nil
         }
     }

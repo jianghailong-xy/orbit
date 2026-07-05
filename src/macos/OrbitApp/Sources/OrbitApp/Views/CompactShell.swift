@@ -405,6 +405,10 @@ private struct AgentComposePush: View {
                                    defaultEffort: model.user?.preferences?.defaultEffort) { session in
                         model.agents?.registerCreatedSession(session)
                         created = session
+                        // Mark it the focused console so the shell starts its SSE stream — the
+                        // page keeps `composingAgentSession` true, under which the normal focus
+                        // rule streams nothing.
+                        model.composedConsoleSessionID = session.id
                     }
                     .navigationTitle(agent.name)
                 }
@@ -413,6 +417,12 @@ private struct AgentComposePush: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        // Leaving the page (system back, or the section/agent changing out from under it) ends the
+        // compose console: drop the focus override so its stream stops and focus falls back to the
+        // list. Guarded so a stale disappear can't clear a newer compose.
+        .onDisappear {
+            if model.composedConsoleSessionID == created?.id { model.composedConsoleSessionID = nil }
+        }
     }
 }
 #endif
