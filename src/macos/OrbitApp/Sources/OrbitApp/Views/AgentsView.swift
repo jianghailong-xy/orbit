@@ -142,8 +142,7 @@ struct AgentPanes: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    app.composingAgentSession = true
-                    selectedSessionID = nil
+                    app.startComposingSession()
                 } label: {
                     Label("New session", systemImage: "square.and.pencil")
                 }
@@ -154,8 +153,7 @@ struct AgentPanes: View {
             // (leading), a compact centered segmented scope switcher (principal), and a settings gear.
             ToolbarItem(placement: .navigation) {
                 Button {
-                    app.composingAgentSession = true
-                    selectedSessionID = nil
+                    app.startComposingSession()
                 } label: {
                     Label("New session", systemImage: "square.and.pencil")
                 }

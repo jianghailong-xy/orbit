@@ -114,19 +114,9 @@ struct CompactShell: View {
             }
     }
 
-    /// A section is "at root" when nothing is pushed onto its stack, so the left edge is free for the
-    /// open gesture. Derived from the shared selection state that drives each stack's push.
-    private var isAtRoot: Bool {
-        switch model.selectedSection {
-        case .active:  return model.selectedSessionID == nil
-        case .tasks:   return model.selectedTaskID == nil
-        // The compose page (composing) is pushed too, not just a selected session's console — so the
-        // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
-        case .agents:  return model.selectedAgentSessionID == nil && !model.composingAgentSession
-        case .runners: return model.selectedRunnerID == nil
-        case .skills, .settings, .admin: return true
-        }
-    }
+    /// A section is "at root" when nothing is pushed onto its stack, so the left edge is free for
+    /// the open gesture — `AppModel.sectionAtRoot`, derived from the shared selection state.
+    private var isAtRoot: Bool { model.sectionAtRoot }
 }
 
 /// The selected section's navigation stack, switched on `selectedSection`. A hidden-tab-bar `TabView`
@@ -344,12 +334,7 @@ private struct NavigationDrawer: View {
     /// session / compose state), enter the Agents section, and close the drawer. The compact split
     /// then surfaces that agent's sessions.
     private func openAgent(_ id: String) {
-        if model.selectedAgentID != id {
-            model.selectedAgentSessionID = nil
-            model.composingAgentSession = false
-        }
-        model.selectedSection = .agents
-        model.selectedAgentID = id
+        model.openAgent(id)
         close()
     }
 }

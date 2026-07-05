@@ -30,9 +30,10 @@ struct QuestionReply: Equatable, Sendable {
 private enum StreamOutcome { case ended, failed, kicked, cancelled }
 
 /// Drives one open session: the reconnecting SSE consume loop (folded through the verified
-/// `TranscriptReducer`) plus the interactive actions — send/queue/interrupt, tool approvals,
-/// and worktree commit/merge. All decision logic lives in OrbitKit (ComposerLogic / Approvals);
-/// this is the orchestration + UI-facing state.
+/// `TranscriptReducer`) plus the interactive actions — send/queue/interrupt and tool approvals.
+/// The worktree status bar's state + actions live in the owned `WorktreeModel` (`worktree`). All
+/// decision logic lives in OrbitKit (ComposerLogic / Approvals); this is the orchestration +
+/// UI-facing state.
 @MainActor
 @Observable
 final class ConsoleModel {
@@ -88,13 +89,9 @@ final class ConsoleModel {
     private(set) var slashItems: [SlashCommandInfo] = []
     var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
 
-    // worktree
-    /// GET /sessions/:id detail driving the status bar (branch, changedFiles +/− stats, merge /
-    /// commit status, targets). Polled while the console is on screen — see `startWorktreePolling`.
-    private(set) var worktree: SessionDetail?
-    /// Per-file unified diffs for the expandable diff sheet, fetched lazily when it opens.
-    private(set) var diff: [FilePatch] = []
-    private(set) var worktreeBusy = false
+    /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
+    /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
+    let worktree: WorktreeModel
 
     var statusMessage: String?
 
@@ -114,7 +111,9 @@ final class ConsoleModel {
         self.agentID = agentID
         self.draftAgent = nil
         self.attachments = attachments
-        self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        self.api = api
+        self.worktree = WorktreeModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
@@ -123,6 +122,7 @@ final class ConsoleModel {
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
+        wireWorktree()
     }
 
     /// Draft (pre-session) console backing the "new session" composer. There's no session yet, so it
@@ -135,7 +135,11 @@ final class ConsoleModel {
         self.agentID = agent.id
         self.draftAgent = agent
         self.attachments = attachments
-        self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
+        self.api = api
+        // Inert for a draft (its guards see the empty sessionID); real work starts once the created
+        // session's live console replaces this one.
+        self.worktree = WorktreeModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
@@ -148,6 +152,15 @@ final class ConsoleModel {
         // Seed the effort pill from the agent's default too (web parity), so a new session shows —
         // and starts at — the agent's configured effort unless the user overrides it.
         if let ef = agent.effort, let e = Effort(rawValue: ef) { self.effort = e }
+        wireWorktree()
+    }
+
+    /// Hand the worktree sub-model the two bits of host context it needs: the live status (its poll
+    /// cadence) and the console status line (its action failures). Weak — it must not retain the
+    /// console it's owned by.
+    private func wireWorktree() {
+        worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
+        worktree.onStatus = { [weak self] msg in self?.statusMessage = msg }
     }
 
     /// Snapshot the full reducer (state + dedup/cursor internals) for the local store. Restoring
@@ -670,84 +683,6 @@ final class ConsoleModel {
         publishStateNow()
     }
 
-    // MARK: worktree
-
-    /// Fetch the session detail behind the status bar (branch / changedFiles / merge+commit status).
-    /// Best-effort: a failure keeps the last snapshot so a transient blip doesn't blank the bar.
-    func loadWorktreeDetail() async {
-        guard !sessionID.isEmpty else { return }
-        do { worktree = try await api.sessionDetail(sessionID) }
-        catch { /* keep last */ }
-    }
-
-    /// Keep the status bar current while the console is on screen, mirroring web's refetch policy:
-    /// poll every 3s while a merge/commit is pending (the runner's outcome is ≤1 heartbeat away),
-    /// every 5s while the session is live (so a mid-turn diff appears without waiting for turn-end),
-    /// and otherwise stay idle — re-checking cheaply so a user-triggered commit/merge (which flips
-    /// the status to pending) is picked up. Cancelled when the view goes away.
-    func startWorktreePolling() async {
-        await loadWorktreeDetail()
-        while !Task.isCancelled {
-            let pending = worktree?.mergeStatus == "pending" || worktree?.commitStatus == "pending"
-            let live = sessionStatus.isLive
-            guard pending || live else {
-                // Settled + terminal: nothing to fetch. Wait, then re-evaluate — an action that sets
-                // pending (below) will make the next pass enter the 3s outcome poll.
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                continue
-            }
-            try? await Task.sleep(nanoseconds: pending ? 3_000_000_000 : 5_000_000_000)
-            if Task.isCancelled { break }
-            await loadWorktreeDetail()
-        }
-    }
-
-    func loadDiff() async {
-        worktreeBusy = true
-        defer { worktreeBusy = false }
-        do { diff = try await api.diff(sessionID: sessionID).patches }
-        catch { /* keep last */ }
-    }
-
-    func commit() async {
-        worktreeBusy = true
-        defer { worktreeBusy = false }
-        do { try await api.commit(sessionID: sessionID) }
-        catch { statusMessage = "Commit failed"; return }
-        // Reflect the pending commit immediately; the poll loop then follows the runner's outcome.
-        await loadWorktreeDetail()
-    }
-
-    func merge(target: String?) async {
-        worktreeBusy = true
-        defer { worktreeBusy = false }
-        do { try await api.merge(sessionID: sessionID, targetBranch: target) }
-        catch { statusMessage = "Merge failed"; return }
-        await loadWorktreeDetail()
-    }
-
-    /// Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
-    /// onto the latest main and fixes the conflicts (it has the context for its own changes). The
-    /// resume clears the stale mergeStatus server-side, so the bar offers Merge again once it's done.
-    /// Same prompt web sends from `resolveMut`.
-    func resolveInSession(branch: String) async {
-        worktreeBusy = true
-        defer { worktreeBusy = false }
-        let content = "Rebase this branch onto the latest `main` and resolve any conflicts.\n\n"
-            + "You're in this session's isolated git worktree, checked out on `\(branch)`. "
-            + "Run `git rebase main` — it may stop on conflicts. For each, resolve every conflict "
-            + "using your knowledge of the changes made on this branch, `git add` the resolved "
-            + "files, then `git rebase --continue`, repeating until the rebase completes. Do not "
-            + "push. Once the rebase finishes, the branch can be merged into main cleanly from the "
-            + "status bar above the composer."
-        do {
-            _ = try await api.resume(sessionID: sessionID,
-                                     ResumeRequest(clientTurnId: UUID().uuidString, content: content,
-                                                   kind: "message"))
-            statusMessage = "Resuming the session to resolve the conflict…"
-        } catch { statusMessage = "Couldn't resume the session"; return }
-        await loadWorktreeDetail()
-    }
 }
 
 /// Downsample an image to a small PNG for the composer's thumbnail chip. Done once at attach time

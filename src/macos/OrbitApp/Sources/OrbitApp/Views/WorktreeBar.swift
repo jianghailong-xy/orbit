@@ -19,7 +19,7 @@ struct WorktreeBar: View {
         // and never fire, `worktree` would never load, and the bar would never appear. A VStack owns
         // the modifier itself and is always in the tree, so the poller runs regardless of content.
         VStack(spacing: 0) {
-            let d = console.worktree
+            let d = console.worktree.detail
             let files = d?.changedFiles ?? []
             switch WorktreeBarLogic.mode(isolationStatus: d?.isolationStatus, branch: d?.branch,
                                          changedFileCount: files.count) {
@@ -33,7 +33,7 @@ struct WorktreeBar: View {
         }
         // Key the poller to the session id so it restarts for the new session when the console is
         // swapped in place (ConsoleView keeps its tree identity across a session switch).
-        .task(id: console.sessionID) { await console.startWorktreePolling() }
+        .task(id: console.sessionID) { await console.worktree.startPolling() }
         .sheet(isPresented: $showDiff) { DiffSheet(console: console) }
     }
 
@@ -147,7 +147,7 @@ private struct WorktreeMergeControl: View {
     var body: some View {
         let status = detail.mergeStatus
         let targets = detail.mergeTargets ?? []
-        let busy = console.worktreeBusy
+        let busy = console.worktree.busy
         let defaultTarget = WorktreeBarLogic.defaultTarget(targets: targets,
                                                            agentDefaultTarget: detail.agent?.defaultMergeTarget)
 
@@ -163,13 +163,13 @@ private struct WorktreeMergeControl: View {
         } else if status == "conflict" || status == "error" {
             if WorktreeBarLogic.resolvable(mergeStatus: status, mergeTarget: detail.mergeTarget) {
                 WTPillButton(title: busy ? "Resuming…" : "Resolve in session", tint: .red, disabled: busy) {
-                    Task { await console.resolveInSession(branch: branch) }
+                    Task { await console.worktree.resolveInSession(branch: branch) }
                 }
             } else {
                 HStack(spacing: 4) {
                     WTPillButton(title: "Retry merge to \(detail.mergeTarget ?? defaultTarget ?? "main")",
                                  tint: .red, disabled: busy) {
-                        Task { await console.merge(target: detail.mergeTarget ?? defaultTarget) }
+                        Task { await console.worktree.merge(target: detail.mergeTarget ?? defaultTarget) }
                     }
                     if !targets.isEmpty { caret(targets: targets, defaultTarget: defaultTarget, tint: .red) }
                 }
@@ -177,7 +177,7 @@ private struct WorktreeMergeControl: View {
         } else {
             HStack(spacing: 4) {
                 WTPillButton(title: "Merge to \(defaultTarget ?? "main")", disabled: busy) {
-                    Task { await console.merge(target: defaultTarget) }
+                    Task { await console.worktree.merge(target: defaultTarget) }
                 }
                 if !targets.isEmpty { caret(targets: targets, defaultTarget: defaultTarget, tint: .accentColor) }
             }
@@ -188,7 +188,7 @@ private struct WorktreeMergeControl: View {
     private func caret(targets: [String], defaultTarget: String?, tint: Color) -> some View {
         Menu {
             ForEach(targets, id: \.self) { b in
-                Button { Task { await console.merge(target: b) } } label: {
+                Button { Task { await console.worktree.merge(target: b) } } label: {
                     if b == defaultTarget { Label(b, systemImage: "checkmark") } else { Text(b) }
                 }
             }
@@ -213,12 +213,12 @@ private struct WorktreeCommitControl: View {
 
     var body: some View {
         let status = detail.commitStatus
-        let busy = console.worktreeBusy
+        let busy = console.worktree.busy
         let pending = status == "pending"
         let title = pending ? "Committing…" : (status == "error" ? "Retry commit" : "Commit")
         WTPillButton(title: title, tint: status == "error" ? .red : .accentColor,
                      disabled: pending || turnActive || busy) {
-            Task { await console.commit() }
+            Task { await console.worktree.commit() }
         }
     }
 }
@@ -264,7 +264,7 @@ struct DiffSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let files = console.worktree?.changedFiles ?? []
+        let files = console.worktree.detail?.changedFiles ?? []
         NavigationStack {
             List(files) { file in
                 NavigationLink {
@@ -281,7 +281,7 @@ struct DiffSheet: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
-        .task { await console.loadDiff() }
+        .task { await console.worktree.loadDiff() }
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 420)
         #endif
@@ -338,7 +338,7 @@ private struct DiffFileView: View {
     private static let lineCap = 1200
 
     var body: some View {
-        let patch = console.diff.first { $0.path == file.path }
+        let patch = console.worktree.diff.first { $0.path == file.path }
         ScrollView {
             if file.additions < 0 || file.deletions < 0 {
                 placeholder("Binary file — no preview")
@@ -356,7 +356,7 @@ private struct DiffFileView: View {
                 .padding(12)
             } else if patch?.truncated == true {
                 placeholder("Diff too large to preview")
-            } else if console.worktreeBusy {
+            } else if console.worktree.busy {
                 placeholder("Loading diff…")
             } else {
                 placeholder("No diff to preview")
