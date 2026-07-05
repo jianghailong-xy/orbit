@@ -88,6 +88,19 @@ export enum RunEventType {
   // the process's output file (broadcast-only animation, like *_DELTA — not persisted).
   BACKGROUND_TASK = 'background_task',
   BACKGROUND_OUTPUT = 'background_output',
+  // Control-plane-internal lifecycle signals (a session was created / left the active list).
+  // They ride the same realtime hub as run events — buying the cross-replica NOTIFY bridge for
+  // free — but are NEVER persisted to run_events (the `type` column is a plain String, so no
+  // migration) and NEVER enter a per-session transcript stream (streamForRun filters them via
+  // isLifecycleType). streamForUser maps them to ControlEventType.SESSION_CREATED / SESSION_ENDED.
+  SESSION_CREATED = 'session_created',
+  SESSION_ENDED = 'session_ended',
+}
+
+/** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
+ *  hub but filtered OUT of every per-session transcript stream and never persisted. */
+export function isLifecycleType(t: RunEventType): boolean {
+  return t === RunEventType.SESSION_CREATED || t === RunEventType.SESSION_ENDED;
 }
 
 /** Lifecycle of a human-facing work item (Task). */

@@ -216,6 +216,9 @@ export class SessionsService {
       });
     }
     this.queue.notifySessionQueued();
+    // Push the new session to the owner's control-plane stream (GET /api/events) so other
+    // clients see it appear without polling.
+    this.realtime.publishSessionCreated(session.id);
     return session;
   }
 
@@ -1379,6 +1382,9 @@ export class SessionsService {
       await this.endLive(session, SessionEndReason.COMPLETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
+    // Archive is a list-membership change with no STATUS event — signal the control plane so
+    // other clients drop the row without polling.
+    this.realtime.publishSessionEnded(session.id, session.status, SessionEndReason.COMPLETED);
     return { ok: true };
   }
 
@@ -1463,6 +1469,8 @@ export class SessionsService {
       await this.endLive(session, SessionEndReason.DELETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
+    // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
+    this.realtime.publishSessionEnded(session.id, session.status, SessionEndReason.DELETED);
     return { ok: true };
   }
 
@@ -1473,6 +1481,9 @@ export class SessionsService {
       where: { id },
       data: { archivedAt: null, deletedAt: null },
     });
+    // Back in the active list — same signal as a brand-new session (the control plane's
+    // session.created carries a full summary either way).
+    this.realtime.publishSessionCreated(id);
     return { ok: true };
   }
 
