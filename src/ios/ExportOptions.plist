@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store / TestFlight distribution. `destination = upload` makes `xcodebuild
+	     -exportArchive` push the build straight to App Store Connect (given the API-key auth
+	     flags), so no separate altool/Transporter step is needed.
+	     `app-store-connect` is the Xcode 16+ name for the old `app-store` method. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<!-- Manual signing with a fixed Apple Distribution identity + App Store profile (both from
+	     secrets). Automatic signing mints a new certificate on every fresh CI runner and eventually
+	     trips Apple's per-account certificate cap; manual reuses the one cert forever. CI overwrites
+	     the profile-name placeholder (PlistBuddy) and the team id (sed) from secrets. -->
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>io.orbitd.app</key>
+		<string>REPLACE_WITH_PROFILE_NAME</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<!-- CI substitutes the real team id from the APPLE_TEAM_ID secret. For a local export,
+	     replace this with your Developer Team ID (e.g. S27N9A88JC). -->
+	<key>teamID</key>
+	<string>REPLACE_WITH_TEAM_ID</string>
+</dict>
+</plist>

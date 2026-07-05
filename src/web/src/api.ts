@@ -38,6 +38,35 @@ export const sessionEventsUrl = (sessionId: string, sinceSeq?: number): string =
   return `/api/sessions/${sessionId}/events?access_token=${tok}${since}`;
 };
 
+export interface EventPageEvent {
+  seq: number;
+  type: string;
+  payload: any;
+  turnId: string | null;
+  ts: string;
+}
+
+/** A page of a session's persisted events, chronological (seq asc). `hasMore` = older
+ *  events remain before this page. */
+export interface EventPage {
+  events: EventPageEvent[];
+  hasMore: boolean;
+}
+
+/** Fetch a page of a session's history for tail-first lazy loading: `tail` gets the newest N
+ *  (initial paint), `before`+`limit` get the N events just older than a seq (scroll-up). Lets a
+ *  long transcript open at the latest message instead of replaying its whole history over SSE. */
+export const getSessionEventPage = (
+  id: string,
+  opts: { tail?: number; before?: number; limit?: number },
+): Promise<EventPage> => {
+  const qs = new URLSearchParams();
+  if (opts.tail != null) qs.set('tail', String(opts.tail));
+  if (opts.before != null) qs.set('before', String(opts.before));
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`);
+};
+
 // ── Interactive sessions (Route B) ──
 
 /** Start a long-lived interactive session. Pick an agent (its machine + project dir

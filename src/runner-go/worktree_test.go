@@ -295,6 +295,30 @@ func TestBranchMergedInto(t *testing.T) {
 	}
 }
 
+// TestBranchMergedInto_ZeroCommitsPastFork: a session whose branch never committed anything
+// still has its tip sitting at the fork point, which is already in main's history — so a naive
+// is-ancestor check would falsely report "✓ In main" for a session that did no work. With a
+// known BaseSha we require ≥1 commit past the fork before claiming the work landed.
+func TestBranchMergedInto_ZeroCommitsPastFork(t *testing.T) {
+	repo := initRepo(t) // main + base commit
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+
+	// Fork a branch at main's HEAD but never commit on it — tip == base == in main.
+	mustGit(t, repo, "checkout", "-b", "orbit/empty")
+	empty := &Worktree{Branch: "orbit/empty", BaseSha: base, RepoDir: repo}
+	if branchMergedInto(empty) {
+		t.Error("a branch with zero commits past its fork must report not-merged, not '✓ In main'")
+	}
+
+	// Once it has a commit and is ff-merged into main, it must report merged even with BaseSha set.
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/empty")
+	if !branchMergedInto(empty) {
+		t.Error("a branch with real commits already in main must report merged")
+	}
+}
+
 // addOriginBare wires a throwaway bare repo as 'origin' and pushes repo's main to it, so
 // origin/<branch> remote-tracking refs exist for the merge-sync tests.
 func addOriginBare(t *testing.T, repo string) string {
@@ -483,7 +507,7 @@ func TestParkCheckpointRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	finalizeWorktree(wt, "wip title", true) // park → checkpoint commit
+	finalizeWorktree(wt, true) // park → checkpoint commit
 	if st, _ := git(repo, "status", "--porcelain"); st != "" {
 		t.Fatalf("checkpoint should commit all work, tree not clean:\n%s", st)
 	}
@@ -516,7 +540,7 @@ func TestPermanentEndNotUndone(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "done.txt"), []byte("done\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	finalizeWorktree(wt, "final", false) // permanent end
+	finalizeWorktree(wt, false) // permanent end
 	endSha := mustGit(t, repo, "rev-parse", "HEAD")
 	if endSha == base {
 		t.Fatal("end commit should advance HEAD past base")

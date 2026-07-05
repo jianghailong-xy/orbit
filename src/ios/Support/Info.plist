@@ -18,18 +18,27 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>io.orbitd.app.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>orbit</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<!-- Export-compliance: the app uses only standard HTTPS/TLS, so it is exempt. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<!-- Default launch screen (blank). A branded launch screen can come later. -->
-	<key>UILaunchScreen</key>
-	<dict/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -42,18 +51,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<!-- orbit:// deep links (session/agent/task routes), same scheme as the macOS client. -->
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.orbit.ios.deeplink</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>orbit</string>
-			</array>
-		</dict>
 	</array>
 </dict>
 </plist>

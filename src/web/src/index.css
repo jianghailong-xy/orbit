@@ -1682,6 +1682,8 @@ body {
   flex-direction: column;
   height: 100%;
   padding: 16px var(--pane-gutter);
+  /* Anchor the drag-and-drop overlay (.agent-dropzone) to the whole pane. */
+  position: relative;
 }
 .agent-header {
   display: flex;
@@ -2367,11 +2369,33 @@ body {
   padding: 0 8px;
   border-bottom: 1px solid var(--bg-hover);
   cursor: pointer;
+  /* Keep the swipe-away content from spilling past the row's edges. */
+  overflow: hidden;
   --row-bg: var(--bg-raised);
 }
-.session-row:hover {
-  background: var(--bg-hover);
-  --row-bg: var(--bg-hover);
+/* Wraps the row's icon + text so a touch swipe can slide it left, exposing the actions
+   pinned to the right edge. On desktop it never translates (transform stays 0). */
+.session-swipe {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  transition: transform 0.18s ease;
+}
+.session-swipe.dragging {
+  transition: none; /* track the finger 1:1 mid-drag; only snaps animate */
+}
+/* A swiped-open row reveals its actions exactly like hover does. */
+.session-row.swipe-open .session-right {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .session-row:hover {
+    background: var(--bg-hover);
+    --row-bg: var(--bg-hover);
+  }
 }
 /* Archived / trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
@@ -2462,7 +2486,15 @@ body {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.session-row:hover .session-right,
+/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe (or the ⋯
+   menu once swiped open); keeping :hover off touch also stops iOS Safari's "first tap shows
+   hover, second tap clicks" — which was swallowing the tap that should open the session. */
+@media (hover: hover) {
+  .session-row:hover .session-right {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .session-row.menu-open .session-right {
   opacity: 1;
   pointer-events: auto;
@@ -2762,6 +2794,24 @@ body {
 .composer-box:focus-within {
   border-color: var(--brand);
 }
+/* Drop-to-upload hint: covers the whole session pane while files are dragged over it. Sits
+   inset from the pane edges with a translucent scrim so the conversation still shows through. */
+.agent-dropzone {
+  position: absolute;
+  inset: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 14px;
+  border: 2px dashed var(--brand);
+  background: color-mix(in srgb, var(--bg-base) 78%, transparent);
+  color: var(--brand);
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+}
 /* Reply-context chip: shown above the box when "Chat about this" hands a question reply
    off to the composer. Brand-tinted to echo the approval card it came from. */
 .composer-replyto {
@@ -2817,7 +2867,8 @@ body {
 }
 /* Top-edge grip to drag the composer taller/shorter; double-click resets to auto-grow.
    Sits over the box's top border so it reads as an affordance without stealing text room.
-   The pill only shows on hover to stay out of the way. */
+   Only rendered once the box has hit its auto-grow cap (see composerCapped), so the pill
+   only shows on hover to stay out of the way. */
 .composer-resize-handle {
   position: absolute;
   top: -3px;
@@ -2972,6 +3023,59 @@ body {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
+}
+/* Phone footer: the five controls are wider than one line, so the base `flex-wrap:
+   wrap` above drops the plan-usage pill onto a lonely second row. Keep the row on a
+   single line and let only the (widest) agent label give up width — it truncates
+   with an ellipsis — so Mode / Model / Effort / Usage all stay put. This block must
+   live AFTER the base .composer-pills rules: media queries add no specificity, so a
+   later same-specificity rule would otherwise override these. */
+@media (max-width: 600px) {
+  /* Enlarge the + and send buttons to a comfortable 40px square tap target on touch
+     (desktop keeps the tight 24px +). flex:none is essential: the box is a flex row
+     whose textarea is width:100%, so without it the flex algorithm shrinks these
+     buttons back into narrow rectangles (width collapses, height doesn't). */
+  .composer-box .composer-attach-btn.ant-btn,
+  .composer-box .ant-btn-icon-only {
+    flex: none;
+    width: 40px;
+    height: 40px;
+  }
+  /* The 40px buttons make the row taller than a single line of text; the box aligns
+     items to flex-end (so buttons stay pinned to the bottom as the textarea grows), so
+     a resting one-line input would otherwise sit low against the bottom. Centre just
+     the textarea: single-line text is vertically centred, and once it grows multiline
+     the textarea is the tallest item, making this a no-op. */
+  .composer-box textarea.ant-input {
+    align-self: center;
+  }
+  .composer-pills {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  .composer-pill-spacer {
+    display: none;
+  }
+  .composer-pills .composer-pill {
+    padding-left: 3px;
+  }
+  /* Every control keeps its natural width except the agent label. */
+  .composer-pills > .composer-pill:not(.composer-pill-agent),
+  .composer-usage {
+    flex: none;
+  }
+  .composer-pill-agent {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .composer-pill-agent .ant-select {
+    min-width: 0;
+  }
+  .composer-pill-static-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
 .cu-pop {
@@ -3128,6 +3232,10 @@ body {
   color: var(--text-3);
   font-size: 13px;
   padding: 10px 4px;
+}
+.chat-loading-older {
+  text-align: center;
+  opacity: 0.75;
 }
 .chat-msg {
   max-width: 80%;
@@ -3373,6 +3481,15 @@ body {
 }
 .chat-sticky-question:hover {
   background: var(--bg-hover);
+}
+/* Tail-first: the question for the content in view is still loading from an older page —
+   show the bar muted and non-interactive until it resolves. */
+.chat-sticky-loading {
+  cursor: default;
+  color: var(--text-3);
+}
+.chat-sticky-loading:hover {
+  background: var(--bg-sunken);
 }
 .chat-sticky-label {
   flex: none;
@@ -4136,6 +4253,7 @@ body {
 }
 .approval-actions {
   display: flex;
+  align-items: center;
   gap: 10px;
   padding: 10px 14px;
   border-top: 1px solid var(--brand-border);
@@ -4185,6 +4303,7 @@ body {
   border-radius: 4px;
   background: var(--brand-border);
   color: var(--brand-strong);
+  white-space: nowrap;
 }
 .approval-btn:disabled {
   opacity: 0.5;
@@ -4194,6 +4313,23 @@ body {
   margin-left: 8px;
   font-size: 11px;
   opacity: 0.75;
+}
+/* On a phone the three buttons can't share one row: the long "auto-allow future …"
+   label shrinks to a 5-6 line block and drags the others into tall boxes. Stack them
+   full-width instead (the standard phone action-sheet layout). */
+@media (max-width: 600px) {
+  .approval-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .approval-btn {
+    width: 100%;
+    padding: 10px 14px; /* ~40px comfortable tap target on touch */
+  }
+  /* No hardware Enter/⌘ key on touch — the hints are noise and force extra wrapping. */
+  .approval-btn-kbd {
+    display: none;
+  }
 }
 
 /* ---- Task detail panel (slide-in beside the task list) ---- */
@@ -4588,6 +4724,12 @@ body {
     overflow-x: hidden;
   }
 
+  /* Let the browser own vertical scrolling but hand horizontal gestures to our
+     swipe-to-reveal handler, so the two don't fight. */
+  .session-row {
+    touch-action: pan-y;
+  }
+
   /* Fixed top bar carrying the drawer toggle. */
   .app-topbar {
     position: fixed;
@@ -4681,6 +4823,20 @@ body {
   .agent-split:not(.show-conversation) .agent-view {
     display: none;
   }
+  /* When a conversation is open, its in-pane header (← · title · ⋯) already carries the
+     back nav, identity, live state, and actions — so the global "Orbit" bar stacked above
+     it is pure redundancy. Drop it and reclaim its 48px band (the ← returns to the session
+     list, where the ☰ menu still lives, so global nav stays one tap away). */
+  .app-shell:has(.agent-split.show-conversation) .app-topbar {
+    display: none;
+  }
+  .app-shell:has(.agent-split.show-conversation) .app-main {
+    padding-top: 0;
+  }
+  /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */
+  .agent-split.show-conversation .agent-header {
+    padding-bottom: 10px;
+  }
   /* In-pane back button: leaves the open conversation for the session list. */
   .agent-back-mobile {
     display: flex;
@@ -4714,6 +4870,27 @@ body {
   /* No drag-to-resize on a full-screen panel. */
   .tdp-resizer {
     display: none;
+  }
+
+  /* iOS Safari force-zooms the whole page when a focused input has font-size < 16px
+     (and never zooms back out). Lift every focusable input to 16px on mobile so the
+     keyboard opens without the jarring zoom; desktop keeps the compact 13–14px sizes.
+     Not touching the viewport meta — pinch-to-zoom stays enabled for accessibility. */
+  .ant-input,
+  .ant-input-affix-wrapper input,
+  textarea.ant-input,
+  .skills-search,
+  .share-modal-url {
+    font-size: 16px;
+  }
+  /* AntD Select focuses this hidden search input on tap — a <16px font here is what
+     still zooms the page when the composer's Mode / Model / Effort dropdowns open.
+     AntD sizes it with a 4-class rule (.ant-select-single:not(…) .ant-select-selector
+     .ant-select-selection-search-input, 14px), which outranks a plain selector, so
+     !important is required to actually lift it. The input is invisible on a non-search
+     Select, so this only affects the zoom trigger, not layout. */
+  .ant-select-selection-search-input {
+    font-size: 16px !important;
   }
 }
 

@@ -16,6 +16,9 @@ final class AgentsModel {
     // The selected agent's sessions for the current Active/Completed/System view.
     private(set) var agentSessions: [Session] = []
     private(set) var sessionsLoading = false
+    /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
+    /// list without the view having to thread the agent id / tab back in.
+    private var lastSessionQuery: (agentID: String, view: SessionView)?
 
     private let api: APIClient
 
@@ -71,6 +74,7 @@ final class AgentsModel {
     /// the first fetch clears the stale list and shows "Loading…"; polls refresh silently so a list
     /// that legitimately has no sessions doesn't flash the spinner every tick.
     func loadSessions(agentID: String, view: SessionView, reset: Bool = false) async {
+        lastSessionQuery = (agentID, view)
         if reset {
             agentSessions = []
             sessionsLoading = true
@@ -80,6 +84,13 @@ final class AgentsModel {
             let all = try await api.listSessions(view: view.queryValue)
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
         } catch { errorText = friendly(error) }
+    }
+
+    /// Silently refresh the currently-shown session list (after a pin/complete/delete row action).
+    /// No-op until a list has been loaded.
+    func reloadCurrentSessions() async {
+        guard let q = lastSessionQuery else { return }
+        await loadSessions(agentID: q.agentID, view: q.view)
     }
 
     private func friendly(_ error: Error) -> String {

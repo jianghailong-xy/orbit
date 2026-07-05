@@ -24,6 +24,7 @@ struct MainView: View {
         // Drive the debounced console mount off the list selection (covers arrow-key navigation,
         // clicks, and a restored selection on appear).
         .onChange(of: model.selectedSessionID, initial: true) { _, _ in model.scheduleConsoleActivate() }
+        .sessionUndoToast()
     }
 }
 
@@ -278,6 +279,7 @@ struct ActiveSidebar: View {
             Section(title) {
                 ForEach(items) { session in
                     SessionRow(session: session, tint: tint).tag(session.id)
+                        .sessionRowActions(session)
                 }
             }
         }

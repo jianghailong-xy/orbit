@@ -18,7 +18,7 @@ src/ios/
   Support/Info.plist          # bundle keys, orbit:// URL scheme, orientations
   Support/Orbit.entitlements  # empty for now; APNs keys land in Phase E
   Support/Assets.xcassets     # AppIcon (placeholder, reuses the macOS mark) + AccentColor
-  .github/workflows/ios-client.yml   # (repo root) generate + build on CI
+  .github/workflows/client.yml       # (repo root) generate + build on CI (macOS + iOS)
 
 ../macos/OrbitKit             # shared cross-platform core (models, SSE, transcript reducer) — SPM dep
 ../macos/OrbitApp/Sources     # shared SwiftUI views + @Observable models, referenced in place
@@ -48,10 +48,41 @@ xcodebuild -project Orbit.xcodeproj -target Orbit -sdk iphonesimulator \
 OrbitKit (`cd ../macos/OrbitKit && swift test`) is verifiable; the SwiftUI layer compiles on the Mac
 CI job.
 
+## Release (TestFlight)
+
+Signed builds go to TestFlight via the `testflight` job in `.github/workflows/release.yml` (shared
+with the macOS DMG job), using an App Store Connect API key for both signing
+(`-allowProvisioningUpdates` creates the cert + profile on the runner) and upload
+(`ExportOptions.plist`'s `destination = upload`). No manual certificates, no fastlane.
+
+**One-time setup**
+1. In App Store Connect, create the app with bundle id **`io.orbitd.app`** (the same id in `project.yml`).
+2. Generate an API key: *Users and Access → Integrations → App Store Connect API → +*, role **Admin**. (App Manager can't create the App Store *distribution* certificate cloud signing needs — you'll hit `exportArchive Cloud signing permission error`; only Admin / Account Holder have Certificates access.) Download the `AuthKey_XXXXXXXXXX.p8` (one-time download).
+3. Add repo secrets (*Settings → Secrets and variables → Actions*):
+   - `ASC_KEY_ID` — the key's Key ID
+   - `ASC_ISSUER_ID` — the Issuer ID above the key list
+   - `ASC_KEY_P8_BASE64` — `base64 -i AuthKey_XXXXXXXXXX.p8` output
+   - `APPLE_TEAM_ID` — already present (shared with the macOS release)
+
+**Cut a build**
+```sh
+.claude/skills/release/release.sh 0.1.2   # pushes v0.1.2 → macOS DMG + iOS TestFlight
+```
+iOS and macOS **share one `v*` tag** and one workflow (`release.yml`): pushing `vX.Y.Z` runs both its
+`dmg` and `testflight` jobs. The tag sets the marketing version — any `-beta.N` suffix is stripped
+for iOS (`v0.1.2-beta.3` → TestFlight `0.1.2`, since `CFBundleShortVersionString` must be numeric);
+the build number is the commit count. To build iOS **only**, skip the tag and dispatch with the
+platform input: `gh workflow run release.yml --ref main -f platform=ios` (builds `0.1.0`).
+
+**Local fallback** (first build, or if CI signing needs debugging): `xcodegen generate` then open
+`Orbit.xcodeproj` in Xcode → *Product ▸ Archive* → *Distribute App ▸ TestFlight & App Store*. Xcode
+signs with your logged-in Apple ID.
+
 ## Roadmap
 
-- **B (this)** — Xcode project stands up, shared sources wired, cross-platform shims. ← done
-- **C** — adaptive navigation shell (iPhone stack/tab, iPad three-column).
-- **D** — iOS-native polish: pull-to-refresh, keyboard avoidance, PHPicker/`.fileImporter`, paste.
+- **B** — Xcode project stands up, shared sources wired, cross-platform shims. ✔
+- **C** — adaptive navigation: iPhone tab shell + iPad three-column. ✔
+- **D** — iOS-native polish: attachments (PhotosPicker/`.fileImporter`), pull-to-refresh, keyboard. ✔
+- **F** — signing + App Store Connect + TestFlight release workflow; full-bleed app icon. ✔ (this)
 - **E** — APNs push (device-token registration + server push for "needs your reply") + icon badge.
-- **F** — signing, App Store Connect, TestFlight release workflow; proper full-bleed app-icon art.
+- Optional — image paste (⌘V / PasteButton); on-device interaction pass.

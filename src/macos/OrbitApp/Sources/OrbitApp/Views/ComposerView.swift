@@ -5,6 +5,7 @@ import OrbitKit
 import AppKit
 #elseif os(iOS)
 import UIKit
+import PhotosUI
 #endif
 
 #if os(macOS)
@@ -31,6 +32,11 @@ struct ComposerView: View {
     #if os(macOS)
     @State private var pasteMonitor: Any?
     @State private var pasteState = ComposerPasteState()
+    #endif
+    #if os(iOS)
+    @State private var showPhotoPicker = false
+    @State private var showFileImporter = false
+    @State private var pickedPhotos: [PhotosPickerItem] = []
     #endif
 
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
@@ -167,11 +173,6 @@ struct ComposerView: View {
                 }
                 .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
 
-                if console.availability == .queue {
-                    Label("Will queue", systemImage: "tray.and.arrow.down")
-                        .foregroundStyle(.secondary)
-                }
-
                 Spacer()
 
                 if let name = console.agentName {
@@ -264,8 +265,20 @@ struct ComposerView: View {
                 Label("Shell", systemImage: "terminal")
             }
             Divider()
-            Button { pickFiles(images: true) } label: { Label("Attach image", systemImage: "photo") }
-            Button { pickFiles(images: false) } label: { Label("Upload file", systemImage: "paperclip") }
+            Button {
+                #if os(iOS)
+                showPhotoPicker = true
+                #else
+                pickFiles(images: true)
+                #endif
+            } label: { Label("Attach image", systemImage: "photo") }
+            Button {
+                #if os(iOS)
+                showFileImporter = true
+                #else
+                pickFiles(images: false)
+                #endif
+            } label: { Label("Upload file", systemImage: "paperclip") }
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 15))
@@ -275,6 +288,18 @@ struct ComposerView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Add a command, skill, shell command, or attachment")
+        #if os(iOS)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhotos,
+                      maxSelectionCount: 5, matching: .images)
+        .onChange(of: pickedPhotos) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await attachPhotos(items); pickedPhotos = [] }
+        }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.item],
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { Task { await attachFiles(urls) } }
+        }
+        #endif
     }
 
     // MARK: borderless footer menus (mirror the web composer's plain dropdowns)
@@ -311,6 +336,13 @@ struct ComposerView: View {
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                // iOS: tap the staged thumbnail to open the full-screen viewer before sending
+                // (the tiny 48² chip is hard to read otherwise). Preview the full-resolution bytes
+                // seeded in the shared store at attach time — the same source the sent bubble uses —
+                // not the downsampled `previewImageData`, so the viewer looks identical to the bubble.
+                // The remove button is overlaid *after* this, so it stays on top and its taps aren't
+                // captured by the preview.
+                .modifier(ComposerImageTap(image: console.attachments.image(for: att.id) ?? image))
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -410,13 +442,56 @@ struct ComposerView: View {
         guard panel.runModal() == .OK else { return }
         for url in panel.urls { Task { await console.attachFile(url: url) } }
         #endif
-        // iOS: photo/file picking (PHPicker + `.fileImporter`) is Phase D; the `+` menu items are
-        // inert there until then. `orbitPNGData()` for pasted/attached images lives in Platform.swift.
+        // iOS uses the SwiftUI `.photosPicker` / `.fileImporter` on the + menu (see addMenu) rather
+        // than an imperative panel — the pick is handled by attachPhotos / attachFiles below.
+    }
+
+    #if os(iOS)
+    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG); normalize to
+    /// PNG — one of the server's inline-image types — before uploading via the shared attach path.
+    private func attachPhotos(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
+            await console.attach(filename: "photo.png", mimeType: "image/png", data: png)
+        }
+    }
+
+    /// Document-picker files: the URLs are security-scoped, so hold access across the read that
+    /// `attachFile` does (it derives the MIME from the extension and enforces the size cap).
+    private func attachFiles(_ urls: [URL]) async {
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            await console.attachFile(url: url)
+            if scoped { url.stopAccessingSecurityScopedResource() }
+        }
+    }
+    #endif
+}
+
+/// iOS: make a staged composer image thumbnail tappable to open the shared full-screen viewer
+/// (`FullScreenImageView` from ConsoleView) — parity with the sent-message thumbnails and web's
+/// tap-to-preview. macOS: no-op, matching the transcript thumbnails there.
+private struct ComposerImageTap: ViewModifier {
+    let image: PlatformImage
+    #if os(iOS)
+    @State private var preview = false
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .contentShape(Rectangle())
+            .onTapGesture { preview = true }
+            .fullScreenCover(isPresented: $preview) { FullScreenImageView(image: image) }
+        #else
+        content
+        #endif
     }
 }
 
 /// Compact plan-usage pill for the composer footer (mirrors web's PlanUsageIndicator): a mini
-/// 5-hour bar + percent; tapping opens a popover with every subscription window, like `/usage`.
+/// 5-hour bar + percent; tapping opens the per-window detail, like `/usage`.
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     @State private var showDetail = false
@@ -431,26 +506,75 @@ private struct PlanUsageIndicator: View {
             }
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
-            .popover(isPresented: $showDetail, arrowEdge: .top) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Plan usage").font(.headline)
-                    ForEach(usage.rows) { row in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(row.label)
-                                Spacer()
-                                Text("\(row.percent)%").foregroundStyle(.secondary)
-                            }
-                            .font(.caption)
-                            UsageBar(percent: row.percent).frame(height: 5)
-                            if let reset = row.window.resetsAt.flatMap(formatReset) {
-                                Text("Resets \(reset)").font(.caption2).foregroundStyle(.tertiary)
-                            }
-                        }
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage))
+        }
+    }
+}
+
+/// Presents the plan-usage detail per platform. macOS gets a tight anchored popover sized to its
+/// content. iOS gets a fitted bottom sheet — a bare `.popover` there auto-promotes to a full-screen
+/// modal that strands two short rows mid-screen, so we show a proper sheet: a grabber, a top-anchored
+/// title with Done, and a detent sized to the row count so there's no wasted space.
+private struct PlanUsageDetailPresentation: ViewModifier {
+    @Binding var isPresented: Bool
+    let usage: PlanUsageSnapshot
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.popover(isPresented: $isPresented, arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Plan usage").font(.headline)
+                PlanUsageDetailRows(rows: usage.rows, compact: true)
+            }
+            .padding(14)
+            .frame(width: 260)
+        }
+        #else
+        content.sheet(isPresented: $isPresented) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Plan usage").font(.title3.weight(.semibold))
+                    Spacer()
+                    Button("Done") { isPresented = false }
+                }
+                .padding(.bottom, 16)
+                PlanUsageDetailRows(rows: usage.rows)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66))])
+            .presentationDragIndicator(.visible)
+        }
+        #endif
+    }
+}
+
+/// The per-window rows shared by the macOS popover and the iOS sheet. `compact` shrinks the type and
+/// bar for the tight popover; the iOS sheet uses the roomier, touch-friendly sizing.
+private struct PlanUsageDetailRows: View {
+    let rows: [PlanUsageRow]
+    var compact: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 12 : 18) {
+            ForEach(rows) { row in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(row.label)
+                        Spacer()
+                        Text("\(row.percent)%").foregroundStyle(.secondary)
+                    }
+                    .font(compact ? .caption : .subheadline)
+                    UsageBar(percent: row.percent).frame(height: compact ? 5 : 8)
+                    if let reset = row.window.resetsAt.flatMap(formatReset) {
+                        Text("Resets \(reset)")
+                            .font(compact ? .caption2 : .caption)
+                            .foregroundStyle(.tertiary)
                     }
                 }
-                .padding(14)
-                .frame(width: 260)
             }
         }
     }

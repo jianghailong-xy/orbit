@@ -234,7 +234,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if job.WT != nil {
 		cr.Branch = job.WT.Branch
 		cr.BaseSha = job.WT.BaseSha
-		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, job.Title, status == stCancelled)
+		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		cr.MergeTargets = mergeTargetsForWT(job.WT)
 	}

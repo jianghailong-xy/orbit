@@ -80,7 +80,8 @@ struct AgentPanes: View {
         // rather than stacking chrome bands above the list.
         List(selection: $selectedSessionID) {
             ForEach(agents.agentSessions) { s in
-                AgentSessionRow(session: s).tag(s.id)
+                AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
+                    .sessionRowActions(s, scope: view)
             }
         }
         .focused($listFocused)
@@ -96,6 +97,12 @@ struct AgentPanes: View {
         .onChange(of: selectedSessionID) { _, new in
             if new != nil { app.composingAgentSession = false }
         }
+        #if os(iOS)
+        // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
+        // Active/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
+        // `reset:` to update the rows in place rather than blanking the list mid-gesture.
+        .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces),
         // then poll every 4s — the same cadence as the Active sidebar — so external changes (new
         // sessions, status transitions made from the web) show up without reopening the agent.
@@ -110,8 +117,41 @@ struct AgentPanes: View {
             }
         }
         .toolbar {
-            // New session — leading, mirroring Mail's compose: enters the draft compose state shown
-            // in the detail pane (NewSessionView). Clearing the selection makes room for it.
+            #if os(iOS)
+            // Compact: both actions sit at the trailing edge. The scope switcher collapses to a
+            // pure filter-icon menu (no text) — Active/Completed/System as checkmarked options plus
+            // the agent-settings gear folded in — and New Session is the rightmost primary action.
+            // Declared scope-first so New Session lands at the trailing edge (SwiftUI lays trailing
+            // items out in declaration order, leading→trailing; verify the order on device).
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    ForEach(SessionView.allCases) { v in
+                        Button { view = v } label: {
+                            if v == view { Label(v.title, systemImage: "checkmark") }
+                            else { Text(v.title) }
+                        }
+                    }
+                    Divider()
+                    Button { showSettings = true } label: {
+                        Label("Agent settings", systemImage: "gearshape")
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease")
+                }
+                .accessibilityLabel("Session scope, \(view.title)")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    app.composingAgentSession = true
+                    selectedSessionID = nil
+                } label: {
+                    Label("New session", systemImage: "square.and.pencil")
+                }
+                .accessibilityLabel("Start a new session with \(agent.name)")
+            }
+            #else
+            // macOS: the wide window toolbar keeps the platform-idiomatic layout — New Session
+            // (leading), a compact centered segmented scope switcher (principal), and a settings gear.
             ToolbarItem(placement: .navigation) {
                 Button {
                     app.composingAgentSession = true
@@ -121,8 +161,6 @@ struct AgentPanes: View {
                 }
                 .help("Start a new session with \(agent.name)")
             }
-            // Scope switcher — centered (principal), content-hugging via fixedSize so it renders as a
-            // compact native segmented control instead of the old full-width band above the list.
             ToolbarItem(placement: .principal) {
                 Picker("View", selection: $view) {
                     ForEach(SessionView.allCases) { Text($0.title).tag($0) }
@@ -131,13 +169,13 @@ struct AgentPanes: View {
                 .labelsHidden()
                 .fixedSize()
             }
-            // Agent settings — trailing gear → sheet (unchanged).
             ToolbarItem(placement: .primaryAction) {
                 Button { showSettings = true } label: {
                     Label("Agent settings", systemImage: "gearshape")
                 }
                 .help("Edit this agent")
             }
+            #endif
         }
         .sheet(isPresented: $showSettings) {
             AgentSettingsSheet(agents: agents, agent: agent)
@@ -236,36 +274,53 @@ struct NewSessionView: View {
 
 struct AgentSessionRow: View {
     let session: Session
+    /// True when the Completed (archived) tab is showing this row — mirrors web's
+    /// `completed={view === 'archived'}`, so a filed session reads as done, not "Cancelled".
+    var completed: Bool = false
+    /// True in the Active view, where pinning applies — mirrors web's `view === 'active'` gate on the
+    /// pinned marker. Completed/System rows never show the bar (they can't be pinned).
+    var showsPin: Bool = false
+    private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). Rows here
     // are always openable (macOS has no Trash tab), so `live: true` — matching web's `openable`.
     private var line: SessionLine? { SessionLine.make(for: session, live: true) }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle().fill(color).frame(width: 6, height: 6)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title ?? "Untitled session").lineLimit(1)
-                if let line {
-                    Text(line.text).font(.caption).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+        HStack(spacing: 0) {
+            // A pinned session is marked at rest by a full-height leading accent bar, flush to the
+            // row's leading edge — the native port of web's `.session-row.pinned` inset bar
+            // (deliberately not a floating pushpin). It sits *outside* the content padding, with the
+            // cell's `listRowInsets` zeroed below, so it bleeds to the top/bottom/leading edges like
+            // web instead of floating short and inset. A clear bar of the same width keeps unpinned
+            // rows aligned.
+            Rectangle()
+                .fill(isPinned ? Color.accentColor : .clear)
+                .frame(width: 3)
+            HStack(spacing: 8) {
+                StatusGlyphView(glyph: .make(for: session, completed: completed))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    if let line {
+                        Text(line.text).font(.caption).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                    }
+                }
+                Spacer()
+                if let n = session.pendingApprovals, n > 0 {
+                    Text("\(n)").font(.caption2.bold())
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.orange, in: Capsule()).foregroundStyle(.white)
                 }
             }
-            Spacer()
-            if let n = session.pendingApprovals, n > 0 {
-                Text("\(n)").font(.caption2.bold())
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(.orange, in: Capsule()).foregroundStyle(.white)
-            }
+            // Re-add the standard cell insets the zeroed `listRowInsets` removed: 3 (bar) + 13 = the
+            // usual 16pt leading so the glyph stays put; 16 trailing; 10 vertical for a comfortable row.
+            .padding(.leading, 13)
+            .padding(.trailing, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.vertical, 2)
-    }
-    private var color: Color {
-        switch session.status {
-        case .running:       return .blue
-        case .awaitingInput: return .orange
-        case .succeeded:     return .green
-        case .failed:        return .red
-        default:             return .secondary
-        }
+        .listRowInsets(EdgeInsets())
+        // Keep the separator aligned under the title now that the cell insets are zeroed, rather than
+        // letting it run full-bleed: bar(3) + leading pad(13) + glyph(20) + spacing(8) = 44.
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
     }
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
@@ -273,6 +328,56 @@ struct AgentSessionRow: View {
         case .running:          return .blue
         case .approval:         return .orange
         }
+    }
+}
+
+/// Renders a `SessionStatusGlyph` at the leading edge of a session row — the shared port of web's
+/// `StatusIcon`. A working session shows an animated spinner (web's `LoadingOutlined spin`);
+/// everything else is an SF Symbol, tinted by the glyph's semantic tone. Fixed frame so titles
+/// line up whether the glyph is a spinner or a symbol.
+struct StatusGlyphView: View {
+    let glyph: SessionStatusGlyph
+    var body: some View {
+        Group {
+            switch glyph.shape {
+            case .spinner:
+                SpinnerGlyph(color: color)
+            case .symbol(let name):
+                Image(systemName: name).font(.system(size: 15)).foregroundStyle(color)
+            }
+        }
+        .frame(width: 20, height: 20)
+        .help(glyph.label)
+        .accessibilityLabel(glyph.label)
+    }
+    private var color: Color {
+        switch glyph.tone {
+        case .brand:   return .blue
+        case .success: return .green
+        case .warning: return .orange
+        case .error:   return .red
+        case .neutral: return .secondary
+        }
+    }
+}
+
+/// A self-drawn indeterminate spinner (a rotating ¾ arc) for the "working" glyph. SwiftUI's
+/// `ProgressView` bridges to a UIKit activity indicator that renders *blank* after a `List` row is
+/// detached and reattached — open a session and navigate back and the spinner vanishes (while the
+/// static SF Symbols survive). A pure-SwiftUI arc re-animates reliably on reappear and also matches
+/// web's spinning-arc loader. `spinning` is reset on disappear so reappearance re-triggers the spin.
+private struct SpinnerGlyph: View {
+    let color: Color
+    @State private var spinning = false
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 13, height: 13)
+            .rotationEffect(.degrees(spinning ? 360 : 0))
+            .animation(.linear(duration: 0.85).repeatForever(autoreverses: false), value: spinning)
+            .onAppear { spinning = true }
+            .onDisappear { spinning = false }
     }
 }
 

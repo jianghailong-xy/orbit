@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
+import Network
 import OrbitKit
 #if os(macOS)
 import AppKit
@@ -25,6 +26,9 @@ struct QuestionReply: Equatable, Sendable {
     let question: String
 }
 
+/// Outcome of one live-stream connection attempt (see `ConsoleModel.run()`).
+private enum StreamOutcome { case ended, failed, kicked, cancelled }
+
 /// Drives one open session: the reconnecting SSE consume loop (folded through the verified
 /// `TranscriptReducer`) plus the interactive actions — send/queue/interrupt, tool approvals,
 /// and worktree commit/merge. All decision logic lives in OrbitKit (ComposerLogic / Approvals);
@@ -44,6 +48,14 @@ final class ConsoleModel {
     var onSessionCreated: ((Session) -> Void)?
     private(set) var state = TranscriptState()
     private(set) var connected = false
+
+    // Reconnect-loop state (see `run()`). `reconnectAttempt` ramps the exponential backoff;
+    // `kickRequested` is set by `reconnectNow()` — the network monitor / app foregrounding — to cut
+    // a stalled read or a backoff wait short; `netWasSatisfied` debounces the path monitor so only a
+    // genuine down→up transition kicks.
+    private var reconnectAttempt = 0
+    private var kickRequested = false
+    private var netWasSatisfied = true
 
     // The session's lifecycle status per the server (REST). The SSE stream can't redeliver the
     // terminal transition (its event is broadcast live-only, never in the replayed log), so the
@@ -138,31 +150,101 @@ final class ConsoleModel {
         // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
         let approvalsSeed = Task { [weak self] in await self?.refreshApprovals() }
         defer { approvalsSeed.cancel() }
-        var attempt = 0
+
+        // Kick a reconnect the moment the network path is restored. This both cuts a pending backoff
+        // wait short AND tears down a read left stalled on a silently-dropped socket — the server
+        // sends no SSE heartbeat, so a dead connection would otherwise hang on URLSession's long
+        // timeout. `noteNetworkPath` debounces to a genuine down→up transition.
+        netWasSatisfied = true
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor in self?.noteNetworkPath(satisfied: satisfied) }
+        }
+        monitor.start(queue: DispatchQueue(label: "io.orbitd.console.netpath"))
+        defer { monitor.cancel() }
+
+        reconnectAttempt = 0
         while !Task.isCancelled {
-            do {
-                connected = true
-                for try await ev in stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq) {
-                    reducer.apply(ev)
-                    scheduleStatePublish()
-                    attempt = 0
+            kickRequested = false
+            let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
+                // The live read, on the main actor (folds into the shared reducer). Ends on a clean
+                // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
+                group.addTask { @MainActor [self] in
+                    do {
+                        connected = true
+                        for try await ev in stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq) {
+                            reducer.apply(ev)
+                            scheduleStatePublish()
+                            reconnectAttempt = 0   // a healthy connection resets the backoff ramp
+                        }
+                        return .ended
+                    } catch is CancellationError {
+                        return .cancelled
+                    } catch {
+                        return .failed
+                    }
                 }
-                connected = false
-                publishStateNow()
-                // The stream closed — if the session ended during the drop, the terminal
-                // status broadcast was missed and won't be replayed, so refresh it from REST.
-                await refreshServerStatus()
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            } catch is CancellationError {
+                // Kick watcher: when `reconnectNow()` fires (network back / app foregrounded), win the
+                // race so the group cancels the read above and the loop reconnects immediately.
+                group.addTask { @MainActor [self] in
+                    while !Task.isCancelled {
+                        if kickRequested { return .kicked }
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                    return .cancelled
+                }
+                let first = await group.next() ?? .cancelled
+                group.cancelAll()
+                return first
+            }
+
+            connected = false
+            switch outcome {
+            case .cancelled:
                 publishStateNow()
                 return
-            } catch {
-                connected = false
-                attempt += 1
-                if attempt > 12 { return }
-                let ms = min(15_000, 500 * (1 << min(attempt, 5)))
-                try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            case .kicked:
+                // Network restored / app foregrounded → reconnect now, backoff reset.
+                reconnectAttempt = 0
+            case .ended:
+                publishStateNow()
+                // The stream closed — if the session ended during the drop, the terminal status
+                // broadcast was missed and won't be replayed, so refresh it from REST.
+                await refreshServerStatus()
+                reconnectAttempt = 0
+                await backoffSleep(ms: 300)
+            case .failed:
+                // No attempt cap: a mobile outage can last minutes, and giving up would freeze the
+                // session with no recovery until the view is torn down and rebuilt. Retry forever
+                // with capped exponential backoff; a kick cuts the wait short when the network returns.
+                reconnectAttempt += 1
+                let ms = min(15_000, 500 * (1 << min(reconnectAttempt, 5)))
+                await backoffSleep(ms: ms)
             }
+        }
+    }
+
+    /// Force the live stream to reconnect immediately: abandons a stalled read or a backoff wait and
+    /// loops again with the backoff reset. Fed by the network monitor and app foregrounding; a no-op
+    /// when the loop isn't running. Idempotent — the flag is cleared at the top of each attempt.
+    func reconnectNow() { kickRequested = true }
+
+    /// Path-monitor callback: kick a reconnect only on a genuine down→up transition, so a stable
+    /// network (which reports `.satisfied` once at startup) doesn't churn the live connection.
+    private func noteNetworkPath(satisfied: Bool) {
+        if satisfied && !netWasSatisfied { reconnectNow() }
+        netWasSatisfied = satisfied
+    }
+
+    /// Backoff sleep that returns early on a reconnect kick or task cancellation, so a restored
+    /// connection doesn't wait out the full exponential backoff. Sliced fine enough to feel instant.
+    private func backoffSleep(ms: Int) async {
+        var remaining = ms
+        while remaining > 0, !Task.isCancelled, !kickRequested {
+            let slice = min(remaining, 200)
+            try? await Task.sleep(nanoseconds: UInt64(slice) * 1_000_000)
+            remaining -= slice
         }
     }
 
@@ -220,18 +302,26 @@ final class ConsoleModel {
     // re-spawns claude (see SessionsService.updateConfig). So we only push genuine user edits.
     private var syncedConfig: (model: String, permissionMode: String, effort: String)?
 
-    /// Load the footer context once: the owning agent's name + the runner's plan usage, and —
-    /// for a LIVE session — adopt its stored model/permission/effort so the pills show the
-    /// server's choice (matching web). A terminal session keeps the local picks for resume.
+    /// Load the footer context once: the owning agent's name + the runner's plan usage, and
+    /// adopt the session's stored model/permission/effort so the pills show its real settings
+    /// (matching web — see AgentView's seed effects). This runs for terminal sessions too: a
+    /// resumable session's pills seed its next resume, and without it the Mode pill would stick
+    /// at the hardcoded `.default` instead of the mode the session actually uses.
     private func loadContext() async {
         guard let s = try? await api.session(sessionID) else { return }
         serverStatus = s.status
         agentName = s.agent?.name
         provider = s.provider ?? s.agent?.provider ?? "claude"
+        if let m = s.model { modelID = m }
+        // A stored mode is adopted verbatim; a session with no stored mode falls back to
+        // `dontAsk` (web's `permissionMode ?? 'dontAsk'`), never the hardcoded `.default`.
+        if let pm = s.permissionMode { permissionMode = PermissionMode(rawValue: pm) ?? .default }
+        else { permissionMode = .dontAsk }
+        if let ef = s.effort, let e = Effort(rawValue: ef) { effort = e }
+        // A LIVE session pushes later pill edits to the server (PATCH /config); record the
+        // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
+        // A terminal session isn't live, so its pills stay local until the next resume.
         if ComposerLogic.isLive(status: s.status) {
-            if let m = s.model { modelID = m }
-            if let pm = s.permissionMode, let mode = PermissionMode(rawValue: pm) { permissionMode = mode }
-            if let ef = s.effort, let e = Effort(rawValue: ef) { effort = e }
             syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
         }
         // Plan usage rides the GET /runners list (there's no per-runner detail endpoint —

@@ -101,6 +101,17 @@ func branchMergedInto(wt *Worktree) bool {
 	if target == "" || target == wt.Branch {
 		return false
 	}
+	// A branch that never committed past its fork point still has its tip sitting at BaseSha,
+	// which is by construction already in main's history — so is-ancestor would trivially say
+	// "merged" for a session that did no work. Require ≥1 commit past the fork before claiming
+	// the work landed; otherwise there was nothing to merge. (Genuinely merged branches keep
+	// their commits ahead of the old fork point, so they still count as ahead here.)
+	if wt.BaseSha != "" {
+		ahead, err := git(wt.RepoDir, "rev-list", "--count", wt.BaseSha+".."+wt.Branch)
+		if err == nil && strings.TrimSpace(ahead) == "0" {
+			return false
+		}
+	}
 	// `merge-base --is-ancestor A B` exits 0 when A is contained in B, 1 when not, 128 on error;
 	// git() returns a non-nil error for any non-zero exit, so err == nil ⇔ already merged.
 	_, err := git(wt.RepoDir, "merge-base", "--is-ancestor", wt.Branch, target)
@@ -268,18 +279,26 @@ const parkCheckpointTrailer = "Orbit-Park-Checkpoint"
 // terminal completion, before /complete, so the work is captured on the branch even though
 // the checkout dir may then be removed. `checkpoint` tags the commit as an undo-on-resume park
 // checkpoint (see parkCheckpointTrailer) rather than a permanent end commit.
-func finalizeWorktree(wt *Worktree, title string, checkpoint bool) ([]ChangedFile, []FilePatch) {
+//
+// The commit subject is derived from the diff, never the session title/prompt: a permanent end
+// gets an LLM-summarized Conventional-Commits message (diffstat fallback, same as the manual
+// Commit button), while a transient park checkpoint gets only the cheap deterministic diffstat
+// (no LLM call on the frequent park path). This keeps a raw first prompt out of git history when
+// session-naming produced no clean title.
+func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch) {
 	if _, err := git(wt.Path, "add", "-A"); err != nil {
 		logln("worktree add failed for", wt.Session+":", err)
 	}
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
-		msg := strings.TrimSpace(title)
-		if msg == "" {
-			msg = "orbit session " + wt.Session
-		}
+		var msg string
 		if checkpoint {
-			msg += "\n\n" + parkCheckpointTrailer + ": " + wt.Session
+			// Transient snapshot, undone on resume — keep it cheap and deterministic.
+			msg = diffstatFallbackMessage(wt.Path, wt.Branch) + "\n\n" + parkCheckpointTrailer + ": " + wt.Session
+		} else {
+			// Permanent commit that stays on the branch and may merge to main — summarize the
+			// diff into a real message, never the raw session title/prompt.
+			msg = generateCommitMessage(wt.Path, diffstatFallbackMessage(wt.Path, wt.Branch))
 		}
 		// Inline identity so the commit never fails on a runner with no git user.* set;
 		// --no-verify so a repo's pre-commit hook can't block finalization.

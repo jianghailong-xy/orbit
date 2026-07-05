@@ -99,31 +99,41 @@ private struct MarkdownBlockView: View {
 /// A GFM table rendered as a rounded, bordered grid — the desktop analogue of the web `.md table`.
 /// The header row is semibold over a gray fill; cells carry inline Markdown, honour per-column
 /// alignment, and size each column to its content so the grid hugs its width instead of filling the
-/// pane. Wide tables overflow rather than wrap.
+/// pane. A table wider than the pane scrolls horizontally within its own bounds (web's `overflow-x`)
+/// rather than overflowing the row — on a narrow iPhone an unbounded wide table clipped the table
+/// *and* its sibling paragraphs by forcing the whole transcript row past the screen edge.
 private struct MarkdownTableView: View {
     let table: MarkdownTable
     private let border = Color.secondary.opacity(0.3)
     private let cornerRadius: CGFloat = 6
 
     var body: some View {
-        Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
-            GridRow {
-                ForEach(table.headers.indices, id: \.self) { c in
-                    cell(table.headers[c], column: c, header: true)
-                }
-            }
-            ForEach(table.rows.indices, id: \.self) { r in
+        // `.fixedSize(horizontal:)` sizes the grid to its content, so a table wider than the pane
+        // would push the whole transcript row past the screen edge and clip it (and its siblings)
+        // on a narrow iPhone. Wrap it in a horizontal ScrollView — the wide grid scrolls within its
+        // own bounds instead, mirroring web's `.md table` overflow-x and the CodeBlockView above. A
+        // table narrower than the pane still hugs the left via the outer `maxWidth: .infinity`.
+        ScrollView(.horizontal, showsIndicators: false) {
+            Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
                 GridRow {
-                    let row = table.rows[r]
                     ForEach(table.headers.indices, id: \.self) { c in
-                        cell(c < row.count ? row[c] : "", column: c, header: false)
+                        cell(table.headers[c], column: c, header: true)
+                    }
+                }
+                ForEach(table.rows.indices, id: \.self) { r in
+                    GridRow {
+                        let row = table.rows[r]
+                        ForEach(table.headers.indices, id: \.self) { c in
+                            cell(c < row.count ? row[c] : "", column: c, header: false)
+                        }
                     }
                 }
             }
+            .fixedSize(horizontal: true, vertical: true)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(border, lineWidth: 1))
+            .padding(1)   // keep the 1pt border off the scroll clip edge
         }
-        .fixedSize(horizontal: true, vertical: true)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(border, lineWidth: 1))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

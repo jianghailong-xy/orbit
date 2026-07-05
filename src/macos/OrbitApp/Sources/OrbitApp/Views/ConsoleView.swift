@@ -41,6 +41,14 @@ struct ConsoleView: View {
         .task(id: sessionID) {
             await registry.model(for: sessionID, agentID: agentID).run()
         }
+        #if os(iOS)
+        // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
+        // carries no title, so iOS would reserve a *large* — and empty — title bar: a big blank band
+        // at the top, above the worktree bar. Force the slim inline bar so the transcript starts
+        // right under the back button. (The New-session compose page already does this; without it the
+        // console reverts to the large bar the moment the session is created — the reported gap.)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 
@@ -49,9 +57,21 @@ struct TranscriptView: View {
     private let bottomID = "transcript-bottom"
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
-    // history isn't yanked back down by streaming updates. Maintained by `BottomTracker` (macOS 15+);
+    // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
+    // Id of the user turn the sticky header names — the newest question above the fold — or nil at the
+    // very top where none is. Derived from the top anchor + the message list by `recomputeStuck`.
+    @State private var stuckID: String?
+    // The scroll state the header derives from. A reference type held in @State: rows and the scroll
+    // tracker mutate it every frame WITHOUT invalidating the view — only `stuckID`, assigned when the
+    // answer changes, redraws. Its ONLY scroll input is `topAnchorID`: the id of the item currently
+    // under the viewport top, always set by a row that IS on screen. That's the key to robustness — the
+    // header is a pure function of (top anchor, message list), recomputed each scroll, so it can't
+    // accumulate the corruption a per-row crossing set did (a recycling List destroys a row the instant
+    // it clears the top edge, so "I scrolled above" can never be observed; an accumulating set only
+    // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
+    @State private var ruler = QuestionRuler()
 
     var body: some View {
         // `List` is NSTableView-backed on macOS → true row recycling, so a long transcript stays
@@ -69,6 +89,11 @@ struct TranscriptView: View {
             List {
                 ForEach(console.state.items) { item in
                     TranscriptItemView(item: item)
+                        .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+                        // Row-level preferences must sit OUTSIDE `AnchorRow`: it wraps content in an
+                        // `if #available` (`_ConditionalContent`), and `listRow*` set inside that branch
+                        // aren't hoisted to the List on iOS — the separators leaked back in. Applied here,
+                        // on the outermost row view, they propagate reliably (a chat flow, no hairlines).
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
@@ -83,15 +108,30 @@ struct TranscriptView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
+            .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
-            .modifier(BottomTracker(atBottom: $atBottom))
+            .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
+            // The transcript viewport's top edge in global space — the line `AnchorRow` tests each row
+            // against to find the one under the top. Stable during a scroll (only shifts on layout, e.g.
+            // the keyboard), so reading it here doesn't churn.
+            .background {
+                GeometryReader { g in
+                    Color.clear.onChange(of: g.frame(in: .global).minY, initial: true) { _, y in ruler.viewportTop = y }
+                }
+            }
             // Follow new/streaming content only while pinned at the bottom (web's smart auto-scroll):
             // if the user has scrolled up to read, don't drag them back. A session switch always
             // re-pins. One-shot, non-animated scrollTo — never the per-frame animated scroll that froze
             // the old build.
-            .onChange(of: console.state.items) { if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) } }
-            .onChange(of: console.sessionID) { atBottom = true; proxy.scrollTo(bottomID, anchor: .bottom) }
-            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom) }
+            .onChange(of: console.state.items) {
+                if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) }
+                recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
+            }
+            .onChange(of: console.sessionID) {
+                atBottom = true; ruler.reset(); stuckID = nil
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
+            .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
                 if !atBottom {
@@ -99,9 +139,83 @@ struct TranscriptView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
+            // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
+            // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
+            // back; it steps back through earlier questions as you scroll up (see `recomputeStuck`) and
+            // hides only at the very top where no question is above. Shown whenever such a question
+            // exists — including at the bottom — exactly like web, not gated on `atBottom`. In-flow inset
+            // (not an overlay) so it pushes content down like web: a `scrollTo(anchor: .top)` then lands
+            // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
+            // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if #available(iOS 18, macOS 15, *), let q = stuckBubble {
+                    stickyQuestion(q, proxy: proxy)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
             .animation(.easeOut(duration: 0.15), value: atBottom)
+            // Only fires when the header appears/disappears (not on every text swap), so animating it
+            // can't churn during a scroll.
+            .animation(.easeOut(duration: 0.15), value: stuckID == nil)
         }
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
+    }
+
+    // Which question is "stuck" to the top = the last user turn that sits ABOVE the item currently under
+    // the viewport top (`topAnchorID`). Everything before that anchor item is above the fold, so the last
+    // user turn among them is web's `.chat-user` bottom-above-top answer — and it steps back through
+    // earlier questions as the anchor moves up. Pure data: we only read the anchor id (set by an on-screen
+    // row) and the message list, so nothing here can be left stale by recycling. If no row has claimed the
+    // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
+    // back to naming the last question so the header shows at once; at the very top / short transcripts it
+    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
+    private func recomputeStuck() {
+        let items = console.state.items
+        var found: String? = nil
+        if let anchor = ruler.topAnchorID {
+            for item in items {
+                if item.id == anchor { break }                       // reached the top item; stop
+                if case .user(let b) = item, !b.queued { found = b.id }
+            }
+        } else if ruler.contentOffset > 40 {
+            for item in items.reversed() {
+                if case .user(let b) = item, !b.queued { found = b.id; break }
+            }
+        }
+        if found != stuckID { stuckID = found }
+    }
+
+    private var stuckBubble: UserBubble? {
+        guard let id = stuckID else { return nil }
+        for item in console.state.items.reversed() {
+            if case .user(let b) = item, b.id == id { return b }
+        }
+        return nil
+    }
+
+    // Sticky header that names the last question and scrolls back to it — web's `.chat-sticky-question`
+    // (muted "↑ Your question" label + a single ellipsized line of the text). `anchor: .top` lands the
+    // bubble just under this header (it's a safe-area inset, so the scroll region starts below it).
+    private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
+        } label: {
+            HStack(spacing: 8) {
+                Text("↑ Your question")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize()
+                Text(bubble.text)
+                    .font(.system(size: 13)).foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            .overlay(alignment: .bottom) { Divider() }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Jump to your last question")
     }
 
     // Circular "scroll to latest" control (web parity). One user-initiated scroll — not the per-frame
@@ -144,14 +258,17 @@ struct TranscriptView: View {
     }
 }
 
-/// Tracks whether the transcript is pinned to the bottom, to drive the jump-to-latest button and
-/// the auto-follow gate. `onScrollGeometryChange` (macOS 15+) is a read-only geometry observer —
-/// unlike `scrollPosition(id:)` + `scrollTargetLayout()` it registers no per-row scroll targets, so
-/// it won't re-break `List` virtualization (see the transcript-freeze history). On the macOS 14 floor
-/// it's a no-op, leaving `atBottom` true. Mirrors web's `measure()`: pin while near the bottom, and
-/// un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
-private struct BottomTracker: ViewModifier {
+/// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
+/// header by stashing the live content offset into `ruler` and asking for a recompute each frame.
+/// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
+/// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
+/// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
+/// `atBottom` true and the header hidden. `atBottom` mirrors web's `measure()`: pin while near the
+/// bottom, un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
+private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
+    let ruler: QuestionRuler
+    let recompute: () -> Void
     @State private var lastOffset: CGFloat = 0
     // Within this many points of the bottom still counts as pinned (web uses 80px).
     private let nearBottom: CGFloat = 80
@@ -166,11 +283,51 @@ private struct BottomTracker: ViewModifier {
                 if m.distance <= nearBottom { atBottom = true }
                 else if m.offset < lastOffset - 1 { atBottom = false }   // genuine upward scroll
                 lastOffset = m.offset
+                ruler.contentOffset = m.offset
+                recompute()
             }
         } else {
             content
         }
     }
+}
+
+/// Publishes the id of the item currently under the transcript's top edge (`ruler.topAnchorID`). Every
+/// row carries this — the anchor can be any kind of turn — and the one whose frame straddles the viewport
+/// top claims it. Because that row is by definition on screen, the anchor is always read from live
+/// geometry and never has to survive recycling; the header then derives the last question above it purely
+/// from the message list (see `recomputeStuck`). `.global` (not the List-ambiguous `.scrollView`) gives
+/// an unambiguous screen frame, compared against the viewport top the parent captures. Passive
+/// `onGeometryChange` observers, not the per-row scroll-target tracking that froze the List — and the
+/// action fires only on the rare frame a row crosses the top line, not every frame. iOS 18+/macOS 15+.
+private struct AnchorRow: ViewModifier {
+    let itemID: String
+    let ruler: QuestionRuler
+    let recompute: () -> Void
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, macOS 15, *) {
+            content.onGeometryChange(for: Bool.self) { proxy in
+                let f = proxy.frame(in: .global)
+                return f.minY <= ruler.viewportTop && ruler.viewportTop < f.maxY
+            } action: { straddlesTop in
+                if straddlesTop, ruler.topAnchorID != itemID { ruler.topAnchorID = itemID; recompute() }
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Backing store for the sticky header (see `TranscriptView.recomputeStuck`). A plain reference type,
+/// held in `@State`: the rows and the scroll tracker mutate it every frame without invalidating the
+/// view; only the recomputed `stuckID` drives redraws.
+final class QuestionRuler {
+    var viewportTop: CGFloat = 0      // transcript viewport's top edge, in global space
+    var contentOffset: CGFloat = 0    // scroll offset (from onScrollGeometryChange) — only for the initial fallback
+    var topAnchorID: String?          // id of the item straddling the viewport top — the header's sole scroll input
+
+    func reset() { topAnchorID = nil; contentOffset = 0 }
 }
 
 struct TranscriptItemView: View {
@@ -202,6 +359,11 @@ struct UserBubbleView: View {
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
 
+    @Environment(AttachmentImageStore.self) private var store
+    @Namespace private var previewNS
+    // Tapped image → full-screen pager (iOS). Unused on macOS, where thumbnails aren't tappable.
+    @State private var previewTarget: ImagePreviewTarget?
+
     private var images: [TurnAttachment] { bubble.attachments.filter(\.isImage) }
     private var files: [TurnAttachment] { bubble.attachments.filter { !$0.isImage } }
 
@@ -212,7 +374,7 @@ struct UserBubbleView: View {
             Spacer(minLength: 60)
             VStack(alignment: .trailing, spacing: 3) {
                 if !images.isEmpty {
-                    attachmentRow { ForEach(images) { ChatAttachmentImage(attachment: $0) } }
+                    imageBlock
                 }
                 if !files.isEmpty {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
@@ -236,12 +398,36 @@ struct UserBubbleView: View {
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
         }
+        .imagePreview($previewTarget, images: images, ns: previewNS, store: store)
     }
 
-    // Wrapping right-aligned row of attachment thumbnails / chips (web's `.chat-images`/`.chat-files`).
+    // Wrapping row of attachment chips (web's flex-wrap `.chat-files`): flows onto multiple lines so
+    // several chips never overflow the bubble column off the edge of a narrow screen.
     @ViewBuilder
     private func attachmentRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 6) { content() }
+        FlowLayout(spacing: 6) { content() }
+    }
+
+    // A single sent image stays a large fitted thumbnail; two or more become a wrapping grid of
+    // uniform square thumbnails (WeChat / web `flex-wrap` parity) so none is clipped off the edge.
+    // Tapping any thumbnail opens the full-screen pager at that image (iOS).
+    @ViewBuilder
+    private var imageBlock: some View {
+        if images.count == 1 {
+            ChatAttachmentImage(attachment: images[0], onTap: tapAction(0),
+                                sourceID: images[0].id, ns: previewNS)
+        } else {
+            FlowLayout(spacing: 6) {
+                ForEach(Array(images.enumerated()), id: \.element.id) { i, att in
+                    ChatAttachmentThumb(attachment: att, onTap: tapAction(i),
+                                        sourceID: att.id, ns: previewNS)
+                }
+            }
+        }
+    }
+
+    private func tapAction(_ i: Int) -> () -> Void {
+        { previewTarget = ImagePreviewTarget(index: i, id: images[i].id) }
     }
 
     // Copy + relative time, hidden until hover (web's `.chat-user-meta`). While the turn is
@@ -283,19 +469,44 @@ struct UserBubbleView: View {
 }
 
 /// A user-turn image attachment: fetched once via the shared cache and shown as a rounded thumbnail
-/// (web's `.chat-image`). Falls back to a file chip if the bytes don't decode as an image.
+/// (web's `.chat-image`). Falls back to a file chip if the bytes don't decode as an image. On iOS,
+/// tapping the thumbnail opens a full-screen, pinch-to-zoom viewer (web-preview parity).
 struct ChatAttachmentImage: View {
     let attachment: TurnAttachment
+    var onTap: () -> Void
+    var sourceID: String
+    var ns: Namespace.ID
     @Environment(AttachmentImageStore.self) private var store
+
+    // Thumbnail cap. iOS enlarges the sent image so a screenshot reads on a phone, and allows extra
+    // height so a portrait shot isn't squeezed into a thin sliver; macOS keeps a compact 220² since
+    // thumbnails sit in a wide window. A tap opens the full-screen viewer for anything finer.
+    #if os(iOS)
+    private static let cap = CGSize(width: 300, height: 360)
+    #else
+    private static let cap = CGSize(width: 220, height: 220)
+    #endif
+
+    /// Scale the source down (or up) to touch the cap while keeping its aspect ratio, and give the
+    /// thumbnail that exact size. A `maxWidth/maxHeight` frame is greedy — it fills the whole cap box
+    /// and letterboxes a mismatched-aspect image inside, so the rounded border wraps empty space
+    /// around a portrait shot. An exact frame makes the border hug the image with no blank margin.
+    private static func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return cap }
+        let k = min(cap.width / src.width, cap.height / src.height)
+        return CGSize(width: src.width * k, height: src.height * k)
+    }
 
     var body: some View {
         Group {
             if let img = store.image(for: attachment.id) {
+                let size = Self.fitted(img.size)
                 Image(platformImage: img)
                     .resizable().scaledToFit()
-                    .frame(maxWidth: 220, maxHeight: 220)
+                    .frame(width: size.width, height: size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                    .imageTap(onTap, sourceID: sourceID, ns: ns)
             } else if store.isNotImage(attachment.id) {
                 ChatAttachmentFile(attachment: attachment)   // not an image after all
             } else {
@@ -323,6 +534,355 @@ struct ChatAttachmentFile: View {
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 }
+
+/// A user-turn image attachment rendered as a uniform square thumbnail — the tile used when a turn
+/// carries two or more images (WeChat-style grid). A single image keeps `ChatAttachmentImage`'s
+/// larger fitted look. Falls back to a file chip if the bytes don't decode.
+struct ChatAttachmentThumb: View {
+    let attachment: TurnAttachment
+    var onTap: () -> Void
+    var sourceID: String
+    var ns: Namespace.ID
+    @Environment(AttachmentImageStore.self) private var store
+
+    #if os(iOS)
+    private static let side: CGFloat = 104
+    #else
+    private static let side: CGFloat = 96
+    #endif
+
+    var body: some View {
+        Group {
+            if let img = store.image(for: attachment.id) {
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: Self.side, height: Self.side)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                    .imageTap(onTap, sourceID: sourceID, ns: ns)
+            } else if store.isNotImage(attachment.id) {
+                ChatAttachmentFile(attachment: attachment)   // not an image after all
+            } else {
+                RoundedRectangle(cornerRadius: 8).fill(.quaternary)
+                    .frame(width: Self.side, height: Self.side)
+            }
+        }
+        .task(id: attachment.id) { await store.load(attachment.id) }
+    }
+}
+
+/// iOS: make a transcript image thumbnail tappable to open the full-screen pager, and (iOS 18+) mark
+/// it as the zoom-transition source so the preview grows out of / shrinks back into this thumbnail —
+/// the WeChat-style expand animation. macOS: no-op — the thumbnail stays a static rounded image.
+private extension View {
+    @ViewBuilder func imageTap(_ onTap: @escaping () -> Void, sourceID: String, ns: Namespace.ID) -> some View {
+        #if os(iOS)
+        let tappable = self.contentShape(Rectangle()).onTapGesture(perform: onTap)
+        if #available(iOS 18.0, *) {
+            tappable.matchedTransitionSource(id: sourceID, in: ns)
+        } else {
+            tappable
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+/// The image a tap opened the full-screen pager on: `index` seeds the starting page; `id` (the tapped
+/// attachment's id) is the iOS-18 zoom-transition source so the viewer zooms back to the right tile.
+struct ImagePreviewTarget: Identifiable {
+    let index: Int
+    let id: String
+}
+
+private extension View {
+    /// iOS: present the full-screen image pager for `target`, zooming out of the tapped thumbnail on
+    /// iOS 18+. macOS: no-op (thumbnails aren't tappable there, so `target` never becomes non-nil).
+    @ViewBuilder
+    func imagePreview(_ target: Binding<ImagePreviewTarget?>, images: [TurnAttachment],
+                      ns: Namespace.ID, store: AttachmentImageStore) -> some View {
+        #if os(iOS)
+        self.fullScreenCover(item: target) { t in
+            Group {
+                if #available(iOS 18.0, *) {
+                    ImagePagerView(images: images, startIndex: t.index)
+                        .navigationTransition(.zoom(sourceID: t.id, in: ns))
+                } else {
+                    ImagePagerView(images: images, startIndex: t.index)
+                }
+            }
+            .environment(store)
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+/// Minimal wrapping layout (like CSS `flex-wrap`): packs subviews left-to-right and drops onto a new
+/// row when the next one wouldn't fit, sizing the block to its content so a trailing VStack still
+/// right-aligns it under the bubble. Fixes several thumbnails / chips overflowing one HStack off the
+/// edge of a phone screen.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(maxWidth: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.reduce(CGFloat(0)) { $0 + $1.height } + spacing * CGFloat(max(0, rows.count - 1))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(maxWidth: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for i in row.items {
+                let size = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(maxWidth: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for i in subviews.indices {
+            let size = subviews[i].sizeThatFits(.unspecified)
+            let needed = row.items.isEmpty ? size.width : row.width + spacing + size.width
+            if !row.items.isEmpty, needed > maxWidth {
+                rows.append(row)
+                row = Row(items: [i], width: size.width, height: size.height)
+            } else {
+                row.width = row.items.isEmpty ? size.width : row.width + spacing + size.width
+                row.height = max(row.height, size.height)
+                row.items.append(i)
+            }
+        }
+        if !row.items.isEmpty { rows.append(row) }
+        return rows
+    }
+}
+
+#if os(iOS)
+/// Single-image full-screen viewer for an in-memory `PlatformImage` (the composer's staged draft
+/// thumbnails, which aren't attachment-backed yet). Pinch or double-tap to zoom, drag to pan while
+/// zoomed; drag down at fit scale to dismiss with the image shrinking as the backdrop fades. The
+/// sent-turn transcript uses `ImagePagerView` (swipe between a turn's images) instead.
+struct FullScreenImageView: View {
+    let image: PlatformImage
+    @Environment(\.dismiss) private var dismiss
+
+    @GestureState private var pinch: CGFloat = 1
+    @State private var scale: CGFloat = 1
+    @State private var offset: CGSize = .zero   // committed pan, only meaningful while zoomed
+    @State private var drag: CGSize = .zero      // live drag translation
+
+    private var liveScale: CGFloat { max(1, scale * pinch) }
+    private var zoomed: Bool { liveScale > 1.01 }
+    // 0 while zoomed or idle; 0→1 as a fit-scale downward drag approaches the dismiss threshold.
+    private var dismissProgress: CGFloat { zoomed ? 0 : min(1, max(0, drag.height) / 260) }
+
+    var body: some View {
+        let magnify = MagnificationGesture()
+            .updating($pinch) { value, state, _ in state = value }
+            .onEnded { value in scale = min(max(1, scale * value), 6) }
+
+        let pan = DragGesture()
+            .onChanged { value in drag = value.translation }
+            .onEnded { value in
+                if zoomed {
+                    offset.width += value.translation.width      // commit the pan
+                    offset.height += value.translation.height
+                    drag = .zero
+                } else if value.translation.height > 150 {
+                    dismiss()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { drag = .zero }
+                }
+            }
+
+        ZStack {
+            Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
+
+            Image(platformImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(liveScale * (1 - dismissProgress * 0.12))
+                .offset(x: offset.width + drag.width, y: offset.height + drag.height)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)   // fill → scaledToFit centres it
+                .contentShape(Rectangle())
+                .gesture(pan)
+                .simultaneousGesture(magnify)
+                .onTapGesture(count: 2) {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        if zoomed { scale = 1; offset = .zero } else { scale = 2.6 }
+                    }
+                }
+                // A single tap anywhere dismisses the preview (no on-screen close button).
+                .onTapGesture { dismiss() }
+        }
+        .ignoresSafeArea()
+        .statusBarHidden(true)
+        .presentationBackground(.clear)
+    }
+}
+
+/// Full-screen, swipeable viewer for the images in a user turn — opened by tapping any transcript
+/// thumbnail. Swipe left/right to move between the turn's images; pinch or double-tap to zoom, drag
+/// to pan while zoomed; drag down at fit scale to dismiss (the image shrinks and the transcript shows
+/// through). A single `DragGesture` routes by direction — horizontal ⇒ page, vertical ⇒ dismiss, any
+/// drag while zoomed ⇒ pan — so paging, dismissing and panning never fight each other.
+struct ImagePagerView: View {
+    let images: [TurnAttachment]
+    @Environment(AttachmentImageStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var index: Int
+    @State private var pageDX: CGFloat = 0      // live horizontal paging drag
+    @State private var dismissDY: CGFloat = 0   // live downward dismiss drag (fit scale only)
+    @GestureState private var pinch: CGFloat = 1
+    @State private var scale: CGFloat = 1        // committed zoom of the current page
+    @State private var pan: CGSize = .zero       // committed pan of the current page
+    @State private var panLive: CGSize = .zero   // live pan translation
+    @State private var mode: DragMode = .idle
+
+    private enum DragMode { case idle, page, dismiss, pan }
+    private static let gap: CGFloat = 24
+
+    init(images: [TurnAttachment], startIndex: Int) {
+        self.images = images
+        _index = State(initialValue: startIndex)
+    }
+
+    private var liveScale: CGFloat { max(1, scale * pinch) }
+    private var zoomed: Bool { liveScale > 1.01 }
+    private var dismissProgress: CGFloat { min(1, dismissDY / 260) }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let stride = w + Self.gap
+
+            let drag = DragGesture()
+                .onChanged { v in
+                    if mode == .idle {
+                        if zoomed { mode = .pan }
+                        else if abs(v.translation.width) > abs(v.translation.height) { mode = .page }
+                        else if v.translation.height > 0 { mode = .dismiss }
+                        else { mode = .page }
+                    }
+                    switch mode {
+                    case .page:
+                        var dx = v.translation.width
+                        if (index == 0 && dx > 0) || (index == images.count - 1 && dx < 0) { dx *= 0.35 }
+                        pageDX = dx
+                    case .dismiss: dismissDY = max(0, v.translation.height)
+                    case .pan: panLive = v.translation
+                    case .idle: break
+                    }
+                }
+                .onEnded { v in
+                    switch mode {
+                    case .page:
+                        var next = index
+                        if v.translation.width < -w * 0.25, index < images.count - 1 { next += 1 }
+                        else if v.translation.width > w * 0.25, index > 0 { next -= 1 }
+                        if next != index { scale = 1; pan = .zero; panLive = .zero }
+                        withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.86)) {
+                            index = next
+                            pageDX = 0
+                        }
+                    case .dismiss:
+                        if v.translation.height > 150 { dismiss() }
+                        else { withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { dismissDY = 0 } }
+                    case .pan:
+                        pan.width += panLive.width
+                        pan.height += panLive.height
+                        panLive = .zero
+                    case .idle: break
+                    }
+                    mode = .idle
+                }
+
+            let magnify = MagnificationGesture()
+                .updating($pinch) { value, state, _ in state = value }
+                .onEnded { value in scale = min(max(1, scale * value), 6) }
+
+            ZStack {
+                // Fades out as the dismiss drag progresses; presentationBackground(.clear) lets the
+                // transcript show through so the swipe reads as peeling the image away.
+                Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
+
+                HStack(spacing: Self.gap) {
+                    ForEach(Array(images.enumerated()), id: \.element.id) { i, att in
+                        page(att, isCurrent: i == index, size: geo.size)
+                            .frame(width: w, height: geo.size.height)
+                    }
+                }
+                .offset(x: -CGFloat(index) * stride + pageDX)   // slide content within the fixed window
+                .frame(width: w, height: geo.size.height, alignment: .leading)
+                .offset(y: dismissDY)                            // dismiss drag moves the window down
+                .scaleEffect(1 - dismissProgress * 0.12)
+            }
+            .contentShape(Rectangle())
+            .gesture(drag)
+            .simultaneousGesture(magnify)
+            .onTapGesture(count: 2) {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    if zoomed { scale = 1; pan = .zero } else { scale = 2.6 }
+                }
+            }
+            // A single tap anywhere dismisses the preview (no on-screen close button).
+            .onTapGesture { dismiss() }
+        }
+        .ignoresSafeArea()
+        .overlay(alignment: .bottom) { pageDots }
+        .statusBarHidden(true)
+        .presentationBackground(.clear)
+    }
+
+    @ViewBuilder
+    private func page(_ att: TurnAttachment, isCurrent: Bool, size: CGSize) -> some View {
+        Group {
+            if let img = store.image(for: att.id) {
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(isCurrent ? liveScale : 1)
+                    .offset(isCurrent
+                            ? CGSize(width: pan.width + panLive.width, height: pan.height + panLive.height)
+                            : .zero)
+            } else {
+                ProgressView().tint(.white)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .task(id: att.id) { await store.load(att.id) }
+    }
+
+    @ViewBuilder
+    private var pageDots: some View {
+        if images.count > 1 {
+            HStack(spacing: 6) {
+                ForEach(images.indices, id: \.self) { i in
+                    Circle()
+                        .fill(i == index ? Color.white : Color.white.opacity(0.4))
+                        .frame(width: 6, height: 6)
+                }
+            }
+            .padding(.bottom, 30)
+            .opacity(1 - dismissProgress)
+        }
+    }
+}
+#endif
 
 struct AssistantBubbleView: View {
     let bubble: AssistantBubble

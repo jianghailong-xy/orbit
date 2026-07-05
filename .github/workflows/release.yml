@@ -1,0 +1,263 @@
+# Release workflow for both Orbit clients — one `vX.Y.Z` tag ships both from a single push:
+#   • dmg        → macOS: signed + notarized + stapled DMG, a GitHub Release, and the Sparkle appcast.
+#   • testflight → iOS:   signed .ipa archived and uploaded to TestFlight.
+#
+# Trigger: pushing a `v*` tag runs BOTH jobs. `workflow_dispatch` also builds, with a `platform`
+# choice (both / macos / ios) so a single client can be rebuilt without a tag (a dispatch with no tag
+# uses each build's default version). The build/test CI gate lives in client.yml.
+#
+# The tag drives the version. macOS uses it verbatim (vX.Y.Z → stable channel; vX.Y.Z-beta.N →
+# Sparkle beta channel). iOS strips any -beta.N to a numeric marketing version
+# (CFBundleShortVersionString must be numeric); its build number is the commit count.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   macOS: DEVID_CERT_P12_BASE64, DEVID_CERT_PASSWORD, KEYCHAIN_PASSWORD, APPLE_ID, APPLE_TEAM_ID,
+#          APPLE_APP_PASSWORD, SPARKLE_ED_PRIVATE_KEY
+#   iOS:   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8_BASE64, APPLE_TEAM_ID
+#   (iOS one-time setup — App Store Connect app + API key — is in src/ios/README.md → Release.)
+name: Release (macOS DMG + iOS TestFlight)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which client(s) to build
+        type: choice
+        default: both
+        options: [both, macos, ios]
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- macOS: signed + notarized DMG ----------------------------------------------------------
+  dmg:
+    name: macOS · signed + notarized DMG
+    # A tag push builds both; a manual run honours the platform choice.
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'ios'
+    runs-on: macos-15
+    permissions:
+      contents: write          # create the GitHub Release + push the gh-pages appcast
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history so build-dmg.sh's commit-count CFBundleVersion is monotonic
+
+      # The app relies on newer-Swift MainActor-isolation inference (SwiftUI View + @Observable),
+      # so pin the latest stable Xcode to match the toolchain it compiles under locally.
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      # Rebuild the Developer ID identity into a throwaway keychain so codesign can find it.
+      - name: Import Developer ID certificate
+        env:
+          DEVID_CERT_P12_BASE64: ${{ secrets.DEVID_CERT_P12_BASE64 }}
+          DEVID_CERT_PASSWORD:   ${{ secrets.DEVID_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD:     ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$DEVID_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$DEVID_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Make the temp keychain default + searchable so codesign and notarytool find it.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      # Store the notary credentials under the profile name build-dmg.sh expects.
+      - name: Store notarization profile
+        env:
+          APPLE_ID:           ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool store-credentials orbit-notary \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD"
+
+      - name: Build signed + notarized DMG
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # On a v* tag the tag drives the DMG version; manual runs keep the script default.
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then export VERSION="${GITHUB_REF_NAME#v}"; fi
+          SIGN_ID="Developer ID Application: Wikova HQ ($APPLE_TEAM_ID)" \
+          NOTARIZE_PROFILE=orbit-notary \
+          ARCHS=arm64 \
+          ./src/macos/scripts/build-dmg.sh
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orbit-dmg
+          path: src/macos/build/Orbit-v*
+          if-no-files-found: error
+
+      # ---- Release publishing (tag pushes only) ------------------------------------------------
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          prerelease=""; case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes $prerelease \
+            "src/macos/build/Orbit-v$ver-arm64.dmg" \
+            "src/macos/build/Orbit-v$ver-arm64.zip"
+
+      - name: Generate Sparkle appcast
+        if: github.ref_type == 'tag'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          # Prerelease tags (vX.Y.Z-…) publish to the beta channel; stable tags reach everyone.
+          channel=""; case "$GITHUB_REF_NAME" in *-*) channel="--channel beta";; esac
+          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.3/Sparkle-2.9.3.tar.xz
+          mkdir -p "$RUNNER_TEMP/sparkle"; tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          work="$RUNNER_TEMP/updates"; mkdir -p "$work/out"
+          cp "src/macos/build/Orbit-v$ver-arm64.zip" "$work/"
+          # Seed with the currently-published appcast so prior versions are preserved.
+          curl -fsSL -o "$work/appcast.xml" https://jianghailong-xy.github.io/orbit/appcast.xml || true
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$RUNNER_TEMP/sparkle/bin/generate_appcast" "$work" \
+            --ed-key-file - $channel \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}" \
+            --maximum-versions 10
+          cp "$work/appcast.xml" "$work/out/appcast.xml"
+
+      - name: Publish appcast to GitHub Pages
+        if: github.ref_type == 'tag'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ github.token }}
+          publish_dir: ${{ runner.temp }}/updates/out
+          keep_files: true
+
+  # ---- iOS: TestFlight --------------------------------------------------------------------------
+  testflight:
+    name: iOS · TestFlight
+    if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history → commit-count build number is monotonic
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: xcodebuild -version && xcodegen --version
+
+      - name: Write App Store Connect API key
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID:        ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          echo "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      # Manual signing: rebuild a FIXED Apple Distribution identity + App Store provisioning profile
+      # from secrets. Automatic signing (-allowProvisioningUpdates) mints a fresh "Apple Development"
+      # certificate on every clean runner and eventually trips Apple's per-account certificate cap
+      # ("maximum number of certificates" → no profile found). A pinned distribution cert is reused
+      # forever, so releases stop accumulating certs.
+      - name: Import distribution certificate + provisioning profile
+        env:
+          IOS_DIST_CERT_P12_BASE64:     ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          IOS_DIST_CERT_PASSWORD:       ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD:            ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$IOS_DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$IOS_DIST_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          # Make the temp keychain default + searchable so codesign finds the identity.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
+          security default-keychain -s "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/dist.p12"
+          # Install the App Store provisioning profile; surface its Name for the signer / ExportOptions.
+          echo "$IOS_PROVISION_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")"
+          NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" \
+            "$HOME/Library/MobileDevice/Provisioning Profiles/$UUID.mobileprovision"
+          echo "PROVISION_PROFILE_NAME=$NAME" >> "$GITHUB_ENV"
+          echo "Installed profile '$NAME' ($UUID)"
+
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+
+      - name: Archive
+        working-directory: src/ios
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          MKT="0.1.0"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            MKT="${GITHUB_REF_NAME#v}"     # v0.1.2 or v0.1.2-beta.3 → 0.1.2-beta.3
+            MKT="${MKT%%-*}"               # strip any -beta.N → numeric X.Y.Z (CFBundleShortVersionString)
+          fi
+          BUILD="$(git rev-list --count HEAD)"
+          echo "Building marketing $MKT (build $BUILD) with profile '$PROVISION_PROFILE_NAME'"
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Orbit.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISION_PROFILE_NAME" \
+            MARKETING_VERSION="$MKT" \
+            CURRENT_PROJECT_VERSION="$BUILD" \
+            archive
+
+      - name: Export + upload to TestFlight
+        working-directory: src/ios
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID:    ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          sed "s/REPLACE_WITH_TEAM_ID/${APPLE_TEAM_ID}/" ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          # Overwrite the profile-name placeholder via PlistBuddy (handles spaces in the name safely).
+          /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:io.orbitd.app $PROVISION_PROFILE_NAME" \
+            "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Orbit.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -authenticationKeyPath "$RUNNER_TEMP/private_keys/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

@@ -92,6 +92,19 @@ extension View {
         #endif
     }
 
+    /// iOS: install the "tap outside a text field lowers the keyboard" convention the transcript was
+    /// missing. A SwiftUI `simultaneousGesture` on the `List` is unreliable — the collection view's
+    /// own recognizers swallow taps that land on a row, so tapping a message never fired one. A
+    /// `UITapGestureRecognizer` on the host window is reliable where the SwiftUI gesture isn't. Attach
+    /// once at the app root; no-op on macOS (no software keyboard). See `KeyboardDismissInstaller`.
+    @ViewBuilder func dismissesKeyboardOnBackgroundTap() -> some View {
+        #if os(iOS)
+        self.background(KeyboardDismissInstaller())
+        #else
+        self
+        #endif
+    }
+
     /// A link-style button — borderless blue text. macOS has `.link`; iOS has no `LinkButtonStyle`,
     /// so it approximates with a plain button tinted to the accent colour.
     @ViewBuilder func linkButtonStyle() -> some View {
@@ -126,6 +139,69 @@ private struct TitlebarSeparatorRemover: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             window?.titlebarSeparatorStyle = .none
+        }
+    }
+}
+#endif
+
+#if os(iOS)
+/// Adds a single window-level tap recognizer that lowers the keyboard on a tap outside any text
+/// input — the iOS convention the transcript needs (a SwiftUI gesture on the `List` doesn't fire on
+/// row taps). The backing view exists only to reach the `UIWindow`; the recognizer, owned by the
+/// coordinator (retained for the representable's lifetime), does the work.
+private struct KeyboardDismissInstaller: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIView(context: Context) -> InstallerView { InstallerView(coordinator: context.coordinator) }
+    func updateUIView(_ uiView: InstallerView, context: Context) {}
+
+    /// Installs on `didMoveToWindow` — the reliable hook: the window is nil during init/makeUIView but
+    /// set the moment the view joins the hierarchy. (Doing it in `updateUIView` could miss if the
+    /// first update fires before the window is attached.)
+    final class InstallerView: UIView {
+        private let coordinator: Coordinator
+        init(coordinator: Coordinator) {
+            self.coordinator = coordinator
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false   // never intercept touches itself
+        }
+        required init?(coder: NSCoder) { fatalError("not used") }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let window { coordinator.install(on: window) }
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private static let recognizerName = "orbit.keyboardDismissTap"
+
+        func install(on window: UIWindow) {
+            // Idempotent: re-joining a window must not stack duplicate recognizers.
+            if window.gestureRecognizers?.contains(where: { $0.name == Self.recognizerName }) == true { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(dismiss))
+            tap.name = Self.recognizerName
+            tap.cancelsTouchesInView = false   // the same tap still reaches buttons, list rows, scrolling
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+        }
+
+        @objc private func dismiss() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+
+        // Never block another recognizer (scroll, buttons, the drawer's swipes) — only observe taps.
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+        // Ignore taps that land inside a text input, so tapping the composer field to move the cursor
+        // keeps focus instead of dismissing-then-refocusing (a keyboard flicker).
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view = touch.view
+            while let current = view {
+                if current is UITextField || current is UITextView { return false }
+                view = current.superview
+            }
+            return true
         }
     }
 }

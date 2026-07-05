@@ -84,6 +84,14 @@ final class ConsoleRegistry {
         for (id, model) in models { persist(id, model) }
     }
 
+    /// Nudge every cached console to reconnect its live stream now — called when the app returns to
+    /// the foreground, where a socket suspended in the background can be dead but not yet erroring.
+    /// Only the focused console has a running stream loop; for the rest this sets a flag that's
+    /// cleared the next time they run, so it's a harmless no-op.
+    func reconnectAll() {
+        for model in models.values { model.reconnectNow() }
+    }
+
     /// Drop all in-memory consoles after persisting them (sign-out). Disk snapshots remain for the
     /// next sign-in.
     func reset() {

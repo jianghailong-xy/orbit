@@ -1,0 +1,105 @@
+# CI for both native clients (src/macos + src/ios). They share OrbitKit (the pure protocol/logic
+# core) and the OrbitApp SwiftUI sources (the iOS app reuses them in place — Structure B), so one
+# workflow tests everything:
+#
+#   • orbitkit-linux — OrbitKit unit tests on Linux (platform-agnostic). Fast; runs on every push.
+#   • macos — macOS compile gate: `swift test`s OrbitKit on macOS (builds the `#if os(macOS)`
+#     Keychain + URLSession-SSE paths) and `swift build`s OrbitApp (SwiftUI; can't build on Linux).
+#   • ios — iOS compile gate: XcodeGen + `xcodebuild` for the Simulator (no signing). Surfaces
+#     iOS-only SDK nits in the shared SwiftUI surface.
+#
+# Signed/distributable builds live in release.yml (tag-triggered). macOS runners bill at 10×, so the
+# two Xcode jobs run only on pull_request or an explicit workflow_dispatch — never plain pushes. A
+# PR touching the shared OrbitKit/OrbitApp exercises both compile gates (correct — the code is
+# shared); a PR touching only one client's own dir still runs both, which is a small, safe overpay.
+name: Client CI (macOS + iOS)
+
+on:
+  push:
+    branches: ["**"]        # branches only — tags are handled by release.yml
+    paths:
+      - "src/macos/**"
+      - "src/ios/**"
+      - ".github/workflows/client.yml"
+  pull_request:
+    paths:
+      - "src/macos/**"
+      - "src/ios/**"
+      - ".github/workflows/client.yml"
+  # Manual trigger to compile a branch on the Mac runners without opening a throwaway PR, e.g.
+  # `gh workflow run client.yml --ref <branch>`.
+  workflow_dispatch:
+
+concurrency:
+  group: client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  orbitkit-linux:
+    name: OrbitKit (Linux · swift test)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift version
+        run: swift --version
+      - name: Test OrbitKit
+        working-directory: src/macos/OrbitKit
+        run: swift test
+
+  macos:
+    name: macOS (build + test)
+    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      # The SwiftUI app relies on newer-Swift MainActor-isolation inference; pin latest stable
+      # Xcode so the runner's Swift compiles it (the default image's Swift rejects it).
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      # Compiles the macOS-only code in OrbitKit (Keychain token store, URLSession SSE transport)
+      # that the Linux job's `#if` guards skip.
+      - name: Test OrbitKit (macOS)
+        working-directory: src/macos/OrbitKit
+        run: swift test
+      # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
+      # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
+      - name: Build OrbitApp
+        working-directory: src/macos/OrbitApp
+        run: swift build
+
+  ios:
+    name: iOS (generate + build)
+    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      # First real compile of the iOS app: shared SwiftUI views + @Observable models + OrbitKit,
+      # built for the simulator so no signing is needed. Surfaces any iOS-availability nits.
+      - name: Build for iOS Simulator
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
