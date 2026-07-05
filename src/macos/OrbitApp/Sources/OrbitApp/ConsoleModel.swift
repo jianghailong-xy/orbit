@@ -26,8 +26,8 @@ struct QuestionReply: Equatable, Sendable {
     let question: String
 }
 
-/// Outcome of one live-stream connection attempt (see `ConsoleModel.run()`).
-private enum StreamOutcome { case ended, failed, kicked, cancelled }
+// One connection attempt's outcome is OrbitKit's `StreamOutcome`; the wait/stop decision after
+// each attempt is the unit-tested `ReconnectPolicy` (see `run()`).
 
 /// Drives one open session: the reconnecting SSE consume loop (folded through the verified
 /// `TranscriptReducer`) plus the interactive actions — send/queue/interrupt and tool approvals.
@@ -54,11 +54,11 @@ final class ConsoleModel {
     private(set) var stateRevision = 0
     private(set) var connected = false
 
-    // Reconnect-loop state (see `run()`). `reconnectAttempt` ramps the exponential backoff;
-    // `kickRequested` is set by `reconnectNow()` — the network monitor / app foregrounding — to cut
-    // a stalled read or a backoff wait short; `netWasSatisfied` debounces the path monitor so only a
-    // genuine down→up transition kicks.
-    private var reconnectAttempt = 0
+    // Reconnect-loop state (see `run()`). `reconnectPolicy` decides wait-vs-stop and ramps the
+    // backoff (pure OrbitKit, unit-tested); `kickRequested` is set by `reconnectNow()` — the network
+    // monitor / app foregrounding — to cut a stalled read or a backoff wait short; `netWasSatisfied`
+    // debounces the path monitor so only a genuine down→up transition kicks.
+    private var reconnectPolicy = ReconnectPolicy()
     private var kickRequested = false
     private var netWasSatisfied = true
 
@@ -225,7 +225,7 @@ final class ConsoleModel {
             }
         }
 
-        reconnectAttempt = 0
+        reconnectPolicy = ReconnectPolicy()
         while !Task.isCancelled {
             kickRequested = false
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
@@ -237,7 +237,7 @@ final class ConsoleModel {
                         for try await ev in stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq) {
                             reducer.apply(ev)
                             scheduleStatePublish()
-                            reconnectAttempt = 0   // a healthy connection resets the backoff ramp
+                            reconnectPolicy.noteHealthy()   // a healthy connection resets the backoff ramp
                         }
                         return .ended
                     } catch is CancellationError {
@@ -261,27 +261,17 @@ final class ConsoleModel {
             }
 
             connected = false
-            switch outcome {
-            case .cancelled:
-                publishStateNow()
+            // Orchestration side effects stay here; the wait/stop decision (backoff ramp, kick
+            // reset, retry-forever) is the unit-tested `ReconnectPolicy`. A clean close can mean
+            // the session ended during the drop — that terminal broadcast is never replayed, so
+            // refresh the status from REST before reconnecting.
+            if outcome == .ended || outcome == .cancelled { publishStateNow() }
+            if outcome == .ended { await refreshServerStatus() }
+            switch reconnectPolicy.next(after: outcome) {
+            case .stop:
                 return
-            case .kicked:
-                // Network restored / app foregrounded → reconnect now, backoff reset.
-                reconnectAttempt = 0
-            case .ended:
-                publishStateNow()
-                // The stream closed — if the session ended during the drop, the terminal status
-                // broadcast was missed and won't be replayed, so refresh it from REST.
-                await refreshServerStatus()
-                reconnectAttempt = 0
-                await backoffSleep(ms: 300)
-            case .failed:
-                // No attempt cap: a mobile outage can last minutes, and giving up would freeze the
-                // session with no recovery until the view is torn down and rebuilt. Retry forever
-                // with capped exponential backoff; a kick cuts the wait short when the network returns.
-                reconnectAttempt += 1
-                let ms = min(15_000, 500 * (1 << min(reconnectAttempt, 5)))
-                await backoffSleep(ms: ms)
+            case .reconnect(let ms):
+                if ms > 0 { await backoffSleep(ms: ms) }
             }
         }
     }
