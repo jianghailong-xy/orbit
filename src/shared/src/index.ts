@@ -2,6 +2,7 @@ export * from './enums';
 export * from './events';
 export * from './dto';
 export * from './codec';
+export * from './realtime';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the

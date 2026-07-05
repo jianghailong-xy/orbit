@@ -5,13 +5,25 @@ import { Client } from 'pg';
 import {
   ArtifactCommand,
   CommitCommand,
+  ControlEvent,
+  ControlEventType,
+  ControlSessionSummary,
+  isLifecycleType,
   MergeCommand,
   NormalizedRunEvent,
   PushCommand,
   RunEventType,
+  RunStatus,
+  SessionEndReason,
 } from '@orbit/shared';
-import { Observable, Subject, filter, map } from 'rxjs';
+import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  approvalIdOf,
+  backgroundPayloadOf,
+  controlTypeFor,
+  errorPayloadOf,
+} from './control-events';
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
@@ -40,6 +52,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  /** sessionId → {ownerId, agentId}, for scoping the user-stream (GET /api/events) without a
+   *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
+  private readonly ownerCache = new Map<string, { ownerId: string; agentId: string | null }>();
+  private static readonly OWNER_CACHE_MAX = 10_000;
 
   constructor(private readonly prisma: PrismaService) {
     this.inbox.setMaxListeners(0);
@@ -193,9 +209,163 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   streamForRun(runId: string): Observable<NormalizedRunEvent> {
     return this.hub.asObservable().pipe(
-      filter((m) => m.runId === runId),
+      // Lifecycle signals (session_created/ended) are control-plane-internal: they ride the hub
+      // for the NOTIFY bridge but must never leak into a per-session transcript stream.
+      filter((m) => m.runId === runId && !isLifecycleType(m.event.type)),
       map((m) => m.event),
     );
+  }
+
+  // ── synthesized lifecycle signals (control plane only) ──────────────────
+  //
+  // session.created / session.ended have no natural RunEvent — archive/restore/create don't emit
+  // STATUS — so the state-changing call sites publish these synthetic signals through the same
+  // hub (seq 0, never persisted; ingest owns durable seq assignment). streamForRun filters them
+  // out above; streamForUser maps them to ControlEventType.SESSION_CREATED / SESSION_ENDED.
+
+  /** A session entered the owner's active list (created, or restored from archive/trash). */
+  publishSessionCreated(sessionId: string): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.SESSION_CREATED,
+      ts: new Date().toISOString(),
+      payload: {},
+    });
+  }
+
+  /** A session left the owner's active list (archived → completed, or soft-deleted). Terminal
+   *  RUN statuses are NOT signalled here — they already flow as STATUS → session.updated; and
+   *  PARKED stays in the active list, so recycling isn't an "ended" either (see the design doc). */
+  publishSessionEnded(sessionId: string, status: RunStatus | string, endReason: SessionEndReason): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.SESSION_ENDED,
+      ts: new Date().toISOString(),
+      payload: { status, endReason },
+    });
+  }
+
+  // ── user-scoped control plane (SSE: GET /api/events) ────────────────────
+  //
+  // One per-user stream multiplexes lifecycle/status/approval/background events across ALL of
+  // the user's sessions, so a client opens it once to drive its list, badges, and
+  // notifications — replacing per-list polling. Derived from the same hub as streamForRun, but
+  // filtered to the coarse control subset and scoped to the user's sessions. Transcript bodies
+  // never enter (the sync controlTypeFor() filter drops them before owner resolution).
+  // See docs/realtime-control-plane-stream.md.
+
+  streamForUser(userId: string): Observable<ControlEvent> {
+    return this.hub.asObservable().pipe(
+      filter((m) => controlTypeFor(m.event.type) !== null),
+      mergeMap((m) => this.toControlEvent(userId, m.runId, m.event)),
+      filter((e): e is ControlEvent => e !== null),
+    );
+  }
+
+  /** Map a hub run event to a control event for `userId`, or null if it isn't this user's
+   *  session or carries nothing the control plane forwards. */
+  private async toControlEvent(
+    userId: string,
+    sessionId: string,
+    ev: NormalizedRunEvent,
+  ): Promise<ControlEvent | null> {
+    const meta = await this.resolveOwner(sessionId);
+    if (!meta || meta.ownerId !== userId) return null;
+    const type = controlTypeFor(ev.type);
+    if (!type) return null;
+
+    let data: Record<string, unknown>;
+    switch (type) {
+      case ControlEventType.SESSION_CREATED:
+      case ControlEventType.SESSION_UPDATED: {
+        const summary = await this.buildSessionSummary(sessionId);
+        if (!summary) return null; // session vanished mid-flight
+        data = summary as unknown as Record<string, unknown>;
+        break;
+      }
+      case ControlEventType.SESSION_ENDED:
+        // Decision Q4: the session left the active list — no more events will follow, so drop
+        // its owner mapping now instead of waiting for LRU pressure.
+        this.ownerCache.delete(sessionId);
+        data = { status: ev.payload.status, endReason: ev.payload.endReason };
+        break;
+      case ControlEventType.SESSION_ERROR:
+        data = errorPayloadOf(ev.payload) as unknown as Record<string, unknown>;
+        break;
+      case ControlEventType.BACKGROUND_TASK:
+        data = backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
+        break;
+      case ControlEventType.APPROVAL_REQUESTED:
+      case ControlEventType.APPROVAL_RESOLVED:
+        data = {
+          approvalId: approvalIdOf(ev.payload),
+          pendingApprovals: await this.countPendingApprovals(sessionId),
+        };
+        break;
+      default:
+        return null;
+    }
+    return { type, sessionId, agentId: meta.agentId, ts: ev.ts ?? new Date().toISOString(), data };
+  }
+
+  /** Resolve (and cache) a session's owner + agent. Bounded LRU; a miss is one indexed lookup. */
+  private async resolveOwner(
+    sessionId: string,
+  ): Promise<{ ownerId: string; agentId: string | null } | null> {
+    const hit = this.ownerCache.get(sessionId);
+    if (hit) {
+      this.ownerCache.delete(sessionId); // re-insert to mark most-recently-used
+      this.ownerCache.set(sessionId, hit);
+      return hit;
+    }
+    const row = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { ownerId: true, agentId: true },
+    });
+    if (!row) return null;
+    const meta = { ownerId: row.ownerId, agentId: row.agentId ?? null };
+    this.ownerCache.set(sessionId, meta);
+    if (this.ownerCache.size > RealtimeService.OWNER_CACHE_MAX) {
+      const oldest = this.ownerCache.keys().next().value; // Map iterates in insertion order
+      if (oldest !== undefined) this.ownerCache.delete(oldest);
+    }
+    return meta;
+  }
+
+  /** The slim session summary the client upserts into its list (decision Q2: full, not a delta).
+   *  Shape mirrors `ControlSessionSummary` / the `GET /sessions` list row. */
+  private async buildSessionSummary(sessionId: string): Promise<ControlSessionSummary | null> {
+    const s = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        agentId: true,
+        lastTurnAt: true,
+        agent: { select: { id: true, name: true, model: true } },
+      },
+    });
+    if (!s) return null;
+    // A blocked permission keeps a session RUNNING, so only RUNNING sessions can hold a live
+    // approval — skip the count otherwise (mirrors the list endpoint).
+    const pendingApprovals =
+      s.status === RunStatus.RUNNING ? await this.countPendingApprovals(sessionId) : 0;
+    return {
+      id: s.id,
+      title: s.title ?? null,
+      status: s.status as RunStatus,
+      agentId: s.agentId ?? null,
+      agent: s.agent
+        ? { id: s.agent.id, name: s.agent.name ?? null, model: s.agent.model ?? null }
+        : null,
+      pendingApprovals,
+      lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+    };
+  }
+
+  private countPendingApprovals(sessionId: string): Promise<number> {
+    return this.prisma.approval.count({ where: { sessionId, status: 'PENDING' } });
   }
 
   // ── cancellation (durable, cross-replica) ───────────────────────────────
