@@ -27,9 +27,10 @@ public enum Effort: String, CaseIterable, Sendable, Identifiable {
 
 public enum AgentDefaults {
     public static let models: [ModelOption] = [
+        ModelOption(id: "claude-fable-5", name: "Fable 5"),
         ModelOption(id: "claude-opus-4-8", name: "Opus 4.8"),
-        ModelOption(id: "claude-sonnet-4-6", name: "Sonnet 4.6"),
-        ModelOption(id: "claude-haiku-4-5-20251001", name: "Haiku 4.5"),
+        ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
+        ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
     ]
     public static let defaultModelID = "claude-opus-4-8"
 
