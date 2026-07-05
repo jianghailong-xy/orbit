@@ -19,7 +19,7 @@ const REAP_INTERVAL_MS = 30_000;
 const PURGE_INTERVAL_MS = 60 * 60_000;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60_000;
 const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
-const IDLE_AFTER_MS = 30 * 60_000; // gracefully end a session idle this long
+const IDLE_AFTER_MS = 4 * 60 * 60_000; // gracefully end a session idle this long (4h)
 // A cancel/end a live (online) runner hasn't honored within this window means the
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize it so the
