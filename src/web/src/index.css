@@ -318,9 +318,9 @@ body {
 .tp-item.active .tp-count {
   color: var(--brand);
 }
-/* "Needs you": one or more active sessions are blocked on an approval the user must
-   act on. Mirrors the amber "N pending" pill inside Active (.session-approval-badge)
-   so the nav speaks the same "waiting on you" language — visible from any page. */
+/* "Needs you": one or more of an agent's active sessions are blocked on an approval the user
+   must act on. An amber pill on the agent's sidebar row speaks the "waiting on you" language,
+   visible from any page. */
 .tp-count.needs-you {
   color: var(--warning);
   background: var(--warning-bg);
@@ -329,7 +329,7 @@ body {
   font-weight: 600;
   font-size: 12px;
 }
-/* Hold the amber even when Active is the selected row (which otherwise tints counts blue). */
+/* Hold the amber even when the row is selected (which otherwise tints counts blue). */
 .tp-item.active .tp-count.needs-you {
   color: var(--warning);
 }
@@ -1510,52 +1510,6 @@ body {
   background: var(--warning-solid);
 }
 
-/* ---- Active: live sessions grouped by how much they need a human ---- */
-.orbit-sessionlist {
-  /* status | title (flex) | meta */
-  --cols: 92px minmax(160px, 1fr) auto;
-  border-top: 1px solid var(--border-subtle);
-}
-.orbit-sessionlist .task-row {
-  grid-template-columns: var(--cols);
-}
-.session-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-}
-/* "需要你回复" leads in amber — the bucket that actually needs action. */
-.session-group-head.attention {
-  color: var(--warning);
-}
-.session-group-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  background: var(--fill-muted);
-  border-radius: 999px;
-  padding: 0 7px;
-  line-height: 16px;
-}
-.session-meta {
-  text-align: right;
-  justify-self: end;
-}
-.session-approval-badge {
-  flex: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--warning);
-  background: var(--warning-bg);
-  border-radius: 999px;
-  padding: 1px 7px;
-}
-
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .agent-split {
   display: flex;
@@ -2461,14 +2415,6 @@ body {
 .session-preview.tone-queued {
   color: var(--text-3);
 }
-.session-meta {
-  font-size: 12.5px;
-  color: var(--text-2);
-  margin-top: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* Row actions overlay the right edge instead of taking layout space: while idle
    the title fills the full row width, and on hover the icon fades in over the
    text. A gradient blends the title into the row background so it never collides
@@ -2556,13 +2502,6 @@ body {
    box-shadow (not background) so it survives the hover/selected background tints. */
 .session-row.pinned {
   box-shadow: inset 3px 0 0 var(--brand);
-}
-/* Persistent left marker on the /active page rows, which have no hover actions of their own. */
-.session-pin-flag {
-  flex: none;
-  margin-right: 4px;
-  font-size: 11px;
-  color: var(--text-4);
 }
 .session-status {
   font-size: 12.5px;
