@@ -89,10 +89,14 @@ struct TranscriptView: View {
             List {
                 ForEach(console.state.items) { item in
                     TranscriptItemView(item: item)
+                        .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+                        // Row-level preferences must sit OUTSIDE `AnchorRow`: it wraps content in an
+                        // `if #available` (`_ConditionalContent`), and `listRow*` set inside that branch
+                        // aren't hoisted to the List on iOS — the separators leaked back in. Applied here,
+                        // on the outermost row view, they propagate reliably (a chat flow, no hairlines).
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
-                        .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
                 }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
