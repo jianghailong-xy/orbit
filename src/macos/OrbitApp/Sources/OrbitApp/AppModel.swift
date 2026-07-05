@@ -179,6 +179,16 @@ final class AppModel {
         signedIn = false
         sessions = []
         groups = .empty
+        resetNavigation()
+        lastSnapshot = nil
+        menuSummary = .empty
+        updateDockBadge(nil)
+    }
+
+    /// Reset every navigation/selection field to the signed-out baseline. The ONE place they are
+    /// cleared wholesale — when adding a navigation field to this model, add its reset here, or a
+    /// stale selection leaks into the next sign-in.
+    private func resetNavigation() {
         selectedSessionID = nil
         activeConsoleSessionID = nil
         selectedSection = .active
@@ -189,9 +199,6 @@ final class AppModel {
         composingAgentSession = false
         composedConsoleSessionID = nil
         selectedUserID = nil
-        lastSnapshot = nil
-        menuSummary = .empty
-        updateDockBadge(nil)
     }
 
     /// Wire up notifications. Call once at launch.
@@ -335,8 +342,27 @@ final class AppModel {
         guard let id = currentAgentID else { return }
         selectedSection = .agents
         selectedAgentID = id
+        startComposingSession()
+    }
+
+    /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
+    /// button): drop the session selection so the compose pane takes the detail column / pushes.
+    func startComposingSession() {
         selectedAgentSessionID = nil
         composingAgentSession = true
+    }
+
+    /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
+    /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent
+    /// clears that agent-scoped state (session selection + draft compose) so its pane opens on the
+    /// session list; re-selecting the current agent keeps them (a pushed console stays pushed).
+    func openAgent(_ id: String) {
+        selectedSection = .agents
+        if selectedAgentID != id {
+            selectedAgentID = id
+            selectedAgentSessionID = nil
+            composingAgentSession = false
+        }
     }
 
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
@@ -345,13 +371,7 @@ final class AppModel {
     func selectAgent(at index: Int) {
         let all = orderedAgents
         guard all.indices.contains(index) else { return }
-        let id = all[index].id
-        selectedSection = .agents
-        if selectedAgentID != id {
-            selectedAgentID = id
-            selectedAgentSessionID = nil
-            composingAgentSession = false
-        }
+        openAgent(all[index].id)
     }
 
     /// The session whose console fills the detail pane right now — the ⌘D ("Complete Session")
@@ -362,6 +382,22 @@ final class AppModel {
         case .active: return activeConsoleSessionID ?? selectedSessionID
         case .agents: return composingAgentSession ? nil : selectedAgentSessionID
         default:      return nil
+        }
+    }
+
+    /// True when the current section's navigation stack is at its root (nothing pushed) — derived
+    /// from the same selection state that drives each stack's push. The compact shell uses this to
+    /// yield the left screen edge to its drawer-open gesture only where no pushed page needs the
+    /// edge for the system back-swipe.
+    var sectionAtRoot: Bool {
+        switch selectedSection {
+        case .active:  return selectedSessionID == nil
+        case .tasks:   return selectedTaskID == nil
+        // The compose page (composing) is pushed too, not just a selected session's console — so the
+        // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
+        case .agents:  return selectedAgentSessionID == nil && !composingAgentSession
+        case .runners: return selectedRunnerID == nil
+        case .skills, .settings, .admin: return true
         }
     }
 
