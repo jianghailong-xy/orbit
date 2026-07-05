@@ -371,6 +371,17 @@ const bgRunningLabel = (n: number): string =>
 const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
 
+// Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-agent
+// (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins), or
+// null when the session is genuinely idle. Shared by the list line, status glyph and header
+// so all three agree a parked-but-still-working session isn't "waiting for your reply".
+const parkedWorkLabel = (s: any): string | null =>
+  (s.runningSubagentCount ?? 0) > 0
+    ? subagentRunningLabel(s.runningSubagentCount)
+    : (s.runningBgCount ?? 0) > 0
+      ? bgRunningLabel(s.runningBgCount)
+      : null;
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -390,9 +401,12 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
     return { text: 'Running…', tone: 'running' };
   }
   if (live && s.status === 'PENDING') return { text: 'Queued', tone: 'queued' };
-  // Parked (AWAITING_INPUT) but a background process is still running — not idle.
-  if (live && (s.runningBgCount ?? 0) > 0)
-    return { text: `${bgRunningLabel(s.runningBgCount)}…`, tone: 'running' };
+  // Parked (AWAITING_INPUT) but still doing background work — a sub-agent and/or background
+  // shells that outlive the turn — so it doesn't read as idle. A spawned sub-agent parks the
+  // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
+  // surfaces "Running Agent…".
+  const parked = live ? parkedWorkLabel(s) : null;
+  if (parked) return { text: `${parked}…`, tone: 'running' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   return null;
 };
@@ -405,10 +419,7 @@ function statusLabel(session: any): string {
   const status: string = session.status;
   if (status === 'RUNNING')
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
-  if (status === 'AWAITING_INPUT')
-    return (session.runningBgCount ?? 0) > 0
-      ? bgRunningLabel(session.runningBgCount)
-      : 'Waiting for your reply';
+  if (status === 'AWAITING_INPUT') return parkedWorkLabel(session) ?? 'Waiting for your reply';
   if (status === 'SUCCEEDED') return 'Completed';
   if (status === 'FAILED') {
     const err: string = typeof session.error === 'string' ? session.error : '';
@@ -467,9 +478,10 @@ function StatusIcon({ session, completed }: { session: any; completed?: boolean 
       </Tooltip>
     );
   }
-  if (status === 'AWAITING_INPUT')
-    return (session.runningBgCount ?? 0) > 0 ? (
-      <Tooltip title={bgRunningLabel(session.runningBgCount)}>
+  if (status === 'AWAITING_INPUT') {
+    const work = parkedWorkLabel(session);
+    return work ? (
+      <Tooltip title={work}>
         <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
       </Tooltip>
     ) : (
@@ -477,6 +489,7 @@ function StatusIcon({ session, completed }: { session: any; completed?: boolean 
         <MessageOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
+  }
   if (status === 'SUCCEEDED')
     return (
       <Tooltip title="Completed">
