@@ -35,13 +35,6 @@ const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatu
 // IDLE_AFTER_MS. Covers DONE from either the agent (MCP) or a manual user edit.
 const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED];
 
-// How long a PENDING session for an already-terminal task must sit untouched before
-// it's treated as an orphan and cancelled. A just-created/revived run is briefly in
-// that exact state (session PENDING, task still DONE — Task.status is agent-owned and
-// only flips once the agent actually runs) before the queue claims it, so gating on a
-// stale updatedAt avoids reaping a legitimate (re)run that hasn't been claimed yet.
-const PENDING_ORPHAN_AFTER_MS = 30 * 60_000;
-
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
  * whose runner dies would sit RUNNING/AWAITING_INPUT forever, leaking a session and
@@ -183,7 +176,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         this.log.error(`reap of ${s.id} failed: ${(e as Error).message}`);
       }
     }
-    await this.cancelOrphanPending();
   }
 
   /**
@@ -236,74 +228,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       payload: { status: RunStatus.FAILED, final: true, reason },
     });
     this.log.warn(`reaped dead-runner session ${sessionId} (${reason})`);
-  }
-
-  /**
-   * Cancel sessions still queued (PENDING) that can never be claimed. The LIVE sweep
-   * above never sees these — PENDING isn't a live status — so a never-claimed session
-   * sits PENDING forever, keeping the list's "running" dot lit. A PENDING session has
-   * no runner process to stop, so just finalize it CANCELLED. Two orphan shapes:
-   *
-   *  1. Task already terminal — a double-queued task (e.g. two batches): one session
-   *     runs to DONE while the other is never claimed. The task is terminal, so no
-   *     reclaim needed.
-   *  2. assigned_runner_id is NULL — the runner was deleted (FK ON DELETE SET NULL),
-   *     so the claim SQL (`assigned_runner_id = runner.id`) can never match and no
-   *     runner will ever pick it up.
-   *
-   * Gated on a stale updatedAt (see PENDING_ORPHAN_AFTER_MS) so a fresh (re)run, which
-   * is momentarily PENDING-on-a-still-terminal-task before the queue claims it, isn't
-   * reaped — its updatedAt is recent; a real orphan's hasn't moved since it was queued.
-   */
-  private async cancelOrphanPending(): Promise<void> {
-    const cutoff = new Date(Date.now() - PENDING_ORPHAN_AFTER_MS);
-    const orphans = await this.prisma.session.findMany({
-      where: {
-        status: RunStatus.PENDING,
-        updatedAt: { lt: cutoff },
-        OR: [
-          { task: { status: { in: TASK_TERMINAL } } },
-          { assignedRunnerId: null },
-        ],
-      },
-      select: { id: true, assignedRunnerId: true },
-    });
-    for (const o of orphans) {
-      const reason = o.assignedRunnerId
-        ? 'orphaned: task already finished'
-        : 'orphaned: runner unavailable';
-      try {
-        const ok = await this.prisma.$transaction(async (tx) => {
-          // Guard on PENDING so we never clobber a session the queue just claimed.
-          const res = await tx.session.updateMany({
-            where: { id: o.id, status: RunStatus.PENDING },
-            data: {
-              status: RunStatus.CANCELLED,
-              error: reason,
-              endReason: SessionEndReason.ORPHANED,
-              finishedAt: new Date(),
-              cancelRequestedAt: new Date(),
-            },
-          });
-          if (res.count === 0) return false;
-          await tx.conversationTurn.updateMany({
-            where: { sessionId: o.id, status: { not: 'ANSWERED' } },
-            data: { status: 'ANSWERED', answeredAt: new Date() },
-          });
-          return true;
-        });
-        if (!ok) continue;
-        this.realtime.publish(o.id, {
-          seq: Number.MAX_SAFE_INTEGER,
-          type: RunEventType.STATUS,
-          ts: new Date().toISOString(),
-          payload: { status: RunStatus.CANCELLED, final: true, reason },
-        });
-        this.log.log(`cancelled orphaned PENDING session ${o.id} (${reason})`);
-      } catch (e) {
-        this.log.error(`orphan-cancel of ${o.id} failed: ${(e as Error).message}`);
-      }
-    }
   }
 
   /**
