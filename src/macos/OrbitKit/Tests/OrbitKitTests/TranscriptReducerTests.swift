@@ -158,17 +158,61 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
     }
 
-    /// A message sent while another turn is in flight is flagged `queued` so the bubble reads
-    /// "Queued" instead of "Sending…" (web parity); reconciling the durable event clears `pending`
-    /// (which hides the indicator regardless of `queued`). An idle send leaves `queued` false.
+    /// A message sent while another turn is in flight is held in `state.queued` (rendered after the
+    /// transcript, out of the running turn's output) and flagged `queued` so it reads "Queued" not
+    /// "Sending…" (web parity). An idle send has no in-flight reply to split, so it goes into `items`.
     func testOptimisticUserCarriesQueuedFlag() {
         var r = TranscriptReducer()
         r.addOptimisticUser(clientTurnId: "c1", text: "do this next", queued: true)
-        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
-        XCTAssertEqual(r.state.items[0].asUser?.queued, true)
+        XCTAssertTrue(r.state.items.isEmpty, "a queued send is held out of the transcript")
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.queued[0].pending, true)
+        XCTAssertEqual(r.state.queued[0].queued, true)
 
-        r.addOptimisticUser(clientTurnId: "c2", text: "right away")   // idle send → default false
-        XCTAssertEqual(r.state.items[1].asUser?.queued, false)
+        r.addOptimisticUser(clientTurnId: "c2", text: "right away")   // idle send → straight into items
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items[0].asUser?.queued, false)
+    }
+
+    /// Regression (the reported iOS bug): a message sent mid-stream must NOT be spliced into the
+    /// middle of the reply. The assistant keeps streaming after the send — the queued bubble stays
+    /// apart in `state.queued`, and the open assistant bubble keeps growing in place, unsplit.
+    func testQueuedSendDoesNotSplitStreamingReply() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .textDelta, payload: .object(["delta": .string("Working on ")])))
+        r.addOptimisticUser(clientTurnId: "c1", text: "also do this", queued: true)
+        r.apply(RunEvent(seq: 2, type: .textDelta, payload: .object(["delta": .string("it now.")])))
+
+        XCTAssertEqual(r.state.items.count, 1, "one assistant bubble — not split around the send")
+        XCTAssertEqual(r.state.items[0].asAssistant?.displayText, "Working on it now.")
+        XCTAssertEqual(r.state.queued.map(\.text), ["also do this"], "the send waits after the transcript")
+    }
+
+    /// When the runner leases the queued turn, its durable `user` event (carrying the tagged server
+    /// turnId) moves it out of `state.queued` into `items` as a real, correctly-ordered row.
+    func testQueuedSendReconcilesIntoTranscriptWhenLeased() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("done")])))
+        r.addOptimisticUser(clientTurnId: "c1", text: "next task", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t9")   // from POST /turns response
+        XCTAssertEqual(r.state.queued.count, 1)
+
+        r.apply(RunEvent(seq: 2, type: .user, turnId: "t9",
+                         payload: .object(["text": .string("next task")])))
+        XCTAssertTrue(r.state.queued.isEmpty, "leased → removed from the queue")
+        XCTAssertEqual(r.state.items.count, 2, "[assistant, user] in order")
+        XCTAssertEqual(r.state.items.last?.asUser?.text, "next task")
+        XCTAssertEqual(r.state.items.last?.asUser?.pending, false)
+    }
+
+    /// An interrupt drops queued follow-ups server-side, so the durable `interrupt` event clears the
+    /// local queue too — otherwise a queued bubble would linger with no `user` event to reconcile it.
+    func testInterruptClearsQueue() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "queued one", queued: true)
+        XCTAssertEqual(r.state.queued.count, 1)
+        r.apply(RunEvent(seq: 5, type: .interrupt, payload: .object([:])))
+        XCTAssertTrue(r.state.queued.isEmpty)
     }
 
     /// The durable `user` event carries `attachments` ([{id,mime,name}]) and a `ts` — both must

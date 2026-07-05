@@ -81,6 +81,28 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(restored.state.items.last?.asAssistant?.displayText, "hello")
     }
 
+    /// A pending queued send (held out of `items`) is part of the snapshot, so switching sessions /
+    /// backgrounding doesn't lose the visible queue.
+    func testQueuedSendSurvivesRoundTrip() throws {
+        var a = TranscriptReducer()
+        for ev in turnOne() { a.apply(ev) }
+        a.addOptimisticUser(clientTurnId: "cq", text: "run this after", queued: true)
+        let b = try roundTrip(a)
+        XCTAssertEqual(a.state, b.state)
+        XCTAssertEqual(b.state.queued.map(\.text), ["run this after"])
+        XCTAssertEqual(b.state.queued.first?.pending, true)
+    }
+
+    /// Migration safety: a snapshot written before `queued` existed lacks the key entirely. It must
+    /// default to empty rather than fail the whole decode (which would discard the cached session).
+    func testStateDecodesSnapshotWithoutQueuedKey() throws {
+        let json = #"{"items":[],"pendingApprovals":[],"background":[],"status":"AWAITING_INPUT","maxSeq":6}"#
+        let s = try JSONDecoder().decode(TranscriptState.self, from: Data(json.utf8))
+        XCTAssertEqual(s.queued, [])
+        XCTAssertEqual(s.maxSeq, 6)
+        XCTAssertEqual(s.status, .awaitingInput)
+    }
+
     // MARK: - FileTranscriptStore
 
     private func tempDir() -> URL {

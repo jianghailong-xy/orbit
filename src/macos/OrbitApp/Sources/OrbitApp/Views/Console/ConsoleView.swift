@@ -152,6 +152,16 @@ struct TranscriptView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
+                // Messages sent while a turn is in flight wait their turn: render them AFTER the
+                // transcript so a mid-turn send is never interleaved into the running reply (web's
+                // trailing `queued` bubbles). No `AnchorRow` — they haven't been asked yet, so they're
+                // never the sticky "Your question" (web's `:not(.chat-queued)`).
+                ForEach(console.state.queued, id: \.id) { bubble in
+                    UserBubbleView(bubble: bubble)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
                 Color.clear.frame(height: 1)
