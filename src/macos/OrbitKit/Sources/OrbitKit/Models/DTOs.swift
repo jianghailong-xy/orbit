@@ -263,6 +263,90 @@ public struct SessionDiff: Codable, Equatable, Sendable {
     public let patches: [FilePatch]
 }
 
+/// One file changed by a worktree-isolated session — the compact diff summary the runner computes
+/// (`git diff base..branch`). `status` is the git name-status letter (A/M/D/R/…); `additions` /
+/// `deletions` are -1 for a binary file. Mirrors `ChangedFile` in src/shared/src/dto.ts (web's
+/// `SessionChangedFile`) and rides on the `SessionDetail` payload, not the `/diff` side-table.
+public struct SessionChangedFile: Codable, Equatable, Sendable, Identifiable {
+    public let path: String
+    public let additions: Int
+    public let deletions: Int
+    public let status: String
+    public var id: String { path }
+    public init(path: String, additions: Int, deletions: Int, status: String) {
+        self.path = path
+        self.additions = additions
+        self.deletions = deletions
+        self.status = status
+    }
+}
+
+/// The agent nested on a session detail, as the worktree bar reads it: the id plus the agent's
+/// remembered default merge target (set when the user last switched targets in the merge dropdown;
+/// nil = the runner's auto-detected default). Distinct from `SessionAgentRef` (list rows), which
+/// carries name/model instead of the merge target.
+public struct SessionDetailAgent: Codable, Equatable, Sendable {
+    public let id: String
+    public let defaultMergeTarget: String?
+    public init(id: String, defaultMergeTarget: String? = nil) {
+        self.id = id
+        self.defaultMergeTarget = defaultMergeTarget
+    }
+}
+
+/// GET /sessions/:id — a single session's detail. Only the worktree-status-bar fields are typed
+/// (Codable ignores the rest of the payload); they mirror the same-named fields on web's
+/// `SessionDetail` and drive `WorktreeBarLogic`. The runner reports the live state each heartbeat
+/// (mid-turn diff / `worktreeDirty`) and the settled state at completion; merge/commit outcomes
+/// land on `mergeStatus` / `commitStatus` a heartbeat after the user acts. Optional throughout:
+/// older runners omit fields, and they're all null before the first worktree report.
+public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    /// The isolated branch this session's work lives on (`orbit/<slug>-<hash>`), or nil pre-isolation.
+    public let branch: String?
+    /// What the runner did: "worktree" (isolated) | "shared-nogit" (no git → the shared workDir).
+    public let isolationStatus: String?
+    /// Per-file diff summary of the worktree vs its base; empty when nothing changed.
+    public let changedFiles: [SessionChangedFile]?
+    /// True while the worktree has uncommitted changes (drives Commit vs Merge). Nil = not reported.
+    public let worktreeDirty: Bool?
+    /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
+    public let mergeStatus: String?
+    public let mergeError: String?
+    /// The branch the last merge targeted (nil = the runner's auto-detected default).
+    public let mergeTarget: String?
+    /// Candidate target branches for the "Merge to…" dropdown (empty/nil for older runners).
+    public let mergeTargets: [String]?
+    /// True when the branch tip already landed in the default target — the bar shows a "✓ In main"
+    /// chip instead of a redundant Merge button.
+    public let branchMerged: Bool?
+    /// Commit outcome: pending | committed | nochange | error. Nil until the user commits.
+    public let commitStatus: String?
+    public let commitError: String?
+    public let agent: SessionDetailAgent?
+
+    public init(id: String, branch: String? = nil, isolationStatus: String? = nil,
+                changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
+                mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
+                mergeTargets: [String]? = nil, branchMerged: Bool? = nil,
+                commitStatus: String? = nil, commitError: String? = nil,
+                agent: SessionDetailAgent? = nil) {
+        self.id = id
+        self.branch = branch
+        self.isolationStatus = isolationStatus
+        self.changedFiles = changedFiles
+        self.worktreeDirty = worktreeDirty
+        self.mergeStatus = mergeStatus
+        self.mergeError = mergeError
+        self.mergeTarget = mergeTarget
+        self.mergeTargets = mergeTargets
+        self.branchMerged = branchMerged
+        self.commitStatus = commitStatus
+        self.commitError = commitError
+        self.agent = agent
+    }
+}
+
 public struct AttachmentRef: Codable, Sendable {
     public let id: String
 }

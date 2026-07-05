@@ -68,6 +68,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    /// GET /sessions/:id decoded to the worktree-status-bar detail (branch, changedFiles, merge /
+    /// commit status, targets). Same endpoint as `session(_:)`, but decodes the richer worktree
+    /// fields the list-shaped `Session` drops.
+    public func sessionDetail(_ id: String) async throws -> SessionDetail { try await get("sessions/\(id)") }
+
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
         try await post("sessions", body: req)
     }

@@ -13,8 +13,6 @@ struct ConsoleView: View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    WorktreeBar(console: console)
-                    Divider()
                     TranscriptView(console: console)
                     if let msg = console.statusMessage {
                         HStack {
@@ -28,6 +26,8 @@ struct ConsoleView: View {
                     }
                     BackgroundTrayView(procs: console.state.background)
                     ApprovalsView(console: console)
+                    // Worktree status bar sits directly above the composer, matching web's layout.
+                    WorktreeBar(console: console)
                     ComposerView(console: console)
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
@@ -44,7 +44,7 @@ struct ConsoleView: View {
         #if os(iOS)
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
         // carries no title, so iOS would reserve a *large* — and empty — title bar: a big blank band
-        // at the top, above the worktree bar. Force the slim inline bar so the transcript starts
+        // at the top, above the transcript. Force the slim inline bar so the transcript starts
         // right under the back button. (The New-session compose page already does this; without it the
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
