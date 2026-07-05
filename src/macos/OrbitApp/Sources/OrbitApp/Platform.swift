@@ -147,26 +147,35 @@ private struct TitlebarSeparatorRemover: NSViewRepresentable {
 #if os(iOS)
 /// Adds a single window-level tap recognizer that lowers the keyboard on a tap outside any text
 /// input — the iOS convention the transcript needs (a SwiftUI gesture on the `List` doesn't fire on
-/// row taps). The backing view exists only to reach the `UIWindow`; the recognizer does the work.
+/// row taps). The backing view exists only to reach the `UIWindow`; the recognizer, owned by the
+/// coordinator (retained for the representable's lifetime), does the work.
 private struct KeyboardDismissInstaller: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeUIView(context: Context) -> UIView {
-        // Non-interactive so this zero-size view never intercepts touches itself.
-        let view = UIView(frame: .zero)
-        view.isUserInteractionEnabled = false
-        return view
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // The window isn't attached yet in makeUIView; install on the first update that has one.
-        guard let window = uiView.window else { return }
-        context.coordinator.install(on: window)
+    func makeUIView(context: Context) -> InstallerView { InstallerView(coordinator: context.coordinator) }
+    func updateUIView(_ uiView: InstallerView, context: Context) {}
+
+    /// Installs on `didMoveToWindow` — the reliable hook: the window is nil during init/makeUIView but
+    /// set the moment the view joins the hierarchy. (Doing it in `updateUIView` could miss if the
+    /// first update fires before the window is attached.)
+    final class InstallerView: UIView {
+        private let coordinator: Coordinator
+        init(coordinator: Coordinator) {
+            self.coordinator = coordinator
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false   // never intercept touches itself
+        }
+        required init?(coder: NSCoder) { fatalError("not used") }
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let window { coordinator.install(on: window) }
+        }
     }
 
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         private static let recognizerName = "orbit.keyboardDismissTap"
 
         func install(on window: UIWindow) {
-            // Idempotent: a rebuild of this representable must not stack duplicate recognizers.
+            // Idempotent: re-joining a window must not stack duplicate recognizers.
             if window.gestureRecognizers?.contains(where: { $0.name == Self.recognizerName }) == true { return }
             let tap = UITapGestureRecognizer(target: self, action: #selector(dismiss))
             tap.name = Self.recognizerName
