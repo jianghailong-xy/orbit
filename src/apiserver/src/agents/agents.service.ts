@@ -65,7 +65,7 @@ export class AgentsService {
 
   list(ownerId: string) {
     return this.prisma.agent.findMany({
-      where: { ownerId },
+      where: { ownerId, deletedAt: null },
       // Custom drag order first; never-reordered agents (position NULL) sort last by
       // creation time, so newly added agents append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -82,7 +82,7 @@ export class AgentsService {
    */
   async reorder(ownerId: string, ids: string[]) {
     const owned = await this.prisma.agent.findMany({
-      where: { id: { in: ids }, ownerId },
+      where: { id: { in: ids }, ownerId, deletedAt: null },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((a) => a.id));
@@ -95,7 +95,7 @@ export class AgentsService {
 
   async get(ownerId: string, id: string) {
     const agent = await this.prisma.agent.findFirst({
-      where: { id, ownerId },
+      where: { id, ownerId, deletedAt: null },
       include: { runner: { select: { id: true, name: true, displayName: true } } },
     });
     if (!agent) throw new NotFoundException('agent not found');
@@ -136,7 +136,11 @@ export class AgentsService {
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
-    await this.prisma.agent.delete({ where: { id } });
+    // Soft delete: stamp `deletedAt` rather than dropping the row. The agent's sessions and
+    // tasks stay linked (no FK SET NULL orphaning) and it stays restorable; every user-facing
+    // listing filters on `deletedAt: null`, while runtime lookups by a live session's agentId
+    // deliberately don't — so in-flight sessions keep resolving their agent's config.
+    await this.prisma.agent.update({ where: { id }, data: { deletedAt: new Date() } });
     return { ok: true };
   }
 }

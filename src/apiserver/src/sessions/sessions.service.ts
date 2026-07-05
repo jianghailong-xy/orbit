@@ -106,7 +106,7 @@ export class SessionsService {
     }
     if (refs.agentId) {
       const agent = await this.prisma.agent.findFirst({
-        where: { id: refs.agentId, ownerId },
+        where: { id: refs.agentId, ownerId, deletedAt: null },
         select: { id: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
@@ -130,7 +130,7 @@ export class SessionsService {
     let provider = AgentProvider.CLAUDE;
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
-        where: { id: dto.agentId, ownerId },
+        where: { id: dto.agentId, ownerId, deletedAt: null },
         select: { runnerId: true, provider: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
@@ -138,7 +138,7 @@ export class SessionsService {
       provider = agentProvider(agent.provider);
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
-        where: { id: dto.agentId, ownerId },
+        where: { id: dto.agentId, ownerId, deletedAt: null },
         select: { provider: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');

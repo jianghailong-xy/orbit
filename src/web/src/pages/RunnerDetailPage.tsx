@@ -501,7 +501,7 @@ export function RunnerDetailPage() {
                 modal.confirm({
                   title: `Delete agent “${a.name}”?`,
                   content:
-                    'This removes the agent and unlinks its sessions and tasks. This can’t be undone.',
+                    'This removes the agent from your list. Its sessions and tasks are kept and stay linked to it.',
                   okText: 'Delete',
                   okButtonProps: { danger: true },
                   cancelText: 'Cancel',

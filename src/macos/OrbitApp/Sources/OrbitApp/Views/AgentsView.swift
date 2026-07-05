@@ -415,6 +415,7 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
+    @State private var confirmingDelete = false
 
     var body: some View {
         Form {
@@ -474,14 +475,23 @@ struct AgentFormContent: View {
                         .keyboardShortcut(.return, modifiers: [])
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                     Spacer()
-                    Button("Delete", role: .destructive) {
-                        Task { await agents.delete(agent.id) }
-                    }
+                    Button("Delete", role: .destructive) { confirmingDelete = true }
                 }
             }
         }
         .formStyle(.grouped)
         .onAppear(perform: prefill)
+        // Delete sits a tap away from Save, so gate it behind an explicit confirmation. The server
+        // soft-deletes (the agent's sessions are kept and linked), but it still vanishes from the
+        // list, so make the action deliberate.
+        .confirmationDialog("Delete \(agent.name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete agent", role: .destructive) {
+                Task { await agents.delete(agent.id) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This removes the agent from your Agents list. Its sessions are kept.")
+        }
     }
 
     private func prefill() {

@@ -233,7 +233,7 @@ export class RunnerApiController {
     const fresh =
       !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
     const agents = await this.prisma.agent.findMany({
-      where: { runnerId: runner.id },
+      where: { runnerId: runner.id, deletedAt: null },
       select: { id: true, name: true, provider: true, agentKey: true, workDir: true },
       orderBy: { name: 'asc' },
     });

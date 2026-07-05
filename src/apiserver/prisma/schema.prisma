@@ -204,6 +204,11 @@ model Agent {
   ownerId            String   @map("owner_id") @db.Uuid
   owner              User     @relation(fields: [ownerId], references: [id])
   createdAt          DateTime @default(now()) @map("created_at")
+  // Soft delete: deleting an agent stamps this instead of removing the row, so its
+  // sessions/tasks stay linked (no orphaning) and it can be restored. NULL = live;
+  // every user-facing listing filters on `deletedAt: null`. Runtime lookups by a live
+  // session's agentId intentionally don't filter, so in-flight sessions keep running.
+  deletedAt          DateTime? @map("deleted_at")
   // Sidebar display order set by drag-to-reorder; NULL sorts last (after positioned
   // agents, by createdAt) so existing/new agents stay oldest-first until reordered.
   position           Int?     @map("position")

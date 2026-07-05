@@ -51,7 +51,7 @@ export class TasksService {
   private async assertOwnedAgent(ownerId: string, agentId?: string | null): Promise<void> {
     if (!agentId) return;
     const agent = await this.prisma.agent.findFirst({
-      where: { id: agentId, ownerId },
+      where: { id: agentId, ownerId, deletedAt: null },
       select: { id: true },
     });
     if (!agent) throw new ForbiddenException('agent not found');
