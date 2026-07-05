@@ -39,6 +39,17 @@ struct ComposerView: View {
     @State private var pickedPhotos: [PhotosPickerItem] = []
     #endif
 
+    // The composer bar is pinned to the screen bottom, so iOS opens this Menu upward and presents
+    // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Fable → Haiku)
+    // exactly like the web composer. macOS drops the menu down, so keep the source order there.
+    private var modelMenuItems: [ModelOption] {
+        #if os(iOS)
+        Array(AgentDefaults.models.reversed())
+        #else
+        AgentDefaults.models
+        #endif
+    }
+
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
     private var showSlash: Bool {
         guard let t = console.slashToken else { return false }
@@ -180,7 +191,7 @@ struct ComposerView: View {
                 }
 
                 Menu {
-                    ForEach(AgentDefaults.models) { m in
+                    ForEach(modelMenuItems) { m in
                         Button {
                             console.modelID = m.id
                             Task { await console.applyConfig(model: m.id) }
