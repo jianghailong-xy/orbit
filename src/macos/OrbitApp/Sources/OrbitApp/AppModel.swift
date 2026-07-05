@@ -52,6 +52,14 @@ final class AppModel {
     var sessionListFocusRequest = 0
     func focusSessionList() { sessionListFocusRequest &+= 1 }
 
+    /// The cached `Session` for an open console — searched across the Active list and the selected
+    /// agent's sessions, mirroring how web's console header reads `selected` from the session list.
+    /// Nil when the session isn't in a loaded list yet (e.g. a fresh deep link), in which case the
+    /// header falls back to the live stream's agent + status.
+    func session(id: String) -> Session? {
+        sessions.first { $0.id == id } ?? agents?.agentSessions.first { $0.id == id }
+    }
+
     let tokenStore: TokenStore
     let notifications = NotificationManager()
     private(set) var baseURL: URL?

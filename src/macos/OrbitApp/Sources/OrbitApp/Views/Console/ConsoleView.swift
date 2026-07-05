@@ -12,6 +12,12 @@ struct ConsoleView: View {
     let sessionID: String
     var agentID: String? = nil
     let registry: ConsoleRegistry
+    #if os(iOS)
+    // Looked up to build the nav-bar title (session name + "state · when"), mirroring how web's
+    // console header reads `selected` off the cached session list. iOS-only: macOS shows status in
+    // the in-transcript `statusBar` instead.
+    @Environment(AppModel.self) private var appModel
+    #endif
 
     var body: some View {
         Group {
@@ -54,9 +60,51 @@ struct ConsoleView: View {
         // right under the back button. (The New-session compose page already does this; without it the
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
+        // Inline title: the session name over a "state · when" subtitle, matching the web Agent
+        // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
+        // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
+        // band before; on iOS that band is now retired in favour of this.
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                ConsoleNavTitle(session: appModel.session(id: sessionID),
+                                console: registry.peek(sessionID))
+            }
+        }
         #endif
     }
 }
+
+#if os(iOS)
+/// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
+/// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
+/// title + timestamps) comes from the app's cached list; when it isn't loaded yet the title falls
+/// back to the live stream's agent name and the subtitle to its current status word.
+private struct ConsoleNavTitle: View {
+    let session: Session?
+    let console: ConsoleModel?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(SessionHeader.title(for: session, fallbackAgent: console?.agentName))
+                .font(.headline)
+                .lineLimit(1).truncationMode(.tail)
+            Text(subtitle)
+                .font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail)
+        }
+    }
+
+    private var subtitle: String {
+        if let s = SessionHeader.subtitle(for: session) { return s }
+        // No cached session yet (fresh deep link): show the live stream's status, prettified like
+        // the old band did (AWAITING_INPUT -> "Awaiting Input").
+        if let status = console?.state.status {
+            return status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+        return ""
+    }
+}
+#endif
 
 struct TranscriptView: View {
     let console: ConsoleModel
@@ -166,7 +214,11 @@ struct TranscriptView: View {
             // can't churn during a scroll.
             .animation(.easeOut(duration: 0.15), value: stuckID == nil)
         }
+        // macOS shows the session state in this band; iOS carries it in the nav-bar subtitle
+        // (`ConsoleNavTitle`) instead, matching the web header, so the band is retired there.
+        #if os(macOS)
         .safeAreaInset(edge: .top, spacing: 0) { statusBar }
+        #endif
     }
 
     // Which question is "stuck" to the top = the last user turn that sits ABOVE the item currently under
@@ -246,6 +298,7 @@ struct TranscriptView: View {
         .help("Scroll to latest")
     }
 
+    #if os(macOS)
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
@@ -264,6 +317,7 @@ struct TranscriptView: View {
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(.bar)
     }
+    #endif
 }
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
