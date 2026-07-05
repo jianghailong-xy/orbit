@@ -36,10 +36,12 @@ struct ConsoleView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        // Restarts only when `sessionID` changes: cancels the previous session's stream (its state
-        // stays cached) and resumes this one from its persisted `maxSeq` — no full replay.
+        // Only hydrate the cached model so the transcript renders warm. The live SSE stream is owned
+        // by the ConsoleModel and started/stopped by the registry's focus() off app state (not this
+        // view's lifecycle) — so backing out to the list reliably drops the connection even if SwiftUI
+        // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
-            await registry.model(for: sessionID, agentID: agentID).run()
+            _ = registry.model(for: sessionID, agentID: agentID)
         }
         #if os(iOS)
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page

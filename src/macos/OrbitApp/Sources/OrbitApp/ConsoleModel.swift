@@ -156,6 +156,27 @@ final class ConsoleModel {
 
     // MARK: live stream
 
+    /// The running `run()` loop, owned here rather than by the view's `.task`, so the registry can
+    /// start/stop it from the app's focus STATE instead of relying on SwiftUI to tear a `ConsoleView`
+    /// down. That guarantees the SSE connection is dropped the moment a session stops being focused —
+    /// even if SwiftUI keeps the off-screen console view cached — so streams can't quietly pile up in
+    /// the connection pool.
+    private var streamTask: Task<Void, Never>?
+
+    /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
+    /// is a no-op) and inert for a draft/session-less console.
+    func startStreaming() {
+        guard streamTask == nil, !isDraft, !sessionID.isEmpty else { return }
+        streamTask = Task { [weak self] in await self?.run() }
+    }
+
+    /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
+    /// `startStreaming()` resumes from `maxSeq` (no full replay). Safe when not streaming.
+    func stopStreaming() {
+        streamTask?.cancel()
+        streamTask = nil
+    }
+
     func run() async {
         Task { await loadSlashItems() }   // one-shot; concurrent with the stream connect
         Task { await loadContext() }      // footer context: agent name / plan usage / live config

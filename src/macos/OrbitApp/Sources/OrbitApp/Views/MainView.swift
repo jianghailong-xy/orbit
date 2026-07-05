@@ -24,6 +24,9 @@ struct MainView: View {
         // Drive the debounced console mount off the list selection (covers arrow-key navigation,
         // clicks, and a restored selection on appear).
         .onChange(of: model.selectedSessionID, initial: true) { _, _ in model.scheduleConsoleActivate() }
+        // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
+        // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
+        .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
         .sessionUndoToast()
     }
 }

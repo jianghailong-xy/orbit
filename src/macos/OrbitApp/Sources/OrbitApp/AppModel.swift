@@ -229,6 +229,27 @@ final class AppModel {
         }
     }
 
+    /// The session whose console is currently on screen (whichever section) — and therefore the one
+    /// that should be live-streaming. Nil when a list / placeholder / new-session draft is showing.
+    /// Section-aware so switching sections (or backing out to a list) stops the previous console's
+    /// stream even if SwiftUI keeps its view cached.
+    var focusedConsoleSessionID: String? {
+        switch selectedSection {
+        case .active: return activeConsoleSessionID
+        case .agents: return composingAgentSession ? nil : selectedAgentSessionID
+        default:      return nil
+        }
+    }
+
+    /// Push the current console focus to the registry, which starts exactly that session's SSE stream
+    /// and stops any other. Driven from the always-present shell on any focus change (MainView /
+    /// CompactShell `.onChange(of: focusedConsoleSessionID)`), so a stream never outlives its console
+    /// by depending on a view unmounting.
+    func syncConsoleFocus() {
+        let id = focusedConsoleSessionID
+        consoleRegistry?.focus(id, agentID: id.flatMap { agentID(for: $0) })
+    }
+
     func loadSessions() async {
         guard let api else { return }
         do {
