@@ -120,7 +120,9 @@ struct CompactShell: View {
         switch model.selectedSection {
         case .active:  return model.selectedSessionID == nil
         case .tasks:   return model.selectedTaskID == nil
-        case .agents:  return model.selectedAgentSessionID == nil
+        // The compose page (composing) is pushed too, not just a selected session's console — so the
+        // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
+        case .agents:  return model.selectedAgentSessionID == nil && !model.composingAgentSession
         case .runners: return model.selectedRunnerID == nil
         case .skills, .settings, .admin: return true
         }
