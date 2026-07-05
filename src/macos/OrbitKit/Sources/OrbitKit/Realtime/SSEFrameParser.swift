@@ -90,4 +90,12 @@ public enum SSEDecoding {
         guard let data = e.data.data(using: .utf8) else { return nil }
         return try? decoder.decode(RunEvent.self, from: data)
     }
+
+    /// Decode a control-plane frame (`GET /api/events`) into a `ControlEvent`. nil for frames
+    /// that aren't control events — notably the server's `{type:"ping"}` keepalive, which has no
+    /// sessionId and exists only to feed the byte watchdog.
+    public static func controlEvent(from e: SSEEvent) -> ControlEvent? {
+        guard let data = e.data.data(using: .utf8) else { return nil }
+        return try? decoder.decode(ControlEvent.self, from: data)
+    }
 }
