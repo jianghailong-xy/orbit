@@ -3,15 +3,15 @@
     <channel>
         <title>Orbit</title>
         <item>
-            <title>0.1.1-beta.43</title>
-            <pubDate>Sun, 05 Jul 2026 03:25:28 +0000</pubDate>
+            <title>0.1.1-beta.44</title>
+            <pubDate>Sun, 05 Jul 2026 12:27:28 +0000</pubDate>
             <link>https://github.com/jianghailong-xy/orbit</link>
             <sparkle:channel>beta</sparkle:channel>
-            <sparkle:version>849</sparkle:version>
-            <sparkle:shortVersionString>0.1.1-beta.43</sparkle:shortVersionString>
+            <sparkle:version>865</sparkle:version>
+            <sparkle:shortVersionString>0.1.1-beta.44</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.43/Orbit-v0.1.1-beta.43-arm64.zip" length="6347243" type="application/octet-stream" sparkle:edSignature="eJPcDV2sUlE5ujBGJkxghJVy2nUGyJl4G3gahKRuCyHSBYUu1I9QNHkwvp0Yz9AssQF3I0M05KTCSIFRNJtkAA=="/>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.44/Orbit-v0.1.1-beta.44-arm64.zip" length="6438388" type="application/octet-stream" sparkle:edSignature="8fqCcW/WnME8DXp4fiY0l/iG49HqWWWIZIpLbYEwHgnYqTMDrNfbt/UzRH7cHoT6HRwXUYc54CQHdpCrtvopCg=="/>
         </item>
         <item>
             <title>0.1.1-beta.42</title>
