@@ -132,14 +132,17 @@ struct ComposerView: View {
                 if console.state.status == .running {
                     Button { Task { await console.interrupt() } } label: {
                         Image(systemName: "stop.fill")
+                            .font(sendGlyphFont)
+                            .composerHitTarget()
                     }
                     .buttonStyle(.plain)
                     .help("Interrupt the current turn")
                 }
                 Button { Task { await console.send() } } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
+                        .font(sendGlyphFont)
                         .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
+                        .composerHitTarget()
                 }
                 .buttonStyle(.plain)
                 .disabled(!console.canSend)
@@ -297,6 +300,7 @@ struct ComposerView: View {
             Image(systemName: "plus")
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
+                .composerHitTarget()
         }
         .borderlessMenuStyle()
         .menuIndicator(.hidden)
@@ -623,4 +627,25 @@ private func formatReset(_ iso: String) -> String? {
     let out = DateFormatter()
     out.dateFormat = "MMM d, h:mm a"
     return out.string(from: date)
+}
+
+// The send/stop glyph is the composer's primary action, so on iOS it's sized up to read as the CTA
+// against the smaller, secondary `+`. macOS keeps the tighter `.title2` — the desktop bar stays compact.
+#if os(iOS)
+private let sendGlyphFont: Font = .title
+#else
+private let sendGlyphFont: Font = .title2
+#endif
+
+private extension View {
+    /// Pad a composer glyph out to Apple's 44×44pt minimum touch target on iOS, where a finger needs
+    /// the room. On macOS the mouse cursor is precise enough that the icon-sized hit area is fine, so
+    /// this is a no-op there and the bar keeps its tight desktop layout.
+    func composerHitTarget() -> some View {
+        #if os(iOS)
+        frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+        #else
+        self
+        #endif
+    }
 }
