@@ -32,6 +32,8 @@ struct OrbitiOSApp: App {
                         // be dead but not yet erroring, so kick the open consoles to reconnect promptly
                         // instead of waiting out URLSession's long read timeout.
                         model.consoleRegistry?.reconnectAll()
+                        // Same for the user-level control-plane stream that keeps the lists fresh.
+                        model.kickControlPlane()
                     } else {
                         // iOS can suspend/terminate at will, so checkpoint the moment we leave the
                         // foreground rather than relying on a clean quit.

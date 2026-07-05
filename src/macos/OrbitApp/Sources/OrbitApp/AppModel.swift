@@ -62,6 +62,13 @@ final class AppModel {
     private var api: APIClient?
     private var pollTask: Task<Void, Never>?
     private var lastSnapshot: [Session]?
+    /// The always-on control-plane stream (GET /api/events) and whether it's currently live.
+    /// While live it owns list freshness (events trigger coalesced snapshot refreshes) and the
+    /// 4s poll tick skips its fetch; any gap — reconnect backoff, an older server without the
+    /// endpoint — falls back to polling automatically. See `runControlPlane`.
+    private var controlTask: Task<Void, Never>?
+    private(set) var controlPlaneLive = false
+    private var controlRefreshScheduled = false
 
     private static let instanceKey = "orbit.instance"
 
@@ -172,6 +179,9 @@ final class AppModel {
     func logout() {
         pollTask?.cancel()
         pollTask = nil
+        controlTask?.cancel()
+        controlTask = nil
+        controlPlaneLive = false
         consoleActivateTask?.cancel()
         consoleActivateTask = nil
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
@@ -207,22 +217,112 @@ final class AppModel {
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
     }
 
-    /// Poll the Active list every 4s (the same cadence the web UI uses) to catch status changes
-    /// the SSE stream of a single open session won't show. Each tick also checkpoints the focused
-    /// console to disk, so a crash/quit loses at most a few seconds of the open transcript.
+    /// Keep the Active list fresh. The control-plane stream (below) is the primary source: while
+    /// it's live, its events drive coalesced refreshes and the 4s tick here skips its fetch. The
+    /// tick remains as the universal fallback — an older server without `/api/events`, or any
+    /// reconnect gap, degrades back to exactly the old polling behavior with no user action.
+    /// Each tick also checkpoints the focused console to disk regardless, so a crash/quit loses
+    /// at most a few seconds of the open transcript.
     func startPolling() {
         guard pollTask == nil else { return }
+        startControlPlane()
         pollTask = Task { @MainActor [weak self] in
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is still nil — prime it once so the sidebar account footer shows the real name
             // instead of the "Account" placeholder.
             if let self, self.user == nil { self.user = try? await self.api?.me() }
             while !Task.isCancelled {
-                await self?.loadSessions()
+                if let self, !self.controlPlaneLive { await self.loadSessions() }
                 if let self { self.consoleRegistry?.flush(self.activeConsoleSessionID) }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
+    }
+
+    // MARK: control-plane stream (GET /api/events)
+
+    private func startControlPlane() {
+        guard controlTask == nil, baseURL != nil else { return }
+        controlTask = Task { @MainActor [weak self] in await self?.runControlPlane() }
+    }
+
+    /// Force the control-plane stream to reconnect now — called when the app returns to the
+    /// foreground, where a socket suspended in the background can be dead but not yet erroring
+    /// (the watchdog would catch it, but a relaunch is immediate). No-op when signed out.
+    func kickControlPlane() {
+        guard controlTask != nil else { return }
+        controlTask?.cancel()
+        controlTask = nil
+        controlPlaneLive = false
+        startControlPlane()
+    }
+
+    /// The always-on control-plane consume loop: one per-user SSE stream carries lifecycle /
+    /// status / approval / background events for ALL sessions, replacing the poll as the driver
+    /// of the list, badges and notifications (docs/realtime-control-plane-stream.md §5.2).
+    ///
+    /// Freshness model — "snapshot + follow" (§4.5): on every (re)connect, one REST snapshot
+    /// rebuilds the derived list state; after that each control event triggers a coalesced
+    /// `loadSessions()` (200ms window). Reusing the snapshot path for event application keeps a
+    /// single source of truth for row shape, grouping, badges AND the notification diff — a
+    /// field-level upsert can come later if event volume ever warrants it.
+    private func runControlPlane() async {
+        guard let baseURL else { return }
+        let stream = URLSessionControlStream(baseURL: baseURL,
+                                             token: { [tokenStore] in tokenStore.token(for: baseURL) })
+        var policy = ReconnectPolicy()
+        while !Task.isCancelled {
+            do {
+                for try await item in stream.events() {
+                    policy.noteHealthy()
+                    switch item {
+                    case .connected:
+                        controlPlaneLive = true
+                        await loadSessions()   // rebuild from snapshot, then follow
+                    case .event:
+                        scheduleControlRefresh()
+                    }
+                }
+                // Clean close — reconnect after a beat.
+                controlPlaneLive = false
+                switch policy.next(after: .ended) {
+                case .stop: return
+                case .reconnect(let ms): if ms > 0 { await sleepMs(ms) }
+                }
+            } catch is CancellationError {
+                controlPlaneLive = false
+                return
+            } catch APIError.http(let status, _) where status == 404 || status == 401 {
+                // 404: an older server without /api/events — polling stays in charge for this
+                // sign-in. 401: the token died; the polling path handles the logout.
+                controlPlaneLive = false
+                return
+            } catch {
+                controlPlaneLive = false
+                switch policy.next(after: .failed) {
+                case .stop: return
+                case .reconnect(let ms): if ms > 0 { await sleepMs(ms) }
+                }
+            }
+        }
+        controlPlaneLive = false
+    }
+
+    /// Coalesce event-driven refreshes: a burst of control events (a turn ending fires STATUS +
+    /// TURN_END back-to-back) folds into one list fetch.
+    private func scheduleControlRefresh() {
+        guard !controlRefreshScheduled else { return }
+        controlRefreshScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let self else { return }
+            self.controlRefreshScheduled = false
+            await self.loadSessions()
+        }
+    }
+
+    private func sleepMs(_ ms: Int) async {
+        try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
     }
 
     /// Mount the selected session's console after a short debounce. Called from the view on every
