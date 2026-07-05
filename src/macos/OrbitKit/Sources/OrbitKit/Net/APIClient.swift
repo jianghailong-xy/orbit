@@ -22,7 +22,7 @@ public final class APIClient: @unchecked Sendable {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    public init(baseURL: URL, tokenStore: TokenStore, session: URLSession = .shared) {
+    public init(baseURL: URL, tokenStore: TokenStore, session: URLSession = .orbitREST) {
         self.baseURL = baseURL
         self.tokenStore = tokenStore
         self.session = session

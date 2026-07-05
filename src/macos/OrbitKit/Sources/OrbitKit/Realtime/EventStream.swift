@@ -34,7 +34,7 @@ public struct URLSessionEventStream: EventStreaming {
     let token: @Sendable () -> String?
     let session: URLSession
 
-    public init(baseURL: URL, token: @escaping @Sendable () -> String?, session: URLSession = .shared) {
+    public init(baseURL: URL, token: @escaping @Sendable () -> String?, session: URLSession = .orbitStreaming) {
         self.baseURL = baseURL
         self.token = token
         self.session = session
