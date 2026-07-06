@@ -134,6 +134,10 @@ public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     public var command: String?
     public var status: String    // running | completed | failed | killed
     public var outputTail: String
+    /// ISO-8601 of the launch (the surfacing tool_result / first background event) — powers the
+    /// tray's "5m ago". Optional, so it's nil until an event carrying `ts` lands and old snapshots
+    /// still decode (synthesized Codable reads a missing optional as nil). Web parity: `BgShell.startedTs`.
+    public var startedAt: String? = nil
 }
 
 /// A live tool-permission / question / plan prompt awaiting a human decision.

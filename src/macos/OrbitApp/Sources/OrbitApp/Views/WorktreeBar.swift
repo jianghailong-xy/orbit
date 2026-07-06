@@ -399,32 +399,106 @@ private struct DiffFileView: View {
     }
 }
 
-/// Strip of background shells the agent launched, between the transcript and approvals.
+/// Background shells the agent launched, shown as a collapsible tray between the transcript and
+/// approvals — a port of web's `BackgroundShellsTray`. Collapsed it's a one-line header
+/// ("Background processes · N running · N total"); tapping it reveals the list, where each row
+/// (status · command · id · age) opens as an accordion to show that shell's captured output tail.
 struct BackgroundTrayView: View {
     let procs: [BackgroundProc]
+    @State private var open = false
+    @State private var expandedID: String? = nil
 
     var body: some View {
         if !procs.isEmpty {
-            HStack(spacing: 12) {
-                Image(systemName: "gearshape.2.fill").foregroundStyle(.secondary)
-                ForEach(procs) { proc in
-                    HStack(spacing: 4) {
-                        Circle().fill(color(proc.status)).frame(width: 6, height: 6)
-                        Text(proc.command ?? proc.id).font(.orbitMono).lineLimit(1)
+            VStack(spacing: 0) {
+                Divider()
+                header
+                if open {
+                    Divider().opacity(0.5)
+                    ForEach(procs) { proc in
+                        BackgroundRow(proc: proc, expanded: expandedID == proc.id) {
+                            withAnimation(.easeOut(duration: 0.12)) {
+                                expandedID = expandedID == proc.id ? nil : proc.id
+                            }
+                        }
                     }
                 }
-                Spacer()
             }
-            .padding(.horizontal, 12).padding(.vertical, 4)
             .background(.bar)
         }
     }
 
-    private func color(_ status: String) -> Color {
-        switch status {
-        case "completed": return .green
-        case "failed", "killed": return .red
-        default: return .orange
+    private var runningCount: Int { procs.filter { $0.status == "running" }.count }
+
+    private var countText: String {
+        (runningCount > 0 ? "\(runningCount) running · " : "") + "\(procs.count) total"
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "gearshape.2.fill").font(.orbitMeta).foregroundStyle(.secondary)
+            Text("Background processes").font(.orbitLabel.weight(.semibold))
+            Text(countText).font(.orbitMeta).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            Image(systemName: open ? "chevron.down" : "chevron.right")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation(.easeOut(duration: 0.12)) { open.toggle() } }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(open ? "Hide background processes" : "Show background processes")
+    }
+}
+
+/// One background-shell row: a folded head (status · command · id · age) that expands to the
+/// captured output tail (or an empty-state note). Mirrors web's `BgShellRow`.
+private struct BackgroundRow: View {
+    let proc: BackgroundProc
+    let expanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                statusIcon.frame(width: 18)
+                Text(proc.command ?? proc.id)
+                    .font(.orbitMono).lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(proc.id).font(.orbitMonoFine).foregroundStyle(.secondary).lineLimit(1)
+                if let ts = proc.startedAt, let rel = RelativeTime.format(ts) {
+                    Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.orbitMeta).foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onToggle)
+            if expanded {
+                if proc.outputTail.isEmpty {
+                    Text("No output captured yet — the agent hasn't read this process's output.")
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    CollapsibleMono(text: proc.outputTail)
+                        .padding(.horizontal, 9).padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    /// Status glyph mirroring web's `BgStatusIcon`. Uses `ProgressView` for the live spinner like the
+    /// neighbouring tool cards do — safe here since the tray isn't inside the recycling transcript List.
+    @ViewBuilder private var statusIcon: some View {
+        switch proc.status {
+        case "running":   ProgressView().controlSize(.small)
+        case "completed": Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
+        case "failed":    Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
+        case "killed":    Image(systemName: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        default:          Image(systemName: "minus.circle").font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
 }

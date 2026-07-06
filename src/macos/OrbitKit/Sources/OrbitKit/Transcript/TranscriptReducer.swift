@@ -286,7 +286,7 @@ public struct TranscriptReducer: Sendable, Codable {
         if let id, !isError, let cmd = bgLaunch[id], let result,
            result.contains("running in background with ID"),
            !state.background.contains(where: { $0.id == id }) {
-            state.background.append(BackgroundProc(id: id, command: cmd, status: "running", outputTail: ""))
+            state.background.append(BackgroundProc(id: id, command: cmd, status: "running", outputTail: "", startedAt: ev.ts))
         }
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
             if case .toolCall(var card) = state.items[idx], card.result == nil, id == nil || card.id == id {
@@ -421,7 +421,7 @@ public struct TranscriptReducer: Sendable, Codable {
             state.background[i].status = status
             if let command { state.background[i].command = command }
         } else {
-            state.background.append(BackgroundProc(id: id, command: command, status: status, outputTail: ""))
+            state.background.append(BackgroundProc(id: id, command: command, status: status, outputTail: "", startedAt: ev.ts))
         }
     }
 
@@ -436,7 +436,7 @@ public struct TranscriptReducer: Sendable, Codable {
             state.background[i].outputTail = snapshot
         } else {
             state.background.append(BackgroundProc(id: id, command: toolUseID.flatMap { bgLaunch[$0] },
-                                                   status: "running", outputTail: snapshot))
+                                                   status: "running", outputTail: snapshot, startedAt: ev.ts))
         }
     }
 

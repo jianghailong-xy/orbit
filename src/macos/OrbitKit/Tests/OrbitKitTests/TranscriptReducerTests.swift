@@ -159,6 +159,19 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.background.isEmpty, "no confirmation ⇒ no tray row")
     }
 
+    /// The tray row keeps the launch wall-clock (the surfacing tool_result's `ts`) so it can render
+    /// "5m ago" like web's `BgShell.startedTs`. Stored raw; the view formats it via `RelativeTime`.
+    func testBackgroundShellCapturesStartedAtFromLaunchTimestamp() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 10, type: .toolUse, payload: .object([
+            "toolUseId": .string("tu7"), "name": .string("Bash"),
+            "input": .object(["command": .string("npm run dev"), "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 11, type: .toolResult, ts: "2026-06-26T10:00:00Z", payload: .object([
+            "toolUseId": .string("tu7"),
+            "content": .string("Command running in background with ID: dev7. Output is being written to: /t/dev7.output.")])))
+        XCTAssertEqual(r.state.background.first?.startedAt, "2026-06-26T10:00:00Z")
+    }
+
     func testDurableDedupKeepsSingleItem() {
         var r = TranscriptReducer()
         let ev = RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hi")]))
