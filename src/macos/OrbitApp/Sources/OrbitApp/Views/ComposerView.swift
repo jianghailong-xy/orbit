@@ -133,7 +133,6 @@ struct ComposerView: View {
                     Button { Task { await console.interrupt() } } label: {
                         Image(systemName: "stop.fill")
                             .font(sendGlyphFont)
-                            .composerHitTarget()
                     }
                     .buttonStyle(.plain)
                     .help("Interrupt the current turn")
@@ -142,7 +141,6 @@ struct ComposerView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(sendGlyphFont)
                         .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
-                        .composerHitTarget()
                 }
                 .buttonStyle(.plain)
                 .disabled(!console.canSend)
@@ -300,7 +298,6 @@ struct ComposerView: View {
             Image(systemName: "plus")
                 .font(.system(size: 15))
                 .foregroundStyle(.secondary)
-                .composerHitTarget(width: 30)
         }
         .borderlessMenuStyle()
         .menuIndicator(.hidden)
@@ -636,18 +633,3 @@ private let sendGlyphFont: Font = .title
 #else
 private let sendGlyphFont: Font = .title2
 #endif
-
-private extension View {
-    /// Give a composer glyph a 44pt-tall touch target on iOS, where a finger needs the room. Width
-    /// defaults to 44 — the send/stop circles fill that. The thin `+` passes a narrower width so its
-    /// hit box doesn't strand a block of empty space to the left of the text (a 15pt glyph centered in
-    /// 44pt reads as the `+` "taking up too much room"); 30pt keeps a comfortable tap area without the
-    /// gap. macOS is a no-op: the mouse is precise enough that the icon-sized hit area is fine there.
-    func composerHitTarget(width: CGFloat = 44) -> some View {
-        #if os(iOS)
-        frame(width: width, height: 44).contentShape(Rectangle())
-        #else
-        self
-        #endif
-    }
-}
