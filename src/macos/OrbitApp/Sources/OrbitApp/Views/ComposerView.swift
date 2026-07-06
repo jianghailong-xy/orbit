@@ -67,7 +67,7 @@ struct ComposerView: View {
                     Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(.blue)
                     Text(reply.question.isEmpty ? "Replying to Claude’s question"
                                                 : "Replying to Claude’s question: \(reply.question)")
-                        .font(.caption).lineLimit(1)
+                        .font(.orbitLabel).lineLimit(1)
                     Spacer()
                     Button { console.cancelChatReply() } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -93,7 +93,7 @@ struct ComposerView: View {
 
                 TextField(placeholder, text: $console.composerText, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 14))
+                    .font(.orbitControl)
                     .lineLimit(1...6)
                     // Fill the available width; vertical centering comes from the HStack's .center
                     // alignment, so the placeholder, the + and the send button all sit on one
@@ -228,7 +228,9 @@ struct ComposerView: View {
                     PlanUsageIndicator(usage: usage)
                 }
             }
-            .font(.caption)
+            // Footer pickers are tappable controls, not metadata — list-subtitle size on iOS (15pt)
+            // for comfortable targets; macOS keeps the dense web-parity caption.
+            .font(.orbitListSubtitle)
         }
         .padding(10)
         .background(.bar)
@@ -328,7 +330,7 @@ struct ComposerView: View {
         HStack(spacing: 3) {
             Text(text).lineLimit(1)
             Image(systemName: "chevron.up.chevron.down")
-                .font(.system(size: 8))
+                .font(.orbitMeta)
                 .foregroundStyle(.tertiary)
         }
         .foregroundStyle(.secondary)
@@ -364,7 +366,7 @@ struct ComposerView: View {
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.caption2)
+                            .font(.orbitMeta)
                             .foregroundStyle(.white, .black.opacity(0.55))
                     }
                     .buttonStyle(.plain)
@@ -383,7 +385,7 @@ struct ComposerView: View {
                 .buttonStyle(.plain)
                 .help("Remove file")
             }
-            .font(.caption)
+            .font(.orbitLabel)
             .padding(.vertical, 4).padding(.horizontal, 8)
             .frame(maxWidth: 220, alignment: .leading)
             .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
@@ -409,9 +411,9 @@ struct ComposerView: View {
                     HStack(spacing: 6) {
                         Text("/\(item.name)").font(.callout.monospaced())
                         Text(item.type == "skill" ? "skill" : "cmd")
-                            .font(.caption2).foregroundStyle(.secondary)
+                            .font(.orbitMeta).foregroundStyle(.secondary)
                         if let d = item.description, !d.isEmpty {
-                            Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 0)
                     }

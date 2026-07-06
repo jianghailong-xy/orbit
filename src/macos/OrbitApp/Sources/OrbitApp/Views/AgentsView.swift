@@ -313,12 +313,12 @@ struct AgentSessionRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title ?? "Untitled session").lineLimit(1)
                     if let line {
-                        Text(line.text).font(.caption).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                        Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
-                    Text("\(n)").font(.caption2.bold())
+                    Text("\(n)").font(.orbitMeta.bold())
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(.orange, in: Capsule()).foregroundStyle(.white)
                 }

@@ -263,7 +263,7 @@ private struct NavigationDrawer: View {
         if let agents = model.agents, !agents.items.isEmpty {
             ForEach(agents.groups) { group in
                 Text(agents.runnerLabel(group.runnerId))
-                    .font(.caption)
+                    .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .padding(.leading, 20)
                     .padding(.top, 8)
@@ -290,7 +290,7 @@ private struct NavigationDrawer: View {
                     .foregroundStyle(.primary)
                 if agent.enabled == false {
                     Text("disabled")
-                        .font(.caption2)
+                        .font(.orbitMeta)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.quaternary, in: Capsule())

@@ -39,13 +39,16 @@ struct UserBubbleView: View {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
                 }
                 if !bubble.text.isEmpty {
+                    // Same prose token as the assistant turn — one reading size across the transcript
+                    // (pre-token, this inherited the platform default and mismatched the reply).
                     Text(shown).textSelection(.enabled)
+                        .font(.orbitProse)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
-                        .buttonStyle(.plain).font(.caption).foregroundStyle(.secondary)
+                        .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 meta
             }
@@ -99,14 +102,14 @@ struct UserBubbleView: View {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.caption2)
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitMeta)
                     }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Copy message")
                 }
                 if bubble.pending {
-                    Text(bubble.queued ? "Queued" : "Sending…").font(.caption2).foregroundStyle(.secondary)
+                    Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
                 } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
-                    Text(rel).font(.caption2).foregroundStyle(.secondary)
+                    Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
             .frame(height: 16)
@@ -151,7 +154,7 @@ struct AssistantBubbleView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .font(.system(size: 14))
+            .font(.orbitProse)
             .foregroundStyle(Color.transcriptInk)
             .textSelection(.enabled)
             if !bubble.isFinalized { TypingDots() }
@@ -175,10 +178,10 @@ struct ThinkingView: View {
                     Text(block.displayText).lineSpacing(5)
                 }
             }
-            .font(.callout).foregroundStyle(.secondary)
+            .font(.orbitProseAside).foregroundStyle(.secondary)
             .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
         } label: {
-            Label("Thinking", systemImage: "brain").font(.caption).foregroundStyle(.secondary)
+            Label("Thinking", systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
 }

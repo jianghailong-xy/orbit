@@ -99,15 +99,9 @@ private struct MarkdownBlockView: View {
     }
 
     private func headingFont(_ level: Int) -> Font {
-        // Explicit sizes (not semantic tokens) so the scale stays a notch above the 14pt body the
-        // assistant call site sets — otherwise an h4 (`.body` = 13pt) renders smaller than the
-        // prose it heads. Roughly mirrors web's 1.3 / 1.18 / 1.05 em heading ramp.
-        switch level {
-        case 1:  return .system(size: 20)
-        case 2:  return .system(size: 17)
-        case 3:  return .system(size: 15)
-        default: return .system(size: 14)
-        }
+        // The per-platform ramp lives in Typography.swift: each step sits at or above orbitProse so
+        // an h4 never renders smaller than the prose it heads. Roughly mirrors web's heading em ramp.
+        Font.orbitHeading(level)
     }
 }
 
@@ -154,7 +148,7 @@ private struct MarkdownTableView: View {
 
     private func cell(_ text: String, column: Int, header: Bool) -> some View {
         inlineMarkdown(text)
-            .font(.system(size: 13))
+            .font(.orbitTableCell)
             .fontWeight(header ? .semibold : .regular)
             .frame(maxWidth: .infinity, alignment: frameAlignment(column))
             .padding(.vertical, 4)
@@ -183,7 +177,7 @@ private struct CodeBlockView: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(code)
-                .font(.system(.caption, design: .monospaced))
+                .font(.orbitMono)
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .padding(10)
@@ -193,7 +187,7 @@ private struct CodeBlockView: View {
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button(action: copy) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.caption)
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitLabel)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
