@@ -73,9 +73,10 @@ type SessionLiveState struct {
 	// MergeTargets is the repo's candidate merge-target branches (local heads minus orbit/*),
 	// for the status bar's "Merge to…" dropdown. Omitted when none / not isolated.
 	MergeTargets []string `json:"mergeTargets,omitempty"`
-	// BranchMerged: the branch tip is already an ancestor of the default merge target (main, else
-	// master) — the work already landed there. Drives the bar's "✓ In main" chip over a redundant
-	// Merge button. No omitempty (false must be sent so the server can clear a stale true).
+	// BranchMerged: the branch's work already landed in the default merge target (main, else
+	// master) — either as an ancestor (fast-forward) or as patch-equivalent commits (a squash/rebase
+	// merge under new SHAs). Drives the bar's "✓ In main" chip over a redundant Merge button. No
+	// omitempty (false must be sent so the server can clear a stale true).
 	BranchMerged bool `json:"branchMerged"`
 }
 

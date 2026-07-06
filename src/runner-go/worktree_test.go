@@ -319,6 +319,46 @@ func TestBranchMergedInto_ZeroCommitsPastFork(t *testing.T) {
 	}
 }
 
+// TestBranchMergedInto_PatchEquivalent: a branch whose commit landed in the target under a
+// DIFFERENT sha — a squash/rebase merge, or Orbit's own rebase-based "Merge to main" — is still
+// merged even though is-ancestor can't see it. This is the false-positive Merge button the
+// patch-id fallback fixes.
+func TestBranchMergedInto_PatchEquivalent(t *testing.T) {
+	repo := initRepo(t) // main + base commit
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+
+	// Fork a branch and commit real work on it.
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	tip := mustGit(t, repo, "rev-parse", "HEAD")
+	feat := &Worktree{Branch: "orbit/feat", BaseSha: base, RepoDir: repo}
+
+	// Advance main on its own first, then replay the branch's patch on top: a different parent (and
+	// tree) forces a NEW sha — the real "branch forked, main moved on, the work landed ahead under a
+	// fresh hash" shape a squash/rebase merge (and Orbit's "Merge to main") produces. A bare
+	// cherry-pick onto the same base could reuse the identical sha and defeat the point.
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "unrelated.txt", "unrelated\n", "unrelated main work")
+	mustGit(t, repo, "cherry-pick", tip)
+
+	// Precondition: is-ancestor no longer sees it (main's copy carries a different sha).
+	if _, err := git(repo, "merge-base", "--is-ancestor", "orbit/feat", "main"); err == nil {
+		t.Fatal("precondition: a re-hashed merge must leave the branch tip NOT an ancestor of main")
+	}
+	if !branchMergedInto(feat) {
+		t.Error("a branch whose patch already landed in main (different sha) must report merged")
+	}
+
+	// A branch with work genuinely absent from main still reports not-merged via the same fallback
+	// (cherry marks its commit '+'), so the actionable Merge button stays.
+	mustGit(t, repo, "checkout", "-b", "orbit/other")
+	commitFile(t, repo, "other.txt", "other\n", "other work")
+	other := &Worktree{Branch: "orbit/other", BaseSha: base, RepoDir: repo}
+	if branchMergedInto(other) {
+		t.Error("a branch with work not in main must report not-merged")
+	}
+}
+
 // addOriginBare wires a throwaway bare repo as 'origin' and pushes repo's main to it, so
 // origin/<branch> remote-tracking refs exist for the merge-sync tests.
 func addOriginBare(t *testing.T, repo string) string {

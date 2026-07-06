@@ -340,11 +340,13 @@ model Session {
   // minus Orbit's own orbit/* session branches), populating the dropdown. Refreshed each
   // heartbeat while live and at completion; empty for older runners (dropdown hidden).
   mergeTargets      String[]  @default([]) @map("merge_targets")
-  // branchMerged is the runner's `git merge-base --is-ancestor branch <default target>` result,
-  // refreshed alongside worktreeDirty on each worktree report: true → this branch is already in
-  // main (e.g. merged out-of-band on the command line), so the bar shows a "✓ In main" chip
-  // instead of a redundant Merge button. Null = the runner hasn't reported it (older runner /
-  // not yet recomputed) → the bar keeps its mergeStatus-driven behavior.
+  // branchMerged is the runner's verdict that this branch's work is already in the default target
+  // (main, else master): the branch tip is an ancestor of it (fast-forward / command-line push), or
+  // every post-fork commit has a patch-equivalent there (a squash/rebase merge under new SHAs, e.g.
+  // Orbit's own rebase-based "Merge to main"). Refreshed alongside worktreeDirty on each worktree
+  // report: true → the bar shows a "✓ In main" chip instead of a redundant Merge button. Null = the
+  // runner hasn't reported it (older runner / not yet recomputed) → the bar keeps its
+  // mergeStatus-driven behavior.
   branchMerged      Boolean?  @map("branch_merged")
   // ── "Commit" (UI button on the worktree status bar, for a live session) ─────
   // worktreeDirty is the runner's last-reported `git status` for the live worktree: true

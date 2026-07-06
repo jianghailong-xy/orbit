@@ -81,12 +81,15 @@ func mergeTargetsForWT(wt *Worktree) []string {
 	return listMergeTargets(wt.RepoDir)
 }
 
-// branchMergedInto reports whether the worktree's branch tip is already an ancestor of the repo's
-// default merge target (main, else master) — i.e. the work already landed there, e.g. via an
-// out-of-band command-line merge. The status bar shows a "✓ In main" chip instead of a redundant
-// Merge button when true. Mirrors mergeToMain's auto-detected default (it judges the same target
-// the plain "Merge to main" button would use). False when nothing's isolated, no target exists,
-// or git can't decide — a conservative default that keeps the actionable Merge button.
+// branchMergedInto reports whether the worktree's branch has already landed in the repo's default
+// merge target (main, else master), so the status bar shows a "✓ In main" chip instead of a
+// redundant Merge button. Two ways it can already be there: the branch tip is an ancestor of the
+// target (a fast-forward or a command-line push), OR every commit since the fork has an equivalent
+// patch in the target (a squash/rebase merge — including Orbit's own "Merge to main", which rebases
+// the branch onto the target and so replays its commits under fresh SHAs that is-ancestor can't
+// match). Mirrors mergeToMain's auto-detected default (it judges the same target the plain "Merge
+// to main" button would use). False when nothing's isolated, no target exists, the branch is the
+// target, or git can't decide — a conservative default that keeps the actionable Merge button.
 func branchMergedInto(wt *Worktree) bool {
 	if wt == nil || wt.Branch == "" {
 		return false
@@ -112,10 +115,37 @@ func branchMergedInto(wt *Worktree) bool {
 			return false
 		}
 	}
-	// `merge-base --is-ancestor A B` exits 0 when A is contained in B, 1 when not, 128 on error;
-	// git() returns a non-nil error for any non-zero exit, so err == nil ⇔ already merged.
-	_, err := git(wt.RepoDir, "merge-base", "--is-ancestor", wt.Branch, target)
-	return err == nil
+	// Fast path — the branch tip is literally contained in the target (a fast-forward, or a
+	// command-line `push origin HEAD:main`). `merge-base --is-ancestor A B` exits 0 when A is an
+	// ancestor of B, non-zero otherwise; git() returns a non-nil error for any non-zero exit, so
+	// err == nil ⇔ already merged.
+	if _, err := git(wt.RepoDir, "merge-base", "--is-ancestor", wt.Branch, target); err == nil {
+		return true
+	}
+	// Slow path — the branch's work landed in the target under NEW commit hashes, so is-ancestor
+	// can't see it: a squash-merge, a rebase, or Orbit's own "Merge to main" (which rebases the
+	// branch onto the target, replaying its commits with fresh SHAs). Fall back to patch-id
+	// equivalence: `git cherry <target> <branch>` lists each of the branch's post-fork commits,
+	// prefixed '-' when an equivalent patch already exists in the target, '+' when it doesn't. Every
+	// commit accounted for ('-', none '+') ⇒ the work is in the target under a different identity —
+	// still merged. Any '+' (or a git error / empty output) stays conservatively false, keeping the
+	// actionable Merge button.
+	out, err := git(wt.RepoDir, "cherry", target, wt.Branch)
+	if err != nil {
+		return false
+	}
+	merged := false
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "+") {
+			return false // a post-fork commit has no equivalent in the target yet
+		}
+		merged = true // a '-' line: this commit's patch already exists in the target
+	}
+	return merged
 }
 
 // defaultGitignore is written into a non-git workDir before its baseline commit (only when
