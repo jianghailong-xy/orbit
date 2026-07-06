@@ -37,9 +37,9 @@ struct ToolApprovalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(approval.toolName ?? "Tool", systemImage: "hand.raised.fill")
-                .foregroundStyle(.orange).font(.callout.bold())
+                .foregroundStyle(.orange).font(.orbitProse.bold())
             if let summary {
-                Text(summary).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(3)
+                Text(summary).font(.orbitMono).foregroundStyle(.secondary).lineLimit(3)
             }
             HStack {
                 Button("Allow") { Task { await console.decide(approval, behavior: .allow) } }
@@ -76,9 +76,9 @@ struct QuestionCard: View {
             ForEach(questions) { q in
                 VStack(alignment: .leading, spacing: 6) {
                     if let header = q.header {
-                        Text(header).font(.caption.bold()).foregroundStyle(.secondary)
+                        Text(header).font(.orbitLabel.bold()).foregroundStyle(.secondary)
                     }
-                    Text(q.question).font(.callout.bold())
+                    Text(q.question).font(.orbitProse.bold())
                     ForEach(q.options) { opt in
                         Button { toggle(q, opt.label) } label: {
                             HStack(alignment: .top, spacing: 8) {
@@ -87,7 +87,7 @@ struct QuestionCard: View {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(opt.label)
                                     if let d = opt.description {
-                                        Text(d).font(.caption).foregroundStyle(.secondary)
+                                        Text(d).font(.orbitLabel).foregroundStyle(.secondary)
                                     }
                                 }
                                 Spacer()
@@ -97,9 +97,9 @@ struct QuestionCard: View {
                     }
                     // claude's AskUserQuestion always allows a free-typed answer, not just a listed option.
                     TextField("Or type your own answer…", text: customBinding(q))
-                        .textFieldStyle(.roundedBorder).font(.callout)
+                        .textFieldStyle(.roundedBorder).font(.orbitControl)
                     if q.multiSelect {
-                        Text("multi-select").font(.caption2).foregroundStyle(.secondary)
+                        Text("multi-select").font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -162,8 +162,8 @@ struct PlanCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Plan", systemImage: "list.bullet.clipboard").font(.callout.bold())
-            MarkdownView(source: plan).font(.callout).textSelection(.enabled)
+            Label("Plan", systemImage: "list.bullet.clipboard").font(.orbitProse.bold())
+            MarkdownView(source: plan).font(.orbitProse).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack {
                 Button("Approve") { Task { await console.decide(approval, behavior: .allow) } }

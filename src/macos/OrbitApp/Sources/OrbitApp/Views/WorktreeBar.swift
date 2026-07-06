@@ -42,7 +42,7 @@ struct WorktreeBar: View {
     private var nudge: some View {
         HStack(spacing: 8) {
             Text("⚠ Shared workDir — not isolated")
-                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                .font(.orbitLabel.weight(.semibold)).foregroundStyle(.orange)
             Spacer(minLength: 4)
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
@@ -85,7 +85,7 @@ struct WorktreeBar: View {
             PlatformPasteboard.copyString(branch)
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.branch").font(.caption2).foregroundStyle(.secondary)
+                Image(systemName: "arrow.triangle.branch").font(.orbitMeta).foregroundStyle(.secondary)
                 BranchLabelView(branch: branch).lineLimit(1).truncationMode(.middle)
             }
             .padding(.horizontal, 6).padding(.vertical, 2)
@@ -101,7 +101,7 @@ struct WorktreeBar: View {
             + Text(" −\(del)").foregroundStyle(.red)
             + Text(" · \(count) \(count == 1 ? "file" : "files")\(committed ? " · committed" : "")")
                 .foregroundStyle(.secondary))
-            .font(.caption.monospaced())
+            .font(.orbitMono)
             .lineLimit(1)
             .truncationMode(.tail)
     }
@@ -110,7 +110,7 @@ struct WorktreeBar: View {
         Button {
             showDiff = true   // DiffSheet fetches the per-file patches on appear.
         } label: {
-            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            Image(systemName: "chevron.right").font(.orbitLabel.weight(.semibold))
                 .foregroundStyle(.secondary).frame(width: 24, height: 24)
         }
         .buttonStyle(.plain)
@@ -127,9 +127,9 @@ struct BranchLabelView: View {
             (Text(p.prefix).foregroundStyle(.secondary)
                 + Text(p.slug)
                 + Text(p.hash).foregroundStyle(.secondary))
-                .font(.caption.monospaced())
+                .font(.orbitMono)
         } else {
-            Text(branch).font(.caption.monospaced())
+            Text(branch).font(.orbitMono)
         }
     }
 }
@@ -193,7 +193,7 @@ private struct WorktreeMergeControl: View {
                 }
             }
         } label: {
-            Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(tint)
+            Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold)).foregroundStyle(tint)
                 .padding(.horizontal, 6).padding(.vertical, 4)
                 .background(tint.opacity(0.14), in: Capsule())
                 .overlay(Capsule().strokeBorder(tint.opacity(0.3)))
@@ -234,7 +234,7 @@ private struct WTPillButton: View {
         let c = disabled ? Color.secondary : tint
         Button(action: action) {
             Text(title)
-                .font(.caption.weight(.semibold))
+                .font(.orbitLabel.weight(.semibold))
                 .lineLimit(1)
                 .padding(.horizontal, 10).padding(.vertical, 3)
                 .foregroundStyle(c)
@@ -251,7 +251,7 @@ private struct WTChip: View {
     let title: String
     var color: Color = .green
     var body: some View {
-        Text(title).font(.caption.weight(.semibold)).foregroundStyle(color).lineLimit(1)
+        Text(title).font(.orbitLabel.weight(.semibold)).foregroundStyle(color).lineLimit(1)
     }
 }
 
@@ -295,15 +295,15 @@ private struct DiffFileRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(String(file.status.prefix(1)).uppercased())
-                .font(.caption2.weight(.bold)).foregroundStyle(statusColor).frame(width: 14)
-            pathText.font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                .font(.orbitMonoFine.weight(.bold)).foregroundStyle(statusColor).frame(width: 14)
+            pathText.font(.orbitMono).lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 6)
             if file.additions < 0 || file.deletions < 0 {
-                Text("binary").font(.caption2).foregroundStyle(.secondary)
+                Text("binary").font(.orbitMeta).foregroundStyle(.secondary)
             } else {
                 (Text("+\(file.additions)").foregroundStyle(.green)
                     + Text(" −\(file.deletions)").foregroundStyle(.red))
-                    .font(.caption2.monospaced())
+                    .font(.orbitMonoFine)
             }
         }
     }
@@ -345,12 +345,12 @@ private struct DiffFileView: View {
             } else if let text = patch?.patch, !text.isEmpty {
                 let (attr, trimmed) = Self.colorize(text)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(attr).font(.caption.monospaced()).textSelection(.enabled)
+                    Text(attr).font(.orbitDiffLine).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if trimmed {
-                        Text("(preview trimmed)").font(.caption2).foregroundStyle(.secondary)
+                        Text("(preview trimmed)").font(.orbitMeta).foregroundStyle(.secondary)
                     } else if patch?.truncated == true {
-                        Text("(diff truncated)").font(.caption2).foregroundStyle(.secondary)
+                        Text("(diff truncated)").font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 }
                 .padding(12)
@@ -369,7 +369,7 @@ private struct DiffFileView: View {
     }
 
     private func placeholder(_ s: String) -> some View {
-        Text(s).font(.caption).foregroundStyle(.secondary)
+        Text(s).font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .center).padding(.top, 40)
     }
 
@@ -410,7 +410,7 @@ struct BackgroundTrayView: View {
                 ForEach(procs) { proc in
                     HStack(spacing: 4) {
                         Circle().fill(color(proc.status)).frame(width: 6, height: 6)
-                        Text(proc.command ?? proc.id).font(.caption.monospaced()).lineLimit(1)
+                        Text(proc.command ?? proc.id).font(.orbitMono).lineLimit(1)
                     }
                 }
                 Spacer()
