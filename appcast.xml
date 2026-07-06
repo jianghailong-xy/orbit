@@ -8,10 +8,10 @@
             <link>https://github.com/jianghailong-xy/orbit</link>
             <sparkle:channel>beta</sparkle:channel>
             <sparkle:version>902</sparkle:version>
-            <sparkle:shortVersionString>0.1.1-beta.53</sparkle:shortVersionString>
+            <sparkle:shortVersionString>0.1.1-beta.54</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.53/Orbit-v0.1.1-beta.53-arm64.zip" length="6498660" type="application/octet-stream" sparkle:edSignature="kSDspnX6TthmgAd2hz+n16S3ZMxHt8f45vOm+EVhWegDVS/h6amYFyDIwCbDi5O/m0jPjU23CGFRC7+ACn42Bg=="/>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.54/Orbit-v0.1.1-beta.54-arm64.zip" length="6498660" type="application/octet-stream" sparkle:edSignature="5+upTUxEQQm05jN6dy56ob0HE1TLporfIwtNX3C8oYZULwC5E3r08begeH4bgl2mxQypLPNXquJoi+cgPZb5Cw=="/>
         </item>
         <item>
             <title>0.1.1-beta.52</title>
