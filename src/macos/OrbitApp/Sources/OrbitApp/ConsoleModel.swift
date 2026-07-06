@@ -97,6 +97,8 @@ final class ConsoleModel {
 
     /// Newest persisted events pulled for the initial paint (web parity — `TAIL_PAGE`). See `run()`.
     private static let tailPage = 200
+    /// Page size for scroll-up history fetches (web parity — `OLDER_PAGE`). See `loadOlder()`.
+    private static let olderPage = 200
 
     private var reducer = TranscriptReducer()
     private let stream: EventStreaming
@@ -220,7 +222,7 @@ final class ConsoleModel {
         // maxSeq, so it skips straight to the SSE resume below (which streams seq > maxSeq).
         if reducer.state.maxSeq == 0, !sessionID.isEmpty {
             if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
-                for ev in page.events { reducer.apply(ev) }
+                reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
                 publishStateNow()
             }
         }
@@ -337,6 +339,41 @@ final class ConsoleModel {
         if let r = replyContext, !state.pendingApprovals.contains(where: { $0.id == r.approvalID }) {
             replyContext = nil
         }
+    }
+
+    // MARK: - scroll-up history paging (web parity: AgentView's loadOlder)
+
+    /// True while an older-history fetch is in flight — the single-flight guard.
+    private(set) var loadingOlder = false
+    /// One-shot scroll anchor: set on each successful prepend to the id of the row that was the
+    /// window's first BEFORE older rows grew above it. The transcript consumes it on the next
+    /// `stateRevision` bump and re-pins that row, holding what the user was reading steady (web
+    /// keeps `scrollTop` constant in a layout effect; SwiftUI's List needs an explicit scrollTo).
+    private var prependAnchorID: String?
+
+    /// Consume the pending prepend anchor (nil when the last publish wasn't a prepend).
+    func takePrependAnchor() -> String? {
+        defer { prependAnchorID = nil }
+        return prependAnchorID
+    }
+
+    /// Pull the next older history page and graft it above the loaded window. Triggered by the
+    /// transcript's load-earlier row scrolling into view; no-op while a fetch is already in
+    /// flight, when the whole history is loaded (`hasMoreOlder` false), or before a window
+    /// cursor exists. A failed fetch is silent — scrolling re-triggers it.
+    func loadOlder() async {
+        guard !loadingOlder, !sessionID.isEmpty,
+              state.hasMoreOlder, let before = state.oldestSeq else { return }
+        loadingOlder = true
+        defer { loadingOlder = false }
+        guard let page = try? await api.eventPage(sessionID: sessionID,
+                                                  before: before, limit: Self.olderPage) else { return }
+        let anchor = reducer.state.items.first?.id
+        reducer.prependOlder(page)
+        // Re-pin only when rows actually grew above the old first row (id unchanged ⇒ nothing
+        // prepended — e.g. the cursor hit the start — and yanking the scroll would be wrong).
+        if let anchor, reducer.state.items.first?.id != anchor { prependAnchorID = anchor }
+        publishStateNow()
     }
 
     // MARK: composer

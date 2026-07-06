@@ -101,6 +101,20 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertEqual(s.queued, [])
         XCTAssertEqual(s.maxSeq, 6)
         XCTAssertEqual(s.status, .awaitingInput)
+        // Same tolerance for the (newer) history-window cursor: paging is simply off.
+        XCTAssertNil(s.oldestSeq)
+        XCTAssertFalse(s.hasMoreOlder)
+    }
+
+    /// The scroll-up paging cursor is part of the snapshot — a restored session must know where
+    /// its loaded window starts (and whether older pages remain) without re-fetching the tail.
+    func testHistoryWindowSurvivesRoundTrip() throws {
+        var a = TranscriptReducer()
+        a.applyTailPage(EventPage(events: turnOne(), hasMore: true))
+        let b = try roundTrip(a)
+        XCTAssertEqual(a.state, b.state)
+        XCTAssertEqual(b.state.oldestSeq, 2)
+        XCTAssertTrue(b.state.hasMoreOlder)
     }
 
     // MARK: - FileTranscriptStore
@@ -130,6 +144,26 @@ final class TranscriptStoreTests: XCTestCase {
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let store = FileTranscriptStore(directory: dir)
         XCTAssertNil(store.load(sessionID: "never-saved"))
+    }
+
+    /// The version gate: a snapshot from a previous schema (here v1, which predates the
+    /// history-window cursor) decodes to nil — the session re-fetches its tail page — rather than
+    /// rehydrating a window whose scroll-up paging would be permanently dead.
+    func testFileStoreDiscardsPreviousSchemaVersion() throws {
+        let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let store = FileTranscriptStore(directory: dir)
+        var r = TranscriptReducer()
+        for ev in turnOne() { r.apply(ev) }
+        store.save(sessionID: "sess-A", reducer: r)
+
+        // Rewind the stored envelope to the previous schema version.
+        let url = dir.appendingPathComponent("sess-A.json")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        let downgraded = text.replacingOccurrences(of: #""version":2"#, with: #""version":1"#)
+        XCTAssertNotEqual(downgraded, text, "expected a v2 envelope to rewrite")
+        try downgraded.write(to: url, atomically: true, encoding: .utf8)
+
+        XCTAssertNil(store.load(sessionID: "sess-A"))
     }
 
     func testFileStorePrunesOldestBeyondCap() throws {

@@ -408,6 +408,136 @@ final class TranscriptReducerTests: XCTestCase {
         // maxSeq is the tail's high-water mark, so the follow-on SSE resumes from seq > 842.
         XCTAssertEqual(s.maxSeq, 842)
     }
+
+    // MARK: - scroll-up history paging (prependOlder — the "can't reach the top" fix)
+
+    func testApplyTailPageTracksHistoryWindow() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("hi")])),
+            RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("hello")])),
+        ], hasMore: true))
+        XCTAssertEqual(r.state.oldestSeq, 41, "low-water mark = the before= cursor for scroll-up")
+        XCTAssertEqual(r.state.maxSeq, 42)
+        XCTAssertTrue(r.state.hasMoreOlder)
+    }
+
+    func testPrependOlderGraftsHistoryInFront() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("latest question")])),
+            RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("latest reply")])),
+        ], hasMore: true))
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, payload: .object(["text": .string("first question")])),
+            RunEvent(seq: 2, type: .assistant, payload: .object(["text": .string("first reply")])),
+            RunEvent(seq: 3, type: .toolUse, payload: .object(["toolUseId": .string("t9"),
+                                                               "name": .string("Bash"),
+                                                               "input": .object(["command": .string("ls")])])),
+            RunEvent(seq: 4, type: .toolResult, payload: .object(["toolUseId": .string("t9"),
+                                                                  "content": .string("a.txt")])),
+        ], hasMore: false))
+
+        XCTAssertEqual(r.state.items.count, 5)
+        XCTAssertEqual(r.state.items.first?.asUser?.text, "first question", "history grafts in front")
+        XCTAssertEqual(r.state.items.last?.asAssistant?.text, "latest reply", "window tail untouched")
+        XCTAssertEqual(r.state.items[2].asTool?.status, .ok, "a tool pair inside the page folds normally")
+        XCTAssertEqual(r.state.oldestSeq, 1, "cursor moved back to the page's first event")
+        XCTAssertEqual(r.state.maxSeq, 42, "high-water mark keeps the live window's")
+        XCTAssertFalse(r.state.hasMoreOlder, "the page said history starts here")
+        XCTAssertEqual(Set(r.state.items.map(\.id)).count, r.state.items.count,
+                       "prepended synthetic ids must not collide with the parent's")
+    }
+
+    func testPrependOlderDiscardsHistoricalSideEffects() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("latest")])),
+        ], hasMore: true))
+        r.apply(RunEvent(seq: 50, type: .status, payload: .object(["status": .string("RUNNING")])))
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 4, type: .user, payload: .object(["text": .string("earlier")])),
+            RunEvent(seq: 5, type: .turnEnd, payload: .object(["status": .string("AWAITING_INPUT")])),
+            RunEvent(seq: 6, type: .backgroundTask, payload: .object(["shellId": .string("bg9"),
+                                                                      "status": .string("running")])),
+        ], hasMore: true))
+
+        XCTAssertEqual(r.state.status, .running, "a historical turn_end must not clobber the live status")
+        XCTAssertTrue(r.state.background.isEmpty, "a historical background task must not resurrect the tray")
+        XCTAssertEqual(r.state.items.compactMap { $0.asUser?.text }, ["earlier", "latest"])
+        XCTAssertTrue(r.state.hasMoreOlder)
+    }
+
+    /// The open-bubble cursors are item indices; the graft must shift them or the next delta
+    /// streams into a PREPENDED bubble (and the finalize overwrites it).
+    func testPrependOlderShiftsOpenStreamingCursor() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("question")])),
+        ], hasMore: true))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("Hel")])))
+
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 1, type: .user, payload: .object(["text": .string("old question")])),
+            RunEvent(seq: 2, type: .assistant, payload: .object(["text": .string("old reply")])),
+        ], hasMore: false))
+
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("lo")])))
+        r.apply(RunEvent(seq: 42, type: .assistant, payload: .object(["text": .string("Hello")])))
+
+        XCTAssertEqual(r.state.items.count, 4, "user + assistant + user + ONE live bubble")
+        XCTAssertEqual(r.state.items[1].asAssistant?.text, "old reply", "prepended bubble untouched")
+        XCTAssertEqual(r.state.items.last?.asAssistant?.text, "Hello",
+                       "the post-graft delta streams into the live bubble, not a prepended one")
+    }
+
+    func testPrependOlderDedupsAlreadyLoadedSeqs() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("latest")])),
+        ], hasMore: true))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 40, type: .user, payload: .object(["text": .string("fresh older")])),
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("latest")])),   // overlap: already loaded
+        ], hasMore: false))
+        XCTAssertEqual(r.state.items.compactMap { $0.asUser?.text }, ["fresh older", "latest"])
+        XCTAssertEqual(r.state.oldestSeq, 40)
+    }
+
+    func testPrependOlderEmptyPageStopsPaging() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .user, payload: .object(["text": .string("latest")])),
+        ], hasMore: true))
+        XCTAssertTrue(r.state.hasMoreOlder)
+
+        r.prependOlder(EventPage(events: [], hasMore: true))
+        XCTAssertFalse(r.state.hasMoreOlder, "an empty page can't advance the cursor — stop, don't loop")
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.oldestSeq, 41)
+    }
+
+    /// A page can end mid-tool-call (its result was folded — unmatched — before this page loaded,
+    /// or hasn't happened yet). The grafted card stays running; a result that arrives AFTER the
+    /// graft must close it, because closeTool scans all items including prepended ones.
+    func testLiveResultClosesGraftedRunningCard() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 41, type: .assistant, payload: .object(["text": .string("working…")])),
+        ], hasMore: true))
+        r.prependOlder(EventPage(events: [
+            RunEvent(seq: 40, type: .toolUse, payload: .object(["toolUseId": .string("t1"),
+                                                                "name": .string("Bash"),
+                                                                "input": .object(["command": .string("sleep 99")])])),
+        ], hasMore: false))
+        XCTAssertEqual(r.state.items.first?.asTool?.status, .running)
+
+        r.apply(RunEvent(seq: 42, type: .toolResult, payload: .object(["toolUseId": .string("t1"),
+                                                                       "content": .string("done")])))
+        XCTAssertEqual(r.state.items.first?.asTool?.status, .ok)
+    }
 }
 
 // Test-only convenience accessors (kept out of the library surface).

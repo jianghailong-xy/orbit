@@ -14,12 +14,18 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     public var status: RunStatus = .pending
     /// Durable high-water seq — the `?sinceSeq=` value to reconnect with.
     public var maxSeq: Int = 0
+    /// Oldest durable seq folded into this window — the `before=` cursor for pulling the previous
+    /// history page when the user scrolls up (web parity: AgentView's `oldestSeqRef`).
+    public var oldestSeq: Int?
+    /// Whether the server holds events older than `oldestSeq` (the last fetched page's `hasMore`).
+    /// Gates the transcript's load-earlier row.
+    public var hasMoreOlder: Bool = false
     public init() {}
 
-    // Tolerant decode so snapshots written before `queued` existed still rehydrate (the key just
-    // defaults to empty) instead of discarding the whole cached session; the other fields keep
-    // their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq }
+    // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
+    // still rehydrate (the keys just default) instead of discarding the whole cached session; the
+    // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -28,6 +34,8 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         queued = (try? c.decodeIfPresent([UserBubble].self, forKey: .queued)) ?? []
         status = try c.decode(RunStatus.self, forKey: .status)
         maxSeq = try c.decode(Int.self, forKey: .maxSeq)
+        oldestSeq = (try? c.decodeIfPresent(Int.self, forKey: .oldestSeq)) ?? nil
+        hasMoreOlder = (try? c.decodeIfPresent(Bool.self, forKey: .hasMoreOlder)) ?? false
     }
 }
 
@@ -53,6 +61,11 @@ public struct TranscriptReducer: Sendable, Codable {
     private var openAssistant: Int?     // index of the in-progress assistant bubble, if any
     private var openThinking: Int?
     private var idSeq = 0
+    /// Namespace for synthetic ids ("i1", "i2", …). A sub-reducer folding an older history page
+    /// (see `prependOlder`) gets a per-page prefix so its ids can never collide with this
+    /// reducer's — now or after either mints more. Transient like `bgLaunch`: the parent's is
+    /// always "i", so it's excluded from the persisted keys and old snapshots still decode.
+    private var idPrefix = "i"
     /// Command text of each `Bash(run_in_background)` launch, keyed by its tool_use id. The
     /// `background_*` events never carry the command, so the tray title is correlated from the
     /// launch captured here — matching web's `deriveBackgroundShells`, which titles the row
@@ -69,6 +82,8 @@ public struct TranscriptReducer: Sendable, Codable {
             if seen.contains(ev.seq) { return }       // dedup replayed/duplicate durable events
             seen.insert(ev.seq)
             if ev.seq > state.maxSeq { state.maxSeq = ev.seq }
+            // Low-water mark: the `before=` cursor for scroll-up history paging.
+            if state.oldestSeq.map({ ev.seq < $0 }) ?? true { state.oldestSeq = ev.seq }
         }
 
         switch ev.type {
@@ -89,6 +104,52 @@ public struct TranscriptReducer: Sendable, Codable {
         case .status, .result:  applyStatus(ev)
         case .system, .unknown: break          // lifecycle noise — no transcript item
         }
+    }
+
+    /// Fold the tail-first initial page (the newest N persisted events) and record whether older
+    /// history remains on the server before it — the cold-open half of tail-first pagination.
+    public mutating func applyTailPage(_ page: EventPage) {
+        for ev in page.events { apply(ev) }
+        state.hasMoreOlder = page.hasMore && !page.events.isEmpty
+    }
+
+    /// Fold a `before=oldestSeq` history page — chronological and strictly older than everything
+    /// loaded — in FRONT of the current window: the scroll-up half of tail-first pagination (web
+    /// AgentView's `loadOlder`). The page is folded standalone by a sub-reducer, then grafted: its
+    /// items are prepended, the dedup set merged, and `oldestSeq` moved back. Only transcript
+    /// items graft — the page's status/approval/background side effects are discarded, because the
+    /// live window owns that truth (a historical `turn_end` must not clobber a running status, nor
+    /// an old background task resurrect the tray). One seam wart is accepted (web heals it by
+    /// re-reducing its full event array, which an incremental reducer can't): a card whose
+    /// `tool_result` was folded — unmatched, and dropped — before its `tool_use` was loaded stays
+    /// "running"; a result arriving after the graft closes it normally (closeTool scans all items).
+    public mutating func prependOlder(_ page: EventPage) {
+        // An empty page means the cursor can't advance: stop the affordance regardless of
+        // `hasMore`, or the load-earlier row would spin forever re-fetching nothing.
+        state.hasMoreOlder = page.hasMore && !page.events.isEmpty
+        // Move the low-water cursor to the page's first durable event — even when every event
+        // turns out to be already folded (a misbehaving overlap), so a retry pages onward instead
+        // of refetching the same window forever (web parity: `oldestSeqRef` moves unconditionally).
+        if let first = page.events.first(where: { $0.type.isDurable && $0.seq > 0 }),
+           state.oldestSeq.map({ first.seq < $0 }) ?? true {
+            state.oldestSeq = first.seq
+        }
+        // Only durable events build history (the live-only types fold to side effects discarded
+        // below anyway), and pages are disjoint by construction (`before` is exclusive) — but
+        // never re-fold a seq this reducer already applied.
+        let fresh = page.events.filter { $0.type.isDurable && $0.seq > 0 && !seen.contains($0.seq) }
+        guard !fresh.isEmpty else { return }
+        var sub = TranscriptReducer()
+        sub.idPrefix = "o\(fresh[0].seq)-"   // per-page id namespace: see `idPrefix`
+        for ev in fresh { sub.apply(ev) }
+        sub.flushStreaming()   // close anything left open at the page's end (defensive; pages hold no deltas)
+        state.items = sub.state.items + state.items
+        seen.formUnion(sub.seen)
+        // The open-bubble cursors are item INDICES — shift them past the prepended rows, or the
+        // next live delta would stream into an old bubble. (`maxSeq` keeps the parent's — the
+        // page is older by construction; the low-water cursor already moved above.)
+        if let i = openAssistant { openAssistant = i + sub.state.items.count }
+        if let i = openThinking { openThinking = i + sub.state.items.count }
     }
 
     /// Show a user bubble immediately on send, before the server's `user` event echoes back.
@@ -385,7 +446,7 @@ public struct TranscriptReducer: Sendable, Codable {
 
     // MARK: - helpers
 
-    private mutating func nextID() -> String { idSeq += 1; return "i\(idSeq)" }
+    private mutating func nextID() -> String { idSeq += 1; return "\(idPrefix)\(idSeq)" }
     private func str(_ ev: RunEvent, _ key: String) -> String? { ev.payload[key]?.stringValue }
     /// Parse the `user` event's `attachments` array (`[{id, mime, name}]`) into refs, dropping any
     /// element without an `id`. Older runners may send `images` (id-only) instead — not handled

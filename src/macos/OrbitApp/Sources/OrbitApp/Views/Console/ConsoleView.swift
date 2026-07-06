@@ -140,6 +140,15 @@ struct TranscriptView: View {
     // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
     @State private var ruler = QuestionRuler()
 
+    /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
+    /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
+    /// yank the reader straight back to the live tail — worse than today's no-paging. The legacy
+    /// floor keeps the pre-paging behavior (the loaded tail is all you can scroll).
+    private var canPageOlder: Bool {
+        guard #available(iOS 18, macOS 15, *) else { return false }
+        return console.state.hasMoreOlder
+    }
+
     var body: some View {
         // `List` is NSTableView-backed on macOS → true row recycling, so a long transcript stays
         // cheap to lay out. (A `LazyVStack` paired with `scrollPosition(id:anchor:)` /
@@ -154,6 +163,26 @@ struct TranscriptView: View {
         // that froze the old LazyVStack build.
         ScrollViewReader { proxy in
             List {
+                // Scroll-up history paging (web's loadOlder): while older pages remain on the
+                // server, the transcript's first row is a spinner that pulls the previous page in
+                // when it scrolls into view. List laziness keeps it un-materialized — and the
+                // fetch un-fired — while the user stays at the tail; its id changes with each
+                // grafted page, so a page too short to push it off-screen re-materializes the row
+                // and chains the next fetch until the viewport fills or history is exhausted.
+                // (Bool-gated via `canPageOlder`, not an inline `if #available` — listRow* set
+                // inside a _ConditionalContent branch aren't hoisted on iOS, see AnchorRow.)
+                if canPageOlder {
+                    HStack {
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                        Spacer()
+                    }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .id("load-older-\(console.state.oldestSeq ?? 0)")
+                    .onAppear { Task { await console.loadOlder() } }
+                }
                 ForEach(console.state.items) { item in
                     TranscriptItemView(item: item)
                         .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
@@ -203,7 +232,17 @@ struct TranscriptView: View {
             // compare bumped once per published snapshot, where the items array would be
             // Equatable-compared in full on every publish just to learn "something changed".
             .onChange(of: console.stateRevision) {
-                if atBottom { proxy.scrollTo(bottomID, anchor: .bottom) }
+                // A prepend published: re-pin the row that was first before history grew above it,
+                // so what the user is reading stays put (web's layout-effect scroll compensation).
+                // The load row that triggered it is short, so any residual shift is a few points.
+                // Always consumed; while pinned at the bottom the follow below wins instead — a
+                // short transcript auto-fills upward and must not yank the user off the live tail.
+                let prependAnchor = console.takePrependAnchor()
+                if atBottom {
+                    proxy.scrollTo(bottomID, anchor: .bottom)
+                } else if let prependAnchor {
+                    proxy.scrollTo(prependAnchor, anchor: .top)
+                }
                 recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
             }
             .onChange(of: console.sessionID) {
