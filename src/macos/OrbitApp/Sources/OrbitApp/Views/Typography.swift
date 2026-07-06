@@ -25,10 +25,13 @@ import SwiftUI
 // orbitMonoFine    diff gutters/gaps, tiny mono badges               .caption2    11 mono  10 mono
 // orbitSectionLabel tracked-out micro headers (OUTPUT / ERROR)       .caption2    11       9
 // orbitMeta        glance metadata: timestamps, badges, chevrons     .caption2    11       10 (.caption2)
+// orbitGlyph       row-scale icons: status glyphs, + button, avatar  .subheadline 15       15
+// orbitHeroGlyph   decorative hero/brand glyphs (login logo)         44 (static)           44
 //
 // Rule of thumb when adding UI: reading text → prose family; tappable words → orbitLabel or
 // larger; monospaced content → the mono family; only true glance-metadata may use orbitMeta.
-// New bare `system(size:)` in views is flagged by CI (client.yml `font-tokens`).
+// Bare `system(size:)` in views fails CI (client.yml `font-tokens`) — this file is the one
+// place fixed sizes may live.
 extension Font {
     #if os(iOS)
     static let orbitProse: Font = .body
@@ -43,6 +46,9 @@ extension Font {
     static let orbitMonoFine: Font = .system(.caption2, design: .monospaced)
     static let orbitSectionLabel: Font = .caption2
     static let orbitMeta: Font = .caption2
+    static let orbitGlyph: Font = .subheadline
+    // Deliberately Dynamic-Type-static: a brand mark, not text (its container doesn't scale).
+    static let orbitHeroGlyph: Font = .system(size: 44)
 
     static func orbitHeading(_ level: Int) -> Font {
         // .headline is 17pt semibold — same size as orbitProse, so an h3/h4 distinguishes itself
@@ -66,6 +72,8 @@ extension Font {
     static let orbitMonoFine: Font = .system(size: 10, design: .monospaced)
     static let orbitSectionLabel: Font = .system(size: 9)
     static let orbitMeta: Font = .caption2
+    static let orbitGlyph: Font = .system(size: 15)
+    static let orbitHeroGlyph: Font = .system(size: 44)
 
     static func orbitHeading(_ level: Int) -> Font {
         // The pre-token fixed ramp, kept verbatim: a notch above the 14pt macOS prose so an h4

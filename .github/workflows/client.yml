@@ -49,8 +49,7 @@ jobs:
 
   # Type-ramp guard: views must use the semantic tokens in Views/Typography.swift (the one file
   # allowed to hold fixed sizes) so iOS/macOS sizing stays platform-appropriate and Dynamic Type
-  # keeps working. Warning-only while the remaining call sites migrate; flips to a hard fail once
-  # the sweep lands (see the Typography.swift header).
+  # keeps working. Hard fail — the sweep landed; add a token instead of a bare size.
   font-tokens:
     name: Font tokens (bare system(size:) audit)
     runs-on: ubuntu-latest
@@ -63,7 +62,8 @@ jobs:
           if [ -n "$hits" ]; then
             echo "$hits"
             count=$(echo "$hits" | wc -l)
-            echo "::warning::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (target: 0)"
+            echo "::error::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (see the Typography.swift header)"
+            exit 1
           else
             echo "No bare system(size:) call sites outside Typography.swift."
           fi

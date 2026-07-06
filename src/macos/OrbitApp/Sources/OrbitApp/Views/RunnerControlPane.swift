@@ -95,7 +95,7 @@ struct RunnerControlPane: View {
     @ViewBuilder
     private func notDetected(_ c: RunnerControl) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "desktopcomputer").font(.system(size: 40)).foregroundStyle(.secondary)
+            Image(systemName: "desktopcomputer").font(.orbitHeroGlyph).foregroundStyle(.secondary)
             Text("No runner on this Mac").font(.headline)
             Text("Enroll this Mac to run agents here. Enrollment fetches a credential and installs "
                  + "the background runner service automatically — no Terminal needed.")

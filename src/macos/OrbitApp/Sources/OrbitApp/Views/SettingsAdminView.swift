@@ -65,7 +65,7 @@ struct SettingsView: View {
                 }
                 .disabled(curPw.isEmpty || newPw.count < 6)
                 if let m = pwMessage {
-                    Text(m).font(.caption).foregroundStyle(.secondary)
+                    Text(m).font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
 
@@ -73,7 +73,7 @@ struct SettingsView: View {
             Section("Updates") {
                 Toggle("Receive beta updates", isOn: $updater.betaChannel)
                 Text("Beta releases ship earlier and may be less stable.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
             }
             #endif
         }
@@ -104,7 +104,7 @@ struct AdminUsersView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(u.name?.isEmpty == false ? u.name! : u.email).lineLimit(1)
                         Text("\(u.email) · \(u.role ?? "MEMBER")")
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                     }
                     .tag(u.id)
                 }
@@ -179,7 +179,7 @@ struct NewUserSheet: View {
             TextField("Email", text: $email)
             TextField("Name (optional)", text: $name)
             Text("A strong password is generated and shown once after creating.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.orbitLabel).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }

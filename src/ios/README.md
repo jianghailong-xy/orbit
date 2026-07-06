@@ -28,6 +28,14 @@ Cross-platform seams live in `../macos/OrbitApp/Sources/OrbitApp/Platform.swift`
 (`PlatformImage`, `PlatformPasteboard`, `Color(light:dark:)`, `borderlessMenuStyle()`); the few
 macOS-only touch-points in shared files are behind `#if os(macOS)`.
 
+### Typography
+All view text uses the semantic `Font.orbit*` tokens in
+`../macos/OrbitApp/Sources/OrbitApp/Views/Typography.swift` — the one file allowed to hold fixed
+sizes (CI `font-tokens` fails on bare `system(size:)` elsewhere). The tokens fork per platform:
+iOS maps to Dynamic-Type-tracking text styles (prose = 17pt body per the HIG), macOS pins the
+denser desktop ramp. Pick by role, not size — the table and rule of thumb are in that file's
+header. The iOS root caps Dynamic Type at `accessibility2` (`OrbitiOSApp.swift`).
+
 ### Files excluded from the iOS target
 Kept in sync in `project.yml`'s `excludes:` — `OrbitApp.swift` (macOS app entry), `HotKeyManager`,
 `UpdaterModel` (Sparkle), `RunnerControl` + `RunnerControlPane` (launchctl), `MenuBarContent`.

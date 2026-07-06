@@ -72,7 +72,7 @@ struct TaskRowView: View {
     var body: some View {
         HStack(spacing: 8) {
             if task.blocked == true {
-                Image(systemName: "lock.fill").font(.caption2).foregroundStyle(.secondary)
+                Image(systemName: "lock.fill").font(.orbitMeta).foregroundStyle(.secondary)
                     .help("Blocked by an unfinished dependency")
             }
             VStack(alignment: .leading, spacing: 3) {
@@ -80,13 +80,13 @@ struct TaskRowView: View {
                 HStack(spacing: 6) {
                     TaskStatusPill(pill: TaskListLogic.pill(task))
                     if let name = task.assignee?.name {
-                        Text(name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text(name).font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
             }
             Spacer()
             if let n = task.commentCount, n > 0 {
-                Label("\(n)", systemImage: "text.bubble").font(.caption2).foregroundStyle(.secondary)
+                Label("\(n)", systemImage: "text.bubble").font(.orbitMeta).foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 2)
@@ -104,7 +104,7 @@ struct TaskStatusPill: View {
             } else {
                 Circle().fill(color).frame(width: 6, height: 6)
             }
-            Text(pill.label).font(.caption2)
+            Text(pill.label).font(.orbitMeta)
         }
         .padding(.horizontal, 6).padding(.vertical, 2)
         .background(color.opacity(0.15), in: Capsule())
@@ -170,7 +170,7 @@ struct TaskDetailContent: View {
             HStack(spacing: 8) {
                 TaskStatusPill(pill: TaskListLogic.pill(t))
                 if let name = t.assignee?.name {
-                    Label(name, systemImage: "person").font(.caption).foregroundStyle(.secondary)
+                    Label(name, systemImage: "person").font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
         }
@@ -206,7 +206,7 @@ struct TaskDetailContent: View {
                 if let ref = deps[i].dependsOnTask {
                     HStack {
                         Circle().fill(ref.status == .done ? Color.green : Color.orange).frame(width: 6, height: 6)
-                        Text(ref.title ?? ref.id).font(.callout)
+                        Text(ref.title ?? ref.id).font(.orbitProseAside)
                         Spacer()
                         Button { Task { await tasks.removeDependency(t.id, dependsOn: ref.id) } } label: {
                             Image(systemName: "xmark.circle.fill")
@@ -220,7 +220,7 @@ struct TaskDetailContent: View {
                     Button(other.title) { Task { await tasks.addDependency(t.id, dependsOn: other.id) } }
                 }
             }
-            .font(.caption).fixedSize()
+            .font(.orbitLabel).fixedSize()
         }
     }
 
@@ -229,10 +229,10 @@ struct TaskDetailContent: View {
             section("Runs") {
                 ForEach(ss) { s in
                     HStack {
-                        Text(s.title ?? s.id).font(.callout).lineLimit(1)
+                        Text(s.title ?? s.id).font(.orbitProseAside).lineLimit(1)
                         Spacer()
                         if let st = s.status {
-                            Text(st.rawValue.capitalized).font(.caption).foregroundStyle(.secondary)
+                            Text(st.rawValue.capitalized).font(.orbitLabel).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -244,8 +244,8 @@ struct TaskDetailContent: View {
         section("Comments") {
             ForEach(t.comments ?? []) { c in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(c.authorName ?? "—").font(.caption).foregroundStyle(.secondary)
-                    Text(c.body).font(.callout).textSelection(.enabled)
+                    Text(c.authorName ?? "—").font(.orbitLabel).foregroundStyle(.secondary)
+                    Text(c.body).font(.orbitProse).textSelection(.enabled)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -266,7 +266,7 @@ struct TaskDetailContent: View {
     @ViewBuilder private func section<Content: View>(_ title: String,
                                                      @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption).bold().foregroundStyle(.secondary)
+            Text(title).font(.orbitLabel).bold().foregroundStyle(.secondary)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

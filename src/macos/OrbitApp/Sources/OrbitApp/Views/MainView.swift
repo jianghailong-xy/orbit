@@ -94,7 +94,7 @@ struct SectionSidebar: View {
             if let agents = model.agents, !agents.items.isEmpty {
                 ForEach(agents.groups) { group in
                     Text(agents.runnerLabel(group.runnerId))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
                     ForEach(group.agents) { a in
                         AgentRowView(agent: a, shortcutIndex: shortcutIndex[a.id])
                             .tag(SidebarSelection.agent(a.id))
@@ -102,7 +102,7 @@ struct SectionSidebar: View {
                 }
             } else {
                 Text(model.agents?.loading == true ? "Loading…" : "No agents")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
             }
         } label: {
             Label(AppSection.agents.title, systemImage: AppSection.agents.systemImage)
@@ -165,7 +165,7 @@ struct AvatarMonogram: View {
             .frame(width: 32, height: 32)
             .overlay(
                 Text(initial)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.orbitGlyph.weight(.semibold))
                     .foregroundStyle(.white)
             )
     }

@@ -8,7 +8,7 @@ struct LoginView: View {
         @Bindable var model = model
         VStack(spacing: 14) {
             Image(systemName: "circle.hexagongrid.fill")
-                .font(.system(size: 44))
+                .font(.orbitHeroGlyph)
                 .foregroundStyle(.tint)
             Text("Orbit").font(.largeTitle.bold())
             Text("Sign in to your instance").foregroundStyle(.secondary)
@@ -26,7 +26,7 @@ struct LoginView: View {
             .frame(width: 320)
 
             if let e = model.errorText {
-                Text(e).font(.callout).foregroundStyle(.red).frame(width: 320)
+                Text(e).font(.orbitProseAside).foregroundStyle(.red).frame(width: 320)
             }
 
             Button {

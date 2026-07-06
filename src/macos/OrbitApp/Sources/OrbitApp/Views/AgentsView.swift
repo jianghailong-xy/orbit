@@ -26,19 +26,19 @@ struct AgentRowView: View {
                 HStack(spacing: 6) {
                     Text(agent.name).lineLimit(1)
                     if agent.enabled == false {
-                        Text("disabled").font(.caption2)
+                        Text("disabled").font(.orbitMeta)
                             .padding(.horizontal, 5).padding(.vertical, 1)
                             .background(.quaternary, in: Capsule())
                     }
                 }
                 Text(AgentDefaults.friendlyName(AgentListLogic.effectiveModel(model: agent.model, env: agent.env))
                      + (agent.workDir.map { " · \($0)" } ?? ""))
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
             if let shortcutIndex {
                 Spacer(minLength: 4)
                 Text("⌘\(shortcutIndex + 1)")
-                    .font(.caption2).monospacedDigit()
+                    .font(.orbitMeta).monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
         }
@@ -261,7 +261,7 @@ struct NewSessionView: View {
             // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
             if let msg = draft.statusMessage {
                 HStack {
-                    Text(msg).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
                     Spacer()
                     Button { draft.statusMessage = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -349,16 +349,18 @@ struct AgentSessionRow: View {
 /// line up whether the glyph is a spinner or a symbol.
 struct StatusGlyphView: View {
     let glyph: SessionStatusGlyph
+    // Box scales with the glyph's own token so a Dynamic-Type-grown symbol isn't clipped.
+    @ScaledMetric(relativeTo: .subheadline) private var box: CGFloat = 20
     var body: some View {
         Group {
             switch glyph.shape {
             case .spinner:
                 SpinnerGlyph(color: color)
             case .symbol(let name):
-                Image(systemName: name).font(.system(size: 15)).foregroundStyle(color)
+                Image(systemName: name).font(.orbitGlyph).foregroundStyle(color)
             }
         }
-        .frame(width: 20, height: 20)
+        .frame(width: box, height: box)
         .help(glyph.label)
         .accessibilityLabel(glyph.label)
     }
@@ -444,7 +446,7 @@ struct AgentFormContent: View {
                     .frame(minHeight: 90)
                     .font(.body)
                 Text("Added to this agent's system prompt on every run (optional).")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
             }
 
             Section("Working directory") {
@@ -458,7 +460,7 @@ struct AgentFormContent: View {
                         LabeledContent(k, value: v)
                     }
                     Text("Env editing is coming in a follow-up.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
                 }
             }
 

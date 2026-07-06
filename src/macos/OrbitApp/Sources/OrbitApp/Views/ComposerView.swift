@@ -300,7 +300,7 @@ struct ComposerView: View {
             } label: { Label("Upload file", systemImage: "paperclip") }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 15))
+                .font(.orbitGlyph)
                 .foregroundStyle(.secondary)
                 .composerHitTarget(width: 30)
         }

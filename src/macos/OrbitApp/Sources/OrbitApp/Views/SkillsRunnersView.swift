@@ -26,10 +26,10 @@ struct SkillsView: View {
                     } header: {
                         HStack(spacing: 6) {
                             Text(g.title)
-                            Text(g.runnerName).font(.caption).foregroundStyle(.secondary)
-                            if !g.online { Image(systemName: "moon.zzz").font(.caption2).foregroundStyle(.secondary) }
+                            Text(g.runnerName).font(.orbitLabel).foregroundStyle(.secondary)
+                            if !g.online { Image(systemName: "moon.zzz").font(.orbitMeta).foregroundStyle(.secondary) }
                             Spacer()
-                            Text("\(g.count)").font(.caption).foregroundStyle(.secondary)
+                            Text("\(g.count)").font(.orbitLabel).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -56,11 +56,11 @@ struct SkillRow: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Image(systemName: isSkill ? "wand.and.stars" : "terminal")
-                    .font(.caption2).foregroundStyle(.secondary)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
                 Text("/\(item.name)").font(.callout).fontDesign(.monospaced)
             }
             if let d = item.description, !d.isEmpty {
-                Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
             }
         }
         .padding(.vertical, 1)
@@ -100,7 +100,7 @@ struct RunnerRow: View {
             Circle().fill(runner.online == true ? Color.green : Color.secondary).frame(width: 7, height: 7)
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName).lineLimit(1)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(subtitle).font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
         }
@@ -163,13 +163,13 @@ struct RunnerDetailContent: View {
             Section("Agents") {
                 let ags = runners.agents(forRunner: runner.id)
                 if ags.isEmpty {
-                    Text("No agents on this runner.").font(.caption).foregroundStyle(.secondary)
+                    Text("No agents on this runner.").font(.orbitLabel).foregroundStyle(.secondary)
                 } else {
                     ForEach(ags) { a in
                         HStack {
                             Text(a.name)
                             Spacer()
-                            if a.enabled == false { Text("disabled").font(.caption2).foregroundStyle(.secondary) }
+                            if a.enabled == false { Text("disabled").font(.orbitMeta).foregroundStyle(.secondary) }
                         }
                     }
                 }
@@ -200,9 +200,9 @@ struct RunnerDetailContent: View {
         if let w {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
-                    Text(label).font(.caption)
+                    Text(label).font(.orbitLabel)
                     Spacer()
-                    Text("\(Int(w.utilization.rounded()))%").font(.caption).foregroundStyle(.secondary)
+                    Text("\(Int(w.utilization.rounded()))%").font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 ProgressView(value: min(max(w.utilization, 0), 100), total: 100)
             }
