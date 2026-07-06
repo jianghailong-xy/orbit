@@ -19,6 +19,11 @@ struct OrbitiOSApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                // The type ramp (Views/Typography.swift) tracks Dynamic Type; cap it at the first
+                // accessibility sizes so a dense console layout (tool cards, diffs, the composer
+                // footer) degrades gracefully instead of exploding at AX5. Larger needs are better
+                // served by system zoom until the layout is audited per-surface.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                 // Tap anywhere outside a text field to lower the keyboard (installed once on the
                 // window). The transcript's `List` swallows a SwiftUI tap gesture, so this is done
                 // with a window-level UIKit recognizer instead.

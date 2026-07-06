@@ -17,6 +17,9 @@ struct UserBubbleView: View {
     @State private var copied = false
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
     private let truncateAt = 6000
+    // The meta row reserves its height even when hidden (so hover-reveal never shifts the bubble);
+    // scale that reservation with the orbitMeta text it holds or large Dynamic Type clips it.
+    @ScaledMetric(relativeTo: .caption2) private var metaHeight: CGFloat = 16
 
     @Environment(AttachmentImageStore.self) private var store
     @Namespace private var previewNS
@@ -112,7 +115,7 @@ struct UserBubbleView: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
-            .frame(height: 16)
+            .frame(height: metaHeight)
             // The pending indicator (Queued/Sending…) always shows; the copy/time row only on hover (web parity).
             .opacity(bubble.pending || hovering ? 1 : 0)
             .allowsHitTesting(bubble.pending || hovering)
