@@ -47,6 +47,27 @@ jobs:
         working-directory: src/macos/OrbitKit
         run: swift test
 
+  # Type-ramp guard: views must use the semantic tokens in Views/Typography.swift (the one file
+  # allowed to hold fixed sizes) so iOS/macOS sizing stays platform-appropriate and Dynamic Type
+  # keeps working. Warning-only while the remaining call sites migrate; flips to a hard fail once
+  # the sweep lands (see the Typography.swift header).
+  font-tokens:
+    name: Font tokens (bare system(size:) audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit bare system(size:) outside Typography.swift
+        run: |
+          hits=$(grep -rn "system(size" src/macos/OrbitApp/Sources src/ios/Sources --include='*.swift' \
+                 | grep -v "Views/Typography.swift" || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            count=$(echo "$hits" | wc -l)
+            echo "::warning::$count bare system(size:) call site(s) outside Views/Typography.swift — use the Font.orbit* tokens (target: 0)"
+          else
+            echo "No bare system(size:) call sites outside Typography.swift."
+          fi
+
   macos:
     name: macOS (build + test)
     # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.

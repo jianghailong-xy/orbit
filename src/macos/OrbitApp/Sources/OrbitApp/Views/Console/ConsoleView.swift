@@ -26,7 +26,7 @@ struct ConsoleView: View {
                     TranscriptView(console: console)
                     if let msg = console.statusMessage {
                         HStack {
-                            Text(msg).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                            Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
                             Spacer()
                             Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
                                 .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -272,9 +272,9 @@ struct TranscriptView: View {
         } label: {
             HStack(spacing: 8) {
                 Text("↑ Your question")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize()
+                    .font(.orbitLabel).foregroundStyle(.secondary).fixedSize()
                 Text(bubble.text)
-                    .font(.system(size: 13)).foregroundStyle(.primary)
+                    .font(.orbitSubtext).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
             }
@@ -296,7 +296,7 @@ struct TranscriptView: View {
             atBottom = true
         } label: {
             Image(systemName: "arrow.down")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.orbitLabel.weight(.semibold))
                 .foregroundStyle(.primary)
                 .frame(width: 32, height: 32)
                 .background(.regularMaterial, in: Circle())
@@ -411,7 +411,7 @@ struct TranscriptItemView: View {
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c)
         case .interrupt:
-            Label("Interrupted", systemImage: "stop.circle").font(.caption).foregroundStyle(.secondary)
+            Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red).textSelection(.enabled)
