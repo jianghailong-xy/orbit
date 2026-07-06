@@ -49,19 +49,19 @@ struct ToolCardView: View {
         HStack(spacing: 7) {
             if hasDetail {
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
             }
             Image(systemName: d.symbol)
-                .font(.system(size: 11)).foregroundStyle(d.tone.color)
+                .font(.orbitMeta).foregroundStyle(d.tone.color)
                 .frame(width: 20, height: 20)
                 .background(d.tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
             Text(d.label)
-                .font(.system(.caption, design: .monospaced).weight(.semibold))
+                .font(.orbitMono.weight(.semibold))
                 .foregroundStyle(.primary)
             summary
             if let meta = d.meta {
                 Text(meta)
-                    .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
                     .padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
             }
@@ -79,11 +79,11 @@ struct ToolCardView: View {
         if let p = d.path {
             (Text(p.base).fontWeight(.semibold).foregroundColor(.primary)
              + Text(p.dir.isEmpty ? "" : "  \(p.dir)").foregroundColor(.secondary))
-                .font(.system(size: 11, design: .monospaced))
+                .font(.orbitMono)
                 .lineLimit(1).truncationMode(.middle)
         } else if let s = d.summary, !s.isEmpty {
             Text(s)
-                .font(d.summaryMono ? .system(size: 11, design: .monospaced) : .caption)
+                .font(d.summaryMono ? .orbitMono : .orbitLabel)
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
         }
     }
@@ -91,8 +91,8 @@ struct ToolCardView: View {
     @ViewBuilder private var status: some View {
         switch card.status {
         case .running: ProgressView().controlSize(.small)
-        case .ok:      Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(.green)
-        case .error:   Image(systemName: "xmark.circle.fill").font(.system(size: 12)).foregroundStyle(.red)
+        case .ok:      Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
+        case .error:   Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
         }
     }
 
@@ -106,7 +106,7 @@ struct ToolCardView: View {
                 // panel + label carry the error colour) — matching web's muted `<Pre>`.
                 VStack(alignment: .leading, spacing: 3) {
                     Text(isErr ? "ERROR" : "OUTPUT")
-                        .font(.system(size: 9, weight: .semibold)).tracking(0.4)
+                        .font(.orbitSectionLabel.weight(.semibold)).tracking(0.4)
                         .foregroundStyle(isErr ? Color.red : Color.secondary)
                     CollapsibleMono(text: result)
                 }
@@ -141,7 +141,7 @@ struct ToolBodyView: View {
             EmptyView()
         case .command(let cmd):
             (Text("$ ").foregroundColor(.blue).fontWeight(.semibold) + Text(cmd))
-                .font(.system(size: 11.5, design: .monospaced)).textSelection(.enabled)
+                .font(.orbitMono).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
                 .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
@@ -150,7 +150,7 @@ struct ToolBodyView: View {
             CollapsibleMono(text: code)
         case .markdown(let md):
             MarkdownView(source: md)
-                .font(.callout).textSelection(.enabled)
+                .font(.orbitProseAside).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .diff(let hunks):
             VStack(alignment: .leading, spacing: 8) {
@@ -185,7 +185,7 @@ struct DiffLineView: View {
                 gutterText("")
                 gutterText("")
                 Text("⋯ \(line.gapCount) unchanged \(line.gapCount == 1 ? "line" : "lines") ⋯")
-                    .font(.system(size: 10.5, design: .monospaced)).italic().foregroundStyle(.tertiary)
+                    .font(.orbitMonoFine).italic().foregroundStyle(.tertiary)
                     .padding(.leading, 6)
                 Spacer(minLength: 0)
             }
@@ -196,10 +196,10 @@ struct DiffLineView: View {
             HStack(alignment: .top, spacing: 0) {
                 gutter(nl.oldNumber)
                 gutter(nl.newNumber)
-                Text(sign).font(.system(size: 11, design: .monospaced)).foregroundStyle(fg)
+                Text(sign).font(.orbitDiffLine).foregroundStyle(fg)
                     .frame(width: 14, alignment: .center)
                 Text(line.text.isEmpty ? " " : line.text)
-                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(fg)
+                    .font(.orbitDiffLine).foregroundStyle(fg)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 6)
             }
             .padding(.vertical, 1)
@@ -209,7 +209,7 @@ struct DiffLineView: View {
     private func gutter(_ n: Int?) -> some View { gutterText(n.map(String.init) ?? "") }
     private func gutterText(_ s: String) -> some View {
         Text(s)
-            .font(.system(size: 10, design: .monospaced)).foregroundStyle(.tertiary)
+            .font(.orbitMonoFine).foregroundStyle(.tertiary)
             .frame(width: 30, alignment: .trailing)
             .padding(.vertical, 1)
             .background(Color.secondary.opacity(0.06))
@@ -231,13 +231,13 @@ struct CollapsibleMono: View {
         let shown = (open || hidden == 0) ? text : lines.prefix(threshold).joined(separator: "\n")
         VStack(alignment: .leading, spacing: 4) {
             Text(shown)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.orbitMono)
                 .foregroundStyle(Color.secondary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if hidden > 0 {
                 Button(open ? "Show less" : "Show \(hidden) more lines") { open.toggle() }
-                    .buttonStyle(.plain).font(.caption2).foregroundStyle(.blue)
+                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.blue)
             }
         }
     }

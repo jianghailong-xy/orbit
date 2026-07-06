@@ -65,7 +65,7 @@ struct ChatAttachmentFile: View {
             Image(systemName: "paperclip").foregroundStyle(.secondary)
             Text(attachment.name ?? "file").lineLimit(1).truncationMode(.middle)
         }
-        .font(.caption)
+        .font(.orbitLabel)
         .padding(.vertical, 4).padding(.horizontal, 8)
         .frame(maxWidth: 220, alignment: .leading)
         .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
