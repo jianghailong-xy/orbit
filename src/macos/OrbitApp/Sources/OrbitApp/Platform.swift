@@ -54,6 +54,16 @@ enum PlatformPasteboard {
     }
 }
 
+/// Fire a one-shot success haptic on iOS (e.g. to confirm a copy, where there's no hover/tooltip to
+/// lean on); a no-op on macOS, which has no haptic engine on the app surface.
+enum PlatformHaptics {
+    static func success() {
+        #if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
+    }
+}
+
 extension Color {
     /// A colour that resolves to `light` or `dark` per the active appearance. SwiftUI has no
     /// built-in light/dark `Color`, so this bridges through the platform colour's dynamic provider.

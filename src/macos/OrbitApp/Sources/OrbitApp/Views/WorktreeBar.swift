@@ -11,6 +11,7 @@ import OrbitKit
 struct WorktreeBar: View {
     let console: ConsoleModel
     @State private var showDiff = false
+    @State private var copied = false
 
     var body: some View {
         // A CONCRETE container (VStack), not `Group`: the poller `.task` below must attach to a view
@@ -62,9 +63,23 @@ struct WorktreeBar: View {
         let del = files.reduce(0) { $0 + max(0, $1.deletions) }
 
         return HStack(spacing: 8) {
-            branchChip(branch).layoutPriority(1)
-            statView(add: add, del: del, count: files.count, committed: primary == .merge)
-            Spacer(minLength: 4)
+            // The whole branch + stat summary is one tap target that opens the diff (the chevron on
+            // the right is the explicit affordance). Copy is the secondary action, so it moves to the
+            // long-press (right-click on macOS) context menu — a plain tap can no longer silently
+            // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
+            Button { showDiff = true } label: {
+                HStack(spacing: 8) {
+                    branchLabel(branch)
+                    statView(add: add, del: del, count: files.count, committed: primary == .merge)
+                    Spacer(minLength: 4)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .layoutPriority(1)
+            .contextMenu { copyBranchButton(branch) }
+            .accessibilityHint("Opens the diff")
+            .help("View diff")
             // The action button + chevron keep their size (web `flex: none`); the branch/stat
             // truncate first under narrow width.
             switch primary {
@@ -80,20 +95,34 @@ struct WorktreeBar: View {
         .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
     }
 
-    private func branchChip(_ branch: String) -> some View {
-        Button {
-            PlatformPasteboard.copyString(branch)
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.triangle.branch").font(.orbitMeta).foregroundStyle(.secondary)
-                BranchLabelView(branch: branch).lineLimit(1).truncationMode(.middle)
-            }
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.1)))
+    /// The branch pill — now a plain label (a tap opens the diff). On copy its leading glyph flashes
+    /// to a green checkmark for ~1.5s so the otherwise-silent clipboard write is visible on iOS,
+    /// where there is no hover tooltip to lean on.
+    private func branchLabel(_ branch: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: copied ? "checkmark" : "arrow.triangle.branch")
+                .font(.orbitMeta).foregroundStyle(copied ? Color.green : Color.secondary)
+            BranchLabelView(branch: branch).lineLimit(1).truncationMode(.middle)
         }
-        .buttonStyle(.plain)
-        .help("Copy branch name")
+        .padding(.horizontal, 6).padding(.vertical, 2)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.1)))
+    }
+
+    private func copyBranchButton(_ branch: String) -> some View {
+        Button { copyBranch(branch) } label: {
+            Label("Copy branch name", systemImage: "doc.on.doc")
+        }
+    }
+
+    private func copyBranch(_ branch: String) {
+        PlatformPasteboard.copyString(branch)
+        PlatformHaptics.success()
+        copied = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            copied = false
+        }
     }
 
     private func statView(add: Int, del: Int, count: Int, committed: Bool) -> some View {
@@ -115,6 +144,7 @@ struct WorktreeBar: View {
         }
         .buttonStyle(.plain)
         .help("View diff")
+        .accessibilityLabel("View diff")
     }
 }
 
@@ -257,14 +287,16 @@ private struct WTChip: View {
 
 // MARK: - diff sheet
 
-/// The changed-file list + per-file unified diff, opened from the bar's chevron. The file list and
-/// its `+/−` stats come from the (already-loaded) `changedFiles`; the diff text is fetched lazily.
+/// The changed-file list + per-file unified diff, opened by tapping the bar (or its chevron). The
+/// file list and its `+/−` stats come from the (already-loaded) `changedFiles`; the diff is lazy.
 struct DiffSheet: View {
     let console: ConsoleModel
     @Environment(\.dismiss) private var dismiss
+    @State private var branchCopied = false
 
     var body: some View {
         let files = console.worktree.detail?.changedFiles ?? []
+        let branch = console.worktree.detail?.branch
         NavigationStack {
             List(files) { file in
                 NavigationLink {
@@ -278,6 +310,15 @@ struct DiffSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                // An explicit, always-visible copy affordance backs up the bar's long-press menu.
+                if let branch {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button { copyBranch(branch) } label: {
+                            Label(branchCopied ? "Copied" : "Copy branch",
+                                  systemImage: branchCopied ? "checkmark" : "doc.on.doc")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
@@ -285,6 +326,16 @@ struct DiffSheet: View {
         #if os(macOS)
         .frame(minWidth: 560, minHeight: 420)
         #endif
+    }
+
+    private func copyBranch(_ branch: String) {
+        PlatformPasteboard.copyString(branch)
+        PlatformHaptics.success()
+        branchCopied = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            branchCopied = false
+        }
     }
 }
 
