@@ -179,6 +179,10 @@ struct DiffHunkView: View {
 struct DiffLineView: View {
     let nl: ToolDisplay.NumberedDiffLine
     private var line: DiffLine { nl.line }
+    // Fixed columns sized to their mono tokens: scale them with Dynamic Type or large sizes
+    // truncate the line numbers / `+`-`-` signs while the code text grows.
+    @ScaledMetric(relativeTo: .caption2) private var gutterWidth: CGFloat = 30
+    @ScaledMetric(relativeTo: .caption) private var signWidth: CGFloat = 14
     var body: some View {
         if line.kind == .gap {
             HStack(spacing: 0) {
@@ -197,7 +201,7 @@ struct DiffLineView: View {
                 gutter(nl.oldNumber)
                 gutter(nl.newNumber)
                 Text(sign).font(.orbitDiffLine).foregroundStyle(fg)
-                    .frame(width: 14, alignment: .center)
+                    .frame(width: signWidth, alignment: .center)
                 Text(line.text.isEmpty ? " " : line.text)
                     .font(.orbitDiffLine).foregroundStyle(fg)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 6)
@@ -210,7 +214,7 @@ struct DiffLineView: View {
     private func gutterText(_ s: String) -> some View {
         Text(s)
             .font(.orbitMonoFine).foregroundStyle(.tertiary)
-            .frame(width: 30, alignment: .trailing)
+            .frame(width: gutterWidth, alignment: .trailing)
             .padding(.vertical, 1)
             .background(Color.secondary.opacity(0.06))
     }
