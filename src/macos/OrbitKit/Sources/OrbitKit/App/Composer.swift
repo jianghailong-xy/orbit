@@ -58,6 +58,18 @@ public enum ComposerLogic {
         !shouldResume(status: status)
     }
 
+    /// Whether the composer shows the interrupt ("stop") button for the running turn. Keys off the
+    /// session's AUTHORITATIVE lifecycle status (`session` — the live control-plane record the
+    /// nav-bar title also reads), mirroring web's `showStop` gate (`selected?.status === 'RUNNING'`).
+    /// Falls back to the stream-derived status only when no session record is loaded yet (a fresh
+    /// deep link): the reducer's `.status` never reliably reaches `.running` on a cold open of an
+    /// already-running session — no durable "running" event is replayed, only `turn_end`/`status`
+    /// transitions move it — so gating the button on the stream alone hid it exactly when the user
+    /// most needs to stop the turn.
+    public static func showsInterrupt(session: RunStatus?, stream: RunStatus) -> Bool {
+        (session ?? stream) == .running
+    }
+
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
                                 attachmentIds: [String]) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,

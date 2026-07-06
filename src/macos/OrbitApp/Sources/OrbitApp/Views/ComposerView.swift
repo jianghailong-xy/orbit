@@ -129,7 +129,13 @@ struct ComposerView: View {
                         }
                     }
 
-                if console.state.status == .running {
+                // Show the stop button off the session's AUTHORITATIVE status (the live control-plane
+                // record the nav-bar title reads), NOT the stream-derived `console.state.status`:
+                // opening an already-running session never replays a "running" event into the
+                // reducer, so the stream status stays stale and the button would never appear. Web
+                // parity — its `showStop` keys off `selected?.status === 'RUNNING'`.
+                if ComposerLogic.showsInterrupt(session: app.session(id: console.sessionID)?.status,
+                                                stream: console.state.status) {
                     Button { Task { await console.interrupt() } } label: {
                         Image(systemName: "stop.fill")
                             .font(sendGlyphFont)
