@@ -232,16 +232,20 @@ struct TranscriptView: View {
             // compare bumped once per published snapshot, where the items array would be
             // Equatable-compared in full on every publish just to learn "something changed".
             .onChange(of: console.stateRevision) {
-                // A prepend published: re-pin the row that was first before history grew above it,
-                // so what the user is reading stays put (web's layout-effect scroll compensation).
-                // The load row that triggered it is short, so any residual shift is a few points.
-                // Always consumed; while pinned at the bottom the follow below wins instead — a
-                // short transcript auto-fills upward and must not yank the user off the live tail.
+                // A prepend published: re-pin the row under the viewport top so what the user is
+                // reading stays put (web's layout-effect scroll compensation). `ruler.topAnchorID`
+                // still holds its PRE-prepend reading here (row geometry re-fires only after the
+                // new layout), i.e. exactly the row to hold steady — even if the user scrolled
+                // away from the trigger while the fetch was in flight. Fallback: the row that was
+                // the window's first (the model's anchor; the spinner row above it carries no
+                // AnchorRow, so it never claims the top). Always consumed; while pinned at the
+                // bottom the follow below wins instead — a short transcript auto-fills upward and
+                // must not yank the user off the live tail.
                 let prependAnchor = console.takePrependAnchor()
                 if atBottom {
                     proxy.scrollTo(bottomID, anchor: .bottom)
                 } else if let prependAnchor {
-                    proxy.scrollTo(prependAnchor, anchor: .top)
+                    proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
                 }
                 recomputeStuck()   // a new turn — or one measured for the first time — can change the answer
             }
