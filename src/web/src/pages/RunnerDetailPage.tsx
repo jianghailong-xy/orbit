@@ -18,6 +18,7 @@ import {
   Modal,
   Select,
   Spin,
+  Switch,
   Tag,
   type MenuProps,
 } from 'antd';
@@ -51,6 +52,7 @@ interface Agent {
   env?: Record<string, string> | null;
   runnerId?: string | null;
   enabled?: boolean;
+  enableWorktree?: boolean;
 }
 
 const fmtTime = (d?: string | null): string =>
@@ -241,6 +243,7 @@ export function RunnerDetailPage() {
   const [fEffort, setFEffort] = useState('');
   const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
+  const [fEnableWorktree, setFEnableWorktree] = useState(true);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
   // New agents start from the user's saved defaults (Settings → Agent defaults),
@@ -277,6 +280,7 @@ export function RunnerDetailPage() {
         effort: fEffort,
         appendSystemPrompt: fAppend.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
+        enableWorktree: fEnableWorktree,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -307,6 +311,7 @@ export function RunnerDetailPage() {
     setFEffort('');
     setFAppend('');
     setFWorkDir('');
+    setFEnableWorktree(true);
     setFEnv([]);
     setFormOpen(true);
   };
@@ -319,6 +324,7 @@ export function RunnerDetailPage() {
     setFEffort(a.effort ?? '');
     setFAppend(a.appendSystemPrompt ?? '');
     setFWorkDir(a.workDir ?? '');
+    setFEnableWorktree(a.enableWorktree ?? true);
     setFEnv(Object.entries(a.env ?? {}).map(([key, value]) => ({ key, value })));
     setFormOpen(true);
   };
@@ -392,6 +398,16 @@ export function RunnerDetailPage() {
             onChange={(e) => setFWorkDir(e.target.value)}
             placeholder="/path/to/project on the runner (optional)"
           />
+        </div>
+      </div>
+      <div className="rd-form-field">
+        <div className="rd-form-label">Worktree isolation</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Switch checked={fEnableWorktree} onChange={setFEnableWorktree} />
+          <span style={{ fontSize: 12, opacity: 0.65 }}>
+            Run each session in its own git worktree. Off → sessions run directly in the working
+            directory with no isolation.
+          </span>
         </div>
       </div>
       <div className="rd-form-field">

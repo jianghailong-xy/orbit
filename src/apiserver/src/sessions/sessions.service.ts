@@ -128,21 +128,26 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     let provider = AgentProvider.CLAUDE;
+    // Per-agent worktree toggle: default on (unchanged behavior). An agent with it turned off
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
+    let enableWorktree = true;
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { runnerId: true, provider: true },
+        select: { runnerId: true, provider: true, enableWorktree: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
       provider = agentProvider(agent.provider);
+      enableWorktree = agent.enableWorktree;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { provider: true },
+        select: { provider: true, enableWorktree: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       provider = agentProvider(agent.provider);
+      enableWorktree = agent.enableWorktree;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
@@ -174,7 +179,7 @@ export class SessionsService {
     const session = await this.prisma.session.create({
       data: {
         title,
-        branch: naming.branch,
+        branch: enableWorktree ? naming.branch : null,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,

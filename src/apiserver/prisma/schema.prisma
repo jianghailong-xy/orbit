@@ -197,6 +197,11 @@ model Agent {
   // baseline commit) on the next claim so its sessions can be worktree-isolated. Opt-in
   // per agent — the web "Enable isolation" action on a non-git run flips this on.
   autoInitGit        Boolean  @default(false) @map("auto_init_git")
+  // Whether this agent's sessions each run in their own per-session git worktree. Default on, so
+  // every existing agent keeps today's isolated behavior. Off → a session gets no `branch` and the
+  // runner runs it directly in workDir with no worktree (the agent's concurrent sessions then share
+  // one working tree); the merge/commit/diff machinery is skipped since there's no isolated branch.
+  enableWorktree     Boolean  @default(true) @map("enable_worktree")
   // The branch this agent's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Agent-scoped so a chosen target sticks across all the agent's sessions.
