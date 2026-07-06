@@ -306,6 +306,15 @@ struct ComposerView: View {
             Image(systemName: "plus")
                 .font(.orbitGlyph)
                 .foregroundStyle(.secondary)
+                #if os(iOS)
+                // The bare 15pt glyph gives a tap target far under the 44pt HIG minimum, and the
+                // Menu's `.fixedSize()` hugs it. On touch, widen the hit area and make the whole
+                // rect tappable — glyph stays leading so it doesn't visually shift; height matches
+                // the send glyph's row so the composer box doesn't grow taller. macOS (pointer
+                // input) keeps the tight glyph.
+                .frame(width: 30, height: 34, alignment: .leading)
+                .contentShape(Rectangle())
+                #endif
         }
         .borderlessMenuStyle()
         .menuIndicator(.hidden)
