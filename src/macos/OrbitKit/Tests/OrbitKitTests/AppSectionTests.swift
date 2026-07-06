@@ -6,13 +6,18 @@ final class AppSectionTests: XCTestCase {
     func testVisibleGatesAdminByRole() {
         XCTAssertFalse(AppSection.visible(isAdmin: false).contains(.admin))
         XCTAssertTrue(AppSection.visible(isAdmin: true).contains(.admin))
-        // Non-admin sees everything except admin.
-        XCTAssertEqual(AppSection.visible(isAdmin: false).count, AppSection.allCases.count - 1)
     }
 
-    func testCanonicalOrder() {
-        XCTAssertEqual(AppSection.allCases.first, .tasks)
-        XCTAssertEqual(AppSection.visible(isAdmin: true), AppSection.allCases)
+    func testSkillsHiddenFromNav() {
+        // Skills is intentionally not a top-level nav destination for either role.
+        XCTAssertFalse(AppSection.visible(isAdmin: false).contains(.skills))
+        XCTAssertFalse(AppSection.visible(isAdmin: true).contains(.skills))
+    }
+
+    func testNavOrder() {
+        // Runners first, then Agents, then Tasks (where Skills used to sit), then Settings; Admin last for admins.
+        XCTAssertEqual(AppSection.visible(isAdmin: false), [.runners, .agents, .tasks, .settings])
+        XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .settings, .admin])
     }
 
     func testEverySectionHasTitleAndIcon() {

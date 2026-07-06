@@ -34,9 +34,11 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// Admin-area sections are hidden from non-admins (mirrors the web route guard).
     public var adminOnly: Bool { self == .admin }
 
-    /// Sections to show for a role, in canonical order.
+    /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
+    /// (its detail view still exists but is no longer a top-level destination). Admin is gated by role.
     public static func visible(isAdmin: Bool) -> [AppSection] {
-        allCases.filter { !$0.adminOnly || isAdmin }
+        let order: [AppSection] = [.runners, .agents, .tasks, .settings, .admin]
+        return order.filter { !$0.adminOnly || isAdmin }
     }
 
     /// The section a deep-link / notification `Route` lands in. There's no aggregate Active view
