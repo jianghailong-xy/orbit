@@ -890,17 +890,21 @@ export function AgentView({ runner }: { runner: Runner }) {
   const sessionsKey = sessionsOpts.queryKey;
   const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: 4000 });
 
-  const sessions = useMemo(
-    () =>
-      (sessionsQ.data ?? []).slice().sort((a, b) => {
-        // Pinned sessions float to the top; among themselves they keep time order.
-        if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
-        const ta = a.lastTurnAt ?? a.createdAt;
-        const tb = b.lastTurnAt ?? b.createdAt;
-        return ta < tb ? 1 : -1;
-      }),
-    [sessionsQ.data],
-  );
+  const sessions = useMemo(() => {
+    const rows = (sessionsQ.data ?? []).slice();
+    // The Completed (archived) view is ordered by the server on archived_at (newest
+    // completed first) and intentionally ignores pinning. The optimistic cache edits
+    // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
+    // archive reconciles via refetch, so the server order holds. Trust it verbatim.
+    if (effectiveView === 'archived') return rows;
+    return rows.sort((a, b) => {
+      // Pinned sessions float to the top; among themselves they keep time order.
+      if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
+      const ta = a.lastTurnAt ?? a.createdAt;
+      const tb = b.lastTurnAt ?? b.createdAt;
+      return ta < tb ? 1 : -1;
+    });
+  }, [sessionsQ.data, effectiveView]);
   const selectedFromList = useMemo(
     () => sessions.find((s) => s.id === selectedId) ?? null,
     [sessions, selectedId],

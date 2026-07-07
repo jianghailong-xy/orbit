@@ -247,6 +247,14 @@ export class SessionsService {
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
+    // The Completed (archived) tab orders by when the session was filed as done
+    // (archived_at, newest first) — not by last activity — and deliberately ignores
+    // pinning, which is an Active-list affordance. Every other view floats pinned
+    // sessions to the top and orders by last turn activity.
+    const orderBy: Prisma.Sql =
+      filters.view === 'archived'
+        ? Prisma.sql`s.archived_at DESC NULLS LAST, s.created_at DESC`
+        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, s.last_turn_at DESC NULLS LAST, s.created_at DESC`;
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
     // `prompt`; together this keeps the list payload flat as the session count grows.
@@ -314,7 +322,7 @@ export class SessionsService {
       WHERE s.owner_id = ${ownerId}::uuid
         ${runnerFilter}
         AND (${visibility})
-      ORDER BY (s.pinned_at IS NOT NULL) DESC, s.last_turn_at DESC NULLS LAST, s.created_at DESC
+      ORDER BY ${orderBy}
     `);
     // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
     const sessions = rows.map((r) => ({
