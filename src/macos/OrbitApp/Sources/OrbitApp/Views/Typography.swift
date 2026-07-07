@@ -87,3 +87,15 @@ extension Font {
     }
     #endif
 }
+
+/// Additive line leading (points on top of the font's own line height) for transcript prose.
+/// Forked because it was tuned once against macOS's 14pt body; iOS prose is 17pt and CJK wants more
+/// leading than Latin, so the same flat value read tighter there. Referenced by MarkdownView and the
+/// streaming AssistantBubble/Thinking rows so the plain→Markdown swap can't shift the layout.
+enum ProseLayout {
+    #if os(iOS)
+    static let lineSpacing: CGFloat = 7
+    #else
+    static let lineSpacing: CGFloat = 5
+    #endif
+}

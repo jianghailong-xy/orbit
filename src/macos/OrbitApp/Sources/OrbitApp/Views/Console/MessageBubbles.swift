@@ -153,7 +153,7 @@ struct AssistantBubbleView: View {
                     // text stops changing. lineSpacing matches MarkdownView's prose leading so
                     // the swap doesn't shift the layout.
                     Text(bubble.displayText)
-                        .lineSpacing(5)
+                        .lineSpacing(ProseLayout.lineSpacing)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -178,7 +178,7 @@ struct ThinkingView: View {
                 if block.isFinalized {
                     MarkdownView(source: block.displayText)
                 } else {
-                    Text(block.displayText).lineSpacing(5)
+                    Text(block.displayText).lineSpacing(ProseLayout.lineSpacing)
                 }
             }
             .font(.orbitProseAside).foregroundStyle(.secondary)

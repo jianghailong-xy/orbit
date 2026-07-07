@@ -27,10 +27,11 @@ struct MarkdownView: View {
                 MarkdownBlockView(block: blocks[i])
             }
         }
-        // Opens the lines up to ~1.55 (SF's default leading is a cramped ~1.17), mirroring
-        // web's `.md { line-height: 1.6 }`. Propagates to all prose Text; code blocks tighten
-        // it back down to stay dense.
-        .lineSpacing(5)
+        // Opens the lines up toward web's `.md { line-height: 1.6 }` (SF's default leading is a
+        // cramped ~1.17). Platform-forked in ProseLayout: iOS prose is 17pt and CJK wants more
+        // leading than Latin, so it runs looser than macOS's 14pt. Propagates to all prose Text;
+        // code blocks tighten it back down to stay dense.
+        .lineSpacing(ProseLayout.lineSpacing)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -54,7 +55,7 @@ private struct MarkdownBlockView: View {
     var body: some View {
         switch block {
         case .heading(let level, let text):
-            inlineMarkdown(text).font(headingFont(level)).bold()
+            inlineMarkdown(text, codeBackground: false).font(headingFont(level)).bold()
                 .fixedSize(horizontal: false, vertical: true)
 
         case .paragraph(let text):
@@ -63,7 +64,7 @@ private struct MarkdownBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .list(let items):
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { i in
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(marker(items[i])).monospacedDigit().foregroundStyle(.secondary)
@@ -206,7 +207,7 @@ private struct CodeBlockView: View {
 
 /// Inline-only Markdown (bold/italic/code/links/strikethrough), newlines preserved. Used for the
 /// text inside a single block; block structure is handled by `MarkdownBlockView`.
-func inlineMarkdown(_ s: String) -> Text {
+func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
     guard var attributed = try? AttributedString(
         markdown: s,
         options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
@@ -217,12 +218,16 @@ func inlineMarkdown(_ s: String) -> Text {
     // blends into prose. Mirror the web `.md code` chip by tinting those runs. Ranges are captured
     // before mutating: attribute-only edits leave the text — and thus these indices — stable, and a
     // single Text keeps wrapping/selection intact. SwiftUI can't round or pad a per-run background,
-    // so this is a flat tint rather than web's rounded, bordered pill.
-    let codeRanges = attributed.runs
-        .filter { $0.inlinePresentationIntent?.contains(.code) == true }
-        .map(\.range)
-    for range in codeRanges {
-        attributed[range].backgroundColor = Color.secondary.opacity(0.2)
+    // so this is a flat tint — kept faint so a code-dense paragraph doesn't read as speckled, rather
+    // than web's rounded, bordered pill. Headings pass codeBackground: false: a tint bar behind a
+    // filename in a large bold heading reads as clutter, and the monospace run alone sets it apart.
+    if codeBackground {
+        let codeRanges = attributed.runs
+            .filter { $0.inlinePresentationIntent?.contains(.code) == true }
+            .map(\.range)
+        for range in codeRanges {
+            attributed[range].backgroundColor = Color.secondary.opacity(0.08)
+        }
     }
     return Text(attributed)
 }
