@@ -214,19 +214,21 @@ private struct NavigationDrawer: View {
                 .padding(.bottom, 8)
 
             List {
-                // Recents leads the drawer (web/ChatGPT-style): the sessions you'd jump back into,
-                // across every agent — a semantic entry point that doesn't make you think in machines.
-                recentsRows
-                ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
+                // Runners is dropped from the drawer rail on iOS — it now lives under Settings (see
+                // SettingsView). The runner-grouped agents below still surface each machine by name.
+                ForEach(AppSection.visible(isAdmin: isAdmin).filter { $0 != .runners }) { section in
                     // The Agents nav row is replaced in place by its runner-grouped agents. Each runner
                     // is a collapsible row (icon · online dot · agent count) that expands to its agents,
-                    // so the machine list is demoted below Recents instead of always-expanded.
+                    // so the machine list stays collapsible instead of always-expanded.
                     if section == .agents {
                         agentsRows
                     } else {
                         sectionRow(section)
                     }
                 }
+                // Recents trails the drawer: the most-recent sessions across every agent, kept below the
+                // machine/section rail so the primary nav destinations stay at the top.
+                recentsRows
             }
             .listStyle(.plain)
             // Agents are always shown now, so load the list when the drawer mounts (mirrors the macOS
@@ -284,56 +286,25 @@ private struct NavigationDrawer: View {
         }
     }
 
-    /// One Recents row: a prominent session title over a muted "agent · status/time" line, led by a
-    /// status dot (working / needs-you / done colour). Tapping opens the session in its agent.
+    /// One Recents row: just the session title on a single lightweight line — tapping opens it in its
+    /// agent. The status dot + "agent · status/time" subtitle were dropped: the two-line row read too
+    /// heavy for a jump-back list.
     private func recentRow(_ s: Session) -> some View {
         let selected = model.selectedSection == .agents && model.selectedAgentSessionID == s.id
         return Button {
             model.openRecentSession(s)
             close()
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(s.title ?? "Untitled session")
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                HStack(spacing: 6) {
-                    Circle().fill(recentDotColor(s)).frame(width: 7, height: 7)
-                    Text(recentSubtitle(s))
-                        .font(.orbitListSubtitle)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .padding(.leading, 20)
-            .padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            Text(s.title ?? "Untitled session")
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+                .padding(.leading, 20)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(selected ? Color.accentColor.opacity(0.12) : Color.clear)
-    }
-
-    /// "<agent> · <status-or-time>": a needs-you / running / queued state wins over the timestamp
-    /// (so an attention row reads as such); otherwise the relative time of last activity.
-    private func recentSubtitle(_ s: Session) -> String {
-        let agent = s.agent?.name ?? model.agents?.agent(s.agentId ?? "")?.name ?? "—"
-        let tail: String
-        if (s.pendingApprovals ?? 0) > 0 { tail = "Needs reply" }
-        else if s.status == .running { tail = "Running…" }
-        else if s.status == .pending { tail = "Queued" }
-        else { tail = RelativeTime.format(s.lastTurnAt ?? s.updatedAt ?? s.createdAt ?? "") ?? "" }
-        return tail.isEmpty ? agent : "\(agent) · \(tail)"
-    }
-
-    /// The leading dot colour, reusing the shared session status glyph's semantic tone.
-    private func recentDotColor(_ s: Session) -> Color {
-        switch SessionStatusGlyph.make(for: s).tone {
-        case .brand:   return .blue
-        case .success: return .green
-        case .warning: return .orange
-        case .error:   return .red
-        case .neutral: return .secondary
-        }
     }
 
     // MARK: Agents grouped by runner (collapsible)

@@ -27,12 +27,20 @@ final class AppModel {
     // Top-level nav: which AppShell section is showing, and the per-section selection. The app
     // lands on the Agents section (the first agent's session list); the agent is selected once the
     // list loads — see `loadAgentsThenLand`.
-    var selectedSection: AppSection = .agents
+    var selectedSection: AppSection = .agents {
+        // Switching sections tears down the other stacks (compact renders one at a time); drop the
+        // in-Settings Runners push so Settings reads as "at root" again when you return to it.
+        didSet { if selectedSection != .settings { settingsShowingRunners = false } }
+    }
     /// Latches the one-shot default-landing resolution so it runs only after the first agent-list
     /// load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
     var selectedTaskID: String?
     var selectedRunnerID: String?
+    /// iOS only: whether Settings has pushed its Runners sub-page (Runners was moved off the drawer
+    /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
+    /// pages yield the screen edge to the system back-swipe.
+    var settingsShowingRunners = false
     var selectedAgentID: String?
     var selectedAgentSessionID: String?   // the agent session whose console fills the detail pane
     /// True while composing a brand-new session for the selected agent (the detail pane shows the
@@ -490,7 +498,10 @@ final class AppModel {
         // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
         case .agents:  return selectedAgentSessionID == nil && !composingAgentSession
         case .runners: return selectedRunnerID == nil
-        case .skills, .settings, .admin: return true
+        // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
+        // pushed runner pages yield the edge to the system back-swipe.
+        case .settings: return !settingsShowingRunners
+        case .skills, .admin: return true
         }
     }
 

@@ -93,6 +93,40 @@ struct RunnersListView: View {
     }
 }
 
+#if os(iOS)
+/// iOS: the runners list surfaced inside Settings, where Runners moved after leaving the drawer rail.
+/// A plain push list — each runner pushes its detail within the Settings navigation stack — reusing
+/// `RunnerRow`/`RunnerDetailContent` instead of the sidebar's split-view selection.
+struct RunnersSettingsList: View {
+    @Environment(AppModel.self) private var model
+    var body: some View {
+        Group {
+            if let runners = model.runners {
+                List {
+                    ForEach(runners.runners) { r in
+                        NavigationLink {
+                            RunnerDetailContent(runners: runners, runner: r)
+                        } label: {
+                            RunnerRow(runner: r)
+                        }
+                    }
+                }
+                .overlay {
+                    if runners.runners.isEmpty {
+                        ContentUnavailableView(runners.loading ? "Loading…" : "No runners",
+                                               systemImage: "desktopcomputer")
+                    }
+                }
+                .task { await runners.load() }
+            } else {
+                ProgressView()
+            }
+        }
+        .navigationTitle("Runners")
+    }
+}
+#endif
+
 struct RunnerRow: View {
     let runner: Runner
     var body: some View {

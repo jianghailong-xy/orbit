@@ -24,7 +24,30 @@ struct SettingsView: View {
     @State private var pwMessage: String?
 
     var body: some View {
-        Form {
+        @Bindable var model = model
+        return Form {
+            #if os(iOS)
+            // Runners moved off the drawer rail into Settings; push the list within this stack. The
+            // push is tracked on the model (`settingsShowingRunners`) so the shell knows Settings is
+            // no longer at root — see `sectionAtRoot`.
+            Section {
+                Button {
+                    model.settingsShowingRunners = true
+                } label: {
+                    HStack {
+                        Label("Runners", systemImage: AppSection.runners.systemImage)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Image(systemName: "chevron.forward")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            #endif
+
             Section("Account") {
                 if let u = model.user {
                     LabeledContent("Email", value: u.email)
@@ -77,6 +100,11 @@ struct SettingsView: View {
             }
             #endif
         }
+        #if os(iOS)
+        .navigationDestination(isPresented: $model.settingsShowingRunners) {
+            RunnersSettingsList()
+        }
+        #endif
         .formStyle(.grouped)
         .navigationTitle("Settings")
         .onAppear {
