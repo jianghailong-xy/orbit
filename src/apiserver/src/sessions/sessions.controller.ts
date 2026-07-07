@@ -13,7 +13,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { concat, concatMap, from, map, Observable, switchMap, throwError } from 'rxjs';
+import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest } from '@orbit/shared';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -30,6 +30,13 @@ import {
   SessionTurnDto,
 } from './dto';
 import { SessionsService } from './sessions.service';
+
+/** ~20s data-plane keepalive (mirrors EventsController): a `ping` data frame — Nest's @Sse can't
+ *  emit raw `:` comments — sent on the per-session transcript stream so an *idle* session (one
+ *  sitting AWAITING_INPUT emits no events for minutes) still pushes a byte before an intermediary
+ *  (Cloudflare reaps idle proxied streams) severs it. Without it the browser eventually shows
+ *  ERR_HTTP2_PROTOCOL_ERROR and reconnect-storms. Clients discard the frame by its `ping` type. */
+const KEEPALIVE_MS = 20_000;
 
 @UseGuards(JwtAuthGuard)
 @Controller('sessions')
@@ -273,7 +280,7 @@ export class SessionsController {
     const seqFilter = Number.isFinite(since) && since > 0 ? { gt: since } : undefined;
     // Gate the stream on ownership BEFORE any event is read or the live hub is
     // subscribed, so a non-owner can never see another user's transcript.
-    return from(
+    const events$ = from(
       this.prisma.session.findFirst({
         where: { id, ownerId: user.userId },
         select: { id: true },
@@ -309,6 +316,14 @@ export class SessionsController {
             },
           }) as MessageEvent,
       ),
+    );
+    // Keep the stream from going byte-idle (see KEEPALIVE_MS): merge a `ping` every ~20s alongside
+    // the events. The ownership check above rejects a non-owner within a single DB round-trip —
+    // long before the first ping fires — and merge propagates that error, so no ping ever leaks to
+    // an unauthorized caller.
+    return merge(
+      events$,
+      interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),
     );
   }
 }

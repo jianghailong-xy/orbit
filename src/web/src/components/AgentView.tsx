@@ -1254,6 +1254,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       es.onmessage = (e) => {
         fails = 0; // a message means the stream is healthy
         const ev = JSON.parse(e.data) as RunEvent;
+        // Server keepalive (~20s): a health byte with no seq/payload, sent so an idle transcript
+        // stream isn't reaped by Cloudflare. Discard it by type before the reducer below, which
+        // would otherwise dedup-miss (seq undefined) and append it as a junk transcript row.
+        if (ev.type === 'ping') return;
         if (typeof ev.seq === 'number' && ev.seq !== Number.MAX_SAFE_INTEGER) {
           lastSeq = Math.max(lastSeq, ev.seq);
         }
