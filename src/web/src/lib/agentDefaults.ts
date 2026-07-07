@@ -26,6 +26,24 @@ export const MODEL_OPTIONS_BY_PROVIDER: Record<string, { value: string; label: s
 
 export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS];
 
+// Per-model context-window size (max input tokens), for the composer's context-usage
+// gauge. Claude values are the models' true windows (Opus 4.8 / Sonnet 5 / Fable 5 = 1M,
+// Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with Swift's
+// AgentDefaults.contextWindow(for:).
+export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
+  'claude-fable-5': 1_000_000,
+  'claude-opus-4-8': 1_000_000,
+  'claude-sonnet-5': 1_000_000,
+  'claude-haiku-4-5': 200_000,
+  'gpt-5.5': 400_000,
+  'gpt-5.4': 400_000,
+  'gpt-5.4-mini': 400_000,
+  'gpt-5.3-codex-spark': 400_000,
+};
+export const DEFAULT_CONTEXT_WINDOW = 200_000;
+export const contextWindowFor = (model?: string | null): number =>
+  (model && CONTEXT_WINDOW_BY_MODEL[model]) || DEFAULT_CONTEXT_WINDOW;
+
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: 'claude-opus-4-8',
   codex: 'gpt-5.5',

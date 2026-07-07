@@ -20,12 +20,15 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// Whether the server holds events older than `oldestSeq` (the last fetched page's `hasMore`).
     /// Gates the transcript's load-earlier row.
     public var hasMoreOlder: Bool = false
+    /// Context-window occupancy (tokens) reported on the latest `turn_end`, for the composer's
+    /// context gauge. nil until a turn completes (older runners omit it) → the gauge is hidden.
+    public var contextTokens: Int?
     public init() {}
 
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -36,6 +39,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         maxSeq = try c.decode(Int.self, forKey: .maxSeq)
         oldestSeq = (try? c.decodeIfPresent(Int.self, forKey: .oldestSeq)) ?? nil
         hasMoreOlder = (try? c.decodeIfPresent(Bool.self, forKey: .hasMoreOlder)) ?? false
+        contextTokens = (try? c.decodeIfPresent(Int.self, forKey: .contextTokens)) ?? nil
     }
 }
 
@@ -307,6 +311,9 @@ public struct TranscriptReducer: Sendable, Codable {
         } else {
             state.status = .awaitingInput
         }
+        // The runner reports this turn's context-window occupancy; keep the latest for the
+        // composer gauge. Guard on > 0 so a turn without usage doesn't blank a known value.
+        if let ct = ev.payload["contextTokens"]?.intValue, ct > 0 { state.contextTokens = ct }
     }
 
     private mutating func appendUser(_ ev: RunEvent) {

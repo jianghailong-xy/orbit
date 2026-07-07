@@ -113,6 +113,30 @@ func isAPIError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "API Error")
 }
 
+// contextTokensFromAssistant returns the context-window occupancy after a *top-level*
+// assistant message: the tokens sent to produce it (fresh input + cache reads + cache
+// writes) plus the tokens it generated — the same figure Claude Code's own context
+// gauge shows. Sub-agent messages (a Task tool's own thread, `parent_tool_use_id` set)
+// run in a separate context, so they're ignored. Returns 0 when the message isn't a
+// top-level assistant turn or carries no usage.
+//
+// Deliberately NOT the turn's trailing result.usage: that SUMS usage across every step
+// of the turn, so cache_read alone dwarfs the real window. The latest assistant
+// message's own usage is the actual current occupancy. (Claude's input_tokens excludes
+// cached tokens — cache_read/creation are counted separately — so all four add up.)
+func contextTokensFromAssistant(msg map[string]interface{}) int {
+	if p, _ := msg["parent_tool_use_id"].(string); p != "" {
+		return 0
+	}
+	message, _ := msg["message"].(map[string]interface{})
+	u, ok := message["usage"].(map[string]interface{})
+	if !ok {
+		return 0
+	}
+	return toInt(u["input_tokens"]) + toInt(u["cache_read_input_tokens"]) +
+		toInt(u["cache_creation_input_tokens"]) + toInt(u["output_tokens"])
+}
+
 // assistantText concatenates the text blocks of an `assistant` stream-json message.
 func assistantText(msg map[string]interface{}) string {
 	message, _ := msg["message"].(map[string]interface{})

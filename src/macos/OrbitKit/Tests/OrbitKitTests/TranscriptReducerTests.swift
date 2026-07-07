@@ -159,6 +159,19 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.background.isEmpty, "no confirmation ⇒ no tray row")
     }
 
+    /// The composer's context gauge reads the latest `turn_end`'s `contextTokens`. A later
+    /// turn_end that omits the field (a pre-feature runner) keeps the last known value rather
+    /// than blanking the gauge.
+    func testTurnEndCarriesContextTokens() {
+        var r = TranscriptReducer()
+        XCTAssertNil(r.state.contextTokens, "no turn yet ⇒ gauge hidden")
+        r.apply(RunEvent(seq: 1, type: .turnEnd,
+                         payload: .object(["status": .string("AWAITING_INPUT"), "contextTokens": .int(94500)])))
+        XCTAssertEqual(r.state.contextTokens, 94500)
+        r.apply(RunEvent(seq: 2, type: .turnEnd, payload: .object(["status": .string("AWAITING_INPUT")])))
+        XCTAssertEqual(r.state.contextTokens, 94500, "a turn_end without the field keeps the last value")
+    }
+
     /// The tray row keeps the launch wall-clock (the surfacing tool_result's `ts`) so it can render
     /// "5m ago" like web's `BgShell.startedTs`. Stored raw; the view formats it via `RelativeTime`.
     func testBackgroundShellCapturesStartedAtFromLaunchTimestamp() {

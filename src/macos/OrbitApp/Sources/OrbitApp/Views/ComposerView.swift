@@ -236,6 +236,10 @@ struct ComposerView: View {
                 }
                 .borderlessMenuStyle().menuIndicator(.hidden).fixedSize().neutralMenuTint()
 
+                if let ctx = console.state.contextTokens, ctx > 0 {
+                    ContextWindowIndicator(tokens: ctx, model: console.modelID)
+                }
+
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
                 }
@@ -577,6 +581,85 @@ private struct PlanUsageIndicator: View {
             .help("Plan usage \(pct)%")
             .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage))
         }
+    }
+}
+
+/// 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge. Context
+/// windows are whole millions and tokens never exceed the window, so integer M suffices.
+private func fmtTokens(_ n: Int) -> String {
+    if n >= 1_000_000 { return "\(n / 1_000_000)M" }
+    if n >= 1000 { return "\(Int((Double(n) / 1000).rounded()))k" }
+    return "\(n)"
+}
+
+/// Context-window gauge for the composer footer (mirrors PlanUsageIndicator): a mini bar +
+/// percent of the model's context window filled by the latest turn; tapping shows the token
+/// counts. Distinct from plan usage — that's the subscription rate limit, this is the session's
+/// live context occupancy (the figure Claude Code's own gauge shows).
+private struct ContextWindowIndicator: View {
+    let tokens: Int
+    let model: String
+    @State private var showDetail = false
+
+    private var window: Int { AgentDefaults.contextWindow(for: model) }
+    private var pct: Int { window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0 }
+
+    var body: some View {
+        Button { showDetail.toggle() } label: {
+            HStack(spacing: 5) {
+                UsageBar(percent: pct).frame(width: 26, height: 4)
+                Text("\(pct)%").foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .help("Context window \(pct)% · \(fmtTokens(tokens)) / \(fmtTokens(window))")
+        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct))
+    }
+}
+
+/// Presents the context-window detail per platform (matches PlanUsageDetailPresentation): a tight
+/// anchored popover on macOS, a fitted bottom sheet on iOS.
+private struct ContextWindowDetailPresentation: ViewModifier {
+    @Binding var isPresented: Bool
+    let tokens: Int
+    let window: Int
+    let pct: Int
+
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Context window").foregroundStyle(.secondary)
+                Spacer()
+                Text("\(pct)%").monospacedDigit()
+            }
+            UsageBar(percent: pct).frame(height: 4)
+            Text("\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.popover(isPresented: $isPresented, arrowEdge: .top) {
+            detail.padding(14).frame(width: 220)
+        }
+        #else
+        content.sheet(isPresented: $isPresented) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("Context").font(.title3.weight(.semibold))
+                    Spacer()
+                    Button("Done") { isPresented = false }
+                }
+                .padding(.bottom, 16)
+                detail
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .presentationDetents([.height(160)])
+            .presentationDragIndicator(.visible)
+        }
+        #endif
     }
 }
 

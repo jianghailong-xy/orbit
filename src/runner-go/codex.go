@@ -73,10 +73,17 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				job.RuntimeSessionID = result.RuntimeSessionID
 				writeSessionMeta(scratchDir, job, execDir)
 			}
+			// Best-effort context-window occupancy for the gauge: OpenAI-style usage counts
+			// cached tokens inside input_tokens, so this turn's input+output ≈ the context.
+			ctxTokens := 0
+			if result.Usage != nil {
+				ctxTokens = result.Usage.InputTokens + result.Usage.OutputTokens
+			}
 			emit(evTurnEnd, map[string]interface{}{
-				"subtype":  result.Subtype,
-				"numTurns": 1,
-				"costUsd":  0,
+				"subtype":       result.Subtype,
+				"numTurns":      1,
+				"costUsd":       0,
+				"contextTokens": ctxTokens,
 			})
 			liveFiles, livePatches := liveDiff(job.WT)
 			if err := t.turnComplete(job.SessionID, TurnCompleteRequest{

@@ -706,6 +706,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// content filtering) shows up here while the trailing `result` still says success,
 	// so we use it to fail the turn below. Reset once the turn's `result` is handled.
 	var lastAssistantText string
+	// Running context-window occupancy: the latest top-level assistant message's total
+	// tokens (input + cache + output). Carried into each turn_end event so the clients'
+	// context gauge updates live and, via event replay, on session reopen. Persists
+	// across turns within this process — the latest value is always the current context.
+	var contextTokens int
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -719,6 +724,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		if msg["type"] == "assistant" {
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
+			}
+			if ct := contextTokensFromAssistant(msg); ct > 0 {
+				contextTokens = ct
 			}
 		}
 		if msg["type"] == "result" {
@@ -742,9 +750,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				writeSessionMeta(scratchDir, job, execDir)
 			}
 			emit(evTurnEnd, map[string]interface{}{
-				"subtype":  r.Subtype,
-				"numTurns": r.NumTurns,
-				"costUsd":  r.CostUsd,
+				"subtype":       r.Subtype,
+				"numTurns":      r.NumTurns,
+				"costUsd":       r.CostUsd,
+				"contextTokens": contextTokens,
 			})
 			var turnID string
 			select {

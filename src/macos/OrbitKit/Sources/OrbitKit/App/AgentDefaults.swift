@@ -38,6 +38,19 @@ public enum AgentDefaults {
         models.first { $0.id == id }?.name ?? id
     }
 
+    /// Per-model context-window size (max input tokens), for the composer's context-usage
+    /// gauge. Claude values are the models' true windows (Opus 4.8 / Sonnet 5 / Fable 5 =
+    /// 1M, Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with web's
+    /// CONTEXT_WINDOW_BY_MODEL.
+    public static func contextWindow(for id: String) -> Int {
+        switch id {
+        case "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5": return 1_000_000
+        case "claude-haiku-4-5": return 200_000
+        case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark": return 400_000
+        default: return 200_000
+        }
+    }
+
     public static let permissionModes = PermissionMode.allCases
 
     public static func label(_ mode: PermissionMode) -> String {

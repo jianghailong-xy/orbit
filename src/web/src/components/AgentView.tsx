@@ -46,6 +46,7 @@ import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import { agentsQuery, type Me, meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import {
+  contextWindowFor,
   DEFAULT_MODEL,
   DEFAULT_MODEL_BY_PROVIDER,
   effortOptionsForProvider,
@@ -218,6 +219,64 @@ function usageRows(usage: PlanUsageSnapshot): PlanUsageRow[] {
     const w = usageWindow(usage, key);
     return w && typeof w.utilization === 'number' ? [{ key, label: w.label || label, w }] : [];
   });
+}
+
+// 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
+const fmtTokens = (n: number): string =>
+  n >= 1_000_000
+    ? `${(n / 1_000_000).toFixed(n % 1_000_000 ? 1 : 0)}M`
+    : n >= 1000
+      ? `${Math.round(n / 1000)}k`
+      : `${n}`;
+
+// The latest turn's context-window occupancy (tokens), read from the newest `turn_end` in
+// the loaded events. 0 = the newest turn carries no usable value (older runner, or no turn
+// completed) → the gauge is hidden. Derived from `events` — which holds the boot tail page
+// (so it's right on cold open) plus live appends — rather than a separate live signal.
+function lastContextTokens(events: RunEvent[]): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type !== 'turn_end') continue;
+    const ct = (events[i].payload as { contextTokens?: unknown } | undefined)?.contextTokens;
+    return typeof ct === 'number' && ct > 0 ? ct : 0;
+  }
+  return 0;
+}
+
+// Context-window gauge for the composer footer (mirrors PlanUsageIndicator): a mini bar
+// + percent of the model's context window filled by the latest turn; hover/click reveals
+// the token counts. Distinct from plan usage — that's the subscription rate limit.
+function ContextWindowIndicator({ tokens, model }: { tokens: number; model: string }) {
+  const windowTokens = contextWindowFor(model);
+  const pct = Math.min(100, Math.round((tokens / windowTokens) * 100));
+  const pop = (
+    <div className="cu-pop">
+      <div className="cu-row">
+        <div className="cu-head">
+          <span className="cu-label">Context window</span>
+          <span className="cu-pct">{pct}%</span>
+        </div>
+        <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+          <span className="runner-util-fill" style={{ width: `${pct}%` }} />
+        </div>
+        <div className="cu-reset">
+          {fmtTokens(tokens)} / {fmtTokens(windowTokens)} tokens
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
+      <span
+        className={`composer-pill composer-usage ${pct >= 90 ? 'full' : ''}`}
+        aria-label={`Context window ${pct}%`}
+      >
+        <span className="composer-usage-bar">
+          <span className="composer-usage-fill" style={{ width: `${pct}%` }} />
+        </span>
+        <span className="composer-usage-pct">{pct}%</span>
+      </span>
+    </Popover>
+  );
 }
 
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
@@ -2191,6 +2250,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         'claude')
     : (pickedAgent?.provider ?? 'claude');
   const shownPlanUsage = usageSnapshotForProvider(runner.planUsage, shownProvider);
+  const contextTokens = lastContextTokens(events);
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
@@ -3244,6 +3304,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
+          {contextTokens > 0 && <ContextWindowIndicator tokens={contextTokens} model={shownModel} />}
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
         </div>
       </div>
