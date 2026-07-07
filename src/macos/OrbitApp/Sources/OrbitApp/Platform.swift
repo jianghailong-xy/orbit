@@ -102,6 +102,21 @@ extension View {
         #endif
     }
 
+    /// Pin a `Menu`'s label to a neutral tint on iOS. Because `borderlessMenuStyle()` is a no-op there
+    /// (iOS has no borderless menu style), the fallback tints the whole label with the accent color
+    /// like a button — which turned the composer's footer pickers and the `+` into a patchwork of
+    /// accent-blue controls jammed beside the neutral agent-name / usage metadata, and silently
+    /// diverged from macOS (where `.borderlessButton` honors the label's own `.foregroundStyle`). A
+    /// label-level `.foregroundStyle` can't override the menu's tint on iOS, so set the tint itself.
+    /// Keeping these neutral reserves the accent for the one primary action (send) and the usage bar.
+    @ViewBuilder func neutralMenuTint(_ tint: Color = .primary) -> some View {
+        #if os(iOS)
+        self.tint(tint)
+        #else
+        self
+        #endif
+    }
+
     /// iOS: install the "tap outside a text field lowers the keyboard" convention the transcript was
     /// missing. A SwiftUI `simultaneousGesture` on the `List` is unreliable — the collection view's
     /// own recognizers swallow taps that land on a row, so tapping a message never fired one. A

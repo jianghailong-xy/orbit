@@ -197,7 +197,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(AgentDefaults.label(console.permissionMode))
                 }
-                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize().neutralMenuTint()
 
                 Spacer()
 
@@ -217,7 +217,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(AgentDefaults.models.first { $0.id == console.modelID }?.name ?? console.modelID)
                 }
-                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize().neutralMenuTint()
 
                 Menu {
                     ForEach(Effort.allCases) { e in
@@ -234,7 +234,7 @@ struct ComposerView: View {
                 } label: {
                     menuLabel(console.effort.label)
                 }
-                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize()
+                .borderlessMenuStyle().menuIndicator(.hidden).fixedSize().neutralMenuTint()
 
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
@@ -339,6 +339,9 @@ struct ComposerView: View {
         .borderlessMenuStyle()
         .menuIndicator(.hidden)
         .fixedSize()
+        // The `+` renders accent-blue by default on iOS (same menu-tint fallback as the footer
+        // pickers); keep it neutral so the send button stays the composer box's only accent.
+        .neutralMenuTint(.secondary)
         .help("Add a command, skill, shell command, or attachment")
         #if os(iOS)
         .photosPicker(isPresented: $showPhotoPicker, selection: $pickedPhotos,
@@ -360,7 +363,15 @@ struct ComposerView: View {
     /// instead of macOS's default bordered popup button.
     private func menuLabel(_ text: String) -> some View {
         HStack(spacing: 3) {
-            Text(text).lineLimit(1)
+            Text(text)
+                #if os(iOS)
+                // The current value now carries the emphasis on its own — the trigger is neutral (no
+                // accent color), so a medium weight reads as "this is the set value" against the
+                // regular-weight agent name without reintroducing a second color. macOS keeps the
+                // lighter secondary label its `.borderlessButton` chrome already draws.
+                .fontWeight(.medium)
+                #endif
+                .lineLimit(1)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.orbitMeta)
                 .foregroundStyle(.tertiary)
