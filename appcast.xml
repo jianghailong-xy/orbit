@@ -19,10 +19,10 @@
             <link>https://github.com/jianghailong-xy/orbit</link>
             <sparkle:channel>beta</sparkle:channel>
             <sparkle:version>925</sparkle:version>
-            <sparkle:shortVersionString>0.1.1-beta.59</sparkle:shortVersionString>
+            <sparkle:shortVersionString>0.1.1-beta.61</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.59/Orbit-v0.1.1-beta.59-arm64.zip" length="6563365" type="application/octet-stream" sparkle:edSignature="GI0/uCHUqKRAvTu7O0eHYlSWDOuqG+EYZFPLUXNXK8Uo3t84+4sb6bApqvah36hBVby2oP5hc4CRQwDp1g4uAw=="/>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.1-beta.61/Orbit-v0.1.1-beta.61-arm64.zip" length="6563539" type="application/octet-stream" sparkle:edSignature="cbntfhLcOh8x/EMZLD6u+2QUEQ1YFSN0NCWSLvRCZ3gIVRp4HetFL4wshtySrjzGOfBC9VSQuuGvFCR25t2gAA=="/>
         </item>
         <item>
             <title>0.1.1-beta.58</title>
