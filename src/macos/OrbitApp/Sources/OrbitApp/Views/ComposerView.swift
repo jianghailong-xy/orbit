@@ -28,12 +28,15 @@ struct ComposerView: View {
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
-    @FocusState private var inputFocused: Bool
     #if os(macOS)
+    @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
     @State private var pasteState = ComposerPasteState()
     #endif
     #if os(iOS)
+    // The iOS editor is a UITextView (GrowingTextEditor), not a @FocusState-bound SwiftUI field, so
+    // its first-responder state rides this flag: set it to focus, read it for the box's focus ring.
+    @State private var iosEditing = false
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
@@ -58,6 +61,26 @@ struct ComposerView: View {
 
     private var placeholder: String {
         console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
+    }
+
+    // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
+    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `iosEditing`).
+    private var boxFocused: Bool {
+        #if os(iOS)
+        iosEditing
+        #else
+        inputFocused
+        #endif
+    }
+
+    /// Focus the input — from autofocus, a reply, or a slash pick. macOS drives @FocusState; iOS
+    /// sets the flag the UITextView editor observes to become first responder.
+    private func requestFocus() {
+        #if os(iOS)
+        iosEditing = true
+        #else
+        inputFocused = true
+        #endif
     }
 
     var body: some View {
@@ -91,36 +114,12 @@ struct ComposerView: View {
             HStack(alignment: .center, spacing: 6) {
                 addMenu
 
-                TextField(placeholder, text: $console.composerText, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.orbitControl)
-                    .lineLimit(1...6)
-                    // Fill the available width; vertical centering comes from the HStack's .center
-                    // alignment, so the placeholder, the + and the send button all sit on one
-                    // centerline. The box hugs the content height (no forced minHeight that would
-                    // strand the text at the top).
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .focused($inputFocused)
-                    .onSubmit { onReturn() }
-                    .onKeyPress(.upArrow) { moveSlash(-1) }
-                    .onKeyPress(.downArrow) { moveSlash(1) }
-                    .onKeyPress(.escape) {
-                        if showSlash {
-                            slashDismissed = console.slashToken
-                            return .handled
-                        }
-                        // No slash menu open: blur the field and hand ↑/↓ back to the session list,
-                        // so the user can keep switching sessions from the keyboard without having to
-                        // click the list first.
-                        inputFocused = false
-                        app.focusSessionList()
-                        return .handled
-                    }
+                inputField
                     .onChange(of: console.slashToken) { _, new in
                         slashIndex = 0
                         if new == nil { console.slashScope = nil }
                     }
-                    .onChange(of: console.replyContext) { if console.replyContext != nil { inputFocused = true } }
+                    .onChange(of: console.replyContext) { if console.replyContext != nil { requestFocus() } }
                     // Clamp input length: an oversized prompt freezes SwiftUI's synchronous
                     // text layout. Pasting past the cap truncates; big content is a file upload.
                     .onChange(of: console.composerText) { _, text in
@@ -168,14 +167,14 @@ struct ComposerView: View {
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.editorSurface)
-                    .shadow(color: .black.opacity(inputFocused ? 0.12 : 0.06),
-                            radius: inputFocused ? 7 : 4, y: 1.5)
+                    .shadow(color: .black.opacity(boxFocused ? 0.12 : 0.06),
+                            radius: boxFocused ? 7 : 4, y: 1.5)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(inputFocused ? 0.22 : 0.10), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
             }
-            .animation(.easeOut(duration: 0.15), value: inputFocused)
+            .animation(.easeOut(duration: 0.15), value: boxFocused)
 
             // Footer controls, laid out like the web composer: permission mode on the left,
             // then the agent identity · model · effort · plan-usage cluster on the right. Each
@@ -254,7 +253,7 @@ struct ComposerView: View {
         // the keystroke here: when the composer is focused and the clipboard holds an image, attach
         // it (web parity) and swallow the paste; anything else falls through to normal text paste.
         .onAppear {
-            if autoFocus { inputFocused = true }
+            if autoFocus { requestFocus() }
             #if os(macOS)
             guard pasteMonitor == nil else { return }
             pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -281,6 +280,42 @@ struct ComposerView: View {
         .onChange(of: console.sessionID, initial: true) { _, _ in
             pasteState.attach = { png in Task { @MainActor in await console.attachPastedImage(pngData: png) } }
         }
+        #endif
+    }
+
+    // The growing multiline input. iOS uses a UITextView-backed editor (`GrowingTextEditor`) because
+    // SwiftUI's `TextField(axis: .vertical)` grows only intermittently as text soft-wraps — the box
+    // stays a line tall while wrapped (most visibly CJK) text spills. macOS keeps the native vertical
+    // TextField: its AppKit backing grows reliably and carries the hardware-keyboard slash navigation.
+    @ViewBuilder
+    private var inputField: some View {
+        #if os(iOS)
+        GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
+                          maxLines: 6, isEditing: $iosEditing)
+            .frame(maxWidth: .infinity)
+        #else
+        TextField(placeholder, text: $console.composerText, axis: .vertical)
+            .textFieldStyle(.plain)
+            .font(.orbitControl)
+            .lineLimit(1...6)
+            // Fill the available width; vertical centering comes from the HStack's .center alignment,
+            // so the placeholder, the + and the send button all sit on one centerline.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .focused($inputFocused)
+            .onSubmit { onReturn() }
+            .onKeyPress(.upArrow) { moveSlash(-1) }
+            .onKeyPress(.downArrow) { moveSlash(1) }
+            .onKeyPress(.escape) {
+                if showSlash {
+                    slashDismissed = console.slashToken
+                    return .handled
+                }
+                // No slash menu open: blur the field and hand ↑/↓ back to the session list, so the
+                // user can keep switching sessions from the keyboard without clicking the list first.
+                inputFocused = false
+                app.focusSessionList()
+                return .handled
+            }
         #endif
     }
 
@@ -462,7 +497,7 @@ struct ComposerView: View {
                 Button {
                     console.pickSlash(item.name)
                     slashDismissed = nil
-                    inputFocused = true
+                    requestFocus()
                 } label: {
                     HStack(spacing: 6) {
                         Text("/\(item.name)").font(.callout.monospaced())
@@ -571,6 +606,107 @@ private struct ComposerImageTap: ViewModifier {
         #endif
     }
 }
+
+#if os(iOS)
+/// A `UITextView`-backed multiline input that grows with its content up to `maxLines`, then scrolls
+/// internally. The iOS composer needs this because SwiftUI's `TextField(axis: .vertical)` grows only
+/// intermittently as text soft-wraps: its reported height lags a layout pass, so a wrapped line —
+/// most visibly with CJK text, which wraps mid-run rather than at spaces — often fails to push the box
+/// taller until the next keystroke. `UITextView` lays out its text synchronously, so measuring it each
+/// change tracks the wrapped height reliably (web-composer parity). Focus is two-way: an external
+/// `isEditing = true` (autofocus, a reply, a slash pick) makes it first responder, and begin/end
+/// editing report back so the composer box's focus ring follows.
+private struct GrowingTextEditor: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let maxLines: Int
+    @Binding var isEditing: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> PlaceholderTextView {
+        let view = PlaceholderTextView(frame: .zero, textContainer: nil)
+        // Touching `layoutManager` opts the field into TextKit 1, whose `sizeThatFits` measures the
+        // wrapped height synchronously and predictably across iOS versions — the whole point here.
+        // (TextKit 2's async layout is what leaves the height stale for a pass.) A plain composer
+        // needs none of TextKit 2's features, so this trade is free.
+        _ = view.layoutManager
+        view.delegate = context.coordinator
+        view.font = UIFont.preferredFont(forTextStyle: .body)   // matches Font.orbitControl (.body) on iOS
+        view.adjustsFontForContentSizeCategory = true
+        view.backgroundColor = .clear
+        view.textColor = .label
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        // Height is driven by `sizeThatFits` (capped at maxLines); scrolling stays on so the text
+        // scrolls within that cap once it's exceeded rather than clipping.
+        view.isScrollEnabled = true
+        view.placeholderLabel.font = view.font
+        return view
+    }
+
+    func updateUIView(_ view: PlaceholderTextView, context: Context) {
+        context.coordinator.parent = self
+        if view.text != text { view.text = text }
+        view.placeholderLabel.text = placeholder
+        view.placeholderLabel.isHidden = !text.isEmpty
+        view.setNeedsLayout()
+        // Drive focus from the binding, but never fight the field's own responder state.
+        if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
+        else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
+    }
+
+    /// Height for the proposed width, capped at `maxLines`. `UITextView.sizeThatFits` measures the
+    /// wrapped text from its layout manager, so this is the reliable growth the vertical TextField lacks.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: PlaceholderTextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? uiView.bounds.width
+        guard width.isFinite, width > 0 else { return nil }
+        let fit = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        let line = uiView.font?.lineHeight ?? UIFont.preferredFont(forTextStyle: .body).lineHeight
+        return CGSize(width: width, height: ceil(min(fit.height, line * CGFloat(maxLines))))
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: GrowingTextEditor
+        init(_ parent: GrowingTextEditor) { self.parent = parent }
+
+        func textViewDidChange(_ view: UITextView) {
+            if parent.text != view.text { parent.text = view.text }
+            (view as? PlaceholderTextView)?.placeholderLabel.isHidden = !view.text.isEmpty
+            // Nudge SwiftUI to re-run `sizeThatFits` so the box tracks the new line count immediately.
+            view.invalidateIntrinsicContentSize()
+        }
+        func textViewDidBeginEditing(_ view: UITextView) {
+            if !parent.isEditing { parent.isEditing = true }
+        }
+        func textViewDidEndEditing(_ view: UITextView) {
+            if parent.isEditing { parent.isEditing = false }
+        }
+    }
+}
+
+/// A `UITextView` with a leading placeholder label (UIKit has none built in), laid out to sit exactly
+/// where typed text begins given the zeroed text-container insets.
+private final class PlaceholderTextView: UITextView {
+    let placeholderLabel = UILabel()
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        placeholderLabel.numberOfLines = 0
+        placeholderLabel.textColor = .placeholderText
+        addSubview(placeholderLabel)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let available = max(bounds.width - textContainerInset.left - textContainerInset.right, 0)
+        let size = placeholderLabel.sizeThatFits(CGSize(width: available, height: .greatestFiniteMagnitude))
+        placeholderLabel.frame = CGRect(x: textContainerInset.left, y: textContainerInset.top,
+                                        width: available, height: size.height)
+    }
+}
+#endif
 
 /// Compact plan-usage pill for the composer footer (mirrors web's PlanUsageIndicator): a mini
 /// 5-hour bar + percent; tapping opens the per-window detail, like `/usage`.
