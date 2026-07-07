@@ -308,12 +308,11 @@ struct ComposerView: View {
                 .foregroundStyle(.secondary)
                 #if os(iOS)
                 // Even bumped up, the glyph alone sits under the 44pt HIG tap minimum and the Menu's
-                // `.fixedSize()` hugs it. On touch, give it a 26×34 hit area with the whole rect
-                // tappable and the glyph centered — so it reads as a padded target with even spacing,
-                // not a flush-left icon with a lopsided gap before the field. Height matches the send
-                // glyph's row so the composer box doesn't grow taller. macOS (pointer input) keeps the
-                // tight glyph.
-                .frame(width: 26, height: 34)
+                // `.fixedSize()` hugs it. On touch, give it a 34×34 square hit area with the whole
+                // rect tappable and the glyph centered — even padding all round, no lopsided gap
+                // before the field. The 34pt height matches the send glyph's row so the composer box
+                // doesn't grow taller. macOS (pointer input) keeps the tight glyph.
+                .frame(width: 34, height: 34)
                 .contentShape(Rectangle())
                 #endif
         }
