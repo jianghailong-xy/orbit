@@ -68,12 +68,15 @@ struct SettingsView: View {
                 Picker("Default permission", selection: $permMode) {
                     ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
                 }
+                #if os(macOS)
+                // iOS auto-saves on change (see `.onChange` below); macOS keeps an explicit commit.
                 Button("Save preferences") {
                     Task {
                         await model.savePreferences(UpdatePreferencesRequest(
                             theme: theme, defaultModel: defaultModel, defaultPermissionMode: permMode.rawValue))
                     }
                 }
+                #endif
             }
 
             Section("Change password") {
@@ -107,6 +110,11 @@ struct SettingsView: View {
         #endif
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        #if os(iOS)
+        .onChange(of: theme) { autosavePreferences() }
+        .onChange(of: defaultModel) { autosavePreferences() }
+        .onChange(of: permMode) { autosavePreferences() }
+        #endif
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -116,6 +124,24 @@ struct SettingsView: View {
             permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "default") ?? .default
         }
     }
+
+    #if os(iOS)
+    /// iOS persists each preference the moment its picker changes — matching the platform's
+    /// "settings apply immediately" convention, so there's no explicit Save button. Fire-and-forget
+    /// like `AppModel.rememberDefaultEffort`. Guarded against the `onAppear` seed (which sets the
+    /// pickers to the current values), so simply opening Settings never triggers a spurious write.
+    private func autosavePreferences() {
+        let p = model.user?.preferences
+        guard (p?.theme ?? "system") != theme
+            || (p?.defaultModel ?? AgentDefaults.defaultModelID) != defaultModel
+            || (p?.defaultPermissionMode ?? PermissionMode.default.rawValue) != permMode.rawValue
+        else { return }
+        Task {
+            await model.savePreferences(UpdatePreferencesRequest(
+                theme: theme, defaultModel: defaultModel, defaultPermissionMode: permMode.rawValue))
+        }
+    }
+    #endif
 }
 
 // MARK: - Admin
