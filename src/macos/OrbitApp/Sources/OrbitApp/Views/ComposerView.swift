@@ -413,11 +413,24 @@ struct ComposerView: View {
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.orbitMeta)
+                            .font(removeGlyphFont)
                             .foregroundStyle(.white, .black.opacity(0.55))
+                            #if os(iOS)
+                            // A .plain button's hit area is only its glyph, so the 11pt caption2 ✕ gave
+                            // a ~13pt target — under a third of HIG's 44pt and the composer's hardest
+                            // control to tap. Enlarge the *touchable* area to 30pt (glyph stays a small
+                            // corner badge) and nudge it up/right so that area reaches into empty space
+                            // past the 48pt thumb instead of blanketing the image — a full 44pt box would
+                            // cover it and steal its tap-to-preview. macOS (pointer) keeps the tight badge.
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                            .offset(x: 7, y: -7)
+                            #endif
                     }
                     .buttonStyle(.plain)
+                    #if os(macOS)
                     .padding(2)
+                    #endif
                     .help("Remove image")
                 }
         } else {
@@ -780,4 +793,14 @@ private let sendGlyphFont: Font = .title2
 private let addGlyphFont: Font = .title3
 #else
 private let addGlyphFont: Font = .orbitGlyph
+#endif
+
+// The staged-attachment remove (✕) badge. On iOS it steps up from the 11pt caption2 metadata size so
+// the glyph reads on a phone, staying a clear step under the 20pt + and 28pt send glyphs so the action
+// hierarchy holds; the real touch fix is the 30pt hit area it's paired with. macOS keeps the tight
+// pointer-precise corner badge at the metadata size.
+#if os(iOS)
+private let removeGlyphFont: Font = .subheadline
+#else
+private let removeGlyphFont: Font = .orbitMeta
 #endif
