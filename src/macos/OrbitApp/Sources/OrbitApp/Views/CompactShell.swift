@@ -8,8 +8,9 @@ import OrbitKit
 ///   • the leading hamburger in each section's root nav bar (discoverable), and
 ///   • an edge-swipe from the left (fast + one-handed), enabled only at a section's root so it never
 ///     fights the system back-swipe on a pushed page.
-/// The drawer pushes the content to the right with a dimming scrim; tapping the scrim or swiping
-/// left closes it. The current section is highlighted.
+/// The drawer pushes the content to the right with a dimming scrim, a soft edge shadow, and rounded
+/// leading corners (so the content reads as a card floating above the drawer); tapping the scrim or
+/// swiping left closes it. The current section is highlighted.
 ///
 /// Under the hood the drawer just drives `selectedSection`, and `CompactSections` renders that one
 /// section's navigation stack. Every existing `List(selection:)` sidebar + detail pair from the iPad
@@ -27,12 +28,34 @@ struct CompactShell: View {
             let w = geo.size.width
             let dw = drawerWidth(w)
             let x = contentOffset(width: w)
+            // How far open, 0…1 — drives the shadow's strength and the card's corner radius so they
+            // grow in with the peek.
+            let progress = dw > 0 ? x / dw : 0
+            // Leading-edge corner radius: 0 when closed (the mask is then a plain full-screen rect, so
+            // the normal layout is untouched) → ~14 fully open, rounding the content into a floating card.
+            let corner = 14 * progress
 
             ZStack(alignment: .leading) {
                 // Drawer, revealed at the leading edge as the content slides right.
                 NavigationDrawer(close: closeDrawer)
                     .frame(width: dw)
                     .offset(x: x - dw)
+
+                // The soft shadow the sliding content casts onto the drawer along its leading edge — the
+                // ChatGPT sense of the content floating *above* the drawer, which is what reads as depth.
+                // A full-height gradient band (rather than a `.shadow` on the live content) keeps the
+                // falloff on the leading edge only, so it never haloes into the top/bottom safe areas and
+                // costs nothing to recompute as the console streams. Sits just left of the content's edge,
+                // above the drawer but below the content, and is non-interactive so drawer taps still land.
+                // Kept always-mounted with opacity tied to `progress` (0 when closed → off-screen at x−24)
+                // so it fades and slides in lockstep with the content instead of popping in on open.
+                LinearGradient(colors: [.black.opacity(0.20 * progress), .clear],
+                               startPoint: .trailing, endPoint: .leading)
+                    .frame(width: 24)
+                    .frame(maxHeight: .infinity)
+                    .offset(x: x - 24)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
 
                 // Section content — pushed right, dimmed, and tap/swipe-to-close via the scrim.
                 // The scrim is an overlay *inside* the offset (offset is the outermost modifier) so it
@@ -47,6 +70,17 @@ struct CompactShell: View {
                                 .onTapGesture(perform: closeDrawer)
                                 .gesture(closeDrag(width: w))
                         }
+                    }
+                    // Round the content's leading corners into a floating card as it slides open. We
+                    // *mask* with an `.ignoresSafeArea` rounded rect rather than `.clipShape` the content
+                    // (or make the content ignore its safe area): the mask spans the full screen — the way
+                    // the nav bar's background already bleeds under the status bar / home indicator — so
+                    // only the corners are trimmed, while the console's own safe-area insets (and the
+                    // composer sitting above the home indicator) are left exactly as they are. At
+                    // `corner == 0` the mask is a plain full-screen rect: a no-op for the closed state.
+                    .mask {
+                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                            .ignoresSafeArea()
                     }
                     .offset(x: x)
 
