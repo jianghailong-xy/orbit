@@ -324,15 +324,15 @@ struct ComposerView: View {
             #endif
         } label: {
             Image(systemName: "plus")
-                .font(.orbitGlyph)
+                .font(addGlyphFont)
                 .foregroundStyle(.secondary)
                 #if os(iOS)
-                // The bare 15pt glyph gives a tap target far under the 44pt HIG minimum, and the
-                // Menu's `.fixedSize()` hugs it. On touch, give it a 26×34 hit area with the whole
-                // rect tappable and the glyph centered — so it reads as a padded target with even
-                // spacing, not a flush-left icon with a lopsided gap before the field. Height matches
-                // the send glyph's row so the composer box doesn't grow taller. macOS (pointer input)
-                // keeps the tight glyph.
+                // Even bumped up, the glyph alone sits under the 44pt HIG tap minimum and the Menu's
+                // `.fixedSize()` hugs it. On touch, give it a 26×34 hit area with the whole rect
+                // tappable and the glyph centered — so it reads as a padded target with even spacing,
+                // not a flush-left icon with a lopsided gap before the field. Height matches the send
+                // glyph's row so the composer box doesn't grow taller. macOS (pointer input) keeps the
+                // tight glyph.
                 .frame(width: 26, height: 34)
                 .contentShape(Rectangle())
                 #endif
@@ -676,4 +676,13 @@ private func formatReset(_ iso: String) -> String? {
 private let sendGlyphFont: Font = .title
 #else
 private let sendGlyphFont: Font = .title2
+#endif
+
+// The `+` add-menu glyph. On iOS it's bumped up from the 15pt row-scale `.orbitGlyph` so it reads as a
+// clearly tappable control rather than a faint hairline — but kept a clear step below the 28pt send CTA
+// so the primary-action hierarchy holds. macOS keeps the tight `.orbitGlyph` for its pointer-precise bar.
+#if os(iOS)
+private let addGlyphFont: Font = .system(size: 20)
+#else
+private let addGlyphFont: Font = .orbitGlyph
 #endif
