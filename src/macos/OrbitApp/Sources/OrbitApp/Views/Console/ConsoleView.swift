@@ -350,7 +350,9 @@ struct TranscriptView: View {
             .padding(.horizontal, 12).padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
-            .overlay(alignment: .bottom) { Divider() }
+            // Wrap the rule in a stack so it draws as a horizontal bottom hairline: a bare `Divider()`
+            // in an overlay has no stack axis and instead renders as a vertical line down the row's center.
+            .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
