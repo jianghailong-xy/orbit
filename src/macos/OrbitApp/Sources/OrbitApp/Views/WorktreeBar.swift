@@ -89,7 +89,11 @@ struct WorktreeBar: View {
             }
             expandButton.layoutPriority(2)
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
+        // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
+        // bars share `min-height: 30`) so the stack above the composer reads as one system. Vertical
+        // padding is trimmed to 3 so the 24pt `expandButton` tap target no longer silently pushed this
+        // bar ~8pt taller than the tray.
+        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
         .background(.bar, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
         .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
@@ -500,7 +504,7 @@ struct BackgroundTrayView: View {
             Image(systemName: open ? "chevron.down" : "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 10).padding(.vertical, 7)
+        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.easeOut(duration: 0.12)) { open.toggle() } }
         .accessibilityAddTraits(.isButton)
