@@ -35,6 +35,7 @@ import type { PlanUsage, SlashCommandInfo } from '@orbit/shared';
 import { api, clearToken } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { useControlPlaneLive } from '../lib/useControlPlane';
 import { orderAgents } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 
@@ -113,6 +114,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  // While the control-plane stream is live it pushes list changes, so the active-sessions poll
+  // below stands down; it resumes automatically on any stream gap.
+  const controlLive = useControlPlaneLive();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
@@ -278,10 +282,12 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // 'active'] cache the sidebar/console already fill, so it adds no extra request.
   const activeSessions = useQuery({
     ...sessionsQuery({ view: 'active' }),
-    refetchInterval: (q) =>
-      (q.state.data ?? []).some((s: any) => s.status === 'RUNNING' || s.status === 'PENDING')
-        ? 5_000
-        : 15_000,
+    refetchInterval: controlLive
+      ? false
+      : (q) =>
+          (q.state.data ?? []).some((s: any) => s.status === 'RUNNING' || s.status === 'PENDING')
+            ? 5_000
+            : 15_000,
   });
   // The "needs you" signal decomposed per agent: how many of each agent's active
   // sessions are blocked on an approval. Lets an agent row show its own attention count

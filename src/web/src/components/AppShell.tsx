@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { MenuOutlined } from '@ant-design/icons';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
+import { ControlPlaneProvider } from '../lib/useControlPlane';
 
 // The app shell: a persistent side nav plus a content region (the routed <Outlet/>).
 // The nav stays mounted across every route; only the region's view changes. On narrow
@@ -14,6 +15,10 @@ export function AppShell() {
   // view isn't left sitting under the overlay.
   useEffect(() => setNavOpen(false), [loc.pathname]);
   return (
+    // ControlPlaneProvider opens the one per-tab control-plane SSE and exposes its liveness, so the
+    // session lists below can stop polling while it's connected (see useControlPlane). Mounted here,
+    // inside the auth gate, so the stream only runs for a signed-in user and spans every route.
+    <ControlPlaneProvider>
     <div className="app-shell">
       <header className="app-topbar">
         <button
@@ -30,6 +35,7 @@ export function AppShell() {
       {navOpen && <div className="app-nav-backdrop" onClick={() => setNavOpen(false)} />}
       <Outlet />
     </div>
+    </ControlPlaneProvider>
   );
 }
 

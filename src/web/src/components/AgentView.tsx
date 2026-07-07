@@ -43,6 +43,7 @@ import {
 import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
+import { useControlPlaneLive } from '../lib/useControlPlane';
 import { agentsQuery, type Me, meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import {
   DEFAULT_MODEL,
@@ -888,7 +889,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
   const sessionsKey = sessionsOpts.queryKey;
-  const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: 4000 });
+  // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
+  // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
+  const controlLive = useControlPlaneLive();
+  const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: controlLive ? false : 4000 });
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
