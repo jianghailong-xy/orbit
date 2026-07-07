@@ -304,15 +304,15 @@ struct ComposerView: View {
             } label: { Label("Upload file", systemImage: "paperclip") }
         } label: {
             Image(systemName: "plus")
-                .font(.orbitGlyph)
+                .font(addGlyphFont)
                 .foregroundStyle(.secondary)
                 #if os(iOS)
-                // The bare 15pt glyph gives a tap target far under the 44pt HIG minimum, and the
-                // Menu's `.fixedSize()` hugs it. On touch, widen the hit area and make the whole
-                // rect tappable — glyph stays leading so it doesn't visually shift; height matches
-                // the send glyph's row so the composer box doesn't grow taller. macOS (pointer
-                // input) keeps the tight glyph.
-                .frame(width: 30, height: 34, alignment: .leading)
+                // Even bumped up, the glyph alone sits under the 44pt HIG tap minimum and the Menu's
+                // `.fixedSize()` hugs it. On touch, give it a 34×34 square hit area with the whole
+                // rect tappable and the glyph centered — even padding all round, no lopsided gap
+                // before the field. The 34pt height matches the send glyph's row so the composer box
+                // doesn't grow taller. macOS (pointer input) keeps the tight glyph.
+                .frame(width: 34, height: 34)
                 .contentShape(Rectangle())
                 #endif
         }
@@ -649,4 +649,13 @@ private func formatReset(_ iso: String) -> String? {
 private let sendGlyphFont: Font = .title
 #else
 private let sendGlyphFont: Font = .title2
+#endif
+
+// The `+` add-menu glyph. On iOS it's bumped up from the 15pt row-scale `.orbitGlyph` so it reads as a
+// clearly tappable control rather than a faint hairline — but kept a clear step below the 28pt send CTA
+// so the primary-action hierarchy holds. macOS keeps the tight `.orbitGlyph` for its pointer-precise bar.
+#if os(iOS)
+private let addGlyphFont: Font = .system(size: 20)
+#else
+private let addGlyphFont: Font = .orbitGlyph
 #endif
