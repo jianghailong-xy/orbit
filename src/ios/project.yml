@@ -55,12 +55,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.app
         PRODUCT_NAME: Orbit
         INFOPLIST_FILE: Support/Info.plist
+        # Release/TestFlight/App Store → aps-environment=production (Orbit.entitlements).
         CODE_SIGN_ENTITLEMENTS: Support/Orbit.entitlements
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"   # 1 = iPhone, 2 = iPad — universal
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ENABLE_PREVIEWS: YES
+      configs:
+        # Local Xcode debug builds → aps-environment=development so an on-device debug build gets a
+        # sandbox APNs token (the client reports "sandbox"; the server pushes to the sandbox host).
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Support/Orbit.Debug.entitlements
 
 # Explicit shared scheme so `xcodebuild -scheme Orbit` resolves the SwiftPM dependencies
 # (OrbitKit + swift-markdown) reliably — `-target` can miss package resolution.

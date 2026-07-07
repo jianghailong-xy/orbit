@@ -302,6 +302,17 @@ struct ComposerView: View {
                 pickFiles(images: false)
                 #endif
             } label: { Label("Upload file", systemImage: "paperclip") }
+            #if os(iOS)
+            // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Gated on
+            // `hasImages` — a non-consuming check, so it doesn't trigger the paste-access banner until
+            // the user actually taps.
+            Button {
+                if let img = UIPasteboard.general.image {
+                    Task { await attachClipboardImage(img) }
+                }
+            } label: { Label("Paste image", systemImage: "doc.on.clipboard") }
+            .disabled(!UIPasteboard.general.hasImages)
+            #endif
         } label: {
             Image(systemName: "plus")
                 .font(.orbitGlyph)
@@ -497,6 +508,12 @@ struct ComposerView: View {
             await console.attachFile(url: url)
             if scoped { url.stopAccessingSecurityScopedResource() }
         }
+    }
+
+    /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
+    private func attachClipboardImage(_ image: UIImage) async {
+        guard let png = image.orbitPNGData() else { return }
+        await console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
     }
     #endif
 }

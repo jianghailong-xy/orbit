@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Debug builds only. A development-signed on-device build must use the SANDBOX APNs
+	  environment; its token then reaches api.sandbox.push.apple.com. The client reports
+	  "sandbox" (via #if DEBUG in PushRegistrar) so the server picks the matching host per token.
+	  Release/TestFlight builds use Orbit.entitlements (aps-environment = production).
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>
