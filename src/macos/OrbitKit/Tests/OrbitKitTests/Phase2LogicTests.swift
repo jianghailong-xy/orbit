@@ -148,20 +148,35 @@ final class Phase2LogicTests: XCTestCase {
     }
 
     func testShowsInterrupt() {
-        // The authoritative session status wins: a running session shows the stop button even when
-        // the stream status is stale — the exact cold-open case (opening an already-running session
+        // Convenience: the idle-composer case (nothing staged to send), which is when the single
+        // button morphs to Stop.
+        func idle(session: RunStatus?, stream: RunStatus) -> Bool {
+            ComposerLogic.showsInterrupt(session: session, stream: stream,
+                                         hasText: false, hasAttachments: false, replying: false)
+        }
+        // The authoritative session status wins: a running session morphs to Stop even when the
+        // stream status is stale — the exact cold-open case (opening an already-running session
         // never replays a `.running` event into the reducer, so the old `state.status`-only gate
         // hid the button and interrupting was impossible).
-        XCTAssertTrue(ComposerLogic.showsInterrupt(session: .running, stream: .awaitingInput))
-        XCTAssertTrue(ComposerLogic.showsInterrupt(session: .running, stream: .pending))
-        XCTAssertTrue(ComposerLogic.showsInterrupt(session: .running, stream: .running))
-        // A non-running authoritative status hides it, even if the stream is a stale `.running`
+        XCTAssertTrue(idle(session: .running, stream: .awaitingInput))
+        XCTAssertTrue(idle(session: .running, stream: .pending))
+        XCTAssertTrue(idle(session: .running, stream: .running))
+        // A non-running authoritative status stays Send, even if the stream is a stale `.running`
         // (e.g. the turn just ended but the reducer missed the un-replayed terminal transition).
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .awaitingInput, stream: .running))
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .parked, stream: .running))
+        XCTAssertFalse(idle(session: .awaitingInput, stream: .running))
+        XCTAssertFalse(idle(session: .parked, stream: .running))
         // No session record yet (a fresh deep link before the list loads): fall back to the stream.
-        XCTAssertTrue(ComposerLogic.showsInterrupt(session: nil, stream: .running))
-        XCTAssertFalse(ComposerLogic.showsInterrupt(session: nil, stream: .awaitingInput))
+        XCTAssertTrue(idle(session: nil, stream: .running))
+        XCTAssertFalse(idle(session: nil, stream: .awaitingInput))
+
+        // Anything staged to send keeps it a Send button (web parity) so a follow-up queues mid-turn,
+        // even while the session is running.
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+                                                    hasText: true, hasAttachments: false, replying: false))
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+                                                    hasText: false, hasAttachments: true, replying: false))
+        XCTAssertFalse(ComposerLogic.showsInterrupt(session: .running, stream: .running,
+                                                    hasText: false, hasAttachments: false, replying: true))
     }
 
     func testEffortLabelsAndWire() {

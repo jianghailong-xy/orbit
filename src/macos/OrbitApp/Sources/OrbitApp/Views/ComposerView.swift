@@ -129,27 +129,35 @@ struct ComposerView: View {
                         }
                     }
 
-                // Show the stop button off the session's AUTHORITATIVE status (the live control-plane
-                // record the nav-bar title reads), NOT the stream-derived `console.state.status`:
-                // opening an already-running session never replays a "running" event into the
-                // reducer, so the stream status stays stale and the button would never appear. Web
-                // parity — its `showStop` keys off `selected?.status === 'RUNNING'`.
-                if ComposerLogic.showsInterrupt(session: app.session(id: console.sessionID)?.status,
-                                                stream: console.state.status) {
+                // One primary button that morphs between Send and Stop, mirroring the web composer
+                // (`showStop`): while a turn is running and there's nothing staged to send it's a
+                // Stop (interrupt); the moment the user types a follow-up it becomes Send again so
+                // the message can queue mid-turn. The running check reads the session's AUTHORITATIVE
+                // status (the live control-plane record the nav-bar title uses), not the stream-
+                // derived `console.state.status` — that never reaches `.running` on a cold open of an
+                // already-running session, so the stop affordance used to never appear.
+                if ComposerLogic.showsInterrupt(
+                    session: app.session(id: console.sessionID)?.status,
+                    stream: console.state.status,
+                    hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    hasAttachments: !console.pendingAttachments.isEmpty,
+                    replying: console.replyContext != nil) {
                     Button { Task { await console.interrupt() } } label: {
-                        Image(systemName: "stop.fill")
+                        Image(systemName: "stop.circle.fill")
                             .font(sendGlyphFont)
+                            .foregroundStyle(Color.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .help("Interrupt the current turn")
+                    .help("Stop the current turn")
+                } else {
+                    Button { Task { await console.send() } } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(sendGlyphFont)
+                            .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!console.canSend)
                 }
-                Button { Task { await console.send() } } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(sendGlyphFont)
-                        .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(!console.canSend)
             }
             .padding(.vertical, 9)
             .padding(.horizontal, 12)

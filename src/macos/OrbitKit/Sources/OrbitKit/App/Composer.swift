@@ -58,16 +58,21 @@ public enum ComposerLogic {
         !shouldResume(status: status)
     }
 
-    /// Whether the composer shows the interrupt ("stop") button for the running turn. Keys off the
-    /// session's AUTHORITATIVE lifecycle status (`session` — the live control-plane record the
-    /// nav-bar title also reads), mirroring web's `showStop` gate (`selected?.status === 'RUNNING'`).
-    /// Falls back to the stream-derived status only when no session record is loaded yet (a fresh
-    /// deep link): the reducer's `.status` never reliably reaches `.running` on a cold open of an
-    /// already-running session — no durable "running" event is replayed, only `turn_end`/`status`
-    /// transitions move it — so gating the button on the stream alone hid it exactly when the user
-    /// most needs to stop the turn.
-    public static func showsInterrupt(session: RunStatus?, stream: RunStatus) -> Bool {
-        (session ?? stream) == .running
+    /// Whether the composer's single primary button shows STOP (interrupt the turn) instead of SEND.
+    /// A 1:1 port of web's `showStop`: the session is authoritatively RUNNING *and* there's nothing
+    /// staged to send — empty text, no attachments, not replying to a question — so the moment the
+    /// user types a follow-up the button morphs back to Send and can still queue mid-turn.
+    ///
+    /// The running check keys off the session's AUTHORITATIVE lifecycle status (`session` — the live
+    /// control-plane record the nav-bar title also reads, web's `selected?.status`), NOT the
+    /// stream-derived reducer status: that never reliably reaches `.running` on a cold open of an
+    /// already-running session (no durable "running" event is replayed — only `turn_end`/`status`
+    /// transitions move it), so the button used to never appear there. `stream` is the fallback only
+    /// when no session record is loaded yet (a fresh deep link).
+    public static func showsInterrupt(session: RunStatus?, stream: RunStatus,
+                                      hasText: Bool, hasAttachments: Bool, replying: Bool) -> Bool {
+        guard !hasText, !hasAttachments, !replying else { return false }
+        return (session ?? stream) == .running
     }
 
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
