@@ -319,14 +319,14 @@ private struct NavigationDrawer: View {
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
     /// "pill" (rather than an edge-to-edge tint) so the active row reads as a floating highlight — the
     /// modern sidebar look the web nav and ChatGPT share. `indent` nudges nested content (an agent
-    /// under its machine) rightward without moving the pill; `padV` tightens the sub-rows.
+    /// under its machine) rightward without moving the pill; every row shares one height.
     @ViewBuilder
-    private func pill(selected: Bool, indent: CGFloat = 0, padV: CGFloat = DrawerMetrics.padV,
+    private func pill(selected: Bool, indent: CGFloat = 0,
                       @ViewBuilder _ content: () -> some View) -> some View {
         content()
             .padding(.leading, DrawerMetrics.padH + indent)
             .padding(.trailing, DrawerMetrics.padH)
-            .padding(.vertical, padV)
+            .padding(.vertical, DrawerMetrics.padV)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Color.accentColor.opacity(0.14) : Color.clear,
                         in: RoundedRectangle(cornerRadius: DrawerMetrics.corner, style: .continuous))
@@ -480,8 +480,10 @@ private struct NavigationDrawer: View {
             openAgent(agent.id)
         } label: {
             // Indent the content to sit under the machine's *label* (icon width + its spacing) while
-            // the selection pill still lines up with every other row.
-            pill(selected: selected, indent: 24 + 12, padV: 7) {
+            // the selection pill still lines up with every other row. Uses the drawer's standard row
+            // height (like machines / Tasks / Recents) — nesting is conveyed by the indent alone, so the
+            // whole rail shares one rhythm rather than making the agent sub-rows read a size smaller.
+            pill(selected: selected, indent: 24 + 12) {
                 HStack(spacing: 6) {
                     Text(agent.name)
                         .lineLimit(1)
