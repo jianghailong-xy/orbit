@@ -302,24 +302,25 @@ struct ComposerView: View {
                 #else
                 pickFiles(images: true)
                 #endif
-            } label: { Label("Attach image", systemImage: "photo") }
+            } label: { Label("Image", systemImage: "photo") }
             Button {
                 #if os(iOS)
                 showFileImporter = true
                 #else
                 pickFiles(images: false)
                 #endif
-            } label: { Label("Upload file", systemImage: "paperclip") }
+            } label: { Label("File", systemImage: "paperclip") }
             #if os(iOS)
-            // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Gated on
-            // `hasImages` — a non-consuming check, so it doesn't trigger the paste-access banner until
-            // the user actually taps.
-            Button {
-                if let img = UIPasteboard.general.image {
-                    Task { await attachClipboardImage(img) }
-                }
-            } label: { Label("Paste image", systemImage: "doc.on.clipboard") }
-            .disabled(!UIPasteboard.general.hasImages)
+            // Paste an image from the clipboard (macOS does this via the ⌘V monitor above). Only
+            // shown when the clipboard actually holds an image — `hasImages` is a non-consuming
+            // check, so it doesn't trigger the paste-access banner until the user taps to paste.
+            if UIPasteboard.general.hasImages {
+                Button {
+                    if let img = UIPasteboard.general.image {
+                        Task { await attachClipboardImage(img) }
+                    }
+                } label: { Label("Paste image", systemImage: "doc.on.clipboard") }
+            }
             #endif
         } label: {
             Image(systemName: "plus")
