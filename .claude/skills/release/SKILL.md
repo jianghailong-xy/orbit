@@ -30,8 +30,18 @@ The tag is the single source of truth for the version:
    git tag --list 'v*' --sort=-v:refname | head -1
    ```
 
-2. **Make sure the release commit is `HEAD` and pushed** (usually `main`'s tip). The tag should
-   point at a committed, pushed state so both workflows check out the right code.
+2. **Always cut from `main`, synced with `origin/main`.** Check out `main` and pull before tagging.
+   Tagging a feature/session branch — or a `main` that's behind `origin/main` — ships a tree that's
+   missing whatever landed on `main` in parallel, so the release silently **drops those features and
+   can revert already-merged fixes**. The tag must point at a committed, pushed `main` tip so both
+   workflows check out the right code. Verify before tagging:
+
+   ```bash
+   git rev-parse --abbrev-ref HEAD                     # → main
+   git fetch origin && git rev-list --count HEAD..origin/main   # → 0 (nothing on origin/main you're missing)
+   ```
+
+   If a fix lives only on another branch, merge it into `main` first — never tag the branch directly.
 
 3. **Run the helper** (resolves the repo root itself):
 
