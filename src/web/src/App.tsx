@@ -17,7 +17,6 @@ import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
-import { SkillsPage } from './pages/SkillsPage';
 import { TaskListView } from './pages/TaskListView';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
@@ -92,14 +91,6 @@ export function App() {
             <Route path="tasks" element={<TaskListView />} />
             <Route path="tasks/:id" element={<TaskListView />} />
             <Route path="lists/:key" element={<TaskListView />} />
-            <Route
-              path="skills"
-              element={
-                <DocView>
-                  <SkillsPage />
-                </DocView>
-              }
-            />
             <Route
               path="settings/profile"
               element={

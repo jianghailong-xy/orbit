@@ -9,7 +9,6 @@ import {
   MenuUnfoldOutlined,
   SettingOutlined,
   TeamOutlined,
-  ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import {
@@ -40,11 +39,10 @@ import { orderAgents } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
-// page, "Skills" the skills page (Admin is appended for admins below). The agents themselves
-// live in the "Agents" group further down.
+// page (Admin is appended for admins below). The agents themselves live in the "Agents"
+// group further down.
 const TOP = [
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
-  { key: 'skills', icon: <ThunderboltOutlined />, label: 'Skills' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -503,7 +501,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           )}
         </div>
 
-        <div className="tp-divider" />
+        {(unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
+          <div className="tp-divider" />
+        )}
 
         {/* "No list" is the complement of the lists below — tasks in no list at all.
             It's a peer of the Task List group, not a child of it, so it never reads
@@ -530,23 +530,27 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           </div>
         )}
 
-        <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
-            <span className="tp-group-name">Task List</span>
-            {activeLists.length > 0 && <span className="tp-count">{activeLists.length}</span>}
-            <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
+        {activeLists.length > 0 && (
+          <div className="tp-group">
+            <div className="tp-group-head" onClick={() => setListOpen((o) => !o)}>
+              <span className="tp-group-name">Task List</span>
+              <span className="tp-count">{activeLists.length}</span>
+              <CaretDownOutlined className={`tp-caret ${listOpen ? '' : 'collapsed'}`} />
+            </div>
+            {listOpen && <>{activeLists.map(renderListRow)}</>}
           </div>
-          {listOpen && <>{activeLists.map(renderListRow)}</>}
-        </div>
+        )}
 
-        <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setCompletedOpen((o) => !o)}>
-            <span className="tp-group-name">Completed</span>
-            {completedLists.length > 0 && <span className="tp-count">{completedLists.length}</span>}
-            <CaretDownOutlined className={`tp-caret ${completedOpen ? '' : 'collapsed'}`} />
+        {completedLists.length > 0 && (
+          <div className="tp-group">
+            <div className="tp-group-head" onClick={() => setCompletedOpen((o) => !o)}>
+              <span className="tp-group-name">Completed</span>
+              <span className="tp-count">{completedLists.length}</span>
+              <CaretDownOutlined className={`tp-caret ${completedOpen ? '' : 'collapsed'}`} />
+            </div>
+            {completedOpen && <>{completedLists.map(renderListRow)}</>}
           </div>
-          {completedOpen && <>{completedLists.map(renderListRow)}</>}
-        </div>
+        )}
       </div>
 
       <div className="tp-user">
