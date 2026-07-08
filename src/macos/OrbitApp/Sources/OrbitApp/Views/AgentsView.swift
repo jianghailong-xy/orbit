@@ -383,13 +383,20 @@ struct StatusGlyphView: View {
 private struct SpinnerGlyph: View {
     let color: Color
     @State private var spinning = false
+    // A fast arc across a list of "working" rows reads as frantic; iOS gets a calmer, less
+    // anxious spin. macOS keeps its original cadence.
+    #if os(iOS)
+    private let spinPeriod: Double = 1.2
+    #else
+    private let spinPeriod: Double = 0.85
+    #endif
     var body: some View {
         Circle()
             .trim(from: 0, to: 0.7)
             .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
             .frame(width: 13, height: 13)
             .rotationEffect(.degrees(spinning ? 360 : 0))
-            .animation(.linear(duration: 0.85).repeatForever(autoreverses: false), value: spinning)
+            .animation(.linear(duration: spinPeriod).repeatForever(autoreverses: false), value: spinning)
             .onAppear { spinning = true }
             .onDisappear { spinning = false }
     }
