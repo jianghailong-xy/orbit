@@ -43,7 +43,7 @@ final class ConsoleModel {
     /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
     /// (see `createDraftSession`). A live console leaves this nil.
     private let draftAgent: Agent?
-    private var provider = "claude"
+    private(set) var provider = "claude"
     var isDraft: Bool { draftAgent != nil }
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
@@ -148,8 +148,10 @@ final class ConsoleModel {
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
         self.agentName = agent.name
         self.provider = agent.provider ?? "claude"
-        let m = agent.model ?? AgentDefaults.defaultModelID
-        self.modelID = AgentDefaults.models.contains { $0.id == m } ? m : AgentDefaults.defaultModelID
+        // The agent's configured model is authoritative — it may belong to any provider. Clamping
+        // it to the Claude list used to seed a Codex draft with claude-opus-4-8, which the runner
+        // then ran as `codex -m claude-opus-4-8`.
+        self.modelID = agent.model ?? AgentDefaults.defaultModel(for: provider)
         self.permissionMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         // Seed the effort pill from the agent's default too (web parity), so a new session shows —
         // and starts at — the agent's configured effort unless the user overrides it.

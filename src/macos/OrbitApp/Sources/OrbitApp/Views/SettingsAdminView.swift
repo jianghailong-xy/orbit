@@ -63,7 +63,7 @@ struct SettingsView: View {
                     Text("Dark").tag("dark")
                 }
                 Picker("Default model", selection: $defaultModel) {
-                    ForEach(AgentDefaults.models) { Text($0.name).tag($0.id) }
+                    ForEach(AgentDefaults.claudeModels) { Text($0.name).tag($0.id) }
                 }
                 Picker("Default permission", selection: $permMode) {
                     ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }

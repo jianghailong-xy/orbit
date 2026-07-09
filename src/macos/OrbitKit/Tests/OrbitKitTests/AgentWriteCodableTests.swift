@@ -40,13 +40,27 @@ final class AgentWriteCodableTests: XCTestCase {
     }
 
     func testCreateEncodes() throws {
-        let obj = try jsonObject(CreateAgentRequest(name: "dev", model: "claude-opus-4-8",
+        let obj = try jsonObject(CreateAgentRequest(name: "dev", provider: "codex", model: "gpt-5.5",
                                                     allowedTools: ["Bash"], env: ["K": "V"]))
         XCTAssertEqual(obj["name"] as? String, "dev")
-        XCTAssertEqual(obj["model"] as? String, "claude-opus-4-8")
+        XCTAssertEqual(obj["provider"] as? String, "codex")
+        XCTAssertEqual(obj["model"] as? String, "gpt-5.5")
         XCTAssertEqual(obj["allowedTools"] as? [String], ["Bash"])
         XCTAssertEqual((obj["env"] as? [String: String])?["K"], "V")
         XCTAssertFalse(obj.keys.contains("description"))
+    }
+
+    func testUpdateEncodesProvider() throws {
+        let obj = try jsonObject(UpdateAgentRequest(provider: "codex", model: "gpt-5.5"))
+        XCTAssertEqual(obj["provider"] as? String, "codex")
+        XCTAssertEqual(obj["model"] as? String, "gpt-5.5")
+    }
+
+    /// A PATCH that doesn't touch the runtime must not send `provider` — otherwise every
+    /// unrelated edit would rewrite it.
+    func testUpdateOmitsProviderWhenNil() throws {
+        let obj = try jsonObject(UpdateAgentRequest(name: "new"))
+        XCTAssertFalse(obj.keys.contains("provider"))
     }
 
     func testReorderEncodes() throws {

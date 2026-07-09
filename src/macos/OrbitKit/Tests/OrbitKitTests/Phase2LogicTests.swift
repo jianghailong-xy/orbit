@@ -180,9 +180,9 @@ final class Phase2LogicTests: XCTestCase {
     }
 
     func testEffortLabelsAndWire() {
-        XCTAssertEqual(Effort.allCases, [.default, .low, .medium, .high, .xhigh, .max])
+        XCTAssertEqual(Effort.allCases, [.default, .minimal, .low, .medium, .high, .xhigh, .max])
         XCTAssertEqual(Effort.allCases.map(\.label),
-                       ["Default", "Low", "Medium", "High", "xHigh", "Max"])
+                       ["Default", "Minimal", "Low", "Medium", "High", "xHigh", "Max"])
         XCTAssertNil(Effort.default.wire)              // Default omits --effort
         XCTAssertEqual(Effort.max.wire, "max")
         XCTAssertEqual(Effort.xhigh.rawValue, "xhigh") // wire/raw match the CLI value

@@ -7,6 +7,14 @@
 .env
 .env.local
 .env.*.local
+.env.bak*
 .orbit
 .claude
 coverage
+dist-bin
+build
+tmp
+data
+backups
+orbit-uploads
+.DS_Store

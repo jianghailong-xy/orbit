@@ -46,10 +46,11 @@ struct ComposerView: View {
     // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Fable → Haiku)
     // exactly like the web composer. macOS drops the menu down, so keep the source order there.
     private var modelMenuItems: [ModelOption] {
+        let models = AgentDefaults.models(for: console.provider)
         #if os(iOS)
-        Array(AgentDefaults.models.reversed())
+        return Array(models.reversed())
         #else
-        AgentDefaults.models
+        return models
         #endif
     }
 
@@ -214,12 +215,12 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    menuLabel(AgentDefaults.models.first { $0.id == console.modelID }?.name ?? console.modelID)
+                    menuLabel(AgentDefaults.friendlyName(console.modelID))
                 }
                 .footerMenuChrome()
 
                 Menu {
-                    ForEach(Effort.allCases) { e in
+                    ForEach(AgentDefaults.efforts(for: console.provider)) { e in
                         Button {
                             console.effort = e
                             Task { await console.applyConfig(effort: e.rawValue) }

@@ -8,17 +8,22 @@ public struct ModelOption: Equatable, Sendable, Identifiable {
     public let name: String
 }
 
+public struct ProviderOption: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let name: String
+}
+
 /// Reasoning-effort levels offered in the composer, in the same order as web's EFFORT_OPTIONS.
 /// `.default` ("") omits `--effort` so the model picks its own.
 public enum Effort: String, CaseIterable, Sendable, Identifiable {
     case `default` = ""
-    case low, medium, high, xhigh, max
+    case minimal, low, medium, high, xhigh, max
     public var id: String { rawValue }
     public var label: String {
         switch self {
         case .default: return "Default"
         case .xhigh:   return "xHigh"
-        default:       return rawValue.capitalized   // Low / Medium / High / Max
+        default:       return rawValue.capitalized   // Minimal / Low / Medium / High / Max
         }
     }
     /// Wire value for a turn/resume request: nil = omit the field (same as Default).
@@ -26,16 +31,52 @@ public enum Effort: String, CaseIterable, Sendable, Identifiable {
 }
 
 public enum AgentDefaults {
-    public static let models: [ModelOption] = [
+    /// Provider runtimes an agent can target. Mirrors web's PROVIDER_OPTIONS.
+    public static let providers: [ProviderOption] = [
+        ProviderOption(id: "claude", name: "Claude"),
+        ProviderOption(id: "codex", name: "Codex"),
+    ]
+
+    public static let claudeModels: [ModelOption] = [
         ModelOption(id: "claude-fable-5", name: "Fable 5"),
         ModelOption(id: "claude-opus-4-8", name: "Opus 4.8"),
         ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
         ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
     ]
+
+    public static let codexModels: [ModelOption] = [
+        ModelOption(id: "gpt-5.5", name: "GPT-5.5"),
+        ModelOption(id: "gpt-5.4", name: "GPT-5.4"),
+        ModelOption(id: "gpt-5.4-mini", name: "GPT-5.4 Mini"),
+        ModelOption(id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark"),
+    ]
+
     public static let defaultModelID = "claude-opus-4-8"
 
+    /// The models a provider's pickers offer. Anything that isn't exactly "codex" is Claude —
+    /// matching apiserver's `agentProvider()`, so a stale provider string can't empty the menu.
+    public static func models(for provider: String) -> [ModelOption] {
+        provider == "codex" ? codexModels : claudeModels
+    }
+
+    /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
+    public static func defaultModel(for provider: String) -> String {
+        provider == "codex" ? "gpt-5.5" : defaultModelID
+    }
+
+    /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
+    /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
-        models.first { $0.id == id }?.name ?? id
+        (claudeModels + codexModels).first { $0.id == id }?.name ?? id
+    }
+
+    /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
+    /// tops out at `xhigh` and adds `minimal`. Mirrors web's CLAUDE_/CODEX_EFFORT_OPTIONS. The
+    /// server and runner both coerce an illegal value, but a picker should never offer one.
+    public static func efforts(for provider: String) -> [Effort] {
+        provider == "codex"
+            ? [.default, .minimal, .low, .medium, .high, .xhigh]
+            : [.default, .low, .medium, .high, .xhigh, .max]
     }
 
     /// Per-model context-window size (max input tokens), for the composer's context-usage

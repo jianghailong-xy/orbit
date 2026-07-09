@@ -10,6 +10,7 @@ import Foundation
 public struct CreateAgentRequest: Encodable, Sendable {
     public let name: String
     public let description: String?
+    public let provider: String?
     public let model: String?
     public let appendSystemPrompt: String?
     public let systemPrompt: String?
@@ -27,7 +28,8 @@ public struct CreateAgentRequest: Encodable, Sendable {
     public let enabled: Bool?
     public let autoInitGit: Bool?
 
-    public init(name: String, description: String? = nil, model: String? = nil,
+    public init(name: String, description: String? = nil, provider: String? = nil,
+                model: String? = nil,
                 appendSystemPrompt: String? = nil, systemPrompt: String? = nil,
                 allowedTools: [String]? = nil, disallowedTools: [String]? = nil,
                 permissionMode: String? = nil, effort: String? = nil,
@@ -37,6 +39,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
                 enabled: Bool? = nil, autoInitGit: Bool? = nil) {
         self.name = name
         self.description = description
+        self.provider = provider
         self.model = model
         self.appendSystemPrompt = appendSystemPrompt
         self.systemPrompt = systemPrompt
@@ -60,6 +63,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
 public struct UpdateAgentRequest: Encodable, Sendable {
     public var name: String?
     public var description: String?
+    public var provider: String?
     public var model: String?
     public var appendSystemPrompt: String?
     public var systemPrompt: String?
@@ -77,7 +81,8 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var enabled: Bool?
     public var autoInitGit: Bool?
 
-    public init(name: String? = nil, description: String? = nil, model: String? = nil,
+    public init(name: String? = nil, description: String? = nil, provider: String? = nil,
+                model: String? = nil,
                 appendSystemPrompt: String? = nil, systemPrompt: String? = nil,
                 allowedTools: [String]? = nil, disallowedTools: [String]? = nil,
                 permissionMode: String? = nil, effort: String? = nil,
@@ -87,6 +92,7 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 enabled: Bool? = nil, autoInitGit: Bool? = nil) {
         self.name = name
         self.description = description
+        self.provider = provider
         self.model = model
         self.appendSystemPrompt = appendSystemPrompt
         self.systemPrompt = systemPrompt
