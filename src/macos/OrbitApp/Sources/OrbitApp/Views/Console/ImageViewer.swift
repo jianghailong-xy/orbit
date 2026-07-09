@@ -1,5 +1,9 @@
 import SwiftUI
 import OrbitKit
+#if os(iOS)
+import UIKit
+import Photos
+#endif
 
 // The full-screen image viewers a transcript (or composer) thumbnail opens, and the presentation
 // helper that hosts them. iOS-only behind `#if os(iOS)` — on macOS thumbnails aren't tappable, so
@@ -37,6 +41,44 @@ extension View {
 }
 
 #if os(iOS)
+/// Copy / save-to-Photos actions offered by the full-screen viewers' long-press menu — both iOS-only.
+enum ImageActions {
+    /// Put the image on the system pasteboard (to paste into another app), confirmed with a haptic.
+    static func copy(_ image: UIImage) {
+        UIPasteboard.general.image = image
+        PlatformHaptics.success()
+    }
+
+    /// Save to the photo library. Requests add-only authorization first (needs
+    /// `NSPhotoLibraryAddUsageDescription` in Info.plist); a success haptic confirms it landed. The
+    /// completion runs off the main thread, so the haptic is hopped back onto it.
+    static func saveToPhotos(_ image: UIImage) {
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else { return }
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            } completionHandler: { success, _ in
+                guard success else { return }
+                Task { @MainActor in PlatformHaptics.success() }
+            }
+        }
+    }
+}
+
+extension View {
+    /// The long-press menu both full-screen viewers share: Copy + Save Image.
+    func imageActionsMenu(_ image: UIImage) -> some View {
+        contextMenu {
+            Button { ImageActions.copy(image) } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+            Button { ImageActions.saveToPhotos(image) } label: {
+                Label("Save Image", systemImage: "square.and.arrow.down")
+            }
+        }
+    }
+}
+
 /// Single-image full-screen viewer for an in-memory `PlatformImage` (the composer's staged draft
 /// thumbnails, which aren't attachment-backed yet). Pinch or double-tap to zoom, drag to pan while
 /// zoomed; drag down at fit scale to dismiss with the image shrinking as the backdrop fades. The
@@ -84,6 +126,7 @@ struct FullScreenImageView: View {
                 .offset(x: offset.width + drag.width, y: offset.height + drag.height)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)   // fill → scaledToFit centres it
                 .contentShape(Rectangle())
+                .imageActionsMenu(image)
                 .gesture(pan)
                 .simultaneousGesture(magnify)
                 .onTapGesture(count: 2) {
@@ -225,6 +268,7 @@ struct ImagePagerView: View {
                     .offset(isCurrent
                             ? CGSize(width: pan.width + panLive.width, height: pan.height + panLive.height)
                             : .zero)
+                    .imageActionsMenu(img)
             } else {
                 ProgressView().tint(.white)
             }
