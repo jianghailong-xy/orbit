@@ -214,6 +214,8 @@ struct AgentConsoleDetail: View {
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
             }
+            // Rebuild the draft when the hero switcher changes the agent (draftModel is per-agent).
+            .id(agent.id)
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
             // A just-created session isn't in the Active list yet, so fall back to the agent
@@ -239,6 +241,8 @@ struct NewSessionView: View {
     /// a restored-token launch primes `user` asynchronously — the seed below reacts to it arriving.
     let defaultEffort: String?
     @State private var draft: ConsoleModel
+    @Environment(AppModel.self) private var app
+    @State private var showSwitcher = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
@@ -249,13 +253,28 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Image(systemName: "square.and.pencil").font(.largeTitle).foregroundStyle(.secondary)
-                Text("New session").font(.title3.weight(.semibold))
-                Text("Send \(agent.name) a task to start a new session.")
-                    .foregroundStyle(.secondary)
+            VStack(spacing: 10) {
+                AgentAvatar(provider: agent.provider, size: 64)
+                    .padding(.bottom, 6)
+                // The agent identity is the hero — a cold launch lands here, so the screen answers
+                // "which agent am I about to task?" at a glance. Tapping opens the switcher.
+                Button { showSwitcher = true } label: {
+                    HStack(spacing: 6) {
+                        Text(agent.name).font(.title2.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.primary.opacity(0.05),
+                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Text(heroSubtitle).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                Text("Send a task to get started.").font(.subheadline).foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 24)
 
             Divider()
             // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
@@ -281,6 +300,19 @@ struct NewSessionView: View {
                 draft.effort = e
             }
         }
+        .sheet(isPresented: $showSwitcher) {
+            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id) { id in
+                app.composeWithAgent(id)
+            }
+        }
+    }
+
+    /// "New session · <model> · <effort>" — surfaces the config the draft will start with (mirrors
+    /// the composer footer) so the model/effort are visible up front, not just the agent name.
+    private var heroSubtitle: String {
+        var parts = ["New session", AgentDefaults.friendlyName(draft.modelID)]
+        if draft.effort != .default { parts.append(draft.effort.label) }
+        return parts.joined(separator: " · ")
     }
 }
 

@@ -42,7 +42,13 @@ final class AppModel {
     /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
     /// pages yield the screen edge to the system back-swipe.
     var settingsShowingRunners = false
-    var selectedAgentID: String?
+    /// Written through to `lastAgentKey` on every non-nil set so the launch default can restore your
+    /// last agent (see `loadAgentsThenLand`); a nil (navigation reset) must not erase the memory.
+    var selectedAgentID: String? {
+        didSet {
+            if let id = selectedAgentID { UserDefaults.standard.set(id, forKey: Self.lastAgentKey) }
+        }
+    }
     var selectedAgentSessionID: String?   // the agent session whose console fills the detail pane
     /// True while composing a brand-new session for the selected agent (the detail pane shows the
     /// draft composer instead of a console). Cleared once a session is selected/created or the
@@ -92,6 +98,9 @@ final class AppModel {
     private var controlRefreshScheduled = false
 
     private static let instanceKey = "orbit.instance"
+    /// Remembers the last agent you selected so a cold launch lands there instead of always the
+    /// first agent in the list. Read in `loadAgentsThenLand`, written by `selectedAgentID`'s didSet.
+    private static let lastAgentKey = "orbit.lastAgent"
 
     init() {
         #if canImport(Security)
@@ -458,6 +467,17 @@ final class AppModel {
         composingAgentSession = true
     }
 
+    /// Switch the agent the new-session draft is composing for while staying on the compose page —
+    /// the hero's agent switcher. Unlike `openAgent` (which drops compose state to land on the
+    /// agent's session list), this keeps `composingAgentSession` true so the pushed/inline
+    /// `NewSessionView` just rebuilds for `id` (a fresh draft via its `.id(agent.id)`).
+    func composeWithAgent(_ id: String) {
+        selectedSection = .agents
+        selectedAgentID = id
+        selectedAgentSessionID = nil
+        composingAgentSession = true
+    }
+
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
     /// macOS sidebar row, the compact drawer row, and ⌘1…⌘9. Switching to a *different* agent
     /// clears that agent-scoped state (session selection + draft compose) so its pane opens on the
@@ -668,7 +688,13 @@ final class AppModel {
         // Only claim the launch default: a deep link / notification that already chose an agent, a
         // session (still resolving its agent), or another section is respected.
         guard selectedSection == .agents, selectedAgentID == nil, selectedAgentSessionID == nil else { return }
-        if let first = orderedAgents.first?.id {
+        let ordered = orderedAgents
+        // Prefer the agent you last used (persisted via `selectedAgentID`) so a cold launch reopens
+        // your context; fall back to the first agent, or Runners onboarding when there are none.
+        if let last = UserDefaults.standard.string(forKey: Self.lastAgentKey),
+           ordered.contains(where: { $0.id == last }) {
+            selectedAgentID = last
+        } else if let first = ordered.first?.id {
             selectedAgentID = first
         } else {
             selectedSection = .runners
