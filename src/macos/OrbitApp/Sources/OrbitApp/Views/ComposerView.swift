@@ -202,7 +202,10 @@ struct ComposerView: View {
                 Spacer()
 
                 if let name = console.agentName {
-                    Text(name).foregroundStyle(.secondary).lineLimit(1)
+                    // Secondary metadata: yield space before the model/effort controls and usage
+                    // gauges when the footer is tight on a narrow iPhone, so the name truncates
+                    // rather than pushing a control or the "%" pill onto a second line.
+                    Text(name).foregroundStyle(.secondary).lineLimit(1).layoutPriority(-1)
                 }
 
                 Menu {
@@ -720,7 +723,10 @@ private struct PlanUsageIndicator: View {
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
                     UsageBar(percent: pct).frame(width: 26, height: 4)
-                    Text("\(pct)%").foregroundStyle(.secondary)
+                    // fixedSize keeps the pill at its ideal width: an unbounded Text is the most
+                    // flexible view in the footer, so without this a tight row wraps "12%" onto
+                    // two lines instead of truncating the (lineLimit-1) name/menu labels.
+                    Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
                 }
             }
             .buttonStyle(.plain)
@@ -754,7 +760,9 @@ private struct ContextWindowIndicator: View {
         Button { showDetail.toggle() } label: {
             HStack(spacing: 5) {
                 UsageBar(percent: pct).frame(width: 26, height: 4)
-                Text("\(pct)%").foregroundStyle(.secondary)
+                // See PlanUsageIndicator: pin the pill to its ideal width so a tight footer never
+                // wraps the "%" onto a second line.
+                Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
             }
         }
         .buttonStyle(.plain)
