@@ -37,7 +37,7 @@ export const AttachmentResolverContext =
 
 export const ArtifactResolverContext =
   createContext<((artifactPath: string) => Promise<string>) | null>(null);
-import Markdown from 'react-markdown';
+import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
@@ -589,6 +589,16 @@ function attachmentIdFromSrc(src: unknown): string | null {
   return id || null;
 }
 
+// react-markdown's built-in urlTransform blanks any src/href whose scheme isn't
+// on its allow-list (http, https, mailto, …). The runner rewrites transcript
+// images and file links to our custom `orbit-attachment:<id>` scheme, so that
+// would strip them to '' before MarkdownImage/MarkdownLink ever see the id. Let
+// those through untouched and defer every other URL to the default (XSS-safe)
+// transform so javascript:/data: links stay neutralized.
+function transcriptUrlTransform(url: string): string {
+  return url.trim().startsWith(ORBIT_ATTACHMENT_PREFIX) ? url : defaultUrlTransform(url);
+}
+
 function isLocalImageSrc(src: string): boolean {
   return /^\/(?:root|home|tmp|Users)\/(?:[^?#]+)\.(?:png|jpe?g|gif|webp|svg)$/i.test(src);
 }
@@ -728,6 +738,7 @@ export const MD = memo(function MD({ children, highlight = true }: { children: s
       <Markdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
+        urlTransform={transcriptUrlTransform}
         components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}
       >
         {children}
