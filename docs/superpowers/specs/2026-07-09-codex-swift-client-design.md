@@ -59,7 +59,14 @@ therefore part of the fix, not an enhancement.
 1. Provider-aware model and effort data in `OrbitKit/AgentDefaults`.
 2. The `ConsoleModel` seed fix.
 3. Provider-scoped model and effort menus in `ComposerView`.
-4. A "Runtime" (provider) picker in `AgentsView`, so Codex agents can be created from the app.
+4. A "Runtime" (provider) picker in `AgentsView`'s edit form, so an existing agent can be switched
+   to Codex.
+
+Note on (4): the Swift app has **no create-agent UI**. `AgentsModel` exposes only `save` (PATCH) and
+`delete`; `APIClient.createAgent` has no call site outside a codable test. Web's
+`RunnerDetailPage.tsx:290` uses one form for both (`editing ? PATCH : POST`) and sends `provider` on
+each; Swift ported only the edit half. Adding the picker therefore enables *switching* an agent's
+runtime, not creating one. Building a create form is a separate, larger piece of work.
 
 **Out of scope**
 
@@ -151,7 +158,7 @@ menus. The class is `@Observable`, so the views update correctly.
 - Menu label (line 217): use `AgentDefaults.friendlyName(console.modelID)`.
 - Effort menu (line 222): `AgentDefaults.efforts(for: console.provider)` instead of `Effort.allCases`.
 
-### `OrbitApp/Views/AgentsView.swift`
+### `OrbitApp/Views/AgentsView.swift` (`AgentFormContent`, the edit form)
 
 - Add a "Runtime" `Picker` bound to a new `provider` state, matching web's wording.
 - On provider change: reset `model` to `AgentDefaults.defaultModel(for: provider)`, and if the current
@@ -159,7 +166,7 @@ menus. The class is `@Observable`, so the views update correctly.
   value the new provider rejects.
 - Model picker (line 430-433) and effort picker (line 445): scope both by provider. Keep the existing
   escape hatch that injects an out-of-list current value so the `Picker` does not render blank.
-- Include `provider` in the dirty check (line 522) and the seed (line 510).
+- Include `provider` in `prefill()` (line 508) and `isDirty` (line 520), and send it in the PATCH.
 
 ### `OrbitKit/Sources/OrbitKit/Models/Agents.swift`
 
@@ -167,11 +174,16 @@ menus. The class is `@Observable`, so the views update correctly.
 `apiserver`'s `CreateAgentDto` / `UpdateAgentDto` accept one (`agents/dto.ts:22,50`). Add
 `provider: String?` to both.
 
+Only `UpdateAgentRequest.provider` gets a call site (the app cannot create agents). Adding it to
+`CreateAgentRequest` too is not speculative: the file's stated job is to mirror `agents/dto.ts`, and it
+already carries fields the app never sends (`targetLabels`, `autoInitGit`). Matching that convention.
+
 ## Data flow
 
-Creating a Codex session from the app:
+Running a Codex session from the app:
 
-1. `AgentsView` writes an agent with `provider: "codex"`, `model: "gpt-5.5"`.
+1. `AgentFormContent` PATCHes an existing agent to `provider: "codex"`, `model: "gpt-5.5"` — or the
+   agent was already created that way on web.
 2. Opening it builds a draft `ConsoleModel`; `init` reads `agent.provider` → `"codex"` and seeds
    `modelID = "gpt-5.5"` (no clamp).
 3. `ComposerView` scopes its menus to `models(for: "codex")` and `efforts(for: "codex")`, so no Claude
@@ -212,9 +224,10 @@ before the work is called done; a green `swift test` is not sufficient evidence.
 
 ## Success criteria
 
-1. `swift test` passes in `src/macos/OrbitKit`.
+1. `swift test` passes in `src/macos/OrbitKit` (baseline before this work: 263 tests, 0 failures).
 2. Creating a session from a Codex agent in the macOS app sends `model: "gpt-5.5"`, not
    `claude-opus-4-8`. Observed on the wire or in the runner log, not inferred.
 3. The composer's model menu on a Codex session lists only Codex models; its effort menu offers
    `Minimal` and does not offer `Max`.
-4. A Codex agent can be created end to end from `AgentsView` and runs a turn.
+4. Switching an agent's Runtime to Codex in `AgentFormContent` PATCHes `provider: "codex"` and resets
+   the model picker to `gpt-5.5`.
