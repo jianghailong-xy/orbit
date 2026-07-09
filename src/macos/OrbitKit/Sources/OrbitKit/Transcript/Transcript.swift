@@ -125,7 +125,35 @@ public struct ToolCard: Equatable, Sendable, Codable {
     public var name: String
     public var input: JSONValue
     public var result: String?
+    /// Inline images carried by the tool_result — e.g. `Read` on a .png, or an MCP tool returning a
+    /// screenshot. The reducer decodes each `image` content block's base64 payload into bytes here;
+    /// the view turns them into a `PlatformImage`. Empty for the common text-only result. Web parity:
+    /// the web transcript renders the same blocks inline via `resultImages()`.
+    public var resultImages: [Data]
     public var status: ToolStatus
+
+    public init(id: String, name: String, input: JSONValue, result: String?,
+                resultImages: [Data] = [], status: ToolStatus) {
+        self.id = id
+        self.name = name
+        self.input = input
+        self.result = result
+        self.resultImages = resultImages
+        self.status = status
+    }
+
+    // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
+    // (the key just defaults to empty) instead of discarding the whole cached session.
+    enum CodingKeys: String, CodingKey { case id, name, input, result, resultImages, status }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        input = try c.decode(JSONValue.self, forKey: .input)
+        result = try c.decodeIfPresent(String.self, forKey: .result)
+        resultImages = (try? c.decodeIfPresent([Data].self, forKey: .resultImages)) ?? []
+        status = try c.decode(ToolStatus.self, forKey: .status)
+    }
 }
 
 /// A background shell the agent launched with Bash(run_in_background).

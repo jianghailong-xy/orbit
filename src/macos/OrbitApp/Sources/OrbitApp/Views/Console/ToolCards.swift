@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import OrbitKit
 
 // The transcript's tool-call rendering: the folded/expandable card row, its semantic body (command /
@@ -19,11 +20,11 @@ struct ToolCardView: View {
         self.card = card
         let display = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
         self.d = display
-        let hasResult = (card.result?.isEmpty == false)
+        let hasResult = (card.result?.isEmpty == false) || !card.resultImages.isEmpty
         _expanded = State(initialValue: display.autoOpen && (display.hasBody || hasResult))
     }
 
-    private var hasResult: Bool { card.result?.isEmpty == false }
+    private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty }
     private var hasDetail: Bool { d.hasBody || hasResult }
     private var isOpen: Bool { expanded && hasDetail }
 
@@ -99,6 +100,15 @@ struct ToolCardView: View {
     private var detail: some View {
         VStack(alignment: .leading, spacing: 8) {
             ToolBodyView(kind: d.body)
+            // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
+            // mirroring web's `ToolResult`, which renders images before the monospace panel.
+            if !card.resultImages.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(card.resultImages.enumerated()), id: \.offset) { _, data in
+                        ToolResultImageView(data: data)
+                    }
+                }
+            }
             if let result = card.result, !result.isEmpty {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
@@ -116,6 +126,52 @@ struct ToolCardView: View {
                             in: RoundedRectangle(cornerRadius: 6))
             }
         }
+    }
+}
+
+/// A single image carried by a tool_result (e.g. `Read` on a .png, or an MCP tool returning a
+/// screenshot), decoded from the inline bytes the runner delivered. Rendered as a rounded thumbnail
+/// fitted to a cap — web parity with the inline preview the web transcript shows. On iOS a tap opens
+/// the shared full-screen zoomable viewer (like a sent-image thumbnail); macOS stays static, matching
+/// the transcript's attachment thumbnails. Renders nothing if the bytes don't decode as an image.
+private struct ToolResultImageView: View {
+    let data: Data
+    #if os(iOS)
+    @State private var fullScreen = false
+    private static let cap = CGSize(width: 300, height: 360)
+    #else
+    private static let cap = CGSize(width: 240, height: 240)
+    #endif
+
+    /// Scale to touch the cap while keeping aspect ratio, never upscaling past native size, so the
+    /// rounded border hugs the image (mirrors `ChatAttachmentImage.fitted`).
+    private static func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return cap }
+        let k = min(cap.width / src.width, cap.height / src.height, 1)
+        return CGSize(width: src.width * k, height: src.height * k)
+    }
+
+    var body: some View {
+        if let img = PlatformImage(data: data) {
+            thumbnail(img, size: Self.fitted(img.size))
+        }
+    }
+
+    @ViewBuilder
+    private func thumbnail(_ img: PlatformImage, size: CGSize) -> some View {
+        let view = Image(platformImage: img)
+            .resizable().scaledToFit()
+            .frame(width: size.width, height: size.height)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+        #if os(iOS)
+        view
+            .contentShape(Rectangle())
+            .onTapGesture { fullScreen = true }
+            .fullScreenCover(isPresented: $fullScreen) { FullScreenImageView(image: img) }
+        #else
+        view
+        #endif
     }
 }
 

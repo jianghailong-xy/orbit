@@ -282,6 +282,9 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
         let isError = ev.payload["isError"]?.boolValue ?? ev.payload["is_error"]?.boolValue ?? false
         let result = str(ev, "content") ?? str(ev, "result") ?? ev.payload["content"]?.asString
+        // A Read on an image (or an MCP screenshot) delivers `content` as an array of image blocks,
+        // not a string — decode those into bytes for inline display (web parity: `resultImages()`).
+        let images = resultImages(ev.payload["content"])
         // A confirmed background-shell launch ("…running in background with ID…") must surface in the
         // tray NOW, keyed by its tool_use id — not wait for a background_task that may never arrive
         // (the shell is still running, or its completion notification was never recorded as an event).
@@ -295,6 +298,7 @@ public struct TranscriptReducer: Sendable, Codable {
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
             if case .toolCall(var card) = state.items[idx], card.result == nil, id == nil || card.id == id {
                 card.result = result
+                card.resultImages = images
                 card.status = isError ? .error : .ok
                 state.items[idx] = .toolCall(card)
                 return
@@ -463,6 +467,19 @@ public struct TranscriptReducer: Sendable, Codable {
         return a.compactMap { el in
             guard let id = el["id"]?.stringValue else { return nil }
             return TurnAttachment(id: id, mime: el["mime"]?.stringValue, name: el["name"]?.stringValue)
+        }
+    }
+    /// Image blocks carried by a tool_result's `content` array (`Read` on a .png, an MCP screenshot):
+    /// each `{type:"image", source:{data}}` block's base64 payload decoded to bytes for inline display.
+    /// Mirrors web's `resultImages()`. A string / text-only `content` yields []. Base64 that doesn't
+    /// decode is dropped (the view can't render it); the view still guards non-image bytes.
+    private func resultImages(_ v: JSONValue?) -> [Data] {
+        guard case .array(let blocks)? = v else { return [] }
+        return blocks.compactMap { b in
+            guard b["type"]?.stringValue == "image",
+                  let b64 = b["source"]?["data"]?.stringValue,
+                  let bytes = Data(base64Encoded: b64) else { return nil }
+            return bytes
         }
     }
 }

@@ -172,6 +172,28 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.contextTokens, 94500, "a turn_end without the field keeps the last value")
     }
 
+    /// A `Read` on an image delivers `content` as an array of base64 `image` blocks, not a string.
+    /// The reducer must decode those into `ToolCard.resultImages` for inline display (web parity),
+    /// and leave `result` nil so no empty OUTPUT text panel renders alongside the image.
+    func testImageToolResultDecodesIntoResultImages() {
+        var r = TranscriptReducer()
+        let pngBytes = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])   // PNG magic header
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("img1"), "name": .string("Read"),
+            "input": .object(["file_path": .string("/tmp/proto.png")])])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("img1"),
+            "content": .array([.object([
+                "type": .string("image"),
+                "source": .object(["type": .string("base64"),
+                                   "media_type": .string("image/png"),
+                                   "data": .string(pngBytes.base64EncodedString())])])])])))
+        let tool = r.state.items.first?.asTool
+        XCTAssertEqual(tool?.status, .ok)
+        XCTAssertEqual(tool?.resultImages, [pngBytes], "image block base64 should decode into resultImages")
+        XCTAssertNil(tool?.result, "an image-only result carries no text → result stays nil")
+    }
+
     /// The tray row keeps the launch wall-clock (the surfacing tool_result's `ts`) so it can render
     /// "5m ago" like web's `BgShell.startedTs`. Stored raw; the view formats it via `RelativeTime`.
     func testBackgroundShellCapturesStartedAtFromLaunchTimestamp() {
