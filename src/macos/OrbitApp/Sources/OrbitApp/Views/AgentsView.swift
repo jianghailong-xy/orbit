@@ -79,12 +79,34 @@ struct AgentPanes: View {
         // live in the window toolbar (below) — like Finder/Mail hosting view controls in the toolbar
         // rather than stacking chrome bands above the list.
         List(selection: $selectedSessionID) {
+            #if os(iOS)
+            // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
+            // deliberate divergence from web's flat list, grouping the tall single-column iPhone list
+            // by last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the
+            // flat list (its 3-pane window reads fine without sections).
+            ForEach(SessionTimeGrouping.sections(agents.agentSessions, pinnedFirst: view == .active)) { section in
+                Section {
+                    ForEach(section.sessions) { s in
+                        AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
+                            .sessionRowActions(s, scope: view)
+                    }
+                } header: {
+                    Text(section.title).textCase(nil)
+                }
+            }
+            #else
             ForEach(agents.agentSessions) { s in
                 AgentSessionRow(session: s, completed: view == .completed, deleted: view == .trash,
                                 showsPin: view == .active).tag(s.id)
                     .sessionRowActions(s, scope: view)
             }
+            #endif
         }
+        #if os(iOS)
+        // Plain style so the sections read as light headers over full-width rows (matching the
+        // current list), not boxed inset-grouped cards.
+        .listStyle(.plain)
+        #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
         .overlay {
@@ -334,6 +356,9 @@ struct AgentSessionRow: View {
     private var line: SessionLine? { SessionLine.make(for: session, live: !deleted) }
 
     var body: some View {
+        #if os(iOS)
+        compactRow
+        #else
         HStack(spacing: 0) {
             // A pinned session is marked at rest by a full-height leading accent bar, flush to the
             // row's leading edge — the native port of web's `.session-row.pinned` inset bar
@@ -369,7 +394,51 @@ struct AgentSessionRow: View {
         // Keep the separator aligned under the title now that the cell insets are zeroed, rather than
         // letting it run full-bleed: bar(3) + leading pad(13) + glyph(20) + spacing(8) = 44.
         .alignmentGuide(.listRowSeparatorLeading) { _ in 44 }
+        #endif
     }
+
+    #if os(iOS)
+    /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
+    /// trailing relative time, a slim live cue (a spinner while working / an amber dot while it needs
+    /// approval), over the preview line. No leading status glyph or pin accent bar — the recency
+    /// sections carry pinning, and the preview line already states the live status in words + colour,
+    /// so the heavy per-row glyph column is dropped for a calmer, more scannable list.
+    private var compactRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(session.title ?? "Untitled session").lineLimit(1)
+                Spacer(minLength: 8)
+                liveIndicator
+                if let rel = relTime {
+                    Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+            }
+            if let line {
+                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// The slim trailing status cue, derived from the same `SessionLine` tone the preview uses: a
+    /// spinner while working, an amber dot while awaiting approval, nothing otherwise.
+    @ViewBuilder private var liveIndicator: some View {
+        switch line?.tone {
+        case .running?:  SpinnerGlyph(color: .blue)
+        case .approval?: Circle().fill(.orange).frame(width: 7, height: 7)
+        default:         EmptyView()
+        }
+    }
+
+    /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8") — the parity with web's
+    /// `session-time` that the native list was missing. Reuses OrbitKit's `RelativeTime` (also used
+    /// by the session-header subtitle).
+    private var relTime: String? {
+        guard let ts = session.lastTurnAt ?? session.createdAt else { return nil }
+        return RelativeTime.format(ts)
+    }
+    #endif
+
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
         case .preview, .queued: return .secondary
