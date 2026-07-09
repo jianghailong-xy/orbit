@@ -43,7 +43,7 @@ func TestCodexAppServerThreadParams(t *testing.T) {
 	if got["approvalPolicy"] != "never" {
 		t.Fatalf("approvalPolicy = %v", got["approvalPolicy"])
 	}
-	if got["sandbox"] != "workspace-write" {
+	if got["sandbox"] != "danger-full-access" {
 		t.Fatalf("sandbox = %v", got["sandbox"])
 	}
 	roots, ok := got["runtimeWorkspaceRoots"].([]string)
@@ -82,12 +82,8 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 		t.Fatalf("input = %#v", got["input"])
 	}
 	sandbox, ok := got["sandboxPolicy"].(map[string]interface{})
-	if !ok || sandbox["type"] != "workspaceWrite" || sandbox["networkAccess"] != false {
+	if !ok || sandbox["type"] != "dangerFullAccess" {
 		t.Fatalf("sandboxPolicy = %#v", got["sandboxPolicy"])
-	}
-	roots, ok := sandbox["writableRoots"].([]string)
-	if !ok || len(roots) != 1 || roots[0] != "/tmp/uploads" {
-		t.Fatalf("writableRoots = %#v", sandbox["writableRoots"])
 	}
 }
 

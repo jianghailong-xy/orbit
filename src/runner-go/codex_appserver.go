@@ -588,11 +588,13 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 			execDir,
 			upDir,
 		},
-		"sandboxPolicy": map[string]interface{}{
-			"type":          "workspaceWrite",
-			"networkAccess": false,
-			"writableRoots": []string{upDir},
-		},
+		// danger-full-access mirrors the Claude path, which runs unsandboxed in execDir.
+		// approvalPolicy is already "never" (Orbit fully trusts the agent), so codex's
+		// sandbox is the only thing left restricting it — and workspace-write (network off,
+		// writableRoots limited to the uploads dir) breaks git: fetch has no network, and a
+		// worktree session's real .git lives outside the workspace so FETCH_HEAD writes get
+		// denied. Full access removes that asymmetry with Claude.
+		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
@@ -607,7 +609,7 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	params := map[string]interface{}{
 		"cwd":            execDir,
 		"approvalPolicy": "never",
-		"sandbox":        "workspace-write",
+		"sandbox":        "danger-full-access", // see codexTurnParams: parity with unsandboxed Claude
 		"runtimeWorkspaceRoots": []string{
 			execDir,
 			upDir,

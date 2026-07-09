@@ -486,7 +486,7 @@ func cmdResume(args []string) {
 		if sessionID == "" {
 			sessionID = meta.SessionUUID
 		}
-		args := []string{"-s", "workspace-write", "-a", "never"}
+		args := []string{"-s", "danger-full-access", "-a", "never"}
 		if meta.WorkDir != "" {
 			args = append(args, "-C", expandTilde(meta.WorkDir))
 		}

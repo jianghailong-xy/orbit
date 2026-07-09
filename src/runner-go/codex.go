@@ -239,7 +239,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
 
-	args := []string{"-C", execDir, "-s", "workspace-write", "-a", "never", "--add-dir", upDir, "exec"}
+	args := []string{"-C", execDir, "-s", "danger-full-access", "-a", "never", "--add-dir", upDir, "exec"}
 	if job.RuntimeSessionID != "" {
 		args = append(args, "resume")
 	}
