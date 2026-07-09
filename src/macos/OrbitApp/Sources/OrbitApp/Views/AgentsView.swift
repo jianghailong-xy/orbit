@@ -378,27 +378,25 @@ struct StatusGlyphView: View {
 /// A self-drawn indeterminate spinner (a rotating ¾ arc) for the "working" glyph. SwiftUI's
 /// `ProgressView` bridges to a UIKit activity indicator that renders *blank* after a `List` row is
 /// detached and reattached — open a session and navigate back and the spinner vanishes (while the
-/// static SF Symbols survive). A pure-SwiftUI arc re-animates reliably on reappear and also matches
-/// web's spinning-arc loader. `spinning` is reset on disappear so reappearance re-triggers the spin.
+/// static SF Symbols survive). The angle is derived from `TimelineView(.animation)` rather than a
+/// `repeatForever` implicit animation: this re-animates reliably on reappear *and* holds a constant
+/// speed. A `repeatForever` animation gets re-applied every time the host row re-renders, and while
+/// an agent streams output the running row re-renders many times a second — those repeats stack on
+/// the `rotationEffect` and the arc visibly accelerates. A time-derived angle is a pure function of
+/// wall-clock time, so no amount of re-rendering can change how fast it spins.
 private struct SpinnerGlyph: View {
     let color: Color
-    @State private var spinning = false
-    // A fast arc across a list of "working" rows reads as frantic; iOS gets a calmer, less
-    // anxious spin. macOS keeps its original cadence.
-    #if os(iOS)
-    private let spinPeriod: Double = 1.2
-    #else
-    private let spinPeriod: Double = 0.85
-    #endif
+    private let period: Double = 0.85   // seconds per rotation; the steady "normal" cadence
     var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .frame(width: 13, height: 13)
-            .rotationEffect(.degrees(spinning ? 360 : 0))
-            .animation(.linear(duration: spinPeriod).repeatForever(autoreverses: false), value: spinning)
-            .onAppear { spinning = true }
-            .onDisappear { spinning = false }
+        TimelineView(.animation) { context in
+            let angle = context.date.timeIntervalSinceReferenceDate
+                .truncatingRemainder(dividingBy: period) / period * 360
+            Circle()
+                .trim(from: 0, to: 0.7)
+                .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .frame(width: 13, height: 13)
+                .rotationEffect(.degrees(angle))
+        }
     }
 }
 
