@@ -32,29 +32,61 @@ enum ProseInk: Hashable {
 }
 
 #if os(iOS)
-/// A read-only, self-sizing `UITextView` that renders inline-Markdown (or plain) text with native
-/// partial selection + Copy. Look matches the `Font.orbit*` tokens and the web transcript: the same
-/// Dynamic-Type-tracked sizes (`preferredFont(forTextStyle:)`), the same faint inline-code tint, and
-/// list markers that hang so wrapped lines align under the text.
-struct SelectableText: UIViewRepresentable {
-    let text: String
+/// One laid-out paragraph inside a `SelectableText`. A leaf view (the user bubble, a fenced code
+/// block) is a single segment; a run of Markdown prose is several — headings, paragraphs and list
+/// items sharing ONE text view so a long-press can drag a selection straight across them. That
+/// sharing is the point: a `UITextView` is a single selection domain, so the old one-view-per-block
+/// layout capped a selection at a single block (you couldn't select two paragraphs, or a heading and
+/// the paragraph beneath it, in one gesture). See `MarkdownView.proseGroups`.
+struct ProseSegment: Hashable {
+    var text: String
     var role: ProseRole = .body
-    var ink: ProseInk = .transcript
     /// Parse `text` as inline Markdown (bold/italic/code/links/strikethrough). Off for the user
     /// bubble and fenced code, which are rendered verbatim.
     var markdown: Bool = false
     /// Tint inline `code` runs, mirroring the web `.md code` chip. Off inside headings (a bar behind a
     /// filename in a big bold heading reads as clutter — matches `inlineMarkdown(codeBackground:)`).
     var codeBackground: Bool = true
-    /// A list marker (`•` / `1.`) prepended in secondary ink with a hanging indent, so a list item is
-    /// one selectable run and its wrapped lines align under the text (web's `.md li`).
+    /// A list marker (`•` / `1.`) laid in secondary ink with a hanging indent, so the marker copies
+    /// with the item and its wrapped lines align under the text (web's `.md li`).
     var leadingMarker: String? = nil
+    /// List nesting depth; each level adds a 16pt head indent (web's nested lists).
+    var indent: Int = 0
+    /// Gap above this paragraph — the inter-block separation (8pt between blocks, 6pt between list
+    /// items), baked into the paragraph style so one text view reproduces the old block `VStack` gaps.
+    var spacingBefore: CGFloat = 0
+}
+
+/// A read-only, self-sizing `UITextView` that renders inline-Markdown (or plain) prose with native
+/// partial selection + Copy. Look matches the `Font.orbit*` tokens and the web transcript: the same
+/// Dynamic-Type-tracked sizes (`preferredFont(forTextStyle:)`), the same faint inline-code tint, and
+/// list markers that hang so wrapped lines align under the text. One view holds one or more
+/// `ProseSegment`s, so a selection can span a whole run of prose blocks — not just one.
+struct SelectableText: UIViewRepresentable {
+    let segments: [ProseSegment]
+    var ink: ProseInk = .transcript
+
+    /// Leaf: a single run of text — the user bubble, a fenced code block, or one standalone block.
+    init(text: String, role: ProseRole = .body, ink: ProseInk = .transcript,
+         markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil) {
+        self.segments = [ProseSegment(text: text, role: role, markdown: markdown,
+                                      codeBackground: codeBackground, leadingMarker: leadingMarker)]
+        self.ink = ink
+    }
+
+    /// Merged: several prose paragraphs sharing one selection domain (see `MarkdownView.proseGroups`).
+    init(segments: [ProseSegment], ink: ProseInk = .transcript) {
+        self.segments = segments
+        self.ink = ink
+    }
 
     // Referenced only so the view re-renders (and rebuilds its baked fonts) when the system text size
     // changes — the fonts are snapshotted at build time, not auto-adjusted by the text view.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    private var wraps: Bool { role != .code }
+    // Only a lone fenced-code leaf renders unwrapped (its natural width scrolls in a horizontal
+    // ScrollView); prose always wraps to the proposed width.
+    private var wraps: Bool { !segments.allSatisfy { $0.role == .code } }
 
     /// Remembers what a text view was last built from, so `updateUIView` can no-op when nothing
     /// changed. That matters twice over: the transcript re-evaluates its rows on every stream publish
@@ -65,18 +97,14 @@ struct SelectableText: UIViewRepresentable {
 
     private var renderKey: Int {
         var hasher = Hasher()
-        hasher.combine(text)
-        hasher.combine(role)
+        hasher.combine(segments)
         hasher.combine(ink)
-        hasher.combine(markdown)
-        hasher.combine(codeBackground)
-        hasher.combine(leadingMarker)
         hasher.combine(dynamicTypeSize)
         return hasher.finalize()
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
+        let tv = SelectableTextView()
         tv.isEditable = false
         tv.isSelectable = true
         tv.isScrollEnabled = false            // self-sizes; the transcript List does the scrolling
@@ -117,31 +145,47 @@ struct SelectableText: UIViewRepresentable {
     // MARK: - Attributed string
 
     private func build() -> NSAttributedString {
-        let base = baseFont()
         let color = ink.uiColor
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = (role == .code) ? 2 : ProseLayout.lineSpacing
-        if !wraps { para.lineBreakMode = .byClipping }
-
         let result = NSMutableAttributedString()
+        for (i, seg) in segments.enumerated() {
+            append(seg, into: result, color: color, trailingNewline: i < segments.count - 1)
+        }
+        return result
+    }
 
-        if let marker = leadingMarker {
-            // Hang the wrapped lines under the text: the marker is followed by a tab to a stop at the
-            // marker's width, and every line indents to that same width.
+    /// Append one paragraph. `trailingNewline` opens the next segment (the break is styled here so it
+    /// belongs to *this* paragraph); the next segment's own `spacingBefore` then adds the block gap.
+    private func append(_ seg: ProseSegment, into result: NSMutableAttributedString,
+                        color: UIColor, trailingNewline: Bool) {
+        let base = baseFont(for: seg.role)
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = (seg.role == .code) ? 2 : ProseLayout.lineSpacing
+        para.paragraphSpacingBefore = seg.spacingBefore
+        if seg.role == .code { para.lineBreakMode = .byClipping }
+
+        // List nesting: every line hangs at `indent × 16`; a marker hangs further so wrapped lines
+        // align under the item's text rather than under its bullet.
+        let indentBase = CGFloat(seg.indent) * 16
+        para.firstLineHeadIndent = indentBase
+        para.headIndent = indentBase
+
+        if let marker = seg.leadingMarker {
             let markerRun = marker + "\t"
-            let indent = ceil((markerRun as NSString).size(withAttributes: [.font: base]).width)
-            para.firstLineHeadIndent = 0
-            para.headIndent = indent
-            para.tabStops = [NSTextTab(textAlignment: .left, location: indent, options: [:])]
-            para.defaultTabInterval = indent
+            let markerWidth = ceil((markerRun as NSString).size(withAttributes: [.font: base]).width)
+            para.headIndent = indentBase + markerWidth
+            para.tabStops = [NSTextTab(textAlignment: .left, location: indentBase + markerWidth, options: [:])]
+            para.defaultTabInterval = markerWidth
             result.append(NSAttributedString(string: markerRun, attributes: [
                 .font: base, .foregroundColor: ProseInk.secondary.uiColor, .paragraphStyle: para,
             ]))
         }
 
-        let source = markdown ? inlineMarkdownAttributed(text) : AttributedString(text)
+        let source = seg.markdown ? inlineMarkdownAttributed(seg.text) : AttributedString(seg.text)
         for run in source.runs {
-            let piece = String(source[run.range].characters)
+            // Soft breaks inside a paragraph become LINE SEPARATORs so they wrap without picking up
+            // paragraph spacing — only the real block break (the styled `\n` below) gets the gap.
+            // `SelectableTextView.copy` restores them to `\n` so pasted prose keeps normal newlines.
+            let piece = String(source[run.range].characters).replacingOccurrences(of: "\n", with: "\u{2028}")
             let intent = run.inlinePresentationIntent
             var font = base
             var traits: UIFontDescriptor.SymbolicTraits = []
@@ -153,7 +197,7 @@ struct SelectableText: UIViewRepresentable {
             var attrs: [NSAttributedString.Key: Any] = [
                 .font: font, .foregroundColor: color, .paragraphStyle: para,
             ]
-            if intent?.contains(.code) == true, codeBackground {
+            if intent?.contains(.code) == true, seg.codeBackground {
                 attrs[.backgroundColor] = UIColor.secondaryLabel.withAlphaComponent(0.08)
             }
             if intent?.contains(.strikethrough) == true {
@@ -162,10 +206,13 @@ struct SelectableText: UIViewRepresentable {
             if let link = run.link { attrs[.link] = link }
             result.append(NSAttributedString(string: piece, attributes: attrs))
         }
-        return result
+
+        if trailingNewline {
+            result.append(NSAttributedString(string: "\n", attributes: [.font: base, .paragraphStyle: para]))
+        }
     }
 
-    private func baseFont() -> UIFont {
+    private func baseFont(for role: ProseRole) -> UIFont {
         switch role {
         case .body:      return .preferredFont(forTextStyle: .body)
         case .aside:     return .preferredFont(forTextStyle: .callout)
@@ -180,6 +227,18 @@ struct SelectableText: UIViewRepresentable {
 
     private func monoFont(matching f: UIFont) -> UIFont {
         UIFont.monospacedSystemFont(ofSize: f.pointSize, weight: .regular)
+    }
+}
+
+/// A read-only `UITextView` whose Copy normalises the soft-break sentinel (U+2028, used inside a
+/// merged prose run so wrapped lines don't pick up inter-block spacing) back to `\n`, so copied prose
+/// pastes with ordinary newlines rather than stray line-separator characters.
+final class SelectableTextView: UITextView {
+    override func copy(_ sender: Any?) {
+        super.copy(sender)
+        if let s = UIPasteboard.general.string, s.contains("\u{2028}") {
+            UIPasteboard.general.string = s.replacingOccurrences(of: "\u{2028}", with: "\n")
+        }
     }
 }
 

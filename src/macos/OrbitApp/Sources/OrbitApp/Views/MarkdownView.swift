@@ -28,6 +28,27 @@ struct MarkdownView: View {
         // Streaming rows don't reach here at all — they render plain until finalized (see
         // AssistantBubbleView / ThinkingView), so the cache holds one entry per finalized text.
         let blocks = cachedMarkdownBlocks(source)
+        #if os(iOS)
+        // Coalesce each run of flowable prose (headings, paragraphs, lists) into ONE SelectableText
+        // so a long-press can drag a selection across those blocks — a UITextView is a single
+        // selection domain, so a view-per-block capped selection at one block (the reported bug).
+        // Code blocks, tables and quotes stay their own views (a scrollable snippet / a grid / a
+        // barred quote can't live inside a shared text run), so they're selection "islands" between
+        // the prose runs; the 8pt block gaps within a run are baked into the text (see ProseSegment).
+        let groups = proseGroups(blocks, base: base)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(groups.indices, id: \.self) { i in
+                switch groups[i] {
+                case .prose(let segments):
+                    SelectableText(segments: segments, ink: ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                case .block(let block):
+                    MarkdownBlockView(block: block, base: base, ink: ink)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #else
         VStack(alignment: .leading, spacing: 8) {
             ForEach(blocks.indices, id: \.self) { i in
                 MarkdownBlockView(block: blocks[i], base: base, ink: ink)
@@ -39,8 +60,54 @@ struct MarkdownView: View {
         // code blocks tighten it back down to stay dense.
         .lineSpacing(ProseLayout.lineSpacing)
         .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 }
+
+#if os(iOS)
+/// A render unit for the iOS transcript: either a `.prose` run of flowable blocks merged into one
+/// selectable text view, or a standalone `.block` (code/table/quote/rule) that renders on its own.
+private enum ProseGroup {
+    case prose([ProseSegment])
+    case block(MarkdownBlock)
+}
+
+/// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
+/// lists) collapse into one `.prose` — a single `SelectableText`, hence one selection domain — while
+/// code/table/quote/rule each stay a standalone `.block`. Inter-block spacing (8pt, and 6pt between
+/// list items) is carried on each segment's `spacingBefore` so the merged view reproduces the gaps
+/// the old block `VStack` drew. See `MarkdownView.body`.
+private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGroup] {
+    var groups: [ProseGroup] = []
+    var pending: [ProseSegment] = []
+    func flush() {
+        if !pending.isEmpty { groups.append(.prose(pending)); pending = [] }
+    }
+    for block in blocks {
+        switch block {
+        case .heading(let level, let text):
+            pending.append(ProseSegment(text: text, role: .heading(level), markdown: true,
+                                        codeBackground: false, spacingBefore: pending.isEmpty ? 0 : 8))
+        case .paragraph(let text):
+            pending.append(ProseSegment(text: text, role: base, markdown: true,
+                                        spacingBefore: pending.isEmpty ? 0 : 8))
+        case .list(let items):
+            for (i, item) in items.enumerated() {
+                let marker = item.ordered ? "\(item.number ?? 1)." : "•"
+                // First item is a block gap (8) from the prior block; siblings sit tighter (6).
+                let gap: CGFloat = pending.isEmpty ? 0 : (i == 0 ? 8 : 6)
+                pending.append(ProseSegment(text: item.text, role: base, markdown: true,
+                                            leadingMarker: marker, indent: item.indent, spacingBefore: gap))
+            }
+        case .code, .table, .quote, .rule:
+            flush()
+            groups.append(.block(block))
+        }
+    }
+    flush()
+    return groups
+}
+#endif
 
 /// Parse cache backing `MarkdownView` (main-actor only, like the view bodies that call it).
 /// Bounded as a leak backstop: past the cap it resets wholesale — visible rows repopulate it
@@ -63,40 +130,21 @@ private struct MarkdownBlockView: View {
 
     var body: some View {
         switch block {
+        // On iOS these flowable blocks are merged into one selectable text view upstream
+        // (MarkdownView.proseGroups), so this view renders them only on macOS; the "island" blocks
+        // below (code/table/quote/rule) can't share a text run and render here on both platforms.
         case .heading(let level, let text):
-            // iOS: one selectable run — bake the heading font + weight into the UITextView (SwiftUI's
-            // `.font`/`.bold` can't reach a representable). macOS keeps the inherited-font `Text`.
-            #if os(iOS)
-            SelectableText(text: text, role: .heading(level), ink: ink, markdown: true, codeBackground: false)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            #else
             inlineMarkdown(text, codeBackground: false).font(headingFont(level)).bold()
                 .fixedSize(horizontal: false, vertical: true)
-            #endif
 
         case .paragraph(let text):
-            #if os(iOS)
-            SelectableText(text: text, role: base, ink: ink, markdown: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            #else
             inlineMarkdown(text)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            #endif
 
         case .list(let items):
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { i in
-                    // iOS: the marker is prepended into the selectable run with a hanging indent, so
-                    // the bullet copies with the item and wrapped lines align under the text — and the
-                    // marker/body baseline can't drift (a representable exposes no text baseline to an
-                    // HStack's `.firstTextBaseline`). macOS keeps the marker + `Text` HStack.
-                    #if os(iOS)
-                    SelectableText(text: items[i].text, role: base, ink: ink, markdown: true,
-                                   leadingMarker: marker(items[i]))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, CGFloat(items[i].indent) * 16)
-                    #else
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(marker(items[i])).monospacedDigit().foregroundStyle(.secondary)
                         inlineMarkdown(items[i].text)
@@ -104,7 +152,6 @@ private struct MarkdownBlockView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.leading, CGFloat(items[i].indent) * 16)
-                    #endif
                 }
             }
 
