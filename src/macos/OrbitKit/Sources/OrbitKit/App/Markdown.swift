@@ -54,6 +54,42 @@ public func parseMarkdownBlocks(_ source: String) -> [MarkdownBlock] {
     return document.children.flatMap(blocks(from:))
 }
 
+/// Split a *streaming* Markdown string into the leading portion that's safe to render as Markdown
+/// now and the still-growing tail to keep as plain text until it completes. A block completes at a
+/// blank line, so everything up to the last top-level blank line is `stable`; the unfinished block
+/// after it stays in `tail`. Text inside an unclosed ``` / ~~~ fence is never complete, so an open
+/// fence keeps its own lines in `tail` too (otherwise a half-written fence would render as a code
+/// block, then reflow). `stable + tail == source` exactly, so the two halves render adjacently with
+/// no gap or dropped character. See `StreamingProse` (the streaming counterpart of `MarkdownView`).
+public func splitStreamingMarkdown(_ source: String) -> (stable: Substring, tail: Substring) {
+    var inFence = false
+    var cut = source.startIndex           // end of the last completed block
+    var lineStart = source.startIndex
+    while lineStart < source.endIndex {
+        let lineEnd = source[lineStart...].firstIndex(of: "\n") ?? source.endIndex
+        let line = source[lineStart..<lineEnd]
+        let afterLine = lineEnd < source.endIndex ? source.index(after: lineEnd) : source.endIndex
+        if isFenceMarker(line) {
+            inFence.toggle()
+        } else if !inFence && isBlankLine(line) {
+            // A top-level blank line closes the block(s) before it: everything up to and including
+            // this line's trailing newline is stable.
+            cut = afterLine
+        }
+        lineStart = afterLine
+    }
+    return (source[..<cut], source[cut...])
+}
+
+private func isBlankLine(_ line: Substring) -> Bool {
+    line.allSatisfy { $0 == " " || $0 == "\t" }
+}
+
+private func isFenceMarker(_ line: Substring) -> Bool {
+    let body = line.drop { $0 == " " || $0 == "\t" }
+    return body.hasPrefix("```") || body.hasPrefix("~~~")
+}
+
 // MARK: - AST → block mapping
 
 /// Most block markup maps to a single block; a paragraph is the exception — one that embeds image(s)

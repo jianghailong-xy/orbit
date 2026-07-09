@@ -155,15 +155,7 @@ struct AssistantBubbleView: View {
                 if bubble.isFinalized {
                     MarkdownView(source: bubble.displayText)
                 } else {
-                    // Streaming: render the growing text plain. The full Markdown pass (a GFM AST
-                    // plus an AttributedString parse per block) would re-run over the WHOLE message
-                    // on every published snapshot for the entire turn — the main battery/heat
-                    // hotspot on iPhone. Finalize swaps in the parsed rendering once, when the
-                    // text stops changing. lineSpacing matches MarkdownView's prose leading so
-                    // the swap doesn't shift the layout.
-                    Text(bubble.displayText)
-                        .lineSpacing(ProseLayout.lineSpacing)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    StreamingProse(text: bubble.displayText)
                 }
             }
             .font(.orbitProse)
@@ -176,20 +168,55 @@ struct AssistantBubbleView: View {
     }
 }
 
+/// The streaming counterpart of `MarkdownView`: renders the *completed* blocks (everything up to the
+/// last blank line) as Markdown and keeps the still-growing trailing block as plain text, so a
+/// paragraph only snaps into formatted Markdown once it ends — the behaviour requested for the live
+/// reply. This bounds the Markdown parse to block *completions* (a few per second) rather than
+/// re-parsing the whole message on every ~5Hz stream publish, which is the battery/heat reason the
+/// finalized swap in `MarkdownView` had degraded to fully-plain streaming. `splitStreamingMarkdown`
+/// guarantees `stable + tail == text`; the fonts (`orbitProse` ↔ SelectableText `.body`) and
+/// `ProseLayout.lineSpacing` match across the two halves, so a block snapping from plain to Markdown
+/// doesn't shift the layout. `base`/`ink` thread the iOS selectable-leaf styling like `MarkdownView`.
+private struct StreamingProse: View {
+    let text: String
+    var base: ProseRole = .body
+    var ink: ProseInk = .transcript
+
+    var body: some View {
+        let (stable, tail) = splitStreamingMarkdown(text)
+        VStack(alignment: .leading, spacing: 8) {
+            if !stable.isEmpty {
+                // `.equatable()`: the tail grows every ~5Hz publish, so this body re-runs constantly —
+                // but the completed prefix only changes when a *new* block completes. Comparing the
+                // source string lets SwiftUI skip the whole subtree (no re-parse, and crucially no
+                // per-frame TextKit re-measure of the finished prose) until then. This is what keeps
+                // progressive streaming off the iPhone battery/heat path the plain degrade avoided.
+                MarkdownView(source: String(stable), base: base, ink: ink).equatable()
+            }
+            if !tail.isEmpty {
+                Text(tail)
+                    .lineSpacing(ProseLayout.lineSpacing)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct ThinkingView: View {
     let block: ThinkingBlock
     @State private var expanded = false
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            // Same streaming degrade as AssistantBubbleView: plain text while the block grows,
-            // full Markdown only once finalized (this body only runs while expanded).
+            // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
+            // while the block grows, the trailing partial stays plain (this body only runs while
+            // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
+            // aside, not the assistant reply; macOS ignores these and keeps the inherited font/colour.
             Group {
                 if block.isFinalized {
-                    // aside/secondary so the iOS selectable leaves read as the muted "thinking" aside,
-                    // not the assistant reply; macOS ignores these and keeps the inherited font/colour.
                     MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
                 } else {
-                    Text(block.displayText).lineSpacing(ProseLayout.lineSpacing)
+                    StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
                 }
             }
             .font(.orbitProseAside).foregroundStyle(.secondary)

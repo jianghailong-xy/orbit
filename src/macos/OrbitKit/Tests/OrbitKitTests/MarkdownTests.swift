@@ -179,4 +179,54 @@ final class MarkdownTests: XCTestCase {
              .image(source: "orbit-attachment:i", alt: "m"),
              .paragraph(text: "after")])
     }
+
+    // MARK: - splitStreamingMarkdown (progressive streaming)
+
+    /// Assert the split matches, and always that it's lossless (`stable + tail == source`) — the two
+    /// halves render adjacently, so a dropped or duplicated character would corrupt the reply.
+    private func assertSplit(_ source: String, stable: String, tail: String,
+                             file: StaticString = #filePath, line: UInt = #line) {
+        let (s, t) = splitStreamingMarkdown(source)
+        XCTAssertEqual(String(s), stable, "stable", file: file, line: line)
+        XCTAssertEqual(String(t), tail, "tail", file: file, line: line)
+        XCTAssertEqual(String(s) + String(t), source, "lossless", file: file, line: line)
+    }
+
+    func testSplitEmptyAndNoBoundaryYet() {
+        assertSplit("", stable: "", tail: "")
+        // A single growing paragraph has no completed block yet — all tail.
+        assertSplit("Hello, still typ", stable: "", tail: "Hello, still typ")
+        assertSplit("one line\n", stable: "", tail: "one line\n")
+    }
+
+    func testSplitCompletedParagraphThenGrowingTail() {
+        assertSplit("Para one is done.\n\nPara two starts **bol",
+                    stable: "Para one is done.\n\n", tail: "Para two starts **bol")
+    }
+
+    func testSplitOnlyLastBoundaryIsStable() {
+        assertSplit("A\n\nB\n\nC still going",
+                    stable: "A\n\nB\n\n", tail: "C still going")
+    }
+
+    func testSplitOpenFenceStaysInTail() {
+        // Everything from the unclosed fence on stays plain — otherwise a half-written code block
+        // would render then reflow. The intro paragraph before it is stable.
+        assertSplit("intro\n\n```py\ncode\n",
+                    stable: "intro\n\n", tail: "```py\ncode\n")
+        // A blank line *inside* the open fence is not a block boundary.
+        assertSplit("intro\n\n```py\ndef f():\n\n    return 1\n",
+                    stable: "intro\n\n", tail: "```py\ndef f():\n\n    return 1\n")
+    }
+
+    func testSplitClosedFenceBecomesStable() {
+        assertSplit("intro\n\n```py\ncode\n```\n\ndone",
+                    stable: "intro\n\n```py\ncode\n```\n\n", tail: "done")
+    }
+
+    func testSplitHeadingRendersOnceBlankFollows() {
+        // Before the blank line the heading is raw tail; once it lands the heading is stable.
+        assertSplit("## Title", stable: "", tail: "## Title")
+        assertSplit("## Title\n\nbody", stable: "## Title\n\n", tail: "body")
+    }
 }

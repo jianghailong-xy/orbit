@@ -9,7 +9,7 @@ import OrbitKit
 ///
 /// Inherited `.font`/`.foregroundStyle` from the call site propagate to paragraph/list text;
 /// headings and code blocks set their own font and override it deliberately.
-struct MarkdownView: View {
+struct MarkdownView: View, Equatable {
     let source: String
     // iOS selectable-leaf styling (see SelectableText): the base role + ink the prose blocks render
     // with, so the same shared renderer reads as the assistant reply here and as the muted "aside" in
@@ -25,8 +25,9 @@ struct MarkdownView: View {
         // turn, plus whole-tree diffs), and `parseMarkdownBlocks` builds a full swift-markdown AST
         // per call — on iPhone that repeated re-parse was a top battery/heat hotspot. The cache
         // keys on the exact source string, so re-evaluations of unchanged text cost a hash lookup.
-        // Streaming rows don't reach here at all — they render plain until finalized (see
-        // AssistantBubbleView / ThinkingView), so the cache holds one entry per finalized text.
+        // A streaming row reaches here only with its *completed-block* prefix (StreamingProse feeds
+        // the growing tail to a plain Text), and that prefix changes only when a block completes — a
+        // few times a second, not every publish — so the cache still holds a handful of entries.
         let blocks = cachedMarkdownBlocks(source)
         #if os(iOS)
         // Coalesce each run of flowable prose (headings, paragraphs, lists) into ONE SelectableText
@@ -66,7 +67,7 @@ struct MarkdownView: View {
 
 #if os(iOS)
 /// A render unit for the iOS transcript: either a `.prose` run of flowable blocks merged into one
-/// selectable text view, or a standalone `.block` (code/table/quote/rule) that renders on its own.
+/// selectable text view, or a standalone `.block` (code/table/quote/image/rule) that renders on its own.
 private enum ProseGroup {
     case prose([ProseSegment])
     case block(MarkdownBlock)
@@ -74,7 +75,7 @@ private enum ProseGroup {
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
 /// lists) collapse into one `.prose` — a single `SelectableText`, hence one selection domain — while
-/// code/table/quote/rule each stay a standalone `.block`. Inter-block spacing (8pt, and 6pt between
+/// code/table/quote/image/rule each stay a standalone `.block`. Inter-block spacing (8pt, and 6pt between
 /// list items) is carried on each segment's `spacingBefore` so the merged view reproduces the gaps
 /// the old block `VStack` drew. See `MarkdownView.body`.
 private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGroup] {
