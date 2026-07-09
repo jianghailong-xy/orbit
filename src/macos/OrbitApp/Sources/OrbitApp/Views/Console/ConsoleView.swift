@@ -266,6 +266,13 @@ struct TranscriptView: View {
                 atBottom = true; ruler.reset(); stuckID = nil
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
+            // A message the user just sent forces the transcript back to the live tail — even if
+            // they'd scrolled up to read history (the stateRevision follow above only re-pins while
+            // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
+            .onChange(of: console.localSendTick) {
+                atBottom = true
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {

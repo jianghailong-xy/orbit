@@ -52,6 +52,11 @@ final class ConsoleModel {
     /// (auto-scroll, sticky-header recompute) observe this O(1) counter instead of an
     /// `onChange(of: state.items)` that Equatable-compares the whole item array every publish.
     private(set) var stateRevision = 0
+    /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
+    /// to force a scroll to the live tail on send — even when the user had scrolled up to read
+    /// history (the `stateRevision` follow only re-pins while already at the bottom). Web parity:
+    /// `onSend` re-pins `atBottom` before the new bubble lands (AgentView.tsx).
+    private(set) var localSendTick = 0
     private(set) var connected = false
 
     // Reconnect-loop state (see `run()`). `reconnectPolicy` decides wait-vs-stop and ramps the
@@ -533,6 +538,7 @@ final class ConsoleModel {
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,
                                   queued: willQueue)
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
+        localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
         composerText = ""
         pendingAttachments = []
 
@@ -682,6 +688,7 @@ final class ConsoleModel {
         defer { sending = false }
         reducer.removeApproval(id: approvalID)
         publishStateNow()
+        localSendTick &+= 1 // a reply is a send too — pin the transcript to the tail (web parity)
         let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRule: nil)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approvalID, req) }
         catch {

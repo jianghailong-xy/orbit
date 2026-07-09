@@ -922,6 +922,16 @@ export function AgentView({ runner }: { runner: Runner }) {
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, []);
+  // Called on send: re-pin to the live tail so a message fired while scrolled up snaps back to the
+  // bottom (and stays pinned as the reply streams) instead of stranding the user in history. The
+  // scroll goes to the current tail now for instant feedback; setting atBottomRef ensures the
+  // content-change effect below re-pins once the new bubble lands. macOS/iOS parity: ConsoleModel's
+  // localSendTick forces the same scroll on send.
+  const pinToBottom = useCallback(() => {
+    atBottomRef.current = true;
+    setAtBottom(true);
+    scrollToBottom();
+  }, [scrollToBottom]);
   // Width of the left session column; drag the divider to resize, persisted to
   // localStorage so the choice survives a reload.
   const [colWidth, setColWidth] = useState<number>(() => {
@@ -2016,6 +2026,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (replyTo) {
       const imgs = readyImages;
       if (!c && imgs.length === 0) return;
+      pinToBottom();
       void decide(replyTo.id, 'deny', undefined, c || '(see attached image)');
       setReplyTo(null);
       setText('');
@@ -2026,6 +2037,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       return;
     }
     if (!c && readyImages.length === 0) return;
+    pinToBottom();
     setHistIdx(-1);
     // `!cmd` runs a raw shell command on the runner (bypassing claude): on a live session,
     // as the first turn of a brand-new draft (no selection), or as the revive turn of an
