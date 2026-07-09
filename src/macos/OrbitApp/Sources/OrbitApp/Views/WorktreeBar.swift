@@ -9,6 +9,7 @@ import OrbitKit
 /// whose agent dir isn't a git repo it becomes an amber "not isolated" nudge. Hidden entirely when
 /// there's nothing to show. All the decisions live in `WorktreeBarLogic`; this view just renders them.
 struct WorktreeBar: View {
+    @Environment(AppModel.self) private var app
     let console: ConsoleModel
     @State private var showDiff = false
     @State private var copied = false
@@ -56,7 +57,12 @@ struct WorktreeBar: View {
 
     private func pill(detail d: SessionDetail, branch: String, files: [SessionChangedFile]) -> some View {
         let committed = !console.sessionStatus.isLive
-        let turnActive = console.sessionStatus == .running
+        // Gate Commit/Merge on the session's AUTHORITATIVE control-plane status (what the composer's
+        // Stop button reads via `showsInterrupt`), not the stream-derived `sessionStatus`: the latter
+        // never reliably reaches `.running` on a cold open of an already-running session (no durable
+        // "running" event is replayed), which left Commit enabled — and Merge shown — mid-turn. Fall
+        // back to the reconciled stream status only until the session record loads (fresh deep link).
+        let turnActive = (app.session(id: console.sessionID)?.status ?? console.sessionStatus) == .running
         let primary = WorktreeBarLogic.primary(worktreeDirty: d.worktreeDirty,
                                                 committed: committed, turnActive: turnActive)
         let add = files.reduce(0) { $0 + max(0, $1.additions) }
