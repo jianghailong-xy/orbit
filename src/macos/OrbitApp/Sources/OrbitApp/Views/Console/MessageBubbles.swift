@@ -44,10 +44,19 @@ struct UserBubbleView: View {
                 if !bubble.text.isEmpty {
                     // Same prose token as the assistant turn — one reading size across the transcript
                     // (pre-token, this inherited the platform default and mismatched the reply).
+                    #if os(iOS)
+                    // Read-only UITextView so a portion of the message can be selected + copied by
+                    // hand — the `meta` copy button is hover-revealed and never shows on iOS. Plain
+                    // text (the user turn isn't Markdown-rendered). macOS keeps the selectable `Text`.
+                    SelectableText(text: shown, role: .body, ink: .primary)
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                    #else
                     Text(shown).textSelection(.enabled)
                         .font(.orbitProse)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+                    #endif
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
@@ -176,7 +185,9 @@ struct ThinkingView: View {
             // full Markdown only once finalized (this body only runs while expanded).
             Group {
                 if block.isFinalized {
-                    MarkdownView(source: block.displayText)
+                    // aside/secondary so the iOS selectable leaves read as the muted "thinking" aside,
+                    // not the assistant reply; macOS ignores these and keeps the inherited font/colour.
+                    MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
                 } else {
                     Text(block.displayText).lineSpacing(ProseLayout.lineSpacing)
                 }

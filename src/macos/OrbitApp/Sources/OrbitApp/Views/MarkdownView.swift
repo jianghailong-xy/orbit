@@ -11,6 +11,12 @@ import OrbitKit
 /// headings and code blocks set their own font and override it deliberately.
 struct MarkdownView: View {
     let source: String
+    // iOS selectable-leaf styling (see SelectableText): the base role + ink the prose blocks render
+    // with, so the same shared renderer reads as the assistant reply here and as the muted "aside" in
+    // the thinking block. macOS ignores both — it keeps inheriting `.font`/`.foregroundStyle` from the
+    // call site. Defaults are the assistant reply.
+    var base: ProseRole = .body
+    var ink: ProseInk = .transcript
 
     var body: some View {
         // No length cap (capping only dropped formatting on long messages — the historic freezes
@@ -24,7 +30,7 @@ struct MarkdownView: View {
         let blocks = cachedMarkdownBlocks(source)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(blocks.indices, id: \.self) { i in
-                MarkdownBlockView(block: blocks[i])
+                MarkdownBlockView(block: blocks[i], base: base, ink: ink)
             }
         }
         // Opens the lines up toward web's `.md { line-height: 1.6 }` (SF's default leading is a
@@ -51,21 +57,46 @@ struct MarkdownView: View {
 
 private struct MarkdownBlockView: View {
     let block: MarkdownBlock
+    // iOS selectable-leaf styling threaded from MarkdownView; unused on macOS (which keeps `Text`).
+    let base: ProseRole
+    let ink: ProseInk
 
     var body: some View {
         switch block {
         case .heading(let level, let text):
+            // iOS: one selectable run — bake the heading font + weight into the UITextView (SwiftUI's
+            // `.font`/`.bold` can't reach a representable). macOS keeps the inherited-font `Text`.
+            #if os(iOS)
+            SelectableText(text: text, role: .heading(level), ink: ink, markdown: true, codeBackground: false)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            #else
             inlineMarkdown(text, codeBackground: false).font(headingFont(level)).bold()
                 .fixedSize(horizontal: false, vertical: true)
+            #endif
 
         case .paragraph(let text):
+            #if os(iOS)
+            SelectableText(text: text, role: base, ink: ink, markdown: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            #else
             inlineMarkdown(text)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            #endif
 
         case .list(let items):
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(items.indices, id: \.self) { i in
+                    // iOS: the marker is prepended into the selectable run with a hanging indent, so
+                    // the bullet copies with the item and wrapped lines align under the text — and the
+                    // marker/body baseline can't drift (a representable exposes no text baseline to an
+                    // HStack's `.firstTextBaseline`). macOS keeps the marker + `Text` HStack.
+                    #if os(iOS)
+                    SelectableText(text: items[i].text, role: base, ink: ink, markdown: true,
+                                   leadingMarker: marker(items[i]))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, CGFloat(items[i].indent) * 16)
+                    #else
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(marker(items[i])).monospacedDigit().foregroundStyle(.secondary)
                         inlineMarkdown(items[i].text)
@@ -73,6 +104,7 @@ private struct MarkdownBlockView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(.leading, CGFloat(items[i].indent) * 16)
+                    #endif
                 }
             }
 
@@ -85,9 +117,14 @@ private struct MarkdownBlockView: View {
         case .quote(let text):
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.4)).frame(width: 3)
+                #if os(iOS)
+                SelectableText(text: text, role: base, ink: .secondary, markdown: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                #else
                 inlineMarkdown(text).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                #endif
             }
 
         case .rule:
@@ -177,11 +214,19 @@ private struct CodeBlockView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
+            // iOS: a read-only UITextView so a snippet can be selected + copied by hand (the hover copy
+            // button below never shows on iOS). It doesn't wrap — the natural width scrolls here, web
+            // parity. macOS keeps the `Text` (its drag-select works) plus the hover copy button.
+            #if os(iOS)
+            SelectableText(text: code, role: .code, ink: .primary)
+                .padding(10)
+            #else
             Text(code)
                 .font(.orbitMono)
                 .lineSpacing(2)
                 .textSelection(.enabled)
                 .padding(10)
+            #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.gray.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
@@ -230,6 +275,17 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
         }
     }
     return Text(attributed)
+}
+
+/// The same inline-Markdown parse as `inlineMarkdown`, but returning the raw `AttributedString` so the
+/// iOS `SelectableText` can restyle it into a read-only `UITextView` (bold/italic/code/links become
+/// concrete `UIFont`s + attributes there; the inline-code tint is applied per run at that point, not
+/// baked here). Falls back to the plain string on a parse failure.
+func inlineMarkdownAttributed(_ s: String) -> AttributedString {
+    (try? AttributedString(
+        markdown: s,
+        options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+    )) ?? AttributedString(s)
 }
 
 extension Color {
