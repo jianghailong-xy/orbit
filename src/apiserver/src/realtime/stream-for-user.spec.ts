@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ControlEvent, RunEventType, RunStatus, SessionEndReason } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -40,7 +41,9 @@ const rowA: Row = {
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
 // sets up the in-memory hub, which is all these tests exercise.
 function svcWith(rows: Record<string, Row>, pending = 0): RealtimeService {
-  return new RealtimeService(fakePrisma(rows, pending));
+  // These tests exercise streamForUser only; a no-op push stub satisfies the new constructor dep.
+  const push = { scheduleBadgeSync: () => undefined } as unknown as PushService;
+  return new RealtimeService(fakePrisma(rows, pending), push);
 }
 
 test('a STATUS event reaches the owner as session.updated with a full summary', async () => {

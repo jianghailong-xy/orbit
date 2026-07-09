@@ -52,6 +52,24 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center?.removeDeliveredNotifications(withIdentifiers: [identifier])
     }
 
+    /// Remove delivered *approval* banners whose session (thread id) matches `predicate`, so an
+    /// approval handled on another device also leaves Notification Center. The silent badge-sync
+    /// push passes the resolved sessions; the foreground reconcile passes "no longer needs you".
+    /// `nonisolated` so the background push delegate can call it directly. See
+    /// docs/cross-platform-badge-sync.md.
+    nonisolated static func removeDeliveredApprovals(where predicate: @escaping @Sendable (String) -> Bool) {
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        UNUserNotificationCenter.current().getDeliveredNotifications { notes in
+            let ids = notes
+                .filter { $0.request.content.categoryIdentifier == Notifications.approvalCategory
+                          && predicate($0.request.content.threadIdentifier) }
+                .map(\.request.identifier)
+            if !ids.isEmpty {
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+            }
+        }
+    }
+
     // MARK: UNUserNotificationCenterDelegate
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,

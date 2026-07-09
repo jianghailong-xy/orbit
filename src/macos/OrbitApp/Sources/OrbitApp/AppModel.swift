@@ -393,6 +393,13 @@ final class AppModel {
             sessions = list
             menuSummary = MenuBar.summary(from: list)
             updateDockBadge(menuSummary.badge)
+            #if os(iOS)
+            // Foreground reconcile: drop delivered approval banners for sessions that no longer need
+            // a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
+            // cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
+            let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
+            NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains($0) })
+            #endif
         } catch APIError.unauthorized {
             logout()
         } catch {

@@ -57,6 +57,21 @@ final class PushDelegate: NSObject, UIApplicationDelegate {
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         // No token this launch (e.g. no network / not provisioned). Registration retries next launch.
     }
+
+    /// Silent badge-sync push (content-available): iOS already applied `aps.badge` on delivery. If
+    /// it named sessions whose approval was handled elsewhere, drop their now-stale delivered
+    /// banners too so Notification Center matches the badge. See docs/cross-platform-badge-sync.md.
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard let ids = userInfo["clearSessions"] as? [String], !ids.isEmpty else {
+            completionHandler(.noData)
+            return
+        }
+        let sessions = Set(ids)
+        NotificationManager.removeDeliveredApprovals(where: { sessions.contains($0) })
+        completionHandler(.newData)
+    }
 }
 
 extension AppModel {

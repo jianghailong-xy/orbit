@@ -17,6 +17,7 @@ import {
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -55,8 +56,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; agentId: string | null }>();
   private static readonly OWNER_CACHE_MAX = 10_000;
+  // Events that can lower an owner's "needs you" badge (an increment is already covered by the
+  // approval-create alert push). On any of these, nudge PushService to reconcile and silently sync
+  // the badge to the owner's other devices, incl. backgrounded iOS. See docs/cross-platform-badge-sync.md.
+  private static readonly BADGE_EVENTS = new Set<string>([
+    RunEventType.APPROVAL_RESOLVED,
+    RunEventType.STATUS,
+    RunEventType.SESSION_ENDED,
+  ]);
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {
     this.inbox.setMaxListeners(0);
   }
 
@@ -203,6 +215,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, s: event.seq }));
+    }
+    // Locally-originated only — NOTIFY-bridged events from other replicas arrive via onNotify →
+    // hub, not here — so the owner's badge is reconciled and synced exactly once, on the origin.
+    if (RealtimeService.BADGE_EVENTS.has(event.type)) {
+      void this.resolveOwner(runId)
+        .then((meta) => meta && this.push.scheduleBadgeSync(meta.ownerId))
+        .catch(() => undefined);
     }
   }
 
