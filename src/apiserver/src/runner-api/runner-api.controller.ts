@@ -18,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
+  modelForProvider,
   AgentExecConfig,
   ArtifactResultRequest,
   ApprovalCreateRequest,
@@ -76,11 +77,6 @@ const INBOX_LEASE_MS = 300_000;
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-
-const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
-  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
-  [AgentProvider.CODEX]: 'gpt-5.5',
-};
 
 function normalizeProvider(value?: string | null): AgentProvider {
   return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
@@ -367,10 +363,11 @@ export class RunnerApiController {
         _max: { seq: true },
       });
       // Per-session override wins over the agent, then a server default — so a
-      // resumed process keeps the model/permission-mode/tools it was created with.
+      // resumed process keeps the model/permission-mode/tools it was created with; a
+      // cross-provider model id is coerced so a reclaim never resumes `codex -m claude-*`.
       const agentCfg: AgentExecConfig = {
         provider,
-        model: s.model ?? agent?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
+        model: modelForProvider(provider, s.model ?? agent?.model),
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],

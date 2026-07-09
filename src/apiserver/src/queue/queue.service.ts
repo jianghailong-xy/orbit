@@ -1,12 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
-import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
+import { AgentProvider, ClaimedSession, modelForProvider, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-
-const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
-  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
-  [AgentProvider.CODEX]: 'gpt-5.5',
-};
 
 function normalizeProvider(value?: string | null): AgentProvider {
   return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
@@ -170,8 +165,10 @@ export class QueueService {
       taskId: session.taskId ?? undefined,
       agent: {
         provider,
-        // Per-session override wins over the agent, then a server default.
-        model: session.model ?? agent?.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
+        // Per-session override wins over the agent, then a server default; a cross-provider
+        // model id (e.g. a stale `claude-*` on a Codex session) is coerced so the runner never
+        // execs `codex -m claude-*`.
+        model: modelForProvider(provider, session.model ?? agent?.model),
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
