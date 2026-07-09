@@ -147,4 +147,36 @@ final class MarkdownTests: XCTestCase {
             .code(language: "sh", code: "bash result_to_hive.sh zf95 sg"),
         ])
     }
+
+    func testStandaloneAttachmentImageBecomesImageBlock() {
+        // The runner (and hand-authored agent messages) reference an uploaded attachment this way.
+        XCTAssertEqual(
+            parseMarkdownBlocks("![Orbit prototype](orbit-attachment:019f491a-fe9e-7e01)"),
+            [.image(source: "orbit-attachment:019f491a-fe9e-7e01", alt: "Orbit prototype")])
+        // A title after the id lives on `Image.title`, so `source` stays the bare scheme+id.
+        XCTAssertEqual(
+            parseMarkdownBlocks("![shot](orbit-attachment:abc123 \"shot.png\")"),
+            [.image(source: "orbit-attachment:abc123", alt: "shot")])
+    }
+
+    func testTextThenImageSplitsIntoParagraphAndImage() {
+        // Text and a trailing image with only a soft break between them are ONE CommonMark paragraph;
+        // the image must still surface as its own block instead of being folded into the prose.
+        XCTAssertEqual(
+            parseMarkdownBlocks("Here it is:\n![p](orbit-attachment:xyz)"),
+            [.paragraph(text: "Here it is:"), .image(source: "orbit-attachment:xyz", alt: "p")])
+    }
+
+    func testRemoteAndInlineImagesStillParse() {
+        // A plain http(s) image is an image block too (the view decides how to load it).
+        XCTAssertEqual(
+            parseMarkdownBlocks("![](https://example.com/a.png)"),
+            [.image(source: "https://example.com/a.png", alt: "")])
+        // An image mid-sentence splits the prose around it.
+        XCTAssertEqual(
+            parseMarkdownBlocks("before ![m](orbit-attachment:i) after"),
+            [.paragraph(text: "before"),
+             .image(source: "orbit-attachment:i", alt: "m"),
+             .paragraph(text: "after")])
+    }
 }

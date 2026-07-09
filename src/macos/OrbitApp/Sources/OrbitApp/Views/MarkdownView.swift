@@ -161,6 +161,10 @@ private struct MarkdownBlockView: View {
         case .table(let table):
             MarkdownTableView(table: table)
 
+        case .image(let source, let alt):
+            MarkdownImageView(source: source, alt: alt)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
         case .quote(let text):
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.4)).frame(width: 3)
@@ -294,6 +298,104 @@ private struct CodeBlockView: View {
         PlatformPasteboard.copyString(code)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+    }
+}
+
+/// A Markdown image block. The runner (and hand-authored agent messages) reference an uploaded
+/// attachment as `orbit-attachment:<id>`; those bytes are bearer-guarded, so an `<img src>` can't
+/// reach them — they're fetched + decoded through the shared `AttachmentImageStore`, the same path a
+/// user turn's images take, and shown as a rounded, aspect-fitted image (web's `.md-image`). A plain
+/// http(s) source loads via `AsyncImage`. Anything else (a local path the client can't reach) falls
+/// back to a paperclip chip, mirroring web's `md-image-unavailable`.
+private struct MarkdownImageView: View {
+    let source: String
+    let alt: String
+    // Every call site (assistant bubble, thinking block, tool card, approval plan) renders inside the
+    // transcript's `AttachmentImageStore` environment — the same store `ChatAttachmentImage` reads.
+    @Environment(AttachmentImageStore.self) private var store
+
+    // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`. A phone is width-bound so the
+    // width cap only bites on macOS/iPad; the height cap stops a tall screenshot from filling the pane.
+    #if os(iOS)
+    private static let cap = CGSize(width: 520, height: 460)
+    #else
+    private static let cap = CGSize(width: 480, height: 360)
+    #endif
+
+    /// Scale the source down to touch the cap (never up — web's `max-*` only shrinks), keeping aspect,
+    /// so the rounded border hugs the image with no letterbox margin (see `ChatAttachmentImage`).
+    private static func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return cap }
+        let k = min(cap.width / src.width, cap.height / src.height, 1)
+        return CGSize(width: src.width * k, height: src.height * k)
+    }
+
+    var body: some View {
+        if let id = attachmentID {
+            attachmentImage(id)
+        } else if let url = remoteURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFit()
+                        .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height, alignment: .leading)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                case .failure:
+                    unavailable
+                default:
+                    placeholder
+                }
+            }
+        } else {
+            unavailable
+        }
+    }
+
+    @ViewBuilder private func attachmentImage(_ id: String) -> some View {
+        Group {
+            if let img = store.image(for: id) {
+                let size = Self.fitted(img.size)
+                Image(platformImage: img)
+                    .resizable().scaledToFit()
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+            } else if store.isNotImage(id) {
+                unavailable   // the bytes didn't decode as an image
+            } else {
+                placeholder
+            }
+        }
+        .task(id: id) { await store.load(id) }
+    }
+
+    private var placeholder: some View {
+        RoundedRectangle(cornerRadius: 8).fill(.quaternary).frame(width: 200, height: 140)
+    }
+
+    private var unavailable: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "paperclip").foregroundStyle(.secondary)
+            Text(alt.isEmpty ? "Image" : alt).lineLimit(1).truncationMode(.middle)
+        }
+        .font(.orbitLabel)
+        .padding(.vertical, 4).padding(.horizontal, 8)
+        .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// The attachment id from an `orbit-attachment:<id>` source (mirrors web's parse: strip prefix,
+    /// trim, take the leading non-whitespace run). `nil` for any other scheme.
+    private var attachmentID: String? {
+        let prefix = "orbit-attachment:"
+        guard source.hasPrefix(prefix) else { return nil }
+        let rest = source.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        let id = rest.prefix { !$0.isWhitespace }
+        return id.isEmpty ? nil : String(id)
+    }
+
+    private var remoteURL: URL? {
+        (source.hasPrefix("http://") || source.hasPrefix("https://")) ? URL(string: source) : nil
     }
 }
 

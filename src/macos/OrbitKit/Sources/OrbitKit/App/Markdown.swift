@@ -44,24 +44,31 @@ public enum MarkdownBlock: Equatable, Sendable {
     case code(language: String?, code: String)
     case quote(text: String)
     case table(MarkdownTable)
+    case image(source: String, alt: String)   // source is usually `orbit-attachment:<id>`; alt text
     case rule
 }
 
 /// Parse a Markdown string into renderable blocks via swift-markdown's GFM parser.
 public func parseMarkdownBlocks(_ source: String) -> [MarkdownBlock] {
     let document = Document(parsing: source)
-    return document.children.compactMap(block(from:))
+    return document.children.flatMap(blocks(from:))
 }
 
 // MARK: - AST → block mapping
+
+/// Most block markup maps to a single block; a paragraph is the exception — one that embeds image(s)
+/// fans out into interleaved paragraph/image blocks (see `paragraphBlocks`).
+private func blocks(from markup: Markup) -> [MarkdownBlock] {
+    if let paragraph = markup as? Paragraph {
+        return paragraphBlocks(paragraph)
+    }
+    return block(from: markup).map { [$0] } ?? []
+}
 
 private func block(from markup: Markup) -> MarkdownBlock? {
     switch markup {
     case let heading as Heading:
         return .heading(level: heading.level, text: inlineText(of: heading))
-
-    case let paragraph as Paragraph:
-        return .paragraph(text: inlineText(of: paragraph))
 
     case let code as CodeBlock:
         let language = code.language.flatMap { $0.isEmpty ? nil : $0 }
@@ -86,6 +93,39 @@ private func block(from markup: Markup) -> MarkdownBlock? {
         let text = trimTrailingNewline(markup.format())
         return text.isEmpty ? nil : .paragraph(text: text)
     }
+}
+
+/// A paragraph becomes a single `.paragraph` — unless it embeds images. The runner rewrites an
+/// uploaded attachment to `![alt](orbit-attachment:<id>)` and models emit screenshots the same way,
+/// but the view's inline parser (`AttributedString(markdown:)`) drops images entirely, so they'd never
+/// show. Split the paragraph instead: each maximal run of non-image inlines stays a `.paragraph`, and
+/// each image becomes its own `.image` block the view layer fetches + displays. Mirrors web's
+/// react-markdown, where `img` is a first-class node.
+private func paragraphBlocks(_ paragraph: Paragraph) -> [MarkdownBlock] {
+    let inlines = paragraph.children.compactMap { $0 as? InlineMarkup }
+    guard inlines.contains(where: { $0 is Image }) else {
+        return [.paragraph(text: inlineText(of: paragraph))]
+    }
+    var result: [MarkdownBlock] = []
+    var run: [InlineMarkup] = []   // non-image inlines awaiting a flush into a paragraph block
+    func flushText() {
+        let text = trimTrailingNewline(Paragraph(run).format())
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty { result.append(.paragraph(text: text)) }
+        run.removeAll()
+    }
+    for inline in inlines {
+        if let image = inline as? Image {
+            flushText()
+            if let source = image.source, !source.isEmpty {
+                result.append(.image(source: source, alt: image.plainText))
+            }
+        } else {
+            run.append(inline)
+        }
+    }
+    flushText()
+    return result
 }
 
 /// Flatten a (possibly nested) list into items tagged with their nesting depth, mirroring the
