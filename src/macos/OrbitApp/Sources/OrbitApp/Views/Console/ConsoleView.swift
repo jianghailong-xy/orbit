@@ -518,12 +518,15 @@ private struct CoastingTapCatcher: UIViewRepresentable {
                 pressed.wrappedValue = true
             case .changed:
                 if !isTap(gesture) { pressed.wrappedValue = false }
-            case .ended:
+            // Fire on ANY terminal state, not just .ended. While the List is coasting the scroll view
+            // grabs the touch to halt deceleration and CANCELS this recognizer (.began → .cancelled)
+            // before the finger lifts — so a mid-coast tap never reached .ended and was silently lost
+            // (the touch DID arrive: the press-magnify fired). Treat a stationary cancelled/failed press
+            // as the tap too; a real drag that began here moved past isTap's threshold and is filtered.
+            case .ended, .cancelled, .failed:
                 let tap = isTap(gesture)
                 pressed.wrappedValue = false
                 if tap { action() }
-            case .cancelled, .failed:
-                pressed.wrappedValue = false
             default:
                 break
             }
