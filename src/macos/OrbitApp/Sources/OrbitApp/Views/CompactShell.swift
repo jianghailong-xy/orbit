@@ -575,6 +575,8 @@ private struct AgentComposePush: View {
                         model.composedConsoleSessionID = session.id
                     }
                     .navigationTitle(agent.name)
+                    // Rebuild the draft when the hero switcher changes the agent (draftModel is per-agent).
+                    .id(agent.id)
                 }
             } else {
                 ContentUnavailableView("Select an agent", systemImage: "person.2")

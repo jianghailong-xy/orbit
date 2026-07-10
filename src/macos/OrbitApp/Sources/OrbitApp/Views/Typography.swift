@@ -88,6 +88,15 @@ extension Font {
     #endif
 }
 
+extension Font {
+    /// The Orbit `>_` mark inside an agent avatar — monospaced, scaled to the avatar diameter. A
+    /// brand glyph (not text), so it stays Dynamic-Type-static like `orbitHeroGlyph`. Identical on
+    /// both platforms (the avatar owns the size), so it lives outside the forked table above.
+    static func orbitAgentGlyph(_ diameter: CGFloat) -> Font {
+        .system(size: diameter * 0.4, weight: .bold, design: .monospaced)
+    }
+}
+
 /// Additive line leading (points on top of the font's own line height) for transcript prose.
 /// Forked because it was tuned once against macOS's 14pt body; iOS prose is 17pt and CJK wants more
 /// leading than Latin, so the same flat value read tighter there. Referenced by MarkdownView and the
