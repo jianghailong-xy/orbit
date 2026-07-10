@@ -360,7 +360,16 @@ struct TranscriptView: View {
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         CoastingButton {
+            #if os(iOS)
+            // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
+            // swallowed by the deceleration, then scroll to the question row on the next runloop.
+            transcriptScroll.halt()
+            DispatchQueue.main.async {
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
+            }
+            #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
+            #endif
         } label: { _ in
             HStack(spacing: 8) {
                 Text("↑ Your question")
