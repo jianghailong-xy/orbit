@@ -108,6 +108,8 @@ final class ConsoleModel {
     let worktree: WorktreeModel
 
     var statusMessage: String?
+    /// Auto-dismiss timer for a transient/informational `statusMessage` — see `showTransientStatus`.
+    private var statusDismissTask: Task<Void, Never>?
 
     /// Newest persisted events pulled for the initial paint (web parity — `TAIL_PAGE`). See `run()`.
     private static let tailPage = 200
@@ -173,12 +175,28 @@ final class ConsoleModel {
         wireWorktree()
     }
 
-    /// Hand the worktree sub-model the two bits of host context it needs: the live status (its poll
-    /// cadence) and the console status line (its action failures). Weak — it must not retain the
-    /// console it's owned by.
+    /// Hand the worktree sub-model the host context it needs: the live status (its poll cadence) and
+    /// the console status line (its action failures, plus the transient resume confirmation). Weak —
+    /// it must not retain the console it's owned by.
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onStatus = { [weak self] msg in self?.statusMessage = msg }
+        worktree.onInfo = { [weak self] msg in self?.showTransientStatus(msg) }
+    }
+
+    /// Show a fleeting, informational status line that auto-clears after a few seconds — the native
+    /// equivalent of web's `message.success` toast. Errors set `statusMessage` directly and stay put
+    /// until the user dismisses them via the banner's ✕; a confirmation like "Resuming…" would linger
+    /// there forever, so it goes through here instead.
+    func showTransientStatus(_ msg: String) {
+        statusDismissTask?.cancel()
+        statusMessage = msg
+        statusDismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            // Only clear if it's still the same message — a later error may have replaced it.
+            guard let self, self.statusMessage == msg else { return }
+            self.statusMessage = nil
+        }
     }
 
     /// Snapshot the full reducer (state + dedup/cursor internals) for the local store. Restoring

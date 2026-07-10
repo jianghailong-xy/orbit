@@ -18,6 +18,9 @@ final class WorktreeModel {
     @ObservationIgnored var isSessionLive: () -> Bool = { false }
     /// Surface a user-facing status line ("Commit failed"…) on the host console. Wired by `ConsoleModel`.
     @ObservationIgnored var onStatus: (String) -> Void = { _ in }
+    /// Surface a transient, informational status line that auto-dismisses (the resume confirmation).
+    /// Web shows these as a self-dismissing toast; the sticky `onStatus` banner is for errors only.
+    @ObservationIgnored var onInfo: (String) -> Void = { _ in }
 
     /// GET /sessions/:id detail driving the status bar (branch, changedFiles +/− stats, merge /
     /// commit status, targets). Polled while the console is on screen — see `startPolling`.
@@ -103,7 +106,7 @@ final class WorktreeModel {
             _ = try await api.resume(sessionID: sessionID,
                                      ResumeRequest(clientTurnId: UUID().uuidString, content: content,
                                                    kind: "message"))
-            onStatus("Resuming the session to resolve the conflict…")
+            onInfo("Resuming the session to resolve the conflict…")
         } catch { onStatus("Couldn't resume the session"); return }
         await loadDetail()
     }
