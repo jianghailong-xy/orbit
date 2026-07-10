@@ -99,7 +99,9 @@ private func proseGroups(_ blocks: [MarkdownBlock], base: ProseRole) -> [ProseGr
                 pending.append(ProseSegment(text: item.text, role: base, markdown: true,
                                             leadingMarker: marker, indent: item.indent, spacingBefore: gap))
             }
-        case .code, .table, .quote, .rule:
+        // `.image`, like code/table/quote/rule, is an "island" that can't merge into a text run —
+        // hand it to `MarkdownBlockView`, which renders it on both platforms.
+        case .code, .table, .quote, .rule, .image:
             flush()
             groups.append(.block(block))
         }
