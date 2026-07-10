@@ -126,7 +126,7 @@ export function ApprovalPanel({
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : `🔓 Approve tool call: ${approval.toolName}`}
       </div>
-      <div className="approval-body">
+      <div className={`approval-body${plan ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
         ) : (

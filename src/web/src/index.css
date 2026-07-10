@@ -4178,9 +4178,12 @@ body {
   font-size: 13.5px;
   color: var(--text-1);
 }
-/* The question form grows with its content instead of scrolling inside the card —
-   multiple questions stay fully visible and the transcript scrolls naturally. */
-.approval-body.is-questions {
+/* The question form and a plan grow with their content instead of scrolling inside the
+   card — every line stays fully visible and the transcript scrolls naturally. A long plan
+   shouldn't be crushed into a 360px scroll box. (A raw tool-input JSON dump keeps the cap
+   below; it's a debug blob, not something read top to bottom.) */
+.approval-body.is-questions,
+.approval-body.is-plan {
   max-height: none;
   overflow: visible;
 }
