@@ -230,6 +230,13 @@ struct TranscriptView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
+            #if os(iOS)
+            // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
+            // sticky header) registers a tap even while the list is still coasting. With the default
+            // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
+            // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
+            .background { ScrollTouchConfigurator() }
+            #endif
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
             .modifier(ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck))
@@ -533,6 +540,54 @@ private struct CoastingTapCatcher: UIViewRepresentable {
         // Recognize alongside the List's scroll — never block it (mirrors KeyboardDismissInstaller).
         func gestureRecognizer(_ gesture: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
+}
+
+/// Reaches the transcript List's underlying `UIScrollView` and sets `delaysContentTouches = false`, so a
+/// tap on an in-list control registers immediately — including while the list is still coasting. With
+/// the default (`true`) the scroll view delays and consumes that first touch to halt deceleration, so
+/// the control only responded once the list settled (the "滚动中点击无效" report: taps worked at rest
+/// but not mid-coast). No public SwiftUI API exposes this, so an inert probe walks the UIKit hierarchy.
+private struct ScrollTouchConfigurator: UIViewRepresentable {
+    func makeUIView(context: Context) -> ProbeView { ProbeView() }
+    func updateUIView(_ uiView: ProbeView, context: Context) { uiView.apply() }
+
+    final class ProbeView: UIView {
+        init() {
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false   // inert: only introspects, never intercepts touches
+        }
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            apply()
+        }
+
+        // Walk up from the probe; at each ancestor also scan its subtree, so the List's scroll view is
+        // found whether it sits above this background probe or beside it.
+        func apply() {
+            var node: UIView? = superview
+            while let current = node {
+                if let scroll = current as? UIScrollView {
+                    scroll.delaysContentTouches = false
+                    return
+                }
+                if let scroll = Self.firstScrollView(in: current) {
+                    scroll.delaysContentTouches = false
+                    return
+                }
+                node = current.superview
+            }
+        }
+
+        private static func firstScrollView(in view: UIView) -> UIScrollView? {
+            for sub in view.subviews {
+                if let scroll = sub as? UIScrollView { return scroll }
+                if let scroll = firstScrollView(in: sub) { return scroll }
+            }
+            return nil
+        }
     }
 }
 #endif
