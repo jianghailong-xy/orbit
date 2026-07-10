@@ -219,6 +219,34 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let input: JSONValue?
 }
 
+/// One background shell from GET /sessions/:id/background — the server's authoritative, complete
+/// list of every Bash(run_in_background) the session launched, derived over ALL persisted events
+/// with output recovered from the agent's Read polls of the `.output` file. Mirrors `BgShell` in
+/// @orbit/shared; only the fields the tray needs are decoded. Seeds the reducer via `seedBackground`.
+public struct BgShellDTO: Decodable, Sendable {
+    public let shellId: String
+    /// tool_use id of the launching Bash call — the key every live `background_*` event correlates
+    /// on, so seeding under it lets live updates land on the same row.
+    public let toolUseId: String
+    public let command: String?
+    public let description: String?
+    /// Web status vocabulary: running | done | failed | killed | unknown.
+    public let status: String
+    public let latestOutput: String?
+    public let startedTs: String?
+
+    /// Map to the reducer's `BackgroundProc`: key by `toolUseId`, translate the web status vocab to
+    /// the native one, and default a missing output to empty (the tray shows "No output captured yet").
+    public func asBackgroundProc() -> BackgroundProc {
+        BackgroundProc(id: toolUseId,
+                       command: command,
+                       description: description,
+                       status: status == "done" ? "completed" : status,
+                       outputTail: latestOutput ?? "",
+                       startedAt: startedTs)
+    }
+}
+
 public enum ApprovalBehavior: String, Codable, Sendable {
     case allow
     case deny

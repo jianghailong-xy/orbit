@@ -611,6 +611,66 @@ final class TranscriptReducerTests: XCTestCase {
                                                                        "content": .string("done")])))
         XCTAssertEqual(r.state.items.first?.asTool?.status, .ok)
     }
+
+    /// The server's authoritative list (GET .../background) is seeded via `seedBackground`. It must
+    /// (1) surface shells the loaded window never held, (2) recover an agent shell's output that the
+    /// live (broadcast-only) tail never persisted, and (3) NOT clobber the fresher live output/state of
+    /// a shell the reducer already tracks — only advance a still-running row to the server's terminal
+    /// state. Rows end up ordered by launch time. This is the reported iOS↔web mismatch, both halves.
+    func testSeedBackgroundMergesCompleteListWithoutClobberingLive() {
+        var r = TranscriptReducer()
+        // Live state: one shell surfaced from its in-window launch, with a fresh live tail, still running.
+        r.apply(RunEvent(seq: 7, type: .toolUse, payload: .object([
+            "toolUseId": .string("tuLive"), "name": .string("Bash"),
+            "input": .object(["command": .string("gh run watch"),
+                              "description": .string("Watch beta.79 build (background)"),
+                              "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 8, type: .toolResult, payload: .object([
+            "toolUseId": .string("tuLive"),
+            "content": .string("Command running in background with ID: shLive. Output written to: /t/shLive.output.")])))
+        r.apply(RunEvent(seq: 0, type: .backgroundOutput, payload: .object([
+            "toolUseId": .string("tuLive"), "content": .string("live tail fresh")])))
+        XCTAssertEqual(r.state.background.count, 1)
+
+        // Server snapshot: an OLDER shell the window never held (output recovered from its Read poll),
+        // plus the live shell again but STALE — no output, already reported terminal.
+        r.seedBackground([
+            BackgroundProc(id: "tuOld", command: "watch pr ci", description: "Watch PR CI (background)",
+                           status: "completed", outputTail: "recovered from Read poll",
+                           startedAt: "2026-07-10T00:00:01Z"),
+            BackgroundProc(id: "tuLive", command: "gh run watch",
+                           description: "Watch beta.79 build (background)",
+                           status: "completed", outputTail: "STALE server snapshot",
+                           startedAt: "2026-07-10T09:00:00Z"),
+        ])
+
+        // ① The count grew to the full session history (the reported "8 vs 3").
+        XCTAssertEqual(r.state.background.count, 2)
+        // ② Ordered by launch — the older shell first.
+        XCTAssertEqual(r.state.background.map(\.id), ["tuOld", "tuLive"])
+        // ③ The older shell's recovered output surfaced (the reported "No output captured yet").
+        let old = r.state.background.first { $0.id == "tuOld" }
+        XCTAssertEqual(old?.outputTail, "recovered from Read poll")
+        XCTAssertEqual(old?.status, "completed")
+        // ④ The live shell KEEPS its fresh live tail (the stale server snapshot must not clobber it)…
+        let live = r.state.background.first { $0.id == "tuLive" }
+        XCTAssertEqual(live?.outputTail, "live tail fresh")
+        // …but its status advances running → the server's terminal state.
+        XCTAssertEqual(live?.status, "completed")
+    }
+
+    /// A seeded row that the live stream later settles must NOT be resurrected to "running" by a
+    /// re-seed of an older (still-running) server snapshot — seedBackground only advances a row that is
+    /// itself still running. Guards the reconnect re-seed path.
+    func testSeedBackgroundNeverResurrectsASettledRow() {
+        var r = TranscriptReducer()
+        r.seedBackground([BackgroundProc(id: "tu", command: "c", description: nil,
+                                         status: "completed", outputTail: "done", startedAt: "2026-07-10T00:00:01Z")])
+        // A stale re-seed (snapshot taken before completion) says it's still running.
+        r.seedBackground([BackgroundProc(id: "tu", command: "c", description: nil,
+                                         status: "running", outputTail: "", startedAt: "2026-07-10T00:00:01Z")])
+        XCTAssertEqual(r.state.background.first?.status, "completed", "a settled row is never resurrected")
+    }
 }
 
 // Test-only convenience accessors (kept out of the library surface).

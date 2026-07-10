@@ -13,7 +13,7 @@ import {
 import type { RunEvent } from './Transcript';
 import { Pre } from './Transcript';
 import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
-import { deriveBackgroundShells } from '../lib/backgroundShells';
+import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
@@ -24,12 +24,26 @@ import { deriveBackgroundShells } from '../lib/backgroundShells';
  * agent's Read polls, plus the runner's live output tail (background_output) and the reliable
  * completion signal (background_task, from Claude's <task-notification>) that drives the
  * terminal icon + this toast.
+ *
+ * `serverShells` is the apiserver's authoritative, complete list (GET /sessions/:id/background,
+ * derived over ALL persisted events). The loaded event window only holds the most recent launches
+ * — so on its own the tray under-counts a long session — while the server list may lag the very
+ * latest live output. We merge: the complete set from the server, the freshest tail from the window.
  */
-export function BackgroundShellsTray({ events, live }: { events: RunEvent[]; live?: boolean }) {
+export function BackgroundShellsTray({
+  events,
+  live,
+  serverShells,
+}: {
+  events: RunEvent[];
+  live?: boolean;
+  serverShells?: BgShell[];
+}) {
   const { message } = AntApp.useApp();
   const shells = useMemo(
-    () => deriveBackgroundShells(events, { sessionLive: !!live }),
-    [events, live],
+    () =>
+      mergeBackgroundShells(serverShells ?? [], deriveBackgroundShells(events, { sessionLive: !!live })),
+    [events, live, serverShells],
   );
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);

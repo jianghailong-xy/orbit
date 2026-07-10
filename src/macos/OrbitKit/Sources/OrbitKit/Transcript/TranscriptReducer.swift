@@ -419,6 +419,34 @@ public struct TranscriptReducer: Sendable, Codable {
 
     // MARK: - background processes
 
+    /// Seed the tray with the server's authoritative background-shell list (GET /sessions/:id/background),
+    /// fetched on session open + each reconnect. The live reducer only surfaces shells whose launch is
+    /// in the loaded event window; this merges in every OTHER shell the session launched — and fills the
+    /// output for agent shells whose live tail (`background_output`) is broadcast-only and so never
+    /// persists (a cold reload has none, which is why they'd otherwise read "No output captured yet").
+    ///
+    /// Idempotent and live-preserving, so it's safe to re-run: a shell we already track keeps its
+    /// (fresher) live output, gaining only fields it lacks; its status advances a still-running row to
+    /// the server's terminal state but never resurrects one the live stream already settled (the
+    /// snapshot may predate that). Unknown shells are appended. Reordered chronologically by launch.
+    /// This is the native half of web's server-list ∪ live-overlay merge (`mergeBackgroundShells`).
+    public mutating func seedBackground(_ incoming: [BackgroundProc]) {
+        for proc in incoming {
+            if let i = state.background.firstIndex(where: { $0.id == proc.id }) {
+                if state.background[i].command == nil { state.background[i].command = proc.command }
+                if state.background[i].description == nil { state.background[i].description = proc.description }
+                if state.background[i].outputTail.isEmpty { state.background[i].outputTail = proc.outputTail }
+                if state.background[i].startedAt == nil { state.background[i].startedAt = proc.startedAt }
+                if state.background[i].status == "running" { state.background[i].status = proc.status }
+            } else {
+                state.background.append(proc)
+            }
+        }
+        // Chronological by launch: ISO-8601 timestamps sort lexicographically = chronologically. A row
+        // with no timestamp (shouldn't happen with server data) sorts last (`~` > any digit).
+        state.background.sort { ($0.startedAt ?? "~") < ($1.startedAt ?? "~") }
+    }
+
     // Correlate every background event to one process by `toolUseId` (the launching Bash call) — the
     // one id present on the launch tool_use/result AND on every background_* event, so a shell
     // surfaced from its launch (see closeTool) and its later completion are the SAME row. `shellId`

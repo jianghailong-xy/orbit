@@ -1,5 +1,6 @@
 export * from './enums';
 export * from './events';
+export * from './background';
 export * from './dto';
 export * from './codec';
 export * from './realtime';

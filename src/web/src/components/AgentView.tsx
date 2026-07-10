@@ -56,6 +56,7 @@ import {
 } from '../lib/agentDefaults';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
+import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
   type ApprovalInfo,
@@ -66,6 +67,7 @@ import {
   decideApproval,
   deleteSession,
   enableAgentIsolation,
+  getBackgroundShells,
   interruptSession,
   listApprovals,
   listQueuedTurns,
@@ -760,6 +762,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
+  // The apiserver's authoritative background-shell list (all launches + output recovered from the
+  // agent's Read polls). The loaded event window only holds recent launches, so the tray merges
+  // this complete set with its live-derived overlay — see BackgroundShellsTray.
+  const [serverBgShells, setServerBgShells] = useState<BgShell[]>([]);
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
   // so these local previews are joined back into the user bubble (and the queued bubble)
@@ -1325,6 +1331,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     }
     accRef.current = cached;
     setEvents(cached);
+    setServerBgShells([]); // clear the previous session's list until the fetch below repopulates it
     seen.current = new Set(cached.map((e) => e.seq).filter(isSeq));
     oldestSeqRef.current = entry ? entry.oldestSeq : null;
     hasMoreOlderRef.current = entry ? entry.hasMoreOlder : false;
@@ -1484,6 +1491,12 @@ export function AgentView({ runner }: { runner: Runner }) {
       // visible queue — restore it from the DB, the source of truth.
       listQueuedTurns(selectedId)
         .then(setQueued)
+        .catch(() => undefined);
+      // The complete background-shell list (all launches, output recovered from Read polls) —
+      // the loaded event window only holds the most recent launches, so without this the tray
+      // under-counts a long session. Merged with the live-derived overlay in the tray.
+      getBackgroundShells(selectedId)
+        .then(setServerBgShells)
         .catch(() => undefined);
       // Tail-first: on a cache miss, fetch just the newest page so the transcript opens
       // straight at the latest message, then open the SSE from that page's max seq so it
@@ -2976,7 +2989,9 @@ export function AgentView({ runner }: { runner: Runner }) {
         />
         {/* Background processes the agent launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
-        {selectedId && !selectedDeleted && <BackgroundShellsTray events={events} live={live} />}
+        {selectedId && !selectedDeleted && (
+          <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
+        )}
         {replyTo && (
           <div className="composer-replyto">
             <span className="composer-replyto-icon">↩</span>

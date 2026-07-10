@@ -261,6 +261,11 @@ final class ConsoleModel {
                 publishStateNow()
             }
         }
+        // Seed the "Background processes" tray with the server's authoritative, complete list — every
+        // Bash(run_in_background) the session launched, not just the few whose launch sits in the loaded
+        // tail window, and the output of agent shells whose live tail was never persisted. Kicked so it
+        // doesn't delay the first paint; re-kicked on each reconnect below to pick up new/finished shells.
+        if !sessionID.isEmpty { Task { [weak self] in await self?.refreshBackground() } }
 
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
@@ -271,7 +276,13 @@ final class ConsoleModel {
             // socket was suspended won't replay, since its `approval_resolved` rides seq 0 (live-only),
             // so without this the stale card lingers. iOS suspends sockets on background, making this
             // the common path there. Kicked concurrently so it doesn't delay the reconnect.
-            if isReconnect { Task { [weak self] in await self?.refreshApprovals() } }
+            if isReconnect {
+                Task { [weak self] in await self?.refreshApprovals() }
+                // Re-seed the tray too: a background shell launched or finished while this socket was
+                // suspended emits no replayable event (its background_output tail is broadcast-only), so
+                // the authoritative server list is how those changes surface after a reconnect.
+                Task { [weak self] in await self?.refreshBackground() }
+            }
             isReconnect = true
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
@@ -774,6 +785,17 @@ final class ConsoleModel {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
                             toolName: $0.toolName, input: $0.input)
         }, knownBefore: knownBefore)
+        publishStateNow()
+    }
+
+    /// Fetch the session's authoritative background-shell list (GET /sessions/:id/background) and seed
+    /// it into the reducer. This surfaces every shell the session launched — including older ones whose
+    /// launch has scrolled out of (or never entered) the loaded event window — and recovers the output
+    /// of agent shells whose live `background_output` tail is broadcast-only and so never persisted.
+    /// `seedBackground` merges live-preservingly, so this is safe to call on open and on every reconnect.
+    private func refreshBackground() async {
+        guard let dtos = try? await api.backgroundShells(sessionID: sessionID) else { return }
+        reducer.seedBackground(dtos.map { $0.asBackgroundProc() })
         publishStateNow()
     }
 

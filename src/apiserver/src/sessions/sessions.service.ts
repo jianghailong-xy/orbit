@@ -14,6 +14,8 @@ import {
   ApprovalInfo,
   ApprovalStatus,
   AgentProvider,
+  type BgShell,
+  deriveBackgroundShells,
   FilePatch,
   MAX_PROMPT_CHARS,
   RunEventType,
@@ -488,6 +490,59 @@ export class SessionsService {
         ts: e.createdAt,
       })),
     };
+  }
+
+  // A background shell with no terminal signal is still "running" only while the session is live;
+  // once it's settled the shell can't still be running, so it reads as "unknown" (see
+  // classifyShellStatus). Mirrors the web tray's liveness (AgentView `TERMINAL`).
+  private static readonly TERMINAL_STATUSES: RunStatus[] = [
+    RunStatus.SUCCEEDED,
+    RunStatus.FAILED,
+    RunStatus.CANCELLED,
+    RunStatus.PARKED,
+  ];
+
+  /**
+   * The authoritative, complete list of background shells the session ever launched — every
+   * Bash(run_in_background), with output recovered from the agent's persisted Read polls of the
+   * `.output` file. Derived server-side over ALL of the session's persisted events (not just the
+   * client's loaded tail window), so the "Background processes" tray shows the same complete list
+   * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
+   * web client overlays live (@orbit/shared deriveBackgroundShells), so the two never drift.
+   */
+  async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true, status: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    // Only the event types the derivation reads — skips the (far larger) system/thinking/assistant
+    // bulk so a long session's tray fetch stays cheap.
+    const rows = await this.prisma.runEvent.findMany({
+      where: {
+        sessionId: id,
+        type: {
+          in: [
+            RunEventType.TOOL_USE,
+            RunEventType.TOOL_RESULT,
+            RunEventType.BACKGROUND_TASK,
+            RunEventType.BACKGROUND_OUTPUT,
+          ],
+        },
+      },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, type: true, payload: true, createdAt: true },
+    });
+    const sessionLive = !SessionsService.TERMINAL_STATUSES.includes(session.status);
+    return deriveBackgroundShells(
+      rows.map((e) => ({
+        seq: e.seq,
+        type: e.type,
+        payload: e.payload,
+        ts: e.createdAt.toISOString(),
+      })),
+      { sessionLive },
+    );
   }
 
   async getLegacyArtifactForOwner(

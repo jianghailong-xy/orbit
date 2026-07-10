@@ -242,6 +242,18 @@ export class SessionsController {
   }
 
   /**
+   * The authoritative, complete list of background shells the session ever launched (every
+   * Bash(run_in_background), with output recovered from the agent's Read polls). Derived over ALL
+   * persisted events, so the "Background processes" tray shows the same complete list on every
+   * client regardless of how much transcript is loaded. Clients merge this with a live-derived
+   * overlay for the freshest tail of anything still running.
+   */
+  @Get(':id/background')
+  backgroundShells(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.getBackgroundShells(user.userId, id);
+  }
+
+  /**
    * A page of a session's persisted events for tail-first lazy loading. `tail=N` returns the
    * newest N (initial paint, so a long transcript opens straight at the latest message instead
    * of replaying its whole history); `before=<seq>&limit=N` returns the N events just older

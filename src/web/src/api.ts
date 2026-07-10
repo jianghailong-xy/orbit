@@ -1,3 +1,5 @@
+import type { BgShell } from '@orbit/shared';
+
 const TOKEN_KEY = 'orbit_token';
 
 export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
@@ -66,6 +68,13 @@ export const getSessionEventPage = (
   if (opts.limit != null) qs.set('limit', String(opts.limit));
   return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`);
 };
+
+/** The authoritative, complete list of background shells the session ever launched (derived
+ *  server-side over ALL persisted events, with output recovered from the agent's Read polls).
+ *  The loaded event window only holds the most recent launches, so the tray merges this with
+ *  its live-derived overlay — see mergeBackgroundShells. */
+export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
+  api<BgShell[]>(`/sessions/${id}/background`);
 
 // ── Interactive sessions (Route B) ──
 

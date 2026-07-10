@@ -98,6 +98,16 @@ public final class APIClient: @unchecked Sendable {
         return try await get("sessions/\(sessionID)/events/page", query: q)
     }
 
+    /// The session's complete background-shell list (GET /sessions/:id/background): every
+    /// Bash(run_in_background) it ever launched, with output recovered from the agent's Read polls,
+    /// derived server-side over ALL persisted events. Seeds the tray with the full history the loaded
+    /// event window can't hold (older launches) — and the output for agent shells whose live tail is
+    /// broadcast-only (never persisted). Live SSE `background_*` events then overlay this. Web parity:
+    /// `getBackgroundShells` merged with the live-derived overlay in BackgroundShellsTray.
+    public func backgroundShells(sessionID: String) async throws -> [BgShellDTO] {
+        try await get("sessions/\(sessionID)/background")
+    }
+
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
         try await post("sessions", body: req)
     }
