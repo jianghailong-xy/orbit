@@ -55,6 +55,8 @@ type HeartbeatRequest struct {
 	// Provider quota for the accounts this runner uses (Claude `/usage` and/or Codex
 	// app-server rate limits). Nil when unavailable — never blocks or fails heartbeat.
 	PlanUsage *PlanUsage `json:"planUsage,omitempty"`
+	// Runtime model catalog for picker UIs. Nil on old runners / unavailable runtimes.
+	ModelCatalog *ModelCatalog `json:"modelCatalog,omitempty"`
 	// Sessions carries each running session's live worktree diff so the web status bar
 	// appears mid-turn, not just at turn-complete. Empty when no isolated session runs.
 	Sessions []SessionLiveState `json:"sessions,omitempty"`
@@ -88,6 +90,20 @@ type SlashCommandInfo struct {
 	// AgentID scopes a project-level asset to the agent whose workDir it was found in;
 	// empty means host-level (the runner's default dir or ~/.claude), shared by all agents.
 	AgentID string `json:"agentId,omitempty"`
+}
+
+type ModelCatalog struct {
+	Codex []ModelInfo `json:"codex,omitempty"`
+}
+
+type ModelInfo struct {
+	Value                 string   `json:"value"`
+	Label                 string   `json:"label"`
+	Priority              *int     `json:"priority,omitempty"`
+	ContextWindow         int      `json:"contextWindow,omitempty"`
+	ReasoningLevels       []string `json:"reasoningLevels,omitempty"`
+	DefaultReasoningLevel string   `json:"defaultReasoningLevel,omitempty"`
+	ServiceTiers          []string `json:"serviceTiers,omitempty"`
 }
 
 type HeartbeatResponse struct {

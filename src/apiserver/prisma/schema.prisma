@@ -126,6 +126,8 @@ model Runner {
   // Latest provider quota for the account(s) this runner uses, reported via heartbeat.
   // Shape mirrors @orbit/shared PlanUsage.
   planUsage         Json?      @map("plan_usage")
+  // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
+  modelCatalog      Json?      @map("model_catalog")
 
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).

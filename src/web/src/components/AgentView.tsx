@@ -48,7 +48,7 @@ import { agentsQuery, type Me, meQuery, sessionQuery, sessionsQuery } from '../l
 import {
   contextWindowFor,
   DEFAULT_MODEL,
-  DEFAULT_MODEL_BY_PROVIDER,
+  defaultModelForProvider,
   effortOptionsForProvider,
   modelOptionsForProvider,
   normalizeEffortForProvider,
@@ -245,8 +245,16 @@ function lastContextTokens(events: RunEvent[]): number {
 // Context-window gauge for the composer footer (mirrors PlanUsageIndicator): a mini bar
 // + percent of the model's context window filled by the latest turn; hover/click reveals
 // the token counts. Distinct from plan usage — that's the subscription rate limit.
-function ContextWindowIndicator({ tokens, model }: { tokens: number; model: string }) {
-  const windowTokens = contextWindowFor(model);
+function ContextWindowIndicator({
+  tokens,
+  model,
+  modelCatalog,
+}: {
+  tokens: number;
+  model: string;
+  modelCatalog?: Runner['modelCatalog'];
+}) {
+  const windowTokens = contextWindowFor(model, modelCatalog);
   const pct = Math.min(100, Math.round((tokens / windowTokens) * 100));
   const pop = (
     <div className="cu-pop">
@@ -1175,7 +1183,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
-    setModel(selected.model ?? DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL);
+    setModel(selected.model ?? defaultModelForProvider(provider, runner.modelCatalog));
     setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
     setEffort(normalizeEffortForProvider(provider, selected.effort ?? ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1188,9 +1196,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (selectedId || !pickedAgent) return;
     setModel(
       pickedAgent.model ??
-        DEFAULT_MODEL_BY_PROVIDER[pickedAgent.provider ?? 'claude'] ??
-        DEFAULT_MODEL,
+        defaultModelForProvider(pickedAgent.provider ?? 'claude', runner.modelCatalog),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, pickedAgent?.id, pickedAgent?.model, pickedAgent?.provider]);
 
   // A fresh session seeds its effort with the most specific default available: the picked agent's
@@ -3282,7 +3290,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (drop) setMode('Default');
                   }
                 }}
-                options={modelOptionsForProvider(shownProvider)}
+                options={modelOptionsForProvider(shownProvider, runner.modelCatalog)}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
@@ -3316,7 +3324,9 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          {contextTokens > 0 && <ContextWindowIndicator tokens={contextTokens} model={shownModel} />}
+          {contextTokens > 0 && (
+            <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} />
+          )}
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
         </div>
       </div>

@@ -1,7 +1,11 @@
+import type { RunnerModelCatalog } from '@orbit/shared';
+
 export const PROVIDER_OPTIONS = [
   { value: 'claude', label: 'Claude' },
   { value: 'codex', label: 'Codex' },
 ];
+
+type ModelOption = { value: string; label: string };
 
 // Model options shared across the app. `value` is the local runtime's model id;
 // `label` is the friendly display name shown in every picker.
@@ -19,7 +23,7 @@ export const CODEX_MODEL_OPTIONS = [
   { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' },
 ];
 
-export const MODEL_OPTIONS_BY_PROVIDER: Record<string, { value: string; label: string }[]> = {
+export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
   claude: CLAUDE_MODEL_OPTIONS,
   codex: CODEX_MODEL_OPTIONS,
 };
@@ -41,16 +45,51 @@ export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'gpt-5.3-codex-spark': 400_000,
 };
 export const DEFAULT_CONTEXT_WINDOW = 200_000;
-export const contextWindowFor = (model?: string | null): number =>
-  (model && CONTEXT_WINDOW_BY_MODEL[model]) || DEFAULT_CONTEXT_WINDOW;
+const catalogOptionsForProvider = (
+  provider?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+): ModelOption[] | undefined => {
+  const key = (provider ?? 'claude') as keyof RunnerModelCatalog;
+  const rows = modelCatalog?.[key];
+  const options = rows
+    ?.filter((m) => m.value && m.label)
+    .map((m) => ({ value: m.value, label: m.label }));
+  return options?.length ? options : undefined;
+};
+
+export const contextWindowFor = (
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+): number => {
+  if (model && modelCatalog) {
+    for (const rows of Object.values(modelCatalog)) {
+      const found = rows?.find((m) => m.value === model && typeof m.contextWindow === 'number');
+      if (found?.contextWindow) return found.contextWindow;
+    }
+  }
+  return (model && CONTEXT_WINDOW_BY_MODEL[model]) || DEFAULT_CONTEXT_WINDOW;
+};
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: 'claude-opus-4-8',
   codex: 'gpt-5.5',
 };
 
-export const modelOptionsForProvider = (provider?: string | null) =>
-  MODEL_OPTIONS_BY_PROVIDER[provider ?? 'claude'] ?? CLAUDE_MODEL_OPTIONS;
+export const modelOptionsForProvider = (
+  provider?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+) =>
+  catalogOptionsForProvider(provider, modelCatalog) ??
+  MODEL_OPTIONS_BY_PROVIDER[provider ?? 'claude'] ??
+  CLAUDE_MODEL_OPTIONS;
+
+export const defaultModelForProvider = (
+  provider?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+): string =>
+  modelOptionsForProvider(provider, modelCatalog)[0]?.value ??
+  DEFAULT_MODEL_BY_PROVIDER[provider ?? 'claude'] ??
+  DEFAULT_MODEL;
 
 // Reasoning effort is provider-specific. Claude supports "max"; Codex's
 // Responses API effort values top out at "xhigh", with "minimal" also available.

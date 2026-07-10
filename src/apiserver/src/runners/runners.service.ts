@@ -57,6 +57,8 @@ export class RunnersService {
         // Latest provider plan-usage snapshot; passed straight through to the UI (it
         // rides `...r` below, unlike commands/skills which get renamed).
         planUsage: true,
+        // Runtime model catalog reported by the runner (Codex model picker source).
+        modelCatalog: true,
       },
     });
     // How many slots each runner is currently using, so the list can show

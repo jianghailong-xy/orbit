@@ -131,6 +131,29 @@ func runLoop(cfg *RunnerConfig) {
 	codexIdle := func() bool { return providerConfigured(providerCodex) }
 	go codexUsageProbe.run(loopCtx, codexActive, codexIdle)
 
+	// Runtime model catalogs, reported by the runtimes themselves. Codex ships new
+	// model slugs in its local catalog, so cache `codex debug models` and let the UI
+	// follow the runner instead of a hardcoded web/mobile list.
+	var modelCatalogMu sync.Mutex
+	var hbModelCatalog *ModelCatalog
+	refreshModelCatalog := func() {
+		if !providerConfigured(providerCodex) {
+			return
+		}
+		models, err := fetchCodexModelCatalog(loopCtx)
+		if err != nil {
+			logln("codex model catalog refresh failed:", err)
+			return
+		}
+		if len(models) == 0 {
+			return
+		}
+		modelCatalogMu.Lock()
+		hbModelCatalog = &ModelCatalog{Codex: models}
+		modelCatalogMu.Unlock()
+	}
+	go refreshModelCatalog()
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	go func() {
@@ -156,6 +179,7 @@ func runLoop(cfg *RunnerConfig) {
 					assetMu.Lock()
 					hbCommands, hbSkills = c, s
 					assetMu.Unlock()
+					go refreshModelCatalog()
 				}
 				mu.Lock()
 				idle := int(maxConcurrent.Load()) - len(active)
@@ -176,6 +200,9 @@ func runLoop(cfg *RunnerConfig) {
 				assetMu.Lock()
 				cmds, skills := hbCommands, hbSkills
 				assetMu.Unlock()
+				modelCatalogMu.Lock()
+				modelCatalog := hbModelCatalog
+				modelCatalogMu.Unlock()
 				// Live worktree diff per running session, so the web's status bar appears
 				// mid-turn instead of only after a turn completes. Computed outside the lock
 				// (git can be slow); a just-finalized session is filtered server-side by status.
@@ -196,8 +223,9 @@ func runLoop(cfg *RunnerConfig) {
 				resp, err := t.heartbeat(HeartbeatRequest{
 					Status: "ONLINE", IdleCapacity: idle, Version: version,
 					Commands: cmds, Skills: skills,
-					PlanUsage: combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
-					Sessions:  liveSessions,
+					PlanUsage:    combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
+					ModelCatalog: modelCatalog,
+					Sessions:     liveSessions,
 				})
 				if err != nil {
 					logln("heartbeat failed:", err)

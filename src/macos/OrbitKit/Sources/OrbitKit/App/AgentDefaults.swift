@@ -59,15 +59,29 @@ public enum AgentDefaults {
         provider == "codex" ? codexModels : claudeModels
     }
 
+    public static func models(for provider: String, catalog: RunnerModelCatalog?) -> [ModelOption] {
+        catalog?.models(for: provider) ?? models(for: provider)
+    }
+
     /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
     public static func defaultModel(for provider: String) -> String {
         provider == "codex" ? "gpt-5.5" : defaultModelID
+    }
+
+    public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?) -> String {
+        models(for: provider, catalog: catalog).first?.id ?? defaultModel(for: provider)
     }
 
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
     /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
         (claudeModels + codexModels).first { $0.id == id }?.name ?? id
+    }
+
+    public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
+        (catalog?.models(for: "claude") ?? []).first { $0.id == id }?.name
+            ?? (catalog?.models(for: "codex") ?? []).first { $0.id == id }?.name
+            ?? friendlyName(id)
     }
 
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
@@ -90,6 +104,10 @@ public enum AgentDefaults {
         case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark": return 400_000
         default: return 200_000
         }
+    }
+
+    public static func contextWindow(for id: String, catalog: RunnerModelCatalog?) -> Int {
+        catalog?.contextWindow(for: id) ?? contextWindow(for: id)
     }
 
     public static let permissionModes = PermissionMode.allCases

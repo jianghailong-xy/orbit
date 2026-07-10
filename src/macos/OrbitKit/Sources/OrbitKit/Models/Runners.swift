@@ -17,6 +17,35 @@ public struct SlashCommandInfo: Codable, Equatable, Sendable, Identifiable {
     public var id: String { "\(agentId ?? "host"):\(type ?? ""):\(name)" }
 }
 
+/// One model option reported by a runner runtime. Codex entries come from `codex debug models`.
+public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
+    public let value: String
+    public let label: String
+    public let priority: Int?
+    public let contextWindow: Int?
+    public let reasoningLevels: [String]?
+    public let defaultReasoningLevel: String?
+    public let serviceTiers: [String]?
+    public var id: String { value }
+}
+
+/// Models a runner says its local runtimes can use.
+public struct RunnerModelCatalog: Codable, Equatable, Sendable {
+    public let claude: [RunnerModelInfo]?
+    public let codex: [RunnerModelInfo]?
+
+    public func models(for provider: String) -> [ModelOption]? {
+        let rows = provider == "codex" ? codex : claude
+        guard let rows, !rows.isEmpty else { return nil }
+        return rows.map { ModelOption(id: $0.value, name: $0.label) }
+    }
+
+    public func contextWindow(for id: String) -> Int? {
+        let all = (claude ?? []) + (codex ?? [])
+        return all.first { $0.value == id }?.contextWindow
+    }
+}
+
 /// PATCH /runners/:id — `displayName` empty string clears the alias (falls back to machine name);
 /// nil omits. `maxConcurrent` 1…64.
 public struct UpdateRunnerRequest: Encodable, Sendable {

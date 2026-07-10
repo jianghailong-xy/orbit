@@ -418,6 +418,11 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var confirmingDelete = false
 
+    private var modelCatalog: RunnerModelCatalog? { agents.modelCatalog(for: agent.runnerId) }
+    private var modelOptions: [ModelOption] {
+        AgentDefaults.models(for: provider, catalog: modelCatalog)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -433,7 +438,7 @@ struct AgentFormContent: View {
                         // under the new one — reset to that provider's default rather than PATCH
                         // a bad value.
                         provider = new
-                        model = AgentDefaults.defaultModel(for: new)
+                        model = AgentDefaults.defaultModel(for: new, catalog: modelCatalog)
                         if !AgentDefaults.efforts(for: new).contains(effort) { effort = .default }
                     }
                 )) {
@@ -443,10 +448,10 @@ struct AgentFormContent: View {
                 Picker("Model", selection: $model) {
                     // Surface a non-standard saved model (e.g. an env-overridden endpoint) so the
                     // picker still shows the current value rather than going blank.
-                    if !AgentDefaults.models(for: provider).contains(where: { $0.id == model }) {
+                    if !modelOptions.contains(where: { $0.id == model }) {
                         Text(model.isEmpty ? "—" : model).tag(model)
                     }
-                    ForEach(AgentDefaults.models(for: provider)) { Text($0.name).tag($0.id) }
+                    ForEach(modelOptions) { Text($0.name).tag($0.id) }
                 }
 
                 Picker("Permission mode", selection: $mode) {
@@ -524,7 +529,7 @@ struct AgentFormContent: View {
     private func prefill() {
         name = agent.name
         provider = agent.provider ?? "claude"
-        model = agent.model ?? AgentDefaults.defaultModel(for: provider)
+        model = agent.model ?? AgentDefaults.defaultModel(for: provider, catalog: modelCatalog)
         mode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         effort = Effort(rawValue: agent.effort ?? "") ?? .default
         instructions = agent.appendSystemPrompt ?? ""
@@ -537,7 +542,7 @@ struct AgentFormContent: View {
     private var isDirty: Bool {
         name != agent.name
         || provider != (agent.provider ?? "claude")
-        || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude"))
+        || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude", catalog: modelCatalog))
         || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
         || effort != (Effort(rawValue: agent.effort ?? "") ?? .default)
         || instructions != (agent.appendSystemPrompt ?? "")

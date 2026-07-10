@@ -124,6 +124,27 @@ export interface SlashCommandInfo {
   agentId?: string;
 }
 
+/** One model option reported by a runner runtime. For Codex this is derived from
+ *  `codex debug models`, so newly shipped model slugs do not require a web release. */
+export interface RunnerModelInfo {
+  /** Runtime model id / slug, e.g. `gpt-5.6`. */
+  value: string;
+  /** Human display name shown in pickers. */
+  label: string;
+  /** Provider catalog order; lower sorts first. */
+  priority?: number;
+  /** Max input/context window reported by the runtime, when available. */
+  contextWindow?: number;
+  /** Provider reasoning efforts accepted by this model. */
+  reasoningLevels?: string[];
+  defaultReasoningLevel?: string;
+  /** Extra service tiers supported by this model, e.g. `priority`. */
+  serviceTiers?: string[];
+}
+
+/** Models a runner says its local runtimes can use. Keys are provider ids. */
+export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
+
 /** One rate-limit window from a provider quota snapshot. Claude reports named
  *  5-hour / weekly windows; Codex reports primary / secondary windows. */
 export interface PlanUsageWindow {
@@ -186,6 +207,8 @@ export interface RunnerHeartbeatRequest {
   /** Provider quota for the account(s) this runner uses. Absent when unavailable
    *  or when the runner is too old to report it. */
   planUsage?: PlanUsage;
+  /** Runtime model catalog reported by this runner. Absent on older runners. */
+  modelCatalog?: RunnerModelCatalog;
   /** Live worktree state for each session this runner is currently running, so the
    *  composer's status bar appears mid-turn — not just after a turn completes. Absent
    *  from older runners (the bar then waits for the first turn-complete as before). */

@@ -30,7 +30,7 @@ import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-quer
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
-import type { PlanUsage, SlashCommandInfo } from '@orbit/shared';
+import type { PlanUsage, RunnerModelCatalog, SlashCommandInfo } from '@orbit/shared';
 import { api, clearToken } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
@@ -75,6 +75,8 @@ export interface Runner {
   skills?: SlashCommandInfo[];
   // Provider quota for the account(s) this runner uses.
   planUsage?: PlanUsage | null;
+  // Runtime model catalog reported by the runner.
+  modelCatalog?: RunnerModelCatalog | null;
 }
 
 interface Agent {

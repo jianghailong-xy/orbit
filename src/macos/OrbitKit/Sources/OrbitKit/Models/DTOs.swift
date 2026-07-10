@@ -74,6 +74,7 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let activeSessions: Int?
     public let lastHeartbeatAt: String?
     public let planUsage: PlanUsage?
+    public let modelCatalog: RunnerModelCatalog?
 }
 
 /// A session row (list + detail share this; detail carries the extra worktree/stat fields).

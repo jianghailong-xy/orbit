@@ -97,6 +97,7 @@ final class ConsoleModel {
     // loaded once when the console opens.
     private(set) var agentName: String?
     private(set) var planUsage: PlanUsageSnapshot?
+    private(set) var modelCatalog: RunnerModelCatalog?
 
     // `/` command & skill autocomplete (the `+` menu opens it scoped). `slashItems` is the
     // runner-reported set already narrowed to host-level + this session's agent (see loadSlashItems).
@@ -461,8 +462,10 @@ final class ConsoleModel {
         if let rid = s.assignedRunnerId,
            let r = (try? await api.runners())?.first(where: { $0.id == rid }) {
             planUsage = r.planUsage?.snapshot(for: provider)
+            modelCatalog = r.modelCatalog
         } else {
             planUsage = nil
+            modelCatalog = nil
         }
     }
 
@@ -640,8 +643,10 @@ final class ConsoleModel {
         if let rid = draftAgent?.runnerId,
            let r = (try? await api.runners())?.first(where: { $0.id == rid }) {
             planUsage = r.planUsage?.snapshot(for: provider)
+            modelCatalog = r.modelCatalog
         } else {
             planUsage = nil
+            modelCatalog = nil
         }
     }
 

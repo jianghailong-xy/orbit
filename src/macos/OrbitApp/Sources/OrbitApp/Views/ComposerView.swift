@@ -46,7 +46,7 @@ struct ComposerView: View {
     // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Fable → Haiku)
     // exactly like the web composer. macOS drops the menu down, so keep the source order there.
     private var modelMenuItems: [ModelOption] {
-        let models = AgentDefaults.models(for: console.provider)
+        let models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog)
         #if os(iOS)
         return Array(models.reversed())
         #else
@@ -218,7 +218,7 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    menuLabel(AgentDefaults.friendlyName(console.modelID))
+                    menuLabel(AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog))
                 }
                 .footerMenuChrome()
 
@@ -240,7 +240,7 @@ struct ComposerView: View {
                 .footerMenuChrome()
 
                 if let ctx = console.state.contextTokens, ctx > 0 {
-                    ContextWindowIndicator(tokens: ctx, model: console.modelID)
+                    ContextWindowIndicator(tokens: ctx, model: console.modelID, modelCatalog: console.modelCatalog)
                 }
 
                 if let usage = console.planUsage {
@@ -764,9 +764,10 @@ private func fmtTokens(_ n: Int) -> String {
 private struct ContextWindowIndicator: View {
     let tokens: Int
     let model: String
+    let modelCatalog: RunnerModelCatalog?
     @State private var showDetail = false
 
-    private var window: Int { AgentDefaults.contextWindow(for: model) }
+    private var window: Int { AgentDefaults.contextWindow(for: model, catalog: modelCatalog) }
     private var pct: Int { window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0 }
 
     var body: some View {

@@ -31,9 +31,9 @@ import { meQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
 import {
   AUTO_CAPABLE_MODELS,
-  DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_MODEL,
   DEFAULT_PERMISSION_MODE,
+  defaultModelForProvider,
   MODE_OPTIONS,
   PROVIDER_OPTIONS,
   modelOptionsForProvider,
@@ -261,7 +261,7 @@ export function RunnerDetailPage() {
   };
   const onProviderChange = (provider: string) => {
     setFProvider(provider);
-    const nextModel = DEFAULT_MODEL_BY_PROVIDER[provider] ?? DEFAULT_MODEL;
+    const nextModel = defaultModelForProvider(provider, runner?.modelCatalog);
     setFModel(nextModel);
     if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(nextModel)) setFMode('default');
     // Effort levels differ per provider (codex has 'minimal', not 'max'); reset to Default so the
@@ -319,7 +319,7 @@ export function RunnerDetailPage() {
     setEditing(a);
     setFName(a.name);
     setFProvider(a.provider ?? 'claude');
-    setFModel(a.model ?? DEFAULT_MODEL_BY_PROVIDER[a.provider ?? 'claude'] ?? DEFAULT_MODEL);
+    setFModel(a.model ?? defaultModelForProvider(a.provider ?? 'claude', runner?.modelCatalog));
     setFMode(a.permissionMode ?? 'dontAsk');
     setFEffort(a.effort ?? '');
     setFAppend(a.appendSystemPrompt ?? '');
@@ -367,7 +367,7 @@ export function RunnerDetailPage() {
           <Select
             value={fModel}
             onChange={onModelChange}
-            options={modelOptionsForProvider(fProvider)}
+            options={modelOptionsForProvider(fProvider, runner?.modelCatalog)}
             style={{ width: '100%' }}
           />
         </div>

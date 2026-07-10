@@ -13,6 +13,8 @@ final class AgentsModel {
     /// runnerId → is-online, for the drawer's collapsible runner rows (a leading connection dot).
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.
     private(set) var runnerOnline: [String: Bool] = [:]
+    /// runnerId → runtime model catalog, reported by that runner.
+    private(set) var runnerModelCatalog: [String: RunnerModelCatalog] = [:]
     private(set) var loading = false
     var errorText: String?
 
@@ -44,6 +46,11 @@ final class AgentsModel {
         return runnerOnline[id] ?? false
     }
 
+    func modelCatalog(for runnerId: String?) -> RunnerModelCatalog? {
+        guard let id = runnerId else { return nil }
+        return runnerModelCatalog[id]
+    }
+
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
 
     func load() async {
@@ -57,6 +64,9 @@ final class AgentsModel {
                                          uniquingKeysWith: { a, _ in a })
                 runnerOnline = Dictionary(runners.map { ($0.id, $0.online ?? ($0.status == .online)) },
                                           uniquingKeysWith: { a, _ in a })
+                runnerModelCatalog = Dictionary(
+                    runners.compactMap { r in r.modelCatalog.map { (r.id, $0) } },
+                    uniquingKeysWith: { a, _ in a })
             }
         } catch { errorText = friendly(error) }
     }

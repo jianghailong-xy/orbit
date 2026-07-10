@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.50",
+  "version": "0.1.51",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed Claude Code runners)",
   "license": "MIT",
@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
-    "build:runner": "scripts/build-binaries.sh dist-bin",
+    "build:runner": "bash scripts/build-binaries.sh dist-bin",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "prisma:generate": "npm run prisma:generate -w @orbit/apiserver",
