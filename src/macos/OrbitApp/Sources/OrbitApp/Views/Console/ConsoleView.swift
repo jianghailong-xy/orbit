@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(iOS)
+import UIKit
+#endif
 
 // The console page and its transcript list + scroll machinery. The row content lives beside this
 // file: MessageBubbles.swift (user/assistant/thinking turns), AttachmentViews.swift (thumbnails /
@@ -343,51 +346,56 @@ struct TranscriptView: View {
     // (muted "↑ Your question" label + a single ellipsized line of the text). `anchor: .top` lands the
     // bubble just under this header (it's a safe-area inset, so the scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        let jump = { withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) } }
-        return HStack(spacing: 8) {
-            Text("↑ Your question")
-                .font(.orbitLabel).foregroundStyle(.secondary).fixedSize()
-            Text(bubble.text)
-                .font(.orbitSubtext).foregroundStyle(.primary)
-                .lineLimit(1).truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 7)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
-        // Wrap the rule in a stack so it draws as a horizontal bottom hairline: a bare `Divider()`
-        // in an overlay has no stack axis and instead renders as a vertical line down the row's center.
-        .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
-        .contentShape(Rectangle())
-        // Same coasting fix as the jump-to-latest disc: a `Button` here loses the first tap to the
-        // List's deceleration-stop, so tapping mid-scroll did nothing until it settled. A
-        // `DragGesture(minimumDistance: 0)` recognizes on touch-down (fires on that first tap), run as a
-        // `simultaneousGesture` so a swipe starting on the bar still scrolls — only a near-stationary
-        // release counts as the tap.
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0).onEnded { value in
-                if abs(value.translation.width) < 12, abs(value.translation.height) < 12 { jump() }
+        // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
+        CoastingButton {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
+        } label: { _ in
+            HStack(spacing: 8) {
+                Text("↑ Your question")
+                    .font(.orbitLabel).foregroundStyle(.secondary).fixedSize()
+                Text(bubble.text)
+                    .font(.orbitSubtext).foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 0)
             }
-        )
-        .accessibilityElement()
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+            // Wrap the rule in a stack so it draws as a horizontal bottom hairline: a bare `Divider()`
+            // in an overlay has no stack axis and instead renders as a vertical line down the row's center.
+            .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
+            .contentShape(Rectangle())
+        }
         .accessibilityLabel("Jump to your last question")
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { jump() }
         .help("Jump to your last question")
     }
 
-    // Circular "scroll to latest" control (web parity). One user-initiated scroll — not the per-frame
-    // animated scroll that previously froze the transcript — so animating this one is safe. The disc
-    // rests at 32pt; `ScrollToLatestButton` gives it a fixed ~44pt hit target, ChatGPT's press feel,
-    // and — crucially — a tap that lands even while the List is still coasting (see its doc). The bottom
-    // padding is 6, not 12, because the control reserves ~6pt of hit area below the disc, so it rests
-    // in the same spot.
+    // Circular "scroll to latest" control (web parity). Wrapped in `CoastingButton` so the tap lands
+    // even while the List is still coasting, and so a press springs the frosted disc ~1.3× larger
+    // (ChatGPT's feel — the material magnifies with it). The disc rests at 32pt inside a fixed ~44pt hit
+    // target; bottom padding is 6, not 12, because that 44pt target already reserves ~6pt below the 32pt
+    // disc, so it rests in the same spot.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        ScrollToLatestButton {
+        CoastingButton {
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
             atBottom = true
+        } label: { pressed in
+            Image(systemName: "arrow.down")
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+                .background(.regularMaterial, in: Circle())
+                .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
+                .overlay { Circle().strokeBorder(.primary.opacity(0.12)) }
+                .shadow(color: .black.opacity(pressed ? 0.26 : 0.18), radius: pressed ? 7 : 4, y: pressed ? 2 : 1)
+                .scaleEffect(pressed ? 1.32 : 1)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
         .padding(.bottom, 6)
+        .accessibilityLabel("Scroll to latest")
+        .help("Scroll to latest")
     }
 
     #if os(macOS)
@@ -412,53 +420,122 @@ struct TranscriptView: View {
     #endif
 }
 
-/// The round jump-to-latest disc. It's a gesture-driven view, not a `Button`, for one specific reason:
-/// while the `List` is still coasting (momentum scroll), a SwiftUI `Button`/`TapGesture` loses the
-/// gesture arbitration to the scroll view — that first tap is spent halting the deceleration and never
-/// reaches the control, so you had to wait for the list to settle and tap again. A `DragGesture` with
-/// `minimumDistance: 0` recognizes on touch-*down*, so it fires on that same first tap mid-scroll; it
-/// runs as a `simultaneousGesture` so a swipe that happens to start on the disc still scrolls the list
-/// (we treat only a near-stationary press as the tap and ignore real drags).
+/// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
+/// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats
+/// that first touch, so a SwiftUI `Button`/`onTapGesture`/`DragGesture` does nothing until the list
+/// settles (what "滚动中点击无效" was). The iOS interactive layer is instead a raw UIKit
+/// `UILongPressGestureRecognizer` (min duration 0) that recognizes *simultaneously* with the scroll and
+/// owns its own touch, so it fires on that first tap mid-coast; `minimumPressDuration: 0` also gives an
+/// instant press signal. macOS has no such arbitration, so a plain drag gesture suffices there.
 ///
-/// `@GestureState` also drives the ChatGPT-style press feel: the frosted disc springs ~1.3× larger
-/// while held (the material magnifies with it), plus a brief brighter fill and deeper shadow. The disc
-/// looks 32pt but the hit target is a fixed ~44pt circle — set *after* the scale, so pressing never
-/// nudges layout or the tap region.
-private struct ScrollToLatestButton: View {
-    let action: () -> Void
-    @GestureState private var pressed = false
+/// The `label` closure is handed the live `pressed` state to drive press feedback (e.g. the disc's
+/// magnify). A swipe that merely begins on the control is treated as a scroll, not a tap — a
+/// small-movement check on iOS, near-zero drag translation on macOS. Trade-off: because the iOS layer
+/// owns the touch, a drag that *starts* on the control won't scroll the List (a dead-zone the size of
+/// the control) — fine for the small disc and the thin sticky bar.
+private struct CoastingButton<Label: View>: View {
+    private let action: () -> Void
+    private let label: (Bool) -> Label
+    @State private var pressed = false
+
+    init(action: @escaping () -> Void, @ViewBuilder label: @escaping (Bool) -> Label) {
+        self.action = action
+        self.label = label
+    }
 
     var body: some View {
-        Image(systemName: "arrow.down")
-            .font(.orbitLabel.weight(.semibold))
-            .foregroundStyle(.primary)
-            .frame(width: 32, height: 32)
-            .background(.regularMaterial, in: Circle())
-            .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
-            .overlay { Circle().strokeBorder(.primary.opacity(0.12)) }
-            .shadow(color: .black.opacity(pressed ? 0.26 : 0.18), radius: pressed ? 7 : 4, y: pressed ? 2 : 1)
-            .scaleEffect(pressed ? 1.32 : 1)
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-            .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0)
-                    .updating($pressed) { _, state, _ in state = true }
-                    .onEnded { value in
-                        // Fire only when the finger barely moved — a real drag that began on the disc is
-                        // a scroll, which the simultaneous List pan handles, so ignore it here.
-                        if abs(value.translation.width) < 12, abs(value.translation.height) < 12 {
-                            action()
-                        }
-                    }
-            )
-            .accessibilityElement()
-            .accessibilityLabel("Scroll to latest")
+        interactive
+            .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { action() }
-            .help("Scroll to latest")
+    }
+
+    @ViewBuilder private var interactive: some View {
+        #if os(iOS)
+        label(pressed).overlay { CoastingTapCatcher(pressed: $pressed, action: action) }
+        #else
+        label(pressed)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in if !pressed { pressed = true } }
+                    .onEnded { value in
+                        pressed = false
+                        if abs(value.translation.width) < 12, abs(value.translation.height) < 12 { action() }
+                    }
+            )
+        #endif
     }
 }
+
+#if os(iOS)
+/// The iOS interactive layer for `CoastingButton`: a transparent UIKit view whose
+/// `UILongPressGestureRecognizer` (min duration 0) recognizes alongside the List's scroll and owns the
+/// touch, so a tap registers even mid-coast. Recognizer wiring mirrors `KeyboardDismissInstaller`.
+private struct CoastingTapCatcher: UIViewRepresentable {
+    @Binding var pressed: Bool
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(pressed: $pressed, action: action) }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+        let press = UILongPressGestureRecognizer(
+            target: context.coordinator, action: #selector(Coordinator.handle(_:)))
+        press.minimumPressDuration = 0
+        press.delegate = context.coordinator
+        press.cancelsTouchesInView = false
+        view.addGestureRecognizer(press)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.pressed = $pressed
+        context.coordinator.action = action
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var pressed: Binding<Bool>
+        var action: () -> Void
+        private var start: CGPoint?
+
+        init(pressed: Binding<Bool>, action: @escaping () -> Void) {
+            self.pressed = pressed
+            self.action = action
+        }
+
+        @objc func handle(_ gesture: UILongPressGestureRecognizer) {
+            switch gesture.state {
+            case .began:
+                start = gesture.location(in: gesture.view)
+                pressed.wrappedValue = true
+            case .changed:
+                if !isTap(gesture) { pressed.wrappedValue = false }
+            case .ended:
+                let tap = isTap(gesture)
+                pressed.wrappedValue = false
+                if tap { action() }
+            case .cancelled, .failed:
+                pressed.wrappedValue = false
+            default:
+                break
+            }
+        }
+
+        // A tap = the finger never wandered far from where it landed; a longer drag is a scroll that
+        // merely began on the control, so it must not fire the action.
+        private func isTap(_ gesture: UILongPressGestureRecognizer) -> Bool {
+            guard let start else { return true }
+            let p = gesture.location(in: gesture.view)
+            return abs(p.x - start.x) <= 12 && abs(p.y - start.y) <= 12
+        }
+
+        // Recognize alongside the List's scroll — never block it (mirrors KeyboardDismissInstaller).
+        func gestureRecognizer(_ gesture: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
+}
+#endif
 
 /// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
 /// header by stashing the live content offset into `ruler` and asking for a recompute each frame.
