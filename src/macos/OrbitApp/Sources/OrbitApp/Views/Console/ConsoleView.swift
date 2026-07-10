@@ -144,6 +144,11 @@ struct TranscriptView: View {
     // it clears the top edge, so "I scrolled above" can never be observed; an accumulating set only
     // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
     @State private var ruler = QuestionRuler()
+    #if os(iOS)
+    // Handle to the List's UIScrollView (populated by `ScrollTouchConfigurator`) so the jump-to-latest
+    // action can force a scroll to the bottom even while the list is coasting.
+    @State private var transcriptScroll = TranscriptScroll()
+    #endif
 
     /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
     /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
@@ -235,7 +240,7 @@ struct TranscriptView: View {
             // sticky header) registers a tap even while the list is still coasting. With the default
             // (`delaysContentTouches == true`) the scroll view delays and consumes that first touch to
             // halt deceleration, so the control only fired once the list settled. No public SwiftUI API.
-            .background { ScrollTouchConfigurator() }
+            .background { ScrollTouchConfigurator(scroll: transcriptScroll) }
             #endif
             .scrollDismissesKeyboard(.interactively)   // iOS: swipe the transcript to lower the keyboard
             .defaultScrollAnchor(.bottom)
@@ -384,7 +389,16 @@ struct TranscriptView: View {
     // disc, so it rests in the same spot.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
+            #if os(iOS)
+            // `proxy.scrollTo` is ignored while the list is coasting — the momentum wins — so drive the
+            // scroll straight through UIKit's `setContentOffset`, which cancels the deceleration and
+            // lands at the bottom. Fall back to the proxy if the scroll view isn't located yet.
+            if !transcriptScroll.toBottom() {
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
+            }
+            #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
+            #endif
             atBottom = true
         } label: { pressed in
             Image(systemName: "arrow.down")
@@ -546,17 +560,36 @@ private struct CoastingTapCatcher: UIViewRepresentable {
     }
 }
 
-/// Reaches the transcript List's underlying `UIScrollView` and sets `delaysContentTouches = false`, so a
-/// tap on an in-list control registers immediately — including while the list is still coasting. With
-/// the default (`true`) the scroll view delays and consumes that first touch to halt deceleration, so
-/// the control only responded once the list settled (the "滚动中点击无效" report: taps worked at rest
-/// but not mid-coast). No public SwiftUI API exposes this, so an inert probe walks the UIKit hierarchy.
+/// Holds the transcript List's `UIScrollView`, located by `ScrollTouchConfigurator`. The jump-to-latest
+/// action uses it to scroll to the bottom via UIKit: `ScrollViewProxy.scrollTo` is ignored while the
+/// list is coasting (the momentum wins), but `setContentOffset` cancels the deceleration and lands it.
+final class TranscriptScroll {
+    weak var view: UIScrollView?
+
+    /// Scroll to the content bottom, cancelling any in-flight deceleration. Returns false when the scroll
+    /// view hasn't been located yet, so the caller can fall back to `proxy.scrollTo`.
+    func toBottom() -> Bool {
+        guard let v = view else { return false }
+        let maxY = v.contentSize.height - v.bounds.height + v.adjustedContentInset.bottom
+        v.setContentOffset(CGPoint(x: 0, y: max(-v.adjustedContentInset.top, maxY)), animated: true)
+        return true
+    }
+}
+
+/// Reaches the transcript List's underlying `UIScrollView` to (1) set `delaysContentTouches = false` so
+/// an in-list control registers a tap even while the list is coasting (the default delays and consumes
+/// that first touch to halt deceleration), and (2) hand the scroll view to `TranscriptScroll` so the
+/// jump-to-latest action can force-scroll to the bottom mid-coast. No public SwiftUI API exposes either,
+/// so an inert probe walks the UIKit hierarchy to the scroll view.
 private struct ScrollTouchConfigurator: UIViewRepresentable {
-    func makeUIView(context: Context) -> ProbeView { ProbeView() }
+    let scroll: TranscriptScroll
+    func makeUIView(context: Context) -> ProbeView { ProbeView(scroll: scroll) }
     func updateUIView(_ uiView: ProbeView, context: Context) { uiView.apply() }
 
     final class ProbeView: UIView {
-        init() {
+        let scroll: TranscriptScroll
+        init(scroll: TranscriptScroll) {
+            self.scroll = scroll
             super.init(frame: .zero)
             isUserInteractionEnabled = false   // inert: only introspects, never intercepts touches
         }
@@ -567,27 +600,28 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
             apply()
         }
 
+        func apply() {
+            guard let scrollView = findScrollView() else { return }
+            scrollView.delaysContentTouches = false
+            scroll.view = scrollView
+        }
+
         // Walk up from the probe; at each ancestor also scan its subtree, so the List's scroll view is
         // found whether it sits above this background probe or beside it.
-        func apply() {
+        private func findScrollView() -> UIScrollView? {
             var node: UIView? = superview
             while let current = node {
-                if let scroll = current as? UIScrollView {
-                    scroll.delaysContentTouches = false
-                    return
-                }
-                if let scroll = Self.firstScrollView(in: current) {
-                    scroll.delaysContentTouches = false
-                    return
-                }
+                if let scrollView = current as? UIScrollView { return scrollView }
+                if let scrollView = Self.firstScrollView(in: current) { return scrollView }
                 node = current.superview
             }
+            return nil
         }
 
         private static func firstScrollView(in view: UIView) -> UIScrollView? {
             for sub in view.subviews {
-                if let scroll = sub as? UIScrollView { return scroll }
-                if let scroll = firstScrollView(in: sub) { return scroll }
+                if let scrollView = sub as? UIScrollView { return scrollView }
+                if let scrollView = firstScrollView(in: sub) { return scrollView }
             }
             return nil
         }
