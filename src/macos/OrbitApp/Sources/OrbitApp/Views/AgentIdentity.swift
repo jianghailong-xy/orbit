@@ -1,9 +1,11 @@
 import SwiftUI
 import OrbitKit
 
-/// Circular agent identity mark: the Orbit terminal glyph (`>_`) on a provider-tinted gradient. The
-/// data model carries no per-agent avatar, so identity reads from the provider color + the shared
-/// mark. Used as the hero of the new-session empty state and in the agent switcher.
+/// Circular agent identity mark. Claude and Codex render their official brand marks (the Anthropic
+/// sunburst / OpenAI blossom, see `BrandMarks.swift`) on a brand-tinted circle so the hero reads as
+/// "an official Claude/Codex agent" at a glance; other providers keep the neutral Orbit `>_` glyph.
+/// The data model carries no per-agent avatar, so identity reads from the provider alone. Used as
+/// the hero of the new-session empty state and in the agent switcher.
 struct AgentAvatar: View {
     let provider: String?
     var size: CGFloat = 64
@@ -11,22 +13,32 @@ struct AgentAvatar: View {
     var body: some View {
         Circle()
             .fill(Self.gradient(for: provider))
-            .overlay {
-                Text(">_")
-                    .font(.orbitAgentGlyph(size))
-                    .foregroundStyle(.white)
-                    .offset(y: -size * 0.03)
-            }
+            .overlay { mark }
             .overlay { Circle().strokeBorder(.white.opacity(0.16), lineWidth: 1) }
             .frame(width: size, height: size)
             .shadow(color: Self.tint(for: provider).opacity(0.35), radius: size * 0.12, y: size * 0.06)
     }
 
-    /// Provider accent: Claude coral by default, a distinct hue for Codex/DeepSeek so a runner with
-    /// several providers reads at a glance.
+    /// The brand mark knocked out in white, or the `>_` glyph for providers without an official mark.
+    @ViewBuilder private var mark: some View {
+        let brand = AgentBrand.from(provider)
+        if let path = brand.markPath {
+            VectorMark(pathData: path)
+                .fill(.white)
+                .frame(width: size * brand.markScale, height: size * brand.markScale)
+        } else {
+            Text(">_")
+                .font(.orbitAgentGlyph(size))
+                .foregroundStyle(.white)
+                .offset(y: -size * 0.03)
+        }
+    }
+
+    /// Brand-accurate circle: Claude coral, OpenAI near-black for Codex, a distinct hue for
+    /// DeepSeek — so a runner with several providers reads at a glance.
     static func tint(for provider: String?) -> Color {
         switch provider?.lowercased() {
-        case "codex", "openai": return Color(red: 0.28, green: 0.68, blue: 0.47)   // green
+        case "codex", "openai": return Color(red: 0.11, green: 0.11, blue: 0.12)   // OpenAI near-black
         case "deepseek":        return Color(red: 0.36, green: 0.55, blue: 0.85)   // blue
         default:                return Color(red: 0.85, green: 0.47, blue: 0.34)   // claude coral
         }
