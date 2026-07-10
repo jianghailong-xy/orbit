@@ -438,13 +438,21 @@ struct ComposerView: View {
                 .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                // While the background upload runs, dim the thumbnail and show a spinner (web
+                // parity: the `composer-attach-spin` badge). It clears the instant the id lands.
+                .overlay {
+                    if att.isUploading {
+                        RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.35))
+                        ProgressView().controlSize(.small).tint(.white)
+                    }
+                }
                 // iOS: tap the staged thumbnail to open the full-screen viewer before sending
                 // (the tiny 48² chip is hard to read otherwise). Preview the full-resolution bytes
-                // seeded in the shared store at attach time — the same source the sent bubble uses —
-                // not the downsampled `previewImageData`, so the viewer looks identical to the bubble.
+                // seeded in the shared store when the upload finishes — the same source the sent
+                // bubble uses — falling back to the downsampled thumbnail while still uploading.
                 // The remove button is overlaid *after* this, so it stays on top and its taps aren't
                 // captured by the preview.
-                .modifier(ComposerImageTap(image: console.attachments.image(for: att.id) ?? image))
+                .modifier(ComposerImageTap(image: att.remoteID.flatMap { console.attachments.image(for: $0) } ?? image))
                 .overlay(alignment: .topTrailing) {
                     Button { console.removeAttachment(att) } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -469,9 +477,14 @@ struct ComposerView: View {
                     .help("Remove image")
                 }
         } else {
-            // Other file: a name + size chip (web's .composer-file).
+            // Other file: a name + size chip (web's .composer-file). The leading icon spins while
+            // the upload is in flight, then settles to a paperclip (web parity).
             HStack(spacing: 6) {
-                Image(systemName: "paperclip").foregroundStyle(.secondary)
+                if att.isUploading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "paperclip").foregroundStyle(.secondary)
+                }
                 Text(att.filename).lineLimit(1).truncationMode(.middle)
                 Text(byteString(att.byteCount)).foregroundStyle(.secondary)
                 Button { console.removeAttachment(att) } label: {
@@ -568,7 +581,7 @@ struct ComposerView: View {
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
             let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            await console.attach(filename: "photo.png", mimeType: "image/png", data: png)
+            console.attach(filename: "photo.png", mimeType: "image/png", data: png)
         }
     }
 
@@ -585,7 +598,7 @@ struct ComposerView: View {
     /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
     private func attachClipboardImage(_ image: UIImage) async {
         guard let png = image.orbitPNGData() else { return }
-        await console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
+        console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
     }
     #endif
 }

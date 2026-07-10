@@ -10,13 +10,22 @@ import UIKit
 #endif
 
 struct PendingAttachment: Identifiable, Equatable, Sendable {
+    /// Stable local id, assigned at pick time so the chip renders immediately — before the upload
+    /// returns a server id. Used for `ForEach`/remove; the turn is sent with `remoteID`, not this.
     let id: String
+    /// The server attachment id, filled once the background upload finishes. A failed upload drops
+    /// the chip entirely, so `remoteID == nil` means "still uploading" (see `isUploading`).
+    var remoteID: String?
     let filename: String
     let mimeType: String
     let byteCount: Int
     /// A small PNG thumbnail for an inline image, downsampled once at attach time so SwiftUI
     /// isn't re-decoding the full-resolution source on every body pass; nil for a non-image file.
     let previewImageData: Data?
+
+    /// True until the background upload resolves — drives the chip's spinner and gates send
+    /// (mirrors the web composer's `status === 'uploading'`).
+    var isUploading: Bool { remoteID == nil }
 }
 
 /// Active "Chat about this" reply: the composer's next send resolves this pending question as a
@@ -523,12 +532,13 @@ final class ConsoleModel {
             return
         }
         let clientTurnId = UUID().uuidString
-        let attachmentIds = pendingAttachments.map(\.id)
+        // Every staged attachment is uploaded by now (send is gated on `isUploading`), so each
+        // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
+        let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
+        let attachmentIds = ready.map(\.1)
         // Carry mime/name onto the optimistic bubble so it can render image thumbnails / file chips
         // immediately (the durable `user` event later supplies the authoritative refs).
-        let turnAttachments = pendingAttachments.map {
-            TurnAttachment(id: $0.id, mime: $0.mimeType, name: $0.filename)
-        }
+        let turnAttachments = ready.map { TurnAttachment(id: $0.1, mime: $0.0.mimeType, name: $0.0.filename) }
 
         // A turn already in flight ⇒ this message waits its turn, so label it "Queued" rather than
         // "Sending…" (web parity). Captured now, before the send revives/advances the status.
@@ -585,7 +595,7 @@ final class ConsoleModel {
             if shell { composerText = "" }
             return
         }
-        let attachmentIds = pendingAttachments.map(\.id)
+        let attachmentIds = pendingAttachments.compactMap(\.remoteID)
         sending = true
         defer { sending = false }
         do {
@@ -635,7 +645,7 @@ final class ConsoleModel {
             statusMessage = reason
             return
         }
-        await attach(filename: url.lastPathComponent, mimeType: mime, data: data)
+        attach(filename: url.lastPathComponent, mimeType: mime, data: data)
     }
 
     /// Clipboard ⌘V of an image (e.g. a screenshot): the view normalizes it to PNG, then this
@@ -646,24 +656,37 @@ final class ConsoleModel {
             statusMessage = reason
             return
         }
-        await attach(filename: "pasted-image.png", mimeType: "image/png", data: pngData)
+        attach(filename: "pasted-image.png", mimeType: "image/png", data: pngData)
     }
 
-    func attach(filename: String, mimeType: String, data: Data) async {
-        do {
-            // A draft has no session yet — upload session-less; createSession links the ids later.
-            let id = try await api.uploadAttachment(sessionID: isDraft ? nil : sessionID, filename: filename,
-                                                    mimeType: mimeType, data: data)
-            // Inline images carry a downsampled thumbnail for the composer chip; other files show
-            // as a name + size chip instead (web parity).
-            let preview = Attachments.isInlineImage(mimeType: mimeType) ? composerThumbnail(from: data) : nil
-            // Seed the shared cache with the full-resolution bytes so the sent bubble renders the
-            // image instantly (no fetch round-trip) once the turn is sent.
-            if Attachments.isInlineImage(mimeType: mimeType) { attachments.seed(id, data: data) }
-            pendingAttachments.append(PendingAttachment(id: id, filename: filename, mimeType: mimeType,
-                                                        byteCount: data.count, previewImageData: preview))
-        } catch {
-            statusMessage = "Upload failed"
+    /// Stage an attachment optimistically: the chip (with an inline-image thumbnail) appears
+    /// immediately, and the byte upload runs in the background so a slow network never hides the
+    /// staged image or blocks the next pick. When the upload resolves the chip gets its server
+    /// `remoteID` (and the full-resolution bytes are seeded so the sent bubble needs no re-fetch);
+    /// a failure drops the chip. Mirrors the web composer's `addImage`, which stages a local
+    /// preview first, then swaps in the id — and is why this returns without awaiting the upload.
+    func attach(filename: String, mimeType: String, data: Data) {
+        let uid = UUID().uuidString
+        let isImage = Attachments.isInlineImage(mimeType: mimeType)
+        // Inline images carry a downsampled thumbnail for the composer chip; other files show as a
+        // name + size chip instead (web parity). Downsampled once here, not on every body pass.
+        let preview = isImage ? composerThumbnail(from: data) : nil
+        pendingAttachments.append(PendingAttachment(id: uid, remoteID: nil, filename: filename,
+                                                    mimeType: mimeType, byteCount: data.count,
+                                                    previewImageData: preview))
+        Task {
+            do {
+                // A draft has no session yet — upload session-less; createSession links the ids later.
+                let id = try await api.uploadAttachment(sessionID: isDraft ? nil : sessionID,
+                                                        filename: filename, mimeType: mimeType, data: data)
+                // The user may have removed the chip mid-upload — only reconcile if it's still staged.
+                guard let idx = pendingAttachments.firstIndex(where: { $0.id == uid }) else { return }
+                if isImage { attachments.seed(id, data: data) }
+                pendingAttachments[idx].remoteID = id
+            } catch {
+                pendingAttachments.removeAll { $0.id == uid }
+                statusMessage = "Upload failed — \(filename)"
+            }
         }
     }
 
