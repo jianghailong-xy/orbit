@@ -147,8 +147,9 @@ struct AssistantBubbleView: View {
     // Assistant turns are long-form Markdown — render them as a full-width document on the window
     // background (no bubble), mirroring web's `.chat-assistant`. A tinted panel here would sit
     // gray-on-gray behind the code blocks' own surface and box long content into a narrow column;
-    // only the short, conversational user turn keeps a bubble. Horizontal padding matches web's
-    // `padding: 0 12px` and keeps the left edge aligned with the tool-card rail.
+    // only the short, conversational user turn keeps a bubble. No extra horizontal inset — the text
+    // sits flush with the row's 16pt leading edge, sharing one gutter with the tool-card rail and the
+    // status bar / composer below (all at 16pt).
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
@@ -164,7 +165,6 @@ struct AssistantBubbleView: View {
             if !bubble.isFinalized { TypingDots() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
     }
 }
 

@@ -251,7 +251,7 @@ struct ComposerView: View {
             // for comfortable targets; macOS keeps the dense web-parity caption.
             .font(.orbitListSubtitle)
         }
-        .padding(10)
+        .padding(.horizontal, 16).padding(.vertical, 10)
         .background(.bar)
         // A focused field editor consumes ⌘V before any SwiftUI .onPasteCommand fires, so intercept
         // the keystroke here: when the composer is focused and the clipboard holds an image, attach

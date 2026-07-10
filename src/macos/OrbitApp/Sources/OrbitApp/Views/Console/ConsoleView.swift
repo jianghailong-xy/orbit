@@ -35,7 +35,7 @@ struct ConsoleView: View {
                             Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
                                 .buttonStyle(.plain).foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 4)
+                        .padding(.horizontal, 16).padding(.vertical, 4)
                         .background(.bar)
                     }
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
@@ -358,7 +358,7 @@ struct TranscriptView: View {
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12).padding(.vertical, 7)
+            .padding(.horizontal, 16).padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
             // Wrap the rule in a stack so it draws as a horizontal bottom hairline: a bare `Divider()`
@@ -414,7 +414,7 @@ struct TranscriptView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 6)
+        .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
     }
     #endif
