@@ -390,10 +390,13 @@ struct TranscriptView: View {
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
             #if os(iOS)
-            // `proxy.scrollTo` is ignored while the list is coasting — the momentum wins — so drive the
-            // scroll straight through UIKit's `setContentOffset`, which cancels the deceleration and
-            // lands at the bottom. Fall back to the proxy if the scroll view isn't located yet.
-            if !transcriptScroll.toBottom() {
+            // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
+            // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
+            // then (2) on the next runloop scroll to the real bottom *row*. Target `bottomID`, not a
+            // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
+            // the end (it scrolled, but stopped short of the bottom).
+            transcriptScroll.halt()
+            DispatchQueue.main.async {
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
             }
             #else
@@ -561,18 +564,16 @@ private struct CoastingTapCatcher: UIViewRepresentable {
 }
 
 /// Holds the transcript List's `UIScrollView`, located by `ScrollTouchConfigurator`. The jump-to-latest
-/// action uses it to scroll to the bottom via UIKit: `ScrollViewProxy.scrollTo` is ignored while the
-/// list is coasting (the momentum wins), but `setContentOffset` cancels the deceleration and lands it.
+/// action uses it to cancel the list's deceleration so the follow-up `proxy.scrollTo(bottomID)` — which
+/// the momentum would otherwise swallow — actually reaches the bottom row.
 final class TranscriptScroll {
     weak var view: UIScrollView?
 
-    /// Scroll to the content bottom, cancelling any in-flight deceleration. Returns false when the scroll
-    /// view hasn't been located yet, so the caller can fall back to `proxy.scrollTo`.
-    func toBottom() -> Bool {
-        guard let v = view else { return false }
-        let maxY = v.contentSize.height - v.bounds.height + v.adjustedContentInset.bottom
-        v.setContentOffset(CGPoint(x: 0, y: max(-v.adjustedContentInset.top, maxY)), animated: true)
-        return true
+    /// Cancel any in-flight deceleration (the coast) in place, so a follow-up `proxy.scrollTo` lands
+    /// instead of being swallowed by the momentum. No-op until the scroll view is located.
+    func halt() {
+        guard let v = view else { return }
+        v.setContentOffset(v.contentOffset, animated: false)
     }
 }
 
