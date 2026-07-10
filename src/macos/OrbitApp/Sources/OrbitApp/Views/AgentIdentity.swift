@@ -13,7 +13,7 @@ struct AgentAvatar: View {
             .fill(Self.gradient(for: provider))
             .overlay {
                 Text(">_")
-                    .font(.system(size: size * 0.4, weight: .bold, design: .monospaced))
+                    .font(.orbitAgentGlyph(size))
                     .foregroundStyle(.white)
                     .offset(y: -size * 0.03)
             }
