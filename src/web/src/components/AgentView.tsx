@@ -657,6 +657,12 @@ function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): s
   return base + suffix;
 }
 
+// Remembers the session the user last had open per agent (agent id → session id). Switching
+// away to another agent and back reopens that conversation instead of the agent's most-recent
+// one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
+// AgentView remounts across runner switches.
+const lastSessionByAgent = new Map<string, string>();
+
 export function AgentView({ runner }: { runner: Runner }) {
   const { message, modal } = AntApp.useApp();
   const qc = useQueryClient();
@@ -1090,17 +1096,36 @@ export function AgentView({ runner }: { runner: Runner }) {
     !selectedId &&
     (composingRoute || view !== 'active' || (sessionsQ.isSuccess && visibleSessions.length === 0));
 
-  // Default landing: opening /agents/<id> on the active tab (no session, not the
-  // /new draft) jumps to the agent's most recent session so the right pane is never
-  // blank. replace() keeps it out of history; archived/trash tabs never auto-open.
+  // Remember the open session as this agent's last-viewed one, so returning to the agent
+  // (an agent-switch away and back, or clicking it in the sidebar) restores it below.
+  useEffect(() => {
+    const agentId = selected?.agent?.id;
+    if (selectedId && agentId) lastSessionByAgent.set(agentId, selectedId);
+  }, [selectedId, selected?.agent?.id]);
+
+  // Default landing: opening /agents/<id> on the active tab (no session, not the /new draft)
+  // opens a session so the right pane is never blank. Prefer the one the user last had open
+  // for this agent (remembered above) — reopening where they left off — and fall back to the
+  // most recent when there's no memory (or it's since been archived/deleted out of view).
+  // replace() keeps it out of history; archived/trash tabs never auto-open.
   useEffect(() => {
     // On mobile the list is its own full screen — auto-opening would trap the back
     // button (it returns here, which would immediately redirect into a session again).
     if (isMobile || selectedId || composingRoute || view !== 'active' || !sessionsQ.isSuccess)
       return;
-    const first = visibleSessions[0];
-    if (first) navigate(`/sessions/${encodeId(first.id)}`, { replace: true });
-  }, [isMobile, selectedId, composingRoute, view, sessionsQ.isSuccess, visibleSessions, navigate]);
+    const remembered = scopeAgentId ? lastSessionByAgent.get(scopeAgentId) : undefined;
+    const target = visibleSessions.find((s) => s.id === remembered) ?? visibleSessions[0];
+    if (target) navigate(`/sessions/${encodeId(target.id)}`, { replace: true });
+  }, [
+    isMobile,
+    selectedId,
+    composingRoute,
+    view,
+    sessionsQ.isSuccess,
+    visibleSessions,
+    scopeAgentId,
+    navigate,
+  ]);
 
   // Step the open session up/down the visible list. Shared by the window-level Up/Down
   // handler and the Segmented's capture handler below. Returns false (a no-op) at the
