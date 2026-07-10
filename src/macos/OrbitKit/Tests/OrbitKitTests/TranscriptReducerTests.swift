@@ -103,8 +103,10 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.background.first?.outputTail, "line 1\nline 2\n", "snapshot replaces, not appends")
     }
 
-    /// The tray title comes from the launching Bash(run_in_background) tool_use — the background_task
-    /// completion event carries no command. Prefer the human `description` when present (web parity).
+    /// The tray row is correlated from the launching Bash(run_in_background) tool_use — the
+    /// background_task completion event carries neither command nor description. Keep BOTH: the human
+    /// `description` titles the row while `command` retains the raw command for the expanded body
+    /// (web parity: `BgShell.command` + `.description`).
     func testBackgroundCommandTitledFromLaunchDescription() {
         var r = TranscriptReducer()
         r.apply(RunEvent(seq: 4, type: .toolUse, payload: .object([
@@ -115,9 +117,32 @@ final class TranscriptReducerTests: XCTestCase {
         r.apply(RunEvent(seq: 5, type: .backgroundTask, payload: .object([
             "shellId": .string("sh9"), "toolUseId": .string("tu9"), "status": .string("completed")])))
         XCTAssertEqual(r.state.background.count, 1)
-        XCTAssertEqual(r.state.background.first?.command, "wait then greet",
-                       "description preferred over the raw command")
+        XCTAssertEqual(r.state.background.first?.command, "sleep 30 && echo done",
+                       "raw command retained so the expanded row can surface it")
+        XCTAssertEqual(r.state.background.first?.description, "wait then greet",
+                       "human description kept as the tray-row title")
         XCTAssertEqual(r.state.background.first?.status, "completed")
+    }
+
+    /// Regression (the reported bug): a background launch WITH a human description must keep the raw
+    /// command too — `description` titles the tray row while `command` feeds its expanded body.
+    /// Previously the reducer stored only `description ?? command`, so a described process lost its
+    /// command entirely and the expanded row could never show it (web showed it; iOS/macOS didn't).
+    func testBackgroundLaunchKeepsBothDescriptionAndCommand() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 4, type: .toolUse, payload: .object([
+            "toolUseId": .string("tu5"), "name": .string("Bash"),
+            "input": .object(["command": .string("gh run watch 123 --interval 30"),
+                              "description": .string("Watch PR #21 CI"),
+                              "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 5, type: .toolResult, payload: .object([
+            "toolUseId": .string("tu5"), "isError": .bool(false),
+            "content": .string("Command running in background with ID: bg21. Output is being written to: /t/bg21.output.")])))
+        XCTAssertEqual(r.state.background.count, 1, "confirmed launch surfaces one row")
+        XCTAssertEqual(r.state.background.first?.description, "Watch PR #21 CI", "description titles the row")
+        XCTAssertEqual(r.state.background.first?.command, "gh run watch 123 --interval 30",
+                       "raw command retained for the expanded body — not overwritten by the description")
+        XCTAssertEqual(r.state.background.first?.status, "running")
     }
 
     /// A background shell must appear in the tray as soon as its launch is confirmed by the

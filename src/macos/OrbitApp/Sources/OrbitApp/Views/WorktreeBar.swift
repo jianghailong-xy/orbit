@@ -529,7 +529,7 @@ private struct BackgroundRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 statusIcon.frame(width: 18)
-                Text(proc.command ?? "Background process")
+                Text(proc.description ?? proc.command ?? "Background process")
                     .font(.orbitMono).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let ts = proc.startedAt, let rel = RelativeTime.format(ts) {
@@ -541,6 +541,11 @@ private struct BackgroundRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onToggle)
             if expanded {
+                // When a human description supplies the title above, surface the actual command too —
+                // otherwise it's lost (web parity: BgShellRow renders `<Pre command prompt>` here).
+                if proc.description != nil, let cmd = proc.command {
+                    ToolBodyView(kind: .command(cmd))
+                }
                 if proc.outputTail.isEmpty {
                     Text("No output captured yet — the agent hasn't read this process's output.")
                         .font(.orbitMeta).foregroundStyle(.secondary)

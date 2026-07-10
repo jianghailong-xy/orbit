@@ -70,12 +70,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// reducer's — now or after either mints more. Transient like `bgLaunch`: the parent's is
     /// always "i", so it's excluded from the persisted keys and old snapshots still decode.
     private var idPrefix = "i"
-    /// Command text of each `Bash(run_in_background)` launch, keyed by its tool_use id. The
-    /// `background_*` events never carry the command, so the tray title is correlated from the
+    /// Command + optional `description` of each `Bash(run_in_background)` launch, keyed by its
+    /// tool_use id. The `background_*` events never carry either, so both are correlated from the
     /// launch captured here — matching web's `deriveBackgroundShells`, which titles the row
-    /// `description ?? command`. Transient: rebuilt from replayed tool_use events and excluded
-    /// from the persisted keys below, so snapshots written before it existed still decode.
-    private var bgLaunch: [String: String] = [:]
+    /// `description ?? command` yet keeps the command to show in the expanded body. Transient:
+    /// rebuilt from replayed tool_use events and excluded from the persisted keys below, so
+    /// snapshots written before it existed still decode.
+    private var bgLaunch: [String: (command: String, description: String?)] = [:]
 
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
@@ -267,13 +268,13 @@ public struct TranscriptReducer: Sendable, Codable {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id") ?? nextID()
         let name = str(ev, "name") ?? str(ev, "toolName") ?? "tool"
         let input = ev.payload["input"] ?? .null
-        // A background shell launch: remember its command so the (command-less) background_* events
-        // can title the tray row. Prefer the human `description`, like web does.
-        if name == "Bash", input["run_in_background"]?.boolValue == true {
+        // A background shell launch: remember its command AND human description so the (command-less)
+        // background_* events can title the tray row (description preferred, like web) while still
+        // surfacing the raw command in the expanded body.
+        if name == "Bash", input["run_in_background"]?.boolValue == true,
+           let command = input["command"]?.stringValue {
             let desc = input["description"]?.stringValue
-            if let label = (desc?.isEmpty == false ? desc : nil) ?? input["command"]?.stringValue {
-                bgLaunch[id] = label
-            }
+            bgLaunch[id] = (command: command, description: desc?.isEmpty == false ? desc : nil)
         }
         state.items.append(.toolCall(ToolCard(id: id, name: name, input: input, result: nil, status: .running)))
     }
@@ -290,10 +291,10 @@ public struct TranscriptReducer: Sendable, Codable {
         // (the shell is still running, or its completion notification was never recorded as an event).
         // Mirrors web's deriveBackgroundShells, which builds the shell list from the launch, not the
         // completion. background_task/output then update this same row (correlated by toolUseId).
-        if let id, !isError, let cmd = bgLaunch[id], let result,
+        if let id, !isError, let launch = bgLaunch[id], let result,
            result.contains("running in background with ID"),
            !state.background.contains(where: { $0.id == id }) {
-            state.background.append(BackgroundProc(id: id, command: cmd, status: "running", outputTail: "", startedAt: ev.ts))
+            state.background.append(BackgroundProc(id: id, command: launch.command, description: launch.description, status: "running", outputTail: "", startedAt: ev.ts))
         }
         for idx in stride(from: state.items.count - 1, through: 0, by: -1) {
             if case .toolCall(var card) = state.items[idx], card.result == nil, id == nil || card.id == id {
@@ -426,13 +427,15 @@ public struct TranscriptReducer: Sendable, Codable {
         let toolUseID = str(ev, "toolUseId")
         let id = toolUseID ?? str(ev, "shellId") ?? str(ev, "id") ?? str(ev, "taskId") ?? nextID()
         let status = str(ev, "status") ?? "running"
-        // The command isn't on this event; correlate it from the launching Bash tool_use (bgLaunch).
-        let command = str(ev, "command") ?? toolUseID.flatMap { bgLaunch[$0] }
+        // Neither the command nor the description is on this event; correlate them from the launching
+        // Bash tool_use (bgLaunch).
+        let launch = toolUseID.flatMap { bgLaunch[$0] }
+        let command = str(ev, "command") ?? launch?.command
         if let i = state.background.firstIndex(where: { $0.id == id }) {
             state.background[i].status = status
             if let command { state.background[i].command = command }
         } else {
-            state.background.append(BackgroundProc(id: id, command: command, status: status, outputTail: "", startedAt: ev.ts))
+            state.background.append(BackgroundProc(id: id, command: command, description: launch?.description, status: status, outputTail: "", startedAt: ev.ts))
         }
     }
 
@@ -446,7 +449,8 @@ public struct TranscriptReducer: Sendable, Codable {
         if let i = state.background.firstIndex(where: { $0.id == id }) {
             state.background[i].outputTail = snapshot
         } else {
-            state.background.append(BackgroundProc(id: id, command: toolUseID.flatMap { bgLaunch[$0] },
+            let launch = toolUseID.flatMap { bgLaunch[$0] }
+            state.background.append(BackgroundProc(id: id, command: launch?.command, description: launch?.description,
                                                    status: "running", outputTail: snapshot, startedAt: ev.ts))
         }
     }

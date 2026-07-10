@@ -159,7 +159,13 @@ public struct ToolCard: Equatable, Sendable, Codable {
 /// A background shell the agent launched with Bash(run_in_background).
 public struct BackgroundProc: Equatable, Sendable, Identifiable, Codable {
     public let id: String
+    /// The raw command that was launched (web parity: `BgShell.command`). When a `description`
+    /// supplies the row title, the command surfaces in the row's expanded body instead of being lost.
     public var command: String?
+    /// Optional human `description` from the Bash launch — the row title when present (web parity:
+    /// `BgShell.description`), which frees `command` to show the real command below it. Defaulted so
+    /// snapshots persisted before this field existed still decode (missing optional reads as nil).
+    public var description: String? = nil
     public var status: String    // running | completed | failed | killed
     public var outputTail: String
     /// ISO-8601 of the launch (the surfacing tool_result / first background event) — powers the
