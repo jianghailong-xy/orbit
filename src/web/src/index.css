@@ -1814,15 +1814,6 @@ body {
   display: inline-flex;
   color: var(--text-3);
 }
-.bg-shell-peek {
-  padding: 0 8px 5px 30px;
-  color: var(--text-3);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .bg-shell-detail {
   border-top: 1px solid var(--border-subtle);
   padding: 6px 8px;

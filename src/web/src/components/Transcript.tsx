@@ -28,6 +28,7 @@ import { createContext, isValidElement, memo, useContext, useEffect, useMemo, us
 import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
+import { stripAnsi } from '../lib/ansi';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -1195,10 +1196,11 @@ export function Pre({
 }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
-  const lines = text.split('\n');
+  const clean = useMemo(() => stripAnsi(text), [text]);
+  const lines = clean.split('\n');
   const hidden = Math.max(0, lines.length - threshold);
   const long = hidden > 0;
-  const shown = open || !long ? text : lines.slice(0, threshold).join('\n');
+  const shown = open || !long ? clean : lines.slice(0, threshold).join('\n');
   return (
     <div className={`chat-pre-wrap${muted ? ' muted' : ''}${prompt ? ' cmd' : ''}`}>
       <pre className="chat-pre">

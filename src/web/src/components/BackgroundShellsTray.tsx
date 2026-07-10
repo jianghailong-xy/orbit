@@ -115,10 +115,6 @@ function BgShellRow({
         {shell.startedTs && <span className="bg-shell-age">{relAge(shell.startedTs)}</span>}
         <span className="bg-shell-caret">{expanded ? <DownOutlined /> : <RightOutlined />}</span>
       </div>
-      {/* Folded: one-line peek of the latest output the agent pulled. */}
-      {!expanded && shell.latestOutput && (
-        <div className="bg-shell-peek">{lastLine(shell.latestOutput)}</div>
-      )}
       {expanded && (
         <div className="bg-shell-detail">
           {/* When the title is the description, still show the actual command. */}
@@ -149,14 +145,6 @@ function BgStatusIcon({ status }: { status: BgShellStatus }) {
   if (status === 'failed') return <CloseCircleFilled className="chat-tool-status err" />;
   if (status === 'killed') return <StopOutlined className="chat-tool-status pending" />;
   return <MinusCircleOutlined className="chat-tool-status pending" />;
-}
-
-function lastLine(text: string): string {
-  const lines = text.trimEnd().split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].trim() !== '') return lines[i];
-  }
-  return '';
 }
 
 // Short relative age ("just now", "5m ago", "3h ago", "2d ago") for a launch / last-read time.
