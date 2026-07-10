@@ -40,20 +40,20 @@ final class AgentWriteCodableTests: XCTestCase {
     }
 
     func testCreateEncodes() throws {
-        let obj = try jsonObject(CreateAgentRequest(name: "dev", provider: "codex", model: "gpt-5.5",
+        let obj = try jsonObject(CreateAgentRequest(name: "dev", provider: "codex", model: "gpt-5.6-sol",
                                                     allowedTools: ["Bash"], env: ["K": "V"]))
         XCTAssertEqual(obj["name"] as? String, "dev")
         XCTAssertEqual(obj["provider"] as? String, "codex")
-        XCTAssertEqual(obj["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(obj["model"] as? String, "gpt-5.6-sol")
         XCTAssertEqual(obj["allowedTools"] as? [String], ["Bash"])
         XCTAssertEqual((obj["env"] as? [String: String])?["K"], "V")
         XCTAssertFalse(obj.keys.contains("description"))
     }
 
     func testUpdateEncodesProvider() throws {
-        let obj = try jsonObject(UpdateAgentRequest(provider: "codex", model: "gpt-5.5"))
+        let obj = try jsonObject(UpdateAgentRequest(provider: "codex", model: "gpt-5.6-sol"))
         XCTAssertEqual(obj["provider"] as? String, "codex")
-        XCTAssertEqual(obj["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(obj["model"] as? String, "gpt-5.6-sol")
     }
 
     /// A PATCH that doesn't touch the runtime must not send `provider` — otherwise every

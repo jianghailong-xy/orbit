@@ -10,14 +10,14 @@ describe('modelForProvider', () => {
 
   it('falls back to the provider default when no override is given', () => {
     expect(modelForProvider(AgentProvider.CODEX, null)).toBe(DEFAULT_MODEL_BY_PROVIDER[AgentProvider.CODEX]);
-    expect(modelForProvider(AgentProvider.CODEX, undefined)).toBe('gpt-5.5');
+    expect(modelForProvider(AgentProvider.CODEX, undefined)).toBe('gpt-5.6-sol');
     expect(modelForProvider(AgentProvider.CLAUDE, '')).toBe('claude-opus-4-8');
   });
 
   it('coerces a Claude model on a Codex session to the Codex default (the reported bug)', () => {
     // The exact mismatch from the 400: `codex -m claude-opus-4-8`.
-    expect(modelForProvider(AgentProvider.CODEX, 'claude-opus-4-8')).toBe('gpt-5.5');
-    expect(modelForProvider(AgentProvider.CODEX, 'claude-fable-5')).toBe('gpt-5.5');
+    expect(modelForProvider(AgentProvider.CODEX, 'claude-opus-4-8')).toBe('gpt-5.6-sol');
+    expect(modelForProvider(AgentProvider.CODEX, 'claude-fable-5')).toBe('gpt-5.6-sol');
   });
 
   it('coerces a GPT model on a Claude session to the Claude default', () => {

@@ -137,7 +137,7 @@ func runLoop(cfg *RunnerConfig) {
 	var modelCatalogMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
 	refreshModelCatalog := func() {
-		if !providerConfigured(providerCodex) {
+		if !codexCLIAvailable() {
 			return
 		}
 		models, err := fetchCodexModelCatalog(loopCtx)

@@ -8,26 +8,26 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testModelsForProvider() {
         let codex = AgentDefaults.models(for: "codex").map(\.id)
-        XCTAssertEqual(codex, ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"])
+        XCTAssertEqual(codex, ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"])
         XCTAssertFalse(codex.contains("claude-opus-4-8"))
 
         let claude = AgentDefaults.models(for: "claude").map(\.id)
         XCTAssertEqual(claude, ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"])
-        XCTAssertFalse(claude.contains("gpt-5.5"))
+        XCTAssertFalse(claude.contains("gpt-5.6-sol"))
 
         // Unknown provider falls back to Claude, never to an empty menu.
         XCTAssertEqual(AgentDefaults.models(for: "gemini").map(\.id), claude)
     }
 
     func testDefaultModelForProvider() {
-        XCTAssertEqual(AgentDefaults.defaultModel(for: "codex"), "gpt-5.5")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "codex"), "gpt-5.6-sol")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "claude"), "claude-opus-4-8")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini"), AgentDefaults.defaultModelID)
     }
 
     func testFriendlyNameSpansProviders() {
+        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol"), "GPT-5.6-Sol")
         XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.5"), "GPT-5.5")
-        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.3-codex-spark"), "GPT-5.3 Codex Spark")
         XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-4-8"), "Opus 4.8")
         // Unknown ids still fall back to the raw string (an env-overridden endpoint).
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")

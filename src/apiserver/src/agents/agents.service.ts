@@ -9,7 +9,7 @@ import { CreateAgentDto, UpdateAgentDto } from './dto';
 const ORBIT_MCP_TOOL = 'mcp__orbit__*';
 const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   [AgentProvider.CLAUDE]: 'claude-opus-4-8',
-  [AgentProvider.CODEX]: 'gpt-5.5',
+  [AgentProvider.CODEX]: 'gpt-5.6-sol',
 };
 
 @Injectable()

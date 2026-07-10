@@ -17,10 +17,12 @@ export const CLAUDE_MODEL_OPTIONS = [
 ];
 
 export const CODEX_MODEL_OPTIONS = [
+  { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' },
+  { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra' },
+  { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna' },
   { value: 'gpt-5.5', label: 'GPT-5.5' },
   { value: 'gpt-5.4', label: 'GPT-5.4' },
   { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-  { value: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark' },
 ];
 
 export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
@@ -39,10 +41,12 @@ export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-opus-4-8': 1_000_000,
   'claude-sonnet-5': 1_000_000,
   'claude-haiku-4-5': 200_000,
+  'gpt-5.6-sol': 372_000,
+  'gpt-5.6-terra': 372_000,
+  'gpt-5.6-luna': 372_000,
   'gpt-5.5': 400_000,
   'gpt-5.4': 400_000,
   'gpt-5.4-mini': 400_000,
-  'gpt-5.3-codex-spark': 400_000,
 };
 export const DEFAULT_CONTEXT_WINDOW = 200_000;
 const catalogOptionsForProvider = (
@@ -72,7 +76,7 @@ export const contextWindowFor = (
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: 'claude-opus-4-8',
-  codex: 'gpt-5.5',
+  codex: 'gpt-5.6-sol',
 };
 
 export const modelOptionsForProvider = (

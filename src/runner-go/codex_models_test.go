@@ -7,11 +7,11 @@ func TestParseCodexModelCatalog(t *testing.T) {
 {
   "models": [
     {
-      "slug": "gpt-5.4",
-      "display_name": "GPT-5.4",
+      "slug": "gpt-5.6-terra",
+      "display_name": "GPT-5.6-Terra",
       "visibility": "list",
-      "priority": 16,
-      "context_window": 272000,
+      "priority": 2,
+      "context_window": 372000,
       "default_reasoning_level": "medium",
       "supported_reasoning_levels": [{"effort": "low"}, {"effort": "medium"}],
       "service_tiers": [{"id": "priority"}]
@@ -23,11 +23,11 @@ func TestParseCodexModelCatalog(t *testing.T) {
       "priority": 43
     },
     {
-      "slug": "gpt-5.6",
-      "display_name": "GPT-5.6",
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT-5.6-Sol",
       "visibility": "list",
-      "priority": 0,
-      "context_window": 272000,
+      "priority": 1,
+      "context_window": 372000,
       "supported_reasoning_levels": [{"effort": "xhigh"}]
     }
   ]
@@ -39,11 +39,11 @@ func TestParseCodexModelCatalog(t *testing.T) {
 	if len(models) != 2 {
 		t.Fatalf("len(models) = %d, want 2", len(models))
 	}
-	if models[0].Value != "gpt-5.6" || models[1].Value != "gpt-5.4" {
+	if models[0].Value != "gpt-5.6-sol" || models[1].Value != "gpt-5.6-terra" {
 		t.Fatalf("models order = %#v", models)
 	}
-	if got := models[0].ContextWindow; got != 272000 {
-		t.Fatalf("context window = %d, want 272000", got)
+	if got := models[0].ContextWindow; got != 372000 {
+		t.Fatalf("context window = %d, want 372000", got)
 	}
 	if got := models[1].ReasoningLevels; len(got) != 2 || got[0] != "low" || got[1] != "medium" {
 		t.Fatalf("reasoning levels = %#v", got)

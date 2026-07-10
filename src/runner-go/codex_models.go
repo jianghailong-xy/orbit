@@ -39,6 +39,11 @@ func fetchCodexModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	return parseCodexModelCatalog(out)
 }
 
+func codexCLIAvailable() bool {
+	_, err := exec.LookPath("codex")
+	return err == nil
+}
+
 func parseCodexModelCatalog(out []byte) ([]ModelInfo, error) {
 	start := bytes.IndexByte(out, '{')
 	if start < 0 {

@@ -45,10 +45,12 @@ public enum AgentDefaults {
     ]
 
     public static let codexModels: [ModelOption] = [
+        ModelOption(id: "gpt-5.6-sol", name: "GPT-5.6-Sol"),
+        ModelOption(id: "gpt-5.6-terra", name: "GPT-5.6-Terra"),
+        ModelOption(id: "gpt-5.6-luna", name: "GPT-5.6-Luna"),
         ModelOption(id: "gpt-5.5", name: "GPT-5.5"),
         ModelOption(id: "gpt-5.4", name: "GPT-5.4"),
         ModelOption(id: "gpt-5.4-mini", name: "GPT-5.4 Mini"),
-        ModelOption(id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark"),
     ]
 
     public static let defaultModelID = "claude-opus-4-8"
@@ -65,7 +67,7 @@ public enum AgentDefaults {
 
     /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
     public static func defaultModel(for provider: String) -> String {
-        provider == "codex" ? "gpt-5.5" : defaultModelID
+        provider == "codex" ? "gpt-5.6-sol" : defaultModelID
     }
 
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?) -> String {
@@ -101,7 +103,8 @@ public enum AgentDefaults {
         switch id {
         case "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
-        case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark": return 400_000
+        case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": return 372_000
+        case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini": return 400_000
         default: return 200_000
         }
     }
