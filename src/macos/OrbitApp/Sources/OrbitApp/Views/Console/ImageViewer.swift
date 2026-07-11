@@ -65,20 +65,6 @@ enum ImageActions {
     }
 }
 
-extension View {
-    /// The long-press menu both full-screen viewers share: Copy + Save Image.
-    func imageActionsMenu(_ image: UIImage) -> some View {
-        contextMenu {
-            Button { ImageActions.copy(image) } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-            Button { ImageActions.saveToPhotos(image) } label: {
-                Label("Save Image", systemImage: "square.and.arrow.down")
-            }
-        }
-    }
-}
-
 /// Single-image full-screen viewer for an in-memory `PlatformImage` (the composer's staged draft
 /// thumbnails, which aren't attachment-backed yet). Pinch or double-tap to zoom, drag to pan while
 /// zoomed; drag down at fit scale to dismiss with the image shrinking as the backdrop fades. The
@@ -91,6 +77,7 @@ struct FullScreenImageView: View {
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero   // committed pan, only meaningful while zoomed
     @State private var drag: CGSize = .zero      // live drag translation
+    @State private var showActions = false
 
     private var liveScale: CGFloat { max(1, scale * pinch) }
     private var zoomed: Bool { liveScale > 1.01 }
@@ -116,6 +103,14 @@ struct FullScreenImageView: View {
                 }
             }
 
+        // Explicit long-press (marked simultaneous below) drives the action sheet. `.contextMenu`
+        // wouldn't fire here — its built-in long-press loses the gesture arena to the pan/tap above.
+        let longPress = LongPressGesture(minimumDuration: 0.4)
+            .onEnded { _ in
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                showActions = true
+            }
+
         ZStack {
             Color.black.opacity(1 - dismissProgress).ignoresSafeArea()
 
@@ -126,9 +121,9 @@ struct FullScreenImageView: View {
                 .offset(x: offset.width + drag.width, y: offset.height + drag.height)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)   // fill → scaledToFit centres it
                 .contentShape(Rectangle())
-                .imageActionsMenu(image)
                 .gesture(pan)
                 .simultaneousGesture(magnify)
+                .simultaneousGesture(longPress)
                 .onTapGesture(count: 2) {
                     withAnimation(.easeOut(duration: 0.22)) {
                         if zoomed { scale = 1; offset = .zero } else { scale = 2.6 }
@@ -140,6 +135,10 @@ struct FullScreenImageView: View {
         .ignoresSafeArea()
         .statusBarHidden(true)
         .presentationBackground(.clear)
+        .confirmationDialog("", isPresented: $showActions, titleVisibility: .hidden) {
+            Button("Copy") { ImageActions.copy(image) }
+            Button("Save Image") { ImageActions.saveToPhotos(image) }
+        }
     }
 }
 
@@ -161,6 +160,7 @@ struct ImagePagerView: View {
     @State private var pan: CGSize = .zero       // committed pan of the current page
     @State private var panLive: CGSize = .zero   // live pan translation
     @State private var mode: DragMode = .idle
+    @State private var showActions = false
 
     private enum DragMode { case idle, page, dismiss, pan }
     private static let gap: CGFloat = 24
@@ -224,6 +224,15 @@ struct ImagePagerView: View {
                 .updating($pinch) { value, state, _ in state = value }
                 .onEnded { value in scale = min(max(1, scale * value), 6) }
 
+            // Explicit long-press (marked simultaneous below) drives the action sheet. `.contextMenu`
+            // wouldn't fire here — its built-in long-press loses the gesture arena to the drag/tap.
+            let longPress = LongPressGesture(minimumDuration: 0.4)
+                .onEnded { _ in
+                    guard store.image(for: images[index].id) != nil else { return }
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                    showActions = true
+                }
+
             ZStack {
                 // Fades out as the dismiss drag progresses; presentationBackground(.clear) lets the
                 // transcript show through so the swipe reads as peeling the image away.
@@ -243,6 +252,7 @@ struct ImagePagerView: View {
             .contentShape(Rectangle())
             .gesture(drag)
             .simultaneousGesture(magnify)
+            .simultaneousGesture(longPress)
             .onTapGesture(count: 2) {
                 withAnimation(.easeOut(duration: 0.22)) {
                     if zoomed { scale = 1; pan = .zero } else { scale = 2.6 }
@@ -255,6 +265,12 @@ struct ImagePagerView: View {
         .overlay(alignment: .bottom) { pageDots }
         .statusBarHidden(true)
         .presentationBackground(.clear)
+        .confirmationDialog("", isPresented: $showActions, titleVisibility: .hidden) {
+            if let img = store.image(for: images[index].id) {
+                Button("Copy") { ImageActions.copy(img) }
+                Button("Save Image") { ImageActions.saveToPhotos(img) }
+            }
+        }
     }
 
     @ViewBuilder
@@ -268,7 +284,6 @@ struct ImagePagerView: View {
                     .offset(isCurrent
                             ? CGSize(width: pan.width + panLive.width, height: pan.height + panLive.height)
                             : .zero)
-                    .imageActionsMenu(img)
             } else {
                 ProgressView().tint(.white)
             }
