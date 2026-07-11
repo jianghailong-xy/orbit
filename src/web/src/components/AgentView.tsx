@@ -244,9 +244,41 @@ function lastContextTokens(events: RunEvent[]): number {
   return 0;
 }
 
-// Context-window gauge for the composer footer (mirrors PlanUsageIndicator): a mini bar
-// + percent of the model's context window filled by the latest turn; hover/click reveals
-// the token counts. Distinct from plan usage — that's the subscription rate limit.
+// Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
+// session-local context metric doesn't read as "another usage bar". Quiet/neutral until it
+// matters, then ramps amber (≥75%) → red (≥90%) as the window fills.
+function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'danger' }) {
+  const r = 5.5;
+  const circ = 2 * Math.PI * r;
+  const frac = Math.min(100, Math.max(0, pct)) / 100;
+  return (
+    <svg
+      className={`context-ring context-ring-${tier}`}
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      aria-hidden="true"
+    >
+      <circle className="context-ring-track" cx="7" cy="7" r={r} fill="none" strokeWidth="2.5" />
+      <circle
+        className="context-ring-fill"
+        cx="7"
+        cy="7"
+        r={r}
+        fill="none"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeDasharray={circ}
+        strokeDashoffset={circ * (1 - frac)}
+        transform="rotate(-90 7 7)"
+      />
+    </svg>
+  );
+}
+
+// Context-window gauge for the composer footer: the ring above + percent of the model's context
+// window filled by the latest turn; hover/click reveals the token counts. Distinct from plan
+// usage — that's the subscription rate limit.
 function ContextWindowIndicator({
   tokens,
   model,
@@ -274,15 +306,11 @@ function ContextWindowIndicator({
       </div>
     </div>
   );
+  const tier = pct >= 90 ? 'danger' : pct >= 75 ? 'warn' : 'neutral';
   return (
     <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
-      <span
-        className={`composer-pill composer-usage ${pct >= 90 ? 'full' : ''}`}
-        aria-label={`Context window ${pct}%`}
-      >
-        <span className="composer-usage-bar">
-          <span className="composer-usage-fill" style={{ width: `${pct}%` }} />
-        </span>
+      <span className="composer-pill composer-usage" aria-label={`Context window ${pct}%`}>
+        <ContextRing pct={pct} tier={tier} />
         <span className="composer-usage-pct">{pct}%</span>
       </span>
     </Popover>

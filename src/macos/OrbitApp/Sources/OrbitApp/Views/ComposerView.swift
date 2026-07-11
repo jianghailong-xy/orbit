@@ -757,8 +757,8 @@ private func fmtTokens(_ n: Int) -> String {
     return "\(n)"
 }
 
-/// Context-window gauge for the composer footer (mirrors PlanUsageIndicator): a mini bar +
-/// percent of the model's context window filled by the latest turn; tapping shows the token
+/// Context-window gauge for the composer footer: a mini donut ring (a distinct silhouette from the
+/// plan-usage bar) + percent of the model's context window filled by the latest turn; tapping shows the token
 /// counts. Distinct from plan usage — that's the subscription rate limit, this is the session's
 /// live context occupancy (the figure Claude Code's own gauge shows).
 private struct ContextWindowIndicator: View {
@@ -773,7 +773,7 @@ private struct ContextWindowIndicator: View {
     var body: some View {
         Button { showDetail.toggle() } label: {
             HStack(spacing: 5) {
-                UsageBar(percent: pct).frame(width: 26, height: 4)
+                UsageRing(percent: pct).frame(width: 14, height: 14)
                 // See PlanUsageIndicator: pin the pill to its ideal width so a tight footer never
                 // wraps the "%" onto a second line.
                 Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
@@ -913,6 +913,30 @@ private struct UsageBar: View {
                     .frame(width: geo.size.width * fraction)
             }
         }
+    }
+}
+
+/// A circular utilization gauge (donut) for the context pill — a distinct silhouette from the
+/// linear plan-usage bar. Quiet/neutral until it matters, then amber (≥75%) → red (≥90%) as the
+/// window fills. Mirrors the web `.context-ring`.
+private struct UsageRing: View {
+    let percent: Int
+    private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }
+    private var tint: Color {
+        if percent >= 90 { return .red }
+        if percent >= 75 { return .orange }
+        return .secondary
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(.quaternary, lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: fraction)
+                .stroke(tint, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(1.25)
     }
 }
 
