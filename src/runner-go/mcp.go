@@ -250,7 +250,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 
 // maxApprovalPolls caps the total wait for a human decision (~25s per poll), so a
 // forgotten approval can't wedge the claude process forever.
-const maxApprovalPolls = 120
+const maxApprovalPolls = 300
 
 // permissionPrompt is claude's --permission-prompt-tool: it registers the gated tool
 // call as a pending approval, blocks until a human allows/denies it (re-polling across
