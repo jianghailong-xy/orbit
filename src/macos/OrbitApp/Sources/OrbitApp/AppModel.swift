@@ -16,7 +16,7 @@ import UIKit
 final class AppModel {
     // auth / instance
     var signedIn = false
-    var instanceField = "orbit.wikova.com"
+    var instanceField = "orbitd.io"
     var email = ""
     var password = ""
     var errorText: String?

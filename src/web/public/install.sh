@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Install the Orbit runner CLI:  curl -fsSL https://orbit.wikova.com/install.sh | bash
+# Install the Orbit runner CLI:  curl -fsSL https://orbitd.io/install.sh | bash
 set -euo pipefail
 
-BASE_URL="${ORBIT_BASE_URL:-https://orbit.wikova.com}"
+BASE_URL="${ORBIT_BASE_URL:-https://orbitd.io}"
 BIN_DIR="${ORBIT_BIN_DIR:-/usr/local/bin}"
 NAME="orbit"
 

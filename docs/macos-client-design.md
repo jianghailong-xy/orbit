@@ -314,7 +314,7 @@ UI can do this.
 ## 9. Auth, multi-instance, distribution
 
 - **Multi-instance:** self-hosted means the app must accept an instance URL
-  (e.g. `https://orbit.wikova.com` or a private one). Store `{serverURL, token, user}` per
+  (e.g. `https://orbitd.io` or a private one). Store `{serverURL, token, user}` per
   instance in Keychain; allow switching. Login mirrors web: `setup-status` → `/setup` or
   `/login`. On 401 (7-day expiry, no refresh), prompt silent re-login.
 - **Distribution: Developer ID + notarization, NOT Mac App Store.** Managing `launchd`,

@@ -47,6 +47,6 @@ COPY --from=binbuild /app/dist-bin /usr/share/nginx/html/dl
 # baked-in default BASE_URL to this deployment's origin — then `curl .../install.sh | bash`
 # pulls the runner from here with no ORBIT_BASE_URL override.
 RUN if [ -n "$PUBLIC_ORIGIN" ]; then \
-      sed -i "s|https://orbit.wikova.com|$PUBLIC_ORIGIN|g" /usr/share/nginx/html/install.sh; \
+      sed -i "s|https://orbitd.io|$PUBLIC_ORIGIN|g" /usr/share/nginx/html/install.sh; \
     fi
 EXPOSE 80

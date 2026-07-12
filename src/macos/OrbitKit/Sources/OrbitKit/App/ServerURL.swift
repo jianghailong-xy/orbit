@@ -1,7 +1,7 @@
 import Foundation
 
 /// Normalizes a user-typed instance address into a control-plane base URL. Self-hosted means
-/// users type things like `orbit.wikova.com`, `https://orbit.example.com/`, or
+/// users type things like `orbitd.io`, `https://orbit.example.com/`, or
 /// `localhost:2086`; the client needs one canonical `URL` (scheme present, no trailing slash).
 public enum ServerURL {
     public static func normalize(_ raw: String) -> URL? {

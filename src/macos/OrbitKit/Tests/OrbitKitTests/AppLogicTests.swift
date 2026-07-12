@@ -4,7 +4,7 @@ import XCTest
 final class AppLogicTests: XCTestCase {
 
     func testServerURLNormalization() {
-        XCTAssertEqual(ServerURL.normalize("orbit.wikova.com")?.absoluteString, "https://orbit.wikova.com")
+        XCTAssertEqual(ServerURL.normalize("orbitd.io")?.absoluteString, "https://orbitd.io")
         XCTAssertEqual(ServerURL.normalize("  https://x.example.com/  ")?.absoluteString, "https://x.example.com")
         XCTAssertEqual(ServerURL.normalize("http://orbit.local:2086")?.absoluteString, "http://orbit.local:2086")
         XCTAssertEqual(ServerURL.normalize("localhost:2086")?.absoluteString, "http://localhost:2086")
