@@ -475,12 +475,17 @@ struct BackgroundTrayView: View {
                 header
                 if open {
                     Divider().opacity(0.5)
-                    ForEach(procs) { proc in
-                        BackgroundRow(proc: proc, expanded: expandedID == proc.id) {
-                            withAnimation(.easeOut(duration: 0.12)) {
-                                expandedID = expandedID == proc.id ? nil : proc.id
-                            }
-                        }
+                    // Web parity (.bg-tray-list: max-height 320px + overflow auto): cap the open
+                    // list and scroll INSIDE it. Uncapped, a tall expanded row (multi-line command
+                    // + a 16-line output tail) competes with the transcript for the console's
+                    // vertical space, and when the screen can't fit it (iPhone) SwiftUI squeezes
+                    // the row's Texts — a height-squeezed Text tail-truncates with "…" even with
+                    // no lineLimit, so an expanded process showed only its first few lines. The
+                    // plain branch keeps a short list at its natural height (a bare ScrollView is
+                    // greedy: capped at 320 it would pad a two-row list out to 320 of empty chrome).
+                    ViewThatFits(in: .vertical) {
+                        rows
+                        ScrollView { rows }.frame(maxHeight: 320)
                     }
                 }
             }
@@ -492,6 +497,20 @@ struct BackgroundTrayView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
             .padding(.horizontal, 16).padding(.bottom, 8)
+        }
+    }
+
+    /// The open tray's accordion rows — one per shell. A computed var so both ViewThatFits
+    /// branches render the identical stack.
+    private var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(procs) { proc in
+                BackgroundRow(proc: proc, expanded: expandedID == proc.id) {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        expandedID = expandedID == proc.id ? nil : proc.id
+                    }
+                }
+            }
         }
     }
 
