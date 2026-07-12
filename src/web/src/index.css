@@ -333,6 +333,18 @@ body {
 .tp-item.active .tp-count.needs-you {
   color: var(--warning);
 }
+/* Agent / runner online dot: grey when the machine is offline, green when its heartbeat is
+   fresh. Shared by the agent rows and their runner-group headers. */
+.tp-adot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+  flex: none;
+}
+.tp-adot.online {
+  background: var(--success-solid);
+}
 /* Task-list status dot. Grey + static by default; turns blue and breathes while
    the list has a task executing right now (runningTasks > 0); turns green and
    static once the whole list is finished (every task DONE). */
@@ -432,6 +444,11 @@ body {
 }
 .tp-caret.collapsed {
   transform: rotate(-90deg);
+}
+/* A runner-group header is itself a row (not a section head), so its disclosure chevron stays
+   visible instead of only appearing on hover like the section carets above. */
+.tp-runner-head .tp-caret {
+  opacity: 1;
 }
 .tp-group-name {
   font-size: 13px;

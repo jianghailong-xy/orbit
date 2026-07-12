@@ -12,22 +12,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  arrayMove,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { useQuery, keepPreviousData, useQueryClient } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
@@ -36,7 +21,7 @@ import { api, clearToken } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
-import { orderAgents } from '../lib/agentOrder';
+import { orderAgents, groupAgentsByRunner, type AgentGroup } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
@@ -89,9 +74,10 @@ interface Agent {
   // Drag-to-reorder slot (0-based). null until the user reorders, so it sorts last.
   position?: number | null;
   // The machine this agent belongs to (null for config-only agents); an agent
-  // with no runner has no console to open.
+  // with no runner has no console to open. GET /agents embeds the runner's name/
+  // displayName so the sidebar can label the runner group without a second lookup.
   runnerId?: string | null;
-  runner?: { id: string } | null;
+  runner?: { id: string; name?: string; displayName?: string | null } | null;
 }
 
 interface TaskList {
@@ -114,7 +100,6 @@ function logout() {
 export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const loc = useLocation();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   // While the control-plane stream is live it pushes list changes, so the active-sessions poll
   // below stands down; it resumes automatically on any stream gap.
   const controlLive = useControlPlaneLive();
@@ -131,9 +116,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           { key: 'admin/providers', icon: <ApiOutlined />, label: 'Providers' },
         ]
       : TOP;
-  // A small drag threshold so a plain click still opens an agent; only real movement
-  // starts a reorder drag.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // The open agent comes from /agents/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -174,6 +156,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const [agentsOpen, setAgentsOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [completedOpen, setCompletedOpen] = useState(false);
+  // Which runner groups are expanded. With more than one runner they default to collapsed (like the
+  // iOS drawer); the effect below keeps the open agent's group expanded, and the user toggles the rest.
+  const [expandedRunners, setExpandedRunners] = useState<Set<string>>(new Set());
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const saved = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
@@ -238,6 +223,36 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // Sidebar display order — shared with the boot pre-warm and the default landing so "the first
   // agent" means the same thing everywhere. ⌘1‒9 (and ⌘N's fallback) map to this order.
   const agentList = useMemo(() => orderAgents(agents.data ?? []), [agents.data]);
+  // Agents grouped by their machine (runner), mirroring the iOS/macOS drawer: each runner is a
+  // collapsible header and host-level agents sink to a "Shared" group. ⌘1‒9 index into the flattened
+  // grouped order, so the shortcut number and the on-screen position stay in lockstep.
+  const agentGroups = useMemo(() => groupAgentsByRunner(agentList), [agentList]);
+  const orderedAgents = useMemo(() => agentGroups.flatMap((g) => g.agents), [agentGroups]);
+  const agentOrderIndex = useMemo(
+    () => new Map(orderedAgents.map((a, i) => [a.id, i])),
+    [orderedAgents],
+  );
+  const runnerGroupKey = (g: AgentGroup<Agent>) => g.runnerId ?? 'host';
+  // Keep the open agent's group expanded — seeded on load and re-applied on navigation — while
+  // leaving every other group under the user's own toggles. A lone group is always shown expanded.
+  useEffect(() => {
+    if (!activeAgentId) return;
+    const g = agentGroups.find((grp) => grp.agents.some((a) => a.id === activeAgentId));
+    if (!g) return;
+    const k = runnerGroupKey(g);
+    setExpandedRunners((prev) => (prev.has(k) ? prev : new Set(prev).add(k)));
+  }, [activeAgentId, agentGroups]);
+  const isRunnerExpanded = (g: AgentGroup<Agent>) =>
+    agentGroups.length <= 1 || expandedRunners.has(runnerGroupKey(g));
+  const toggleRunner = (g: AgentGroup<Agent>) => {
+    const k = runnerGroupKey(g);
+    setExpandedRunners((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
 
   // User-created task lists shown in the "Task List" group below. Poll so the
   // per-list running indicator stays live: 5s while anything is running (mirrors the
@@ -271,6 +286,13 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     refetchInterval: 15_000,
   });
   const onlineRunnerIds = new Set((runners.data ?? []).filter((r) => r.online).map((r) => r.id));
+  // Runner id → display name (displayName || name), matching how the rest of the app labels a
+  // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
+  const runnerLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    return m;
+  }, [runners.data]);
 
   // Task count for the "未分组" (no-list) bucket. Reuses the ['tasks'] cache the main
   // view populates, so it adds no extra network request.
@@ -320,36 +342,11 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     [navigate],
   );
 
-  // Drag-to-reorder: optimistically stamp the new positions onto the cached list so
-  // the order (and ⌘N labels) update instantly, persist via POST /agents/reorder,
-  // then re-sync with the server's truth (also rolls back on failure).
-  const onAgentDragEnd = useCallback(
-    (e: DragEndEvent) => {
-      const { active, over } = e;
-      if (!over || active.id === over.id) return;
-      const oldIndex = agentList.findIndex((a) => a.id === active.id);
-      const newIndex = agentList.findIndex((a) => a.id === over.id);
-      if (oldIndex < 0 || newIndex < 0) return;
-      const next = arrayMove(agentList, oldIndex, newIndex);
-      const order = new Map(next.map((a, i) => [a.id, i]));
-      qc.setQueryData<Agent[]>(['agents'], (prev) =>
-        prev?.map((a) => {
-          const p = order.get(a.id);
-          return p === undefined ? a : { ...a, position: p };
-        }),
-      );
-      void api('/agents/reorder', { method: 'POST', body: { ids: next.map((a) => a.id) } })
-        .catch(() => {})
-        .finally(() => void qc.invalidateQueries({ queryKey: ['agents'] }));
-    },
-    [agentList, qc],
-  );
-
   // ⌘/Ctrl + 1‒9 opens the matching agent in the list. The modifier chord never
   // produces text input, so it fires even while a text field is focused;
   // preventDefault stops the browser's own tab-switch on the same chord.
   useEffect(() => {
-    const list = agentList;
+    const list = orderedAgents;
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
       const n = Number(e.key);
@@ -359,7 +356,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [agentList, openAgent]);
+  }, [orderedAgents, openAgent]);
 
   const renderListRow = (l: TaskList) => {
     const key = encodeId(l.id);
@@ -443,8 +440,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         {/* The user's agents, kept reachable when collapsed: a monogram avatar each
             (agents are entities with identity + online state + ⌘1‒9, so unlike the
             text-titled task lists they read fine as icons). Same order, same shortcuts. */}
-        {agentList.length > 0 && <div className="tp-rail-divider" />}
-        {agentList.map((a, i) => {
+        {orderedAgents.length > 0 && <div className="tp-rail-divider" />}
+        {orderedAgents.map((a, i) => {
           const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
           return (
             <div
@@ -479,33 +476,51 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         <div className="tp-group">
           <div className="tp-group-head" onClick={() => setAgentsOpen((o) => !o)}>
             <span className="tp-group-name">Agents</span>
-            {agentList.length > 0 && <span className="tp-count">{agentList.length}</span>}
+            {orderedAgents.length > 0 && <span className="tp-count">{orderedAgents.length}</span>}
             <CaretDownOutlined className={`tp-caret ${agentsOpen ? '' : 'collapsed'}`} />
           </div>
-          {agentsOpen && (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={onAgentDragEnd}
-            >
-              <SortableContext
-                items={agentList.map((a) => a.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {agentList.map((a, i) => (
-                  <SortableAgentRow
-                    key={a.id}
-                    agent={a}
-                    index={i}
-                    active={a.id === activeAgentId}
-                    online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
-                    needsYou={agentNeedsYou.get(a.id) ?? 0}
-                    onOpen={openAgent}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          )}
+          {agentsOpen &&
+            agentGroups.map((group) => {
+              const expanded = isRunnerExpanded(group);
+              // Host agents read as "Shared"; a real runner uses its display name, falling back to
+              // the name embedded in the agent payload until the ['runners'] cache lands.
+              const label =
+                group.runnerId == null
+                  ? 'Shared'
+                  : (runnerLabels.get(group.runnerId) ??
+                    group.agents[0]?.runner?.displayName ??
+                    group.agents[0]?.runner?.name ??
+                    'Machine');
+              return (
+                <div key={runnerGroupKey(group)}>
+                  <div className="tp-item tp-runner-head" onClick={() => toggleRunner(group)}>
+                    <span className="tp-ico">
+                      {group.runnerId == null ? <InboxOutlined /> : <DesktopOutlined />}
+                    </span>
+                    <span className="tp-label">{label}</span>
+                    {group.runnerId != null && (
+                      <span
+                        className={`tp-adot ${onlineRunnerIds.has(group.runnerId) ? 'online' : ''}`}
+                      />
+                    )}
+                    <span className="tp-count">{group.agents.length}</span>
+                    <CaretDownOutlined className={`tp-caret ${expanded ? '' : 'collapsed'}`} />
+                  </div>
+                  {expanded &&
+                    group.agents.map((a) => (
+                      <AgentRow
+                        key={a.id}
+                        agent={a}
+                        index={agentOrderIndex.get(a.id) ?? 0}
+                        active={a.id === activeAgentId}
+                        online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
+                        needsYou={agentNeedsYou.get(a.id) ?? 0}
+                        onOpen={openAgent}
+                      />
+                    ))}
+                </div>
+              );
+            })}
         </div>
 
         {(unlistedCount > 0 || activeLists.length > 0 || completedLists.length > 0) && (
@@ -627,9 +642,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
 }
 
-// One draggable agent row. The drag listeners sit on the whole row; the sensor's
-// activation distance keeps a plain click opening the agent instead of starting a drag.
-function SortableAgentRow({
+// One agent row under its runner group: an online dot, the agent name, and the ⌘ shortcut hint
+// (or an amber "needs you" count). A plain click opens the agent's console.
+function AgentRow({
   agent,
   index,
   active,
@@ -644,33 +659,12 @@ function SortableAgentRow({
   needsYou: number;
   onOpen: (a: Agent) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: agent.id,
-  });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : undefined,
-  };
   return (
     <div
-      ref={setNodeRef}
-      style={style}
       className={`tp-item inset ${active ? 'active' : ''}`}
       onClick={() => onOpen(agent)}
-      {...attributes}
-      {...listeners}
     >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: online ? 'var(--success-solid)' : 'var(--dot-idle)',
-          flex: 'none',
-          marginRight: 8,
-        }}
-      />
+      <span className={`tp-adot ${online ? 'online' : ''}`} style={{ marginRight: 8 }} />
       <span className="tp-label">{agent.name}</span>
       {/* When one of this agent's sessions is waiting on you, the right slot shows an
           amber attention count instead of the ⌘ shortcut — the "it's your turn" signal
