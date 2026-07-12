@@ -65,6 +65,34 @@ enum ImageActions {
     }
 }
 
+/// Present the classic iPhone bottom action sheet (Copy / Save Image / Cancel) for `image`. Bridges
+/// UIKit's `UIAlertController(.actionSheet)` on purpose: SwiftUI's `.confirmationDialog`, presented
+/// from inside our clear-background `fullScreenCover`, renders as a centered card with no Cancel
+/// instead of the bottom sheet. Presents from the frontmost view controller (the image cover itself).
+@MainActor
+func presentImageActionSheet(_ image: UIImage) {
+    guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+          let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first,
+          let root = window.rootViewController else { return }
+    var top = root
+    while let presented = top.presentedViewController { top = presented }
+
+    let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+    sheet.addAction(UIAlertAction(title: "Copy", style: .default) { _ in ImageActions.copy(image) })
+    sheet.addAction(UIAlertAction(title: "Save Image", style: .default) { _ in ImageActions.saveToPhotos(image) })
+    sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+    // iPad renders an action sheet as a popover, which traps without an anchor — pin it to the
+    // bottom-centre so the sheet still reads as coming from the image.
+    if let pop = sheet.popoverPresentationController {
+        pop.sourceView = top.view
+        pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.maxY - 1, width: 1, height: 1)
+        pop.permittedArrowDirections = []
+    }
+    top.present(sheet, animated: true)
+}
+
 /// Single-image full-screen viewer for an in-memory `PlatformImage` (the composer's staged draft
 /// thumbnails, which aren't attachment-backed yet). Pinch or double-tap to zoom, drag to pan while
 /// zoomed; drag down at fit scale to dismiss with the image shrinking as the backdrop fades. The
@@ -77,7 +105,6 @@ struct FullScreenImageView: View {
     @State private var scale: CGFloat = 1
     @State private var offset: CGSize = .zero   // committed pan, only meaningful while zoomed
     @State private var drag: CGSize = .zero      // live drag translation
-    @State private var showActions = false
 
     private var liveScale: CGFloat { max(1, scale * pinch) }
     private var zoomed: Bool { liveScale > 1.01 }
@@ -103,12 +130,12 @@ struct FullScreenImageView: View {
                 }
             }
 
-        // Explicit long-press (marked simultaneous below) drives the action sheet. `.contextMenu`
+        // Explicit long-press (marked simultaneous below) opens the action sheet. `.contextMenu`
         // wouldn't fire here — its built-in long-press loses the gesture arena to the pan/tap above.
         let longPress = LongPressGesture(minimumDuration: 0.4)
             .onEnded { _ in
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                showActions = true
+                presentImageActionSheet(image)
             }
 
         ZStack {
@@ -135,10 +162,6 @@ struct FullScreenImageView: View {
         .ignoresSafeArea()
         .statusBarHidden(true)
         .presentationBackground(.clear)
-        .confirmationDialog("", isPresented: $showActions, titleVisibility: .hidden) {
-            Button("Copy") { ImageActions.copy(image) }
-            Button("Save Image") { ImageActions.saveToPhotos(image) }
-        }
     }
 }
 
@@ -160,7 +183,6 @@ struct ImagePagerView: View {
     @State private var pan: CGSize = .zero       // committed pan of the current page
     @State private var panLive: CGSize = .zero   // live pan translation
     @State private var mode: DragMode = .idle
-    @State private var showActions = false
 
     private enum DragMode { case idle, page, dismiss, pan }
     private static let gap: CGFloat = 24
@@ -224,13 +246,13 @@ struct ImagePagerView: View {
                 .updating($pinch) { value, state, _ in state = value }
                 .onEnded { value in scale = min(max(1, scale * value), 6) }
 
-            // Explicit long-press (marked simultaneous below) drives the action sheet. `.contextMenu`
+            // Explicit long-press (marked simultaneous below) opens the action sheet. `.contextMenu`
             // wouldn't fire here — its built-in long-press loses the gesture arena to the drag/tap.
             let longPress = LongPressGesture(minimumDuration: 0.4)
                 .onEnded { _ in
-                    guard store.image(for: images[index].id) != nil else { return }
+                    guard let img = store.image(for: images[index].id) else { return }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    showActions = true
+                    presentImageActionSheet(img)
                 }
 
             ZStack {
@@ -265,12 +287,6 @@ struct ImagePagerView: View {
         .overlay(alignment: .bottom) { pageDots }
         .statusBarHidden(true)
         .presentationBackground(.clear)
-        .confirmationDialog("", isPresented: $showActions, titleVisibility: .hidden) {
-            if let img = store.image(for: images[index].id) {
-                Button("Copy") { ImageActions.copy(img) }
-                Button("Save Image") { ImageActions.saveToPhotos(img) }
-            }
-        }
     }
 
     @ViewBuilder
