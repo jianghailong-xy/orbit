@@ -17,6 +17,7 @@ import {
 } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
+import { PROVIDER_PRESETS } from '../lib/providerPresets';
 
 interface ProviderModelRow {
   value: string;
@@ -68,6 +69,9 @@ export function ProvidersAdminPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminProvider | null>(null);
+  // Selected official template (create only): picking one pre-fills the form below;
+  // every field stays editable afterwards. '' = start from a blank custom provider.
+  const [preset, setPreset] = useState('');
   const [slug, setSlug] = useState('');
   const [label, setLabel] = useState('');
   const [runtime, setRuntime] = useState('claude');
@@ -84,8 +88,23 @@ export function ProvidersAdminPage() {
     void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
   };
 
+  const applyPreset = (slugKey: string) => {
+    setPreset(slugKey);
+    const p = PROVIDER_PRESETS.find((x) => x.slug === slugKey);
+    if (!p) return; // '' = Custom: keep whatever is typed
+    setSlug(p.slug);
+    setLabel(p.label);
+    setRuntime('claude'); // presets are Anthropic-compatible endpoints
+    setBaseUrl(p.baseUrl);
+    setDefaultModel(p.defaultModel);
+    setModels(
+      p.models.map((m) => ({ value: m.value, label: m.label, contextWindow: m.contextWindow ?? null })),
+    );
+  };
+
   const openCreate = () => {
     setEditing(null);
+    setPreset('');
     setSlug('');
     setLabel('');
     setRuntime('claude');
@@ -260,6 +279,23 @@ export function ProvidersAdminPage() {
         destroyOnClose
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          {!editing && (
+            <Field label="Template">
+              <Select
+                value={preset}
+                onChange={applyPreset}
+                style={{ width: '100%' }}
+                options={[
+                  { value: '', label: 'Custom (blank)' },
+                  ...PROVIDER_PRESETS.map((p) => ({ value: p.slug, label: p.label })),
+                ]}
+              />
+              <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+                {PROVIDER_PRESETS.find((p) => p.slug === preset)?.note ??
+                  'Official presets pre-fill the endpoint and models — just add your API key.'}
+              </div>
+            </Field>
+          )}
           <Field label="Slug">
             <Input
               placeholder="e.g. deepseek"
