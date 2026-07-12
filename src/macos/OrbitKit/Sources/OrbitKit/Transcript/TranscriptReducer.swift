@@ -329,23 +329,30 @@ public struct TranscriptReducer: Sendable, Codable {
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
         let atts = attachments(ev.payload["attachments"])
-        // The runner just leased a queued send: drop its placeholder from `state.queued` — this
-        // durable event becomes its real transcript row below, in order (web parity). Matched by the
-        // server `turnId` we tagged onto it, or an echoed `clientTurnId`.
-        state.queued.removeAll { q in
-            (cid != nil && q.clientTurnId == cid) || (ev.turnId != nil && q.turnId == ev.turnId)
-        }
-        // Reconcile a pending optimistic bubble: prefer the server's `clientTurnId` echo (if it
-        // ever sends one), else the server-assigned `turnId` we tagged onto the bubble from the
-        // POST response — the runner echoes `turnId`, not `clientTurnId` (web parity).
-        if let i = state.items.firstIndex(where: {
-            guard case .user(let b) = $0, b.pending else { return false }
+        // Does this durable `user` event echo a still-pending optimistic bubble? Match on the
+        // server `turnId` we tagged onto it (or an echoed `clientTurnId`), falling back to the
+        // message text while the bubble is still untagged. The tag is applied from the POST /turns
+        // response (`setOptimisticTurnId`), but on iOS that response and this SSE event race — they
+        // ride separate connection pools, so the event can land first. A turnId-only match would
+        // then miss and append a duplicate, stranding the original bubble on "Sending…".
+        func echoes(_ b: UserBubble) -> Bool {
             if let cid, b.clientTurnId == cid { return true }
             if let tid = ev.turnId, b.turnId == tid { return true }
-            return false
+            return b.turnId == nil && !body.isEmpty && b.text == body
+        }
+        // The runner just leased a queued send: drop its placeholder from `state.queued` — this
+        // durable event becomes its real transcript row below, in order (web parity).
+        if let qi = state.queued.firstIndex(where: echoes) {
+            state.queued.remove(at: qi)
+        }
+        // Reconcile a pending optimistic (idle) bubble in place rather than appending a duplicate.
+        if let i = state.items.firstIndex(where: {
+            guard case .user(let b) = $0, b.pending else { return false }
+            return echoes(b)
         }) {
             if case .user(var b) = state.items[i] {       // reconcile optimistic bubble
                 b.pending = false
+                if let tid = ev.turnId { b.turnId = tid }    // adopt the id if we matched by text
                 if !body.isEmpty { b.text = body }
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts

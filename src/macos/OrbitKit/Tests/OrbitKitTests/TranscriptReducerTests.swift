@@ -270,6 +270,30 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
     }
 
+    /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
+    /// that assigns the turnId — iOS runs SSE and REST on separate connection pools, so their
+    /// ordering isn't guaranteed. The optimistic bubble is still untagged (turnId nil) when the event
+    /// lands, so a turnId-only match misses; matching on the message text reconciles it in place
+    /// instead of leaving the original stuck on "Sending…" beside a duplicate. A late
+    /// `setOptimisticTurnId` must then be a no-op, not resurrect the duplicate.
+    func testOptimisticUserReconciledByTextWhenTurnIdRacesLate() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c9", text: "先做123条的效果图")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, true)
+
+        // Durable event arrives FIRST — no clientTurnId echo, bubble still turnId nil.
+        r.apply(RunEvent(seq: 10, type: .user, turnId: "turn-77",
+                         payload: .object(["text": .string("先做123条的效果图")])))
+        XCTAssertEqual(r.state.items.count, 1, "must reconcile by text, not duplicate")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, false)
+        XCTAssertEqual(r.state.items[0].asUser?.turnId, "turn-77", "adopts the server turnId")
+
+        // The POST response finally lands and tries to tag the (already reconciled) bubble.
+        r.setOptimisticTurnId(clientTurnId: "c9", turnId: "turn-77")
+        XCTAssertEqual(r.state.items.count, 1, "late tag must not strand a duplicate")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, false)
+    }
+
     /// A message sent while another turn is in flight is held in `state.queued` (rendered after the
     /// transcript, out of the running turn's output) and flagged `queued` so it reads "Queued" not
     /// "Sending…" (web parity). An idle send has no in-flight reply to split, so it goes into `items`.
@@ -313,6 +337,24 @@ final class TranscriptReducerTests: XCTestCase {
                          payload: .object(["text": .string("next task")])))
         XCTAssertTrue(r.state.queued.isEmpty, "leased → removed from the queue")
         XCTAssertEqual(r.state.items.count, 2, "[assistant, user] in order")
+        XCTAssertEqual(r.state.items.last?.asUser?.text, "next task")
+        XCTAssertEqual(r.state.items.last?.asUser?.pending, false)
+    }
+
+    /// The same POST-vs-SSE race on the queued path: a mid-turn send whose turnId tag loses the race
+    /// must still be pulled out of `state.queued` by its durable `user` event (matched on text),
+    /// leaving one correctly-ordered row rather than a stuck "Queued" placeholder plus a duplicate.
+    func testQueuedSendReconciledByTextWhenTurnIdRacesLate() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("on it")])))
+        r.addOptimisticUser(clientTurnId: "c1", text: "next task", queued: true)
+        XCTAssertEqual(r.state.queued.count, 1)
+
+        // Durable event beats the POST response — queued bubble still untagged (turnId nil).
+        r.apply(RunEvent(seq: 2, type: .user, turnId: "t9",
+                         payload: .object(["text": .string("next task")])))
+        XCTAssertTrue(r.state.queued.isEmpty, "leased by text match → removed from the queue")
+        XCTAssertEqual(r.state.items.count, 2, "[assistant, user] — no duplicate")
         XCTAssertEqual(r.state.items.last?.asUser?.text, "next task")
         XCTAssertEqual(r.state.items.last?.asUser?.pending, false)
     }
