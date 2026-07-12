@@ -211,6 +211,64 @@ func uploadsDir(sessionID string) string { return filepath.Join(uploadsRootDir()
 
 func baseRefName(sessionID string) string { return "refs/orbit-base/" + sessionID }
 
+// resolveBaseSha returns the base commit every session diff is computed against, healing a
+// recorded base that has gone wrong two ways:
+//
+//   - DRIFT (not an ancestor of the branch any more): a checkout re-created after GC stamped the
+//     repo's CURRENT HEAD, which had moved past the branch's fork — every diff then counts other
+//     people's commits as this session's deletions.
+//   - SLACK (a real ancestor, but looser than the true fork): the branch was rebased forward
+//     mid-session, so the old fork is still in its history yet the diff now counts the target's
+//     replayed commits as this session's additions.
+//
+// The candidate fork is merge-base(HEAD, branch). A valid recorded base is only tightened TOWARD
+// it (persisted must be an ancestor of the candidate), never loosened — a branch forked off a
+// non-HEAD branch (e.g. develop while the root sits on main) keeps its tighter recorded fork.
+// And it is never tightened all the way TO the branch tip: a fully-merged branch keeps its old
+// fork, so the bar still shows the session's cumulative work and branchMergedInto's ≥1-commit
+// guard keeps reading "✓ In main" (tip==base would read as a session that never worked). The
+// moment new work lands past the merge, the candidate falls behind the tip again and the base
+// snaps to it — diffs then show only the new work. Healed values are re-persisted to the base
+// ref. Best-effort: on any git failure the persisted value is returned unchanged.
+func resolveBaseSha(repoRoot, sessionID, branch, persisted string) string {
+	tip, err := git(repoRoot, "rev-parse", "refs/heads/"+branch)
+	if err != nil || tip == "" {
+		return persisted
+	}
+	mb, err := git(repoRoot, "merge-base", "HEAD", branch)
+	if err != nil || mb == "" {
+		return persisted
+	}
+	valid := false
+	if persisted != "" {
+		if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, branch); err == nil {
+			valid = true
+		}
+	}
+	if valid {
+		if persisted == mb || mb == tip {
+			return persisted
+		}
+		// Tighten a slack fork (rebase moved it forward); keep a fork the candidate can't see
+		// (forked off a non-HEAD branch — persisted is NOT an ancestor of the candidate).
+		if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, mb); err != nil {
+			return persisted
+		}
+	}
+	_, _ = git(repoRoot, "update-ref", baseRefName(sessionID), mb)
+	return mb
+}
+
+// freshenBaseSha re-validates wt.BaseSha before a diff is computed: a branch rebased mid-session
+// leaves the recorded fork outside its history, mis-basing every diff until the next re-attach.
+// One is-ancestor check when healthy; self-healing (and ref-re-persisting) when not.
+func freshenBaseSha(wt *Worktree) {
+	if wt == nil || wt.BaseSha == "" || wt.Branch == "" {
+		return
+	}
+	wt.BaseSha = resolveBaseSha(wt.RepoDir, wt.Session, wt.Branch, wt.BaseSha)
+}
+
 func shortSha(sha string) string {
 	if len(sha) > 8 {
 		return sha[:8]
@@ -262,6 +320,9 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 	// any uncommitted in-flight work intact. Recover BaseSha from the persisted base ref.
 	if isGitRepo(wtPath) {
 		base, _ := git(repoRoot, "rev-parse", baseRefName(job.SessionID))
+		// Heal a drifted/missing base ref (see resolveBaseSha) so a reclaim never resumes
+		// with a fork point that isn't actually in the branch's history.
+		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, base)
 		job.WT = &Worktree{Path: wtPath, Branch: job.Branch, BaseSha: base, RepoDir: repoRoot, Session: job.SessionID}
 		job.IsolationStatus = isoWorktree
 		logln(fmt.Sprintf("session %s — re-attached worktree %s (branch %s)", job.SessionID, wtPath, job.Branch))
@@ -277,10 +338,15 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 	}
 	// Record the fork point as a ref so it survives a runner restart (the in-memory
 	// BaseSha would be lost on reclaim), then create the worktree on the session's branch.
-	_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
 	if branchExists(repoRoot, job.Branch) {
+		// Re-creating a checkout for a branch that already exists (GC'd after a park, revived
+		// later): the repo HEAD has moved past the branch's fork by now, so stamping it as the
+		// base mis-bases every diff (other people's commits read as this session's deletions).
+		// The true fork point is the merge-base with the branch; resolveBaseSha persists it.
+		base = resolveBaseSha(repoRoot, job.SessionID, job.Branch, "")
 		_, err = git(repoRoot, "worktree", "add", wtPath, job.Branch)
 	} else {
+		_, _ = git(repoRoot, "update-ref", baseRefName(job.SessionID), base)
 		_, err = git(repoRoot, "worktree", "add", "-b", job.Branch, wtPath, base)
 	}
 	if err != nil {
@@ -338,6 +404,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			logln("worktree commit failed for", wt.Session+":", err)
 		}
 	}
+	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
+	freshenBaseSha(wt)
 	if wt.BaseSha == "" {
 		return nil, nil
 	}
@@ -407,6 +475,8 @@ func liveDiffStat(wt *Worktree) []ChangedFile {
 // using, and .gitignore is respected so node_modules/build output don't show. The index is
 // pre-seeded from base (read-tree) so a tracked-but-ignored file isn't misreported as deleted.
 func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
+	// A mid-session rebase moved the fork point — heal before basing the live diff on it.
+	freshenBaseSha(wt)
 	if wt == nil || wt.BaseSha == "" {
 		return nil, nil
 	}

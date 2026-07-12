@@ -655,3 +655,91 @@ func mustWrite(t *testing.T, repo, name string) {
 		t.Fatal(err)
 	}
 }
+
+// TestResolveBaseSha: the base-ref healer behind every session diff. A recorded base is kept
+// only while it is a real ancestor of the branch; a drifted one (a re-created checkout stamped
+// with a repo HEAD that had moved on) or a missing one heals to the true fork point
+// (merge-base) and is re-persisted, so diffs stop counting other people's commits.
+func TestResolveBaseSha(t *testing.T) {
+	repo := initRepo(t)
+	fork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "main.txt", "main\n", "main advance") // HEAD moves past the fork
+
+	// A persisted base that IS an ancestor of the branch is kept verbatim.
+	if got := resolveBaseSha(repo, "s1", "orbit/feat", fork); got != fork {
+		t.Errorf("valid ancestor base must be kept, got %s want %s", got, fork)
+	}
+	// A drifted base (the moved repo HEAD — not in the branch's history) heals to the fork.
+	head := mustGit(t, repo, "rev-parse", "HEAD")
+	if got := resolveBaseSha(repo, "s1", "orbit/feat", head); got != fork {
+		t.Errorf("drifted base must heal to the fork point, got %s want %s", got, fork)
+	}
+	if ref := mustGit(t, repo, "rev-parse", baseRefName("s1")); ref != fork {
+		t.Errorf("healed base must be re-persisted to the ref, got %s want %s", ref, fork)
+	}
+	// A missing base resolves straight to the fork.
+	if got := resolveBaseSha(repo, "s2", "orbit/feat", ""); got != fork {
+		t.Errorf("missing base must resolve to the fork point, got %s want %s", got, fork)
+	}
+}
+
+// A branch forked off a NON-HEAD branch (develop, while the root checkout sits on main) records
+// a fork the merge-base-with-HEAD candidate can't see; its tighter recorded base must be kept,
+// not loosened to the main/develop split point (which would count develop's commits as session
+// work). And a fully-merged branch (tip == candidate) keeps its old fork, so the bar still shows
+// the session's cumulative work and the ≥1-commit "✓ In main" guard keeps holding.
+func TestResolveBaseShaKeepsTighterAndMergedForks(t *testing.T) {
+	repo := initRepo(t)
+	mustGit(t, repo, "checkout", "-b", "develop")
+	commitFile(t, repo, "dev.txt", "dev\n", "develop advance")
+	devFork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat") // forks from develop
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main") // root sits on main; split point is behind devFork
+	if got := resolveBaseSha(repo, "s4", "orbit/feat", devFork); got != devFork {
+		t.Errorf("a tighter non-HEAD fork must be kept, got %s want %s", got, devFork)
+	}
+
+	// Fully merged: tip == merge-base(HEAD, branch) → the old fork is kept verbatim.
+	repo2 := initRepo(t)
+	fork2 := mustGit(t, repo2, "rev-parse", "HEAD")
+	mustGit(t, repo2, "checkout", "-b", "orbit/done")
+	commitFile(t, repo2, "done.txt", "done\n", "done work")
+	mustGit(t, repo2, "checkout", "main")
+	mustGit(t, repo2, "merge", "--ff-only", "orbit/done")
+	if got := resolveBaseSha(repo2, "s5", "orbit/done", fork2); got != fork2 {
+		t.Errorf("a fully-merged branch must keep its old fork, got %s want %s", got, fork2)
+	}
+}
+
+// TestFreshenBaseShaAfterRebase: a branch rebased mid-session leaves the recorded fork outside
+// its history — the live/final diffs must re-base onto the NEW fork instead of counting the
+// target's commits as session work (the "+3170 −532 phantom diff" symptom).
+func TestFreshenBaseShaAfterRebase(t *testing.T) {
+	repo := initRepo(t)
+	oldFork := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "main.txt", "main\n", "main advance")
+	mustGit(t, repo, "checkout", "orbit/feat")
+	mustGit(t, repo, "rebase", "main")
+	newFork := mustGit(t, repo, "rev-parse", "main")
+	// The root checkout sits on main in real deployments (the branch lives in a separate
+	// worktree); the candidate fork is computed against the ROOT's HEAD, not the branch.
+	mustGit(t, repo, "checkout", "main")
+
+	wt := &Worktree{Path: repo, Branch: "orbit/feat", BaseSha: oldFork, RepoDir: repo, Session: "s3"}
+	freshenBaseSha(wt)
+	if wt.BaseSha != newFork {
+		t.Errorf("rebased branch must re-base onto the new fork, got %s want %s", wt.BaseSha, newFork)
+	}
+	// And a still-valid base is left untouched (single is-ancestor check, no ref churn).
+	freshenBaseSha(wt)
+	if wt.BaseSha != newFork {
+		t.Errorf("healthy base must be stable, got %s", wt.BaseSha)
+	}
+}
