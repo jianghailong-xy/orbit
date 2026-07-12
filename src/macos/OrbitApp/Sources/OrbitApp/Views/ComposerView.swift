@@ -239,13 +239,13 @@ struct ComposerView: View {
                 }
                 .footerMenuChrome()
 
-                if let ctx = console.state.contextTokens, ctx > 0 {
-                    ContextWindowIndicator(tokens: ctx, model: console.modelID, modelCatalog: console.modelCatalog)
-                }
-
                 if let usage = console.planUsage {
                     PlanUsageIndicator(usage: usage)
                 }
+
+                // Context stays visible even before the first turn reports tokens — a New Session
+                // reads 0%. Rightmost pill, to the right of plan usage.
+                ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID, modelCatalog: console.modelCatalog)
             }
             // Footer pickers are tappable controls, not metadata — list-subtitle size on iOS (15pt)
             // for comfortable targets; macOS keeps the dense web-parity caption.

@@ -233,7 +233,7 @@ const fmtTokens = (n: number): string =>
 
 // The latest turn's context-window occupancy (tokens), read from the newest `turn_end` in
 // the loaded events. 0 = the newest turn carries no usable value (older runner, or no turn
-// completed) → the gauge is hidden. Derived from `events` — which holds the boot tail page
+// completed) → the gauge reads 0% (as on a new session). Derived from `events` — which holds the boot tail page
 // (so it's right on cold open) plus live appends — rather than a separate live signal.
 function lastContextTokens(events: RunEvent[]): number {
   for (let i = events.length - 1; i >= 0; i--) {
@@ -3392,10 +3392,10 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          {contextTokens > 0 && (
-            <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} />
-          )}
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
+          {/* Context stays visible even before the first turn reports tokens — a New Session reads
+              0%. Rightmost pill, to the right of plan usage. */}
+          <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} />
         </div>
       </div>
       </div>
