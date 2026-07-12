@@ -11,7 +11,7 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
-import { ProvidersAdminPage } from './pages/ProvidersAdminPage';
+import { ProvidersPage } from './pages/ProvidersPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -119,14 +119,17 @@ export function App() {
                 </DocView>
               }
             />
+            {/* Providers is for everyone (each user's own BYOK list; admins also manage the
+                shared ones there). Keep the old admin-only path as a redirect. */}
             <Route
-              path="admin/providers"
+              path="providers"
               element={
                 <DocView>
-                  <ProvidersAdminPage />
+                  <ProvidersPage />
                 </DocView>
               }
             />
+            <Route path="admin/providers" element={<Navigate to="/providers" replace />} />
             <Route
               path="runners"
               element={

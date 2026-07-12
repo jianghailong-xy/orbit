@@ -138,10 +138,14 @@ export class QueueService {
     const declared = session.provider ?? agent?.provider ?? null;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // provider (claude|codex), the model, and the process env (baseUrl + decrypted key injected)
-    // here, so the runner receives a plain claude/codex job and needs no changes.
+    // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
+    // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
+    // user could burn another tenant's key by naming their slug.
     const customRow = isBuiltinProvider(declared)
       ? null
-      : await this.prisma.modelProvider.findUnique({ where: { slug: declared! } });
+      : await this.prisma.modelProvider.findFirst({
+          where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        });
     const exec = resolveProviderExec({
       declaredProvider: declared,
       customRow,

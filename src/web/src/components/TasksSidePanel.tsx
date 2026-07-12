@@ -44,6 +44,9 @@ import { useThemeMode, type ThemeMode } from '../lib/theme';
 // group further down.
 const TOP = [
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
+  // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
+  // manage the shared ones on the same page.
+  { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -122,14 +125,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
-  // Admins get extra top-nav entries: user management and the model-provider catalog.
+  // Admins get an extra top-nav entry: user management.
   const navItems =
     me.data?.role === 'ADMIN'
-      ? [
-          ...TOP,
-          { key: 'admin', icon: <TeamOutlined />, label: 'Admin' },
-          { key: 'admin/providers', icon: <ApiOutlined />, label: 'Providers' },
-        ]
+      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
       : TOP;
   // A small drag threshold so a plain click still opens an agent; only real movement
   // starts a reorder drag.

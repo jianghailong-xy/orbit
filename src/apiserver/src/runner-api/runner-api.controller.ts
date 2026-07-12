@@ -354,10 +354,13 @@ export class RunnerApiController {
       const agent = s.agent;
       const declared = s.provider ?? agent?.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
-      // and injected env so a resumed session keeps talking to the configured endpoint.
+      // and injected env so a resumed session keeps talking to the configured endpoint. Owner
+      // scope mirrors the claim path: a personal provider resolves only for its owner's sessions.
       const customRow = isBuiltinProvider(declared)
         ? null
-        : await this.prisma.modelProvider.findUnique({ where: { slug: declared! } });
+        : await this.prisma.modelProvider.findFirst({
+            where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: s.ownerId }] },
+          });
       const exec = resolveProviderExec({
         declaredProvider: declared,
         customRow,

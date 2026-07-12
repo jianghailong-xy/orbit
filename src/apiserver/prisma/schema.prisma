@@ -78,6 +78,7 @@ model User {
   taskLists        TaskList[] // task lists this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
+  modelProviders   ModelProvider[] // personal (BYOK) model providers
 
   @@map("user")
 }
@@ -716,8 +717,14 @@ model ModelProvider {
   enabled      Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position     Int?
+  // NULL = a shared provider (admin-managed, visible to everyone). Set = a personal (BYOK)
+  // provider: visible in, and dispatchable for, only its owner's sessions. Slugs stay globally
+  // unique either way, so dispatch-by-slug is never ambiguous.
+  ownerId      String?  @map("owner_id") @db.Uuid
+  owner        User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  @@index([ownerId])
   @@map("model_provider")
 }
