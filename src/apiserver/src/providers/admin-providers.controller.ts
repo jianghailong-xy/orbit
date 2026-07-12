@@ -5,9 +5,9 @@ import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { ProvidersService } from './providers.service';
 
 /**
- * Admin-only management of control-plane model providers (the endpoint + encrypted key that
- * "usage is not access-controlled" providers borrow). Gated like the user-management area:
- * JwtAuthGuard sets the user, AdminRoleGuard checks the role per request.
+ * Admin-only management of the SHARED model providers (ownerId null — visible to every
+ * user's pickers). Personal (BYOK) providers are each user's own, managed via
+ * /providers/mine; they never appear here. Gated like the user-management area.
  */
 @UseGuards(JwtAuthGuard, AdminRoleGuard)
 @Controller('admin/providers')
@@ -16,21 +16,21 @@ export class AdminProvidersController {
 
   @Get()
   list() {
-    return this.providers.listAdmin();
+    return this.providers.listShared();
   }
 
   @Post()
   create(@Body() dto: CreateModelProviderDto) {
-    return this.providers.create(dto);
+    return this.providers.create(null, dto);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateModelProviderDto) {
-    return this.providers.update(id, dto);
+    return this.providers.update(null, id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.providers.remove(id);
+    return this.providers.remove(null, id);
   }
 }

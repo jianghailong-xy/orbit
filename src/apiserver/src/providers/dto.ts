@@ -1,8 +1,9 @@
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
-// Phase 1 supports the claude runtime (Anthropic-compatible endpoints); codex is reserved
-// for Phase 2. Kept a plain allow-list so a new runtime is a one-line change.
-const RUNTIMES = ['claude', 'codex'];
+// Only the claude runtime (Anthropic-compatible endpoints) works today: codex ignores
+// OPENAI_BASE_URL-style env and needs config.toml / `-c` overrides on the runner, so the
+// codex runtime stays rejected here until that runner support lands. One-line to extend.
+const RUNTIMES = ['claude'];
 
 export class CreateModelProviderDto {
   @IsString() @MinLength(1) slug!: string;

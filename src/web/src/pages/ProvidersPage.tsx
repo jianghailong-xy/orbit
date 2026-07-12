@@ -16,7 +16,7 @@ import {
   type TableColumnsType,
 } from 'antd';
 import { api } from '../api';
-import { providersQuery } from '../lib/queries';
+import { meQuery, providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS } from '../lib/providerPresets';
 
 interface ProviderModelRow {
@@ -25,9 +25,9 @@ interface ProviderModelRow {
   contextWindow?: number;
 }
 
-// Admin view of a configured provider (GET /admin/providers): every field except the encrypted
-// key, which is surfaced only as `hasApiKey`.
-interface AdminProvider {
+// A provider row as the management APIs return it (mine or shared): every field except the
+// encrypted key, which is surfaced only as `hasApiKey`.
+interface ProviderRow {
   id: string;
   slug: string;
   label: string;
@@ -36,17 +36,8 @@ interface AdminProvider {
   models: ProviderModelRow[];
   defaultModel: string | null;
   enabled: boolean;
-  position: number | null;
-  createdAt: string;
-  updatedAt: string;
   hasApiKey: boolean;
 }
-
-// Phase 1 ships the claude runtime (Anthropic-compatible endpoints); codex is Phase 2.
-const RUNTIME_OPTIONS = [
-  { value: 'claude', label: 'claude (Anthropic-compatible endpoint)' },
-  { value: 'codex', label: 'codex' },
-];
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
 // blank) rather than the wire's optional number, so an empty cell round-trips cleanly.
@@ -56,35 +47,67 @@ interface DraftModel {
   contextWindow: number | null;
 }
 
-// Admin-only management of control-plane model providers: a custom identity (slug/label) that
-// borrows a built-in runtime and carries its own model list. Mirrors AdminUsersPage's shape —
-// a Table with an "Add provider" button and a controlled Modal form for create/edit.
-export function ProvidersAdminPage() {
+/**
+ * Model providers: "My providers" is every user's personal (BYOK) list — their own API key,
+ * visible only to them (/providers/mine). Admins additionally manage the shared providers
+ * every user sees (/admin/providers). Both sections share one table + form (ProviderSection);
+ * only the endpoints and copy differ.
+ */
+export function ProvidersPage() {
+  const me = useQuery(meQuery());
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <h1 className="page-title">Providers</h1>
+      <ProviderSection
+        title="My providers"
+        hint="Personal providers use your own API key and are visible only to you."
+        listKey={['providers', 'mine']}
+        basePath="/providers/mine"
+      />
+      {me.data?.role === 'ADMIN' && (
+        <ProviderSection
+          title="Shared providers"
+          hint="Available to every user on this deployment. Admin only."
+          listKey={['admin', 'providers']}
+          basePath="/admin/providers"
+        />
+      )}
+    </div>
+  );
+}
+
+function ProviderSection({
+  title,
+  hint,
+  listKey,
+  basePath,
+}: {
+  title: string;
+  hint: string;
+  listKey: string[];
+  basePath: string;
+}) {
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
-  const providers = useQuery({
-    queryKey: ['admin', 'providers'],
-    queryFn: () => api<AdminProvider[]>('/admin/providers'),
-  });
+  const providers = useQuery({ queryKey: listKey, queryFn: () => api<ProviderRow[]>(basePath) });
 
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<AdminProvider | null>(null);
+  const [editing, setEditing] = useState<ProviderRow | null>(null);
   // Selected official template (create only): picking one pre-fills the form below;
   // every field stays editable afterwards. '' = start from a blank custom provider.
   const [preset, setPreset] = useState('');
   const [slug, setSlug] = useState('');
   const [label, setLabel] = useState('');
-  const [runtime, setRuntime] = useState('claude');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [models, setModels] = useState<DraftModel[]>([]);
 
-  // Both list queries the pickers read must refresh: the admin table here and the de-sensitized
-  // ['providers'] catalog the composer/runner forms merge into their dropdowns.
+  // Both this section's list and the de-sensitized ['providers'] catalog the pickers read
+  // must refresh on any change.
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['admin', 'providers'] });
+    void qc.invalidateQueries({ queryKey: listKey });
     void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
   };
 
@@ -94,7 +117,6 @@ export function ProvidersAdminPage() {
     if (!p) return; // '' = Custom: keep whatever is typed
     setSlug(p.slug);
     setLabel(p.label);
-    setRuntime('claude'); // presets are Anthropic-compatible endpoints
     setBaseUrl(p.baseUrl);
     setDefaultModel(p.defaultModel);
     setModels(
@@ -107,7 +129,6 @@ export function ProvidersAdminPage() {
     setPreset('');
     setSlug('');
     setLabel('');
-    setRuntime('claude');
     setBaseUrl('');
     setApiKey('');
     setDefaultModel('');
@@ -115,11 +136,10 @@ export function ProvidersAdminPage() {
     setModels([]);
     setOpen(true);
   };
-  const openEdit = (p: AdminProvider) => {
+  const openEdit = (p: ProviderRow) => {
     setEditing(p);
     setSlug(p.slug);
     setLabel(p.label);
-    setRuntime(p.runtime || 'claude');
     setBaseUrl(p.baseUrl);
     setApiKey(''); // never round-trips the stored key; blank keeps it
     setDefaultModel(p.defaultModel ?? '');
@@ -146,26 +166,24 @@ export function ProvidersAdminPage() {
         }));
       const dm = defaultModel.trim() || undefined;
       if (editing) {
-        return api(`/admin/providers/${editing.id}`, {
+        return api(`${basePath}/${editing.id}`, {
           method: 'PATCH',
           body: {
             label: label.trim(),
-            runtime,
             baseUrl: baseUrl.trim(),
             models: modelPayload,
             defaultModel: dm,
             enabled,
-            // Omit the key to keep the stored one; send it only when the admin typed a new one.
+            // Omit the key to keep the stored one; send it only when a new one was typed.
             ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           },
         });
       }
-      return api('/admin/providers', {
+      return api(basePath, {
         method: 'POST',
         body: {
           slug: slug.trim().toLowerCase(),
           label: label.trim(),
-          runtime,
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim(),
           models: modelPayload,
@@ -184,7 +202,7 @@ export function ProvidersAdminPage() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => api(`/admin/providers/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api(`${basePath}/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       invalidate();
       message.success('Provider deleted');
@@ -198,7 +216,7 @@ export function ProvidersAdminPage() {
     baseUrl.trim() !== '' &&
     (editing ? true : slug.trim() !== '' && apiKey.trim() !== '');
 
-  const columns: TableColumnsType<AdminProvider> = [
+  const columns: TableColumnsType<ProviderRow> = [
     {
       title: 'Provider',
       key: 'provider',
@@ -209,7 +227,6 @@ export function ProvidersAdminPage() {
         </div>
       ),
     },
-    { title: 'Runtime', dataIndex: 'runtime', key: 'runtime', render: (r: string) => <Tag>{r}</Tag> },
     {
       title: 'Models',
       key: 'models',
@@ -251,9 +268,12 @@ export function ProvidersAdminPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ marginBottom: 32 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 className="page-title">Providers</h1>
+        <div>
+          <h2 style={{ marginBottom: 0 }}>{title}</h2>
+          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{hint}</div>
+        </div>
         <Button type="primary" onClick={openCreate}>
           Add provider
         </Button>
@@ -261,6 +281,7 @@ export function ProvidersAdminPage() {
 
       <Table
         rowKey="id"
+        style={{ marginTop: 12 }}
         loading={providers.isLoading}
         dataSource={providers.data ?? []}
         columns={columns}
@@ -292,7 +313,7 @@ export function ProvidersAdminPage() {
               />
               <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
                 {PROVIDER_PRESETS.find((p) => p.slug === preset)?.note ??
-                  'Official presets pre-fill the endpoint and models — just add your API key.'}
+                  'Official presets pre-fill an Anthropic-compatible endpoint and models — just add your API key.'}
               </div>
             </Field>
           )}
@@ -315,23 +336,15 @@ export function ProvidersAdminPage() {
               onChange={(e) => setLabel(e.target.value)}
             />
           </Field>
-          <Field label="Runtime">
-            <Select
-              value={runtime}
-              onChange={setRuntime}
-              options={RUNTIME_OPTIONS}
-              style={{ width: '100%' }}
-            />
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-              claude runtime = Anthropic-compatible endpoint.
-            </div>
-          </Field>
           <Field label="Base URL">
             <Input
-              placeholder="https://api.example.com"
+              placeholder="https://api.example.com/anthropic"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
+            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+              An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).
+            </div>
           </Field>
           <Field label="API key">
             <Input.Password

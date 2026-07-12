@@ -12,24 +12,37 @@ const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 export class ProvidersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** De-sensitized list for pickers (no key, no baseUrl). Enabled only. All users. */
-  listPublic() {
+  /** De-sensitized picker catalog (no key, no baseUrl): the shared providers plus the
+   *  caller's own personal ones. Enabled only. */
+  listPublic(userId: string) {
     return this.prisma.modelProvider.findMany({
-      where: { enabled: true },
+      where: { enabled: true, OR: [{ ownerId: null }, { ownerId: userId }] },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: { slug: true, label: true, runtime: true, models: true, defaultModel: true },
     });
   }
 
-  /** Admin list: every field except the encrypted key (surfaced as a hasApiKey flag). */
-  async listAdmin() {
+  /** Admin management list: the SHARED (ownerId null) providers only — never another
+   *  user's personal rows. Every field except the encrypted key (→ hasApiKey). */
+  async listShared() {
     const rows = await this.prisma.modelProvider.findMany({
+      where: { ownerId: null },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
   }
 
-  async create(dto: CreateModelProviderDto) {
+  /** The caller's personal (BYOK) providers, disabled ones included. */
+  async listMine(ownerId: string) {
+    const rows = await this.prisma.modelProvider.findMany({
+      where: { ownerId },
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+    });
+    return rows.map((r) => this.desensitize(r));
+  }
+
+  /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */
+  async create(ownerId: string | null, dto: CreateModelProviderDto) {
     const slug = dto.slug.trim().toLowerCase();
     this.assertSlug(slug);
     try {
@@ -43,6 +56,7 @@ export class ProvidersService {
           models: (dto.models ?? []) as Prisma.InputJsonValue,
           defaultModel: dto.defaultModel ?? dto.models?.[0]?.value ?? null,
           enabled: dto.enabled ?? true,
+          ownerId,
         },
       });
       return this.desensitize(row);
@@ -54,8 +68,10 @@ export class ProvidersService {
     }
   }
 
-  async update(id: string, dto: UpdateModelProviderDto) {
-    await this.getOrThrow(id);
+  /** Update a provider within one ownership scope: admins pass null (shared rows),
+   *  users pass their id (their personal rows). Cross-scope ids read as not-found. */
+  async update(ownerId: string | null, id: string, dto: UpdateModelProviderDto) {
+    await this.getScoped(ownerId, id);
     const data: Prisma.ModelProviderUpdateInput = {
       label: dto.label,
       runtime: dto.runtime,
@@ -70,14 +86,14 @@ export class ProvidersService {
     return this.desensitize(row);
   }
 
-  async remove(id: string) {
-    await this.getOrThrow(id);
+  async remove(ownerId: string | null, id: string) {
+    await this.getScoped(ownerId, id);
     await this.prisma.modelProvider.delete({ where: { id } });
     return { ok: true };
   }
 
-  private async getOrThrow(id: string) {
-    const row = await this.prisma.modelProvider.findUnique({ where: { id } });
+  private async getScoped(ownerId: string | null, id: string) {
+    const row = await this.prisma.modelProvider.findFirst({ where: { id, ownerId } });
     if (!row) throw new NotFoundException('provider not found');
     return row;
   }
