@@ -153,7 +153,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 
-  const [agentsOpen, setAgentsOpen] = useState(true);
   const [listOpen, setListOpen] = useState(true);
   const [completedOpen, setCompletedOpen] = useState(false);
   // Which runner groups are expanded. With more than one runner they default to collapsed (like the
@@ -474,13 +473,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         <div className="tp-divider" />
 
         <div className="tp-group">
-          <div className="tp-group-head" onClick={() => setAgentsOpen((o) => !o)}>
-            <span className="tp-group-name">Agents</span>
-            {orderedAgents.length > 0 && <span className="tp-count">{orderedAgents.length}</span>}
-            <CaretDownOutlined className={`tp-caret ${agentsOpen ? '' : 'collapsed'}`} />
-          </div>
-          {agentsOpen &&
-            agentGroups.map((group) => {
+          {agentGroups.map((group) => {
               const expanded = isRunnerExpanded(group);
               // Host agents read as "Shared"; a real runner uses its display name, falling back to
               // the name embedded in the agent payload until the ['runners'] cache lands.
