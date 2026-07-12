@@ -45,7 +45,7 @@ final class SessionTimeGroupingTests: XCTestCase {
 
     func testPinnedLiftedToLeadingSectionRegardlessOfDate() {
         let s = [
-            session("pin-old", pinnedAt: "2026-01-01T00:00:00Z", lastTurnAt: "2026-05-01T00:00:00Z"),
+            session("pin-old", lastTurnAt: "2026-05-01T00:00:00Z", pinnedAt: "2026-01-01T00:00:00Z"),
             session("today", lastTurnAt: "2026-07-08T09:00:00Z"),
         ]
         let out = sections(s)
@@ -56,7 +56,7 @@ final class SessionTimeGroupingTests: XCTestCase {
     func testPinnedFirstDisabledBucketsPinnedByTime() {
         // Completed/System views (pinnedFirst: false): a stale pinnedAt must NOT spawn a "Pinned"
         // section — the session just buckets by its time like any other.
-        let s = [session("pin", pinnedAt: "2026-01-01T00:00:00Z", lastTurnAt: "2026-07-08T09:00:00Z")]
+        let s = [session("pin", lastTurnAt: "2026-07-08T09:00:00Z", pinnedAt: "2026-01-01T00:00:00Z")]
         let out = SessionTimeGrouping.sections(s, pinnedFirst: false, now: date(now), calendar: utc)
         XCTAssertEqual(out.map(\.title), ["Today"])
     }
