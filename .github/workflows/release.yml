@@ -56,6 +56,12 @@ jobs:
         run: swift --version && xcodebuild -version
       - name: Install create-dmg
         run: brew install create-dmg
+      # build-dmg.sh compiles the `orbit` runner from source and freezes it into the .app (its
+      # self-update is disabled, so the bundled version must match the app), which needs Go.
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
 
       # Rebuild the Developer ID identity into a throwaway keychain so codesign can find it.
       - name: Import Developer ID certificate

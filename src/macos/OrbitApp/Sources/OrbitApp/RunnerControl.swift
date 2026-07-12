@@ -121,6 +121,22 @@ final class RunnerControl {
         }
     }
 
+    /// Frozen-runner upkeep. The LaunchAgent disables the runner's network self-update
+    /// (ORBIT_NO_SELFUPDATE), so its version tracks the app, not the control plane. Sparkle replaces
+    /// the `.app` but not the already-installed `~/.orbit/bin/orbit`, so on launch we compare the
+    /// bundled runner's version against the installed copy and, when the app carries a different one
+    /// (i.e. it was just updated), re-copy the binary + reload the service via `installService()`.
+    /// No-op until this Mac has enrolled (no service installed) or when the versions already match —
+    /// so a normal launch costs two quick `version` probes and nothing else.
+    func syncBundledRunner() async {
+        guard serviceInstalled, let src = bundledRunnerURL else { return }
+        guard let bundledVer = await Self.runnerVersion(at: src) else { return }
+        let installedVer = await Self.runnerVersion(at: paths.binFile)
+        guard installedVer != bundledVer else { return }
+        await installService()   // re-copies the bundled binary, rewrites the plist, reloads launchd
+        if status.running { message = "Runner updated to \(bundledVer) with the app." }
+    }
+
     /// One-app enrollment: start the device flow, self-approve (we're the signed-in user), poll
     /// for the credential, write config.json, then install + start the bundled runner service —
     /// the whole "set up a runner on this Mac" with no Terminal.
@@ -181,6 +197,25 @@ final class RunnerControl {
             do { try process.run() } catch { return nil }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
+            let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (s?.isEmpty ?? true) ? nil : s
+        }.value
+    }
+
+    /// `<binary> version` → the runner's baked version string (e.g. "0.1.52"), or nil if it can't
+    /// be run. Lets `syncBundledRunner` tell whether the installed runner matches this .app's copy.
+    nonisolated private static func runnerVersion(at url: URL) async -> String? {
+        await Task.detached {
+            let process = Process()
+            process.executableURL = url
+            process.arguments = ["version"]
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = Pipe()
+            do { try process.run() } catch { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
             let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (s?.isEmpty ?? true) ? nil : s
         }.value

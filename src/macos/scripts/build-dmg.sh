@@ -31,27 +31,31 @@ cp "$bin" "$app/Contents/MacOS/$APP_NAME"
 iconset="$out/AppIcon.iconset"; rm -rf "$iconset"; mkdir -p "$iconset"
 cp "$here/../Assets.xcassets/AppIcon.appiconset/"icon_*.png "$iconset/"
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
-echo "▶ bundle orbit runner binary"
+echo "▶ build orbit runner binary from source (frozen into the app)"
 # The macOS app installs + runs a local runner with no Terminal: "Enroll this Mac" copies this
-# bundled `orbit` binary to ~/.orbit/bin and loads the LaunchAgent. It self-updates from /dl after
-# first launch, so the bundled copy is only a seed. SKIP_RUNNER_BUNDLE=1 skips it (offline local
-# builds) — the in-app installer then reports the binary missing.
+# bundled `orbit` binary to ~/.orbit/bin and loads the LaunchAgent. The runner's network self-update
+# is disabled (ORBIT_NO_SELFUPDATE in the plist), so its version tracks the app: we build it here
+# from the same source tree at the same $VERSION, and the app re-syncs ~/.orbit/bin on launch. This
+# is why we build (not download /dl): the bundled copy is an exact, version-matched build rather than
+# whatever the control plane currently serves, so a fresh install needs no second download.
+# SKIP_RUNNER_BUNDLE=1 skips it (fast offline builds without the Go toolchain) — the in-app installer
+# then reports the binary missing.
 runner_out="$app/Contents/Resources/orbit"
 if [ -n "${SKIP_RUNNER_BUNDLE:-}" ]; then
   echo "  (skipped: SKIP_RUNNER_BUNDLE set)"
 else
-  DL_BASE="${ORBIT_DL_BASE:-https://orbit.wikova.com}"
+  runner_src="$here/../../runner-go"
   runner_parts=""
   for a in $ARCHS; do
     case "$a" in
-      arm64)            rkey="darwin-arm64" ;;
-      x86_64|x64|amd64) rkey="darwin-x64" ;;
+      arm64)            goarch="arm64" ;;
+      x86_64|x64|amd64) goarch="amd64" ;;
       *) echo "✗ unsupported runner arch: $a" >&2; exit 1 ;;
     esac
-    part="$out/orbit-$rkey"
-    echo "  ↓ $DL_BASE/dl/orbit-$rkey.gz"
-    curl -fSL "$DL_BASE/dl/orbit-$rkey.gz" -o "$part.gz"
-    gzip -df "$part.gz"
+    part="$out/orbit-darwin-$goarch"
+    echo "  ⚒ go build darwin/$goarch v$VERSION"
+    ( cd "$runner_src" && CGO_ENABLED=0 GOOS=darwin GOARCH="$goarch" \
+      go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$part" . )
     runner_parts="$runner_parts $part"
   done
   if [ "$(echo $ARCHS | wc -w)" -gt 1 ]; then

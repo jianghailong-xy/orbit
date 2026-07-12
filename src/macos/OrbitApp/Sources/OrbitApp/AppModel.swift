@@ -254,6 +254,11 @@ final class AppModel {
     func bootstrap() {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
+        #if os(macOS)
+        // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
+        // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
+        Task { await runnerControl?.syncBundledRunner() }
+        #endif
     }
 
     /// Keep the Active list fresh. The control-plane stream (below) is the primary source: while

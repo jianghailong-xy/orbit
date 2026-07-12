@@ -142,10 +142,13 @@ public enum Launchctl {
     public static func printService(uid: Int) -> [String] { ["print", "gui/\(uid)/\(label)"] }
 }
 
-/// Builds the runner's LaunchAgent plist. Mirrors `orbit register`'s `installLaunchd` (runner-go):
+/// Builds the runner's LaunchAgent plist. Like `orbit register`'s `installLaunchd` (runner-go) it
 /// runs `<orbit> run` with ORBIT_HOME/HOME/PATH baked in (launchd starts agents with a minimal
 /// PATH and no HOME, so the `claude` CLI the runner shells out to wouldn't otherwise be found),
-/// RunAtLoad + KeepAlive, logging to runner.log. Pure string → unit-tested.
+/// RunAtLoad + KeepAlive, logging to runner.log. Unlike the CLI's, it also sets ORBIT_NO_SELFUPDATE:
+/// the app bundles the runner and re-syncs `~/.orbit/bin` on launch (RunnerControl.syncBundledRunner),
+/// so the runner's version tracks the app instead of pulling a separate network self-update from the
+/// control plane. Pure string → unit-tested.
 public enum LaunchdPlist {
     public static func make(label: String, programPath: String, orbitHome: String,
                             home: String, path: String, logPath: String) -> String {
@@ -165,6 +168,7 @@ public enum LaunchdPlist {
             <key>ORBIT_HOME</key><string>\(orbitHome)</string>
             <key>HOME</key><string>\(home)</string>
             <key>PATH</key><string>\(path)</string>
+            <key>ORBIT_NO_SELFUPDATE</key><string>1</string>
           </dict>
           <key>RunAtLoad</key><true/>
           <key>KeepAlive</key><true/>
