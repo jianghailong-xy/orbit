@@ -8,9 +8,10 @@ import OrbitKit
 ///   • the leading hamburger in each section's root nav bar (discoverable), and
 ///   • an edge-swipe from the left (fast + one-handed), enabled only at a section's root so it never
 ///     fights the system back-swipe on a pushed page.
-/// The drawer pushes the content to the right with a dimming scrim, a soft edge shadow, and rounded
-/// leading corners (so the content reads as a card floating above the drawer); tapping the scrim or
-/// swiping left closes it. The current section is highlighted.
+/// The drawer pushes the content to the right as a large-radius card casting a soft shadow onto the
+/// drawer (ChatGPT-style: the content stays fully bright and the depth comes from the shadow alone,
+/// with the drawer surface one level below the card's); tapping the exposed content or swiping left
+/// closes it. The current section is highlighted.
 ///
 /// Under the hood the drawer just drives `selectedSection`, and `CompactSections` renders that one
 /// section's navigation stack. Every existing `List(selection:)` sidebar + detail pair from the iPad
@@ -32,13 +33,16 @@ struct CompactShell: View {
             // grow in with the peek.
             let progress = dw > 0 ? x / dw : 0
             // Leading-edge corner radius: 0 when closed (the mask is then a plain full-screen rect, so
-            // the normal layout is untouched) → ~14 fully open, rounding the content into a floating card.
-            let corner = 14 * progress
+            // the normal layout is untouched) → ~36 fully open — the large ChatGPT-style radius that
+            // makes the content read as a card lifted off the drawer rather than a nicked screen edge.
+            let corner = 36 * progress
 
             ZStack(alignment: .leading) {
                 // A consistent app-background base under the fixed sidebar and the sliding card, so the
                 // reveal reads in light and dark rather than exposing the raw window behind the shell.
-                Color(uiColor: .systemBackground)
+                // One level below the card's background (matching the drawer surface) so the card reads
+                // as floating above it.
+                Color(uiColor: .secondarySystemBackground)
                     .ignoresSafeArea()
 
                 // Fixed sidebar pinned to the leading edge. It stays put while the content card slides
@@ -50,30 +54,40 @@ struct CompactShell: View {
 
                 // The soft shadow the sliding content casts onto the drawer along its leading edge — the
                 // ChatGPT sense of the content floating *above* the drawer, which is what reads as depth.
+                // With no dimming on the content anymore this shadow carries the depth alone, so it's a
+                // wide band with blur-like exponential falloff (dense right at the edge, fading fast)
+                // rather than a thin linear ramp that reads as a stripe.
                 // A full-height gradient band (rather than a `.shadow` on the live content) keeps the
                 // falloff on the leading edge only, so it never haloes into the top/bottom safe areas and
                 // costs nothing to recompute as the console streams. Sits just left of the content's edge,
                 // above the drawer but below the content, and is non-interactive so drawer taps still land.
-                // Kept always-mounted with opacity tied to `progress` (0 when closed → off-screen at x−24)
+                // Kept always-mounted with opacity tied to `progress` (0 when closed → off-screen at x−48)
                 // so it fades and slides in lockstep with the content instead of popping in on open.
-                LinearGradient(colors: [.black.opacity(0.20 * progress), .clear],
-                               startPoint: .trailing, endPoint: .leading)
-                    .frame(width: 24)
+                LinearGradient(gradient: Gradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black.opacity(0.03 * progress), location: 0.3),
+                    .init(color: .black.opacity(0.10 * progress), location: 0.62),
+                    .init(color: .black.opacity(0.26 * progress), location: 1),
+                ]), startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 48)
                     .frame(maxHeight: .infinity)
-                    .offset(x: x - 24)
+                    .offset(x: x - 48)
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
 
-                // Section content — pushed right, dimmed, and tap/swipe-to-close via the scrim.
-                // The scrim is an overlay *inside* the offset (offset is the outermost modifier) so it
-                // travels with the content and dims only the visible peek at [x, x+w]. Applying the
-                // overlay after `.offset` would size it to the un-offset full-screen frame — painting
-                // over the drawer and stealing its taps, so drawer rows couldn't switch sections.
+                // Section content — pushed right, kept fully bright (ChatGPT-style: the card stays
+                // white and the depth comes from the shadow, not a dim), with an invisible tap/swipe-
+                // to-close layer over the peek. The layer is an overlay *inside* the offset (offset is
+                // the outermost modifier) so it travels with the content and covers only the visible
+                // peek at [x, x+w]. Applying the overlay after `.offset` would size it to the un-offset
+                // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
+                // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
                     .overlay {
                         if x > 0 {
-                            Color.black.opacity(0.35 * (x / dw))
+                            Color.clear
                                 .ignoresSafeArea()
+                                .contentShape(Rectangle())
                                 .onTapGesture(perform: closeDrawer)
                                 .gesture(closeDrag(width: w))
                         }
@@ -313,7 +327,9 @@ private struct NavigationDrawer: View {
                 .background(.bar)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(uiColor: .systemBackground))
+        // One level below the content card's background (ChatGPT-style), so the undimmed white card
+        // separates from the drawer in light mode and the shadow band stays visible in dark mode.
+        .background(Color(uiColor: .secondarySystemBackground))
     }
 
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
