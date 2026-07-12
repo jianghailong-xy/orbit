@@ -333,7 +333,8 @@ struct NewSessionView: View {
     /// "New session · <model> · <effort>" — surfaces the config the draft will start with (mirrors
     /// the composer footer) so the model/effort are visible up front, not just the agent name.
     private var heroSubtitle: String {
-        var parts = ["New session", AgentDefaults.friendlyName(draft.modelID)]
+        var parts = ["New session", AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
+                                                               configured: draft.configuredProviders)]
         if draft.effort != .default { parts.append(draft.effort.label) }
         return parts.joined(separator: " · ")
     }
@@ -525,7 +526,11 @@ struct AgentFormContent: View {
 
     private var modelCatalog: RunnerModelCatalog? { agents.modelCatalog(for: agent.runnerId) }
     private var modelOptions: [ModelOption] {
-        AgentDefaults.models(for: provider, catalog: modelCatalog)
+        AgentDefaults.models(for: provider, catalog: modelCatalog, configured: agents.configuredProviders)
+    }
+    /// Runtime options: the built-ins (claude/codex) plus the control-plane–configured providers.
+    private var providerOptions: [ProviderOption] {
+        AgentDefaults.providers(configured: agents.configuredProviders)
     }
 
     var body: some View {
@@ -543,11 +548,19 @@ struct AgentFormContent: View {
                         // under the new one — reset to that provider's default rather than PATCH
                         // a bad value.
                         provider = new
-                        model = AgentDefaults.defaultModel(for: new, catalog: modelCatalog)
+                        model = AgentDefaults.defaultModel(for: new, catalog: modelCatalog,
+                                                           configured: agents.configuredProviders)
                         if !AgentDefaults.efforts(for: new).contains(effort) { effort = .default }
                     }
                 )) {
-                    ForEach(AgentDefaults.providers) { Text($0.name).tag($0.id) }
+                    // Surface a saved provider missing from the list (a removed/disabled configured
+                    // provider) as its raw slug so the picker still shows the current value rather
+                    // than going blank — same pattern as the Model picker below.
+                    if !providerOptions.contains(where: { $0.id == provider }) {
+                        Text(AgentDefaults.providerName(provider, configured: agents.configuredProviders))
+                            .tag(provider)
+                    }
+                    ForEach(providerOptions) { Text($0.name).tag($0.id) }
                 }
 
                 Picker("Model", selection: $model) {
@@ -634,7 +647,8 @@ struct AgentFormContent: View {
     private func prefill() {
         name = agent.name
         provider = agent.provider ?? "claude"
-        model = agent.model ?? AgentDefaults.defaultModel(for: provider, catalog: modelCatalog)
+        model = agent.model ?? AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                                                          configured: agents.configuredProviders)
         mode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         effort = Effort(rawValue: agent.effort ?? "") ?? .default
         instructions = agent.appendSystemPrompt ?? ""
@@ -647,7 +661,8 @@ struct AgentFormContent: View {
     private var isDirty: Bool {
         name != agent.name
         || provider != (agent.provider ?? "claude")
-        || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude", catalog: modelCatalog))
+        || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude", catalog: modelCatalog,
+                                                               configured: agents.configuredProviders))
         || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
         || effort != (Effort(rawValue: agent.effort ?? "") ?? .default)
         || instructions != (agent.appendSystemPrompt ?? "")

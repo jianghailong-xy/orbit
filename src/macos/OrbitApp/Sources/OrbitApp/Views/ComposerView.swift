@@ -46,7 +46,8 @@ struct ComposerView: View {
     // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Fable → Haiku)
     // exactly like the web composer. macOS drops the menu down, so keep the source order there.
     private var modelMenuItems: [ModelOption] {
-        let models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog)
+        let models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
+                                          configured: console.configuredProviders)
         #if os(iOS)
         return Array(models.reversed())
         #else
@@ -218,7 +219,8 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    menuLabel(AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog))
+                    menuLabel(AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                                                         configured: console.configuredProviders))
                 }
                 .footerMenuChrome()
 
@@ -245,7 +247,9 @@ struct ComposerView: View {
 
                 // Context stays visible even before the first turn reports tokens — a New Session
                 // reads 0%. Rightmost pill, to the right of plan usage.
-                ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID, modelCatalog: console.modelCatalog)
+                ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID,
+                                       modelCatalog: console.modelCatalog,
+                                       configured: console.configuredProviders)
             }
             // Footer pickers are tappable controls, not metadata — list-subtitle size on iOS (15pt)
             // for comfortable targets; macOS keeps the dense web-parity caption.
@@ -765,9 +769,13 @@ private struct ContextWindowIndicator: View {
     let tokens: Int
     let model: String
     let modelCatalog: RunnerModelCatalog?
+    /// Configured providers' model rows carry their own context windows (from the control plane).
+    let configured: [ConfiguredProvider]
     @State private var showDetail = false
 
-    private var window: Int { AgentDefaults.contextWindow(for: model, catalog: modelCatalog) }
+    private var window: Int {
+        AgentDefaults.contextWindow(for: model, catalog: modelCatalog, configured: configured)
+    }
     private var pct: Int { window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0 }
 
     var body: some View {

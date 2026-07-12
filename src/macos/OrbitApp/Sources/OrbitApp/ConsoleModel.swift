@@ -98,6 +98,11 @@ final class ConsoleModel {
     private(set) var agentName: String?
     private(set) var planUsage: PlanUsageSnapshot?
     private(set) var modelCatalog: RunnerModelCatalog?
+    /// Control-plane–configured providers (custom slugs borrowing a built-in runtime) — this
+    /// session's provider may be one, so the composer's model menu/pill and the context gauge
+    /// merge them in. Loaded with the footer context; left empty by an older server without
+    /// the endpoint.
+    private(set) var configuredProviders: [ConfiguredProvider] = []
 
     // `/` command & skill autocomplete (the `+` menu opens it scoped). `slashItems` is the
     // runner-reported set already narrowed to host-level + this session's agent (see loadSlashItems).
@@ -478,6 +483,9 @@ final class ConsoleModel {
             planUsage = nil
             modelCatalog = nil
         }
+        // Configured providers for the model menu/pill + context gauge. Best-effort like plan
+        // usage; a transient failure keeps the last good list.
+        if let providers = try? await api.providers() { configuredProviders = providers }
     }
 
     /// Re-read just the authoritative lifecycle status from REST (lighter than loadContext).
@@ -658,6 +666,17 @@ final class ConsoleModel {
         } else {
             planUsage = nil
             modelCatalog = nil
+        }
+        if let providers = try? await api.providers() { configuredProviders = providers }
+        // The init seeded a model-less agent's draft with the static default — before the
+        // configured list/catalog were known. Re-seed it now so a configured provider's draft
+        // starts at that provider's default model (web parity: AgentView's model seed calls
+        // defaultModelForProvider with `configured`). Guarded on "still the untouched static
+        // default" so a model the user already picked is never clobbered.
+        if let agent = draftAgent, agent.model == nil,
+           modelID == AgentDefaults.defaultModel(for: provider) {
+            modelID = AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                                                 configured: configuredProviders)
         }
     }
 

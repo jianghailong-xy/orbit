@@ -56,4 +56,82 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(Effort.minimal.label, "Minimal")
         XCTAssertEqual(Effort.minimal.wire, "minimal")
     }
+
+    // MARK: configured providers (control-plane custom slugs — GET /api/providers)
+
+    private let deepseek = ConfiguredProvider(
+        slug: "deepseek", label: "DeepSeek", runtime: "claude",
+        models: [
+            ConfiguredProviderModel(value: "deepseek-v4-pro", label: "DeepSeek V4 Pro", contextWindow: 128_000),
+            ConfiguredProviderModel(value: "deepseek-v4-lite", label: "DeepSeek V4 Lite"),
+        ],
+        defaultModel: "deepseek-v4-pro")
+
+    func testMergedProviderOptions() {
+        XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).map(\.id),
+                       ["claude", "codex", "deepseek"])
+        XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).last?.name, "DeepSeek")
+        // No configured providers → the built-ins only, in their fixed order.
+        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex"])
+        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex"])
+    }
+
+    func testModelsForConfiguredProvider() {
+        let models = AgentDefaults.models(for: "deepseek", catalog: nil, configured: [deepseek])
+        XCTAssertEqual(models.map(\.id), ["deepseek-v4-pro", "deepseek-v4-lite"])
+        XCTAssertEqual(models.map(\.name), ["DeepSeek V4 Pro", "DeepSeek V4 Lite"])
+
+        // A built-in slug never resolves to a configured provider — the static list stays.
+        XCTAssertEqual(AgentDefaults.models(for: "claude", catalog: nil, configured: [deepseek]).map(\.id),
+                       AgentDefaults.claudeModels.map(\.id))
+        // An unconfigured slug keeps the existing fallback (Claude, never an empty menu).
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: nil, configured: [deepseek]).map(\.id),
+                       AgentDefaults.claudeModels.map(\.id))
+        // A configured provider with no usable models falls back too rather than emptying the menu.
+        let empty = ConfiguredProvider(slug: "hollow", label: "Hollow")
+        XCTAssertEqual(AgentDefaults.models(for: "hollow", catalog: nil, configured: [empty]).map(\.id),
+                       AgentDefaults.claudeModels.map(\.id))
+    }
+
+    func testDefaultModelForConfiguredProvider() {
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: [deepseek]),
+                       "deepseek-v4-pro")
+        // No declared default → the provider's first model.
+        let noDefault = ConfiguredProvider(slug: "deepseek", label: "DeepSeek",
+                                           models: deepseek.models, defaultModel: nil)
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: [noDefault]),
+                       "deepseek-v4-pro")
+        // Not configured at all → identical to the existing catalog overload's fallback.
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: []),
+                       AgentDefaults.defaultModel(for: "deepseek", catalog: nil))
+    }
+
+    func testFriendlyNameFromConfiguredProvider() {
+        XCTAssertEqual(AgentDefaults.friendlyName("deepseek-v4-pro", catalog: nil, configured: [deepseek]),
+                       "DeepSeek V4 Pro")
+        // Static ids and unknown ids keep the existing behavior.
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-4-8", catalog: nil, configured: [deepseek]),
+                       "Opus 4.8")
+        XCTAssertEqual(AgentDefaults.friendlyName("unknown-model", catalog: nil, configured: [deepseek]),
+                       "unknown-model")
+    }
+
+    func testContextWindowFromConfiguredProvider() {
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "deepseek-v4-pro", catalog: nil, configured: [deepseek]),
+                       128_000)
+        // A row without a window falls through to the static table's default.
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "deepseek-v4-lite", catalog: nil, configured: [deepseek]),
+                       200_000)
+        // Static ids are untouched by the configured list.
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-4-8", catalog: nil, configured: [deepseek]),
+                       1_000_000)
+    }
+
+    func testProviderNameResolution() {
+        XCTAssertEqual(AgentDefaults.providerName("claude", configured: [deepseek]), "Claude")
+        XCTAssertEqual(AgentDefaults.providerName("codex", configured: nil), "Codex")
+        XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: [deepseek]), "DeepSeek")
+        // A removed/disabled provider's slug renders verbatim — never mislabels as Claude.
+        XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: []), "deepseek")
+    }
 }

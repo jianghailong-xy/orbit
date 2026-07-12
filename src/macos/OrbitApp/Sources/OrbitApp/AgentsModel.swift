@@ -15,6 +15,10 @@ final class AgentsModel {
     private(set) var runnerOnline: [String: Bool] = [:]
     /// runnerId → runtime model catalog, reported by that runner.
     private(set) var runnerModelCatalog: [String: RunnerModelCatalog] = [:]
+    /// Control-plane–configured providers (custom slugs borrowing a built-in runtime), merged into
+    /// the agent editor's Runtime/Model pickers alongside claude/codex. Loaded with the agent list;
+    /// left empty by an older server without the endpoint.
+    private(set) var configuredProviders: [ConfiguredProvider] = []
     private(set) var loading = false
     var errorText: String?
 
@@ -68,6 +72,9 @@ final class AgentsModel {
                     runners.compactMap { r in r.modelCatalog.map { (r.id, $0) } },
                     uniquingKeysWith: { a, _ in a })
             }
+            // Best-effort too: a transient failure keeps the last good list rather than blanking
+            // the pickers (mirrors the runners fetch above).
+            if let providers = try? await api.providers() { configuredProviders = providers }
         } catch { errorText = friendly(error) }
     }
 

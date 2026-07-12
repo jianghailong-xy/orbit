@@ -41,6 +41,26 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertNil(obj["missing"]?.stringValue)
     }
 
+    func testConfiguredProviderDecodesToleratingUnknownAndMissingFields() throws {
+        // The GET /api/providers Phase 1 shape, plus an unknown future field (must be ignored)
+        // and a model row without contextWindow (optional).
+        let json = #"""
+        [{"slug":"deepseek","label":"DeepSeek","runtime":"claude",
+          "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro","contextWindow":128000},
+                    {"value":"deepseek-v4-lite","label":"DeepSeek V4 Lite"}],
+          "defaultModel":"deepseek-v4-pro","futureField":true}]
+        """#
+        let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
+        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list[0].slug, "deepseek")
+        XCTAssertEqual(list[0].label, "DeepSeek")
+        XCTAssertEqual(list[0].runtime, "claude")
+        XCTAssertEqual(list[0].defaultModel, "deepseek-v4-pro")
+        XCTAssertEqual(list[0].models.map(\.value), ["deepseek-v4-pro", "deepseek-v4-lite"])
+        XCTAssertEqual(list[0].models[0].contextWindow, 128_000)
+        XCTAssertNil(list[0].models[1].contextWindow)
+    }
+
     func testLoginResponseDecodes() throws {
         let json = #"{"accessToken":"jwt.abc.def","user":{"id":"u1","email":"a@b.com","name":"A","role":"ADMIN"}}"#
         let res = try JSONDecoder().decode(LoginResponse.self, from: Data(json.utf8))

@@ -37,6 +37,28 @@ public enum AgentDefaults {
         ProviderOption(id: "codex", name: "Codex"),
     ]
 
+    /// Provider-picker options with the control-plane–configured providers appended after the
+    /// built-ins. Mirrors web's mergedProviderOptions.
+    public static func providers(configured: [ConfiguredProvider]?) -> [ProviderOption] {
+        providers + (configured ?? []).map { ProviderOption(id: $0.slug, name: $0.label) }
+    }
+
+    /// Display name for a provider slug: a built-in's fixed label, then a configured provider's
+    /// label, then the raw slug — a since-removed/disabled provider must not silently read as
+    /// "Claude" (mirrors web's RunnerDetailPage providerLabel).
+    public static func providerName(_ slug: String, configured: [ConfiguredProvider]?) -> String {
+        providers.first { $0.id == slug }?.name
+            ?? configuredProvider(slug, in: configured)?.label
+            ?? slug
+    }
+
+    /// Resolve a configured provider by slug — a built-in slug never matches (the server refuses
+    /// to mint one), so claude/codex always resolve to the static/catalog lists.
+    private static func configuredProvider(_ slug: String,
+                                           in configured: [ConfiguredProvider]?) -> ConfiguredProvider? {
+        configured?.first { $0.slug == slug }
+    }
+
     public static let claudeModels: [ModelOption] = [
         ModelOption(id: "claude-fable-5", name: "Fable 5"),
         ModelOption(id: "claude-opus-4-8", name: "Opus 4.8"),
@@ -65,6 +87,19 @@ public enum AgentDefaults {
         catalog?.models(for: provider) ?? models(for: provider)
     }
 
+    /// As `models(for:catalog:)`, but a configured provider's own model list (from the control
+    /// plane) wins for its slug. Mirrors web's modelOptionsForProvider.
+    public static func models(for provider: String, catalog: RunnerModelCatalog?,
+                              configured: [ConfiguredProvider]?) -> [ModelOption] {
+        if let custom = configuredProvider(provider, in: configured) {
+            let options = custom.models
+                .filter { !$0.value.isEmpty && !$0.label.isEmpty }
+                .map { ModelOption(id: $0.value, name: $0.label) }
+            if !options.isEmpty { return options }
+        }
+        return models(for: provider, catalog: catalog)
+    }
+
     /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
     public static func defaultModel(for provider: String) -> String {
         provider == "codex" ? "gpt-5.6-sol" : defaultModelID
@@ -72,6 +107,17 @@ public enum AgentDefaults {
 
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?) -> String {
         models(for: provider, catalog: catalog).first?.id ?? defaultModel(for: provider)
+    }
+
+    /// As `defaultModel(for:catalog:)`, preferring a configured provider's declared default,
+    /// then its first model. Mirrors web's defaultModelForProvider.
+    public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?,
+                                    configured: [ConfiguredProvider]?) -> String {
+        if let def = configuredProvider(provider, in: configured)?.defaultModel, !def.isEmpty {
+            return def
+        }
+        return models(for: provider, catalog: catalog, configured: configured).first?.id
+            ?? defaultModel(for: provider)
     }
 
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
@@ -84,6 +130,14 @@ public enum AgentDefaults {
         (catalog?.models(for: "claude") ?? []).first { $0.id == id }?.name
             ?? (catalog?.models(for: "codex") ?? []).first { $0.id == id }?.name
             ?? friendlyName(id)
+    }
+
+    /// As `friendlyName(_:catalog:)`, also checking the configured providers' model rows — a
+    /// custom provider's model id renders its label, not the raw id.
+    public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?,
+                                    configured: [ConfiguredProvider]?) -> String {
+        (configured ?? []).flatMap(\.models).first { $0.value == id }?.label
+            ?? friendlyName(id, catalog: catalog)
     }
 
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
@@ -111,6 +165,17 @@ public enum AgentDefaults {
 
     public static func contextWindow(for id: String, catalog: RunnerModelCatalog?) -> Int {
         catalog?.contextWindow(for: id) ?? contextWindow(for: id)
+    }
+
+    /// As `contextWindow(for:catalog:)`, checking the configured providers' model rows first —
+    /// their windows come from the control plane, not the runner. Mirrors web's contextWindowFor.
+    public static func contextWindow(for id: String, catalog: RunnerModelCatalog?,
+                                     configured: [ConfiguredProvider]?) -> Int {
+        if let window = (configured ?? []).flatMap(\.models)
+            .first(where: { $0.value == id && ($0.contextWindow ?? 0) > 0 })?.contextWindow {
+            return window
+        }
+        return contextWindow(for: id, catalog: catalog)
     }
 
     public static let permissionModes = PermissionMode.allCases
