@@ -1,4 +1,5 @@
 import {
+  ApiOutlined,
   BgColorsOutlined,
   CaretDownOutlined,
   CheckOutlined,
@@ -121,10 +122,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
   const { mode, setMode } = useThemeMode();
-  // Admins get an extra top-nav entry into the user-management area.
+  // Admins get extra top-nav entries: user management and the model-provider catalog.
   const navItems =
     me.data?.role === 'ADMIN'
-      ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
+      ? [
+          ...TOP,
+          { key: 'admin', icon: <TeamOutlined />, label: 'Admin' },
+          { key: 'admin/providers', icon: <ApiOutlined />, label: 'Providers' },
+        ]
       : TOP;
   // A small drag threshold so a plain click still opens an agent; only real movement
   // starts a reorder drag.

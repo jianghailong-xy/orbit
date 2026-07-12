@@ -27,7 +27,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { PlanUsage, PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
-import { meQuery } from '../lib/queries';
+import { meQuery, providersQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
 import {
   AUTO_CAPABLE_MODELS,
@@ -35,7 +35,7 @@ import {
   DEFAULT_PERMISSION_MODE,
   defaultModelForProvider,
   MODE_OPTIONS,
-  PROVIDER_OPTIONS,
+  mergedProviderOptions,
   modelOptionsForProvider,
   effortOptionsForProvider,
 } from '../lib/agentDefaults';
@@ -197,6 +197,9 @@ export function RunnerDetailPage() {
 
   const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
   const agents = (agentsQ.data ?? []).filter((a) => a.runnerId === runnerId);
+  // Configured providers (custom slugs) merged into the Runtime/Model pickers below alongside
+  // the built-in claude/codex; each brings its own model list.
+  const configuredProviders = useQuery(providersQuery()).data ?? [];
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -261,7 +264,7 @@ export function RunnerDetailPage() {
   };
   const onProviderChange = (provider: string) => {
     setFProvider(provider);
-    const nextModel = defaultModelForProvider(provider, runner?.modelCatalog);
+    const nextModel = defaultModelForProvider(provider, runner?.modelCatalog, configuredProviders);
     setFModel(nextModel);
     if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(nextModel)) setFMode('default');
     // Effort levels differ per provider (codex has 'minimal', not 'max'); reset to Default so the
@@ -319,7 +322,9 @@ export function RunnerDetailPage() {
     setEditing(a);
     setFName(a.name);
     setFProvider(a.provider ?? 'claude');
-    setFModel(a.model ?? defaultModelForProvider(a.provider ?? 'claude', runner?.modelCatalog));
+    setFModel(
+      a.model ?? defaultModelForProvider(a.provider ?? 'claude', runner?.modelCatalog, configuredProviders),
+    );
     setFMode(a.permissionMode ?? 'dontAsk');
     setFEffort(a.effort ?? '');
     setFAppend(a.appendSystemPrompt ?? '');
@@ -358,7 +363,7 @@ export function RunnerDetailPage() {
           <Select
             value={fProvider}
             onChange={onProviderChange}
-            options={PROVIDER_OPTIONS}
+            options={mergedProviderOptions(configuredProviders)}
             style={{ width: '100%' }}
           />
         </div>
@@ -367,7 +372,7 @@ export function RunnerDetailPage() {
           <Select
             value={fModel}
             onChange={onModelChange}
-            options={modelOptionsForProvider(fProvider, runner?.modelCatalog)}
+            options={modelOptionsForProvider(fProvider, runner?.modelCatalog, configuredProviders)}
             style={{ width: '100%' }}
           />
         </div>
@@ -473,7 +478,14 @@ export function RunnerDetailPage() {
     // When an agent overrides the endpoint/model via env (e.g. a DeepSeek-compatible
     // base URL), the static `model` field is stale — show the effective model instead.
     const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || DEFAULT_MODEL;
-    const providerLabel = a.provider === 'codex' ? 'Codex' : 'Claude';
+    // A configured provider shows its own label; fall back to the raw slug if it's since been
+    // removed/disabled (so the row never silently mislabels it as Claude).
+    const providerLabel =
+      a.provider === 'codex'
+        ? 'Codex'
+        : a.provider && a.provider !== 'claude'
+          ? (configuredProviders.find((p) => p.slug === a.provider)?.label ?? a.provider)
+          : 'Claude';
     return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">

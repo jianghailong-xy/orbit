@@ -18,7 +18,6 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import {
   AgentProvider,
-  modelForProvider,
   AgentExecConfig,
   ArtifactResultRequest,
   ApprovalCreateRequest,
@@ -61,6 +60,7 @@ import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
+import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
@@ -352,7 +352,20 @@ export class RunnerApiController {
     const out: ReclaimSession[] = [];
     for (const s of sessions) {
       const agent = s.agent;
-      const provider = normalizeProvider(s.provider ?? agent?.provider);
+      const declared = s.provider ?? agent?.provider ?? null;
+      // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
+      // and injected env so a resumed session keeps talking to the configured endpoint.
+      const customRow = isBuiltinProvider(declared)
+        ? null
+        : await this.prisma.modelProvider.findUnique({ where: { slug: declared! } });
+      const exec = resolveProviderExec({
+        declaredProvider: declared,
+        customRow,
+        sessionModel: s.model,
+        agentModel: agent?.model,
+        agentEnv: agent?.env as Record<string, string> | null,
+      });
+      const provider = exec.provider;
       const runtime = reclaimRuntimeIds({
         provider,
         sessionId: s.id,
@@ -369,7 +382,7 @@ export class RunnerApiController {
       // cross-provider model id is coerced so a reclaim never resumes `codex -m claude-*`.
       const agentCfg: AgentExecConfig = {
         provider,
-        model: modelForProvider(provider, s.model ?? agent?.model),
+        model: exec.model,
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
@@ -383,7 +396,8 @@ export class RunnerApiController {
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
-        env: (agent?.env as Record<string, string> | null) ?? undefined,
+        // Includes a custom provider's injected baseUrl/key (else just the agent's env).
+        env: exec.env,
       };
       out.push({
         sessionId: s.id,

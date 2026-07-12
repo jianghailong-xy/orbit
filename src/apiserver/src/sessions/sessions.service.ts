@@ -129,7 +129,9 @@ export class SessionsService {
     // the chosen agent's machine (agents belong to a runner) — picking an agent is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
-    let provider = AgentProvider.CLAUDE;
+    // The session's provider identity: a built-in ("claude"/"codex") or a custom slug
+    // ("deepseek") inherited from the agent. Stored verbatim; the runtime is derived below.
+    let provider: string = AgentProvider.CLAUDE;
     // Per-agent worktree toggle: default off. An agent with it turned off (the default)
     // makes its sessions run with no branch, so the runner runs them in the shared workDir.
     let enableWorktree = false;
@@ -140,7 +142,7 @@ export class SessionsService {
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
-      provider = agentProvider(agent.provider);
+      provider = agent.provider ?? AgentProvider.CLAUDE;
       enableWorktree = agent.enableWorktree;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
@@ -148,7 +150,7 @@ export class SessionsService {
         select: { provider: true, enableWorktree: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
-      provider = agentProvider(agent.provider);
+      provider = agent.provider ?? AgentProvider.CLAUDE;
       enableWorktree = agent.enableWorktree;
     }
     if (!assignedRunnerId) {
@@ -178,6 +180,10 @@ export class SessionsService {
     // then commits the work here for a manual merge — harmless for non-git/shared runs.
     const naming = await generateNaming({ prompt: dto.prompt, title: dto.title });
     const title = dto.title ?? naming.title ?? titleFromPrompt(dto.prompt);
+    // provider is the identity stored on the row; runtime is which built-in CLI actually
+    // drives it (a custom provider borrows claude), and decides the pre-generated session-id
+    // and effort normalization.
+    const runtime = agentProvider(provider);
     const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {
@@ -186,13 +192,13 @@ export class SessionsService {
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
-        runtimeSessionId: provider === AgentProvider.CLAUDE ? runtimeSessionId : null,
+        runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
         // Codex creates/returns its own thread id after the first exec turn.
-        claudeSessionId: provider === AgentProvider.CLAUDE ? runtimeSessionId : null,
+        claudeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         permissionMode: dto.permissionMode,
-        effort: normalizeEffortForProvider(provider, dto.effort),
+        effort: normalizeEffortForProvider(runtime, dto.effort),
         agentId: dto.agentId,
         assignedRunnerId,
         taskId: dto.taskId,

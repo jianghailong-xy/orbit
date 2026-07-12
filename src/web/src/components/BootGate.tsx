@@ -6,6 +6,7 @@ import { decodeId } from '../lib/idCodec';
 import {
   agentsQuery,
   meQuery,
+  providersQuery,
   runnersQuery,
   sessionQuery,
   sessionsQuery,
@@ -89,6 +90,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // Warm the signed-in user so the nav footer's name paints with the first frame.
   // Not a readiness milestone — it must never hold the splash open.
   useQuery({ ...meQuery(), enabled: warm });
+  // Warm the configured-provider catalog so the composer's model pill has a custom agent's
+  // model list on first paint. Non-blocking, like `me` — never a readiness milestone.
+  useQuery({ ...providersQuery(), enabled: warm });
   // A /sessions/<id> deep link carries no runner — its session detail resolves one.
   const sessionDetail = useQuery({
     ...sessionQuery(deep?.kind === 'session' ? deep.id : null),

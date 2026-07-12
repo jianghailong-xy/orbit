@@ -44,8 +44,9 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
-import { agentsQuery, type Me, meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { agentsQuery, type Me, meQuery, providersQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import {
+  type ConfiguredProvider,
   contextWindowFor,
   DEFAULT_MODEL,
   defaultModelForProvider,
@@ -283,12 +284,14 @@ function ContextWindowIndicator({
   tokens,
   model,
   modelCatalog,
+  configured,
 }: {
   tokens: number;
   model: string;
   modelCatalog?: Runner['modelCatalog'];
+  configured?: ConfiguredProvider[];
 }) {
-  const windowTokens = contextWindowFor(model, modelCatalog);
+  const windowTokens = contextWindowFor(model, modelCatalog, configured);
   const pct = Math.min(100, Math.round((tokens / windowTokens) * 100));
   const pop = (
     <div className="cu-pop">
@@ -700,6 +703,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // The signed-in user, for the account-synced default effort (seeds a new session's Effort
   // pill; written on change below). Cached/deduped with the nav footer's `me`.
   const me = useQuery(meQuery());
+  // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
+  // model list + context-window sizing when the open session/agent uses one. Cached/deduped
+  // app-wide by React Query; empty until it loads (then the model pill's options fill in).
+  const configuredProviders = useQuery(providersQuery()).data ?? [];
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
@@ -1242,7 +1249,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
-    setModel(selected.model ?? defaultModelForProvider(provider, runner.modelCatalog));
+    setModel(selected.model ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
     setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
     setEffort(normalizeEffortForProvider(provider, selected.effort ?? ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1255,7 +1262,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (selectedId || !pickedAgent) return;
     setModel(
       pickedAgent.model ??
-        defaultModelForProvider(pickedAgent.provider ?? 'claude', runner.modelCatalog),
+        defaultModelForProvider(pickedAgent.provider ?? 'claude', runner.modelCatalog, configuredProviders),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, pickedAgent?.id, pickedAgent?.model, pickedAgent?.provider]);
@@ -3358,7 +3365,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (drop) setMode('Default');
                   }
                 }}
-                options={modelOptionsForProvider(shownProvider, runner.modelCatalog)}
+                options={modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />
@@ -3395,7 +3402,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
               0%. Rightmost pill, to the right of plan usage. */}
-          <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} />
+          <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} configured={configuredProviders} />
         </div>
       </div>
       </div>

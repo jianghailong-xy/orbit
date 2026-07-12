@@ -689,3 +689,35 @@ model TaskDependency {
   @@index([dependsOnTaskId])
   @@map("task_dependency")
 }
+
+// A control-plane-configured model provider (e.g. DeepSeek) that borrows a built-in
+// runtime CLI instead of shipping its own. Sessions/agents keep its `slug` in their
+// `provider` column as a first-class identity (shown in pickers). At dispatch the queue
+// resolves the slug here, coerces the runner-facing provider to `runtime` (claude|codex),
+// and injects baseUrl + the decrypted key into the borrowed CLI's process env so it talks
+// to this endpoint. The API key is stored AES-256-GCM encrypted (providers/provider-crypto.ts);
+// it is dispatched only over the runner-auth claim channel and NEVER returned to the browser.
+model ModelProvider {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  // Stable identity stored in Agent/Session.provider and shown in pickers, e.g. "deepseek".
+  slug         String   @unique
+  label        String
+  // Which built-in runtime CLI drives it: "claude" (Anthropic-compatible endpoint, Phase 1)
+  // or "codex" (OpenAI-compatible). Decides which env vars baseUrl/key inject into.
+  runtime      String   @default("claude")
+  baseUrl      String   @map("base_url")
+  // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Never
+  // selected into a browser-facing payload.
+  apiKeyEnc    String   @map("api_key_enc")
+  // Picker model list: [{ value, label, contextWindow? }]. `value` is the runtime model id
+  // passed as --model (e.g. "deepseek-chat").
+  models       Json     @default("[]")
+  defaultModel String?  @map("default_model")
+  enabled      Boolean  @default(true)
+  // Picker display order; NULL sorts last.
+  position     Int?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("model_provider")
+}

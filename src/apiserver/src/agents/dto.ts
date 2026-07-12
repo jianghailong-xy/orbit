@@ -8,10 +8,9 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { AgentProvider, PermissionMode } from '@orbit/shared';
+import { PermissionMode } from '@orbit/shared';
 
 const PERMISSION_MODES = Object.values(PermissionMode);
-const AGENT_PROVIDERS = Object.values(AgentProvider);
 
 export class CreateAgentDto {
   @IsString()
@@ -19,7 +18,10 @@ export class CreateAgentDto {
   name!: string;
 
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsIn(AGENT_PROVIDERS) provider?: AgentProvider;
+  // A built-in provider ("claude"/"codex") or a configured ModelProvider slug (e.g. "deepseek").
+  // Kept a plain string (not @IsIn a fixed enum) so custom providers pass; an unknown slug
+  // simply falls back to the claude runtime at dispatch (resolveProviderExec).
+  @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
@@ -47,7 +49,7 @@ export class CreateAgentDto {
 export class UpdateAgentDto {
   @IsOptional() @IsString() @MinLength(1) name?: string;
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsIn(AGENT_PROVIDERS) provider?: AgentProvider;
+  @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;

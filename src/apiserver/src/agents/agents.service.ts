@@ -40,7 +40,12 @@ export class AgentsService {
         name: dto.name,
         description: dto.description,
         provider,
-        model: dto.model ?? DEFAULT_MODEL_BY_PROVIDER[provider],
+        // Built-in providers resolve a default model here; a custom provider's default lives on
+        // its ModelProvider row, so the client sends an explicit model (claude's as a last resort).
+        model:
+          dto.model ??
+          DEFAULT_MODEL_BY_PROVIDER[provider as AgentProvider] ??
+          DEFAULT_MODEL_BY_PROVIDER[AgentProvider.CLAUDE],
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         allowedTools: Array.from(

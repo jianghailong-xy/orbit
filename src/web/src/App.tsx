@@ -11,6 +11,7 @@ import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { ProvidersAdminPage } from './pages/ProvidersAdminPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -115,6 +116,14 @@ export function App() {
               element={
                 <DocView>
                   <AdminUsersPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="admin/providers"
+              element={
+                <DocView>
+                  <ProvidersAdminPage />
                 </DocView>
               }
             />

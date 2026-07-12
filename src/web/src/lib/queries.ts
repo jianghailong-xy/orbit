@@ -1,5 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
 import { api, getSession, getSessionDiff } from '../api';
+import type { ConfiguredProvider } from './agentDefaults';
+
+export type { ConfiguredProvider };
 
 /**
  * Single source of truth for the app's shared React Query *reads*: every query's key
@@ -32,6 +35,15 @@ export const setupStatusQuery = () =>
 
 export const agentsQuery = () =>
   queryOptions({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+
+/** Control-plane–configured providers (custom slugs borrowing a built-in runtime), de-sensitized
+ *  for the pickers. Merged with the built-in claude/codex in the provider/model dropdowns; any
+ *  signed-in user can read it. */
+export const providersQuery = () =>
+  queryOptions({
+    queryKey: ['providers'] as const,
+    queryFn: () => api<ConfiguredProvider[]>('/providers'),
+  });
 
 /** Per-account UI preferences (theme + new-agent defaults). Mirrors the apiserver's
  *  UpdatePreferencesDto; every key is optional and falls back to an app default. */

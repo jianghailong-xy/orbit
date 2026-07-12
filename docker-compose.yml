@@ -26,6 +26,10 @@ services:
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
+      # Optional: master key (AES-256-GCM) that encrypts control-plane model providers' API keys
+      # (DeepSeek etc.) at rest. Needed only to add a provider in the admin UI; unset → provider
+      # create/dispatch throws a clear error. Generate: openssl rand -base64 32.
+      PROVIDER_SECRET_KEY: "${PROVIDER_SECRET_KEY:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Optional: DeepSeek (OpenAI-compatible) for clean English session titles + worktree

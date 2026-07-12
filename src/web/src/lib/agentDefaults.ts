@@ -7,6 +7,34 @@ export const PROVIDER_OPTIONS = [
 
 type ModelOption = { value: string; label: string };
 
+/**
+ * A control-plane–configured provider (from GET /api/providers): a custom identity (its own
+ * slug/label + model list) that borrows a built-in runtime. Its slug lands in an agent/session's
+ * `provider` field just like a built-in, so it's merged into the pickers alongside claude/codex.
+ */
+export interface ConfiguredProvider {
+  slug: string;
+  label: string;
+  runtime: string;
+  models: { value: string; label: string; contextWindow?: number }[];
+  defaultModel?: string | null;
+}
+
+/** Resolve a configured provider by slug — a built-in slug (claude/codex) never matches. */
+const configuredProvider = (
+  provider?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): ConfiguredProvider | undefined =>
+  provider ? (configured ?? []).find((p) => p.slug === provider) : undefined;
+
+/** Provider dropdown options: built-in (claude/codex) followed by the configured providers. */
+export const mergedProviderOptions = (
+  configured?: ConfiguredProvider[] | null,
+): { value: string; label: string }[] => [
+  ...PROVIDER_OPTIONS,
+  ...(configured ?? []).map((p) => ({ value: p.slug, label: p.label })),
+];
+
 // Model options shared across the app. `value` is the local runtime's model id;
 // `label` is the friendly display name shown in every picker.
 export const CLAUDE_MODEL_OPTIONS = [
@@ -64,7 +92,14 @@ const catalogOptionsForProvider = (
 export const contextWindowFor = (
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
 ): number => {
+  if (model && configured) {
+    for (const p of configured) {
+      const found = p.models.find((m) => m.value === model && typeof m.contextWindow === 'number');
+      if (found?.contextWindow) return found.contextWindow;
+    }
+  }
   if (model && modelCatalog) {
     for (const rows of Object.values(modelCatalog)) {
       const found = rows?.find((m) => m.value === model && typeof m.contextWindow === 'number');
@@ -82,17 +117,31 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
 export const modelOptionsForProvider = (
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
-) =>
-  catalogOptionsForProvider(provider, modelCatalog) ??
-  MODEL_OPTIONS_BY_PROVIDER[provider ?? 'claude'] ??
-  CLAUDE_MODEL_OPTIONS;
+  configured?: ConfiguredProvider[] | null,
+): ModelOption[] => {
+  // A configured provider carries its own model list (from the API), which wins for its slug.
+  const custom = configuredProvider(provider, configured);
+  if (custom) {
+    const options = custom.models
+      .filter((m) => m.value && m.label)
+      .map((m) => ({ value: m.value, label: m.label }));
+    if (options.length) return options;
+  }
+  return (
+    catalogOptionsForProvider(provider, modelCatalog) ??
+    MODEL_OPTIONS_BY_PROVIDER[provider ?? 'claude'] ??
+    CLAUDE_MODEL_OPTIONS
+  );
+};
 
 export const defaultModelForProvider = (
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
 ): string =>
-  modelOptionsForProvider(provider, modelCatalog)[0]?.value ??
-  DEFAULT_MODEL_BY_PROVIDER[provider ?? 'claude'] ??
+  configuredProvider(provider, configured)?.defaultModel ||
+  modelOptionsForProvider(provider, modelCatalog, configured)[0]?.value ||
+  DEFAULT_MODEL_BY_PROVIDER[provider ?? 'claude'] ||
   DEFAULT_MODEL;
 
 // Reasoning effort is provider-specific. Claude supports "max"; Codex's

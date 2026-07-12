@@ -1,11 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'events';
-import { AgentProvider, ClaimedSession, modelForProvider, PermissionMode } from '@orbit/shared';
+import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-
-function normalizeProvider(value?: string | null): AgentProvider {
-  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-}
+import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 
 function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
   if (effort == null) return undefined;
@@ -138,7 +135,21 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const agent = session.agent;
-    const provider = normalizeProvider(session.provider ?? agent?.provider);
+    const declared = session.provider ?? agent?.provider ?? null;
+    // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
+    // provider (claude|codex), the model, and the process env (baseUrl + decrypted key injected)
+    // here, so the runner receives a plain claude/codex job and needs no changes.
+    const customRow = isBuiltinProvider(declared)
+      ? null
+      : await this.prisma.modelProvider.findUnique({ where: { slug: declared! } });
+    const exec = resolveProviderExec({
+      declaredProvider: declared,
+      customRow,
+      sessionModel: session.model,
+      agentModel: agent?.model,
+      agentEnv: agent?.env as Record<string, string> | null,
+    });
+    const provider = exec.provider;
     const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
     const sessionUuid =
       provider === AgentProvider.CLAUDE
@@ -165,10 +176,9 @@ export class QueueService {
       taskId: session.taskId ?? undefined,
       agent: {
         provider,
-        // Per-session override wins over the agent, then a server default; a cross-provider
-        // model id (e.g. a stale `claude-*` on a Codex session) is coerced so the runner never
-        // execs `codex -m claude-*`.
-        model: modelForProvider(provider, session.model ?? agent?.model),
+        // Resolved above: a per-session/agent override (coerced for built-ins so the runner
+        // never execs `codex -m claude-*`), or a custom provider's own model.
+        model: exec.model,
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
@@ -182,7 +192,8 @@ export class QueueService {
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
-        env: (agent?.env as Record<string, string> | null) ?? undefined,
+        // Includes a custom provider's injected baseUrl/key (else just the agent's env).
+        env: exec.env,
       },
     };
   }
