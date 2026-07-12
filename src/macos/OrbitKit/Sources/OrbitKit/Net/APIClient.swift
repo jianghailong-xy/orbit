@@ -126,6 +126,9 @@ public final class APIClient: @unchecked Sendable {
     public func archiveSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none) }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }
     public func deleteSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)") }
+    /// Hard-delete a trashed session and all its data — irreversible (the Trash tab's "Delete
+    /// Permanently"). Server: `DELETE /sessions/:id/purge`.
+    public func purgeSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)/purge") }
     /// Pin/unpin: personal ordering that floats the session to the top of every list (POST to set,
     /// DELETE to clear). After either the caller refetches the list to pick up the new order.
     public func pinSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/pin", body: Optional<Empty>.none) }

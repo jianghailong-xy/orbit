@@ -630,7 +630,7 @@ final class AppModel {
         }
     }
 
-    /// Soft-delete a session to the trash — reversible via Undo (or the web Trash view).
+    /// Soft-delete a session to the trash — reversible via Undo (or the Trash view).
     func deleteSession(_ id: String) {
         guard let api else { return }
         Task { @MainActor in
@@ -638,6 +638,18 @@ final class AppModel {
             dropIfOpen(id)
             await reloadSessionLists()
             offerUndo("Deleted", sessionID: id)
+        }
+    }
+
+    /// Permanently delete a trashed session and all its data — irreversible, so there's no Undo (the
+    /// Trash row action gates it behind a confirmation). Mirrors web's `purgeMut`.
+    func purgeSession(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { try await api.purgeSession(id) }
+            catch { errorText = "Couldn't delete the session permanently."; return }
+            dropIfOpen(id)
+            await reloadSessionLists()
         }
     }
 

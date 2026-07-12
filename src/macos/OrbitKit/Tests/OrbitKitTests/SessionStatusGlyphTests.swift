@@ -94,6 +94,19 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g.tone, .error)
     }
 
+    func testDeletedTabShowsDeletedGlyph() {
+        // The Trash tab reads as deleted regardless of the settled status — web's deletedAt branch.
+        let g = SessionStatusGlyph.make(for: session(.succeeded), deleted: true)
+        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted"))
+    }
+
+    func testDeletedTakesPrecedenceOverCompletedAndFailure() {
+        // deletedAt is checked first (a session can be filed, then trashed), so Trash wins over both
+        // the Completed override and a genuine FAILED — the row reads "Deleted".
+        let g = SessionStatusGlyph.make(for: session(.failed, error: "boom"), completed: true, deleted: true)
+        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted"))
+    }
+
     /// The list payload's terminal-state fields decode (server keys: error / endReason).
     func testSessionDecodesTerminalFields() throws {
         let json = #"{"id":"s1","status":"CANCELLED","error":null,"endReason":"orphaned"}"#

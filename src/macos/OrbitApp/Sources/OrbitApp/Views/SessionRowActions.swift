@@ -2,47 +2,61 @@ import SwiftUI
 import OrbitKit
 
 // Row-level session actions for the session lists (the Active sidebar and each agent's
-// Active/Completed/System list). Two surfaces, deliberately paired:
+// Active/Completed/System/Trash list). Two surfaces, deliberately paired:
 //   • swipeActions — the iOS accelerator, mapped to the platform convention (NOT the first-draft
 //     request, which had them reversed):
-//       – leading  (swipe right) → the positive actions: Complete/Pin (Restore on the Completed tab)
+//       – leading  (swipe right) → the positive actions: Complete/Pin (Restore on the Completed and
+//         Trash tabs)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
 //         stray full swipe can't fire it — the user must tap the revealed button.
 //   • contextMenu — the cross-platform "source of truth": the same actions on a long-press (iOS) or
 //     right-click (macOS), so they're discoverable and reachable by VoiceOver, and so macOS (where
 //     row swiping is awkward) still has them.
-// Delete is a soft-delete to the trash and every mutation offers Undo (see `AppModel`), so both
-// swipe and menu are safe.
+// Delete is a soft-delete to the trash and offers Undo (see `AppModel`), so both swipe and menu are
+// safe. The Trash tab's Delete is instead a permanent purge — irreversible, so it's gated behind a
+// confirmation and offers no Undo.
 
 private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let session: Session
-    /// The tab this row is shown under; `nil` for the Active sidebar (always active sessions). Only
-    /// `.completed` changes the positive action from Complete to Restore.
+    /// The tab this row is shown under; `nil` for the Active sidebar (always active sessions).
+    /// `.completed` and `.trash` swap the positive action from Complete to Restore; `.trash` also
+    /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
+    /// confirmation) and drops Pin — a trashed session isn't orderable.
     let scope: SessionView?
+    /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
+    /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
+    @State private var confirmPurge = false
 
     private var isCompleted: Bool { scope == .completed }
+    private var isTrash: Bool { scope == .trash }
     private var isPinned: Bool { session.pinnedAt != nil }
 
     func body(content: Content) -> some View {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: true) {
                 positiveButton
-                pinButton
+                if !isTrash { pinButton }
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 deleteButton
             }
             .contextMenu {
-                pinButton
+                if !isTrash { pinButton }
                 positiveButton
                 Divider()
                 deleteButton
             }
+            .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
+                Button("Delete Permanently", role: .destructive) { model.purgeSession(session.id) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This session and its full transcript will be permanently deleted. This can't be undone.")
+            }
     }
 
     @ViewBuilder private var positiveButton: some View {
-        if isCompleted {
+        if isCompleted || isTrash {
             Button { model.restoreSession(session.id) } label: {
                 Label("Restore", systemImage: "tray.and.arrow.up")
             }
@@ -62,9 +76,15 @@ private struct SessionRowActions: ViewModifier {
         .tint(.indigo)
     }
 
-    private var deleteButton: some View {
-        Button(role: .destructive) { model.deleteSession(session.id) } label: {
-            Label("Delete", systemImage: "trash")
+    @ViewBuilder private var deleteButton: some View {
+        if isTrash {
+            Button(role: .destructive) { confirmPurge = true } label: {
+                Label("Delete Permanently", systemImage: "trash.slash")
+            }
+        } else {
+            Button(role: .destructive) { model.deleteSession(session.id) } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 }

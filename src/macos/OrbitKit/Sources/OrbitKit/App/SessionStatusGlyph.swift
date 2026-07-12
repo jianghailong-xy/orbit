@@ -7,11 +7,10 @@ import Foundation
 /// Kept in OrbitKit (not the SwiftUI view) so the exact web mapping is shared by macOS + iOS and
 /// unit-tested. The view turns `shape`/`tone` into an SF Symbol (or spinner) and a colour.
 ///
-/// Note vs. web: web also branches on `deletedAt` (a Trash-only glyph) and `archivedAt`, but the
-/// session *list* payload sends neither — web derives "completed" from the active tab, and there is
-/// no Trash tab on the clients — so those branches don't apply here. `completed` carries the
-/// Completed (archived) tab, where a filed session reads as done even though its status settled to
-/// CANCELLED; a genuine FAILED still surfaces its real glyph.
+/// Note vs. web: the list payload sends neither `deletedAt` nor `archivedAt`, so the tab drives the
+/// glyph instead — `completed` carries the Completed (archived) tab (a filed session reads as done
+/// even though its status settled to CANCELLED; a genuine FAILED still surfaces its real glyph), and
+/// `deleted` carries the Trash tab (web branches on `deletedAt` first with the same neutral ⊖).
 public struct SessionStatusGlyph: Equatable, Sendable {
     /// How the view should draw the glyph. `.spinner` is the animated "working" indicator (web's
     /// `LoadingOutlined spin`); `.symbol` names an SF Symbol.
@@ -40,8 +39,13 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     }
 
     /// The glyph for a session, mirroring web `StatusIcon({ session, completed })`.
-    /// `completed` = the Completed (archived) tab is showing this row.
-    public static func make(for s: Session, completed: Bool = false) -> SessionStatusGlyph {
+    /// `completed` = the Completed (archived) tab is showing this row; `deleted` = the Trash tab.
+    public static func make(for s: Session, completed: Bool = false, deleted: Bool = false) -> SessionStatusGlyph {
+        // Trash tab: a soft-deleted session reads as deleted regardless of its settled status —
+        // web branches on `deletedAt` first with the same neutral ⊖ + "Deleted" tooltip.
+        if deleted {
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")
+        }
         // Completed tab: the user deliberately filed this session, so it reads as done even though
         // its status settles to CANCELLED async. A genuine FAILED still falls through to its glyph.
         if completed && s.status != .failed {
