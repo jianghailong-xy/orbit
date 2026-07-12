@@ -3333,6 +3333,32 @@ body {
   gap: 4px;
   font-size: 12px;
 }
+/* A transcript thumbnail that opens the session-wide left/right preview pager. Mirrors the
+   AntD .ant-image thumbnail (rounded, zoom cursor) and paints the mask as a hover overlay. */
+.chat-image-btn {
+  position: relative;
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: zoom-in;
+  line-height: 0;
+}
+.chat-image-btn .chat-image-mask {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.chat-image-btn:hover .chat-image-mask,
+.chat-image-btn:focus-visible .chat-image-mask {
+  opacity: 1;
+}
 /* Placeholder box while a durable attachment blob is being fetched (post-reload). */
 .chat-image-loading {
   width: 120px;

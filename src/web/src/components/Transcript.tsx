@@ -71,6 +71,66 @@ export interface ExportMode {
 }
 export const ExportCtx = createContext<ExportMode | null>(null);
 
+// ── session-wide image preview ──────────────────────────────────────────────
+// Every image thumbnail in the transcript (user-sent, durable attachment, tool
+// result) registers here so one full-screen lightbox can page across all of them
+// with the left/right arrows — clicking any thumbnail opens the group at that
+// image. Order is by event `seq`, not mount order: durable attachments resolve
+// their blobs asynchronously and scroll-up paging prepends older turns, so
+// registration order ≠ visual order; sorting by seq keeps the pager in transcript
+// order regardless. A thumbnail registers only once its src is ready (an
+// attachment registers after its blob resolves), so the pager never shows a blank
+// slide. When this context is absent (the composer's unsent previews, the static
+// HTML export) ChatImage falls back to its own standalone single-image preview.
+type PreviewRegistry = {
+  register: (key: string, order: number, src: string) => void;
+  unregister: (key: string) => void;
+  open: (key: string) => void;
+};
+const ImagePreviewContext = createContext<PreviewRegistry | null>(null);
+
+function ImagePreviewProvider({ children }: { children: ReactNode }) {
+  const entries = useRef(new Map<string, { order: number; src: string }>());
+  const [state, setState] = useState<{ visible: boolean; current: number; items: string[] }>({
+    visible: false,
+    current: 0,
+    items: [],
+  });
+  const registry = useMemo<PreviewRegistry>(
+    () => ({
+      register: (key, order, src) => {
+        entries.current.set(key, { order, src });
+      },
+      unregister: (key) => {
+        entries.current.delete(key);
+      },
+      // Snapshot the images in seq order at click time and open the group at the
+      // clicked one; images arriving mid-preview needn't join the frozen set.
+      open: (key) => {
+        const sorted = [...entries.current.entries()].sort((a, b) => a[1].order - b[1].order);
+        const current = sorted.findIndex(([k]) => k === key);
+        if (current < 0) return;
+        setState({ visible: true, current, items: sorted.map(([, v]) => v.src) });
+      },
+    }),
+    [],
+  );
+  return (
+    <ImagePreviewContext.Provider value={registry}>
+      {children}
+      <Image.PreviewGroup
+        items={state.items}
+        preview={{
+          visible: state.visible,
+          current: state.current,
+          onVisibleChange: (v) => setState((s) => ({ ...s, visible: v })),
+          onChange: (current) => setState((s) => ({ ...s, current })),
+        }}
+      />
+    </ImagePreviewContext.Provider>
+  );
+}
+
 // ── grouped transcript tree ────────────────────────────────────────────────
 // The raw event stream is flat. Two relationships have to be reconstructed to
 // render like Claude Code: a tool_result belongs to its tool_use, and every
@@ -239,7 +299,11 @@ export const Transcript = memo(function Transcript({
       artifactSessionId ? (artifactPath: string) => fetchSessionArtifactObjectUrl(artifactSessionId, artifactPath) : null,
     [artifactSessionId],
   );
-  const body = <NodeList nodes={nodes} live={live} />;
+  const body = (
+    <ImagePreviewProvider>
+      <NodeList nodes={nodes} live={live} />
+    </ImagePreviewProvider>
+  );
   return artifactResolve ? (
     <ArtifactResolverContext.Provider value={artifactResolve}>{body}</ArtifactResolverContext.Provider>
   ) : (
@@ -311,7 +375,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'tool':
       return <ToolView node={node} live={live} />;
     case 'result':
-      return <ToolResult content={node.content} isError={node.isError} />;
+      return <ToolResult seq={node.seq} content={node.content} isError={node.isError} />;
     case 'divider':
       return <div className="chat-turn-divider" />;
     case 'interrupt':
@@ -356,14 +420,14 @@ function UserBubble({ node }: { node: TextNode }) {
         {localImgs && (
           <div className="chat-images">
             {localImgs.map((im, i) => (
-              <ChatImage key={i} src={im.url} />
+              <ChatImage key={i} src={im.url} previewKey={`u${node.seq}-l${i}`} order={node.seq * 1e4 + i} />
             ))}
           </div>
         )}
         {imgRefs.length > 0 && (
           <div className="chat-images">
-            {imgRefs.map((r) => (
-              <AttachmentImage key={r.id} id={r.id} />
+            {imgRefs.map((r, i) => (
+              <AttachmentImage key={r.id} id={r.id} previewKey={`u${node.seq}-a${r.id}`} order={node.seq * 1e4 + i} />
             ))}
           </div>
         )}
@@ -422,8 +486,17 @@ function relTime(iso: string): string {
 // Renders a past turn's image from its attachment id. The download endpoint is
 // bearer-guarded (an <img src> can't carry the token), so fetch the blob and show its
 // object URL, revoking it on unmount. Stays blank until loaded (and on error).
-export function AttachmentImage({ id }: { id: string }) {
-  return <ResolvedAttachmentImage id={id} className="chat-image" alt="Image sent by user" loadingClassName="chat-image chat-image-loading" />;
+export function AttachmentImage({ id, previewKey, order }: { id: string; previewKey?: string; order?: number }) {
+  return (
+    <ResolvedAttachmentImage
+      id={id}
+      className="chat-image"
+      alt="Image sent by user"
+      loadingClassName="chat-image chat-image-loading"
+      previewKey={previewKey}
+      order={order}
+    />
+  );
 }
 
 function ResolvedAttachmentImage({
@@ -431,11 +504,15 @@ function ResolvedAttachmentImage({
   className,
   alt,
   loadingClassName,
+  previewKey,
+  order,
 }: {
   id: string;
   className: string;
   alt: string;
   loadingClassName: string;
+  previewKey?: string;
+  order?: number;
 }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
@@ -464,7 +541,7 @@ function ResolvedAttachmentImage({
     return data ? <ChatImage src={data} className={className} alt={alt} /> : <span className={loadingClassName} />;
   }
   if (!url) return <span className={loadingClassName} />;
-  return <ChatImage src={url} className={className} alt={alt} />;
+  return <ChatImage src={url} className={className} alt={alt} previewKey={previewKey} order={order} />;
 }
 
 // A non-image file the user sent: a chip that downloads the blob on click (the download
@@ -519,15 +596,29 @@ export function ChatImage({
   src,
   className = 'chat-image',
   alt = 'Image sent by user',
+  previewKey,
+  order,
 }: {
   src: string;
   className?: string;
   alt?: string;
+  // When set (and inside the transcript's ImagePreviewProvider) this image joins the
+  // session-wide left/right preview group under this stable key, ordered by `order`.
+  previewKey?: string;
+  order?: number;
 }) {
   const exp = useContext(ExportCtx);
+  const registry = useContext(ImagePreviewContext);
   // Static export: AntD's Image lightbox is JS-driven and inert in a saved file — render a
   // plain <img> (the src is already the full-resolution data URL).
   if (exp) return <img className={className} src={src} alt={alt} />;
+  // In the transcript: join the shared left/right pager (see ImagePreviewProvider).
+  if (registry && previewKey !== undefined && order !== undefined) {
+    return (
+      <GroupedChatImage registry={registry} previewKey={previewKey} order={order} src={src} className={className} alt={alt} />
+    );
+  }
+  // Standalone (the composer's unsent previews): AntD's own single-image lightbox.
   return (
     <Image
       className={className}
@@ -541,6 +632,38 @@ export function ChatImage({
         ),
       }}
     />
+  );
+}
+
+// A transcript thumbnail wired into the session-wide preview group: registers its src on
+// mount (re-registering if the src changes, e.g. an object URL is replaced), unregisters on
+// unmount, and opens the group at this image on click.
+function GroupedChatImage({
+  registry,
+  previewKey,
+  order,
+  src,
+  className,
+  alt,
+}: {
+  registry: PreviewRegistry;
+  previewKey: string;
+  order: number;
+  src: string;
+  className: string;
+  alt: string;
+}) {
+  useEffect(() => {
+    registry.register(previewKey, order, src);
+    return () => registry.unregister(previewKey);
+  }, [registry, previewKey, order, src]);
+  return (
+    <button type="button" className="chat-image-btn" onClick={() => registry.open(previewKey)}>
+      <img className={className} src={src} alt={alt} />
+      <span className="chat-image-mask">
+        <EyeOutlined /> Preview
+      </span>
+    </button>
   );
 }
 
@@ -876,7 +999,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </div>
           )}
           {node.result && (
-            <ToolResult content={node.result.content} isError={node.result.isError} compact markdown={isSubAgent} />
+            <ToolResult seq={node.seq} content={node.result.content} isError={node.result.isError} compact markdown={isSubAgent} />
           )}
         </div>
       )}
@@ -1137,11 +1260,13 @@ function describeTool(name: string, input: any, isShell?: boolean): ToolDesc {
 }
 
 function ToolResult({
+  seq,
   content,
   isError,
   compact,
   markdown,
 }: {
+  seq: number;
   content: any;
   isError?: boolean;
   compact?: boolean;
@@ -1159,7 +1284,7 @@ function ToolResult({
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (
-            <ChatImage key={i} src={src} />
+            <ChatImage key={i} src={src} previewKey={`r${seq}-${i}`} order={seq * 1e4 + i} />
           ))}
         </div>
       )}
