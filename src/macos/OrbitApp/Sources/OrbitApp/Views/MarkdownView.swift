@@ -316,24 +316,54 @@ private struct MarkdownImageView: View {
     // Every call site (assistant bubble, thinking block, tool card, approval plan) renders inside the
     // transcript's `AttachmentImageStore` environment — the same store `ChatAttachmentImage` reads.
     @Environment(AttachmentImageStore.self) private var store
+    // Live pane width (measured in `body`); `capWidth` clamps the image to it so a wide image can't
+    // push the transcript row past the screen edge — web's `100%` term (see `cap`).
+    @State private var paneWidth: CGFloat = 0
+    #if os(iOS)
+    // A tap opens the shared full-screen zoomable viewer, like a sent-image thumbnail.
+    @State private var fullScreen = false
+    #endif
 
-    // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`. A phone is width-bound so the
-    // width cap only bites on macOS/iPad; the height cap stops a tall screenshot from filling the pane.
+    // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`. `cap` is the fixed upper
+    // bound (the `760px` / `70vh` term); the render width also honours the pane via `capWidth` (the
+    // `100%` term). Without that clamp a landscape image scaled up to the 520pt cap overflowed a
+    // ~360pt phone pane and bled off both edges — the reported "image stretches the whole page" bug.
     #if os(iOS)
     private static let cap = CGSize(width: 520, height: 460)
     #else
     private static let cap = CGSize(width: 480, height: 360)
     #endif
 
-    /// Scale the source down to touch the cap (never up — web's `max-*` only shrinks), keeping aspect,
-    /// so the rounded border hugs the image with no letterbox margin (see `ChatAttachmentImage`).
-    private static func fitted(_ src: CGSize) -> CGSize {
-        guard src.width > 0, src.height > 0 else { return cap }
-        let k = min(cap.width / src.width, cap.height / src.height, 1)
+    /// The fixed width cap, but never wider than the pane (0 before the first geometry read → fall
+    /// back to the fixed cap; the read lands on the same layout pass).
+    private var capWidth: CGFloat {
+        paneWidth > 0 ? min(Self.cap.width, paneWidth) : Self.cap.width
+    }
+
+    /// Scale the source down to touch the (pane-clamped) cap (never up — web's `max-*` only shrinks),
+    /// keeping aspect, so the rounded border hugs the image with no letterbox margin (see
+    /// `ChatAttachmentImage`).
+    private func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return CGSize(width: capWidth, height: Self.cap.height) }
+        let k = min(capWidth / src.width, Self.cap.height / src.height, 1)
         return CGSize(width: src.width * k, height: src.height * k)
     }
 
     var body: some View {
+        content
+            // Spread to the full pane and measure it: a `GeometryReader` background reads the pane
+            // width without disturbing the exact-framed image (which stays hugged to the leading edge
+            // — the empty trailing space is inert). `onGeometryChange` is iOS 18+, so this uses the
+            // version-agnostic reader + `onChange`.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.width, initial: true) { _, w in paneWidth = w }
+                }
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         if let id = attachmentID {
             attachmentImage(id)
         } else if let url = remoteURL {
@@ -341,7 +371,7 @@ private struct MarkdownImageView: View {
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFit()
-                        .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height, alignment: .leading)
+                        .frame(maxWidth: capWidth, maxHeight: Self.cap.height, alignment: .leading)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                 case .failure:
@@ -358,12 +388,15 @@ private struct MarkdownImageView: View {
     @ViewBuilder private func attachmentImage(_ id: String) -> some View {
         Group {
             if let img = store.image(for: id) {
-                let size = Self.fitted(img.size)
-                Image(platformImage: img)
-                    .resizable().scaledToFit()
-                    .frame(width: size.width, height: size.height)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                let size = fitted(img.size)
+                withPreview(
+                    Image(platformImage: img)
+                        .resizable().scaledToFit()
+                        .frame(width: size.width, height: size.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) },
+                    image: img
+                )
             } else if store.isNotImage(id) {
                 unavailable   // the bytes didn't decode as an image
             } else {
@@ -371,6 +404,20 @@ private struct MarkdownImageView: View {
             }
         }
         .task(id: id) { await store.load(id) }
+    }
+
+    /// iOS: a tap opens the shared full-screen zoomable viewer (pinch/pan, Copy/Save) — the same
+    /// preview a sent-image thumbnail or a tool-result image opens. macOS: the image stays static,
+    /// matching the transcript's other thumbnails.
+    @ViewBuilder private func withPreview(_ view: some View, image img: PlatformImage) -> some View {
+        #if os(iOS)
+        view
+            .contentShape(Rectangle())
+            .onTapGesture { fullScreen = true }
+            .fullScreenCover(isPresented: $fullScreen) { FullScreenImageView(image: img) }
+        #else
+        view
+        #endif
     }
 
     private var placeholder: some View {
