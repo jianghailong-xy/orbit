@@ -1796,6 +1796,10 @@ body {
   border-radius: 6px;
   background: var(--bg-raised);
   overflow: hidden;
+  /* Keep natural height: as a flex child of the height-capped .bg-tray-list,
+     'overflow: hidden' would otherwise let flex-shrink squash an expanded row
+     to fit, clipping its output with no scrollbar to reach the rest. */
+  flex: none;
 }
 .bg-shell-head {
   display: flex;
