@@ -293,8 +293,8 @@ export class RunnerApiController {
     if (dto?.sessions?.length) {
       try {
         await Promise.all(
-          dto.sessions.map((s) =>
-            this.prisma.session.updateMany({
+          dto.sessions.map(async (s) => {
+            await this.prisma.session.updateMany({
               where: { id: s.sessionId, assignedRunnerId: runner.id, status: { in: LIVE } },
               data: {
                 isolationStatus: s.isolationStatus,
@@ -308,8 +308,11 @@ export class RunnerApiController {
                 // redundant Merge button (older runners omit it → left untouched).
                 ...(s.branchMerged !== undefined ? { branchMerged: s.branchMerged } : {}),
               },
-            }),
-          ),
+            });
+            // New commits after an earlier merge: retire the stale "✓ Merged" so the bar
+            // offers Merge again for the new work.
+            await this.clearStaleMergedStatus(s.sessionId, runner.id, s.branchMerged);
+          }),
         );
       } catch {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
@@ -772,6 +775,10 @@ export class RunnerApiController {
       }
       return true;
     });
+    // Post-turn worktree verdict: new commits after an earlier merge retire the stale
+    // "✓ Merged" (see clearStaleMergedStatus). Outside the transaction — independent write,
+    // self-guarded, and valid even for a duplicate/late turn-complete.
+    await this.clearStaleMergedStatus(sessionId, runner.id, dto.branchMerged);
     if (failTask) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
@@ -1208,6 +1215,9 @@ export class RunnerApiController {
         update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
       });
     }
+    // Opening the diff drawer recomputes branchMerged; new commits after an earlier merge
+    // retire the stale "✓ Merged" here too (see clearStaleMergedStatus).
+    await this.clearStaleMergedStatus(sessionId, runner.id, dto.branchMerged);
     return { ok: true };
   }
 
@@ -1248,5 +1258,29 @@ export class RunnerApiController {
       throw new ForbiddenException('session does not belong to this runner');
     }
     return session;
+  }
+
+  /**
+   * A worktree report saying the branch is NOT in its merge target (branchMerged === false)
+   * means any earlier "✓ Merged" outcome is history — new commits landed on the branch since
+   * that merge. Clear the stale terminal 'merged' so the status bar offers Merge again: every
+   * client renders the chip from mergeStatus first (web MergeButton returns "✓ Merged" on
+   * status === 'merged' before ever looking at the live branchMerged verdict), so without this
+   * the bar stays stuck on "✓ Merged" and hides the button for the new work. Guarded on the
+   * current value: an in-flight merge ('pending') is never touched, a no-match write is free,
+   * and a stale-snapshot report racing a *fresh* merge result at worst blinks the chip for one
+   * report cycle (the next report carries branchMerged=true → "✓ In main"). mergedAt is kept —
+   * it remains true history of when that earlier merge landed.
+   */
+  private async clearStaleMergedStatus(
+    sessionId: string,
+    runnerId: string,
+    branchMerged?: boolean,
+  ): Promise<void> {
+    if (branchMerged !== false) return;
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, assignedRunnerId: runnerId, mergeStatus: 'merged' },
+      data: { mergeStatus: null, mergeError: null },
+    });
   }
 }
