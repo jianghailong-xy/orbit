@@ -221,7 +221,11 @@ private struct WorktreeMergeControl: View {
             .buttonStyle(.plain)
             .disabled(busy)
             if !targets.isEmpty {
-                Rectangle().fill(c.opacity(0.3)).frame(width: 1).padding(.vertical, 3)
+                // Fixed height, NOT a bare `Rectangle().frame(width: 1)`: an unheighted Rectangle is
+                // a greedy shape that expands vertically without bound, and since this HStack has no
+                // height cap (the bar is only `minHeight: 30`) it stretched the whole split button —
+                // and the enclosing Capsule — into a giant pill. 18pt sits ~3pt inside the button.
+                Rectangle().fill(c.opacity(0.3)).frame(width: 1, height: 18)
                 MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: c)
             }
         }
