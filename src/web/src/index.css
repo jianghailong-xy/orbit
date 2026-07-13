@@ -2231,6 +2231,27 @@ body {
   border-radius: 4px;
   padding: 0 4px;
 }
+/* The merge-target dropdown popup: height-capped, and searchable for long branch lists. The panel
+   itself carries the elevated surface (antd theme tokens, set inline), so the antd menu inside it is
+   flattened to just the scrollable list of branches. */
+.wt-merge-menu-panel {
+  overflow: hidden;
+  min-width: 208px;
+}
+.wt-merge-menu-search {
+  padding: 6px;
+}
+.wt-merge-menu-list.ant-dropdown-menu {
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: none;
+  border-radius: 0;
+}
+.wt-merge-menu-empty {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 12px;
+}
 .wt-merge-manual {
   display: flex;
   flex-direction: column;

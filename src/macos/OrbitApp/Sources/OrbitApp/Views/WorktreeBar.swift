@@ -211,7 +211,9 @@ private struct WorktreeMergeControl: View {
                                  tint: .red, disabled: busy) {
                         Task { await console.worktree.merge(target: detail.mergeTarget ?? defaultTarget) }
                     }
-                    if !targets.isEmpty { caret(targets: targets, defaultTarget: defaultTarget, tint: .red) }
+                    if !targets.isEmpty {
+                        MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: .red)
+                    }
                 }
             }
         } else {
@@ -219,27 +221,110 @@ private struct WorktreeMergeControl: View {
                 WTPillButton(title: "Merge to \(defaultTarget ?? "main")", disabled: busy) {
                     Task { await console.worktree.merge(target: defaultTarget) }
                 }
-                if !targets.isEmpty { caret(targets: targets, defaultTarget: defaultTarget, tint: .accentColor) }
+                if !targets.isEmpty {
+                    MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: .accentColor)
+                }
             }
         }
     }
+}
 
-    /// The split-button caret: a menu of the repo's other branches to merge into instead.
-    private func caret(targets: [String], defaultTarget: String?, tint: Color) -> some View {
-        Menu {
-            ForEach(targets, id: \.self) { b in
-                Button { Task { await console.worktree.merge(target: b) } } label: {
-                    if b == defaultTarget { Label(b, systemImage: "checkmark") } else { Text(b) }
+/// The split-button caret: picks another branch to merge into. A short list stays a native inline
+/// `Menu`; once the repo has many branches it becomes a searchable, height-capped sheet so the list
+/// stops running off-screen and can be filtered — mirroring web's searchable merge-target dropdown.
+private struct MergeTargetCaret: View {
+    let console: ConsoleModel
+    let targets: [String]
+    let defaultTarget: String?
+    let tint: Color
+    @State private var showPicker = false
+
+    /// Past this many branches the inline menu is a chore to scan, so switch to the search sheet
+    /// (matches web's merge-target search threshold).
+    private static let searchThreshold = 8
+
+    var body: some View {
+        if targets.count > Self.searchThreshold {
+            Button { showPicker = true } label: { caretLabel }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Choose a branch to merge into")
+                .sheet(isPresented: $showPicker) {
+                    MergeTargetPickerSheet(targets: targets, defaultTarget: defaultTarget) { picked in
+                        Task { await console.worktree.merge(target: picked) }
+                    }
                 }
+        } else {
+            Menu {
+                ForEach(targets, id: \.self) { b in
+                    Button { Task { await console.worktree.merge(target: b) } } label: {
+                        if b == defaultTarget { Label(b, systemImage: "checkmark") } else { Text(b) }
+                    }
+                }
+            } label: {
+                caretLabel
             }
-        } label: {
-            Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold)).foregroundStyle(tint)
-                .padding(.horizontal, 6).padding(.vertical, 4)
-                .background(tint.opacity(0.14), in: Capsule())
-                .overlay(Capsule().strokeBorder(tint.opacity(0.3)))
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
-        .menuIndicator(.hidden)
-        .fixedSize()
+    }
+
+    private var caretLabel: some View {
+        Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold)).foregroundStyle(tint)
+            .padding(.horizontal, 6).padding(.vertical, 4)
+            .background(tint.opacity(0.14), in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.3)))
+    }
+}
+
+/// A searchable, height-capped list of branches to merge into — shown instead of the inline menu
+/// when the repo has many branches (the iOS/macOS counterpart to web's merge-target search box).
+/// Medium-height on iOS so it never runs off-screen; picking a branch dismisses and fires the merge.
+private struct MergeTargetPickerSheet: View {
+    let targets: [String]
+    let defaultTarget: String?
+    let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var filtered: [String] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty ? targets : targets.filter { $0.lowercased().contains(q) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(filtered, id: \.self) { b in
+                Button {
+                    dismiss()
+                    onPick(b)
+                } label: {
+                    HStack(spacing: 8) {
+                        BranchLabelView(branch: b).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        if b == defaultTarget {
+                            Text("default").font(.orbitMeta).foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            .listStyle(.plain)
+            .searchable(text: $query, prompt: "Search branches")
+            .overlay { if filtered.isEmpty { ContentUnavailableView.search } }
+            .navigationTitle("Merge into")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        #else
+        .frame(minWidth: 360, minHeight: 420)
+        #endif
     }
 }
 

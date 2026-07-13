@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Drawer, Dropdown, Segmented, Tooltip } from 'antd';
+import { App as AntApp, Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -290,6 +290,11 @@ function MergeButton({
   onResolveInSession?: () => void;
   resolving?: boolean;
 }) {
+  // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
+  // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
+  // order stable across the different button states.
+  const [targetQuery, setTargetQuery] = useState('');
+  const { token } = theme.useToken();
   if (status === 'merged') {
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
@@ -399,7 +404,13 @@ function MergeButton({
   // Older runner (no reported targets) or mid-merge → the plain button, no caret.
   if (!hasMenu) return mainBtnEl;
 
-  const items: MenuProps['items'] = targets.map((b) => ({
+  // Surface the search field only once the list is long enough that scanning it is a chore; short
+  // lists stay a plain click-to-pick menu. The panel is always height-capped (see the CSS) so a long
+  // branch list scrolls instead of running off the screen.
+  const showSearch = targets.length > 8;
+  const q = targetQuery.trim().toLowerCase();
+  const visible = q ? targets.filter((b) => b.toLowerCase().includes(q)) : targets;
+  const items: MenuProps['items'] = visible.map((b) => ({
     key: b,
     label: (
       <span className="wt-merge-target">
@@ -413,7 +424,44 @@ function MergeButton({
   return (
     <span className="wt-merge-split-wrap" onClick={(e) => e.stopPropagation()}>
       {mainBtnEl}
-      <Dropdown trigger={['click']} placement="topRight" menu={{ items }}>
+      <Dropdown
+        trigger={['click']}
+        placement="topRight"
+        menu={{ items, className: 'wt-merge-menu-list' }}
+        onOpenChange={(open) => {
+          if (!open) setTargetQuery('');
+        }}
+        dropdownRender={(menu) => (
+          <div
+            className="wt-merge-menu-panel"
+            style={{
+              background: token.colorBgElevated,
+              borderRadius: token.borderRadiusLG,
+              boxShadow: token.boxShadowSecondary,
+            }}
+          >
+            {showSearch && (
+              <div className="wt-merge-menu-search" style={{ borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+                <Input
+                  size="small"
+                  autoFocus
+                  allowClear
+                  placeholder="Search branches…"
+                  value={targetQuery}
+                  onChange={(e) => setTargetQuery(e.target.value)}
+                />
+              </div>
+            )}
+            {visible.length > 0 ? (
+              menu
+            ) : (
+              <div className="wt-merge-menu-empty" style={{ color: token.colorTextTertiary }}>
+                No matching branches
+              </div>
+            )}
+          </div>
+        )}
+      >
         <button
           type="button"
           className={`wt-merge-caret${failed ? ' wt-merge-btn-failed' : ''}`}
