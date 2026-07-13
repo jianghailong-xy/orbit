@@ -26,7 +26,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
-import { generateNaming, titleFromPrompt } from './naming';
+import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -179,6 +179,9 @@ export class SessionsService {
     // runs claude in its own `git worktree` on this branch when the workDir is a git repo,
     // then commits the work here for a manual merge — harmless for non-git/shared runs.
     const naming = await generateNaming({ prompt: dto.prompt, title: dto.title });
+    // DeepSeek gave us nothing usable in the 4s creation window (slow/unreachable/error), so the
+    // title fell back to the raw prompt line. Retry off the hot path below, once the row exists.
+    const usedFallbackTitle = !dto.title && !naming.title;
     const title = dto.title ?? naming.title ?? titleFromPrompt(dto.prompt);
     // provider is the identity stored on the row; runtime is which built-in CLI actually
     // drives it (a custom provider borrows claude), and decides the pre-generated session-id
@@ -233,7 +236,32 @@ export class SessionsService {
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
+    // Title fell back to the raw prompt line because DeepSeek missed the 4s creation window.
+    // Retry off the hot path (generous timeout + retries) and swap in a clean title when it
+    // lands — the branch is left as-is (the runner may already hold a worktree on it).
+    if (usedFallbackTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
     return session;
+  }
+
+  /**
+   * Background retry for a session whose title fell back to the raw prompt at creation (DeepSeek
+   * slow/unreachable in the 4s window). Re-asks DeepSeek with a generous timeout + retries, then
+   * swaps the title in — but only while it's still the exact fallback we wrote, so a user rename
+   * (or any concurrent change) is never clobbered. Re-publishes the session so live clients pick
+   * up the new title. Fire-and-forget: never awaited, swallows all errors.
+   */
+  private async beautifyTitleLater(sessionId: string, prompt: string, fallbackTitle: string): Promise<void> {
+    try {
+      const title = await beautifyTitle({ prompt });
+      if (!title || title === fallbackTitle) return;
+      const res = await this.prisma.session.updateMany({
+        where: { id: sessionId, title: fallbackTitle },
+        data: { title },
+      });
+      if (res.count > 0) this.realtime.publishSessionCreated(sessionId);
+    } catch {
+      // best-effort; the raw fallback title simply stays
+    }
   }
 
   async list(
