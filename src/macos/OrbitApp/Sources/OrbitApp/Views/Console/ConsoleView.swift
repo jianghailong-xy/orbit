@@ -414,13 +414,18 @@ struct TranscriptView: View {
             atBottom = true
         } label: { pressed in
             Image(systemName: "arrow.down")
-                .font(.orbitLabel.weight(.semibold))
+                // A thin 15pt arrow, not the old chunky semibold — matches ChatGPT's slim glyph and
+                // web's `ArrowDownOutlined` (15px). Fixed size (like `orbitHeroGlyph`): a control mark,
+                // not body text, so it shouldn't ride Dynamic Type.
+                .font(.system(size: 15, weight: .regular))
                 .foregroundStyle(.primary)
                 .frame(width: 32, height: 32)
                 .background(.regularMaterial, in: Circle())
                 .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
-                .overlay { Circle().strokeBorder(.primary.opacity(0.12)) }
-                .shadow(color: .black.opacity(pressed ? 0.26 : 0.18), radius: pressed ? 7 : 4, y: pressed ? 2 : 1)
+                // Fainter ring + softer shadow (web parity: 0.12) so the disc reads as light as
+                // ChatGPT's, not the heavier ring/shadow it had before.
+                .overlay { Circle().strokeBorder(.primary.opacity(0.08)) }
+                .shadow(color: .black.opacity(pressed ? 0.20 : 0.12), radius: pressed ? 6 : 4, y: pressed ? 2 : 1)
                 .scaleEffect(pressed ? 1.32 : 1)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
