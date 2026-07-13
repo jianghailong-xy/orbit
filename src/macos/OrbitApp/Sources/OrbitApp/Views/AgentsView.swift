@@ -123,9 +123,6 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
-        // Tag filter chips pinned above the list ("All" + one per tag); hidden when the owner has
-        // no tags. Pure derive — see `tagFilterBar` / `shownSessions`.
-        .safeAreaInset(edge: .top, spacing: 0) { tagFilterBar }
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -176,6 +173,21 @@ struct AgentPanes: View {
                     }
                     if !app.sessionTags.isEmpty {
                         Divider()
+                        // Filter by tag lives here (a submenu) rather than a persistent chip row above
+                        // the list — the row read as clutter. A checkmark marks the active tag; "All"
+                        // clears it, and the toolbar icon fills below to signal an active filter.
+                        Menu {
+                            Button { tagFilter = nil } label: {
+                                if tagFilter == nil { Label("All", systemImage: "checkmark") } else { Text("All") }
+                            }
+                            ForEach(app.sessionTags) { t in
+                                Button { tagFilter = (tagFilter == t.id ? nil : t.id) } label: {
+                                    if tagFilter == t.id { Label(t.name, systemImage: "checkmark") } else { Text(t.name) }
+                                }
+                            }
+                        } label: {
+                            Label("Filter by Tag", systemImage: "tag")
+                        }
                         Button { groupByTag.toggle() } label: {
                             if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
                             else { Text("Group by Tag") }
@@ -186,7 +198,9 @@ struct AgentPanes: View {
                         Label("Settings", systemImage: "gearshape")
                     }
                 } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
+                    // Filled variant when a tag filter is active, so the (now chip-less) filter state
+                    // stays visible at a glance.
+                    Image(systemName: tagFilter == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
                 }
                 .accessibilityLabel("Session scope, \(view.title)")
             }
@@ -257,40 +271,6 @@ struct AgentPanes: View {
         } else {
             Text("Untagged").textCase(nil)
         }
-    }
-
-    /// The horizontal tag filter chips above the list: "All" + one per tag; tap to filter, tap the
-    /// active one again to clear. Hidden when the owner has no tags.
-    @ViewBuilder private var tagFilterBar: some View {
-        if !app.sessionTags.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    tagChip(title: "All", color: nil, selected: tagFilter == nil) { tagFilter = nil }
-                    ForEach(app.sessionTags) { t in
-                        tagChip(title: t.name, color: Color(tagHex: t.color), selected: tagFilter == t.id) {
-                            tagFilter = (tagFilter == t.id) ? nil : t.id
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-            }
-            .background(.bar)
-        }
-    }
-
-    private func tagChip(title: String, color: Color?, selected: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if let color { Circle().fill(color).frame(width: 8, height: 8) }
-                Text(title).font(.orbitListSubtitle)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(selected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1))
-            .foregroundStyle(selected ? Color.accentColor : Color.primary)
-        }
-        .buttonStyle(.plain)
     }
 }
 
