@@ -15,11 +15,12 @@ struct WorktreeBar: View {
     @State private var copied = false
 
     var body: some View {
-        // A CONCRETE container (VStack), not `Group`: the poller `.task` below must attach to a view
-        // that is always present. `Group` applies its modifiers to each *child*, so while the bar is
-        // hidden its only child is `EmptyView` — the `.task` would land on `EmptyView` (no lifecycle)
-        // and never fire, `worktree` would never load, and the bar would never appear. A VStack owns
-        // the modifier itself and is always in the tree, so the poller runs regardless of content.
+        // A CONCRETE container (VStack), not `Group`, so the `.sheet` below has a stable host that's
+        // always in the tree even while the bar's content is hidden (a `Group` applies its modifiers to
+        // its current *child* — `EmptyView` when hidden — so the sheet would ride a transient view). The
+        // status poll that fills `worktree.detail` is owned by `ConsoleModel` and driven by the app's
+        // focus state (see `startStreaming`), NOT a view `.task` here, so it keeps running even when this
+        // pushed detail's lifecycle churns on iPhone and freezes an on-screen `.task`.
         VStack(spacing: 0) {
             let d = console.worktree.detail
             let files = d?.changedFiles ?? []
@@ -33,9 +34,6 @@ struct WorktreeBar: View {
                 if let d, let branch = d.branch { pill(detail: d, branch: branch, files: files) }
             }
         }
-        // Key the poller to the session id so it restarts for the new session when the console is
-        // swapped in place (ConsoleView keeps its tree identity across a session switch).
-        .task(id: console.sessionID) { await console.worktree.startPolling() }
         .sheet(isPresented: $showDiff) { DiffSheet(console: console) }
     }
 
