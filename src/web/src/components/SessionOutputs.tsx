@@ -428,8 +428,17 @@ function MergeButton({
               boxShadow: token.boxShadowSecondary,
             }}
           >
+            {visible.length > 0 ? (
+              menu
+            ) : (
+              <div className="wt-merge-menu-empty" style={{ color: token.colorTextTertiary }}>
+                No matching branches
+              </div>
+            )}
+            {/* Search sits at the BOTTOM of the panel: this dropdown opens upward from the worktree
+                bar, so the bottom edge is the one nearest the caret the user just clicked. */}
             {showSearch && (
-              <div className="wt-merge-menu-search" style={{ borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+              <div className="wt-merge-menu-search" style={{ borderTop: `1px solid ${token.colorBorderSecondary}` }}>
                 <Input
                   size="small"
                   autoFocus
@@ -438,13 +447,6 @@ function MergeButton({
                   value={targetQuery}
                   onChange={(e) => setTargetQuery(e.target.value)}
                 />
-              </div>
-            )}
-            {visible.length > 0 ? (
-              menu
-            ) : (
-              <div className="wt-merge-menu-empty" style={{ color: token.colorTextTertiary }}>
-                No matching branches
               </div>
             )}
           </div>
