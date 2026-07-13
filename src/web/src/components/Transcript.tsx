@@ -952,10 +952,16 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // A plan or a question to the user is the point of the turn — open it by
-  // default; errors also auto-open. A static export opens every card (nothing can
-  // be un-folded after the fact).
+  // default; errors also auto-open; a result carrying an image (a screenshot the
+  // agent produced for the user) opens so the picture shows without a click. A
+  // static export opens every card (nothing can be un-folded after the fact).
   const defaultOpen =
-    !!exp || !!node.result?.isError || node.name === 'ExitPlanMode' || node.name === 'AskUserQuestion' || isShell;
+    !!exp ||
+    !!node.result?.isError ||
+    node.name === 'ExitPlanMode' ||
+    node.name === 'AskUserQuestion' ||
+    isShell ||
+    resultImages(node.result?.content).length > 0;
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const open = manualOpen ?? defaultOpen;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
