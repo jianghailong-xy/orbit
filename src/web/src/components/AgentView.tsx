@@ -1971,12 +1971,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     mutationFn: (vars: { id: string; branch: string }) =>
       resumeSession(
         vars.id,
-        'Rebase this branch onto the latest `main` and resolve any conflicts.\n\n' +
-          "You're in this session's isolated git worktree, checked out on `" +
+        'Rebase this branch onto the latest main and resolve any conflicts.\n\n' +
+          "You're in this session's isolated git worktree, checked out on " +
           vars.branch +
-          '`. Run `git rebase main` — it may stop on conflicts. For each, resolve every conflict' +
-          ' using your knowledge of the changes made on this branch, `git add` the resolved' +
-          ' files, then `git rebase --continue`, repeating until the rebase completes. Do not' +
+          '. Run git rebase main — it may stop on conflicts. For each, resolve every conflict' +
+          ' using your knowledge of the changes made on this branch, git add the resolved' +
+          ' files, then git rebase --continue, repeating until the rebase completes. Do not' +
           ' push. Once the rebase finishes, the branch can be merged into main cleanly from the' +
           ' status bar above the composer.',
       ),
