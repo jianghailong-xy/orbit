@@ -400,10 +400,10 @@ struct AgentSessionRow: View {
 
     #if os(iOS)
     /// The compact (iPhone) row for the ChatGPT-style grouped list: a flush-left title with a
-    /// trailing relative time, a slim live cue (a spinner while working / an amber dot while it needs
-    /// approval), over the preview line. No leading status glyph or pin accent bar — the recency
-    /// sections carry pinning, and the preview line already states the live status in words + colour,
-    /// so the heavy per-row glyph column is dropped for a calmer, more scannable list.
+    /// trailing relative time, a slim live cue (spinner while working / amber dot when it needs you /
+    /// red dot on failure), over the preview line. No leading status glyph or pin accent bar — the
+    /// recency sections carry pinning, and the preview line already states the live status in words +
+    /// colour, so the heavy per-row glyph column is dropped for a calmer, more scannable list.
     private var compactRow: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
@@ -419,15 +419,26 @@ struct AgentSessionRow: View {
             }
         }
         .padding(.vertical, 2)
+        // Combine the row's text into one VoiceOver element and speak the session's state as its
+        // value — the visible cue only covers working/needs-you/failed, so the calm states (dormant,
+        // done, queued) would otherwise no longer announce their status the way the dropped leading
+        // glyph did. `statusWord` is the shared, tested port of web's `statusLabel`.
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(SessionHeader.statusWord(for: session))
     }
 
-    /// The slim trailing status cue, derived from the same `SessionLine` tone the preview uses: a
-    /// spinner while working, an amber dot while awaiting approval, nothing otherwise.
+    /// The slim trailing status cue — the essence of the dropped leading glyph, derived from the same
+    /// `SessionStatusGlyph` source so nothing important goes silent: a spinner while working, an amber
+    /// dot when it needs you (approval), a red dot on failure. The calm states (dormant / done /
+    /// queued) show no cue — that's the decluttering — but still read their status in the preview line
+    /// and the VoiceOver value on the row.
     @ViewBuilder private var liveIndicator: some View {
-        switch line?.tone {
-        case .running?:  SpinnerGlyph(color: .blue)
-        case .approval?: Circle().fill(.orange).frame(width: 7, height: 7)
-        default:         EmptyView()
+        let glyph = SessionStatusGlyph.make(for: session, completed: completed)
+        switch (glyph.shape, glyph.tone) {
+        case (.spinner, _): SpinnerGlyph(color: .blue)
+        case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
+        case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
+        default:            EmptyView()
         }
     }
 
