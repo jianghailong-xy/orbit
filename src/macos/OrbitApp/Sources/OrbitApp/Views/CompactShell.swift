@@ -79,6 +79,21 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
+                    // An opaque backing *inside* the sliding content so its translucent bars — the
+                    // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
+                    // material on the status line / worktree bar / composer — sample a surface that
+                    // travels with them. Without it those bars, finding nothing opaque in their own
+                    // subtree, sample straight through to the *stationary* window (drawer/base); as the
+                    // card slides, that backdrop shifts under them every frame and the blur re-rasterizes
+                    // — the residual top/bottom-strip flicker left after the `.mask` was removed. The
+                    // outer shadow proxy is opaque but a *sibling*, out of the bars' sampling subtree, so
+                    // it can't play this role. `systemBackground` matches what the transcript showed
+                    // through before, so the resting look is unchanged. (Only the console's transcript is
+                    // a see-through list — every other section's list is opaque and covers this backing,
+                    // so they're visually untouched.)
+                    .background {
+                        Color(uiColor: .systemBackground).ignoresSafeArea()
+                    }
                     .overlay {
                         if x > 0 {
                             Color.clear
