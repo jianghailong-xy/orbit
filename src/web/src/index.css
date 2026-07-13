@@ -5256,3 +5256,146 @@ body {
   font-size: 12px;
   color: var(--text-3);
 }
+
+/* ============================================================================
+   Provider onboarding — logo gallery + guided add flow (ProvidersPage).
+   ========================================================================== */
+.provider-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.provider-gallery.in-modal {
+  grid-template-columns: repeat(2, 1fr);
+}
+@media (max-width: 640px) {
+  .provider-gallery,
+  .provider-gallery.in-modal {
+    grid-template-columns: 1fr;
+  }
+}
+
+.provider-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  text-align: left;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.provider-card:hover {
+  border-color: var(--brand-border);
+  box-shadow: 0 4px 14px rgba(51, 112, 255, 0.1);
+  transform: translateY(-1px);
+}
+.provider-card.custom {
+  border-style: dashed;
+  background: var(--bg-subtle);
+}
+.provider-card .pc-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.provider-card .pc-sub {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.provider-back {
+  display: inline-block;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.provider-back:hover {
+  color: var(--brand);
+}
+
+.provider-idbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-subtle);
+}
+
+.provider-adv {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.provider-adv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  cursor: pointer;
+  user-select: none;
+  background: var(--bg-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.provider-adv-head:hover {
+  background: var(--bg-hover);
+}
+.provider-adv-head .pa-chev {
+  color: var(--text-3);
+  transition: transform 0.18s;
+}
+.provider-adv-head.open .pa-chev {
+  transform: rotate(90deg);
+}
+.provider-adv-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+  background: var(--success-bg);
+}
+.provider-adv-body {
+  padding: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.provider-empty {
+  margin-top: 12px;
+  padding: 28px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.provider-empty h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.provider-empty p {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-3);
+}

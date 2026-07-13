@@ -18,6 +18,14 @@ export class CreateModelProviderDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
+// Validate an endpoint + freshly-typed key before saving. Stateless: nothing is persisted.
+export class TestModelProviderDto {
+  @IsString() @MinLength(1) baseUrl!: string;
+  @IsString() @MinLength(1) apiKey!: string;
+  /** Model to probe with; the picker sends the default (or the first) model. */
+  @IsOptional() @IsString() model?: string;
+}
+
 export class UpdateModelProviderDto {
   @IsOptional() @IsString() @MinLength(1) label?: string;
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;

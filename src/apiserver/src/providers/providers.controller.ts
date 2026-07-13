@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
+import { CreateModelProviderDto, TestModelProviderDto, UpdateModelProviderDto } from './dto';
 import { ProvidersService } from './providers.service';
 
 /**
@@ -23,6 +23,12 @@ export class ProvidersController {
   @Get('mine')
   listMine(@CurrentUser() user: AuthUser) {
     return this.providers.listMine(user.userId);
+  }
+
+  // Stateless key/endpoint probe for the add/edit form — any signed-in user, own inputs only.
+  @Post('test')
+  test(@Body() dto: TestModelProviderDto) {
+    return this.providers.testConnection(dto);
   }
 
   @Post('mine')

@@ -9,14 +9,25 @@ export interface ProviderPresetModel {
   contextWindow?: number;
 }
 
+/** Brand mark for the vendor tile: a monogram over a two-stop gradient. */
+export interface ProviderBrand {
+  mono: string;
+  from: string;
+  to: string;
+}
+
 export interface ProviderPreset {
   slug: string;
   label: string;
   baseUrl: string;
   models: ProviderPresetModel[];
   defaultModel: string;
-  /** Caveat shown under the template picker (e.g. regional endpoint variants). */
+  /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
+  /** Logo tile shown in the provider gallery and rows. */
+  brand: ProviderBrand;
+  /** Vendor console where the user mints an API key (rendered as a "Get your API key" link). */
+  keyUrl?: string;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -29,6 +40,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
     ],
     defaultModel: 'deepseek-v4-pro',
+    brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
+    keyUrl: 'https://platform.deepseek.com',
   },
   {
     slug: 'kimi',
@@ -41,6 +54,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'kimi-k2.7-code',
     note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/anthropic.',
+    brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
+    keyUrl: 'https://platform.moonshot.ai',
   },
   {
     slug: 'glm',
@@ -51,6 +66,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'glm-4.7', label: 'GLM-4.7' },
     ],
     defaultModel: 'glm-5.2',
+    brand: { mono: 'Z', from: '#33b6b0', to: '#1e8e8e' },
+    keyUrl: 'https://z.ai',
   },
   {
     slug: 'minimax',
@@ -62,6 +79,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800 },
     ],
     defaultModel: 'MiniMax-M2.7',
+    brand: { mono: 'M', from: '#ff5b76', to: '#e11d48' },
+    keyUrl: 'https://www.minimax.io',
   },
   {
     slug: 'qwen',
@@ -74,5 +93,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'qwen3.7-max',
     note: 'Beijing-region endpoint; Singapore/intl uses a workspace-specific URL (see Model Studio docs).',
+    brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
+    keyUrl: 'https://bailian.console.aliyun.com',
   },
 ];
