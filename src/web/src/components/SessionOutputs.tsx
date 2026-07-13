@@ -199,18 +199,6 @@ export function SessionOutputs({
             resolving={resolving}
           />
         )}
-        <button
-          type="button"
-          className="wt-expand"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (firstFile) setOpenFile(firstFile);
-          }}
-          aria-label="View diff"
-          title="View diff"
-        >
-          ›
-        </button>
       </div>
       {failed && (
         <div className="wt-merge wt-bar-fail">
