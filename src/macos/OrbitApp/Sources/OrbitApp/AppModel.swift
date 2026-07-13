@@ -25,6 +25,10 @@ final class AppModel {
     // data
     var user: User?
     var sessions: [Session] = []
+    /// The owner's session-tag library — the 7 seeded system tags plus any custom ones, fetched from
+    /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
+    /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
+    var sessionTags: [SessionTag] = []
     // Top-level nav: which AppShell section is showing, and the per-section selection. The app
     // lands on the Agents section (the first agent's session list); the agent is selected once the
     // list loads — see `loadAgentsThenLand`.
@@ -661,6 +665,60 @@ final class AppModel {
                 if pinned { try await api.pinSession(session.id) }
                 else { try await api.unpinSession(session.id) }
             } catch { return }
+            await reloadSessionLists()
+        }
+    }
+
+    // MARK: session tags
+
+    /// Load the owner's tag library (best-effort — an older server without the endpoint leaves it
+    /// empty, and the picker/chips simply don't appear).
+    func loadSessionTags() async {
+        guard let api else { return }
+        if let tags = try? await api.listSessionTags() { sessionTags = tags }
+    }
+
+    /// Replace the full set of tags on a session (the picker sends its current selection), then
+    /// refresh the on-screen lists so the row's dots and any tag grouping update.
+    func setSessionTags(_ session: Session, tagIDs: [String]) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { _ = try await api.setSessionTags(session.id, tagIDs: tagIDs) }
+            catch { return }
+            await reloadSessionLists()
+        }
+    }
+
+    /// Create a custom tag, then reload the library so the picker and filter chips show it.
+    func createSessionTag(name: String, color: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { _ = try await api.createSessionTag(name: name, color: color) }
+            catch { errorText = "Couldn't create the tag."; return }
+            await loadSessionTags()
+        }
+    }
+
+    /// Rename and/or recolor a custom tag, then reload the library + lists (a recolor changes the
+    /// row dots, so the lists refresh too).
+    func updateSessionTag(_ id: String, name: String? = nil, color: String? = nil) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { _ = try await api.updateSessionTag(id, name: name, color: color) }
+            catch { errorText = "Couldn't update the tag."; return }
+            await loadSessionTags()
+            await reloadSessionLists()
+        }
+    }
+
+    /// Delete a custom tag; its links to sessions cascade away server-side, so reload the library
+    /// and the lists (rows lose the dot).
+    func deleteSessionTag(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor in
+            do { try await api.deleteSessionTag(id) }
+            catch { errorText = "Couldn't delete the tag."; return }
+            await loadSessionTags()
             await reloadSessionLists()
         }
     }

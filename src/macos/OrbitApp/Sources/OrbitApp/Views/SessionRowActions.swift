@@ -24,6 +24,9 @@ private struct SessionRowActions: ViewModifier {
     /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
     /// confirmation) and drops Pin — a trashed session isn't orderable.
     let scope: SessionView?
+    /// Opens the tag picker for this row (set by the list, which owns the sheet). `nil` on surfaces
+    /// without a tag library on hand (e.g. the Active sidebar), where the "Tags…" item is hidden.
+    let onTag: (() -> Void)?
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
@@ -43,6 +46,9 @@ private struct SessionRowActions: ViewModifier {
             }
             .contextMenu {
                 if !isTrash { pinButton }
+                if !isTrash, let onTag {
+                    Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
+                }
                 positiveButton
                 Divider()
                 deleteButton
@@ -91,8 +97,10 @@ private struct SessionRowActions: ViewModifier {
 
 extension View {
     /// Attach the pin / complete-or-restore / delete actions to a session row (swipe + context menu).
-    func sessionRowActions(_ session: Session, scope: SessionView? = nil) -> some View {
-        modifier(SessionRowActions(session: session, scope: scope))
+    /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
+    func sessionRowActions(_ session: Session, scope: SessionView? = nil,
+                           onTag: (() -> Void)? = nil) -> some View {
+        modifier(SessionRowActions(session: session, scope: scope, onTag: onTag))
     }
 }
 

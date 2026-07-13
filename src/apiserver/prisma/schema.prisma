@@ -79,6 +79,7 @@ model User {
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
+  sessionTags      SessionTag[] // personal colored session labels (tenant scope)
 
   @@map("user")
 }
@@ -417,6 +418,8 @@ model Session {
   createdTasks Task[] @relation("TaskCreatorSession")
   attachments  Attachment[]
   diff         SessionDiff?
+  // Personal colored labels applied to this session (many-to-many via the join table).
+  tagLinks     SessionTagLink[]
 
   @@index([assignedRunnerId, status])
   @@index([batchId, status])
@@ -437,6 +440,47 @@ model SessionDiff {
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@map("session_diff")
+}
+
+// A personal, colored label the owner can apply to their sessions (Files.app-style Tags).
+// Per-owner: every query filters by ownerId. `isSystem` marks the 7 seeded preset-color tags
+// (Red…Gray) — always present, selectable, but not renamable/deletable; user-created tags are
+// isSystem=false. `position` orders them in the picker (system first, then creation order).
+// `color` is a #RRGGBB hex from the shared palette. Deleting a tag cascades its links away
+// (the sessions themselves are untouched). Seeded lazily on first list — see SessionTagsService.
+model SessionTag {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  color     String
+  isSystem  Boolean  @default(false) @map("is_system")
+  position  Int      @default(0)
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation(fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  links SessionTagLink[]
+
+  // One tag name per owner: makes the system-tag seed idempotent (createMany skipDuplicates)
+  // and blocks duplicate custom names.
+  @@unique([ownerId, name])
+  @@index([ownerId])
+  @@map("session_tag")
+}
+
+// Join table wiring a SessionTag onto a Session (many-to-many). Both endpoints cascade-delete
+// with their parent; unique on (session, tag) so an assignment is idempotent.
+model SessionTagLink {
+  id        String     @id @default(uuid(7)) @db.Uuid
+  sessionId String     @map("session_id") @db.Uuid
+  session   Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tagId     String     @map("tag_id") @db.Uuid
+  tag       SessionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  @@unique([sessionId, tagId])
+  @@index([tagId])
+  @@map("session_tag_link")
 }
 
 // A tool-permission request from claude's --permission-prompt-tool (served by the

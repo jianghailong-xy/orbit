@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Sse,
   StreamableFile,
@@ -21,6 +22,8 @@ import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { SetSessionTagsDto } from '../session-tags/dto';
+import { SessionTagsService } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
   MergeToMainDto,
@@ -45,6 +48,7 @@ export class SessionsController {
     private readonly sessions: SessionsService,
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly tags: SessionTagsService,
   ) {}
 
   @Post()
@@ -206,6 +210,17 @@ export class SessionsController {
   @Delete(':id/pin')
   unpin(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
+  }
+
+  /** Replace the set of personal colored tags applied to this session (picker sends the full
+   *  selection). Returns the session's new tag set. */
+  @Put(':id/tags')
+  setTags(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Body() dto: SetSessionTagsDto,
+  ) {
+    return this.tags.setForSession(user.userId, id, dto.tagIds);
   }
 
   // Soft-delete: moves the session to the trash (deletedAt), retaining all data.

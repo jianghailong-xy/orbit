@@ -70,6 +70,13 @@ struct AgentPanes: View {
     @Binding var selectedSessionID: String?
     @State private var view: SessionView = .active
     @State private var showSettings = false
+    /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
+    /// the row's context menu) so the sheet presents reliably.
+    @State private var taggingSession: Session?
+    /// The tag filter chip selection (a tag id), or nil for "All" (iOS list only).
+    @State private var tagFilter: String?
+    /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
+    @State private var groupByTag = false
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
@@ -84,21 +91,31 @@ struct AgentPanes: View {
             // deliberate divergence from web's flat list, grouping the tall single-column iPhone list
             // by last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the
             // flat list (its 3-pane window reads fine without sections).
-            ForEach(SessionTimeGrouping.sections(agents.agentSessions, pinnedFirst: view == .active)) { section in
-                Section {
-                    ForEach(section.sessions) { s in
-                        AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
-                            .sessionRowActions(s, scope: view)
+            // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
+            // sections; the tag filter chip narrows either. Both are the pure, tested OrbitKit
+            // groupers over the same console-sorted, tag-filtered list (`shownSessions`).
+            if groupByTag {
+                ForEach(SessionTagGrouping.sections(shownSessions)) { section in
+                    Section {
+                        ForEach(section.sessions) { sessionRow($0) }
+                    } header: {
+                        tagSectionHeader(section.tag)
                     }
-                } header: {
-                    Text(section.title).textCase(nil)
+                }
+            } else {
+                ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .active && tagFilter == nil)) { section in
+                    Section {
+                        ForEach(section.sessions) { sessionRow($0) }
+                    } header: {
+                        Text(section.title).textCase(nil)
+                    }
                 }
             }
             #else
             ForEach(agents.agentSessions) { s in
                 AgentSessionRow(session: s, completed: view == .completed, deleted: view == .trash,
                                 showsPin: view == .active).tag(s.id)
-                    .sessionRowActions(s, scope: view)
+                    .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
             }
             #endif
         }
@@ -106,6 +123,9 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        // Tag filter chips pinned above the list ("All" + one per tag); hidden when the owner has
+        // no tags. Pure derive — see `tagFilterBar` / `shownSessions`.
+        .safeAreaInset(edge: .top, spacing: 0) { tagFilterBar }
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -152,6 +172,13 @@ struct AgentPanes: View {
                         Button { view = v } label: {
                             if v == view { Label(v.title, systemImage: "checkmark") }
                             else { Text(v.title) }
+                        }
+                    }
+                    if !app.sessionTags.isEmpty {
+                        Divider()
+                        Button { groupByTag.toggle() } label: {
+                            if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
+                            else { Text("Group by Tag") }
                         }
                     }
                     Divider()
@@ -201,6 +228,69 @@ struct AgentPanes: View {
         .sheet(isPresented: $showSettings) {
             AgentSettingsSheet(agents: agents, agent: agent)
         }
+        // The tag picker for the row whose "Tags…" action was tapped (list-owned for reliable
+        // presentation). Works on both platforms; the filter chips / grouping above are iOS-only.
+        .sheet(item: $taggingSession) { s in
+            SessionTagSheet(session: s).environment(app)
+        }
+        // Load the owner's tag library when the pane appears so the picker + chips are populated.
+        .task { await app.loadSessionTags() }
+    }
+
+    // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
+    private var shownSessions: [Session] {
+        guard let f = tagFilter else { return agents.agentSessions }
+        return SessionFilter.withTag(agents.agentSessions, tagID: f)
+    }
+
+    @ViewBuilder private func sessionRow(_ s: Session) -> some View {
+        AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+    }
+
+    @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
+        if let tag {
+            HStack(spacing: 6) {
+                Circle().fill(Color(tagHex: tag.color)).frame(width: 8, height: 8)
+                Text(tag.name).textCase(nil)
+            }
+        } else {
+            Text("Untagged").textCase(nil)
+        }
+    }
+
+    /// The horizontal tag filter chips above the list: "All" + one per tag; tap to filter, tap the
+    /// active one again to clear. Hidden when the owner has no tags.
+    @ViewBuilder private var tagFilterBar: some View {
+        if !app.sessionTags.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    tagChip(title: "All", color: nil, selected: tagFilter == nil) { tagFilter = nil }
+                    ForEach(app.sessionTags) { t in
+                        tagChip(title: t.name, color: Color(tagHex: t.color), selected: tagFilter == t.id) {
+                            tagFilter = (tagFilter == t.id) ? nil : t.id
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .background(.bar)
+        }
+    }
+
+    private func tagChip(title: String, color: Color?, selected: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let color { Circle().fill(color).frame(width: 8, height: 8) }
+                Text(title).font(.orbitListSubtitle)
+            }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(selected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1))
+            .foregroundStyle(selected ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -373,7 +463,10 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: .make(for: session, completed: completed, deleted: deleted))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title ?? "Untitled session").lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(session.title ?? "Untitled session").lineLimit(1)
+                        SessionTagDots(tags: session.tags ?? [])
+                    }
                     if let line {
                         Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
@@ -408,6 +501,7 @@ struct AgentSessionRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
+                SessionTagDots(tags: session.tags ?? [])
                 Spacer(minLength: 8)
                 liveIndicator
                 if let rel = relTime {

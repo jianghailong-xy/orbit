@@ -317,6 +317,7 @@ export class SessionsService {
       lastUserText: string | null;
       mergeStatus: string | null;
       pinnedAt: Date | null;
+      tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningSubagentCount: number;
       agentId: string | null;
@@ -345,6 +346,15 @@ export class SessionsService {
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
         s.pinned_at       AS "pinnedAt",
+        COALESCE((
+          SELECT json_agg(json_build_object(
+                   'id', st.id, 'name', st.name, 'color', st.color,
+                   'isSystem', st.is_system, 'position', st.position
+                 ) ORDER BY st.is_system DESC, st.position ASC, st.created_at ASC)
+          FROM session_tag_link stl
+          JOIN session_tag st ON st.id = stl.tag_id
+          WHERE stl.session_id = s.id
+        ), '[]'::json) AS "tags",
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         a.id    AS "agentId",
@@ -385,6 +395,7 @@ export class SessionsService {
       lastUserText: r.lastUserText,
       mergeStatus: r.mergeStatus,
       pinnedAt: r.pinnedAt,
+      tags: r.tags,
       runningBgCount: r.runningBgCount,
       runningSubagentCount: r.runningSubagentCount,
       agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
@@ -412,10 +423,20 @@ export class SessionsService {
       include: {
         agent: true,
         assignedRunner: { select: { id: true, name: true } },
+        tagLinks: {
+          include: {
+            tag: { select: { id: true, name: true, color: true, isSystem: true, position: true } },
+          },
+        },
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    return session;
+    // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
+    const { tagLinks, ...rest } = session;
+    const tags = tagLinks
+      .map((l) => l.tag)
+      .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    return { ...rest, tags };
   }
 
   /**

@@ -38,6 +38,12 @@ public enum SessionFilter {
         sessions.filter { $0.agent?.id == agentID }
     }
 
+    /// Keep only sessions carrying the given tag — the list's tag filter chip. Order is preserved,
+    /// so the result stays console-sorted (pinned-first, then recency).
+    public static func withTag(_ sessions: [Session], tagID: String) -> [Session] {
+        sessions.filter { ($0.tags ?? []).contains { $0.id == tagID } }
+    }
+
     /// Sessions belonging to one agent, scoped for a specific Agent-console tab — mirrors the web
     /// Agent console. The `active` query returns auto-created (`source == "system"`) sessions for
     /// slot accounting and deep-link resolution, but they get their own System tab, so they're

@@ -63,3 +63,43 @@ public enum SessionTimeGrouping {
         return 4
     }
 }
+
+/// One tag-bucketed section of the session list (the "By Tag" grouping mode): the tag heading —
+/// `nil` for the trailing "Untagged" bucket — over the sessions filed under it.
+public struct SessionTagSection: Identifiable, Equatable, Sendable {
+    public let tag: SessionTag?
+    public let sessions: [Session]
+    public var id: String { tag?.id ?? "__untagged__" }
+    public init(tag: SessionTag?, sessions: [Session]) {
+        self.tag = tag
+        self.sessions = sessions
+    }
+}
+
+/// Buckets a per-agent session list by tag (the list's optional "By Tag" grouping). Distinct from
+/// `SessionTimeGrouping` (by recency) and `SessionGrouping` (by live status).
+public enum SessionTagGrouping {
+    /// Group a **console-sorted** list by each session's *primary* tag — the first entry in its
+    /// server-ordered `tags` (system-first, lowest position) — into one section per tag, ordered as
+    /// the tag library is (system first, then by position, then name). A multi-tag session appears
+    /// once, under its primary tag (a deliberate divergence from Files.app, which repeats a file
+    /// under every tag — one row per id keeps `List` identity/selection unambiguous). Untagged
+    /// sessions fall to a trailing "Untagged" section. Order within each section is preserved.
+    public static func sections(_ sessions: [Session]) -> [SessionTagSection] {
+        var groups: [String: (tag: SessionTag, sessions: [Session])] = [:]
+        var untagged: [Session] = []
+        for s in sessions {
+            guard let primary = (s.tags ?? []).first else { untagged.append(s); continue }
+            groups[primary.id, default: (primary, [])].sessions.append(s)
+        }
+        var sections = groups.values
+            .sorted { a, b in
+                if a.tag.isSystem != b.tag.isSystem { return a.tag.isSystem }
+                if a.tag.position != b.tag.position { return a.tag.position < b.tag.position }
+                return a.tag.name < b.tag.name
+            }
+            .map { SessionTagSection(tag: $0.tag, sessions: $0.sessions) }
+        if !untagged.isEmpty { sections.append(SessionTagSection(tag: nil, sessions: untagged)) }
+        return sections
+    }
+}

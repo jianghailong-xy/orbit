@@ -123,6 +123,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// The owning agent, nested by the list/detail payloads (the flat `agentId` is NOT sent
     /// there, so per-agent grouping reads `agent.id`).
     public let agent: SessionAgentRef?
+    /// The personal colored tags applied to this session, server-ordered (system tags first, then
+    /// by position). Empty/absent when untagged or from an older server. Drives the row's tag dots
+    /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
+    public let tags: [SessionTag]?
 
     public init(id: String, title: String?, status: RunStatus, agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
@@ -131,7 +135,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
-                pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil) {
+                pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
+                tags: [SessionTag]? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -155,6 +160,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt
         self.lastTurnAt = lastTurnAt
+        self.tags = tags
     }
 }
 
@@ -164,6 +170,46 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let name: String?
     public let provider: String?
     public let model: String?
+}
+
+/// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
+/// is fetched from `GET /session-tags` (system tags seeded + always present); each session carries
+/// the subset applied to it. `color` is a #RRGGBB hex; `isSystem` marks the 7 preset-color tags,
+/// which are selectable but can't be renamed, recolored, or deleted. `position` orders the picker
+/// and the row dots (system first).
+public struct SessionTag: Codable, Equatable, Sendable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let color: String
+    public let isSystem: Bool
+    public let position: Int
+    public init(id: String, name: String, color: String, isSystem: Bool = false, position: Int = 0) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.isSystem = isSystem
+        self.position = position
+    }
+}
+
+/// POST /session-tags — create a custom tag (name + #RRGGBB palette color).
+public struct CreateSessionTagRequest: Codable, Sendable {
+    public let name: String
+    public let color: String
+    public init(name: String, color: String) { self.name = name; self.color = color }
+}
+
+/// PATCH /session-tags/:id — rename and/or recolor a custom tag (system tags are rejected server-side).
+public struct UpdateSessionTagRequest: Codable, Sendable {
+    public let name: String?
+    public let color: String?
+    public init(name: String? = nil, color: String? = nil) { self.name = name; self.color = color }
+}
+
+/// PUT /sessions/:id/tags — replace a session's full tag set (the picker sends the current selection).
+public struct SetSessionTagsRequest: Codable, Sendable {
+    public let tagIds: [String]
+    public init(tagIds: [String]) { self.tagIds = tagIds }
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.

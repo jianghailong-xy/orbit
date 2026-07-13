@@ -133,6 +133,27 @@ public final class APIClient: @unchecked Sendable {
     /// DELETE to clear). After either the caller refetches the list to pick up the new order.
     public func pinSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/pin", body: Optional<Empty>.none) }
     public func unpinSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)/pin") }
+
+    // MARK: session tags (personal colored labels)
+
+    /// The caller's tag library — the 7 seeded system tags plus any custom ones, picker-ordered
+    /// (system first). An older server without the endpoint 404s; the caller treats that as "no tags".
+    public func listSessionTags() async throws -> [SessionTag] { try await get("session-tags") }
+    /// Create a custom tag (name + palette color); returns the created tag.
+    public func createSessionTag(name: String, color: String) async throws -> SessionTag {
+        try await post("session-tags", body: CreateSessionTagRequest(name: name, color: color))
+    }
+    /// Rename and/or recolor a custom tag (system tags are rejected server-side); returns the updated tag.
+    public func updateSessionTag(_ id: String, name: String? = nil, color: String? = nil) async throws -> SessionTag {
+        try await patch("session-tags/\(id)", body: UpdateSessionTagRequest(name: name, color: color))
+    }
+    /// Delete a custom tag; its links to sessions cascade away server-side.
+    public func deleteSessionTag(_ id: String) async throws { try await deleteRaw("session-tags/\(id)") }
+    /// Replace the full set of tags applied to a session; returns the session's new tag set.
+    @discardableResult
+    public func setSessionTags(_ sessionID: String, tagIDs: [String]) async throws -> [SessionTag] {
+        try await put("sessions/\(sessionID)/tags", body: SetSessionTagsRequest(tagIds: tagIDs))
+    }
     /// Share/unshare: mint (or clear) a public read-only link to this session's transcript, served
     /// at `<baseURL>/s/<shareToken>` with no auth. `enableShare` is idempotent server-side (returns
     /// the existing token if already shared); `disableShare` makes any live link 404 immediately.
@@ -278,6 +299,11 @@ public final class APIClient: @unchecked Sendable {
 
     private func patch<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
         let data = try await send(makeRequest(path, method: "PATCH", body: body))
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let data = try await send(makeRequest(path, method: "PUT", body: body))
         return try decoder.decode(T.self, from: data)
     }
 

@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { AgentsModule } from './agents/agents.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { SessionTagsModule } from './session-tags/session-tags.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { RunnersModule } from './runners/runners.module';
@@ -28,6 +29,7 @@ import { ProvidersModule } from './providers/providers.module';
     UsersModule,
     AgentsModule,
     SessionsModule,
+    SessionTagsModule,
     TasksModule,
     TaskListsModule,
     RunnersModule,
