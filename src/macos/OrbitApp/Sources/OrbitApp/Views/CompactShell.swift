@@ -40,9 +40,8 @@ struct CompactShell: View {
             ZStack(alignment: .leading) {
                 // A consistent app-background base under the fixed sidebar and the sliding card, so the
                 // reveal reads in light and dark rather than exposing the raw window behind the shell.
-                // One level below the card's background (matching the drawer surface) so the card reads
-                // as floating above it.
-                Color(uiColor: .secondarySystemBackground)
+                // Matches the drawer surface so the card reads as floating above one continuous layer.
+                drawerSurface
                     .ignoresSafeArea()
 
                 // Fixed sidebar pinned to the leading edge. It stays put while the content card slides
@@ -52,27 +51,24 @@ struct CompactShell: View {
                 NavigationDrawer(close: closeDrawer)
                     .frame(width: dw)
 
-                // The soft shadow the sliding content casts onto the drawer along its leading edge — the
-                // ChatGPT sense of the content floating *above* the drawer, which is what reads as depth.
-                // With no dimming on the content anymore this shadow carries the depth alone, so it's a
-                // wide band with blur-like exponential falloff (dense right at the edge, fading fast)
-                // rather than a thin linear ramp that reads as a stripe.
-                // A full-height gradient band (rather than a `.shadow` on the live content) keeps the
-                // falloff on the leading edge only, so it never haloes into the top/bottom safe areas and
-                // costs nothing to recompute as the console streams. Sits just left of the content's edge,
-                // above the drawer but below the content, and is non-interactive so drawer taps still land.
-                // Kept always-mounted with opacity tied to `progress` (0 when closed → off-screen at x−48)
-                // so it fades and slides in lockstep with the content instead of popping in on open.
-                LinearGradient(gradient: Gradient(stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .black.opacity(0.03 * progress), location: 0.3),
-                    .init(color: .black.opacity(0.10 * progress), location: 0.62),
-                    .init(color: .black.opacity(0.26 * progress), location: 1),
-                ]), startPoint: .leading, endPoint: .trailing)
-                    .frame(width: 48)
-                    .frame(maxHeight: .infinity)
-                    .offset(x: x - 48)
+                // The soft shadow the sliding content casts onto the drawer — the ChatGPT sense of the
+                // content floating *above* the drawer, which is what reads as depth (with no dimming on
+                // the content anymore this shadow carries the depth alone). It's cast by an opaque
+                // stand-in shaped exactly like the card (same full-screen rect, same continuous corners,
+                // same offset) sitting just beneath the content: a straight-edged gradient band was tried
+                // first, but the card's rounded corners let the band's densest part show through as flat
+                // dark patches in the corner cutouts, where a real shadow hugs the arc — `.shadow` on a
+                // matching shape gets the corners right by construction. The stand-in is fully covered by
+                // the content above, contains no live views (so console streaming never re-renders it),
+                // and its top/bottom shadow falls off-screen (the shape's edges sit on the screen edges),
+                // so nothing haloes into the safe areas. Opacity rides `progress` so the shadow fades and
+                // slides in lockstep with the content instead of popping in on open; non-interactive so
+                // drawer taps still land.
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .fill(Color(uiColor: .systemBackground))
                     .ignoresSafeArea()
+                    .shadow(color: .black.opacity(0.45 * progress), radius: 26, x: 0, y: 0)
+                    .offset(x: x)
                     .allowsHitTesting(false)
 
                 // Section content — pushed right, kept fully bright (ChatGPT-style: the card stays
@@ -249,6 +245,17 @@ private struct CompactSections: View {
     }
 }
 
+/// The drawer surface color — one level below the content card so the undimmed white card floats.
+/// `secondarySystemBackground` (#F2F2F7) read too gray next to ChatGPT's near-white drawer, so light
+/// uses ~#F9F9F9: barely off-white, leaving the card/drawer separation to the edge shadow (exactly
+/// how ChatGPT reads). Dark keeps #1C1C1E (secondarySystemBackground's dark value, written literally
+/// to avoid resolving a nested dynamic color) so the black card and its shadow stay visible.
+private let drawerSurface = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 1)
+        : UIColor(white: 0.976, alpha: 1)
+})
+
 /// One place for the drawer's spacing rhythm so every row lines up on the same grid. Tuned for a
 /// calm, ChatGPT-style rail: roomy ~44pt rows, a hair of space between them, and a rounded selection
 /// pill that's inset from both edges rather than an edge-to-edge tint.
@@ -329,7 +336,7 @@ private struct NavigationDrawer: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // One level below the content card's background (ChatGPT-style), so the undimmed white card
         // separates from the drawer in light mode and the shadow band stays visible in dark mode.
-        .background(Color(uiColor: .secondarySystemBackground))
+        .background(drawerSurface)
     }
 
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
