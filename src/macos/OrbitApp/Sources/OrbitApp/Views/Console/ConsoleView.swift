@@ -420,9 +420,12 @@ struct TranscriptView: View {
                 // Soft gray, not crisp black — ChatGPT's muted arrow.
                 .foregroundStyle(.secondary)
                 .frame(width: 40, height: 40)
-                // ChatGPT's airy disc: translucent + borderless. The shadow (web parity: 0.12) alone
-                // defines the edge — no ring — so it reads as light as ChatGPT's, not an opaque chip.
-                .background(.ultraThinMaterial, in: Circle())
+                // ChatGPT's airy disc: translucent + borderless. `.ultraThinMaterial` alone reads nearly
+                // solid over the white transcript (and can't reliably blur the scrolled text behind it),
+                // so composite it at ~0.7 opacity — the real content bleeds through and it reads as
+                // semi-transparent glass, not an opaque chip. Shadow (0.12) alone defines the edge — no
+                // ring. `opacity` is the knob: lower = more see-through, higher = more solid.
+                .background(Circle().fill(.ultraThinMaterial).opacity(0.7))
                 .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
                 .shadow(color: .black.opacity(pressed ? 0.20 : 0.12), radius: pressed ? 6 : 4, y: pressed ? 2 : 1)
                 .scaleEffect(pressed ? 1.2 : 1)
