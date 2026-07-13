@@ -510,6 +510,19 @@ struct ComposerView: View {
 
     // MARK: `/` autocomplete menu
 
+    // The `/` menu was tuned as a macOS pointer menu (dense rows, 4pt gutters). On iOS those same
+    // rows land well under a comfortable touch target, so give each a 44pt minimum and looser
+    // vertical padding — this is the one composer surface that never got the iOS density pass that
+    // Typography/ProseLayout applied everywhere else. macOS keeps its native menu density
+    // (minHeight 0 is a no-op there, so its rows are pixel-identical).
+    #if os(iOS)
+    private static let slashRowVPad: CGFloat = 8
+    private static let slashRowMinHeight: CGFloat = 44
+    #else
+    private static let slashRowVPad: CGFloat = 4
+    private static let slashRowMinHeight: CGFloat = 0
+    #endif
+
     private var slashMenu: some View {
         let matches = console.slashMatches
         let highlightID = matches.indices.contains(slashIndex) ? matches[slashIndex].id : matches.first?.id
@@ -529,8 +542,8 @@ struct ComposerView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8).padding(.vertical, Self.slashRowVPad)
+                    .frame(maxWidth: .infinity, minHeight: Self.slashRowMinHeight, alignment: .leading)
                     .background(item.id == highlightID ? Color.accentColor.opacity(0.18) : .clear)
                     .contentShape(Rectangle())
                 }
