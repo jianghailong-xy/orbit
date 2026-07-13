@@ -391,11 +391,10 @@ struct TranscriptView: View {
         .help("Jump to your last question")
     }
 
-    // Circular "scroll to latest" control (web parity). Wrapped in `CoastingButton` so the tap lands
-    // even while the List is still coasting, and so a press springs the frosted disc ~1.3× larger
-    // (ChatGPT's feel — the material magnifies with it). The disc rests at 32pt inside a fixed ~44pt hit
-    // target; bottom padding is 6, not 12, because that 44pt target already reserves ~6pt below the 32pt
-    // disc, so it rests in the same spot.
+    // Circular "scroll to latest" control (ChatGPT parity). Wrapped in `CoastingButton` so the tap lands
+    // even while the List is still coasting, and so a press springs the translucent disc ~1.2× larger
+    // (ChatGPT's feel — the material magnifies with it). The disc rests at 40pt inside a 44pt hit target
+    // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
             #if os(iOS)
@@ -418,15 +417,15 @@ struct TranscriptView: View {
                 // web's `ArrowDownOutlined` (15px). Fixed size (like `orbitHeroGlyph`): a control mark,
                 // not body text, so it shouldn't ride Dynamic Type.
                 .font(.orbitControlGlyph)
-                .foregroundStyle(.primary)
-                .frame(width: 32, height: 32)
-                .background(.regularMaterial, in: Circle())
+                // Soft gray, not crisp black — ChatGPT's muted arrow.
+                .foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
+                // ChatGPT's airy disc: translucent + borderless. The shadow (web parity: 0.12) alone
+                // defines the edge — no ring — so it reads as light as ChatGPT's, not an opaque chip.
+                .background(.ultraThinMaterial, in: Circle())
                 .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
-                // Fainter ring + softer shadow (web parity: 0.12) so the disc reads as light as
-                // ChatGPT's, not the heavier ring/shadow it had before.
-                .overlay { Circle().strokeBorder(.primary.opacity(0.08)) }
                 .shadow(color: .black.opacity(pressed ? 0.20 : 0.12), radius: pressed ? 6 : 4, y: pressed ? 2 : 1)
-                .scaleEffect(pressed ? 1.32 : 1)
+                .scaleEffect(pressed ? 1.2 : 1)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
