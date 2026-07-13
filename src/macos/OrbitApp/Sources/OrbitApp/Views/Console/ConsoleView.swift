@@ -455,12 +455,20 @@ struct TranscriptView: View {
                 // Soft gray, not crisp black — ChatGPT's muted arrow.
                 .foregroundStyle(.secondary)
                 .frame(width: 40, height: 40)
-                // ChatGPT's airy disc: translucent + borderless. `.ultraThinMaterial` alone reads nearly
-                // solid over the white transcript (and can't reliably blur the scrolled text behind it),
-                // so composite it at ~0.7 opacity — the real content bleeds through and it reads as
-                // semi-transparent glass, not an opaque chip. Shadow (0.12) alone defines the edge — no
-                // ring. `opacity` is the knob: lower = more see-through, higher = more solid.
-                .background(Circle().fill(.ultraThinMaterial).opacity(0.7))
+                // ChatGPT's airy disc is a *real* backdrop blur — you can see the transcript blurred
+                // through its body. SwiftUI's `.ultraThinMaterial` in a List overlay doesn't blur the
+                // scrolled rows; it renders a flat, near-solid light disc (which is why every opacity
+                // tweak still read "too solid"). On iOS wrap a genuine `UIVisualEffectView`
+                // (`TranscriptBlurDisc`) so the content actually blurs through; macOS keeps the SwiftUI
+                // material (the List-overlay limitation doesn't bite there). Borderless — the shadow
+                // (0.12) alone defines the edge. Blur style is the knob: ultraThin↔thin↔regular.
+                .background {
+                    #if os(iOS)
+                    TranscriptBlurDisc().clipShape(Circle())
+                    #else
+                    Circle().fill(.ultraThinMaterial)
+                    #endif
+                }
                 .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
                 .shadow(color: .black.opacity(pressed ? 0.20 : 0.12), radius: pressed ? 6 : 4, y: pressed ? 2 : 1)
                 .scaleEffect(pressed ? 1.2 : 1)
@@ -597,6 +605,19 @@ struct SessionStatusCardView: View {
 }
 
 #if os(iOS)
+/// A real UIKit backdrop-blur disc for the scroll-to-bottom button. `UIVisualEffectView` genuinely
+/// blurs the transcript rows behind it — SwiftUI's `.ultraThinMaterial` in a List overlay renders as a
+/// flat light disc instead, which never reads as ChatGPT's translucent glass. Non-interactive so the
+/// `CoastingButton` tap-catcher layered over it still owns the touch.
+private struct TranscriptBlurDisc: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        let view = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterial))
+        view.isUserInteractionEnabled = false
+        return view
+    }
+    func updateUIView(_ view: UIVisualEffectView, context: Context) {}
+}
+
 /// The iOS interactive layer for `CoastingButton`: a transparent UIKit view whose
 /// `UILongPressGestureRecognizer` (min duration 0) recognizes alongside the List's scroll and owns the
 /// touch, so a tap registers even mid-coast. Recognizer wiring mirrors `KeyboardDismissInstaller`.
