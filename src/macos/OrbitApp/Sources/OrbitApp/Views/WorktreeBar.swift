@@ -69,8 +69,9 @@ struct WorktreeBar: View {
         let del = files.reduce(0) { $0 + max(0, $1.deletions) }
 
         return HStack(spacing: 8) {
-            // The whole branch + stat summary is one tap target that opens the diff (the chevron on
-            // the right is the explicit affordance). Copy is the secondary action, so it moves to the
+            // The whole branch + stat summary is the tap target that opens the diff — there's no
+            // separate chevron anymore (a lone › sitting right next to the merge caret's ⌄ read as a
+            // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
             // long-press (right-click on macOS) context menu — a plain tap can no longer silently
             // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
             Button { showDiff = true } label: {
@@ -86,19 +87,16 @@ struct WorktreeBar: View {
             .contextMenu { copyBranchButton(branch) }
             .accessibilityHint("Opens the diff")
             .help("View diff")
-            // The action button + chevron keep their size (web `flex: none`); the branch/stat
-            // truncate first under narrow width.
+            // The action button keeps its size (web `flex: none`); the branch/stat truncate first
+            // under narrow width.
             switch primary {
             case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
             case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
             case .none:   EmptyView()
             }
-            expandButton.layoutPriority(2)
         }
         // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
-        // bars share `min-height: 30`) so the stack above the composer reads as one system. Vertical
-        // padding is trimmed to 3 so the 24pt `expandButton` tap target no longer silently pushed this
-        // bar ~8pt taller than the tray.
+        // bars share `min-height: 30`) so the stack above the composer reads as one system.
         .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
         .background(.bar, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
@@ -145,17 +143,6 @@ struct WorktreeBar: View {
             .truncationMode(.tail)
     }
 
-    private var expandButton: some View {
-        Button {
-            showDiff = true   // DiffSheet fetches the per-file patches on appear.
-        } label: {
-            Image(systemName: "chevron.right").font(.orbitLabel.weight(.semibold))
-                .foregroundStyle(.secondary).frame(width: 24, height: 24)
-        }
-        .buttonStyle(.plain)
-        .help("View diff")
-        .accessibilityLabel("View diff")
-    }
 }
 
 /// Render an auto-generated `orbit/<slug>-<hash>` branch with the prefix + hash dimmed so the
@@ -206,32 +193,50 @@ private struct WorktreeMergeControl: View {
                     Task { await console.worktree.resolveInSession(branch: branch) }
                 }
             } else {
-                HStack(spacing: 4) {
-                    WTPillButton(title: "Retry merge to \(detail.mergeTarget ?? defaultTarget ?? "main")",
-                                 tint: .red, disabled: busy) {
-                        Task { await console.worktree.merge(target: detail.mergeTarget ?? defaultTarget) }
-                    }
-                    if !targets.isEmpty {
-                        MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: .red)
-                    }
-                }
+                mergeSplit(title: "Retry merge to \(detail.mergeTarget ?? defaultTarget ?? "main")",
+                           tint: .red, busy: busy, primaryTarget: detail.mergeTarget ?? defaultTarget,
+                           targets: targets, defaultTarget: defaultTarget)
             }
         } else {
-            HStack(spacing: 4) {
-                WTPillButton(title: "Merge to \(defaultTarget ?? "main")", disabled: busy) {
-                    Task { await console.worktree.merge(target: defaultTarget) }
-                }
-                if !targets.isEmpty {
-                    MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: .accentColor)
-                }
+            mergeSplit(title: "Merge to \(defaultTarget ?? "main")",
+                       tint: .accentColor, busy: busy, primaryTarget: defaultTarget,
+                       targets: targets, defaultTarget: defaultTarget)
+        }
+    }
+
+    /// The idle/retry action as one unified split button: the primary "Merge to <default>" segment
+    /// butted directly against the target-branch caret, sharing a single capsule + border with a 1pt
+    /// hairline divider between them, so the caret reads as part of the button rather than a detached
+    /// pill (the old `spacing: 4` + standalone caret capsule). No reported targets → a plain pill, no
+    /// caret. The caret (MergeTargetCaret) still flips from an inline menu to a searchable sheet once
+    /// the repo has many branches.
+    private func mergeSplit(title: String, tint: Color, busy: Bool, primaryTarget: String?,
+                            targets: [String], defaultTarget: String?) -> some View {
+        let c = busy ? Color.secondary : tint
+        return HStack(spacing: 0) {
+            Button { Task { await console.worktree.merge(target: primaryTarget) } } label: {
+                Text(title).font(.orbitLabel.weight(.semibold)).lineLimit(1)
+                    .foregroundStyle(c)
+                    .padding(.leading, 10).padding(.trailing, targets.isEmpty ? 10 : 9).padding(.vertical, 3)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(busy)
+            if !targets.isEmpty {
+                Rectangle().fill(c.opacity(0.3)).frame(width: 1).padding(.vertical, 3)
+                MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: c)
             }
         }
+        .background(c.opacity(busy ? 0.08 : 0.14), in: Capsule())
+        .overlay(Capsule().strokeBorder(c.opacity(0.3)))
     }
 }
 
 /// The split-button caret: picks another branch to merge into. A short list stays a native inline
 /// `Menu`; once the repo has many branches it becomes a searchable, height-capped sheet so the list
 /// stops running off-screen and can be filtered — mirroring web's searchable merge-target dropdown.
+/// Rendered inside the merge split button's shared capsule, so its label is a bare chevron (no pill
+/// of its own — the enclosing capsule + hairline divider frame it).
 private struct MergeTargetCaret: View {
     let console: ConsoleModel
     let targets: [String]
@@ -268,11 +273,11 @@ private struct MergeTargetCaret: View {
         }
     }
 
+    /// Bare chevron — no capsule of its own; it sits inside the split button's shared capsule.
     private var caretLabel: some View {
         Image(systemName: "chevron.down").font(.orbitMeta.weight(.semibold)).foregroundStyle(tint)
-            .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(tint.opacity(0.14), in: Capsule())
-            .overlay(Capsule().strokeBorder(tint.opacity(0.3)))
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .contentShape(Rectangle())
     }
 }
 
