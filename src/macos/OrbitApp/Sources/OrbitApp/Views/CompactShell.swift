@@ -114,10 +114,26 @@ struct CompactShell: View {
                     // the screen-edge corners are shaped (matching the shadow proxy), leaving the console's
                     // own safe-area insets untouched. At `corner == 0` the cutout is empty: a closed no-op.
                     .overlay {
-                        CornerCutout(radius: corner)
-                            .fill(drawerSurface, style: FillStyle(eoFill: true))
-                            .ignoresSafeArea()
-                            .allowsHitTesting(false)
+                        ZStack {
+                            CornerCutout(radius: corner)
+                                .fill(drawerSurface, style: FillStyle(eoFill: true))
+                            // The flat cutout above also paints over the arc-hugging shadow the
+                            // proxy put in these slivers (content covers the proxy, cutout covers
+                            // the content), leaving pale unshadowed notches at the card's leading
+                            // corners while the straight edge next to them keeps its shadow band.
+                            // Re-cast the proxy's exact shadow here, masked to the slivers, so the
+                            // band wraps the arc again — still shape-only work, so the live content
+                            // is never rasterized.
+                            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                                .fill(.black)
+                                .shadow(color: .black.opacity(0.45 * progress), radius: 26, x: 0, y: 0)
+                                .mask {
+                                    CornerCutout(radius: corner)
+                                        .fill(style: FillStyle(eoFill: true))
+                                }
+                        }
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
                     }
                     .offset(x: x)
 
