@@ -171,7 +171,13 @@ struct CompactShell: View {
 
     /// Swipe-left to close (leftward drag on the scrim).
     private func closeDrag(width w: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 12)
+        // Measure in the GLOBAL (screen-fixed) space, not the default `.local`. This gesture lives on the
+        // content overlay, which is itself `.offset` by the very `dragX` we set here — so a `.local`
+        // translation is read in a frame that moves as we drag, feeding the content's own displacement
+        // back into each next reading. That feedback makes the offset stutter left/right every frame — the
+        // rapid drag flicker. A global frame is pinned to the screen, so `translation` tracks only the
+        // finger. (openDrag needs no such fix: it rides the stationary edge strip, not the moving content.)
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { g in
                 guard drawerOpen else { return }
                 dragX = max(min(0, g.translation.width), -drawerWidth(w))
