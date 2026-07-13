@@ -218,11 +218,20 @@ final class ConsoleModel {
     /// the connection pool.
     private var streamTask: Task<Void, Never>?
 
+    /// The worktree status-bar poll loop, owned here alongside `streamTask` (started/stopped with it
+    /// from the app's focus STATE) rather than by `WorktreeBar`'s `.task`. On iPhone the console is a
+    /// pushed `NavigationSplitView` detail whose `.task` could stop iterating while the bar was still on
+    /// screen — freezing it on "Merging…"/"Committing…" until a nav pop + re-push remounted it and a
+    /// fresh fetch landed. Anchoring the poll to focus (exactly as the SSE stream already is) keeps the
+    /// runner's merge/commit outcome flowing into the bar without a remount.
+    private var worktreePollTask: Task<Void, Never>?
+
     /// Begin the live SSE loop if it isn't already running. Idempotent (re-focusing the same session
     /// is a no-op) and inert for a draft/session-less console.
     func startStreaming() {
         guard streamTask == nil, !isDraft, !sessionID.isEmpty else { return }
         streamTask = Task { [weak self] in await self?.run() }
+        worktreePollTask = Task { [weak self] in await self?.worktree.startPolling() }
     }
 
     /// Cancel the live SSE loop and drop its connection. The reducer state stays cached, so a later
@@ -230,6 +239,8 @@ final class ConsoleModel {
     func stopStreaming() {
         streamTask?.cancel()
         streamTask = nil
+        worktreePollTask?.cancel()
+        worktreePollTask = nil
     }
 
     func run() async {

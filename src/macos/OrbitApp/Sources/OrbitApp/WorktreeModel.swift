@@ -42,11 +42,12 @@ final class WorktreeModel {
         catch { /* keep last */ }
     }
 
-    /// Keep the status bar current while the console is on screen, mirroring web's refetch policy:
+    /// Keep the status bar current while the console is focused, mirroring web's refetch policy:
     /// poll every 3s while a merge/commit is pending (the runner's outcome is ≤1 heartbeat away),
     /// every 5s while the session is live (so a mid-turn diff appears without waiting for turn-end),
     /// and otherwise stay idle — re-checking cheaply so a user-triggered commit/merge (which flips
-    /// the status to pending) is picked up. Cancelled when the view goes away.
+    /// the status to pending) is picked up. Owned by `ConsoleModel` and cancelled when the session
+    /// loses focus (`stopStreaming`), not tied to the bar view's lifecycle — see `startStreaming`.
     func startPolling() async {
         await loadDetail()
         while !Task.isCancelled {
