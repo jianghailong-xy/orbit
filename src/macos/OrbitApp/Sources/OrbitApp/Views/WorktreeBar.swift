@@ -168,6 +168,10 @@ private struct WorktreeMergeControl: View {
     let console: ConsoleModel
     let detail: SessionDetail
     let branch: String
+    /// The branch the user picked via the caret — it only re-points the primary button's target; the
+    /// merge itself waits for a tap on the primary button. Falls back to the default when the pick is
+    /// no longer an offered target.
+    @State private var selectedTarget: String? = nil
 
     var body: some View {
         let status = detail.mergeStatus
@@ -175,6 +179,9 @@ private struct WorktreeMergeControl: View {
         let busy = console.worktree.busy
         let defaultTarget = WorktreeBarLogic.defaultTarget(targets: targets,
                                                            agentDefaultTarget: detail.agent?.defaultMergeTarget)
+        // The user's caret pick re-points the primary button until they merge (falls back if the
+        // picked branch is no longer an offered target).
+        let picked = selectedTarget.flatMap { targets.contains($0) ? $0 : nil }
 
         if status == "merged" {
             let elsewhere = detail.mergeTarget != nil && detail.mergeTarget != "main" && detail.mergeTarget != "master"
@@ -191,14 +198,16 @@ private struct WorktreeMergeControl: View {
                     Task { await console.worktree.resolveInSession(branch: branch) }
                 }
             } else {
-                mergeSplit(title: "Retry merge to \(detail.mergeTarget ?? defaultTarget ?? "main")",
-                           tint: .red, busy: busy, primaryTarget: detail.mergeTarget ?? defaultTarget,
-                           targets: targets, defaultTarget: defaultTarget)
+                let target = picked ?? detail.mergeTarget ?? defaultTarget
+                mergeSplit(title: "Retry merge to \(target ?? "main")",
+                           tint: .red, busy: busy, primaryTarget: target,
+                           targets: targets, currentTarget: target)
             }
         } else {
-            mergeSplit(title: "Merge to \(defaultTarget ?? "main")",
-                       tint: .accentColor, busy: busy, primaryTarget: defaultTarget,
-                       targets: targets, defaultTarget: defaultTarget)
+            let target = picked ?? defaultTarget
+            mergeSplit(title: "Merge to \(target ?? "main")",
+                       tint: .accentColor, busy: busy, primaryTarget: target,
+                       targets: targets, currentTarget: target)
         }
     }
 
@@ -209,7 +218,7 @@ private struct WorktreeMergeControl: View {
     /// caret. The caret (MergeTargetCaret) still flips from an inline menu to a searchable sheet once
     /// the repo has many branches.
     private func mergeSplit(title: String, tint: Color, busy: Bool, primaryTarget: String?,
-                            targets: [String], defaultTarget: String?) -> some View {
+                            targets: [String], currentTarget: String?) -> some View {
         let c = busy ? Color.secondary : tint
         return HStack(spacing: 0) {
             Button { Task { await console.worktree.merge(target: primaryTarget) } } label: {
@@ -226,7 +235,7 @@ private struct WorktreeMergeControl: View {
                 // height cap (the bar is only `minHeight: 30`) it stretched the whole split button —
                 // and the enclosing Capsule — into a giant pill. 18pt sits ~3pt inside the button.
                 Rectangle().fill(c.opacity(0.3)).frame(width: 1, height: 18)
-                MergeTargetCaret(console: console, targets: targets, defaultTarget: defaultTarget, tint: c)
+                MergeTargetCaret(targets: targets, currentTarget: currentTarget, tint: c) { selectedTarget = $0 }
             }
         }
         .background(c.opacity(busy ? 0.08 : 0.14), in: Capsule())
@@ -240,10 +249,12 @@ private struct WorktreeMergeControl: View {
 /// Rendered inside the merge split button's shared capsule, so its label is a bare chevron (no pill
 /// of its own — the enclosing capsule + hairline divider frame it).
 private struct MergeTargetCaret: View {
-    let console: ConsoleModel
     let targets: [String]
-    let defaultTarget: String?
+    let currentTarget: String?
     let tint: Color
+    /// Called with the picked branch — the parent re-points the primary button to it; the merge is
+    /// NOT run here, it waits for the primary button tap.
+    let onPick: (String) -> Void
     @State private var showPicker = false
 
     /// Past this many branches the inline menu is a chore to scan, so switch to the search sheet
@@ -256,15 +267,13 @@ private struct MergeTargetCaret: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Choose a branch to merge into")
                 .sheet(isPresented: $showPicker) {
-                    MergeTargetPickerSheet(targets: targets, defaultTarget: defaultTarget) { picked in
-                        Task { await console.worktree.merge(target: picked) }
-                    }
+                    MergeTargetPickerSheet(targets: targets, currentTarget: currentTarget, onPick: onPick)
                 }
         } else {
             Menu {
                 ForEach(targets, id: \.self) { b in
-                    Button { Task { await console.worktree.merge(target: b) } } label: {
-                        if b == defaultTarget { Label(b, systemImage: "checkmark") } else { Text(b) }
+                    Button { onPick(b) } label: {
+                        if b == currentTarget { Label(b, systemImage: "checkmark") } else { Text(b) }
                     }
                 }
             } label: {
@@ -285,10 +294,11 @@ private struct MergeTargetCaret: View {
 
 /// A searchable, height-capped list of branches to merge into — shown instead of the inline menu
 /// when the repo has many branches (the iOS/macOS counterpart to web's merge-target search box).
-/// Medium-height on iOS so it never runs off-screen; picking a branch dismisses and fires the merge.
+/// Medium-height on iOS so it never runs off-screen; picking a branch dismisses and re-points the
+/// primary merge button (the merge itself waits for a tap on that button).
 private struct MergeTargetPickerSheet: View {
     let targets: [String]
-    let defaultTarget: String?
+    let currentTarget: String?
     let onPick: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
@@ -308,8 +318,9 @@ private struct MergeTargetPickerSheet: View {
                     HStack(spacing: 8) {
                         BranchLabelView(branch: b).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength: 8)
-                        if b == defaultTarget {
-                            Text("default").font(.orbitMeta).foregroundStyle(.secondary)
+                        if b == currentTarget {
+                            Image(systemName: "checkmark").font(.orbitMeta.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
                     .contentShape(Rectangle())

@@ -282,6 +282,9 @@ function MergeButton({
   // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
   // order stable across the different button states.
   const [targetQuery, setTargetQuery] = useState('');
+  // The branch the user picked in the caret dropdown — it only re-points the primary button's target;
+  // the merge doesn't run until they click the primary button (picking no longer merges immediately).
+  const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const { token } = theme.useToken();
   if (status === 'merged') {
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
@@ -358,12 +361,16 @@ function MergeButton({
   const remembered = agentDefaultTarget && targets.includes(agentDefaultTarget) ? agentDefaultTarget : undefined;
   const defaultTarget =
     remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
-  const primaryTarget = failed ? (mergeTarget ?? undefined) : defaultTarget;
+  // The target the primary button will merge into: the user's caret pick if it's still offered, else
+  // the default. Picking in the caret only re-points this — the merge waits for the primary click.
+  const effectiveTarget =
+    selectedTarget && targets.includes(selectedTarget) ? selectedTarget : defaultTarget;
+  const primaryTarget = failed ? (mergeTarget ?? undefined) : effectiveTarget;
   const primaryLabel = pending
     ? 'Merging…'
     : failed
       ? `Retry merge to ${mergeTarget ?? defaultTarget ?? 'main'}`
-      : `Merge to ${defaultTarget ?? 'main'}`;
+      : `Merge to ${effectiveTarget ?? 'main'}`;
   const hasMenu = targets.length > 0 && !pending;
 
   const mainBtn = (
@@ -375,7 +382,7 @@ function MergeButton({
         e.stopPropagation();
         onMerge(primaryTarget);
       }}
-      title={failed ? undefined : `Merge this branch into ${defaultTarget ?? 'main'}`}
+      title={failed ? undefined : `Merge this branch into ${effectiveTarget ?? 'main'}`}
     >
       {primaryLabel}
     </button>
@@ -403,10 +410,11 @@ function MergeButton({
     label: (
       <span className="wt-merge-target">
         <span className="wt-merge-target-name">{b}</span>
-        {b === defaultTarget && <span className="wt-merge-target-tag">default</span>}
+        {b === effectiveTarget && <span className="wt-merge-target-tag">selected</span>}
       </span>
     ),
-    onClick: () => onMerge(b),
+    // Picking only re-points the primary button (setSelectedTarget) — it no longer merges immediately.
+    onClick: () => setSelectedTarget(b),
   }));
 
   return (
