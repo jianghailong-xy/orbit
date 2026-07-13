@@ -248,6 +248,27 @@ func isCodexImage(mime string) bool {
 	}
 }
 
+// codexProviderArgs returns the `-c` overrides that point codex at a custom OpenAI-compatible
+// provider. The apiserver injects OPENAI_BASE_URL + OPENAI_API_KEY into the job env for a codex
+// custom provider (see custom-provider.ts); codex ignores OPENAI_BASE_URL, so we translate it
+// into a `model_providers.orbit` block and select it. The key stays in the process env and codex
+// reads it via env_key. No injected base URL → built-in codex (its default provider), no overrides.
+// wire_api "chat" (=> {base_url}/chat/completions) is the compatible dialect Gemini's OpenAI
+// endpoint and generic OpenAI-compatible servers speak; native OpenAI accepts it too.
+func codexProviderArgs(agentEnv map[string]string) []string {
+	base := strings.TrimSpace(agentEnv["OPENAI_BASE_URL"])
+	if base == "" {
+		return nil
+	}
+	return []string{
+		"-c", fmt.Sprintf("model_providers.orbit.name=%q", "Orbit provider"),
+		"-c", fmt.Sprintf("model_providers.orbit.base_url=%q", base),
+		"-c", `model_providers.orbit.env_key="OPENAI_API_KEY"`,
+		"-c", `model_providers.orbit.wire_api="chat"`,
+		"-c", `model_provider="orbit"`,
+	}
+}
+
 func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt string, imagePaths []string, emit emitFn) codexTurnResult {
 	result := codexTurnResult{Status: stSucceeded, Subtype: "success"}
 	upDir := uploadsDir(job.SessionID)
@@ -270,6 +291,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 			"-c", `mcp_servers.orbit.args=["mcp"]`,
 		)
 	}
+	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")
 	for _, p := range imagePaths {
 		args = append(args, "-i", p)

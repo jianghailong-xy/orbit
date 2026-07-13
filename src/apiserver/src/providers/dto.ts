@@ -1,9 +1,9 @@
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
-// Only the claude runtime (Anthropic-compatible endpoints) works today: codex ignores
-// OPENAI_BASE_URL-style env and needs config.toml / `-c` overrides on the runner, so the
-// codex runtime stays rejected here until that runner support lands. One-line to extend.
-const RUNTIMES = ['claude'];
+// Custom providers borrow a built-in runtime: `claude` for Anthropic-compatible endpoints,
+// `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, etc.). The runner
+// translates a codex provider's OPENAI_BASE_URL into codex `-c model_providers.*` overrides.
+const RUNTIMES = ['claude', 'codex'];
 
 export class CreateModelProviderDto {
   @IsString() @MinLength(1) slug!: string;
@@ -24,6 +24,8 @@ export class TestModelProviderDto {
   @IsString() @MinLength(1) apiKey!: string;
   /** Model to probe with; the picker sends the default (or the first) model. */
   @IsOptional() @IsString() model?: string;
+  /** Which dialect to probe: claude → Anthropic Messages, codex → OpenAI chat completions. */
+  @IsOptional() @IsIn(RUNTIMES) runtime?: string;
 }
 
 export class UpdateModelProviderDto {

@@ -22,6 +22,11 @@ export interface ProviderPreset {
   baseUrl: string;
   models: ProviderPresetModel[];
   defaultModel: string;
+  /**
+   * Runtime the provider borrows: `claude` for Anthropic-compatible endpoints (default),
+   * `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, …).
+   */
+  runtime?: 'claude' | 'codex';
   /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
   /** Logo tile shown in the provider gallery and rows. */
@@ -31,6 +36,47 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    slug: 'anthropic',
+    label: 'Anthropic (Claude)',
+    runtime: 'claude',
+    baseUrl: 'https://api.anthropic.com',
+    models: [
+      { value: 'claude-opus-4-8', label: 'Claude Opus 4.8', contextWindow: 200_000 },
+      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5', contextWindow: 200_000 },
+      { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200_000 },
+    ],
+    defaultModel: 'claude-opus-4-8',
+    brand: { mono: 'A', from: '#d97757', to: '#c15f3c' },
+    keyUrl: 'https://console.anthropic.com/settings/keys',
+  },
+  {
+    slug: 'openai',
+    label: 'OpenAI',
+    runtime: 'codex',
+    baseUrl: 'https://api.openai.com/v1',
+    models: [
+      { value: 'gpt-5.1', label: 'GPT-5.1' },
+      { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini' },
+    ],
+    defaultModel: 'gpt-5.1',
+    brand: { mono: 'O', from: '#4b5158', to: '#1f2226' },
+    keyUrl: 'https://platform.openai.com/api-keys',
+  },
+  {
+    slug: 'gemini',
+    label: 'Gemini',
+    runtime: 'codex',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    models: [
+      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', contextWindow: 1_000_000 },
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', contextWindow: 1_000_000 },
+    ],
+    defaultModel: 'gemini-2.5-pro',
+    note: 'Google Gemini via its OpenAI-compatible endpoint.',
+    brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' },
+    keyUrl: 'https://aistudio.google.com/apikey',
+  },
   {
     slug: 'deepseek',
     label: 'DeepSeek',

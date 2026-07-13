@@ -8,6 +8,7 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Table,
@@ -17,6 +18,7 @@ import {
 import { api } from '../api';
 import { meQuery, providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS, type ProviderBrand } from '../lib/providerPresets';
+import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 
 interface ProviderModelRow {
   value: string;
@@ -54,31 +56,62 @@ function brandFor(slug: string, label: string): ProviderBrand {
   return { mono: (label.trim()[0] ?? '?').toUpperCase(), from: '#9aa0a8', to: '#6b7178' };
 }
 
-// The square logo tile — a monogram over the brand gradient, or a dashed neutral tile for "Custom".
+// The square logo tile: the vendor's brand glyph (white) over its brand gradient — falling back to
+// a monogram when no glyph is known, or a dashed neutral "+" tile for "Custom".
 function ProviderTile({
-  brand,
+  slug,
+  label,
   size = 40,
   muted = false,
 }: {
-  brand: ProviderBrand;
+  slug: string;
+  label: string;
   size?: number;
   muted?: boolean;
 }) {
   const radius = Math.round(size * 0.26);
-  const paint = muted
-    ? {
-        background: 'var(--fill-muted)',
-        color: 'var(--text-3)',
-        border: '1px dashed var(--border)',
-        fontSize: Math.round(size * 0.5),
-      }
-    : {
-        background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
-        fontSize: Math.round(size * 0.42),
-      };
+  if (muted) {
+    return (
+      <div
+        className="provider-tile"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: radius,
+          background: 'var(--fill-muted)',
+          color: 'var(--text-3)',
+          border: '1px dashed var(--border)',
+          fontSize: Math.round(size * 0.5),
+        }}
+      >
+        +
+      </div>
+    );
+  }
+  const brand = brandFor(slug, label);
+  const glyph = PROVIDER_GLYPHS[slug];
   return (
-    <div className="provider-tile" style={{ width: size, height: size, borderRadius: radius, ...paint }}>
-      {brand.mono}
+    <div
+      className="provider-tile"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+      }}
+    >
+      {glyph ? (
+        <svg
+          viewBox="0 0 24 24"
+          width={Math.round(size * 0.56)}
+          height={Math.round(size * 0.56)}
+          fill="currentColor"
+          style={{ color: '#fff' }}
+          dangerouslySetInnerHTML={{ __html: glyph }}
+        />
+      ) : (
+        <span style={{ fontSize: Math.round(size * 0.42) }}>{brand.mono}</span>
+      )}
     </div>
   );
 }
@@ -139,6 +172,8 @@ function ProviderSection({
   const [defaultModel, setDefaultModel] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [models, setModels] = useState<DraftModel[]>([]);
+  // Anthropic-compatible (claude) vs OpenAI-compatible (codex) endpoint dialect.
+  const [runtime, setRuntime] = useState<'claude' | 'codex'>('claude');
 
   // Stateless pre-save probe of the endpoint + typed key (POST /providers/test).
   const testMut = useMutation({
@@ -149,6 +184,7 @@ function ProviderSection({
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim(),
           model: defaultModel.trim() || models.find((m) => m.value.trim())?.value || '',
+          runtime,
         },
       }),
   });
@@ -168,6 +204,7 @@ function ProviderSection({
     setDefaultModel('');
     setEnabled(true);
     setModels([]);
+    setRuntime('claude');
   };
 
   // Create: open the modal at the vendor gallery.
@@ -200,6 +237,7 @@ function ProviderSection({
       setApiKey('');
       setDefaultModel(p.defaultModel);
       setEnabled(true);
+      setRuntime(p.runtime ?? 'claude');
       setModels(
         p.models.map((m) => ({ value: m.value, label: m.label, contextWindow: m.contextWindow ?? null })),
       );
@@ -218,6 +256,7 @@ function ProviderSection({
     setApiKey(''); // never round-trips the stored key; blank keeps it
     setDefaultModel(p.defaultModel ?? '');
     setEnabled(p.enabled);
+    setRuntime(p.runtime === 'codex' ? 'codex' : 'claude');
     setModels(
       (p.models ?? []).map((m) => ({
         value: m.value,
@@ -244,6 +283,7 @@ function ProviderSection({
           method: 'PATCH',
           body: {
             label: label.trim(),
+            runtime,
             baseUrl: baseUrl.trim(),
             models: modelPayload,
             defaultModel: dm,
@@ -258,6 +298,7 @@ function ProviderSection({
         body: {
           slug: slug.trim().toLowerCase(),
           label: label.trim(),
+          runtime,
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim(),
           models: modelPayload,
@@ -296,7 +337,7 @@ function ProviderSection({
       key: 'provider',
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ProviderTile brand={brandFor(p.slug, p.label)} size={32} />
+          <ProviderTile slug={p.slug} label={p.label} size={32} />
           <div>
             <div style={{ fontWeight: 600 }}>{p.label}</div>
             <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.slug}</code>
@@ -363,15 +404,17 @@ function ProviderSection({
     <div className={`provider-gallery${inModal ? ' in-modal' : ''}`}>
       {PROVIDER_PRESETS.map((p) => (
         <button key={p.slug} type="button" className="provider-card" onClick={() => pickVendor(p.slug)}>
-          <ProviderTile brand={p.brand} />
+          <ProviderTile slug={p.slug} label={p.label} />
           <div style={{ minWidth: 0 }}>
             <div className="pc-name">{p.label}</div>
-            <div className="pc-sub">Anthropic-compatible</div>
+            <div className="pc-sub">
+              {p.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'}
+            </div>
           </div>
         </button>
       ))}
       <button type="button" className="provider-card custom" onClick={() => pickVendor('__custom__')}>
-        <ProviderTile brand={{ mono: '+', from: '', to: '' }} muted />
+        <ProviderTile slug="__custom__" label="Custom" muted />
         <div style={{ minWidth: 0 }}>
           <div className="pc-name">Custom</div>
           <div className="pc-sub">Manual endpoint</div>
@@ -428,12 +471,12 @@ function ProviderSection({
 
       {preset && (
         <div className="provider-idbar">
-          <ProviderTile brand={preset.brand} />
+          <ProviderTile slug={preset.slug} label={preset.label} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>{preset.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              Anthropic-compatible · {preset.models.length} model{preset.models.length === 1 ? '' : 's'}{' '}
-              included
+              {preset.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'} ·{' '}
+              {preset.models.length} model{preset.models.length === 1 ? '' : 's'} included
             </div>
           </div>
         </div>
@@ -510,6 +553,23 @@ function ProviderSection({
                   Filled from the official {preset.label} preset — most people don't need to change these.
                 </div>
               )}
+              <Field label="Runtime">
+                <Select<'claude' | 'codex'>
+                  value={runtime}
+                  onChange={(v) => {
+                    setRuntime(v);
+                    testMut.reset();
+                  }}
+                  style={{ width: '100%' }}
+                  options={[
+                    { value: 'claude', label: 'Anthropic-compatible (Claude)' },
+                    { value: 'codex', label: 'OpenAI-compatible (Codex)' },
+                  ]}
+                />
+                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+                  The API dialect this endpoint speaks — a preset sets it for you.
+                </div>
+              </Field>
               {!isCustom && (
                 <Field label="Label">
                   <Input value={label} onChange={(e) => setLabel(e.target.value)} />
@@ -538,7 +598,9 @@ function ProviderSection({
                 />
                 <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
                   {preset?.note ??
-                    'An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).'}
+                    (runtime === 'codex'
+                      ? 'An OpenAI-compatible endpoint (its base URL, e.g. up to /v1).'
+                      : 'An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).')}
                 </div>
               </Field>
               <Field label="Models">

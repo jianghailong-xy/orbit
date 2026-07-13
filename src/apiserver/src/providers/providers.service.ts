@@ -102,19 +102,24 @@ export class ProvidersService {
     baseUrl: string;
     apiKey: string;
     model?: string;
+    runtime?: string;
   }): Promise<{ ok: boolean; status?: number; message: string }> {
-    const base = this.assertTestableUrl(dto.baseUrl);
+    const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');
+    // codex providers speak OpenAI chat-completions; claude providers the Anthropic Messages API.
+    const isCodex = dto.runtime === 'codex';
+    const endpoint = isCodex ? `${base}/chat/completions` : `${base}/v1/messages`;
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${dto.apiKey}`,
+    };
+    if (!isCodex) headers['anthropic-version'] = '2023-06-01';
     try {
-      const resp = await fetch(`${base.replace(/\/+$/, '')}/v1/messages`, {
+      const resp = await fetch(endpoint, {
         method: 'POST',
         redirect: 'manual',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${dto.apiKey}`,
-          'anthropic-version': '2023-06-01',
-        },
+        headers,
         body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
         signal: AbortSignal.timeout(8000),
       });

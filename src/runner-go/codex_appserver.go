@@ -479,6 +479,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 			"-c", `mcp_servers.orbit.args=["mcp"]`,
 		)
 	}
+	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
