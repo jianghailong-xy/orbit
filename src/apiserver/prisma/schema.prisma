@@ -321,6 +321,12 @@ model Session {
   // Only meaningful while RUNNING; the list gates display on status so a stale value
   // on a finished session is never shown.
   lastToolUse       String?   @map("last_tool_use")
+  // Denormalized "pending question": the latest user turn's text while it's the frontier — a
+  // turn just started and the agent hasn't replied yet. Set alongside lastToolUse on event
+  // ingestion and cleared (null) the moment any other frontier lands (assistant text, a tool,
+  // turn end). Lets the list show the message you just sent while awaiting the reply, instead of
+  // the now-stale previous reply. Only meaningful while RUNNING; display is status-gated.
+  lastUserText      String?   @map("last_user_text")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +

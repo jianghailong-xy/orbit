@@ -870,7 +870,10 @@ export class RunnerApiController {
     // other frontier (assistant text, tool_result, turn end) means no tool is running
     // → clear it. Batches arrive in seq order, so the latest batch's frontier is the
     // latest overall. An empty (all-streaming) batch leaves the prior value untouched.
-    let frontier: { seq: number; tool: string | null } | null = null;
+    // The same frontier also carries `userText`: the message text when the latest event is
+    // a user turn (a turn just started, no reply yet) → the list shows it while awaiting the
+    // reply; any other frontier clears it, flipping the row back to the reply once it lands.
+    let frontier: { seq: number; tool: string | null; userText: string | null } | null = null;
     for (const e of durable) {
       // Sub-agent (Task/Agent) events carry the spawning call's parentToolUseId. Skip
       // them: while a sub-agent runs, its own tool_use/tool_result would clobber then
@@ -885,14 +888,24 @@ export class RunnerApiController {
               .trim()
               .slice(0, 60) || null
           : null;
-      frontier = { seq: e.seq, tool };
+      // The pending question, denormalized like the tool above: the user turn's text when it's
+      // the frontier. A later frontier (assistant text, a tool, turn end) computes null here,
+      // which clears it — so the list swaps the message you just sent back for the reply the
+      // moment the agent responds. Stored full; the list query truncates it (left(…, PREVIEW_LEN)).
+      const userText =
+        e.type === RunEventType.USER
+          ? ((e.payload as { text?: string; content?: string } | null)?.text ??
+              (e.payload as { content?: string } | null)?.content ??
+              '').trim() || null
+          : null;
+      frontier = { seq: e.seq, tool, userText };
     }
     if (lastAssistant || frontier) {
       await this.prisma.session.update({
         where: { id: sessionId },
         data: {
           ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
-          ...(frontier ? { lastToolUse: frontier.tool } : {}),
+          ...(frontier ? { lastToolUse: frontier.tool, lastUserText: frontier.userText } : {}),
         },
       });
     }

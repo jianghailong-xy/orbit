@@ -286,6 +286,7 @@ export class SessionsService {
       effort: string | null;
       lastAssistantText: string | null;
       lastToolUse: string | null;
+      lastUserText: string | null;
       mergeStatus: string | null;
       pinnedAt: Date | null;
       runningBgCount: number;
@@ -313,6 +314,7 @@ export class SessionsService {
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
         s.last_tool_use   AS "lastToolUse",
+        left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
         s.pinned_at       AS "pinnedAt",
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
@@ -352,6 +354,7 @@ export class SessionsService {
       effort: r.effort,
       lastAssistantText: r.lastAssistantText,
       lastToolUse: r.lastToolUse,
+      lastUserText: r.lastUserText,
       mergeStatus: r.mergeStatus,
       pinnedAt: r.pinnedAt,
       runningBgCount: r.runningBgCount,

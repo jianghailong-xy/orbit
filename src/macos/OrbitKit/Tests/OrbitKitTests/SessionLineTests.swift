@@ -4,10 +4,12 @@ import XCTest
 /// Ports the web `sessionLine` cases: the Agent-console list's second line.
 final class SessionLineTests: XCTestCase {
     private func session(status: RunStatus, lastAssistantText: String? = nil, lastToolUse: String? = nil,
-                         runningBgCount: Int? = nil, pendingApprovals: Int? = nil) -> Session {
+                         lastUserText: String? = nil, runningBgCount: Int? = nil,
+                         pendingApprovals: Int? = nil) -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
-                lastAssistantText: lastAssistantText, lastToolUse: lastToolUse, runningBgCount: runningBgCount)
+                lastAssistantText: lastAssistantText, lastToolUse: lastToolUse, lastUserText: lastUserText,
+                runningBgCount: runningBgCount)
     }
 
     func testRunningPrioritisesApprovalThenToolThenPreview() {
@@ -22,6 +24,23 @@ final class SessionLineTests: XCTestCase {
 
         let bare = session(status: .running)
         XCTAssertEqual(SessionLine.make(for: bare, live: true), .init(text: "Running…", tone: .running))
+    }
+
+    /// A turn just started (RUNNING) but the agent hasn't replied yet: the row shows the message
+    /// you just sent, not the now-stale previous reply. A tool/approval frontier still outranks it.
+    func testRunningShowsPendingUserMessageBeforeStaleReply() {
+        let awaiting = session(status: .running, lastAssistantText: "previous reply",
+                               lastUserText: "fix the drawer shadow")
+        XCTAssertEqual(SessionLine.make(for: awaiting, live: true),
+                       .init(text: "fix the drawer shadow", tone: .preview))
+
+        // Once the agent picks up a tool, the tool status wins over the pending message.
+        let tooling = session(status: .running, lastToolUse: "Bash", lastUserText: "fix the drawer shadow")
+        XCTAssertEqual(SessionLine.make(for: tooling, live: true), .init(text: "Running Bash…", tone: .running))
+
+        // Markdown in the sent message is flattened, like a reply preview.
+        let md = session(status: .running, lastUserText: "please `run` the **tests**")
+        XCTAssertEqual(SessionLine.make(for: md, live: true)?.text, "please run the tests")
     }
 
     func testPendingAndBackground() {
@@ -44,12 +63,13 @@ final class SessionLineTests: XCTestCase {
     }
 
     /// The list payload's preview fields decode (server keys: lastAssistantText / lastToolUse /
-    /// runningBgCount).
+    /// lastUserText / runningBgCount).
     func testSessionDecodesPreviewFields() throws {
-        let json = #"{"id":"s1","status":"RUNNING","lastAssistantText":"hello","lastToolUse":"Read","runningBgCount":1}"#
+        let json = #"{"id":"s1","status":"RUNNING","lastAssistantText":"hello","lastToolUse":"Read","lastUserText":"hi there","runningBgCount":1}"#
         let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertEqual(s.lastAssistantText, "hello")
         XCTAssertEqual(s.lastToolUse, "Read")
+        XCTAssertEqual(s.lastUserText, "hi there")
         XCTAssertEqual(s.runningBgCount, 1)
     }
 }

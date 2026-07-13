@@ -2,8 +2,9 @@ import Foundation
 
 /// The preview line shown under a session title in the Agent-console list — a direct port of the
 /// web `sessionLine`. For a live RUNNING session it surfaces the current state (the tool in flight,
-/// that it's blocked on you, or a bare "Running…") so the row never collapses to just a title;
-/// otherwise it's the flattened last assistant reply (or nil). `tone` drives the colour.
+/// that it's blocked on you, the message you just sent while awaiting the reply, or a bare
+/// "Running…") so the row never collapses to just a title; otherwise it's the flattened last
+/// assistant reply (or nil). `tone` drives the colour.
 public struct SessionLine: Equatable, Sendable {
     public enum Tone: String, Sendable {
         case preview   // reply content — default/secondary
@@ -25,6 +26,11 @@ public struct SessionLine: Equatable, Sendable {
         if live && s.status == .running {
             if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
+            // A turn just started and the agent hasn't replied yet: show the message you just sent
+            // (server-set while the user turn is the frontier, cleared once a reply/tool lands)
+            // rather than the now-stale previous reply. Content, not status — the spinner already
+            // conveys "working" — so it takes the muted preview tone.
+            if let u = s.lastUserText, !u.isEmpty { return SessionLine(text: plainPreview(u), tone: .preview) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }

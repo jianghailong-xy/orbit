@@ -110,6 +110,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// assistant reply, the tool currently in flight, and the live background-shell count.
     public let lastAssistantText: String?
     public let lastToolUse: String?
+    /// The message you just sent, surfaced while a turn is running but the agent hasn't replied
+    /// yet — the server sets it while the user turn is the frontier and clears it once a reply or
+    /// tool lands, so the row shows your pending message instead of the now-stale previous reply.
+    public let lastUserText: String?
     public let runningBgCount: Int?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
@@ -125,7 +129,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 pendingApprovals: Int?, branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
-                lastToolUse: String? = nil, runningBgCount: Int? = nil,
+                lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil) {
         self.id = id
@@ -143,6 +147,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.source = source
         self.lastAssistantText = lastAssistantText
         self.lastToolUse = lastToolUse
+        self.lastUserText = lastUserText
         self.runningBgCount = runningBgCount
         self.error = error
         self.endReason = endReason

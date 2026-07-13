@@ -496,6 +496,11 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
+    // A turn just started and the agent hasn't replied yet: show the message you just sent (the
+    // server sets lastUserText while the user turn is the frontier and clears it the moment a
+    // reply or tool lands) instead of the now-stale previous reply. It's content, not status —
+    // the spinner already carries "working" — so it takes the muted preview tone, not blue.
+    if (s.lastUserText) return { text: plainPreview(s.lastUserText), tone: 'preview' };
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
