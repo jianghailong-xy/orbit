@@ -88,16 +88,21 @@ struct CompactShell: View {
                                 .gesture(closeDrag(width: w))
                         }
                     }
-                    // Round the content's leading corners into a floating card as it slides open. We
-                    // *mask* with an `.ignoresSafeArea` rounded rect rather than `.clipShape` the content
-                    // (or make the content ignore its safe area): the mask spans the full screen — the way
-                    // the nav bar's background already bleeds under the status bar / home indicator — so
-                    // only the corners are trimmed, while the console's own safe-area insets (and the
-                    // composer sitting above the home indicator) are left exactly as they are. At
-                    // `corner == 0` the mask is a plain full-screen rect: a no-op for the closed state.
-                    .mask {
-                        RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    // Round the content's leading corners into a floating card as it slides open —
+                    // *without* masking the live content. A `.mask`/`.clipShape` composites the whole
+                    // section — including its translucent `UIVisualEffectView` nav bar — into an offscreen
+                    // buffer every frame; re-rasterizing that blur as the drawer slides behind it is what
+                    // made the drag (closing especially) flicker. Instead the content rides a plain
+                    // `.offset` and we lay an opaque cutout over only the corner slivers, in the drawer
+                    // surface color, so the square corners *read* as rounded against the revealed drawer
+                    // while the content layer is never rasterized. Full-screen + `.ignoresSafeArea` so only
+                    // the screen-edge corners are shaped (matching the shadow proxy), leaving the console's
+                    // own safe-area insets untouched. At `corner == 0` the cutout is empty: a closed no-op.
+                    .overlay {
+                        CornerCutout(radius: corner)
+                            .fill(drawerSurface, style: FillStyle(eoFill: true))
                             .ignoresSafeArea()
+                            .allowsHitTesting(false)
                     }
                     .offset(x: x)
 
@@ -255,6 +260,28 @@ private let drawerSurface = Color(uiColor: UIColor { trait in
         ? UIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 1)
         : UIColor(white: 0.976, alpha: 1)
 })
+
+/// A full-screen rectangle with a rounded-rectangle "hole", even-odd filled so only the corner slivers
+/// between the square screen edge and the card's rounded corner get painted. Laid opaquely over the
+/// (unmasked) sliding content in the drawer-surface color, it fakes the card's rounded leading corners
+/// *without* masking the live content — so the console and its translucent nav bar ride a cheap `.offset`
+/// and never trigger the offscreen re-rasterization a `.mask` forces (the source of the drag flicker).
+/// The interior stays unfilled — even-odd: a ray from an interior point crosses both the outer rect and
+/// the inner rounded rect (two crossings, even) — so the content shows through everywhere but the corners.
+private struct CornerCutout: Shape {
+    var radius: CGFloat
+    /// Animate the radius so it grows/shrinks with the open/close offset animation, exactly as the
+    /// `RoundedRectangle(cornerRadius:)` did when this was a mask.
+    var animatableData: CGFloat {
+        get { radius }
+        set { radius = newValue }
+    }
+    func path(in rect: CGRect) -> Path {
+        var path = Path(rect)
+        path.addPath(Path(roundedRect: rect, cornerRadius: radius, style: .continuous))
+        return path
+    }
+}
 
 /// One place for the drawer's spacing rhythm so every row lines up on the same grid. Tuned for a
 /// calm, ChatGPT-style rail: roomy ~44pt rows, a hair of space between them, and a rounded selection
