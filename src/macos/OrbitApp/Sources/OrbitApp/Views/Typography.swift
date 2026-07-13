@@ -95,6 +95,11 @@ extension Font {
     static func orbitAgentGlyph(_ diameter: CGFloat) -> Font {
         .system(size: diameter * 0.4, weight: .bold, design: .monospaced)
     }
+
+    /// A thin control-affordance glyph sized for a fixed disc (e.g. the transcript scroll-to-bottom
+    /// arrow). Like `orbitHeroGlyph`, it's a mark in a fixed-size container, not text, so it stays
+    /// Dynamic-Type-static — a scaling glyph would overflow the disc. Identical on both platforms.
+    static let orbitControlGlyph: Font = .system(size: 15, weight: .regular)
 }
 
 /// Additive line leading (points on top of the font's own line height) for transcript prose.

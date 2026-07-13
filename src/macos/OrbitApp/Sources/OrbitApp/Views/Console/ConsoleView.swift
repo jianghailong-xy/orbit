@@ -417,7 +417,7 @@ struct TranscriptView: View {
                 // A thin 15pt arrow, not the old chunky semibold — matches ChatGPT's slim glyph and
                 // web's `ArrowDownOutlined` (15px). Fixed size (like `orbitHeroGlyph`): a control mark,
                 // not body text, so it shouldn't ride Dynamic Type.
-                .font(.system(size: 15, weight: .regular))
+                .font(.orbitControlGlyph)
                 .foregroundStyle(.primary)
                 .frame(width: 32, height: 32)
                 .background(.regularMaterial, in: Circle())
