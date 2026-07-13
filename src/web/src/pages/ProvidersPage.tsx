@@ -8,7 +8,6 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
-  Select,
   Space,
   Switch,
   Table,
@@ -17,7 +16,7 @@ import {
 } from 'antd';
 import { api } from '../api';
 import { meQuery, providersQuery } from '../lib/queries';
-import { PROVIDER_PRESETS } from '../lib/providerPresets';
+import { PROVIDER_PRESETS, type ProviderBrand } from '../lib/providerPresets';
 
 interface ProviderModelRow {
   value: string;
@@ -45,6 +44,43 @@ interface DraftModel {
   value: string;
   label: string;
   contextWindow: number | null;
+}
+
+// The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
+// derived from its label.
+function brandFor(slug: string, label: string): ProviderBrand {
+  const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
+  if (preset) return preset.brand;
+  return { mono: (label.trim()[0] ?? '?').toUpperCase(), from: '#9aa0a8', to: '#6b7178' };
+}
+
+// The square logo tile — a monogram over the brand gradient, or a dashed neutral tile for "Custom".
+function ProviderTile({
+  brand,
+  size = 40,
+  muted = false,
+}: {
+  brand: ProviderBrand;
+  size?: number;
+  muted?: boolean;
+}) {
+  const radius = Math.round(size * 0.26);
+  const paint = muted
+    ? {
+        background: 'var(--fill-muted)',
+        color: 'var(--text-3)',
+        border: '1px dashed var(--border)',
+        fontSize: Math.round(size * 0.5),
+      }
+    : {
+        background: `linear-gradient(135deg, ${brand.from}, ${brand.to})`,
+        fontSize: Math.round(size * 0.42),
+      };
+  return (
+    <div className="provider-tile" style={{ width: size, height: size, borderRadius: radius, ...paint }}>
+      {brand.mono}
+    </div>
+  );
 }
 
 /**
@@ -93,9 +129,9 @@ function ProviderSection({
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderRow | null>(null);
-  // Selected official template (create only): picking one pre-fills the form below;
-  // every field stays editable afterwards. '' = start from a blank custom provider.
-  const [preset, setPreset] = useState('');
+  // null = show the vendor gallery (create only); a preset slug or '__custom__' = show the form.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [advOpen, setAdvOpen] = useState(false);
   const [slug, setSlug] = useState('');
   const [label, setLabel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -104,6 +140,19 @@ function ProviderSection({
   const [enabled, setEnabled] = useState(true);
   const [models, setModels] = useState<DraftModel[]>([]);
 
+  // Stateless pre-save probe of the endpoint + typed key (POST /providers/test).
+  const testMut = useMutation({
+    mutationFn: () =>
+      api<{ ok: boolean; status?: number; message: string }>('/providers/test', {
+        method: 'POST',
+        body: {
+          baseUrl: baseUrl.trim(),
+          apiKey: apiKey.trim(),
+          model: defaultModel.trim() || models.find((m) => m.value.trim())?.value || '',
+        },
+      }),
+  });
+
   // Both this section's list and the de-sensitized ['providers'] catalog the pickers read
   // must refresh on any change.
   const invalidate = () => {
@@ -111,22 +160,7 @@ function ProviderSection({
     void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
   };
 
-  const applyPreset = (slugKey: string) => {
-    setPreset(slugKey);
-    const p = PROVIDER_PRESETS.find((x) => x.slug === slugKey);
-    if (!p) return; // '' = Custom: keep whatever is typed
-    setSlug(p.slug);
-    setLabel(p.label);
-    setBaseUrl(p.baseUrl);
-    setDefaultModel(p.defaultModel);
-    setModels(
-      p.models.map((m) => ({ value: m.value, label: m.label, contextWindow: m.contextWindow ?? null })),
-    );
-  };
-
-  const openCreate = () => {
-    setEditing(null);
-    setPreset('');
+  const resetFields = () => {
     setSlug('');
     setLabel('');
     setBaseUrl('');
@@ -134,10 +168,50 @@ function ProviderSection({
     setDefaultModel('');
     setEnabled(true);
     setModels([]);
+  };
+
+  // Create: open the modal at the vendor gallery.
+  const openCreate = () => {
+    setEditing(null);
+    setChosen(null);
+    setAdvOpen(false);
+    resetFields();
+    testMut.reset();
     setOpen(true);
   };
+
+  // Pick a vendor (from the modal gallery or the empty state). A preset pre-fills every field and
+  // keeps the advanced block collapsed; '__custom__' starts blank with advanced expanded.
+  const pickVendor = (key: string) => {
+    setEditing(null);
+    testMut.reset();
+    if (key === '__custom__') {
+      resetFields();
+      setChosen('__custom__');
+      setAdvOpen(true);
+    } else {
+      const p = PROVIDER_PRESETS.find((x) => x.slug === key);
+      if (!p) return;
+      setChosen(key);
+      setAdvOpen(false);
+      setSlug(p.slug);
+      setLabel(p.label);
+      setBaseUrl(p.baseUrl);
+      setApiKey('');
+      setDefaultModel(p.defaultModel);
+      setEnabled(true);
+      setModels(
+        p.models.map((m) => ({ value: m.value, label: m.label, contextWindow: m.contextWindow ?? null })),
+      );
+    }
+    setOpen(true);
+  };
+
   const openEdit = (p: ProviderRow) => {
     setEditing(p);
+    testMut.reset();
+    setChosen(PROVIDER_PRESETS.some((x) => x.slug === p.slug) ? p.slug : '__custom__');
+    setAdvOpen(false);
     setSlug(p.slug);
     setLabel(p.label);
     setBaseUrl(p.baseUrl);
@@ -221,9 +295,12 @@ function ProviderSection({
       title: 'Provider',
       key: 'provider',
       render: (_, p) => (
-        <div>
-          <div>{p.label}</div>
-          <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.slug}</code>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ProviderTile brand={brandFor(p.slug, p.label)} size={32} />
+          <div>
+            <div style={{ fontWeight: 600 }}>{p.label}</div>
+            <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.slug}</code>
+          </div>
         </div>
       ),
     },
@@ -236,17 +313,13 @@ function ProviderSection({
       title: 'Endpoint',
       dataIndex: 'baseUrl',
       key: 'baseUrl',
-      render: (u: string) => (
-        <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>
-      ),
+      render: (u: string) => <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>,
     },
     {
       title: 'Enabled',
       dataIndex: 'enabled',
       key: 'enabled',
-      render: (on: boolean) => (
-        <Tag color={on ? 'green' : 'default'}>{on ? 'Enabled' : 'Disabled'}</Tag>
-      ),
+      render: (on: boolean) => <Tag color={on ? 'green' : 'default'}>{on ? 'Enabled' : 'Disabled'}</Tag>,
     },
     {
       title: '',
@@ -267,6 +340,271 @@ function ProviderSection({
     },
   ];
 
+  const preset =
+    chosen && chosen !== '__custom__' ? PROVIDER_PRESETS.find((p) => p.slug === chosen) : undefined;
+  const isCustom = chosen === '__custom__';
+  const showGallery = chosen === null && !editing;
+  // A test needs somewhere to send it, a key to send, and a model to probe with.
+  const canTest =
+    baseUrl.trim() !== '' &&
+    apiKey.trim() !== '' &&
+    (defaultModel.trim() !== '' || models.some((m) => m.value.trim() !== ''));
+
+  const modalTitle = editing
+    ? `Edit ${editing.label}`
+    : showGallery
+      ? 'Add provider'
+      : isCustom
+        ? 'Add custom provider'
+        : `Connect ${preset?.label ?? ''}`;
+
+  // The vendor gallery — shared by the modal's first step and the empty state.
+  const gallery = (inModal: boolean) => (
+    <div className={`provider-gallery${inModal ? ' in-modal' : ''}`}>
+      {PROVIDER_PRESETS.map((p) => (
+        <button key={p.slug} type="button" className="provider-card" onClick={() => pickVendor(p.slug)}>
+          <ProviderTile brand={p.brand} />
+          <div style={{ minWidth: 0 }}>
+            <div className="pc-name">{p.label}</div>
+            <div className="pc-sub">Anthropic-compatible</div>
+          </div>
+        </button>
+      ))}
+      <button type="button" className="provider-card custom" onClick={() => pickVendor('__custom__')}>
+        <ProviderTile brand={{ mono: '+', from: '', to: '' }} muted />
+        <div style={{ minWidth: 0 }}>
+          <div className="pc-name">Custom</div>
+          <div className="pc-sub">Manual endpoint</div>
+        </div>
+      </button>
+    </div>
+  );
+
+  const footer = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <span style={{ color: 'var(--text-3)', fontSize: 12, textAlign: 'left', lineHeight: 1.4 }}>
+        {showGallery
+          ? "Can't find your provider? Choose Custom to enter an endpoint."
+          : preset && !editing
+            ? 'Everything else uses sensible defaults.'
+            : ''}
+      </span>
+      <Space>
+        <Button onClick={() => setOpen(false)}>Cancel</Button>
+        {!showGallery && (
+          <Button
+            type="primary"
+            disabled={!canSave}
+            loading={saveMut.isPending}
+            onClick={() => canSave && saveMut.mutate()}
+          >
+            {editing ? 'Save' : 'Create'}
+          </Button>
+        )}
+      </Space>
+    </div>
+  );
+
+  const body = showGallery ? (
+    <>
+      <div style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 16 }}>
+        Pick a model provider to get started. Each uses your own key, visible only to you.
+      </div>
+      {gallery(true)}
+    </>
+  ) : (
+    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      {!editing && (
+        <span
+          className="provider-back"
+          onClick={() => {
+            testMut.reset();
+            setChosen(null);
+          }}
+        >
+          ‹ All providers
+        </span>
+      )}
+
+      {preset && (
+        <div className="provider-idbar">
+          <ProviderTile brand={preset.brand} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600 }}>{preset.label}</div>
+            <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+              Anthropic-compatible · {preset.models.length} model{preset.models.length === 1 ? '' : 's'}{' '}
+              included
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCustom && (
+        <Field label="Label">
+          <Input placeholder="e.g. My provider" value={label} onChange={(e) => setLabel(e.target.value)} />
+        </Field>
+      )}
+
+      <Field
+        label={
+          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <span>{preset ? `Paste your ${preset.label} API key` : 'API key'}</span>
+            {preset?.keyUrl && (
+              <a
+                href={preset.keyUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: 12, fontWeight: 500 }}
+              >
+                Get your API key ↗
+              </a>
+            )}
+          </span>
+        }
+      >
+        <Input.Password
+          placeholder={editing ? 'Leave blank to keep the current key' : 'Provider API key'}
+          value={apiKey}
+          onChange={(e) => {
+            setApiKey(e.target.value);
+            testMut.reset();
+          }}
+          autoComplete="new-password"
+        />
+        <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+          Stored encrypted — never sent back to your browser.
+        </div>
+      </Field>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: -6 }}>
+        <Button size="small" onClick={() => testMut.mutate()} disabled={!canTest} loading={testMut.isPending}>
+          Test connection
+        </Button>
+        {!testMut.isPending && testMut.data?.ok && (
+          <span style={{ color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>✓ {testMut.data.message}</span>
+        )}
+        {!testMut.isPending && testMut.data && !testMut.data.ok && (
+          <span style={{ color: 'var(--error)', fontSize: 13 }}>{testMut.data.message}</span>
+        )}
+        {!testMut.isPending && testMut.isError && (
+          <span style={{ color: 'var(--error)', fontSize: 13 }}>
+            {(testMut.error as Error)?.message || 'Test failed'}
+          </span>
+        )}
+      </div>
+
+      <div className="provider-adv">
+        <div
+          className={`provider-adv-head${advOpen ? ' open' : ''}`}
+          onClick={() => setAdvOpen((v) => !v)}
+        >
+          <span className="pa-chev">▸</span>
+          <span>Advanced</span>
+          {preset && !editing && <span className="provider-adv-badge">Auto-filled</span>}
+        </div>
+        {advOpen && (
+          <div className="provider-adv-body">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              {preset && (
+                <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                  Filled from the official {preset.label} preset — most people don't need to change these.
+                </div>
+              )}
+              {!isCustom && (
+                <Field label="Label">
+                  <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+                </Field>
+              )}
+              <Field label="Slug">
+                <Input
+                  placeholder="e.g. deepseek"
+                  value={slug}
+                  disabled={!!editing}
+                  onChange={(e) => setSlug(e.target.value)}
+                />
+                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+                  Lowercase letters, digits and hyphens, starting with a letter. Can't be claude or codex.
+                  Fixed once created.
+                </div>
+              </Field>
+              <Field label="Base URL">
+                <Input
+                  placeholder="https://api.example.com/anthropic"
+                  value={baseUrl}
+                  onChange={(e) => {
+                    setBaseUrl(e.target.value);
+                    testMut.reset();
+                  }}
+                />
+                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+                  {preset?.note ??
+                    'An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).'}
+                </div>
+              </Field>
+              <Field label="Models">
+                {models.map((m, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <Input
+                      placeholder="model id (value)"
+                      value={m.value}
+                      onChange={(e) =>
+                        setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+                      }
+                    />
+                    <Input
+                      placeholder="Label"
+                      value={m.label}
+                      onChange={(e) =>
+                        setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
+                      }
+                    />
+                    <InputNumber
+                      placeholder="Context"
+                      value={m.contextWindow}
+                      min={0}
+                      style={{ width: 140, flex: 'none' }}
+                      onChange={(v) =>
+                        setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
+                      }
+                    />
+                    <Button
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      onClick={() => setModels(models.filter((_, j) => j !== i))}
+                    />
+                  </div>
+                ))}
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
+                  block
+                >
+                  Add model
+                </Button>
+              </Field>
+              <Field label="Default model">
+                <Input
+                  placeholder="Model id used by default (optional)"
+                  value={defaultModel}
+                  onChange={(e) => setDefaultModel(e.target.value)}
+                />
+              </Field>
+            </Space>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Switch checked={enabled} onChange={setEnabled} />
+        <span>Enabled</span>
+        <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
+          Disabled providers are hidden from the pickers.
+        </span>
+      </div>
+    </Space>
+  );
+
   return (
     <div style={{ marginBottom: 32 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -279,145 +617,47 @@ function ProviderSection({
         </Button>
       </div>
 
-      <Table
-        rowKey="id"
-        style={{ marginTop: 12 }}
-        loading={providers.isLoading}
-        dataSource={providers.data ?? []}
-        columns={columns}
-        pagination={false}
-      />
+      {providers.isLoading ? (
+        <Table
+          rowKey="id"
+          style={{ marginTop: 12 }}
+          loading
+          dataSource={[]}
+          columns={columns}
+          pagination={false}
+        />
+      ) : (providers.data?.length ?? 0) === 0 ? (
+        <div className="provider-empty">
+          <h3>Connect your first provider</h3>
+          <p>Pick a provider and paste your API key — that's it.</p>
+          {gallery(false)}
+        </div>
+      ) : (
+        <Table
+          rowKey="id"
+          style={{ marginTop: 12 }}
+          dataSource={providers.data ?? []}
+          columns={columns}
+          pagination={false}
+        />
+      )}
 
       <Modal
-        title={editing ? `Edit ${editing.label}` : 'Add provider'}
+        title={modalTitle}
         open={open}
         onCancel={() => setOpen(false)}
-        onOk={() => canSave && saveMut.mutate()}
-        okButtonProps={{ disabled: !canSave }}
-        confirmLoading={saveMut.isPending}
-        okText={editing ? 'Save' : 'Create'}
-        width={640}
+        footer={footer}
+        width={560}
         destroyOnClose
       >
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          {!editing && (
-            <Field label="Template">
-              <Select
-                value={preset}
-                onChange={applyPreset}
-                style={{ width: '100%' }}
-                options={[
-                  { value: '', label: 'Custom (blank)' },
-                  ...PROVIDER_PRESETS.map((p) => ({ value: p.slug, label: p.label })),
-                ]}
-              />
-              <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-                {PROVIDER_PRESETS.find((p) => p.slug === preset)?.note ??
-                  'Official presets pre-fill an Anthropic-compatible endpoint and models — just add your API key.'}
-              </div>
-            </Field>
-          )}
-          <Field label="Slug">
-            <Input
-              placeholder="e.g. deepseek"
-              value={slug}
-              disabled={!!editing}
-              onChange={(e) => setSlug(e.target.value)}
-            />
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-              Lowercase letters, digits and hyphens, starting with a letter. Can't be claude or
-              codex. Fixed once created.
-            </div>
-          </Field>
-          <Field label="Label">
-            <Input
-              placeholder="e.g. DeepSeek"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </Field>
-          <Field label="Base URL">
-            <Input
-              placeholder="https://api.example.com/anthropic"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-              An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).
-            </div>
-          </Field>
-          <Field label="API key">
-            <Input.Password
-              placeholder={editing ? 'Leave blank to keep the current key' : 'Provider API key'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="new-password"
-            />
-          </Field>
-          <Field label="Models">
-            {models.map((m, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <Input
-                  placeholder="model id (value)"
-                  value={m.value}
-                  onChange={(e) =>
-                    setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
-                  }
-                />
-                <Input
-                  placeholder="Label"
-                  value={m.label}
-                  onChange={(e) =>
-                    setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
-                  }
-                />
-                <InputNumber
-                  placeholder="Context"
-                  value={m.contextWindow}
-                  min={0}
-                  style={{ width: 140, flex: 'none' }}
-                  onChange={(v) =>
-                    setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
-                  }
-                />
-                <Button
-                  type="text"
-                  icon={<DeleteOutlined />}
-                  onClick={() => setModels(models.filter((_, j) => j !== i))}
-                />
-              </div>
-            ))}
-            <Button
-              type="dashed"
-              icon={<PlusOutlined />}
-              onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
-              block
-            >
-              Add model
-            </Button>
-          </Field>
-          <Field label="Default model">
-            <Input
-              placeholder="Model id used by default (optional)"
-              value={defaultModel}
-              onChange={(e) => setDefaultModel(e.target.value)}
-            />
-          </Field>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Switch checked={enabled} onChange={setEnabled} />
-            <span>Enabled</span>
-            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              Disabled providers are hidden from the pickers.
-            </span>
-          </div>
-        </Space>
+        {body}
       </Modal>
     </div>
   );
 }
 
 // One labelled form row: a small label above its control.
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <div>
       <div style={{ fontSize: 13, marginBottom: 4 }}>{label}</div>
