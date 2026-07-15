@@ -21,6 +21,24 @@ type codexTurnResult struct {
 	Usage            *TokenUsage
 }
 
+func codexContextTokens(usage *TokenUsage) int {
+	if usage == nil {
+		return 0
+	}
+	// OpenAI-style usage counts cached tokens inside input_tokens, so input+output
+	// is the best available context-window occupancy for Codex.
+	return usage.InputTokens + usage.OutputTokens
+}
+
+func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64) map[string]interface{} {
+	return map[string]interface{}{
+		"subtype":       result.Subtype,
+		"numTurns":      numTurns,
+		"costUsd":       costUsd,
+		"contextTokens": codexContextTokens(result.Usage),
+	}
+}
+
 type codexPreparedTurn struct {
 	Prompt         string
 	AttachmentRefs []map[string]interface{}
@@ -73,18 +91,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				job.RuntimeSessionID = result.RuntimeSessionID
 				writeSessionMeta(scratchDir, job, execDir)
 			}
-			// Best-effort context-window occupancy for the gauge: OpenAI-style usage counts
-			// cached tokens inside input_tokens, so this turn's input+output ≈ the context.
-			ctxTokens := 0
-			if result.Usage != nil {
-				ctxTokens = result.Usage.InputTokens + result.Usage.OutputTokens
-			}
-			emit(evTurnEnd, map[string]interface{}{
-				"subtype":       result.Subtype,
-				"numTurns":      1,
-				"costUsd":       0,
-				"contextTokens": ctxTokens,
-			})
+			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
 			liveFiles, livePatches := liveDiff(job.WT)
 			if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 				TurnID:           resp.TurnID,

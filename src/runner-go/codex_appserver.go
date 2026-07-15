@@ -135,11 +135,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if result.Status == stFailed && result.Result == "" {
 			result.Result = result.Error
 		}
-		emit(evTurnEnd, map[string]interface{}{
-			"subtype":  result.Subtype,
-			"numTurns": 1,
-			"costUsd":  0,
-		})
+		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
 		liveFiles, livePatches := liveDiff(job.WT)
 		if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
 			TurnID:           orbitTurnID,

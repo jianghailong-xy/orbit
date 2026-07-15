@@ -104,6 +104,30 @@ func TestCodexUsageMapsOnlyTokenCounters(t *testing.T) {
 	}
 }
 
+func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
+	got := codexTurnEndPayload(codexTurnResult{
+		Subtype: "completed",
+		Usage: &TokenUsage{
+			InputTokens:              1200,
+			OutputTokens:             80,
+			CacheCreationInputTokens: 300,
+			CacheReadInputTokens:     400,
+		},
+	}, 1, 0)
+
+	if got["contextTokens"] != 1280 {
+		t.Fatalf("contextTokens = %v, want 1280", got["contextTokens"])
+	}
+	if got["subtype"] != "completed" || got["numTurns"] != 1 {
+		t.Fatalf("payload = %#v", got)
+	}
+
+	noUsage := codexTurnEndPayload(codexTurnResult{Subtype: "completed"}, 1, 0)
+	if noUsage["contextTokens"] != 0 {
+		t.Fatalf("missing usage contextTokens = %v, want 0", noUsage["contextTokens"])
+	}
+}
+
 func TestCodexAppInterruptWaitsForTurnID(t *testing.T) {
 	var mu sync.Mutex
 	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1", startSent: true}
