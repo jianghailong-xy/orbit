@@ -100,13 +100,14 @@ export const contextWindowFor = (
       if (found?.contextWindow) return found.contextWindow;
     }
   }
+  if (model && CONTEXT_WINDOW_BY_MODEL[model]) return CONTEXT_WINDOW_BY_MODEL[model];
   if (model && modelCatalog) {
     for (const rows of Object.values(modelCatalog)) {
       const found = rows?.find((m) => m.value === model && typeof m.contextWindow === 'number');
       if (found?.contextWindow) return found.contextWindow;
     }
   }
-  return (model && CONTEXT_WINDOW_BY_MODEL[model]) || DEFAULT_CONTEXT_WINDOW;
+  return DEFAULT_CONTEXT_WINDOW;
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {

@@ -153,18 +153,23 @@ public enum AgentDefaults {
     /// gauge. Claude values are the models' true windows (Opus 4.8 / Sonnet 5 / Fable 5 =
     /// 1M, Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with web's
     /// CONTEXT_WINDOW_BY_MODEL.
-    public static func contextWindow(for id: String) -> Int {
+    private static func knownContextWindow(for id: String) -> Int? {
         switch id {
         case "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
         case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": return 372_000
         case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini": return 400_000
-        default: return 200_000
+        default: return nil
         }
     }
 
+    public static func contextWindow(for id: String) -> Int {
+        knownContextWindow(for: id) ?? 200_000
+    }
+
     public static func contextWindow(for id: String, catalog: RunnerModelCatalog?) -> Int {
-        catalog?.contextWindow(for: id) ?? contextWindow(for: id)
+        if let known = knownContextWindow(for: id) { return known }
+        return catalog?.contextWindow(for: id) ?? 200_000
     }
 
     /// As `contextWindow(for:catalog:)`, checking the configured providers' model rows first —

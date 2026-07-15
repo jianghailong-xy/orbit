@@ -127,6 +127,24 @@ final class AgentDefaultsTests: XCTestCase {
                        1_000_000)
     }
 
+    func testKnownModelContextWindowWinsOverRunnerCatalog() {
+        let catalog = RunnerModelCatalog(
+            claude: nil,
+            codex: [RunnerModelInfo(value: "gpt-5.5", label: "GPT-5.5", priority: nil,
+                                    contextWindow: 272_000, reasoningLevels: nil,
+                                    defaultReasoningLevel: nil, serviceTiers: nil)])
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: catalog), 400_000)
+    }
+
+    func testUnknownModelContextWindowFallsBackToRunnerCatalog() {
+        let catalog = RunnerModelCatalog(
+            claude: nil,
+            codex: [RunnerModelInfo(value: "gpt-new", label: "GPT New", priority: nil,
+                                    contextWindow: 512_000, reasoningLevels: nil,
+                                    defaultReasoningLevel: nil, serviceTiers: nil)])
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-new", catalog: catalog), 512_000)
+    }
+
     func testProviderNameResolution() {
         XCTAssertEqual(AgentDefaults.providerName("claude", configured: [deepseek]), "Claude")
         XCTAssertEqual(AgentDefaults.providerName("codex", configured: nil), "Codex")
