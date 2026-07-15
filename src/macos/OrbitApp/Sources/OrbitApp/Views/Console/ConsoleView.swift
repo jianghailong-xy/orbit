@@ -225,6 +225,17 @@ struct TranscriptView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
+                // "Working" indicator: while the agent owes a reply it hasn't begun to stream (the
+                // send→first-token gap), animated dots sit at the tail so the page shows immediate,
+                // continuous feedback instead of looking inert. Placed last, just above the anchor,
+                // and hands off seamlessly to the streaming reply's own dots (see showWorkingIndicator).
+                if console.showWorkingIndicator {
+                    WorkingIndicatorView()
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .id("working-indicator")
+                }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
                 Color.clear.frame(height: 1)

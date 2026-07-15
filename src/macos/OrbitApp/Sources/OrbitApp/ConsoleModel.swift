@@ -90,6 +90,11 @@ final class ConsoleModel {
     var effort: Effort = .default
     private(set) var pendingAttachments: [PendingAttachment] = []
     private(set) var sending = false
+    /// True from the moment the user sends a message until the agent's first output for that turn
+    /// lands (or the send fails). Bridges the window where the POST has returned but the live
+    /// `RUNNING` status hasn't arrived yet, so the tail "working" indicator doesn't blink off in
+    /// between — see `showWorkingIndicator` / `clearAwaitingReplyIfSatisfied`.
+    private(set) var awaitingReply = false
     /// Set while replying to a pending question via "Chat about this" (see send()).
     private(set) var replyContext: QuestionReply?
 
@@ -392,7 +397,19 @@ final class ConsoleModel {
         publishScheduled = false
         stateRevision &+= 1
         state = reducer.state
+        clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
+    }
+
+    /// End the send→first-token bridge (`awaitingReply`) once the stream reports the turn `RUNNING`
+    /// (the running-status branch of `showWorkingIndicator` takes over from here) or the agent's
+    /// output has landed at the tail (the transcript no longer ends on the user's un-answered turn).
+    /// A failed send clears it directly in `send()`; this handles the success paths.
+    private func clearAwaitingReplyIfSatisfied() {
+        guard awaitingReply else { return }
+        var tailIsUnansweredUser = false
+        if let last = state.items.last, case .user = last { tailIsUnansweredUser = true }
+        if state.status == .running || !tailIsUnansweredUser { awaitingReply = false }
     }
 
     /// Drop the chat-reply context if its question was resolved another way (an option was picked,
@@ -454,6 +471,27 @@ final class ConsoleModel {
         guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !sending else { return false }
         if replyContext != nil { return true }   // a question reply always sends (deny+message)
         return availability != .blocked
+    }
+
+    /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
+    /// begun to stream. This fills the send→first-token gap where the message page would otherwise
+    /// look inert — the native port of web's "Waiting for the agent…" note (AgentView.tsx),
+    /// generalized to follow-ups on an existing session. Shown while a turn is in flight — `sending`
+    /// covers the POST round-trip, `awaitingReply` bridges to the live `RUNNING` status, and
+    /// `state.status == .running` covers the rest — and suppressed the moment the tail already
+    /// animates on its own (a streaming assistant/thinking block or a running tool) or an approval
+    /// card is pending, since each of those already signals the state.
+    var showWorkingIndicator: Bool {
+        guard !isDraft else { return false }
+        guard sending || awaitingReply || state.status == .running else { return false }
+        guard state.pendingApprovals.isEmpty else { return false }
+        guard let last = state.items.last else { return true }   // empty transcript → a reply is owed
+        switch last {
+        case .assistant(let b): return b.isFinalized
+        case .thinking(let b):  return b.isFinalized
+        case .toolCall(let c):  return c.status != .running
+        case .user, .interrupt, .error: return true   // the agent still owes a reply
+        }
     }
 
     // What we believe the server's stored config is — set on load, updated after each push.
@@ -598,6 +636,10 @@ final class ConsoleModel {
         // tagged below once POST returns — the runner echoes turnId, not clientTurnId).
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,
                                   queued: willQueue)
+        // Show the tail "working" indicator right away (before the scroll below), and keep it up
+        // until the agent's first token — or a send failure — resolves it. `publishStateNow` clears
+        // it for a queued send, where the running turn already animates the tail.
+        awaitingReply = true
         publishStateNow()   // revision bump → the transcript auto-scrolls the new bubble into view
         localSendTick &+= 1 // …and force that scroll even if the user had scrolled up to read history
         composerText = ""
@@ -632,6 +674,7 @@ final class ConsoleModel {
             }
         } catch {
             statusMessage = "Send failed — \(error)"
+            awaitingReply = false   // no turn is coming — drop the tail "working" indicator
         }
     }
 

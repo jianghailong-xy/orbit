@@ -241,3 +241,16 @@ struct TypingDots: View {
         .onAppear { animating = true }
     }
 }
+
+/// Tail "the agent is working" indicator, shown from the moment a message is sent until the first
+/// token streams in (web's "Waiting for the agent…" note). The same `TypingDots` the streaming
+/// reply uses, at the assistant gutter — so the wait reads as continuous, ChatGPT-style feedback
+/// (dots → dots beneath the growing reply) instead of an inert page. Gated by
+/// `ConsoleModel.showWorkingIndicator`.
+struct WorkingIndicatorView: View {
+    var body: some View {
+        TypingDots()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Working")
+    }
+}
