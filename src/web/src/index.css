@@ -5073,6 +5073,17 @@ body {
 .wt-diff-split .diff-split-cell .diff-text {
   padding: 0 8px;
 }
+/* The drawer shows real file line numbers, which reach 4-5 digits in large files. The base
+   .diff-ln gutter is a fixed 34px and inherits white-space: pre-wrap, so a wide number wrapped
+   onto a second line — splitting it (e.g. "1649" → "164"/"9") and inflating that row's height.
+   Fit up to 5 digits (1ch = the monospace digit width; border-box includes the 12px padding),
+   never wrap, and use min-width so every row's gutter stays uniform (code columns line up) while
+   still growing for 6+ digit files. Scoped to the drawer; the transcript gutter is unchanged. */
+.wt-diff-view .diff-ln {
+  width: auto;
+  min-width: calc(5ch + 12px);
+  white-space: nowrap;
+}
 .wt-diff-split .diff-split-hunk {
   display: flex;
 }
