@@ -2997,7 +2997,7 @@ body {
   color: var(--text-2);
 }
 /* Context gauge: a donut (not the plan bar) so the session-local context metric reads as a
-   different kind of thing from the account-level plan usage. Quiet/neutral until it matters,
+   different kind of thing from the account-level plan usage. Brand blue until it fills,
    then ramps amber ≥75% / red ≥90%. */
 .context-ring {
   flex: none;
@@ -3007,7 +3007,7 @@ body {
   stroke: var(--border-subtle);
 }
 .context-ring-fill {
-  stroke: var(--text-2);
+  stroke: var(--brand);
   transition: stroke-dashoffset 0.3s ease, stroke 0.2s ease;
 }
 .context-ring-warn .context-ring-fill {

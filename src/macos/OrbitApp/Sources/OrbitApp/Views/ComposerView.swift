@@ -938,7 +938,7 @@ private struct UsageBar: View {
 }
 
 /// A circular utilization gauge (donut) for the context pill — a distinct silhouette from the
-/// linear plan-usage bar. Quiet/neutral until it matters, then amber (≥75%) → red (≥90%) as the
+/// linear plan-usage bar. Accent blue until it fills, then amber (≥75%) → red (≥90%) as the
 /// window fills. Mirrors the web `.context-ring`.
 private struct UsageRing: View {
     let percent: Int
@@ -946,7 +946,7 @@ private struct UsageRing: View {
     private var tint: Color {
         if percent >= 90 { return .red }
         if percent >= 75 { return .orange }
-        return .secondary
+        return .accentColor
     }
 
     var body: some View {

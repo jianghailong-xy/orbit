@@ -264,8 +264,8 @@ function lastContextTokens(events: RunEvent[]): number {
 }
 
 // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
-// session-local context metric doesn't read as "another usage bar". Quiet/neutral until it
-// matters, then ramps amber (≥75%) → red (≥90%) as the window fills.
+// session-local context metric doesn't read as "another usage bar". Brand blue until it
+// fills, then ramps amber (≥75%) → red (≥90%) as the window fills.
 function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'danger' }) {
   const r = 5.5;
   const circ = 2 * Math.PI * r;
