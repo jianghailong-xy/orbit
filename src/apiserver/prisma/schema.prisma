@@ -80,8 +80,30 @@ model User {
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
+  refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
 
   @@map("user")
+}
+
+/// A long-lived opaque refresh token a client swaps for a fresh short-lived access JWT via
+/// POST /api/auth/refresh, so an active client is never forced to re-login while the access
+/// token stays short-lived. Only the SHA-256 hash of the token is stored (never the token
+/// itself). Rotating: each refresh sets `revokedAt` on the presented row and issues a new one;
+/// replaying an already-revoked row signals theft → the user's whole family is revoked. Logout
+/// revokes the presented token. Rows cascade-delete with the user.
+model RefreshToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  // Non-null once the token is consumed (rotated) or revoked (logout / theft-triggered family
+  // kill); a dead token presented again is treated as replay.
+  revokedAt DateTime? @map("revoked_at")
+
+  @@index([userId])
+  @@map("refresh_token")
 }
 
 /// An iOS device's APNs token, owner-scoped, so the server can push "needs your reply" alerts to a

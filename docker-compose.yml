@@ -26,6 +26,9 @@ services:
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
+      # Optional: access-token (JWT) lifetime (e.g. 1h, 24h, 7d). Clients auto-refresh via a
+      # 30d refresh token, so this can be short; defaults to 7d. Shorten once clients ship refresh.
+      ACCESS_TOKEN_TTL: "${ACCESS_TOKEN_TTL:-7d}"
       # Optional: master key (AES-256-GCM) that encrypts control-plane model providers' API keys
       # (DeepSeek etc.) at rest. Needed only to add a provider in the admin UI; unset → provider
       # create/dispatch throws a clear error. Generate: openssl rand -base64 32.

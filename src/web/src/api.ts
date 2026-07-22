@@ -1,28 +1,145 @@
 import type { BgShell } from '@orbit/shared';
 
 const TOKEN_KEY = 'orbit_token';
+const REFRESH_KEY = 'orbit_refresh';
+
+// Auto-refresh state (see the "Token auto-refresh" block below). Declared up here so the token
+// accessors can reference the timer without a use-before-define.
+let refreshInFlight: Promise<boolean> | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const getToken = (): string | null => localStorage.getItem(TOKEN_KEY);
-export const setToken = (t: string): void => localStorage.setItem(TOKEN_KEY, t);
-export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY);
+export const getRefreshToken = (): string | null => localStorage.getItem(REFRESH_KEY);
+
+/** Persist a fresh login/refresh result (access + refresh) and (re)arm proactive refresh. */
+export const setSession = (s: { accessToken: string; refreshToken: string }): void => {
+  localStorage.setItem(TOKEN_KEY, s.accessToken);
+  localStorage.setItem(REFRESH_KEY, s.refreshToken);
+  scheduleProactiveRefresh();
+};
+
+/** Clear the whole session (access + refresh). Used on sign-out and on an unrecoverable 401. */
+export const clearToken = (): void => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
+  if (refreshTimer !== undefined) {
+    clearTimeout(refreshTimer);
+    refreshTimer = undefined;
+  }
+};
+
+// ── Token auto-refresh ──────────────────────────────────────────────────────────────────────
+// The access token is short-lived; a long-lived, rotating refresh token (stored server-side) swaps
+// for a fresh pair via POST /auth/refresh, so an active user is never bounced to /login. Refreshes
+// are single-flighted (concurrent 401s share one call) and fire both reactively (on a 401, then the
+// failed request retries once) and proactively (a timer ~1 min before the access token's `exp`). An
+// already-open SSE stream was authed at connect time and keeps flowing; its next reconnect reads the
+// refreshed token from localStorage, so no explicit stream re-auth is needed.
+
+/** Swap the stored refresh token for a fresh access+refresh pair. Single-flight; resolves to whether
+ *  a valid new access token is now stored. Never throws. */
+export function refreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function doRefresh(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false; // expired/revoked/reused → caller falls through to logout
+    setSession((await res.json()) as { accessToken: string; refreshToken: string });
+    return true;
+  } catch {
+    return false; // transient network error — keep the session; a later call retries
+  }
+}
+
+/** Decode a JWT's `exp` (seconds since epoch), or null if it can't be read. The payload is
+ *  base64url, so map `-_` back to `+/` before atob (which only accepts standard base64). */
+function jwtExp(token: string): number | null {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(b64)) as { exp?: number };
+    return typeof exp === 'number' ? exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** (Re)arm a timer to refresh ~1 min before the current access token expires. Called on boot, after
+ *  login, and after each refresh. Safe to call repeatedly (replaces any pending timer). */
+export function scheduleProactiveRefresh(): void {
+  if (refreshTimer !== undefined) clearTimeout(refreshTimer);
+  refreshTimer = undefined;
+  const token = getToken();
+  if (!token || !getRefreshToken()) return;
+  const exp = jwtExp(token);
+  if (exp == null) return;
+  const ms = Math.max(0, exp * 1000 - Date.now() - 60_000);
+  refreshTimer = setTimeout(() => {
+    void refreshSession();
+  }, ms);
+}
+
+/** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
+ *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
+ *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
+export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const withAuth = (): RequestInit => ({
+    ...init,
+    headers: {
+      ...init.headers,
+      ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
+    },
+  });
+  let res = await fetch(input, withAuth());
+  if (res.status === 401 && (await refreshSession())) {
+    res = await fetch(input, withAuth()); // retry once with the refreshed token
+  }
+  if (res.status === 401) {
+    clearToken();
+    if (location.pathname !== '/login') location.href = '/login';
+  }
+  return res;
+}
+
+/** Revoke the stored refresh token server-side (best-effort) — called on explicit sign-out. */
+export async function logoutSession(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return;
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    // best-effort; clearing the local token still signs this browser out
+  }
+}
 
 export async function api<T = unknown>(
   path: string,
   options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
 ): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await authedFetch(`/api${path}`, {
     method: options.method ?? 'GET',
     headers: {
       'content-type': 'application/json',
-      ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
       ...options.headers,
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
-  if (res.status === 401) {
-    clearToken();
-    if (location.pathname !== '/login') location.href = '/login';
-  }
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as {
       message?: string;
@@ -146,16 +263,11 @@ export const uploadAttachment = async (file: File, sessionId?: string): Promise<
   const form = new FormData();
   form.append('file', file);
   const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
-  const res = await fetch(`/api/attachments${qs}`, {
+  const res = await authedFetch(`/api/attachments${qs}`, {
     method: 'POST',
     // No content-type header: the browser sets the multipart boundary itself.
-    headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
     body: form,
   });
-  if (res.status === 401) {
-    clearToken();
-    if (location.pathname !== '/login') location.href = '/login';
-  }
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
     throw new Error(msg.message || res.statusText);
@@ -168,19 +280,14 @@ export const uploadAttachment = async (file: File, sessionId?: string): Promise<
  *  pointing straight at it would 401 — fetch with the token, then hand back an object URL
  *  the caller must revoke. */
 export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
-  const res = await fetch(`/api/attachments/${encodeURIComponent(id)}`, {
-    headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
-  });
+  const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
   return URL.createObjectURL(await res.blob());
 };
 
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
-  const res = await fetch(
+  const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
-    {
-      headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
-    },
   );
   if (!res.ok) throw new Error(`artifact ${artifactPath}: ${res.status}`);
   return URL.createObjectURL(await res.blob());
@@ -190,9 +297,7 @@ export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactP
  *  bytes must be embedded inline (an object URL dies with the page, and the endpoint is
  *  bearer-guarded so a plain `<img src>` in the saved file would 401). */
 export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
-  const res = await fetch(`/api/attachments/${encodeURIComponent(id)}`, {
-    headers: getToken() ? { authorization: `Bearer ${getToken()}` } : {},
-  });
+  const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {

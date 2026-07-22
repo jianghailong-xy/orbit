@@ -5,8 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { hashPassword, verifyPassword } from '../common/crypto.util';
+import { generateToken, hashPassword, sha256, verifyPassword } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Refresh-token lifetime (sliding — each rotation issues a fresh one with a new window). */
+const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 @Injectable()
 export class AuthService {
@@ -73,8 +76,63 @@ export class AuthService {
     return { success: true };
   }
 
+  /**
+   * Swap a valid refresh token for a fresh access+refresh pair (rotation). The presented token
+   * is consumed atomically; replaying an already-consumed token signals theft, so the user's
+   * whole refresh-token family is revoked and the call fails (forcing a real re-login).
+   */
+  async refresh(refreshToken: string) {
+    const tokenHash = sha256(refreshToken);
+    const row = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+    if (!row) throw new UnauthorizedException('invalid refresh token');
+    if (row.revokedAt) {
+      // A consumed/revoked token replayed → treat as theft: revoke every live token for the user.
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: row.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('refresh token reuse detected');
+    }
+    if (row.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('refresh token expired');
+    }
+    // Atomically consume the presented token; a concurrent double-submit that lost the race
+    // sees count 0 and is rejected without minting a second token.
+    const claimed = await this.prisma.refreshToken.updateMany({
+      where: { id: row.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw new UnauthorizedException('invalid refresh token');
+    const user = await this.prisma.user.findUnique({ where: { id: row.userId } });
+    if (!user) throw new UnauthorizedException('invalid refresh token');
+    return this.tokenFor(user.id, user.email, user.name);
+  }
+
+  /** Revoke a refresh token (sign-out). Idempotent: an unknown/already-revoked token is a no-op. */
+  async logout(refreshToken: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: sha256(refreshToken), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { success: true };
+  }
+
   private async tokenFor(userId: string, email: string, name: string) {
     const accessToken = await this.jwt.signAsync({ sub: userId, email });
-    return { accessToken, user: { id: userId, email, name } };
+    const refreshToken = await this.issueRefreshToken(userId);
+    return { accessToken, refreshToken, user: { id: userId, email, name } };
+  }
+
+  /** Mint a fresh opaque refresh token, persist only its hash, and return the plaintext (shown once). */
+  private async issueRefreshToken(userId: string): Promise<string> {
+    const token = generateToken(32);
+    await this.prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash: sha256(token),
+        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+      },
+    });
+    return token;
   }
 }

@@ -25,7 +25,21 @@ public struct LoginRequest: Codable, Sendable {
 
 public struct LoginResponse: Codable, Sendable {
     public let accessToken: String
+    // Optional so a login against an older server (pre auto-refresh) still decodes; nil → no refresh
+    // token stored, and the client behaves as before (access token until expiry, then re-login).
+    public let refreshToken: String?
     public let user: User
+}
+
+public struct RefreshRequest: Codable, Sendable {
+    public let refreshToken: String
+    public init(refreshToken: String) { self.refreshToken = refreshToken }
+}
+
+/// Response from `POST /auth/refresh`: a fresh access token plus a rotated refresh token.
+public struct RefreshResponse: Codable, Sendable {
+    public let accessToken: String
+    public let refreshToken: String
 }
 
 public struct SetupStatus: Codable, Sendable {

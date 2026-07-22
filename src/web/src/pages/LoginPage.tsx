@@ -1,8 +1,9 @@
 import { App as AntApp, Button, Card, Form, Input } from 'antd';
-import { api, setToken } from '../api';
+import { api, setSession } from '../api';
 
 interface AuthResponse {
   accessToken: string;
+  refreshToken: string;
 }
 
 export function LoginPage() {
@@ -11,7 +12,7 @@ export function LoginPage() {
   const submit = async (values: Record<string, string>) => {
     try {
       const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: values });
-      setToken(res.accessToken);
+      setSession(res);
       const next = new URLSearchParams(window.location.search).get('next');
       // Land at the root and let <DefaultLanding> resolve the destination — the first agent's
       // session list, or onboarding (registration guide / runners) when there's no agent to open

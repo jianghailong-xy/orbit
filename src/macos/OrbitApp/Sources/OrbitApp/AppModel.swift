@@ -230,7 +230,15 @@ final class AppModel {
         controlTask = nil
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
-        if let baseURL { tokenStore.setToken(nil, for: baseURL) }
+        // Best-effort server-side revoke of the refresh token before we drop it locally. Capture the
+        // token by value and hand it to the async call so clearing the store below can't race the read.
+        if let baseURL, let api, let refreshToken = tokenStore.refreshToken(for: baseURL) {
+            Task { await api.revokeRefreshToken(refreshToken) }
+        }
+        if let baseURL {
+            tokenStore.setToken(nil, for: baseURL)
+            tokenStore.setRefreshToken(nil, for: baseURL)
+        }
         signedIn = false
         sessions = []
         resetNavigation()

@@ -17,7 +17,10 @@ import { JwtAuthGuard } from './jwt-auth.guard';
         }
         return {
           secret,
-          signOptions: { expiresIn: '7d' },
+          // Access-token lifetime. Env-configurable so a deployment can shorten it (e.g. 1h)
+          // once all clients ship refresh-token support; kept at 7d by default so clients that
+          // predate auto-refresh aren't forced to re-login more often during rollout.
+          signOptions: { expiresIn: config.get<string>('ACCESS_TOKEN_TTL') ?? '7d' },
         };
       },
     }),

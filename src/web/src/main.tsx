@@ -9,6 +9,11 @@ import { App } from './App';
 import { BootGate } from './components/BootGate';
 import { lightTheme, darkTheme } from './theme';
 import { ThemeProvider, useThemeMode } from './lib/theme';
+import { scheduleProactiveRefresh } from './api';
+
+// Arm the access-token auto-refresh as early as possible: if a valid session is already stored,
+// schedule a silent refresh just before it expires so an active tab is never bounced to /login.
+scheduleProactiveRefresh();
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },

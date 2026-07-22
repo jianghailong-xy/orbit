@@ -17,7 +17,7 @@ import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type { PlanUsage, RunnerModelCatalog, SlashCommandInfo } from '@orbit/shared';
-import { api, clearToken } from '../api';
+import { api, clearToken, logoutSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
@@ -95,7 +95,8 @@ interface TaskList {
   completed?: boolean;
 }
 
-function logout() {
+async function logout() {
+  await logoutSession(); // revoke the refresh token server-side (best-effort) before clearing
   clearToken();
   location.href = '/login';
 }

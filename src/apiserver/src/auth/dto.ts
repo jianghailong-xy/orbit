@@ -8,6 +8,12 @@ export class LoginDto {
   password!: string;
 }
 
+/** Body for POST /auth/refresh and POST /auth/logout — the opaque refresh token. */
+export class RefreshDto {
+  @IsString()
+  refreshToken!: string;
+}
+
 export class ChangePasswordDto {
   @IsString()
   currentPassword!: string;

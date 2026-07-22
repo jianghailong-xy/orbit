@@ -10,8 +10,9 @@ public enum APIError: Error, Equatable {
     case notConfigured
 }
 
-/// Async REST client for the Orbit control plane (`/api`). JWT bearer; 401 surfaces as
-/// `.unauthorized` so the app can prompt re-login (tokens last 7 days, no refresh endpoint).
+/// Async REST client for the Orbit control plane (`/api`). Short-lived JWT bearer; on a 401 it makes
+/// one single-flight `POST /auth/refresh` (via the shared `SessionRefresher`) and retries the request
+/// once. `.unauthorized` surfaces only when that refresh fails — the app then prompts re-login.
 ///
 /// Uses `dataTask` + a continuation rather than `data(for:)` so it compiles on Linux
 /// Foundation too; the surface is plain `async`/`await`.
@@ -41,7 +42,14 @@ public final class APIClient: @unchecked Sendable {
     public func login(email: String, password: String) async throws -> LoginResponse {
         let res: LoginResponse = try await post("auth/login", body: LoginRequest(email: email, password: password))
         tokenStore.setToken(res.accessToken, for: baseURL)
+        tokenStore.setRefreshToken(res.refreshToken, for: baseURL)
         return res
+    }
+
+    /// Revoke a refresh token server-side on sign-out. Best-effort (`try?`); takes the token
+    /// explicitly so the caller can clear local storage immediately without racing this call.
+    public func revokeRefreshToken(_ refreshToken: String) async {
+        _ = try? await postRaw("auth/logout", body: RefreshRequest(refreshToken: refreshToken))
     }
 
     public func me() async throws -> User { try await get("users/me") }
@@ -331,19 +339,43 @@ public final class APIClient: @unchecked Sendable {
         return req
     }
 
-    private func send(_ req: URLRequest) async throws -> Data {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, Error>) in
+    private func send(_ original: URLRequest) async throws -> Data {
+        var req = original
+        var didRefresh = false
+        while true {
+            let (data, status) = try await rawSend(req)
+            switch status {
+            case 200..<300:
+                return data
+            case 401:
+                // Try one single-flight refresh, then retry the request with the fresh token.
+                // `.unauthorized` (→ re-login) surfaces only if that refresh also fails.
+                if !didRefresh {
+                    let refresher = await SessionRefresherRegistry.shared.refresher(
+                        baseURL: baseURL, tokenStore: tokenStore, session: session)
+                    if await refresher.refresh() {
+                        didRefresh = true
+                        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+                        continue
+                    }
+                }
+                throw APIError.unauthorized
+            default:
+                throw APIError.http(status: status, body: String(data: data, encoding: .utf8))
+            }
+        }
+    }
+
+    /// Execute a request and hand back the raw body + HTTP status; status interpretation (including
+    /// the 401 refresh-retry) lives in `send`.
+    private func rawSend(_ req: URLRequest) async throws -> (Data, Int) {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<(Data, Int), Error>) in
             let task = session.dataTask(with: req) { data, response, error in
                 if let error { cont.resume(throwing: error); return }
                 guard let http = response as? HTTPURLResponse, let data else {
                     cont.resume(throwing: APIError.invalidResponse); return
                 }
-                switch http.statusCode {
-                case 200..<300: cont.resume(returning: data)
-                case 401:       cont.resume(throwing: APIError.unauthorized)
-                default:        cont.resume(throwing: APIError.http(status: http.statusCode,
-                                                                    body: String(data: data, encoding: .utf8)))
-                }
+                cont.resume(returning: (data, http.statusCode))
             }
             task.resume()
         }

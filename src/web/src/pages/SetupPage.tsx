@@ -1,11 +1,12 @@
 import { App as AntApp, Button, Card, Form, Input, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { Navigate } from 'react-router-dom';
-import { api, setToken } from '../api';
+import { api, setSession } from '../api';
 import { setupStatusQuery } from '../lib/queries';
 
 interface AuthResponse {
   accessToken: string;
+  refreshToken: string;
 }
 
 /**
@@ -34,7 +35,7 @@ export function SetupPage() {
         method: 'POST',
         body: { email: values.email, name: values.name, password: values.password },
       });
-      setToken(res.accessToken);
+      setSession(res);
       // A brand-new system has no runner yet — start onboarding at the registration guide.
       location.href = '/runners/register';
     } catch (err) {
