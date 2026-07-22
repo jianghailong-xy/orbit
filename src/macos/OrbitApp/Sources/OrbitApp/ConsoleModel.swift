@@ -622,7 +622,11 @@ final class ConsoleModel {
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
 
-    func send() async {
+    /// `authoritative` is the session's live control-plane status (`app.session(id:)?.status`), read
+    /// by the view at tap time — the same source the Stop button uses. It decides whether a mid-turn
+    /// send is labeled "Queued"; nil until the session record loads, where it falls back to the
+    /// stream-reconciled status. See `ComposerLogic.willQueue`.
+    func send(authoritative: RunStatus? = nil) async {
         guard !sending else { return }
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
@@ -663,8 +667,11 @@ final class ConsoleModel {
         let turnAttachments = ready.map { TurnAttachment(id: $0.1, mime: $0.0.mimeType, name: $0.0.filename) }
 
         // A turn already in flight ⇒ this message waits its turn, so label it "Queued" rather than
-        // "Sending…" (web parity). Captured now, before the send revives/advances the status.
-        let willQueue = availability == .queue
+        // "Sending…" (web parity). Reads the authoritative control-plane status the view passes in
+        // (the Stop button's source), not the stream-reconciled `sessionStatus` — that never reliably
+        // reaches `.running` on a cold open of an already-running session. Captured now, before the
+        // send revives/advances the status. See `ComposerLogic.willQueue`.
+        let willQueue = ComposerLogic.willQueue(authoritative: authoritative, reconciled: sessionStatus)
         // Optimistic bubble; reconciled by the server's `user` event (matched by the turnId
         // tagged below once POST returns — the runner echoes turnId, not clientTurnId).
         reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text, attachments: turnAttachments,

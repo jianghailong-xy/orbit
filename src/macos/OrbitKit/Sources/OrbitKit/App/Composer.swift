@@ -75,6 +75,21 @@ public enum ComposerLogic {
         return (session ?? stream) == .running
     }
 
+    /// Whether an outgoing send will be **queued** behind an in-flight turn (→ a "Queued" bubble the
+    /// user can withdraw) rather than delivered immediately (→ "Sending…"). Reads the AUTHORITATIVE
+    /// control-plane status when the session record is loaded — the same source and precedence as
+    /// `showsInterrupt`, so the Stop button and the queued label always agree — and falls back to the
+    /// stream-reconciled status only until that record lands (a fresh deep link).
+    ///
+    /// Keying off the reconciled stream status alone (as the caller once did) mislabeled a mid-turn
+    /// send as "Sending…": `state.status` never reliably reaches `.running` on a cold open of an
+    /// already-running session (no durable "running" event is replayed), so `availability` saw the
+    /// stale prior `.awaitingInput` and the bubble was appended inline — splitting the streaming
+    /// reply — instead of held in the queue.
+    public static func willQueue(authoritative: RunStatus?, reconciled: RunStatus) -> Bool {
+        availability(status: authoritative ?? reconciled) == .queue
+    }
+
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
                                 attachmentIds: [String]) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,

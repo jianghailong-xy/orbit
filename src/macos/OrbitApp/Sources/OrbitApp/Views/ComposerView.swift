@@ -151,7 +151,12 @@ struct ComposerView: View {
                     .buttonStyle(.plain)
                     .help("Stop the current turn")
                 } else {
-                    Button { Task { await console.send() } } label: {
+                    Button {
+                        // Capture the authoritative status at tap time so a mid-turn send is labeled
+                        // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.
+                        let status = app.session(id: console.sessionID)?.status
+                        Task { await console.send(authoritative: status) }
+                    } label: {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(sendGlyphFont)
                             .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
@@ -565,7 +570,8 @@ struct ComposerView: View {
             console.pickSlash(matches[min(slashIndex, matches.count - 1)].name)
             slashDismissed = nil
         } else {
-            Task { await console.send() }
+            let status = app.session(id: console.sessionID)?.status
+            Task { await console.send(authoritative: status) }
         }
     }
 

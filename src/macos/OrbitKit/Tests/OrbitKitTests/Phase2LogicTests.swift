@@ -179,6 +179,26 @@ final class Phase2LogicTests: XCTestCase {
                                                     hasText: false, hasAttachments: false, replying: true))
     }
 
+    func testWillQueue() {
+        // The authoritative session status wins: a send during a running (or still-PENDING) turn is
+        // queued → "Queued", even when the stream-reconciled status is a stale `.awaitingInput` — the
+        // exact cold-open case (opening an already-running session never replays a `.running` event,
+        // so the old `sessionStatus`-only gate mislabeled it "Sending…" and split the reply).
+        XCTAssertTrue(ComposerLogic.willQueue(authoritative: .running, reconciled: .awaitingInput))
+        XCTAssertTrue(ComposerLogic.willQueue(authoritative: .pending, reconciled: .awaitingInput))
+        XCTAssertTrue(ComposerLogic.willQueue(authoritative: .running, reconciled: .running))
+        // A non-queueing authoritative status delivers now (→ "Sending…"/inline), even if the stream
+        // is a stale `.running` (the turn just ended but the reducer missed the un-replayed terminal).
+        XCTAssertFalse(ComposerLogic.willQueue(authoritative: .awaitingInput, reconciled: .running))
+        XCTAssertFalse(ComposerLogic.willQueue(authoritative: .succeeded, reconciled: .running))
+        // No session record yet (a fresh deep link before the list loads): fall back to the reconciled
+        // stream status.
+        XCTAssertTrue(ComposerLogic.willQueue(authoritative: nil, reconciled: .running))
+        XCTAssertTrue(ComposerLogic.willQueue(authoritative: nil, reconciled: .pending))
+        XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .awaitingInput))
+        XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .parked))
+    }
+
     func testEffortLabelsAndWire() {
         XCTAssertEqual(Effort.allCases, [.default, .minimal, .low, .medium, .high, .xhigh, .max])
         XCTAssertEqual(Effort.allCases.map(\.label),
