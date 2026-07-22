@@ -35,6 +35,22 @@ struct QuestionReply: Equatable, Sendable {
     let question: String
 }
 
+/// A local-only command result rendered inline with the conversation. It deliberately stays out of
+/// `TranscriptState`: `/status` never reaches the runner and therefore has no durable server event.
+struct LocalStatusCard: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let rows: [ComposerStatusRow]
+    /// The transcript item that was last when the command ran. Rendering after this stable id keeps
+    /// later runner messages below the card instead of moving an old local result back to the tail.
+    let afterItemID: String?
+
+    init(id: UUID = UUID(), rows: [ComposerStatusRow], afterItemID: String? = nil) {
+        self.id = id
+        self.rows = rows
+        self.afterItemID = afterItemID
+    }
+}
+
 // One connection attempt's outcome is OrbitKit's `StreamOutcome`; the wait/stop decision after
 // each attempt is the unit-tested `ReconnectPolicy` (see `run()`).
 
@@ -121,6 +137,10 @@ final class ConsoleModel {
     var statusMessage: String?
     /// Auto-dismiss timer for a transient/informational `statusMessage` — see `showTransientStatus`.
     private var statusDismissTask: Task<Void, Never>?
+    /// Local `/status` results belong in the conversation, not the error/info banner above the
+    /// composer. Keep a short in-memory tail, matching the web client; these are intentionally not
+    /// persisted because no corresponding runner event exists.
+    private(set) var localStatusCards: [LocalStatusCard] = []
 
     /// Newest persisted events pulled for the initial paint (web parity — `TAIL_PAGE`). See `run()`.
     private static let tailPage = 200
@@ -694,7 +714,7 @@ final class ConsoleModel {
     private func showStatusCommand() {
         let window = AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog, configured: configuredProviders)
         let primary = planUsage?.rows.first
-        statusMessage = ComposerHostCommand.statusSummary(ComposerStatusSnapshot(
+        let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App",
             sessionTitle: isDraft ? nil : "Current session",
             sessionStatus: isDraft ? nil : sessionStatus.rawValue,
@@ -707,6 +727,8 @@ final class ConsoleModel {
             contextWindow: window,
             planUsageLabel: primary?.label,
             planUsagePercent: primary?.percent))
+        let card = LocalStatusCard(rows: rows, afterItemID: state.items.last?.id)
+        localStatusCards = Array((localStatusCards + [card]).suffix(5))
     }
 
     /// Draft send: create a brand-new session for the agent (mirrors the web composer's create path

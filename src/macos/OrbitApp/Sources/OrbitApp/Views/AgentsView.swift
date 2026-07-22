@@ -346,28 +346,50 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 10) {
-                AgentAvatar(provider: agent.provider, size: 64)
-                    .padding(.bottom, 6)
-                // The agent identity is the hero — a cold launch lands here, so the screen answers
-                // "which agent am I about to task?" at a glance. Tapping opens the switcher.
-                Button { showSwitcher = true } label: {
-                    HStack(spacing: 6) {
-                        Text(agent.name).font(.title2.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                        Image(systemName: "chevron.down").font(.footnote.weight(.semibold))
-                            .foregroundStyle(.secondary)
+            if draft.localStatusCards.isEmpty {
+                VStack(spacing: 10) {
+                    AgentAvatar(provider: agent.provider, size: 64)
+                        .padding(.bottom, 6)
+                    // The agent identity is the hero — a cold launch lands here, so the screen answers
+                    // "which agent am I about to task?" at a glance. Tapping opens the switcher.
+                    Button { showSwitcher = true } label: {
+                        HStack(spacing: 6) {
+                            Text(agent.name).font(.title2.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.footnote.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.05),
+                                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.05),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    Text(heroSubtitle).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                    Text("Send a task to get started.").font(.subheadline).foregroundStyle(.tertiary)
                 }
-                .buttonStyle(.plain)
-                Text(heroSubtitle).font(.orbitListSubtitle).foregroundStyle(.secondary)
-                Text("Send a task to get started.").font(.subheadline).foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 24)
+            } else {
+                // Once a local command has produced output this is no longer an empty state. Replace
+                // the hero instead of showing both, and stack repeated commands vertically.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 12) {
+                            ForEach(draft.localStatusCards) { card in
+                                SessionStatusCardView(card: card).id(card.id)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(16)
+                    }
+                    .defaultScrollAnchor(.center)
+                    .onChange(of: draft.localStatusCards.count) {
+                        if let last = draft.localStatusCards.last {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 24)
 
             Divider()
             // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).

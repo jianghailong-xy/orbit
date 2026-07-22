@@ -193,6 +193,11 @@ struct TranscriptView: View {
                     .id("load-older-\(console.state.oldestSeq ?? 0)")
                     .onAppear { Task { await console.loadOlder() } }
                 }
+                // A command run before the first transcript event belongs above events that arrive
+                // later. Drafts use the same nil anchor but render in NewSessionView below.
+                ForEach(console.localStatusCards.filter { $0.afterItemID == nil }) { card in
+                    statusCardRow(card)
+                }
                 ForEach(console.state.items) { item in
                     TranscriptItemView(item: item)
                         .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
@@ -203,6 +208,11 @@ struct TranscriptView: View {
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
+                    // `/status` never enters the runner event stream. Attach its local card after
+                    // the item that was last at invocation time so later events remain later.
+                    ForEach(console.localStatusCards.filter { $0.afterItemID == item.id }) { card in
+                        statusCardRow(card)
+                    }
                 }
                 // Pending approvals render inline as the agent's latest turn — web's AgentView places
                 // the ApprovalPanel right after the messages, so the card scrolls with the conversation
@@ -299,6 +309,12 @@ struct TranscriptView: View {
                 atBottom = true
                 proxy.scrollTo(bottomID, anchor: .bottom)
             }
+            // A local command is an explicit new tail item, so reveal it even when the reader had
+            // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
+            .onChange(of: console.localStatusCards.count) {
+                atBottom = true
+                proxy.scrollTo(bottomID, anchor: .bottom)
+            }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
@@ -363,6 +379,14 @@ struct TranscriptView: View {
             if case .user(let b) = item, b.id == id { return b }
         }
         return nil
+    }
+
+    private func statusCardRow(_ card: LocalStatusCard) -> some View {
+        SessionStatusCardView(card: card)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .id("local-status-\(card.id)")
     }
 
     // Sticky header that names the last question and scrolls back to it — web's `.chat-sticky-question`
@@ -515,6 +539,60 @@ private struct CoastingButton<Label: View>: View {
                     }
             )
         #endif
+    }
+}
+
+/// Structured inline rendering for the app-handled `/status` command. Shared by live transcripts
+/// and the New Session draft so both platforms use one compact, wrapping layout.
+struct SessionStatusCardView: View {
+    let card: LocalStatusCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill")
+                    .font(.orbitGlyph)
+                    .foregroundStyle(.blue)
+                Text("Status")
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+                ForEach(Array(card.rows.enumerated()), id: \.offset) { _, row in
+                    GridRow(alignment: .firstTextBaseline) {
+                        Text(row.label)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 82, alignment: .leading)
+                        Text(row.value)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+        .frame(maxWidth: 560, alignment: .leading)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.14))
+        }
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.blue).frame(width: 3)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Session status")
     }
 }
 
