@@ -38,7 +38,11 @@ final class WorktreeModel {
     /// Best-effort: a failure keeps the last snapshot so a transient blip doesn't blank the bar.
     func loadDetail() async {
         guard !sessionID.isEmpty else { return }
-        do { detail = try await api.sessionDetail(sessionID) }
+        do {
+            let next = try await api.sessionDetail(sessionID)
+            surfaceCompletedAction(from: detail, to: next)
+            detail = next
+        }
         catch { /* keep last */ }
     }
 
@@ -76,7 +80,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.commit(sessionID: sessionID) }
-        catch { onStatus("Commit failed"); return }
+        catch { onStatus(Self.actionFailure("Commit failed", error: error)); return }
         // Reflect the pending commit immediately; the poll loop then follows the runner's outcome.
         await loadDetail()
     }
@@ -85,7 +89,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.merge(sessionID: sessionID, targetBranch: target) }
-        catch { onStatus("Merge failed"); return }
+        catch { onStatus(Self.actionFailure("Merge failed", error: error)); return }
         await loadDetail()
     }
 
@@ -110,5 +114,62 @@ final class WorktreeModel {
             onInfo("Resuming the session to resolve the conflict…")
         } catch { onStatus("Couldn't resume the session"); return }
         await loadDetail()
+    }
+
+    private func surfaceCompletedAction(from old: SessionDetail?, to new: SessionDetail) {
+        guard let old else { return }
+        if (old.mergeStatus == "conflict" || old.mergeStatus == "error"), new.mergeStatus == "pending" {
+            onInfo("Merging…")
+            return
+        }
+        if old.commitStatus == "error", new.commitStatus == "pending" {
+            onInfo("Committing…")
+            return
+        }
+        let mergeFailed = new.mergeStatus == "conflict" || new.mergeStatus == "error"
+        let commitFinished = new.commitStatus == "committed" || new.commitStatus == "nochange"
+        if old.mergeStatus == "pending", mergeFailed {
+            onStatus(WorktreeBarLogic.failureMessage(mergeStatus: new.mergeStatus,
+                                                     mergeError: new.mergeError,
+                                                     commitStatus: nil,
+                                                     commitError: nil) ?? "Merge failed")
+        } else if old.mergeStatus == "pending", new.mergeStatus == "merged" {
+            onInfo("Merged into \(new.mergeTarget ?? "main")")
+        } else if old.commitStatus == "pending", new.commitStatus == "error" {
+            onStatus(WorktreeBarLogic.failureMessage(mergeStatus: nil,
+                                                     mergeError: nil,
+                                                     commitStatus: new.commitStatus,
+                                                     commitError: new.commitError) ?? "Commit failed")
+        } else if old.commitStatus == "pending", commitFinished {
+            onInfo(new.commitStatus == "nochange" ? "No changes to commit" : "Committed changes")
+        }
+    }
+
+    private static func actionFailure(_ fallback: String, error: Error) -> String {
+        if case APIError.unauthorized = error {
+            return "Session expired — sign in again."
+        }
+        if case APIError.http(_, let body) = error {
+            if let reason = apiMessage(from: body) {
+                return "\(fallback): \(reason)"
+            }
+        }
+        return "\(fallback) — check your connection."
+    }
+
+    private static func apiMessage(from body: String?) -> String? {
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        guard let data = trimmed.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let json = object as? [String: Any] else {
+            return trimmed
+        }
+        if let message = json["message"] as? String, !message.isEmpty { return message }
+        if let messages = json["message"] as? [String], !messages.isEmpty {
+            return messages.joined(separator: "\n")
+        }
+        if let error = json["error"] as? String, !error.isEmpty { return error }
+        return trimmed
     }
 }

@@ -17,6 +17,14 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: "orbit/x-abcdef", changedFileCount: 0), .hidden)
     }
 
+    func testModeShowsFailedMergeEvenWithoutChangedFiles() {
+        XCTAssertEqual(
+            WorktreeBarLogic.mode(isolationStatus: "worktree", branch: "orbit/x-abcdef",
+                                  changedFileCount: 0, mergeStatus: "error"),
+            .worktree
+        )
+    }
+
     func testModeHiddenWhenWorktreeButNoBranch() {
         XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: nil, changedFileCount: 5), .hidden)
     }
@@ -81,6 +89,39 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: "conflict", mergeTarget: "develop"))
         XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: "error", mergeTarget: "main"))
         XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: nil, mergeTarget: "main"))
+    }
+
+    // MARK: failure detail
+
+    func testFailureMessageIncludesMergeError() {
+        XCTAssertEqual(
+            WorktreeBarLogic.failureMessage(mergeStatus: "error", mergeError: " target has uncommitted changes \n",
+                                            commitStatus: nil, commitError: nil),
+            "target has uncommitted changes"
+        )
+    }
+
+    func testFailureMessageIncludesConflictDetail() {
+        XCTAssertEqual(
+            WorktreeBarLogic.failureMessage(mergeStatus: "conflict", mergeError: "CONFLICT (content): file.txt",
+                                            commitStatus: nil, commitError: nil),
+            "Merge conflict — aborted, working tree left clean.\nCONFLICT (content): file.txt"
+        )
+    }
+
+    func testFailureMessagePrefersCommitError() {
+        XCTAssertEqual(
+            WorktreeBarLogic.failureMessage(mergeStatus: "error", mergeError: "merge",
+                                            commitStatus: "error", commitError: "commit failed"),
+            "commit failed"
+        )
+    }
+
+    func testManualMergeCommandUsesTargetAndBranch() {
+        XCTAssertEqual(
+            WorktreeBarLogic.manualMergeCommand(mergeTarget: "develop", branch: "orbit/fix-a1b2c3"),
+            "git rebase develop orbit/fix-a1b2c3 && git checkout develop && git merge --ff-only orbit/fix-a1b2c3"
+        )
     }
 
     // MARK: branch parts

@@ -17,12 +17,18 @@ public enum WorktreeBarLogic {
     }
 
     /// Mirrors web: no `isolationStatus` → hidden; `shared-nogit` → the nudge; a `worktree` with a
-    /// branch and at least one changed file → the full bar; anything else → hidden.
-    public static func mode(isolationStatus: String?, branch: String?, changedFileCount: Int) -> Mode {
+    /// branch and at least one changed file → the full bar. Pending/failed commit and merge states
+    /// also keep the bar visible so their outcome text has somewhere to land even if the runner
+    /// reports an empty diff.
+    public static func mode(isolationStatus: String?, branch: String?, changedFileCount: Int,
+                            mergeStatus: String? = nil, commitStatus: String? = nil) -> Mode {
         guard let iso = isolationStatus else { return .hidden }
         if iso == "shared-nogit" { return .notIsolated }
-        guard iso == "worktree", branch != nil, changedFileCount > 0 else { return .hidden }
-        return .worktree
+        guard iso == "worktree", branch != nil else { return .hidden }
+        let actionableStatus =
+            mergeStatus == "pending" || mergeStatus == "conflict" || mergeStatus == "error" ||
+            commitStatus == "pending" || commitStatus == "error"
+        return changedFileCount > 0 || actionableStatus ? .worktree : .hidden
     }
 
     /// The primary action offered on the bar.
@@ -59,6 +65,31 @@ public enum WorktreeBarLogic {
         mergeStatus == "conflict" && (mergeTarget == nil || mergeTarget == "main" || mergeTarget == "master")
     }
 
+    /// User-facing reason for the failed commit/merge state. The runner keeps raw git output in
+    /// `mergeError` for conflicts and precondition failures; trim it but do not discard it, because
+    /// native clients do not have web's hover-only tooltip as a fallback on iOS.
+    public static func failureMessage(mergeStatus: String?, mergeError: String?,
+                                      commitStatus: String?, commitError: String?) -> String? {
+        if commitStatus == "error" {
+            return trimmed(commitError) ?? "Commit failed — try again."
+        }
+        if mergeStatus == "conflict" {
+            guard let err = trimmed(mergeError) else {
+                return "Merge conflict — aborted, working tree left clean."
+            }
+            return "Merge conflict — aborted, working tree left clean.\n\(err)"
+        }
+        if mergeStatus == "error" {
+            return trimmed(mergeError) ?? "Merge failed — try again."
+        }
+        return nil
+    }
+
+    public static func manualMergeCommand(mergeTarget: String?, branch: String) -> String {
+        let target = mergeTarget ?? "main"
+        return "git rebase \(target) \(branch) && git checkout \(target) && git merge --ff-only \(branch)"
+    }
+
     /// Split an auto-generated `orbit/<slug>-<hash>` branch into its (prefix, slug, hash) parts so the
     /// view can dim the `orbit/` prefix and the `-<hash>` suffix and foreground the slug — matching
     /// web's `BranchLabel` (regex `^(orbit/)(.+)(-[0-9a-f]{6})$`). Returns nil for any other shape,
@@ -76,5 +107,10 @@ public enum WorktreeBarLogic {
         let slug = String(rest.dropLast(7))
         guard !slug.isEmpty else { return nil }
         return (prefix, slug, hash)
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? nil : text
     }
 }

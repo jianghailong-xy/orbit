@@ -25,7 +25,9 @@ struct WorktreeBar: View {
             let d = console.worktree.detail
             let files = d?.changedFiles ?? []
             switch WorktreeBarLogic.mode(isolationStatus: d?.isolationStatus, branch: d?.branch,
-                                         changedFileCount: files.count) {
+                                         changedFileCount: files.count,
+                                         mergeStatus: d?.mergeStatus,
+                                         commitStatus: d?.commitStatus) {
             case .hidden:
                 EmptyView()
             case .notIsolated:
@@ -65,17 +67,58 @@ struct WorktreeBar: View {
                                                 committed: committed, turnActive: turnActive)
         let add = files.reduce(0) { $0 + max(0, $1.additions) }
         let del = files.reduce(0) { $0 + max(0, $1.deletions) }
+        let failure = WorktreeBarLogic.failureMessage(mergeStatus: d.mergeStatus,
+                                                      mergeError: d.mergeError,
+                                                      commitStatus: d.commitStatus,
+                                                      commitError: d.commitError)
+        let manualMergeCmd = failure != nil && d.commitStatus != "error"
+            ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
+            : nil
 
-        return HStack(spacing: 8) {
-            // The whole branch + stat summary is the tap target that opens the diff — there's no
-            // separate chevron anymore (a lone › sitting right next to the merge caret's ⌄ read as a
-            // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
-            // long-press (right-click on macOS) context menu — a plain tap can no longer silently
-            // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                // The whole branch + stat summary is the tap target that opens the diff — there's no
+                // separate chevron anymore (a lone › sitting right next to the merge caret's ⌄ read as a
+                // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
+                // long-press (right-click on macOS) context menu — a plain tap can no longer silently
+                // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
+                branchSummary(branch: branch, add: add, del: del, count: files.count,
+                              committed: primary == .merge)
+                // The action button keeps its size (web `flex: none`); the branch/stat truncate first
+                // under narrow width.
+                switch primary {
+                case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
+                case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                case .none:   EmptyView()
+                }
+            }
+            if let failure {
+                failureView(message: failure, manualMergeCommand: manualMergeCmd)
+            }
+        }
+        // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
+        // bars share `min-height: 30`) so the stack above the composer reads as one system.
+        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
+        .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func branchSummary(branch: String, add: Int, del: Int, count: Int, committed: Bool) -> some View {
+        if count == 0 {
+            HStack(spacing: 8) {
+                branchLabel(branch)
+                statView(add: add, del: del, count: count, committed: committed)
+                Spacer(minLength: 4)
+            }
+            .layoutPriority(1)
+            .contextMenu { copyBranchButton(branch) }
+        } else {
             Button { showDiff = true } label: {
                 HStack(spacing: 8) {
                     branchLabel(branch)
-                    statView(add: add, del: del, count: files.count, committed: primary == .merge)
+                    statView(add: add, del: del, count: count, committed: committed)
                     Spacer(minLength: 4)
                 }
                 .contentShape(Rectangle())
@@ -85,20 +128,7 @@ struct WorktreeBar: View {
             .contextMenu { copyBranchButton(branch) }
             .accessibilityHint("Opens the diff")
             .help("View diff")
-            // The action button keeps its size (web `flex: none`); the branch/stat truncate first
-            // under narrow width.
-            switch primary {
-            case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
-            case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
-            case .none:   EmptyView()
-            }
         }
-        // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
-        // bars share `min-height: 30`) so the stack above the composer reads as one system.
-        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
-        .background(.bar, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
     }
 
     /// The branch pill — now a plain label (a tap opens the diff). On copy its leading glyph flashes
@@ -139,6 +169,37 @@ struct WorktreeBar: View {
             .font(.orbitMono)
             .lineLimit(1)
             .truncationMode(.tail)
+    }
+
+    private func failureView(message: String, manualMergeCommand: String?) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.orbitMeta.weight(.semibold))
+                .foregroundStyle(Color.red)
+                .padding(.top, 1)
+            Text(message)
+                .font(.orbitMeta)
+                .foregroundStyle(Color.red)
+                .lineLimit(6)
+                .truncationMode(.tail)
+                .textSelection(.enabled)
+        }
+        .contextMenu {
+            Button { copyFailureText(message) } label: {
+                Label("Copy failure reason", systemImage: "doc.on.doc")
+            }
+            if let manualMergeCommand {
+                Button { copyFailureText(manualMergeCommand) } label: {
+                    Label("Copy manual merge command", systemImage: "terminal")
+                }
+            }
+        }
+        .accessibilityLabel(message)
+    }
+
+    private func copyFailureText(_ text: String) {
+        PlatformPasteboard.copyString(text)
+        PlatformHaptics.success()
     }
 
 }
