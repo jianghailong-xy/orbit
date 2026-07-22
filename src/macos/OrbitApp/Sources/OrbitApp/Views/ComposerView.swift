@@ -748,8 +748,8 @@ private final class PlaceholderTextView: UITextView {
 }
 #endif
 
-/// Compact plan-usage pill for the composer footer (mirrors web's PlanUsageIndicator): a mini
-/// 5-hour bar + percent; tapping opens the per-window detail, like `/usage`.
+/// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
+/// while percentages retain Orbit's percent-consumed semantics.
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     @State private var showDetail = false
@@ -909,6 +909,10 @@ private struct PlanUsageDetailRows: View {
         VStack(alignment: .leading, spacing: compact ? 12 : 18) {
             ForEach(rows) { row in
                 VStack(alignment: .leading, spacing: 4) {
+                    if let groupLabel = row.groupLabel {
+                        Text(groupLabel).foregroundStyle(.secondary)
+                            .font(compact ? .caption : .subheadline)
+                    }
                     HStack {
                         Text(row.label)
                         Spacer()
@@ -927,7 +931,7 @@ private struct PlanUsageDetailRows: View {
     }
 }
 
-/// A horizontal utilization gauge that fills its frame; turns amber past 90% (like the web bar).
+/// A horizontal utilization gauge that fills its frame; turns amber past 90%.
 private struct UsageBar: View {
     let percent: Int
     private var fraction: CGFloat { CGFloat(min(100, max(0, percent))) / 100 }

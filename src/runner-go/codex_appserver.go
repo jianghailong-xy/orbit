@@ -55,7 +55,7 @@ type codexAppActiveTurn struct {
 	thinkText          strings.Builder
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{})) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -198,7 +198,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(ctx, t, job.SessionID, text, []string{execDir, upDir})
-				})
+				}, onRateLimits)
 			}
 		}
 	}()
@@ -759,9 +759,13 @@ func (a *codexAppServer) close() {
 	a.closeDone()
 }
 
-func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor) {
+func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{})) {
 	params := rawObject(msg.Params)
 	switch msg.Method {
+	case "account/rateLimits/updated":
+		if snapshot := mapValue(firstPresent(params, "rateLimits", "rate_limits")); snapshot != nil && onRateLimits != nil {
+			onRateLimits(snapshot)
+		}
 	case "thread/started":
 		if threadID := nestedString(params, "thread", "id"); threadID != "" {
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "sessionId": threadID, "provider": providerCodex, "runtime": "app-server"})

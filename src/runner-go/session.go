@@ -89,7 +89,7 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	}
 }
 
-func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string) {
+func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{})) {
 	syncJobProvider(job)
 	scratch := filepath.Join(runsDir(), job.SessionID)
 	_ = os.MkdirAll(scratch, 0o755)
@@ -186,7 +186,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if ctx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
-		st, ended, reload := runSessionProcess(ctx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg)
+		st, ended, reload := runSessionProcess(ctx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits)
 		firstSpawn = false
 		if ended {
 			status = st
@@ -287,7 +287,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{})) (string, bool, bool) {
 	provider := runtimeProvider(job)
 	// Fail fast with an actionable message if the engine CLI isn't on PATH — the
 	// provider constants match the binary names. ended=true so we don't respawn.
@@ -296,7 +296,7 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	if provider == providerCodex {
-		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
+		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits)
 	}
 	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
 }

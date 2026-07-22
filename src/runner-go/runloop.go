@@ -346,7 +346,7 @@ func runLoop(cfg *RunnerConfig) {
 		go func(j *ClaimedSession, dir string) {
 			// loopCtx doubles as the shutdown signal: cancelled on SIGTERM/SIGINT, it tells
 			// the session to drain (finish its turn, then detach) rather than be killed.
-			runInteractiveSession(t, j, jobCtx, loopCtx, dir)
+			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsageProbe.mergeCodexRateLimits)
 			mu.Lock()
 			delete(active, j.SessionID)
 			mu.Unlock()

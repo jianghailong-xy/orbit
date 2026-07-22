@@ -343,7 +343,7 @@ func TestCodexAppServerReasoningFlushesOnceOnComplete(t *testing.T) {
 	}
 	notify := func(method string, params interface{}) {
 		raw, _ := json.Marshal(params)
-		handleCodexAppNotification(codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil)
+		handleCodexAppNotification(codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
 	}
 
 	notify("item/reasoning/summaryTextDelta", map[string]interface{}{"delta": "Think"})
@@ -369,6 +369,39 @@ func TestCodexAppServerReasoningFlushesOnceOnComplete(t *testing.T) {
 	}
 	if active.thinkText.Len() != 0 {
 		t.Fatalf("thinkText not reset after flush: %q", active.thinkText.String())
+	}
+}
+
+func TestCodexAppServerForwardsRateLimitUpdates(t *testing.T) {
+	var mu sync.Mutex
+	var active *codexAppActiveTurn
+	var got map[string]interface{}
+	raw, _ := json.Marshal(map[string]interface{}{
+		"rateLimits": map[string]interface{}{
+			"limitId": "codex-other",
+			"primary": map[string]interface{}{
+				"usedPercent":        7,
+				"windowDurationMins": 300,
+			},
+		},
+	})
+	handleCodexAppNotification(
+		codexRPCMessage{Method: "account/rateLimits/updated", Params: raw},
+		func(string, map[string]interface{}) {},
+		&mu,
+		&active,
+		func(codexTurnResult) {},
+		nil,
+		nil,
+		func(snapshot map[string]interface{}) { got = snapshot },
+	)
+
+	if got == nil || firstString(got, "limitId") != "codex-other" {
+		t.Fatalf("forwarded snapshot = %#v", got)
+	}
+	window := mapValue(got["primary"])
+	if mins, _ := int64Value(window["windowDurationMins"]); mins != 300 {
+		t.Fatalf("window duration = %d, want 300", mins)
 	}
 }
 

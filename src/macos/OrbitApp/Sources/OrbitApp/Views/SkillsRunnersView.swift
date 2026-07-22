@@ -177,7 +177,7 @@ struct RunnerDetailContent: View {
                 ForEach(pu.snapshots, id: \.0) { entry in
                     Section(entry.0) {
                         ForEach(entry.1.rows) { row in
-                            quotaRow(row.label, row.window)
+                            quotaRow(row)
                         }
                     }
                 }
@@ -230,16 +230,17 @@ struct RunnerDetailContent: View {
         }
     }
 
-    @ViewBuilder private func quotaRow(_ label: String, _ w: PlanUsageWindow?) -> some View {
-        if let w {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(label).font(.orbitLabel)
-                    Spacer()
-                    Text("\(Int(w.utilization.rounded()))%").font(.orbitLabel).foregroundStyle(.secondary)
-                }
-                ProgressView(value: min(max(w.utilization, 0), 100), total: 100)
+    @ViewBuilder private func quotaRow(_ row: PlanUsageRow) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let groupLabel = row.groupLabel {
+                Text(groupLabel).font(.orbitLabel).foregroundStyle(.secondary)
             }
+            HStack {
+                Text(row.label).font(.orbitLabel)
+                Spacer()
+                Text("\(row.percent)%").font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            ProgressView(value: Double(row.percent), total: 100)
         }
     }
 }

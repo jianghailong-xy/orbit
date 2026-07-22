@@ -103,8 +103,9 @@ import { AttachmentImage, ChatImage, StreamingMessage, Transcript, type TurnImag
 import { ApprovalPanel } from './ApprovalPanel';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
-import type { PlanUsage, PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
+import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
+import { planUsageRows } from '../lib/planUsage';
 
 interface RunEvent {
   seq: number;
@@ -183,63 +184,20 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
-
-// Subscription windows surfaced in the composer's plan-usage popover. Claude has
-// named windows; Codex reports primary/secondary windows through its app-server.
-const CLAUDE_PLAN_USAGE_ROWS: { key: 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet'; label: string }[] = [
-  { key: 'fiveHour', label: '5-hour limit' },
-  { key: 'sevenDay', label: 'Weekly · all models' },
-  { key: 'sevenDayOpus', label: 'Weekly · Opus' },
-  { key: 'sevenDaySonnet', label: 'Weekly · Sonnet' },
-];
-const CODEX_PLAN_USAGE_ROWS: { key: 'primary' | 'secondary'; label: string }[] = [
-  { key: 'primary', label: 'Primary limit' },
-  { key: 'secondary', label: 'Secondary limit' },
-];
 const fmtReset = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-
-type PlanUsageRow = { key: string; label: string; w: PlanUsageWindow };
-
-function usageWindow(usage: PlanUsageSnapshot, key: string): PlanUsageWindow | undefined {
-  switch (key) {
-    case 'fiveHour':
-      return usage.fiveHour;
-    case 'sevenDay':
-      return usage.sevenDay;
-    case 'sevenDayOpus':
-      return usage.sevenDayOpus;
-    case 'sevenDaySonnet':
-      return usage.sevenDaySonnet;
-    case 'primary':
-      return usage.primary;
-    case 'secondary':
-      return usage.secondary;
-    default:
-      return undefined;
-  }
-}
 
 function usageSnapshotForProvider(usage: PlanUsage | null | undefined, provider: string): PlanUsageSnapshot | null {
   if (!usage) return null;
   if (provider === 'codex') {
     if (usage.codex) return usage.codex;
-    return usage.provider === 'codex' || usage.primary || usage.secondary ? usage : null;
+    return usage.provider === 'codex' || usage.primary || usage.secondary || usage.rateLimits?.length ? usage : null;
   }
   if (provider === 'claude') {
     if (usage.claude) return usage.claude;
     return !usage.provider || usage.provider === 'claude' || usage.fiveHour || usage.sevenDay ? usage : null;
   }
   return null;
-}
-
-function usageRows(usage: PlanUsageSnapshot): PlanUsageRow[] {
-  const codex = usage.provider === 'codex' || usage.primary || usage.secondary;
-  const defs = codex ? CODEX_PLAN_USAGE_ROWS : CLAUDE_PLAN_USAGE_ROWS;
-  return defs.flatMap(({ key, label }) => {
-    const w = usageWindow(usage, key);
-    return w && typeof w.utilization === 'number' ? [{ key, label: w.label || label, w }] : [];
-  });
 }
 
 // 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
@@ -341,23 +299,25 @@ function ContextWindowIndicator({
 // Compact plan-usage indicator for the composer footer (right of the effort pill).
 // The pill shows the binding/primary window; hover reveals every reported window.
 function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
-  const rows = usageRows(usage);
+  const rows = planUsageRows(usage);
   if (rows.length === 0) return null;
-  const primaryPct = Math.round(rows[0].w.utilization); // fiveHour when present, else first available
+  const primary = rows[0];
   const pop = (
     <div className="cu-pop">
-      {rows.map(({ key, label, w }) => {
-        const pct = Math.round(w.utilization);
+      {rows.map(({ key, label, groupLabel, window, percent, nearLimit }) => {
         return (
           <div className="cu-row" key={key}>
+            {groupLabel && <div className="cu-label">{groupLabel}</div>}
             <div className="cu-head">
               <span className="cu-label">{label}</span>
-              <span className="cu-pct">{pct}%</span>
+              <span className="cu-pct">{percent}%</span>
             </div>
-            <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
-              <span className="runner-util-fill" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+            <div className={`runner-util ${nearLimit ? 'full' : ''}`}>
+              <span className="runner-util-fill" style={{ width: `${percent}%` }} />
             </div>
-            {w.resetsAt && <div className="cu-reset">Resets {fmtReset(w.resetsAt)}</div>}
+            {window.resetsAt && (
+              <div className="cu-reset">Resets {fmtReset(window.resetsAt)}</div>
+            )}
           </div>
         );
       })}
@@ -366,16 +326,13 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
   return (
     <Popover content={pop} title="Plan usage" placement="topRight" trigger={['hover', 'click']}>
       <span
-        className={`composer-pill composer-usage ${primaryPct >= 90 ? 'full' : ''}`}
-        aria-label={`Plan usage ${primaryPct}%`}
+        className={`composer-pill composer-usage ${primary.nearLimit ? 'full' : ''}`}
+        aria-label={`Plan usage ${primary.percent}%`}
       >
         <span className="composer-usage-bar">
-          <span
-            className="composer-usage-fill"
-            style={{ width: `${Math.min(100, Math.max(0, primaryPct))}%` }}
-          />
+          <span className="composer-usage-fill" style={{ width: `${primary.percent}%` }} />
         </span>
-        <span className="composer-usage-pct">{primaryPct}%</span>
+        <span className="composer-usage-pct">{primary.percent}%</span>
       </span>
     </Popover>
   );
@@ -2142,7 +2099,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? usageRows(shownPlanUsage)[0] : undefined;
+    const planRow = shownPlanUsage ? planUsageRows(shownPlanUsage)[0] : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,
@@ -2159,7 +2116,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       contextTokens,
       contextWindow: contextWindowFor(shownModel, runner.modelCatalog, configuredProviders),
       planUsageLabel: planRow?.label,
-      planUsagePercent: planRow?.w.utilization,
+      planUsagePercent: planRow?.percent,
     });
     pinToBottom();
     setLocalStatusCards((prev) => [

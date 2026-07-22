@@ -114,6 +114,24 @@ public struct PlanUsageCredits: Codable, Equatable, Sendable {
     public let balance: String?
 }
 
+public struct PlanUsageRateLimit: Codable, Equatable, Sendable {
+    public let limitId: String?
+    public let limitName: String?
+    public let primary: PlanUsageWindow?
+    public let secondary: PlanUsageWindow?
+    public let credits: PlanUsageCredits?
+
+    public init(limitId: String? = nil, limitName: String? = nil,
+                primary: PlanUsageWindow? = nil, secondary: PlanUsageWindow? = nil,
+                credits: PlanUsageCredits? = nil) {
+        self.limitId = limitId
+        self.limitName = limitName
+        self.primary = primary
+        self.secondary = secondary
+        self.credits = credits
+    }
+}
+
 /// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
@@ -128,6 +146,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let planType: String?
     public let rateLimitReachedType: String?
     public let credits: PlanUsageCredits?
+    public let rateLimits: [PlanUsageRateLimit]?
     public let fetchedAt: String?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
@@ -136,6 +155,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
+                rateLimits: [PlanUsageRateLimit]? = nil,
                 fetchedAt: String? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
@@ -149,6 +169,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.planType = planType
         self.rateLimitReachedType = rateLimitReachedType
         self.credits = credits
+        self.rateLimits = rateLimits
         self.fetchedAt = fetchedAt
     }
 }
@@ -168,6 +189,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let planType: String?
     public let rateLimitReachedType: String?
     public let credits: PlanUsageCredits?
+    public let rateLimits: [PlanUsageRateLimit]?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let fetchedAt: String?
@@ -178,6 +200,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 secondary: PlanUsageWindow? = nil, limitId: String? = nil,
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
+                rateLimits: [PlanUsageRateLimit]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
         self.provider = provider
@@ -192,6 +215,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.planType = planType
         self.rateLimitReachedType = rateLimitReachedType
         self.credits = credits
+        self.rateLimits = rateLimits
         self.claude = claude
         self.codex = codex
         self.fetchedAt = fetchedAt
@@ -202,34 +226,71 @@ public struct PlanUsage: Codable, Equatable, Sendable {
 public struct PlanUsageRow: Equatable, Sendable, Identifiable {
     public let key: String
     public let label: String
+    public let groupLabel: String?
     public let window: PlanUsageWindow
     public var id: String { key }
-    /// Utilization rounded to a whole percent (0…100).
-    public var percent: Int { Int(window.utilization.rounded()) }
+    /// Orbit displays percent consumed for every provider.
+    public var percent: Int {
+        min(100, max(0, Int(window.utilization.rounded())))
+    }
+}
+
+private func isApproximateWindow(_ minutes: Int, _ expected: Int) -> Bool {
+    Double(minutes) >= Double(expected) * 0.95 && Double(minutes) <= Double(expected) * 1.05
+}
+
+private func codexWindowLabel(_ window: PlanUsageWindow, secondary: Bool) -> String {
+    if let minutes = window.windowDurationMins {
+        if isApproximateWindow(minutes, 5 * 60) { return "5h limit" }
+        if isApproximateWindow(minutes, 24 * 60) { return "Daily limit" }
+        if isApproximateWindow(minutes, 7 * 24 * 60) { return "Weekly limit" }
+        if isApproximateWindow(minutes, 30 * 24 * 60) { return "Monthly limit" }
+        if isApproximateWindow(minutes, 365 * 24 * 60) { return "Annual limit" }
+    }
+    if window.label == "5-hour limit" { return "5h limit" }
+    return window.label ?? (secondary ? "Secondary usage limit" : "Usage limit")
 }
 
 public extension PlanUsageSnapshot {
-    /// Present windows in provider order: Claude 5-hour first, Codex primary first.
+    /// Present windows in provider order, preserving every Codex TUI rate-limit bucket.
     var rows: [PlanUsageRow] {
-        let codex = provider == "codex" || primary != nil || secondary != nil
-        let raw: [(String, String, PlanUsageWindow?)]
+        let codex = provider == "codex" || primary != nil || secondary != nil || rateLimits?.isEmpty == false
         if codex {
-            raw = [("primary", primary?.label ?? "Primary limit", primary),
-                   ("secondary", secondary?.label ?? "Secondary limit", secondary)]
-        } else {
-            raw = [("fiveHour", "5-hour limit", fiveHour),
-                   ("sevenDay", "Weekly · all models", sevenDay),
-                   ("sevenDayOpus", "Weekly · Opus", sevenDayOpus),
-                   ("sevenDaySonnet", "Weekly · Sonnet", sevenDaySonnet)]
+            let buckets = (rateLimits?.isEmpty == false
+                ? rateLimits!
+                : [PlanUsageRateLimit(limitId: limitId ?? "codex", limitName: limitName,
+                                      primary: primary, secondary: secondary, credits: credits)])
+                .sorted { ($0.limitId ?? "codex") < ($1.limitId ?? "codex") }
+            return buckets.enumerated().flatMap { bucketIndex, bucket -> [PlanUsageRow] in
+                let windows: [(String, Bool, PlanUsageWindow)] = [
+                    bucket.primary.map { ("primary", false, $0) },
+                    bucket.secondary.map { ("secondary", true, $0) }
+                ].compactMap { $0 }
+                let bucketLabel = bucket.limitName ?? bucket.limitId ?? "codex"
+                let prefixed = bucketLabel.caseInsensitiveCompare("codex") != .orderedSame
+                return windows.enumerated().map { windowIndex, entry in
+                    let baseLabel = codexWindowLabel(entry.2, secondary: entry.1)
+                    return PlanUsageRow(
+                        key: "\(bucket.limitId ?? bucketLabel)-\(bucketIndex)-\(entry.0)",
+                        label: prefixed && windows.count == 1 ? "\(bucketLabel) \(baseLabel)" : baseLabel,
+                        groupLabel: prefixed && windows.count > 1 && windowIndex == 0 ? "\(bucketLabel) limit" : nil,
+                        window: entry.2)
+                }
+            }
         }
+        let raw: [(String, String, PlanUsageWindow?)] = [
+            ("fiveHour", "5-hour limit", fiveHour),
+            ("sevenDay", "Weekly · all models", sevenDay),
+            ("sevenDayOpus", "Weekly · Opus", sevenDayOpus),
+            ("sevenDaySonnet", "Weekly · Sonnet", sevenDaySonnet)]
         return raw
             .compactMap { key, label, window in
-                window.map { PlanUsageRow(key: key, label: label, window: $0) }
+                window.map { PlanUsageRow(key: key, label: $0.label ?? label,
+                                          groupLabel: nil, window: $0) }
             }
     }
 
-    /// The binding window's percent (5-hour when present, else the first available), or nil
-    /// when the runner reports no windows.
+    /// The first displayed window's percent, or nil when no windows are reported.
     var primaryPercent: Int? { rows.first?.percent }
 }
 
@@ -240,6 +301,7 @@ public extension PlanUsage {
                           primary: primary, secondary: secondary, limitId: limitId,
                           limitName: limitName, planType: planType,
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
+                          rateLimits: rateLimits,
                           fetchedAt: fetchedAt)
     }
 
@@ -247,7 +309,7 @@ public extension PlanUsage {
         if provider == "codex" {
             if let codex { return codex }
             let flat = flatSnapshot
-            return flat.provider == "codex" || flat.primary != nil || flat.secondary != nil ? flat : nil
+            return flat.provider == "codex" || flat.primary != nil || flat.secondary != nil || flat.rateLimits?.isEmpty == false ? flat : nil
         }
         if let claude { return claude }
         let flat = flatSnapshot
@@ -261,7 +323,8 @@ public extension PlanUsage {
             }
         }
         let flat = flatSnapshot
-        let title = flat.provider == "codex" || flat.primary != nil || flat.secondary != nil ? "Codex quota" : "Claude quota"
+        let title = flat.provider == "codex" || flat.primary != nil || flat.secondary != nil || flat.rateLimits?.isEmpty == false
+            ? "Codex quota" : "Claude quota"
         return [(title, flat)]
     }
 

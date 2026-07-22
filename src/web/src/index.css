@@ -882,7 +882,7 @@ body {
 .runner-util.full .runner-util-fill {
   background: var(--warning-solid);
 }
-/* Per-runner Claude plan-usage gauges (runner detail page). Reuses .runner-util for
+/* Per-runner plan-usage gauges (runner detail page). Reuses .runner-util for
    the bar; .rd-usage-bar widens it and drops the slot-meter's 200px cap. */
 .rd-usage {
   display: flex;
@@ -899,6 +899,11 @@ body {
 .rd-usage-label {
   font-size: 13px;
   color: var(--text-3);
+}
+.rd-usage-row > .rd-usage-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 .rd-usage-pct {
   font-size: 13px;
@@ -2967,8 +2972,8 @@ body {
 .composer-pill-spacer {
   flex: 1 1 auto;
 }
-/* Compact plan-usage indicator at the right end of the pill row: a mini 5-hour bar +
-   percent; hover opens a popover with every window's gauge (mirrors Claude `/usage`). */
+/* Compact plan-usage indicator at the right end of the pill row. The bar retains
+   Orbit's percent-consumed semantics for every provider. */
 .composer-usage {
   gap: 6px;
   padding-right: 6px;
@@ -3093,6 +3098,10 @@ body {
 .cu-label {
   font-size: 13px;
   color: var(--text-3);
+}
+.cu-row > .cu-label {
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 .cu-pct {
   font-size: 14px;

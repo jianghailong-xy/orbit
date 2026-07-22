@@ -164,6 +164,16 @@ export interface PlanUsageCredits {
   balance?: string;
 }
 
+/** One Codex rate-limit bucket. The backend may provide additional
+ *  model/product buckets alongside the canonical `codex` bucket. */
+export interface PlanUsageRateLimit {
+  limitId?: string;
+  limitName?: string;
+  primary?: PlanUsageWindow;
+  secondary?: PlanUsageWindow;
+  credits?: PlanUsageCredits;
+}
+
 export interface PlanUsageSnapshot {
   provider?: AgentProvider;
   /** Rolling 5-hour session limit. */
@@ -183,6 +193,8 @@ export interface PlanUsageSnapshot {
   planType?: string;
   rateLimitReachedType?: string;
   credits?: PlanUsageCredits;
+  /** All Codex limit buckets, in display order. */
+  rateLimits?: PlanUsageRateLimit[];
   /** ISO-8601 when the runner fetched this. */
   fetchedAt?: string;
 }

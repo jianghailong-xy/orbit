@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -55,6 +57,17 @@ type CreditsSnapshot struct {
 	Balance    string `json:"balance,omitempty"`
 }
 
+// PlanUsageRateLimit preserves one Codex rate-limit bucket. Codex can return
+// additional model/product buckets alongside the canonical "codex" bucket, and
+// its TUI renders every bucket rather than flattening them into two windows.
+type PlanUsageRateLimit struct {
+	LimitID   string           `json:"limitId,omitempty"`
+	LimitName string           `json:"limitName,omitempty"`
+	Primary   *PlanUsageWindow `json:"primary,omitempty"`
+	Secondary *PlanUsageWindow `json:"secondary,omitempty"`
+	Credits   *CreditsSnapshot `json:"credits,omitempty"`
+}
+
 // PlanUsage is a provider usage snapshot. For compatibility, a single-provider
 // heartbeat can still be flat; when the runner has multiple providers active, Claude
 // and Codex snapshots are nested under claude/codex.
@@ -68,13 +81,14 @@ type PlanUsage struct {
 	SevenDaySonnet *PlanUsageWindow `json:"sevenDaySonnet,omitempty"`
 
 	// Codex windows, from app-server account/rateLimits/read.
-	Primary              *PlanUsageWindow `json:"primary,omitempty"`
-	Secondary            *PlanUsageWindow `json:"secondary,omitempty"`
-	LimitID              string           `json:"limitId,omitempty"`
-	LimitName            string           `json:"limitName,omitempty"`
-	PlanType             string           `json:"planType,omitempty"`
-	RateLimitReachedType string           `json:"rateLimitReachedType,omitempty"`
-	Credits              *CreditsSnapshot `json:"credits,omitempty"`
+	Primary              *PlanUsageWindow     `json:"primary,omitempty"`
+	Secondary            *PlanUsageWindow     `json:"secondary,omitempty"`
+	LimitID              string               `json:"limitId,omitempty"`
+	LimitName            string               `json:"limitName,omitempty"`
+	PlanType             string               `json:"planType,omitempty"`
+	RateLimitReachedType string               `json:"rateLimitReachedType,omitempty"`
+	Credits              *CreditsSnapshot     `json:"credits,omitempty"`
+	RateLimits           []PlanUsageRateLimit `json:"rateLimits,omitempty"`
 
 	// Nested snapshots when more than one provider is available.
 	Claude *PlanUsage `json:"claude,omitempty"`
@@ -91,6 +105,7 @@ type planUsageProbe struct {
 	client *http.Client
 	name   string
 	fetch  planUsageFetchFunc
+	mu     sync.Mutex
 	val    atomic.Value // *PlanUsage; unset until the first successful fetch
 }
 
@@ -107,6 +122,28 @@ func newCodexPlanUsageProbe() *planUsageProbe {
 func (p *planUsageProbe) snapshot() *PlanUsage {
 	v, _ := p.val.Load().(*PlanUsage)
 	return v
+}
+
+func (p *planUsageProbe) store(u *PlanUsage) {
+	p.mu.Lock()
+	current, _ := p.val.Load().(*PlanUsage)
+	if current != nil && current.Provider == providerCodex && u != nil && u.Provider == providerCodex {
+		u = mergeCodexPlanUsage(current, u)
+	}
+	p.val.Store(u)
+	p.mu.Unlock()
+}
+
+// mergeCodexRateLimits accepts the sparse rolling snapshot emitted by an active
+// app-server session. Codex's own TUI merges these notifications with the latest
+// account/rateLimits/read result; doing the same keeps short windows that are only
+// reported after a turn from disappearing from Orbit's heartbeat.
+func (p *planUsageProbe) mergeCodexRateLimits(raw map[string]interface{}) {
+	update := codexPlanUsageFromSnapshots([]map[string]interface{}{raw})
+	p.mu.Lock()
+	current, _ := p.val.Load().(*PlanUsage)
+	p.val.Store(mergeCodexPlanUsage(current, update))
+	p.mu.Unlock()
 }
 
 // run keeps the usage snapshot fresh without blocking heartbeats: it refreshes on
@@ -138,8 +175,8 @@ func (p *planUsageProbe) runWithIntervals(ctx context.Context, activeCount func(
 			logln(p.name + " recovered")
 			lastErr = ""
 		}
-		lastUsage = u
-		p.val.Store(u)
+		p.store(u)
+		lastUsage = p.snapshot()
 	}
 	wasActive := activeCount() > 0
 	ticker := time.NewTicker(checkInterval)
@@ -207,6 +244,10 @@ func nextPlanUsageResetAfter(usage *PlanUsage, after time.Time) (time.Time, bool
 		add(u.SevenDaySonnet)
 		add(u.Primary)
 		add(u.Secondary)
+		for _, limit := range u.RateLimits {
+			add(limit.Primary)
+			add(limit.Secondary)
+		}
 		visit(u.Claude)
 		visit(u.Codex)
 	}
@@ -402,32 +443,242 @@ func startCodexUsageAppServer(ctx context.Context) (*codexAppServer, error) {
 }
 
 func parseCodexPlanUsage(result map[string]interface{}) (*PlanUsage, error) {
-	limits := mapValue(result["rateLimitsByLimitId"])
-	var snap map[string]interface{}
-	if limits != nil {
-		snap = mapValue(limits["codex"])
-	}
-	if snap == nil {
-		snap = mapValue(result["rateLimits"])
-	}
-	if snap == nil {
+	snapshots := codexRateLimitSnapshots(result)
+	if len(snapshots) == 0 {
 		return nil, fmt.Errorf("rateLimits response missing codex snapshot")
 	}
-	u := &PlanUsage{
-		Provider:             providerCodex,
-		LimitID:              firstString(snap, "limitId", "limit_id"),
-		LimitName:            firstString(snap, "limitName", "limit_name"),
-		PlanType:             firstString(snap, "planType", "plan_type"),
-		RateLimitReachedType: firstString(snap, "rateLimitReachedType", "rate_limit_reached_type"),
-		Primary:              codexRateLimitWindow("Primary", mapValue(snap["primary"])),
-		Secondary:            codexRateLimitWindow("Secondary", mapValue(snap["secondary"])),
-		Credits:              codexCreditsSnapshot(mapValue(snap["credits"])),
-		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
-	}
-	return u, nil
+	return codexPlanUsageFromSnapshots(snapshots), nil
 }
 
-func codexRateLimitWindow(role string, raw map[string]interface{}) *PlanUsageWindow {
+// codexRateLimitSnapshots mirrors Codex TUI's account response handling: the
+// top-level rateLimits value is only the preferred bucket, while
+// rateLimitsByLimitId may contain additional model/product buckets. Keep the
+// top-level bucket first, then visit every other bucket deterministically.
+func codexRateLimitSnapshots(result map[string]interface{}) []map[string]interface{} {
+	limits := mapValue(firstPresent(result, "rateLimitsByLimitId", "rate_limits_by_limit_id"))
+	top := mapValue(firstPresent(result, "rateLimits", "rate_limits"))
+	base := top
+	if base == nil && limits != nil {
+		base = mapValue(limits["codex"])
+	}
+
+	keys := make([]string, 0, len(limits))
+	for key := range limits {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	if base == nil && len(keys) > 0 {
+		base = mapValue(limits[keys[0]])
+	}
+	if base == nil {
+		return nil
+	}
+
+	snapshots := []map[string]interface{}{base}
+	seen := map[string]bool{}
+	baseID := firstString(base, "limitId", "limit_id")
+	if baseID == "" {
+		baseID = "codex"
+	}
+	seen[baseID] = true
+	for _, key := range keys {
+		snap := mapValue(limits[key])
+		if snap == nil {
+			continue
+		}
+		id := firstString(snap, "limitId", "limit_id")
+		if id == "" {
+			id = key
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		snapshots = append(snapshots, snap)
+	}
+	return snapshots
+}
+
+func codexPlanUsageFromSnapshots(snapshots []map[string]interface{}) *PlanUsage {
+	base := snapshots[0]
+	windows := make([]*PlanUsageWindow, 0, len(snapshots)*2)
+	rateLimits := make([]PlanUsageRateLimit, 0, len(snapshots))
+	for i, snap := range snapshots {
+		limitID := firstString(snap, "limitId", "limit_id")
+		if limitID == "" && i == 0 {
+			limitID = "codex"
+		}
+		primary := codexRateLimitWindow(false, mapValue(snap["primary"]))
+		secondary := codexRateLimitWindow(true, mapValue(snap["secondary"]))
+		credits := codexCreditsSnapshot(mapValue(snap["credits"]))
+		rateLimits = append(rateLimits, PlanUsageRateLimit{
+			LimitID:   limitID,
+			LimitName: firstString(snap, "limitName", "limit_name"),
+			Primary:   primary,
+			Secondary: secondary,
+			Credits:   credits,
+		})
+		windows = append(windows, primary, secondary)
+	}
+	primary, secondary := selectCodexRateLimitWindows(windows...)
+	return &PlanUsage{
+		Provider:             providerCodex,
+		LimitID:              firstString(base, "limitId", "limit_id"),
+		LimitName:            firstString(base, "limitName", "limit_name"),
+		PlanType:             firstString(base, "planType", "plan_type"),
+		RateLimitReachedType: firstString(base, "rateLimitReachedType", "rate_limit_reached_type"),
+		Primary:              primary,
+		Secondary:            secondary,
+		Credits:              codexCreditsSnapshot(mapValue(base["credits"])),
+		RateLimits:           rateLimits,
+		FetchedAt:            time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// Orbit's cross-platform DTO has two Codex window slots. Prefer the two
+// subscription windows users expect, even when the backend splits them across
+// different limit IDs, then fall back to any remaining reported durations.
+func selectCodexRateLimitWindows(windows ...*PlanUsageWindow) (*PlanUsageWindow, *PlanUsageWindow) {
+	unique := make([]*PlanUsageWindow, 0, len(windows))
+	seenDurations := map[int64]bool{}
+	for _, window := range windows {
+		if window == nil {
+			continue
+		}
+		if window.WindowDurationMins > 0 {
+			if seenDurations[window.WindowDurationMins] {
+				continue
+			}
+			seenDurations[window.WindowDurationMins] = true
+		}
+		unique = append(unique, window)
+	}
+
+	ordered := make([]*PlanUsageWindow, 0, len(unique))
+	appendDuration := func(duration int64) {
+		for _, window := range unique {
+			if window.WindowDurationMins == duration {
+				ordered = append(ordered, window)
+				return
+			}
+		}
+	}
+	appendDuration(300)
+	appendDuration(10080)
+	for _, window := range unique {
+		if window.WindowDurationMins != 300 && window.WindowDurationMins != 10080 {
+			ordered = append(ordered, window)
+		}
+	}
+	if len(ordered) == 0 {
+		return nil, nil
+	}
+	if len(ordered) == 1 {
+		return ordered[0], nil
+	}
+	return ordered[0], ordered[1]
+}
+
+func mergeCodexPlanUsage(current, update *PlanUsage) *PlanUsage {
+	if current == nil {
+		return update
+	}
+	if update == nil {
+		return current
+	}
+	merged := *current
+	merged.Provider = providerCodex
+	currentLimits := codexRateLimitBuckets(current)
+	merged.RateLimits = mergeCodexRateLimitBuckets(currentLimits, codexRateLimitBuckets(update))
+	if merged.LimitID == "" && len(currentLimits) > 0 {
+		merged.LimitID = currentLimits[0].LimitID
+		merged.LimitName = currentLimits[0].LimitName
+		merged.Credits = currentLimits[0].Credits
+	}
+	windows := make([]*PlanUsageWindow, 0, len(merged.RateLimits)*2)
+	for _, limit := range merged.RateLimits {
+		windows = append(windows, limit.Primary, limit.Secondary)
+	}
+	merged.Primary, merged.Secondary = selectCodexRateLimitWindows(windows...)
+	updatesCanonicalBucket := update.LimitID == "" || update.LimitID == "codex"
+	if updatesCanonicalBucket && update.LimitID != "" {
+		merged.LimitID = update.LimitID
+	}
+	if updatesCanonicalBucket && update.LimitName != "" {
+		merged.LimitName = update.LimitName
+	}
+	if update.PlanType != "" {
+		merged.PlanType = update.PlanType
+	}
+	if update.RateLimitReachedType != "" {
+		merged.RateLimitReachedType = update.RateLimitReachedType
+	}
+	if updatesCanonicalBucket && update.Credits != nil {
+		merged.Credits = update.Credits
+	}
+	if update.FetchedAt != "" {
+		merged.FetchedAt = update.FetchedAt
+	}
+	return &merged
+}
+
+func codexRateLimitBuckets(usage *PlanUsage) []PlanUsageRateLimit {
+	if usage == nil {
+		return nil
+	}
+	if len(usage.RateLimits) > 0 {
+		return append([]PlanUsageRateLimit(nil), usage.RateLimits...)
+	}
+	if usage.Primary == nil && usage.Secondary == nil && usage.LimitID == "" && usage.LimitName == "" && usage.Credits == nil {
+		return nil
+	}
+	limitID := usage.LimitID
+	if limitID == "" {
+		limitID = "codex"
+	}
+	return []PlanUsageRateLimit{{
+		LimitID:   limitID,
+		LimitName: usage.LimitName,
+		Primary:   usage.Primary,
+		Secondary: usage.Secondary,
+		Credits:   usage.Credits,
+	}}
+}
+
+// Rolling updates replace the windows for their limit ID while preserving account
+// metadata omitted from the sparse notification, matching Codex TUI's cache model.
+func mergeCodexRateLimitBuckets(current, updates []PlanUsageRateLimit) []PlanUsageRateLimit {
+	merged := append([]PlanUsageRateLimit(nil), current...)
+	for _, update := range updates {
+		updateID := update.LimitID
+		if updateID == "" {
+			updateID = "codex"
+			update.LimitID = updateID
+		}
+		index := -1
+		for i := range merged {
+			currentID := merged[i].LimitID
+			if currentID == "" {
+				currentID = "codex"
+			}
+			if currentID == updateID {
+				index = i
+				break
+			}
+		}
+		if index < 0 {
+			merged = append(merged, update)
+			continue
+		}
+		if update.Credits == nil {
+			update.Credits = merged[index].Credits
+		}
+		merged[index] = update
+	}
+	return merged
+}
+
+func codexRateLimitWindow(secondary bool, raw map[string]interface{}) *PlanUsageWindow {
 	if raw == nil {
 		return nil
 	}
@@ -439,7 +690,7 @@ func codexRateLimitWindow(role string, raw map[string]interface{}) *PlanUsageWin
 	reset, _ := int64Value(firstPresent(raw, "resetsAt", "resets_at"))
 	w := &PlanUsageWindow{
 		Utilization:        used,
-		Label:              codexWindowLabel(role, mins),
+		Label:              codexWindowLabel(secondary, mins),
 		WindowDurationMins: mins,
 	}
 	if reset > 0 {
@@ -448,26 +699,32 @@ func codexRateLimitWindow(role string, raw map[string]interface{}) *PlanUsageWin
 	return w
 }
 
-func codexWindowLabel(role string, mins int64) string {
-	switch mins {
-	case 300:
-		return "5-hour limit"
-	case 1440:
-		return "Daily limit"
-	case 10080:
-		return "Weekly limit"
-	}
-	if mins > 0 && mins%60 == 0 {
-		hours := mins / 60
-		if hours == 1 {
-			return role + " · 1-hour limit"
+func codexWindowLabel(secondary bool, mins int64) string {
+	const (
+		fiveHours = int64(5 * 60)
+		day       = int64(24 * 60)
+		week      = int64(7 * 24 * 60)
+		month     = int64(30 * 24 * 60)
+		year      = int64(365 * 24 * 60)
+	)
+	for _, known := range []struct {
+		minutes int64
+		label   string
+	}{
+		{fiveHours, "5h limit"},
+		{day, "Daily limit"},
+		{week, "Weekly limit"},
+		{month, "Monthly limit"},
+		{year, "Annual limit"},
+	} {
+		if mins*100 >= known.minutes*95 && mins*100 <= known.minutes*105 {
+			return known.label
 		}
-		return fmt.Sprintf("%s · %d-hour limit", role, hours)
 	}
-	if mins > 0 {
-		return fmt.Sprintf("%s · %d-min limit", role, mins)
+	if secondary {
+		return "Secondary usage limit"
 	}
-	return role + " limit"
+	return "Usage limit"
 }
 
 func codexCreditsSnapshot(raw map[string]interface{}) *CreditsSnapshot {

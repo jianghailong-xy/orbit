@@ -219,6 +219,16 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(u.primaryPercent, 12)           // binding window = 5-hour
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
                                sevenDaySonnet: nil, fetchedAt: nil).primaryPercent)
+
+        let codex = PlanUsage(provider: "codex", rateLimits: [
+            PlanUsageRateLimit(limitId: "codex",
+                               primary: .init(utilization: 22, windowDurationMins: 300),
+                               secondary: .init(utilization: 35, windowDurationMins: 10_080)),
+            PlanUsageRateLimit(limitId: "codex-other",
+                               primary: .init(utilization: 90, windowDurationMins: 60))
+        ])
+        XCTAssertEqual(codex.rows.map(\.label), ["5h limit", "Weekly limit", "codex-other Usage limit"])
+        XCTAssertEqual(codex.rows.map(\.percent), [22, 35, 90])
     }
 
     func testMakeTurn() {
@@ -296,6 +306,10 @@ final class Phase2LogicTests: XCTestCase {
             planUsageLabel: "Primary limit", planUsagePercent: 41))
         XCTAssertTrue(rows.contains(ComposerStatusRow(label: "Context", value: "25% (95k / 372k tokens)")))
         XCTAssertTrue(rows.contains(ComposerStatusRow(label: "Reasoning", value: "Default")))
+
+        let codexRows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", planUsageLabel: "5h limit", planUsagePercent: 22))
+        XCTAssertTrue(codexRows.contains(ComposerStatusRow(label: "Plan usage", value: "5h limit 22%")))
 
         let unreported = ComposerHostCommand.statusRows(ComposerStatusSnapshot(surface: "App"))
         XCTAssertTrue(unreported.contains(ComposerStatusRow(label: "Context", value: "not reported yet")))

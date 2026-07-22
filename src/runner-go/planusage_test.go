@@ -38,7 +38,7 @@ func TestParseCodexPlanUsage(t *testing.T) {
 	if got.Provider != providerCodex || got.LimitID != "codex" || got.PlanType != "plus" {
 		t.Fatalf("unexpected metadata: %#v", got)
 	}
-	if got.Primary == nil || got.Primary.Utilization != 6 || got.Primary.Label != "5-hour limit" || got.Primary.ResetsAt == "" {
+	if got.Primary == nil || got.Primary.Utilization != 6 || got.Primary.Label != "5h limit" || got.Primary.ResetsAt == "" {
 		t.Fatalf("unexpected primary: %#v", got.Primary)
 	}
 	if got.Secondary == nil || got.Secondary.Utilization != 30 || got.Secondary.Label != "Weekly limit" {
@@ -46,6 +46,149 @@ func TestParseCodexPlanUsage(t *testing.T) {
 	}
 	if got.Credits == nil || !got.Credits.HasCredits || got.Credits.Unlimited || got.Credits.Balance != "10" {
 		t.Fatalf("unexpected credits: %#v", got.Credits)
+	}
+}
+
+func TestParseCodexPlanUsageCombinesWindowsAcrossLimitIDs(t *testing.T) {
+	weekly := map[string]interface{}{
+		"limitId": "codex",
+		"primary": map[string]interface{}{
+			"usedPercent":        float64(18),
+			"windowDurationMins": float64(10080),
+			"resetsAt":           float64(1785336445),
+		},
+		"planType": "plus",
+	}
+	fiveHour := map[string]interface{}{
+		"limitId": "codex-other",
+		"primary": map[string]interface{}{
+			"usedPercent":        float64(7),
+			"windowDurationMins": float64(300),
+			"resetsAt":           float64(1784761200),
+		},
+	}
+
+	got, err := parseCodexPlanUsage(map[string]interface{}{
+		"rateLimits": weekly,
+		"rateLimitsByLimitId": map[string]interface{}{
+			"codex":       weekly,
+			"codex-other": fiveHour,
+		},
+	})
+	if err != nil {
+		t.Fatalf("parseCodexPlanUsage error: %v", err)
+	}
+	if got.Primary == nil || got.Primary.WindowDurationMins != 300 || got.Primary.Utilization != 7 || got.Primary.Label != "5h limit" {
+		t.Fatalf("unexpected primary: %#v", got.Primary)
+	}
+	if got.Secondary == nil || got.Secondary.WindowDurationMins != 10080 || got.Secondary.Utilization != 18 || got.Secondary.Label != "Weekly limit" {
+		t.Fatalf("unexpected secondary: %#v", got.Secondary)
+	}
+	if len(got.RateLimits) != 2 || got.RateLimits[0].LimitID != "codex" || got.RateLimits[1].LimitID != "codex-other" {
+		t.Fatalf("rate-limit buckets = %#v", got.RateLimits)
+	}
+}
+
+func TestCodexRateLimitSnapshotsPreferTopLevelLikeTUI(t *testing.T) {
+	top := map[string]interface{}{"limitId": "codex-other"}
+	canonical := map[string]interface{}{"limitId": "codex"}
+	got := codexRateLimitSnapshots(map[string]interface{}{
+		"rateLimits": top,
+		"rateLimitsByLimitId": map[string]interface{}{
+			"codex":       canonical,
+			"codex-other": top,
+		},
+	})
+	if len(got) != 2 || firstString(got[0], "limitId") != "codex-other" || firstString(got[1], "limitId") != "codex" {
+		t.Fatalf("snapshot order = %#v", got)
+	}
+}
+
+func TestPlanUsageProbeMergesRollingCodexWindow(t *testing.T) {
+	p := newCodexPlanUsageProbe()
+	p.store(&PlanUsage{
+		Provider: providerCodex,
+		Primary: &PlanUsageWindow{
+			Utilization:        18,
+			WindowDurationMins: 10080,
+			Label:              "Weekly limit",
+		},
+		PlanType: "plus",
+	})
+
+	p.mergeCodexRateLimits(map[string]interface{}{
+		"limitId": "codex-other",
+		"primary": map[string]interface{}{
+			"usedPercent":        float64(7),
+			"windowDurationMins": float64(300),
+		},
+	})
+
+	got := p.snapshot()
+	if got.Primary == nil || got.Primary.WindowDurationMins != 300 || got.Primary.Utilization != 7 {
+		t.Fatalf("unexpected primary after merge: %#v", got.Primary)
+	}
+	if got.Secondary == nil || got.Secondary.WindowDurationMins != 10080 || got.Secondary.Utilization != 18 {
+		t.Fatalf("unexpected secondary after merge: %#v", got.Secondary)
+	}
+	if got.PlanType != "plus" {
+		t.Fatalf("plan type = %q, want preserved plus", got.PlanType)
+	}
+	if len(got.RateLimits) != 2 || got.RateLimits[0].LimitID != "codex" || got.RateLimits[1].LimitID != "codex-other" {
+		t.Fatalf("rate-limit buckets after merge = %#v", got.RateLimits)
+	}
+}
+
+func TestPlanUsageProbeFullReadKeepsRollingOnlyBucketLikeTUI(t *testing.T) {
+	p := newCodexPlanUsageProbe()
+	p.store(codexPlanUsageFromSnapshots([]map[string]interface{}{
+		{
+			"limitId": "codex",
+			"primary": map[string]interface{}{"usedPercent": float64(18), "windowDurationMins": float64(10080)},
+		},
+	}))
+	p.mergeCodexRateLimits(map[string]interface{}{
+		"limitId": "codex-other",
+		"primary": map[string]interface{}{"usedPercent": float64(7), "windowDurationMins": float64(300)},
+	})
+	p.store(codexPlanUsageFromSnapshots([]map[string]interface{}{
+		{
+			"limitId": "codex",
+			"primary": map[string]interface{}{"usedPercent": float64(20), "windowDurationMins": float64(10080)},
+		},
+	}))
+
+	got := p.snapshot()
+	if len(got.RateLimits) != 2 || got.RateLimits[1].LimitID != "codex-other" {
+		t.Fatalf("rate-limit buckets after full read = %#v", got.RateLimits)
+	}
+	if got.Secondary == nil || got.Secondary.Utilization != 20 {
+		t.Fatalf("weekly compatibility window = %#v", got.Secondary)
+	}
+}
+
+func TestCodexWindowLabelMatchesTUI(t *testing.T) {
+	tests := []struct {
+		name      string
+		secondary bool
+		minutes   int64
+		want      string
+	}{
+		{"five-hour", false, 300, "5h limit"},
+		{"approximate five-hour", false, 288, "5h limit"},
+		{"daily", false, 1440, "Daily limit"},
+		{"weekly", true, 10080, "Weekly limit"},
+		{"monthly", false, 43200, "Monthly limit"},
+		{"annual", false, 525600, "Annual limit"},
+		{"primary fallback", false, 60, "Usage limit"},
+		{"secondary fallback", true, 120, "Secondary usage limit"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := codexWindowLabel(tt.secondary, tt.minutes); got != tt.want {
+				t.Fatalf("codexWindowLabel(%v, %d) = %q, want %q", tt.secondary, tt.minutes, got, tt.want)
+			}
+		})
 	}
 }
 
