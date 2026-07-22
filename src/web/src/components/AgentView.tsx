@@ -1837,7 +1837,24 @@ export function AgentView({ runner }: { runner: Runner }) {
   const control = useMutation({
     mutationFn: (id: string) => interruptSession(id),
     onSuccess: () => {
-      // Interrupt drops queued follow-ups server-side; mirror that locally.
+      // Interrupt drops queued follow-ups server-side. Rather than silently lose what the
+      // user typed, fold their queued text back into the composer so it can be edited and
+      // resent — the composer is guaranteed empty here (showStop only offers Stop with an
+      // empty composer), so this never clobbers an in-progress draft. Queued images can't
+      // be rehydrated (a ComposerImage needs its File), so flag any that were dropped.
+      const restored = queued
+        .map((q) => q.content.trim())
+        .filter(Boolean)
+        .join('\n\n');
+      const droppedImages = queued.reduce(
+        (n, q) => n + (q.attachments?.length ?? turnImages[q.turnId]?.length ?? 0),
+        0,
+      );
+      if (restored) setText(restored);
+      if (droppedImages)
+        message.info(
+          `${droppedImages} queued image${droppedImages > 1 ? 's' : ''} weren't restored — re-add if needed`,
+        );
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },

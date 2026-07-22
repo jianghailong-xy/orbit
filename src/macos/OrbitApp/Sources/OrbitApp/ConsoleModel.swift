@@ -349,6 +349,7 @@ final class ConsoleModel {
                     do {
                         connected = true
                         for try await ev in stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq) {
+                            foldQueuedBackIntoComposer(before: ev)   // salvage queued text before an interrupt drops it
                             reducer.apply(ev)
                             scheduleStatePublish()
                             reconnectPolicy.noteHealthy()   // a healthy connection resets the backoff ramp
@@ -833,6 +834,26 @@ final class ConsoleModel {
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
         }
+    }
+
+    /// An interrupt drops the still-queued (not-yet-leased) follow-ups server-side, and the reducer
+    /// clears them locally to match (web parity). Rather than silently lose what the user typed, fold
+    /// that queued text back into the composer so it can be edited and resent. Called just before the
+    /// reducer applies the interrupt event, while `state.queued` is still populated.
+    ///
+    /// Only fires when the composer is idle: unlike web — where Stop is offered only with an empty
+    /// composer — an interrupt event can also arrive from another client, so it must never clobber a
+    /// draft being typed here. Queued images aren't rehydrated (the composer needs their bytes), so
+    /// they're dropped as before; the text is what's costly to lose.
+    private func foldQueuedBackIntoComposer(before ev: RunEvent) {
+        guard case .interrupt = ev.type, !reducer.state.queued.isEmpty,
+              composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let restored = reducer.state.queued
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        guard !restored.isEmpty else { return }
+        composerText = restored
     }
 
     /// `+` menu → Attach image / Upload file: read a picked file, enforce the size cap (web
