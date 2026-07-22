@@ -13,6 +13,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EyeOutlined,
+  InfoCircleOutlined,
   LoadingOutlined,
   MessageOutlined,
   MinusCircleOutlined,
@@ -65,6 +66,7 @@ import {
   slashMatches as getSlashMatches,
   slashToken as getSlashToken,
   type ComposerSlashItem,
+  type LocalStatusRow,
 } from '../lib/slashCommands';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
@@ -121,6 +123,11 @@ interface QueuedTurn {
   // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
   // image-only follow-up turn — the local turnImages previews don't survive a reload.
   attachments?: { id: string; mimeType: string }[];
+}
+
+interface LocalStatusCard {
+  id: string;
+  rows: LocalStatusRow[];
 }
 
 // An attachment staged in the composer: uploaded to the control plane (POST /api/attachments)
@@ -706,6 +713,27 @@ function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): s
   return base + suffix;
 }
 
+function SessionStatusCard({ card }: { card: LocalStatusCard }) {
+  return (
+    <div className="chat-status-card" role="status" aria-label="Session status">
+      <div className="chat-status-head">
+        <span className="chat-status-icon" aria-hidden="true">
+          <InfoCircleOutlined />
+        </span>
+        <span>Status</span>
+      </div>
+      <div className="chat-status-grid">
+        {card.rows.map((row) => (
+          <div className="chat-status-row" key={row.label}>
+            <span className="chat-status-label">{row.label}</span>
+            <span className="chat-status-value">{row.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Remembers the session the user last had open per agent (agent id → session id). Switching
 // away to another agent and back reopens that conversation instead of the agent's most-recent
 // one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
@@ -813,6 +841,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [streamingThink, setStreamingThink] = useState(''); // live thinking from thinking_delta
   const [idle, setIdle] = useState(false); // session is AWAITING_INPUT (a new turn is accepted)
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
+  const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   // The apiserver's authoritative background-shell list (all launches + output recovered from the
   // agent's Read polls). The loaded event window only holds recent launches, so the tray merges
   // this complete set with its live-derived overlay — see BackgroundShellsTray.
@@ -1340,6 +1369,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setApprovals([]);
     setReplyTo(null);
     setQueued([]);
+    setLocalStatusCards([]);
     setIdle(false);
     setStuck(null);
     // Staged uploads are scoped to the previous session (can't be linked to another), and
@@ -1619,7 +1649,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (!el) return;
     if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
     measure(); // content grew — the in-view prompt may have just scrolled off the top
-  }, [events, streamingText, streamingThink, approvals, queued, measure]);
+  }, [events, streamingText, streamingThink, approvals, queued, localStatusCards, measure]);
 
   // Track at-bottom + which prompt to surface as the user scrolls.
   useEffect(() => {
@@ -2131,19 +2161,11 @@ export function AgentView({ runner }: { runner: Runner }) {
       planUsageLabel: planRow?.label,
       planUsagePercent: planRow?.w.utilization,
     });
-    modal.info({
-      title: 'Status',
-      content: (
-        <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '6px 14px' }}>
-          {rows.map((row) => (
-            <div key={row.label} style={{ display: 'contents' }}>
-              <span style={{ color: 'var(--text-2)' }}>{row.label}</span>
-              <span>{row.value}</span>
-            </div>
-          ))}
-        </div>
-      ),
-    });
+    pinToBottom();
+    setLocalStatusCards((prev) => [
+      ...prev.slice(-4),
+      { id: `status-${Date.now()}-${Math.random().toString(36).slice(2)}`, rows },
+    ]);
   }
 
   const onSend = (): void => {
@@ -2915,6 +2937,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </div>
               )}
               <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+              {localStatusCards.map((card) => (
+                <SessionStatusCard card={card} key={card.id} />
+              ))}
               {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
               {streamingText && <StreamingMessage text={streamingText} />}
               {!selectedDeleted && approvals.map((a, i) => (
@@ -2998,6 +3023,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           ) : composing ? (
             <div className="agent-sessions agent-draft" ref={scrollRef}>
               <div className="chat-note">Send this agent a task to start a new session.</div>
+              {localStatusCards.map((card) => (
+                <SessionStatusCard card={card} key={card.id} />
+              ))}
             </div>
           ) : (
             <div className="agent-sessions" />

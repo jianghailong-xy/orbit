@@ -3307,6 +3307,57 @@ body {
   color: var(--text-1);
   background: var(--bg-hover);
 }
+.chat-status-card {
+  width: min(560px, 100%);
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.chat-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.chat-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12px;
+}
+.chat-status-grid {
+  display: grid;
+  gap: 0;
+  padding: 6px 12px 10px;
+}
+.chat-status-row {
+  display: grid;
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+  gap: 14px;
+  padding: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.chat-status-label {
+  color: var(--text-2);
+}
+.chat-status-value {
+  min-width: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
 /* Fenced code block in assistant markdown — a hover copy button in the top-right corner so a
    whole generated file (e.g. an HTML report) can be lifted out without the surrounding prose.
    The block is the hover area and the button sits inside it, so the pointer never leaves it. */
