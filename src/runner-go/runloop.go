@@ -350,9 +350,23 @@ func runLoop(cfg *RunnerConfig) {
 	// this a restart orphans them (they stay AWAITING_INPUT, leaking a concurrency
 	// slot and never seeing their inbox 'end'/cancel). Resume each before claiming
 	// new work so the slot accounting is correct from the first heartbeat.
-	if rec, err := t.reclaim(); err != nil {
-		logln("reclaim failed:", err)
-	} else {
+	// Retried with backoff: on a joint restart the apiserver is often still down when
+	// we come up, and a single failed attempt would orphan every resumable session for
+	// the rest of this process — their queued turns then sit PENDING forever.
+	reclaimed := false
+	for delay := time.Second; loopCtx.Err() == nil; {
+		rec, err := t.reclaim()
+		if err != nil {
+			logln("reclaim failed:", err)
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(delay):
+			}
+			if delay < 30*time.Second {
+				delay *= 2
+			}
+			continue
+		}
 		for i := range rec.Sessions {
 			r := rec.Sessions[i]
 			logln(fmt.Sprintf("reclaiming session %s — %s", r.SessionID, r.Title))
@@ -376,19 +390,25 @@ func runLoop(cfg *RunnerConfig) {
 				MaxSeq:           r.MaxSeq,
 			})
 		}
+		reclaimed = true
+		break
 	}
 
 	// Reap orphan worktrees from a previous process — any checkout whose session we did
 	// not just reclaim (a crash mid-finalize, or a cancelled session never resumed). The
-	// branches are kept; only the stray checkout dirs are removed.
-	mu.Lock()
-	liveSet := make(map[string]bool, len(active))
-	for id := range active {
-		liveSet[id] = true
+	// branches are kept; only the stray checkout dirs are removed. Skipped unless the
+	// reclaim above actually answered: without that list every live session looks like
+	// an orphan and we would delete the checkouts we are about to resume.
+	if reclaimed {
+		mu.Lock()
+		liveSet := make(map[string]bool, len(active))
+		for id := range active {
+			liveSet[id] = true
+		}
+		mu.Unlock()
+		gcWorktrees(liveSet)
+		gcUploads(liveSet)
 	}
-	mu.Unlock()
-	gcWorktrees(liveSet)
-	gcUploads(liveSet)
 
 	for loopCtx.Err() == nil {
 		mu.Lock()
