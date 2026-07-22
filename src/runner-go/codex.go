@@ -19,6 +19,7 @@ type codexTurnResult struct {
 	Error            string
 	RuntimeSessionID string
 	Usage            *TokenUsage
+	ContextTokens    int
 }
 
 func codexContextTokens(usage *TokenUsage) int {
@@ -31,11 +32,15 @@ func codexContextTokens(usage *TokenUsage) int {
 }
 
 func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64) map[string]interface{} {
+	contextTokens := result.ContextTokens
+	if contextTokens <= 0 {
+		contextTokens = codexContextTokens(result.Usage)
+	}
 	return map[string]interface{}{
 		"subtype":       result.Subtype,
 		"numTurns":      numTurns,
 		"costUsd":       costUsd,
-		"contextTokens": codexContextTokens(result.Usage),
+		"contextTokens": contextTokens,
 	}
 }
 
@@ -554,6 +559,50 @@ func codexUsage(v interface{}) *TokenUsage {
 		CacheCreationInputTokens: toInt(firstPresent(u, "cache_creation_input_tokens", "cacheCreationInputTokens")),
 		CacheReadInputTokens:     toInt(firstPresent(u, "cached_input_tokens", "cache_read_input_tokens", "cacheReadInputTokens")),
 	}
+}
+
+func codexUsageBreakdown(v interface{}) *TokenUsage {
+	u := mapValue(v)
+	if u == nil {
+		return nil
+	}
+	return &TokenUsage{
+		InputTokens:              toInt(firstPresent(u, "inputTokens", "input_tokens")),
+		OutputTokens:             toInt(firstPresent(u, "outputTokens", "output_tokens")) + toInt(firstPresent(u, "reasoningOutputTokens", "reasoning_output_tokens")),
+		CacheCreationInputTokens: 0,
+		CacheReadInputTokens:     toInt(firstPresent(u, "cachedInputTokens", "cached_input_tokens", "cacheReadInputTokens", "cache_read_input_tokens")),
+	}
+}
+
+func codexBreakdownTotalTokens(v interface{}) int {
+	u := mapValue(v)
+	if u == nil {
+		return 0
+	}
+	if total := toInt(firstPresent(u, "totalTokens", "total_tokens")); total > 0 {
+		return total
+	}
+	usage := codexUsageBreakdown(u)
+	if usage == nil {
+		return 0
+	}
+	return usage.InputTokens + usage.CacheReadInputTokens + usage.OutputTokens
+}
+
+func codexThreadContextTokens(v interface{}) int {
+	u := mapValue(v)
+	if u == nil {
+		return 0
+	}
+	return codexBreakdownTotalTokens(firstPresent(u, "total"))
+}
+
+func codexThreadLastUsage(v interface{}) *TokenUsage {
+	u := mapValue(v)
+	if u == nil {
+		return nil
+	}
+	return codexUsageBreakdown(firstPresent(u, "last"))
 }
 
 func codexText(m map[string]interface{}) string {

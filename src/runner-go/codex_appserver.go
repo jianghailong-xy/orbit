@@ -839,6 +839,19 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 			(*active).result.Error = errMsg
 		}
 		activeMu.Unlock()
+	case "thread/tokenUsage/updated":
+		turnID := firstString(params, "turnId", "turn_id")
+		tokenUsage := firstPresent(params, "tokenUsage", "token_usage")
+		activeMu.Lock()
+		if *active != nil && ((*active).codexTurnID == "" || turnID == "" || (*active).codexTurnID == turnID) {
+			if contextTokens := codexThreadContextTokens(tokenUsage); contextTokens > 0 {
+				(*active).result.ContextTokens = contextTokens
+			}
+			if usage := codexThreadLastUsage(tokenUsage); usage != nil {
+				(*active).result.Usage = usage
+			}
+		}
+		activeMu.Unlock()
 	case "turn/completed":
 		turn := mapValue(params["turn"])
 		status := strings.ToLower(firstString(turn, "status"))

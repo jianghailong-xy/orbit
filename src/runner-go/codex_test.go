@@ -128,6 +128,59 @@ func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
 	}
 }
 
+func TestCodexTurnEndPayloadPrefersAppServerContextTokens(t *testing.T) {
+	got := codexTurnEndPayload(codexTurnResult{
+		Subtype:       "completed",
+		ContextTokens: 91_000,
+		Usage: &TokenUsage{
+			InputTokens:  1200,
+			OutputTokens: 80,
+		},
+	}, 1, 0)
+
+	if got["contextTokens"] != 91_000 {
+		t.Fatalf("contextTokens = %v, want 91000", got["contextTokens"])
+	}
+}
+
+func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1", codexTurnID: "codex-turn-1"}
+	raw, _ := json.Marshal(map[string]interface{}{
+		"threadId": "thread-1",
+		"turnId":   "codex-turn-1",
+		"tokenUsage": map[string]interface{}{
+			"total": map[string]interface{}{
+				"totalTokens":           91_000,
+				"inputTokens":           70_000,
+				"cachedInputTokens":     15_000,
+				"outputTokens":          5_000,
+				"reasoningOutputTokens": 1_000,
+			},
+			"last": map[string]interface{}{
+				"totalTokens":           1_500,
+				"inputTokens":           1_000,
+				"cachedInputTokens":     200,
+				"outputTokens":          250,
+				"reasoningOutputTokens": 50,
+			},
+			"modelContextWindow": 400_000,
+		},
+	})
+
+	handleCodexAppNotification(codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil)
+
+	if active.result.ContextTokens != 91_000 {
+		t.Fatalf("ContextTokens = %d, want 91000", active.result.ContextTokens)
+	}
+	if active.result.Usage == nil {
+		t.Fatalf("Usage = nil")
+	}
+	if active.result.Usage.InputTokens != 1_000 || active.result.Usage.CacheReadInputTokens != 200 || active.result.Usage.OutputTokens != 300 {
+		t.Fatalf("Usage = %#v", active.result.Usage)
+	}
+}
+
 func TestCodexAppInterruptWaitsForTurnID(t *testing.T) {
 	var mu sync.Mutex
 	active := &codexAppActiveTurn{orbitTurnID: "orbit-turn-1", startSent: true}
