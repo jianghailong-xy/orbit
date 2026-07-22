@@ -581,7 +581,7 @@ final class ConsoleModel {
     func loadSlashItems() async {
         guard let runners = try? await api.runners() else { return }
         let all = runners.flatMap { ($0.commands ?? []) + ($0.skills ?? []) }
-        slashItems = ComposerSlash.scoped(items: all, agentID: agentID)
+        slashItems = ComposerHostCommand.slashItems + ComposerSlash.scoped(items: all, agentID: agentID)
     }
 
     /// `+` menu → Command/Skill: pop the menu scoped to one kind by inserting a `/`.
@@ -604,7 +604,6 @@ final class ConsoleModel {
 
     func send() async {
         guard !sending else { return }
-        if isDraft { await createDraftSession(); return }
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(composerText)
@@ -612,6 +611,20 @@ final class ConsoleModel {
             if shell { composerText = "" }
             return
         }
+        if let command = ComposerHostCommand.commandName(in: text) {
+            if ComposerHostCommand.isLocal(command) {
+                showStatusCommand()
+                composerText = ""
+                return
+            }
+            let knownRunnerCommand = slashItems.contains { $0.type != "local" && $0.name == command }
+            if !knownRunnerCommand, replyContext == nil {
+                statusMessage = command.isEmpty ? "Pick a slash command before sending"
+                                                : "Unsupported slash command /\(command)"
+                return
+            }
+        }
+        if isDraft { await createDraftSession(); return }
         // "Chat about this": resolve the pending question as a deny+message so claude reads the
         // text as in-turn feedback and continues — not a fresh turn. (Mirrors the web reroute.)
         if let reply = replyContext {
@@ -676,6 +689,24 @@ final class ConsoleModel {
             statusMessage = "Send failed — \(error)"
             awaitingReply = false   // no turn is coming — drop the tail "working" indicator
         }
+    }
+
+    private func showStatusCommand() {
+        let window = AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog, configured: configuredProviders)
+        let primary = planUsage?.rows.first
+        statusMessage = ComposerHostCommand.statusSummary(ComposerStatusSnapshot(
+            surface: "App",
+            sessionTitle: isDraft ? nil : "Current session",
+            sessionStatus: isDraft ? nil : sessionStatus.rawValue,
+            agentName: agentName,
+            provider: provider,
+            model: modelID,
+            permissionMode: permissionMode.rawValue,
+            effort: effort.label,
+            contextTokens: state.contextTokens,
+            contextWindow: window,
+            planUsageLabel: primary?.label,
+            planUsagePercent: primary?.percent))
     }
 
     /// Draft send: create a brand-new session for the agent (mirrors the web composer's create path

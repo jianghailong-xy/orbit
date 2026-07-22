@@ -15,6 +15,13 @@ public struct SlashCommandInfo: Codable, Equatable, Sendable, Identifiable {
     public let agentId: String?
     /// Stable identity for SwiftUI lists (the same name can exist host-level and per-agent).
     public var id: String { "\(agentId ?? "host"):\(type ?? ""):\(name)" }
+
+    public init(name: String, description: String? = nil, type: String? = nil, agentId: String? = nil) {
+        self.name = name
+        self.description = description
+        self.type = type
+        self.agentId = agentId
+    }
 }
 
 /// One model option reported by a runner runtime. Codex entries come from `codex debug models`.

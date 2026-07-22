@@ -30,7 +30,7 @@ struct ConsoleView: View {
                     TranscriptView(console: console)
                     if let msg = console.statusMessage {
                         HStack {
-                            Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
+                            Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
                             Spacer()
                             Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
                                 .buttonStyle(.plain).foregroundStyle(.secondary)

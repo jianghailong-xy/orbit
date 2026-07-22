@@ -240,6 +240,7 @@ final class Phase2LogicTests: XCTestCase {
 
     func testSlashScopedAndMatches() {
         let items = [
+            SlashCommandInfo(name: "status", description: nil, type: "local", agentId: nil),
             SlashCommandInfo(name: "commit", description: nil, type: "command", agentId: nil),
             SlashCommandInfo(name: "deploy", description: nil, type: "command", agentId: "a1"),
             SlashCommandInfo(name: "review", description: nil, type: "skill", agentId: "a2"),
@@ -247,7 +248,7 @@ final class Phase2LogicTests: XCTestCase {
         ]
         // host-level + this agent's assets only
         let scoped = ComposerSlash.scoped(items: items, agentID: "a1")
-        XCTAssertEqual(scoped.map(\.name).sorted(), ["commit", "compose", "deploy"])
+        XCTAssertEqual(scoped.map(\.name).sorted(), ["commit", "compose", "deploy", "status"])
 
         // prefix-matches sort ahead of substring matches; capped to scope
         let m = ComposerSlash.matches(items: scoped, token: "com", scope: nil)
@@ -256,7 +257,28 @@ final class Phase2LogicTests: XCTestCase {
         let onlyCommands = ComposerSlash.matches(items: scoped, token: "", scope: "command")
         XCTAssertEqual(onlyCommands.map(\.name).sorted(), ["commit", "deploy"])
 
+        let local = ComposerSlash.matches(items: scoped, token: "sta", scope: nil)
+        XCTAssertEqual(local.map(\.name), ["status"])
+
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
+    }
+
+    func testHostSlashCommandParsingAndStatusSummary() {
+        XCTAssertNil(ComposerHostCommand.commandName(in: "hello /status"))
+        XCTAssertEqual(ComposerHostCommand.commandName(in: "/status"), "status")
+        XCTAssertEqual(ComposerHostCommand.commandName(in: " /status now "), "status")
+        XCTAssertEqual(ComposerHostCommand.commandName(in: "/"), "")
+        XCTAssertTrue(ComposerHostCommand.isLocal("STATUS"))
+
+        let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", sessionTitle: "Current session", sessionStatus: "RUNNING",
+            model: "gpt-5.6-sol", effort: "", contextTokens: 94_500, contextWindow: 372_000,
+            planUsageLabel: "Primary limit", planUsagePercent: 41))
+        XCTAssertTrue(rows.contains(ComposerStatusRow(label: "Context", value: "25% (95k / 372k tokens)")))
+        XCTAssertTrue(rows.contains(ComposerStatusRow(label: "Reasoning", value: "Default")))
+
+        let unreported = ComposerHostCommand.statusRows(ComposerStatusSnapshot(surface: "App"))
+        XCTAssertTrue(unreported.contains(ComposerStatusRow(label: "Context", value: "not reported yet")))
     }
 
     func testSlashPickAndOpening() {

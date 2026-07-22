@@ -93,6 +93,115 @@ public enum ComposerLogic {
     }
 }
 
+public struct ComposerStatusSnapshot: Equatable, Sendable {
+    public let surface: String
+    public let sessionTitle: String?
+    public let sessionStatus: String?
+    public let agentName: String?
+    public let provider: String?
+    public let model: String?
+    public let permissionMode: String?
+    public let effort: String?
+    public let contextTokens: Int?
+    public let contextWindow: Int?
+    public let planUsageLabel: String?
+    public let planUsagePercent: Int?
+
+    public init(surface: String, sessionTitle: String? = nil, sessionStatus: String? = nil,
+                agentName: String? = nil, provider: String? = nil, model: String? = nil,
+                permissionMode: String? = nil, effort: String? = nil,
+                contextTokens: Int? = nil, contextWindow: Int? = nil,
+                planUsageLabel: String? = nil, planUsagePercent: Int? = nil) {
+        self.surface = surface
+        self.sessionTitle = sessionTitle
+        self.sessionStatus = sessionStatus
+        self.agentName = agentName
+        self.provider = provider
+        self.model = model
+        self.permissionMode = permissionMode
+        self.effort = effort
+        self.contextTokens = contextTokens
+        self.contextWindow = contextWindow
+        self.planUsageLabel = planUsageLabel
+        self.planUsagePercent = planUsagePercent
+    }
+}
+
+public struct ComposerStatusRow: Equatable, Sendable {
+    public let label: String
+    public let value: String
+    public init(label: String, value: String) {
+        self.label = label
+        self.value = value
+    }
+}
+
+public enum ComposerHostCommand {
+    public static let status = "status"
+    public static let slashItems = [
+        SlashCommandInfo(name: status, description: "Show local session status", type: "local")
+    ]
+
+    public static func commandName(in text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("/") else { return nil }
+        guard let first = trimmed.split(maxSplits: 1, whereSeparator: { $0.isWhitespace }).first else { return "" }
+        return String(first.dropFirst())
+    }
+
+    public static func isLocal(_ name: String) -> Bool {
+        slashItems.contains { $0.name.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    public static func statusRows(_ s: ComposerStatusSnapshot) -> [ComposerStatusRow] {
+        var rows = [ComposerStatusRow(label: "Surface", value: s.surface)]
+        if let title = s.sessionTitle, !title.isEmpty {
+            rows.append(ComposerStatusRow(label: "Session",
+                                          value: s.sessionStatus.map { "\(title) (\($0))" } ?? title))
+        } else {
+            rows.append(ComposerStatusRow(label: "Session", value: "New session draft"))
+        }
+        if let agent = s.agentName, !agent.isEmpty {
+            rows.append(ComposerStatusRow(label: "Agent", value: agent))
+        }
+        if let provider = s.provider, !provider.isEmpty {
+            rows.append(ComposerStatusRow(label: "Provider", value: provider))
+        }
+        if let model = s.model, !model.isEmpty {
+            rows.append(ComposerStatusRow(label: "Model", value: model))
+        }
+        if let permission = s.permissionMode, !permission.isEmpty {
+            rows.append(ComposerStatusRow(label: "Permission", value: permission))
+        }
+        let effort = s.effort ?? ""
+        rows.append(ComposerStatusRow(label: "Reasoning", value: effort.isEmpty ? "Default" : effort))
+        if let tokens = s.contextTokens, tokens > 0, let window = s.contextWindow, window > 0 {
+            let pct = min(100, Int((Double(tokens) / Double(window) * 100).rounded()))
+            rows.append(ComposerStatusRow(label: "Context",
+                                          value: "\(pct)% (\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens)"))
+        } else {
+            rows.append(ComposerStatusRow(label: "Context", value: "not reported yet"))
+        }
+        if let percent = s.planUsagePercent {
+            rows.append(ComposerStatusRow(label: "Plan usage",
+                                          value: "\(s.planUsageLabel ?? "Primary limit") \(percent)%"))
+        } else {
+            rows.append(ComposerStatusRow(label: "Plan usage", value: "not reported"))
+        }
+        return rows
+    }
+
+    public static func statusSummary(_ s: ComposerStatusSnapshot) -> String {
+        statusRows(s).map { "\($0.label): \($0.value)" }.joined(separator: " | ")
+    }
+
+    private static func fmtTokens(_ n: Int) -> String {
+        if n >= 1_000_000 { return "\(n / 1_000_000)M" }
+        if n >= 1000 { return "\(Int((Double(n) / 1000).rounded()))k" }
+        return "\(n)"
+    }
+}
+
 /// `/`-autocomplete for the composer, mirroring the web composer. The runner reports its on-disk
 /// slash commands and skills (they ride the GET /runners payload as `commands` / `skills`); the
 /// composer pops a hint menu while the cursor sits on a `/token` at the start of input or right

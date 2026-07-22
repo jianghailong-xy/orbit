@@ -55,6 +55,17 @@ import {
   normalizeEffortForProvider,
   supportsAuto,
 } from '../lib/agentDefaults';
+import {
+  LOCAL_SLASH_ITEMS,
+  isLocalSlashCommand,
+  localStatusRows,
+  openSlash,
+  pickSlash as replaceSlashToken,
+  slashCommandName,
+  slashMatches as getSlashMatches,
+  slashToken as getSlashToken,
+  type ComposerSlashItem,
+} from '../lib/slashCommands';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
@@ -2100,9 +2111,61 @@ export function AgentView({ runner }: { runner: Runner }) {
   const uploading = images.some((im) => im.status === 'uploading');
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
+  function showLocalStatus(): void {
+    const planRow = shownPlanUsage ? usageRows(shownPlanUsage)[0] : undefined;
+    const rows = localStatusRows({
+      surface: 'Web',
+      runnerName: runner.displayName || runner.name,
+      runnerOnline: runner.online,
+      activeSessions: runner.activeSessions,
+      maxConcurrent: runner.maxConcurrent,
+      sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
+      sessionStatus: selected ? statusLabel(selected) : selectedMissing ? 'not found' : null,
+      agentName: shownAgentName,
+      provider: shownProvider,
+      model: shownModel,
+      permissionMode: shownMode,
+      effort: shownEffort,
+      contextTokens,
+      contextWindow: contextWindowFor(shownModel, runner.modelCatalog, configuredProviders),
+      planUsageLabel: planRow?.label,
+      planUsagePercent: planRow?.w.utilization,
+    });
+    modal.info({
+      title: 'Status',
+      content: (
+        <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '6px 14px' }}>
+          {rows.map((row) => (
+            <div key={row.label} style={{ display: 'contents' }}>
+              <span style={{ color: 'var(--text-2)' }}>{row.label}</span>
+              <span>{row.value}</span>
+            </div>
+          ))}
+        </div>
+      ),
+    });
+  }
+
   const onSend = (): void => {
     const c = text.trim();
-    if (send.isPending || uploading) return;
+    if (send.isPending) return;
+    const commandName = slashCommandName(c);
+    if (commandName !== null) {
+      if (isLocalSlashCommand(commandName)) {
+        showLocalStatus();
+        setText('');
+        setHistIdx(-1);
+        return;
+      }
+      if (!replyTo) {
+        const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
+        if (!knownRunnerCommand) {
+          message.error(commandName ? `Unsupported slash command /${commandName}` : 'Pick a slash command before sending');
+          return;
+        }
+      }
+    }
+    if (uploading) return;
     // Replying to a pending AskUserQuestion: resolve it with the text as a deny+message
     // (claude reads it as feedback and continues) instead of a fresh turn. The deny channel
     // is text-only — a blocking question can only be answered with text — so attached images
@@ -2173,14 +2236,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   // it, AWAITING_INPUT runs it now, and PENDING (still waiting for a slot, no claude yet)
   // queues it until the runner claims the session. A non-live (ended) session revives or
   // starts fresh. `live` is exactly "not terminal", so no per-status gate is needed here.
-  const canSend =
-    (!!text.trim() || readyImages.length > 0) &&
-    !send.isPending &&
-    !uploading &&
-    runner.online &&
-    !selectedDeleted &&
-    !selectedMissing &&
-    !loadingSession;
+  const pendingSlashCommand = slashCommandName(text);
+  const localSlashReady = pendingSlashCommand !== null && isLocalSlashCommand(pendingSlashCommand);
+  const canSend = localSlashReady
+    ? !send.isPending
+    : (!!text.trim() || readyImages.length > 0) &&
+      !send.isPending &&
+      !uploading &&
+      runner.online &&
+      !selectedDeleted &&
+      !selectedMissing &&
+      !loadingSession;
   // The single send button morphs into a Stop while a turn is generating AND the composer
   // is empty — interrupting that turn. With content typed it stays Send, so a follow-up can
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
@@ -2188,7 +2254,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const showStop =
     selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0 && !replyTo;
 
-  // ── `/` command & skill autocomplete ──────────────────────────────────────
+  // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
   // / runner.skills). Show them as a hint menu while the cursor sits on a `/token`
   // at the start of input or right after whitespace/newline, like the Claude Code TUI;
@@ -2274,31 +2340,35 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [slashDismissed, setSlashDismissed] = useState<string | null>(null);
   // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
   const [slashScope, setSlashScope] = useState<'command' | 'skill' | null>(null);
-  const slashToken = /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
+  const slashToken = getSlashToken(text);
   // Scope the `/` menu to the composer's agent: host-level assets (no agentId — e.g.
   // ~/.claude or the runner's default dir) plus the assets of the agent this session
   // runs as. A live session's agent is fixed; a draft uses the picked agent.
   const composerAgentId = live ? selected?.agent?.id : agentId;
-  const slashItems = useMemo(
-    () =>
-      [
-        ...(runner.commands ?? []).map((c) => ({ name: c.name, description: c.description, type: 'command' as const, agentId: c.agentId })),
-        ...(runner.skills ?? []).map((s) => ({ name: s.name, description: s.description, type: 'skill' as const, agentId: s.agentId })),
+  const slashItems = useMemo<ComposerSlashItem[]>(
+    () => [
+      ...LOCAL_SLASH_ITEMS,
+      ...[
+        ...(runner.commands ?? []).map((c) => ({
+          name: c.name,
+          description: c.description,
+          type: 'command' as const,
+          agentId: c.agentId,
+        })),
+        ...(runner.skills ?? []).map((s) => ({
+          name: s.name,
+          description: s.description,
+          type: 'skill' as const,
+          agentId: s.agentId,
+        })),
       ].filter((it) => !it.agentId || it.agentId === composerAgentId),
+    ],
     [runner.commands, runner.skills, composerAgentId],
   );
   const slashMatches = useMemo(() => {
-    if (slashToken === null) return [];
-    const q = slashToken.toLowerCase();
-    return slashItems
-      .filter((it) => (slashScope === null || it.type === slashScope) && it.name.toLowerCase().includes(q))
-      .sort((a, b) => {
-        const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
-        const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
-        return pa - pb || a.name.localeCompare(b.name);
-      })
-      .slice(0, 50);
-  }, [slashItems, slashToken, slashScope]);
+    const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
+    return getSlashMatches(items, slashToken, slashScope);
+  }, [slashItems, slashToken, slashScope, runner.online]);
   useEffect(() => {
     setSlashIndex(0);
     if (slashToken === null) setSlashScope(null);
@@ -2306,7 +2376,6 @@ export function AgentView({ runner }: { runner: Runner }) {
   const showSlash =
     slashToken !== null &&
     slashToken !== slashDismissed &&
-    runner.online &&
     !selectedDeleted &&
     !selectedMissing &&
     slashMatches.length > 0;
@@ -2314,7 +2383,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const pickSlash = (name: string): void => {
     // Replace only the trailing `/token` ($1 preserves the start-or-whitespace before
     // it), so picking a command mid-message doesn't clobber text typed earlier.
-    setText(text.replace(/(^|\s)\/\S*$/, `$1/${name} `));
+    setText(replaceSlashToken(text, name));
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -2322,7 +2391,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // with a space when mid-message) so slashToken matches and the menu pops.
   const insertSlash = (scope: 'command' | 'skill'): void => {
     setSlashScope(scope);
-    setText((t) => (t === '' || /\s$/.test(t) ? `${t}/` : `${t} /`));
+    setText(openSlash);
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
@@ -2381,7 +2450,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Per-control hints derived from the same state that drives enable/disable, so the help
   // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
   // Empty string = no tooltip, which keeps idle controls free of hover noise.
-  const composerDisabled = !runner.online || selectedDeleted || selectedMissing;
+  const composerDisabled = selectedDeleted || selectedMissing;
   const configHint = selectedDeleted
     ? 'Restore this session before changing settings'
     : selectedMissing
@@ -3076,7 +3145,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onMouseEnter={() => setSlashIndex(i)}
                 >
                   <span className="composer-slash-name">/{it.name}</span>
-                  <span className="composer-slash-type">{it.type === 'skill' ? 'skill' : 'cmd'}</span>
+                  <span className="composer-slash-type">
+                    {it.type === 'skill' ? 'skill' : it.type === 'local' ? 'local' : 'cmd'}
+                  </span>
                   {it.agentId && <span className="composer-slash-type">project</span>}
                   {it.description && <span className="composer-slash-desc">{it.description}</span>}
                 </div>
@@ -3118,14 +3189,14 @@ export function AgentView({ runner }: { runner: Runner }) {
                   key: 'command',
                   icon: <CodeOutlined />,
                   label: 'Command',
-                  disabled: (runner.commands?.length ?? 0) === 0,
+                  disabled: !runner.online || (runner.commands?.length ?? 0) === 0,
                   onClick: () => insertSlash('command'),
                 },
                 {
                   key: 'skill',
                   icon: <ThunderboltOutlined />,
                   label: 'Skill',
-                  disabled: (runner.skills?.length ?? 0) === 0,
+                  disabled: !runner.online || (runner.skills?.length ?? 0) === 0,
                   onClick: () => insertSlash('skill'),
                 },
                 {

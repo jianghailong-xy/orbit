@@ -535,7 +535,7 @@ struct ComposerView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text("/\(item.name)").font(.callout.monospaced())
-                        Text(item.type == "skill" ? "skill" : "cmd")
+                        Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
                             .font(.orbitMeta).foregroundStyle(.secondary)
                         if let d = item.description, !d.isEmpty {
                             Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
