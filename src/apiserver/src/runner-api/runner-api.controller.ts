@@ -416,6 +416,9 @@ export class RunnerApiController {
         workDir: agent?.workDir ?? undefined,
         branch: s.branch ?? undefined,
         autoInitGit: agent?.autoInitGit ?? undefined,
+        // cf. the claim path: the branch this session merges into, so a restarted runner
+        // still judges "already merged" against it rather than main.
+        mergeTarget: s.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
         agentId: s.agentId ?? undefined,
         taskId: s.taskId ?? undefined,
       });

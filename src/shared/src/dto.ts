@@ -308,6 +308,11 @@ export interface ClaimedSession {
   /** Agent opt-in: if workDir isn't a git repo, the runner `git init`s it (default
    *  .gitignore + baseline commit) so the session can still be worktree-isolated. */
   autoInitGit?: boolean;
+  /** The branch this session's work merges INTO (its recorded mergeTarget, else its agent's
+   *  defaultMergeTarget) — the same branch the status bar's Merge button names. The runner
+   *  judges "already merged" against it, so work landed in e.g. `develop` isn't reported
+   *  unmerged just because it isn't in main. Omitted → the runner auto-detects main/master. */
+  mergeTarget?: string;
   /** Pre-generated Claude session id to pass via --session-id (and --resume on respawn). */
   sessionUuid: string;
   /** Provider-neutral runtime session/thread id. For Claude this mirrors sessionUuid. */
@@ -462,6 +467,8 @@ export interface ReclaimSession {
   branch?: string;
   /** Agent opt-in to auto-`git init` a non-git workDir, cf. ClaimedSession.autoInitGit. */
   autoInitGit?: boolean;
+  /** Branch this session merges into, cf. ClaimedSession.mergeTarget. */
+  mergeTarget?: string;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */
   agentId?: string;
   /** DB id of the parent Task this session runs under, if any (ORBIT_TASK_ID). */

@@ -359,6 +359,45 @@ func TestBranchMergedInto_PatchEquivalent(t *testing.T) {
 	}
 }
 
+// TestBranchMergedInto_RememberedTarget: the reported case — an agent whose merge target is
+// `develop` merges there successfully, then the session is resumed (which clears mergeStatus, so
+// the bar falls back to this check). Judged against main the work looks unmerged and the bar
+// wrongly re-offers "Merge to develop"; judged against the session's remembered target it is
+// correctly "✓ In develop".
+func TestBranchMergedInto_RememberedTarget(t *testing.T) {
+	repo := initRepo(t) // main + base commit
+	base := mustGit(t, repo, "rev-parse", "HEAD")
+	mustGit(t, repo, "branch", "develop")
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	feat := &Worktree{Branch: "orbit/feat", BaseSha: base, RepoDir: repo, Session: "s-remembered"}
+
+	// Land the work in develop only; main never sees it.
+	mustGit(t, repo, "checkout", "develop")
+	mustGit(t, repo, "merge", "--ff-only", "orbit/feat")
+
+	// With no remembered target the check falls back to main, where the work isn't — the
+	// conservative not-merged that keeps an actionable Merge button.
+	if branchMergedInto(feat) {
+		t.Error("without a remembered target, main is the yardstick and the work isn't there")
+	}
+
+	// Once the session's target is known (from the merge it ran, or the claim payload), the same
+	// branch must report merged.
+	rememberMergeTarget(feat.Session, "develop")
+	defer forgetMergeTarget(feat.Session)
+	if !branchMergedInto(feat) {
+		t.Error("work landed in the session's merge target (develop) must report merged")
+	}
+
+	// An empty target means "auto-detect": it must drop the remembered entry, not keep it.
+	rememberMergeTarget(feat.Session, "")
+	if branchMergedInto(feat) {
+		t.Error("an empty target must clear the remembered branch and fall back to main")
+	}
+}
+
 // addOriginBare wires a throwaway bare repo as 'origin' and pushes repo's main to it, so
 // origin/<branch> remote-tracking refs exist for the merge-sync tests.
 func addOriginBare(t *testing.T, repo string) string {

@@ -259,6 +259,10 @@ func runLoop(cfg *RunnerConfig) {
 					}
 					go func(req MergeCommand) {
 						res := mergeToMain(req)
+						// Record where this session's work went, so a later "already merged"
+						// check (after a resume clears mergeStatus) looks at that branch and
+						// not at main.
+						rememberMergeTarget(req.SessionID, req.TargetBranch)
 						if err := t.mergeResult(req.SessionID, MergeResultRequest{
 							Status: res.Status, MergedSha: res.MergedSha, Message: res.Message,
 						}); err != nil {
@@ -325,6 +329,9 @@ func runLoop(cfg *RunnerConfig) {
 		// Per-session git worktree isolation: when the agent's workDir is a git repo, run
 		// claude in its own checkout on job.Branch instead of the shared dir. Falls back to
 		// the shared dir (recording why on job.IsolationStatus) for non-git workDirs.
+		// The branch this session merges into, so branchMergedInto's "already merged" check
+		// judges the target the Merge button names rather than main (see mergeTargetBySession).
+		rememberMergeTarget(job.SessionID, job.MergeTarget)
 		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
 		// A resumed/reclaimed session whose last act was a park checkpoint: undo it so the
 		// agent continues from an uncommitted working tree, not a committed snapshot — no
@@ -343,6 +350,7 @@ func runLoop(cfg *RunnerConfig) {
 			mu.Lock()
 			delete(active, j.SessionID)
 			mu.Unlock()
+			forgetMergeTarget(j.SessionID)
 		}(job, execDir)
 	}
 
@@ -382,6 +390,7 @@ func runLoop(cfg *RunnerConfig) {
 				WorkDir:          r.WorkDir,
 				Branch:           r.Branch,
 				AutoInitGit:      r.AutoInitGit,
+				MergeTarget:      r.MergeTarget,
 				AgentID:          r.AgentID,
 				TaskID:           r.TaskID,
 				Reclaimed:        true,

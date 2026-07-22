@@ -249,6 +249,10 @@ type ClaimedSession struct {
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit: agent opted in to auto-`git init` a non-git workDir so it can be isolated.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
+	// MergeTarget is the branch this session's work merges INTO (its recorded target, else its
+	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
+	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
+	MergeTarget string `json:"mergeTarget,omitempty"`
 	// WT and IsolationStatus are runner-internal, resolved by setupWorktree at start: WT
 	// is the live worktree (nil when running shared), IsolationStatus what was done.
 	WT              *Worktree `json:"-"`
@@ -300,6 +304,8 @@ type ReclaimSession struct {
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
+	// MergeTarget, cf. ClaimedSession.MergeTarget.
+	MergeTarget string `json:"mergeTarget,omitempty"`
 }
 
 type ReclaimResponse struct {

@@ -81,22 +81,59 @@ func mergeTargetsForWT(wt *Worktree) []string {
 	return listMergeTargets(wt.RepoDir)
 }
 
-// branchMergedInto reports whether the worktree's branch has already landed in the repo's default
-// merge target (main, else master), so the status bar shows a "✓ In main" chip instead of a
-// redundant Merge button. Two ways it can already be there: the branch tip is an ancestor of the
+// mergeTargetBySession records the branch each session's work is merged INTO, so
+// branchMergedInto judges the same branch the UI's Merge button names: an agent whose default
+// target is `develop` merges there, and checking main would report "not merged" for work that
+// did land. Seeded from the claim/reclaim payload (the session's recorded merge target, so a
+// runner restart doesn't forget) and refreshed by every merge this runner runs.
+var (
+	mergeTargetMu        sync.Mutex
+	mergeTargetBySession = map[string]string{}
+)
+
+// rememberMergeTarget records the branch a session merges into. An empty target means the
+// auto-detected default (main/master), so any stale entry is dropped rather than kept.
+func rememberMergeTarget(sessionID, target string) {
+	mergeTargetMu.Lock()
+	defer mergeTargetMu.Unlock()
+	if target == "" {
+		delete(mergeTargetBySession, sessionID)
+		return
+	}
+	mergeTargetBySession[sessionID] = target
+}
+
+// forgetMergeTarget drops a finished session's remembered target (called as it leaves `active`).
+func forgetMergeTarget(sessionID string) {
+	mergeTargetMu.Lock()
+	defer mergeTargetMu.Unlock()
+	delete(mergeTargetBySession, sessionID)
+}
+
+func mergeTargetFor(sessionID string) string {
+	mergeTargetMu.Lock()
+	defer mergeTargetMu.Unlock()
+	return mergeTargetBySession[sessionID]
+}
+
+// branchMergedInto reports whether the worktree's branch has already landed in its merge target
+// (the session's remembered target, else main, else master), so the status bar shows a "✓ In
+// main" chip instead of a redundant Merge button. Two ways it can already be there: the branch
+// tip is an ancestor of the
 // target (a fast-forward or a command-line push), OR every commit since the fork has an equivalent
 // patch in the target (a squash/rebase merge — including Orbit's own "Merge to main", which rebases
 // the branch onto the target and so replays its commits under fresh SHAs that is-ancestor can't
-// match). Mirrors mergeToMain's auto-detected default (it judges the same target the plain "Merge
-// to main" button would use). False when nothing's isolated, no target exists, the branch is the
-// target, or git can't decide — a conservative default that keeps the actionable Merge button.
+// match). Judges the same target the Merge button names (see mergeTargetBySession), falling back
+// to mergeToMain's auto-detected default. False when nothing's isolated, no target exists, the
+// branch is the target, or git can't decide — a conservative default that keeps the actionable
+// Merge button.
 func branchMergedInto(wt *Worktree) bool {
 	if wt == nil || wt.Branch == "" {
 		return false
 	}
 	var target string
-	for _, b := range []string{"main", "master"} {
-		if branchExists(wt.RepoDir, b) {
+	for _, b := range []string{mergeTargetFor(wt.Session), "main", "master"} {
+		if b != "" && branchExists(wt.RepoDir, b) {
 			target = b
 			break
 		}

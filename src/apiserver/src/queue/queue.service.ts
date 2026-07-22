@@ -172,6 +172,10 @@ export class QueueService {
       branch: session.branch ?? undefined,
       // Agent opt-in: auto-`git init` a non-git workDir so it can be isolated.
       autoInitGit: agent?.autoInitGit ?? undefined,
+      // The branch this session merges into — its own recorded target, else the agent's
+      // remembered default (what the status bar's Merge button offers). Lets the runner
+      // judge "already merged" against that branch instead of main.
+      mergeTarget: session.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
       sessionUuid,
       maxSeq,
       resume,
