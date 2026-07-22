@@ -225,26 +225,30 @@ struct TranscriptView: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
-                // Messages sent while a turn is in flight wait their turn: render them AFTER the
-                // transcript so a mid-turn send is never interleaved into the running reply (web's
-                // trailing `queued` bubbles). No `AnchorRow` — they haven't been asked yet, so they're
-                // never the sticky "Your question" (web's `:not(.chat-queued)`).
-                ForEach(console.state.queued, id: \.id) { bubble in
-                    UserBubbleView(bubble: bubble)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
                 // "Working" indicator: while the agent owes a reply it hasn't begun to stream (the
-                // send→first-token gap), animated dots sit at the tail so the page shows immediate,
-                // continuous feedback instead of looking inert. Placed last, just above the anchor,
-                // and hands off seamlessly to the streaming reply's own dots (see showWorkingIndicator).
+                // send→first-token gap), animated dots show immediate, continuous feedback instead of
+                // the page looking inert, and hand off seamlessly to the streaming reply's own dots
+                // (see showWorkingIndicator). It belongs to the RUNNING turn, so it renders ABOVE any
+                // `queued` follow-ups (which wait behind that turn) — otherwise the dots sit under the
+                // queued bubble, reading as "working on the queued message," and jump when the running
+                // reply streams in above it. With no queued/approvals it's still effectively the tail.
                 if console.showWorkingIndicator {
                     WorkingIndicatorView()
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                         .id("working-indicator")
+                }
+                // Messages sent while a turn is in flight wait their turn: render them AFTER the
+                // transcript (and the running turn's working indicator) so a mid-turn send is never
+                // interleaved into the running reply (web's trailing `queued` bubbles). No `AnchorRow`
+                // — they haven't been asked yet, so they're never the sticky "Your question" (web's
+                // `:not(.chat-queued)`).
+                ForEach(console.state.queued, id: \.id) { bubble in
+                    UserBubbleView(bubble: bubble)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
                 // Zero-height tail row: a stable `scrollTo` target that always sits below the last
                 // message (the last item's own id moves as it streams).
