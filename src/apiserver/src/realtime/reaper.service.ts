@@ -5,6 +5,7 @@ import {
   RunEventType,
   SessionEndReason,
   TRASH_RETENTION_DAYS,
+  gracefulEndStatus,
   isApiErrorText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
@@ -97,6 +98,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         claudeSessionId: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
+        endReason: true,
         task: { select: { status: true } },
         agent: { select: { provider: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
@@ -108,15 +110,26 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const offline =
           !s.assignedRunner || s.assignedRunner.status === 'OFFLINE' || now - hb > OFFLINE_AFTER_MS;
         if (offline) {
-          await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'runner offline');
+          await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline');
           continue;
         }
         // Online runner that hasn't honored a cancel/end in time: the session is
         // wedged (e.g. a restarted runner that never re-attached). Force-finalize so
-        // the slot is freed; without this both branches below skip it forever.
+        // the slot is freed; without this both branches below skip it forever. An
+        // unacknowledged *graceful* end (idle recycle / task done / user end) is not a
+        // run failure — a healthy session that simply sat untouched for IDLE_AFTER_MS
+        // must not resurface as FAILED — so settle it at the same benign terminal state
+        // /complete would have given it. Only a hard cancel still lands FAILED.
         const cancelAt = s.cancelRequestedAt?.getTime() ?? 0;
         if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
-          await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'cancel not honored');
+          const graceful = gracefulEndStatus(s.endReason);
+          await this.forceFinalize(
+            s.id,
+            s.assignedRunnerId,
+            s.taskId,
+            graceful ? `${s.endReason} end not honored` : 'cancel not honored',
+            graceful ? { status: graceful } : {},
+          );
           continue;
         }
         const provider = s.provider ?? s.agent?.provider;
@@ -128,7 +141,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           !s.claudeSessionId &&
           now - lastTurn > CODEX_STARTUP_GRACE_MS
         ) {
-          await this.forceFail(s.id, s.assignedRunnerId, s.taskId, 'codex runtime not initialized');
+          await this.forceFinalize(
+            s.id,
+            s.assignedRunnerId,
+            s.taskId,
+            'codex runtime not initialized',
+          );
           continue;
         }
         // Backstop for a task run whose last turn ended in a Claude API error (e.g.
@@ -145,14 +163,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           });
           const text = (last?.payload as { text?: string } | null)?.text;
           if (isApiErrorText(text)) {
-            await this.forceFail(
-              s.id,
-              s.assignedRunnerId,
-              s.taskId,
-              'run failed (API error)',
-              TaskStatus.FAILED,
-              text,
-            );
+            await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'run failed (API error)', {
+              resetTaskTo: TaskStatus.FAILED,
+              failureDetail: text,
+            });
             continue;
           }
         }
@@ -179,28 +193,39 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Finalize a session FAILED, drain queued turns, signal + publish terminal. `resetTaskTo`
-   * is how a now-stalled IN_PROGRESS task is reclaimed: OPEN for a retryable end (dead/
-   * partitioned runner, unhonored cancel) or FAILED for a genuine run failure.
+   * Finalize a stalled live session, drain queued turns, signal + publish terminal.
+   * `status` is FAILED for a genuine breakdown — `reason` is then recorded as the session's
+   * error — or the benign terminal state a graceful end would have reached (PARKED/
+   * SUCCEEDED) when the runner merely never acknowledged that end; there `reason` is only a
+   * log/publish detail and no error is written. `resetTaskTo` is how a now-stalled
+   * IN_PROGRESS task is reclaimed: OPEN for a retryable end (dead/partitioned runner,
+   * unhonored cancel) or FAILED for a genuine run failure. A SUCCEEDED finish leaves the
+   * task alone — the agent owns DONE.
    */
-  private async forceFail(
+  private async forceFinalize(
     sessionId: string,
     runnerId: string | null,
     taskId: string | null,
     reason: string,
-    resetTaskTo: TaskStatus = TaskStatus.OPEN,
-    // Detail recorded on the task comment for a genuine failure (resetTaskTo=FAILED);
-    // defaults to `reason`. Lets the API-error backstop surface the actual error text.
-    failureDetail?: string,
+    opts: {
+      status?: RunStatus;
+      resetTaskTo?: TaskStatus;
+      // Detail recorded on the task comment for a genuine failure (resetTaskTo=FAILED);
+      // defaults to `reason`. Lets the API-error backstop surface the actual error text.
+      failureDetail?: string;
+    } = {},
   ): Promise<void> {
+    const status = opts.status ?? RunStatus.FAILED;
+    const failed = status === RunStatus.FAILED;
+    const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.session.updateMany({
         where: { id: sessionId, status: { in: LIVE } },
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).
         data: {
-          status: RunStatus.FAILED,
-          error: reason,
+          status,
+          ...(failed ? { error: reason } : {}),
           finishedAt: new Date(),
           cancelRequestedAt: new Date(),
         },
@@ -211,11 +236,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Reclaim a now-stalled IN_PROGRESS task so it stops showing as running.
-      if (taskId) await reclaimStalledTask(tx, taskId, resetTaskTo);
+      if (taskId && status !== RunStatus.SUCCEEDED) {
+        await reclaimStalledTask(tx, taskId, resetTaskTo);
+      }
       // For a genuine failure, record it on the task timeline (independent of whether
       // the task was IN_PROGRESS, so a run that never reached IN_PROGRESS is covered).
-      if (taskId && resetTaskTo === TaskStatus.FAILED) {
-        await postRunFailureComment(tx, taskId, failureDetail ?? reason);
+      if (taskId && failed && resetTaskTo === TaskStatus.FAILED) {
+        await postRunFailureComment(tx, taskId, opts.failureDetail ?? reason);
       }
       return true;
     });
@@ -225,9 +252,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       seq: Number.MAX_SAFE_INTEGER,
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
-      payload: { status: RunStatus.FAILED, final: true, reason },
+      payload: { status, final: true, reason },
     });
-    this.log.warn(`reaped dead-runner session ${sessionId} (${reason})`);
+    const msg = `reaped session ${sessionId} -> ${status} (${reason})`;
+    if (failed) this.log.warn(msg);
+    else this.log.log(msg);
   }
 
   /**

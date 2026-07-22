@@ -44,10 +44,10 @@ import {
   SessionCommitResultRequest,
   SessionCompleteRequest,
   SessionDiffResultRequest,
-  SessionEndReason,
   SessionMergeResultRequest,
   TurnAttachment,
   TurnCompleteRequest,
+  gracefulEndStatus,
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -720,7 +720,7 @@ export class RunnerApiController {
           // didn't exit), so finalizing FAILED here would leak its runner concurrency
           // slot — the process lingers, holding a slot, until the runner restarts. Set
           // cancelRequestedAt so the next heartbeat's cancel-drain tells the runner to
-          // tear that process down and reclaim the slot (mirrors reaper forceFail).
+          // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failTask
             ? { error: dto.result || 'run failed', finishedAt: new Date(), cancelRequestedAt: new Date() }
             : {}),
@@ -1053,13 +1053,8 @@ export class RunnerApiController {
     // or a user end with work still possible) settle PARKED — terminal but resumable, so
     // the list shows it as dormant rather than cancelled. A hard end
     // (archive=completed / delete=deleted) keeps CANCELLED.
-    const PARKED_END: string[] = [SessionEndReason.IDLE, SessionEndReason.ENDED];
     const effectiveStatus: RunStatus = session.cancelRequestedAt
-      ? session.endReason === SessionEndReason.TASK_DONE
-        ? RunStatus.SUCCEEDED
-        : PARKED_END.includes(session.endReason ?? '')
-          ? RunStatus.PARKED
-          : RunStatus.CANCELLED
+      ? ((gracefulEndStatus(session.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
       : (dto.status as RunStatus);
 
     // Finalize in ONE transaction. Only a LIVE session is finalized (updateMany

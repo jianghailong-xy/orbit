@@ -40,6 +40,27 @@ export enum SessionEndReason {
   CANCELLED = 'cancelled', // user stopped the run (batch-stop) — settles CANCELLED, not PARKED
 }
 
+/**
+ * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
+ * wasn't one (a hard archive/delete/batch-stop, or no reason recorded). TASK_DONE settles
+ * SUCCEEDED — the agent finished its work, and a completed run must never read as
+ * cancelled. IDLE/ENDED (idle recycle, or a user end with work still possible) settle
+ * PARKED: terminal but resumable, so the list shows them as dormant. Shared so the two
+ * places that finalize such an end — the runner's /complete and the reaper's backstop for
+ * an end the runner never acknowledged — can't drift apart.
+ */
+export function gracefulEndStatus(endReason: string | null | undefined): RunStatus | null {
+  switch (endReason) {
+    case SessionEndReason.TASK_DONE:
+      return RunStatus.SUCCEEDED;
+    case SessionEndReason.IDLE:
+    case SessionEndReason.ENDED:
+      return RunStatus.PARKED;
+    default:
+      return null;
+  }
+}
+
 /** Health of a registered runner machine. */
 export enum RunnerStatus {
   ONLINE = 'ONLINE',
