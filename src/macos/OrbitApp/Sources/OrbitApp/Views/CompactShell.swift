@@ -137,9 +137,11 @@ struct CompactShell: View {
                     }
                     .offset(x: x)
 
-                // Left-edge open strip — present only at a section's root so it yields the edge to
-                // the system back-swipe on any pushed page.
-                if !drawerOpen && isAtRoot {
+                // Left-edge open strip — present at a section's root, and on a console opened from
+                // Recents (which turns off the system back-swipe below, freeing this edge), so the
+                // drawer-open swipe is available there. A normal pushed page keeps the edge for the
+                // system back-swipe.
+                if !drawerOpen && (isAtRoot || model.consoleFromRecents) {
                     Color.clear
                         .frame(width: 18)
                         .frame(maxHeight: .infinity)
@@ -253,6 +255,10 @@ private struct CompactSections: View {
                     }
             } detail: {
                 AgentConsoleDetail()
+                    // A Recents-opened console frees the left edge for the drawer-open swipe: turn off
+                    // the system back-swipe here (the nav-bar back button still returns to the list) so
+                    // the two gestures don't fight on the same edge. Scoped to this compact shell.
+                    .background { SwipeBackGestureToggle(enabled: !model.consoleFromRecents) }
             }
 
         // RUNNERS — runner list → detail
@@ -680,6 +686,61 @@ private struct AgentComposePush: View {
         // list. Guarded so a stale disappear can't clear a newer compose.
         .onDisappear {
             if model.composedConsoleSessionID == created?.id { model.composedConsoleSessionID = nil }
+        }
+    }
+}
+
+/// Toggles the enclosing `UINavigationController`'s interactive pop (edge swipe-back) gesture while
+/// leaving the tappable back button intact — there's no SwiftUI API to disable only the swipe. Used on
+/// a Recents-opened console so the left screen edge drives `CompactShell`'s drawer-open swipe instead of
+/// the system back-swipe: backing out with the edge returns you to the drawer you came from, while the
+/// `‹` button still pops to the session list. A passive, non-interactive probe that reaches the nav
+/// controller through its own responder chain; it caches that controller so the gesture is restored even
+/// if the view is torn down while disabled.
+private struct SwipeBackGestureToggle: UIViewRepresentable {
+    var enabled: Bool
+
+    func makeUIView(context: Context) -> ProbeView { ProbeView() }
+    func updateUIView(_ uiView: ProbeView, context: Context) { uiView.setSwipeBack(enabled: enabled) }
+    static func dismantleUIView(_ uiView: ProbeView, coordinator: ()) { uiView.restore() }
+
+    final class ProbeView: UIView {
+        private var desiredEnabled = true
+        private weak var nav: UINavigationController?
+
+        init() {
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false   // never intercept touches; the edge strip owns the gesture
+        }
+        @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+        func setSwipeBack(enabled: Bool) {
+            desiredEnabled = enabled
+            apply()
+        }
+        // The probe may not be in the window (nav controller unresolvable) on the first update, so also
+        // apply once it lands — mirroring the current selection state.
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            apply()
+        }
+        func restore() { nav?.interactivePopGestureRecognizer?.isEnabled = true }
+
+        private func apply() {
+            // Only drive the gesture while attached; a detached probe leaves restoration to
+            // `restore()` (dismantle) or the next `updateUIView`, never writing a stale nav controller.
+            guard window != nil else { return }
+            if let found = nearestNav() { nav = found }
+            nav?.interactivePopGestureRecognizer?.isEnabled = desiredEnabled
+        }
+        private func nearestNav() -> UINavigationController? {
+            var responder: UIResponder? = next
+            while let r = responder {
+                if let nav = r as? UINavigationController { return nav }
+                if let vc = r as? UIViewController, let nav = vc.navigationController { return nav }
+                responder = r.next
+            }
+            return nil
         }
     }
 }

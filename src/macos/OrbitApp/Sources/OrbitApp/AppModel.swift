@@ -53,7 +53,19 @@ final class AppModel {
             if let id = selectedAgentID { UserDefaults.standard.set(id, forKey: Self.lastAgentKey) }
         }
     }
-    var selectedAgentSessionID: String?   // the agent session whose console fills the detail pane
+    var selectedAgentSessionID: String? {   // the agent session whose console fills the detail pane
+        // A console reached any way other than a Recents tap drops the Recents edge-swipe affordance, so
+        // list-opened (and deep-linked) consoles keep the system back-swipe. `openRecentSession` sets
+        // `recentsConsoleSessionID` *before* the selection so this observer preserves it there.
+        didSet {
+            if selectedAgentSessionID != recentsConsoleSessionID { recentsConsoleSessionID = nil }
+        }
+    }
+    /// iOS compact: the session id a **Recents** drawer tap pushed into a console. While it equals the
+    /// selected session (`consoleFromRecents`), the shell frees the left screen edge for the drawer-open
+    /// swipe — you came from the drawer, so the edge returns you there. Cleared by the observer above the
+    /// moment the selection moves off it (back to the list, a different session, or leaving Agents).
+    var recentsConsoleSessionID: String?
     /// True while composing a brand-new session for the selected agent (the detail pane shows the
     /// draft composer instead of a console). Cleared once a session is selected/created or the
     /// agent changes. See `NewSessionView`.
@@ -525,6 +537,10 @@ final class AppModel {
             selectedAgentID = agentID
         }
         composingAgentSession = false
+        // Set BEFORE the selection so its observer preserves the marker (the observer clears it whenever
+        // the new selection doesn't match). Flags this as a Recents-opened console so the compact shell
+        // frees the left edge for the drawer-open swipe. See `consoleFromRecents`.
+        recentsConsoleSessionID = s.id
         selectedAgentSessionID = s.id
     }
 
@@ -545,6 +561,17 @@ final class AppModel {
         case .agents: return composingAgentSession ? nil : selectedAgentSessionID
         default:      return nil
         }
+    }
+
+    /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
+    /// **Recents** drawer row (and is still the one showing). The compact shell uses this to free the
+    /// left screen edge for the drawer-open swipe on that page — you came from the drawer, so the edge
+    /// returns you there — while the nav-bar back button still pops to the agent's session list.
+    var consoleFromRecents: Bool {
+        selectedSection == .agents
+            && !composingAgentSession
+            && selectedAgentSessionID != nil
+            && selectedAgentSessionID == recentsConsoleSessionID
     }
 
     /// True when the current section's navigation stack is at its root (nothing pushed) — derived
