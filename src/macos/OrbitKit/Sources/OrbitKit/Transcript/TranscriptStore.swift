@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -30,6 +30,8 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// v2: `TranscriptState` gained the history-window cursor (`oldestSeq`/`hasMoreOlder`); a v1
     /// snapshot would rehydrate without one and leave scroll-up paging permanently dead for that
     /// session, so spend one cheap tail re-fetch instead.
+    /// v3: context usage can arrive on non-`turn_end` events; old snapshots may have cached 0/nil
+    /// after seeing the relevant seq, so force one tail re-fetch.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {

@@ -184,17 +184,22 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.background.isEmpty, "no confirmation ⇒ no tray row")
     }
 
-    /// The composer's context gauge reads the latest `turn_end`'s `contextTokens`. A later
-    /// turn_end that omits the field (a pre-feature runner) keeps the last known value rather
-    /// than blanking the gauge.
-    func testTurnEndCarriesContextTokens() {
+    /// The composer's context gauge reads the latest positive `contextTokens` from any event. New
+    /// runners normally report it on `turn_end`; a lightweight status/unknown event may also
+    /// refresh it without ending the active turn. Later events that omit it keep the last known
+    /// value rather than blanking the gauge.
+    func testEventsCarryContextTokens() {
         var r = TranscriptReducer()
-        XCTAssertNil(r.state.contextTokens, "no turn yet ⇒ gauge hidden")
+        XCTAssertNil(r.state.contextTokens, "no usage event yet ⇒ gauge hidden")
         r.apply(RunEvent(seq: 1, type: .turnEnd,
                          payload: .object(["status": .string("AWAITING_INPUT"), "contextTokens": .int(94500)])))
         XCTAssertEqual(r.state.contextTokens, 94500)
-        r.apply(RunEvent(seq: 2, type: .turnEnd, payload: .object(["status": .string("AWAITING_INPUT")])))
-        XCTAssertEqual(r.state.contextTokens, 94500, "a turn_end without the field keeps the last value")
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object(["contextTokens": .int(109879)])))
+        XCTAssertEqual(r.state.contextTokens, 109879)
+        r.apply(RunEvent(seq: 3, type: .turnEnd, payload: .object(["status": .string("AWAITING_INPUT")])))
+        XCTAssertEqual(r.state.contextTokens, 109879, "an event without the field keeps the last value")
+        r.apply(RunEvent(seq: 4, type: .system, payload: .object(["contextTokens": .int(0)])))
+        XCTAssertEqual(r.state.contextTokens, 109879, "zero does not blank the last known value")
     }
 
     /// A `Read` on an image delivers `content` as an array of base64 `image` blocks, not a string.

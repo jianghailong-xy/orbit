@@ -20,8 +20,9 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// Whether the server holds events older than `oldestSeq` (the last fetched page's `hasMore`).
     /// Gates the transcript's load-earlier row.
     public var hasMoreOlder: Bool = false
-    /// Context-window occupancy (tokens) reported on the latest `turn_end`, for the composer's
-    /// context gauge. nil until a turn completes (older runners omit it) → the gauge is hidden.
+    /// Context-window occupancy (tokens) reported by the runner, for the composer's context gauge.
+    /// nil until the first usage-bearing event arrives (older runners omit it) → the gauge is
+    /// hidden.
     public var contextTokens: Int?
     public init() {}
 
@@ -90,6 +91,10 @@ public struct TranscriptReducer: Sendable, Codable {
             // Low-water mark: the `before=` cursor for scroll-up history paging.
             if state.oldestSeq.map({ ev.seq < $0 }) ?? true { state.oldestSeq = ev.seq }
         }
+        // The runner reports context-window occupancy on `turn_end`; a lightweight event can also
+        // refresh the gauge without ending the active turn. Guard on > 0 so an event without usage
+        // doesn't blank a known value.
+        if let ct = ev.payload["contextTokens"]?.intValue, ct > 0 { state.contextTokens = ct }
 
         switch ev.type {
         case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "")
@@ -316,9 +321,6 @@ public struct TranscriptReducer: Sendable, Codable {
         } else {
             state.status = .awaitingInput
         }
-        // The runner reports this turn's context-window occupancy; keep the latest for the
-        // composer gauge. Guard on > 0 so a turn without usage doesn't blank a known value.
-        if let ct = ev.payload["contextTokens"]?.intValue, ct > 0 { state.contextTokens = ct }
     }
 
     private mutating func appendUser(_ ev: RunEvent) {

@@ -146,9 +146,8 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertNil(store.load(sessionID: "never-saved"))
     }
 
-    /// The version gate: a snapshot from a previous schema (here v1, which predates the
-    /// history-window cursor) decodes to nil — the session re-fetches its tail page — rather than
-    /// rehydrating a window whose scroll-up paging would be permanently dead.
+    /// The version gate: a snapshot from a previous schema decodes to nil — the session re-fetches
+    /// its tail page — rather than rehydrating state with stale derived fields.
     func testFileStoreDiscardsPreviousSchemaVersion() throws {
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let store = FileTranscriptStore(directory: dir)
@@ -159,8 +158,8 @@ final class TranscriptStoreTests: XCTestCase {
         // Rewind the stored envelope to the previous schema version.
         let url = dir.appendingPathComponent("sess-A.json")
         let text = try String(contentsOf: url, encoding: .utf8)
-        let downgraded = text.replacingOccurrences(of: #""version":2"#, with: #""version":1"#)
-        XCTAssertNotEqual(downgraded, text, "expected a v2 envelope to rewrite")
+        let downgraded = text.replacingOccurrences(of: #""version":3"#, with: #""version":2"#)
+        XCTAssertNotEqual(downgraded, text, "expected a v3 envelope to rewrite")
         try downgraded.write(to: url, atomically: true, encoding: .utf8)
 
         XCTAssertNil(store.load(sessionID: "sess-A"))

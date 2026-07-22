@@ -250,15 +250,15 @@ const fmtTokens = (n: number): string =>
       ? `${Math.round(n / 1000)}k`
       : `${n}`;
 
-// The latest turn's context-window occupancy (tokens), read from the newest `turn_end` in
-// the loaded events. 0 = the newest turn carries no usable value (older runner, or no turn
-// completed) → the gauge reads 0% (as on a new session). Derived from `events` — which holds the boot tail page
-// (so it's right on cold open) plus live appends — rather than a separate live signal.
+// The latest usable context-window occupancy (tokens). New runners report it on
+// `turn_end`; a lightweight status event can also refresh the gauge without ending the
+// active turn. Older runners omit the field; keep scanning so a later missing value
+// does not blank a known reading. Derived from `events` — which holds the boot tail
+// page (so it's right on cold open) plus live appends — rather than a separate live signal.
 function lastContextTokens(events: RunEvent[]): number {
   for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type !== 'turn_end') continue;
     const ct = (events[i].payload as { contextTokens?: unknown } | undefined)?.contextTokens;
-    return typeof ct === 'number' && ct > 0 ? ct : 0;
+    if (typeof ct === 'number' && ct > 0) return ct;
   }
   return 0;
 }
