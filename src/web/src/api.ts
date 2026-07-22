@@ -98,10 +98,10 @@ export const createInteractiveSession = (body: {
     method: 'POST',
     body: {
       ...body,
-      // Mark a shell-launched session in the list with a `$` prefix so it reads as a command.
-      title: body.shell
-        ? `$ ${body.prompt.trim()}`.slice(0, 80)
-        : body.prompt.trim().slice(0, 80) || 'Interactive session',
+      // Shell-launched sessions get a `$ …` title so they read as a command in the list. A
+      // normal session sends NO title, so the server names it (DeepSeek summary + raw-prompt
+      // fallback); sending the prompt as an explicit title here would suppress that naming.
+      title: body.shell ? `$ ${body.prompt.trim()}`.slice(0, 80) : undefined,
     },
   });
 
