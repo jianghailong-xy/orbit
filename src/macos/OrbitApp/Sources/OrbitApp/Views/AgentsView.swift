@@ -523,19 +523,10 @@ struct AgentSessionRow: View {
         .accessibilityValue(SessionHeader.statusWord(for: session))
     }
 
-    /// The slim trailing status cue — the essence of the dropped leading glyph, derived from the same
-    /// `SessionStatusGlyph` source so nothing important goes silent: a spinner while working, an amber
-    /// dot when it needs you (approval), a red dot on failure. The calm states (dormant / done /
-    /// queued) show no cue — that's the decluttering — but still read their status in the preview line
-    /// and the VoiceOver value on the row.
-    @ViewBuilder private var liveIndicator: some View {
-        let glyph = SessionStatusGlyph.make(for: session, completed: completed)
-        switch (glyph.shape, glyph.tone) {
-        case (.spinner, _): SpinnerGlyph(color: .blue)
-        case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
-        case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
-        default:            EmptyView()
-        }
+    /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
+    /// while working / amber dot when it needs you / red dot on failure; calm states stay quiet).
+    private var liveIndicator: some View {
+        SessionLiveIndicator(session: session, completed: completed)
     }
 
     /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8") — the parity with web's
@@ -584,6 +575,27 @@ struct StatusGlyphView: View {
         case .warning: return .orange
         case .error:   return .red
         case .neutral: return .secondary
+        }
+    }
+}
+
+/// The slim status cue used by the compact (iPhone) lists — the essence of the leading
+/// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
+/// when it needs you (approval), a red dot on failure. The calm states (dormant / done / queued)
+/// show nothing — the surrounding row states them in words + colour and in its VoiceOver value — so
+/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
+/// both show the exact same cue.
+struct SessionLiveIndicator: View {
+    let session: Session
+    /// Mirrors the row's tab context (the Completed tab) so a filed session reads as done, not working.
+    var completed: Bool = false
+    @ViewBuilder var body: some View {
+        let glyph = SessionStatusGlyph.make(for: session, completed: completed)
+        switch (glyph.shape, glyph.tone) {
+        case (.spinner, _): SpinnerGlyph(color: .blue)
+        case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
+        case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
+        default:            EmptyView()
         }
     }
 }

@@ -467,9 +467,10 @@ private struct NavigationDrawer: View {
         }
     }
 
-    /// One Recents row: just the session title on a single lightweight line — tapping opens it in its
-    /// agent. The status dot + "agent · status/time" subtitle were dropped: the two-line row read too
-    /// heavy for a jump-back list.
+    /// One Recents row: the session title on a single lightweight line with a slim trailing live cue —
+    /// the same `SessionLiveIndicator` the compact session list uses (spinner while working / amber dot
+    /// when it needs you / red dot on failure). Calm states (dormant / done / queued) stay quiet so the
+    /// jump-back list stays light. Tapping opens the session in its agent.
     private func recentRow(_ s: Session) -> some View {
         let selected = model.selectedSection == .agents && model.selectedAgentSessionID == s.id
         return Button {
@@ -477,9 +478,13 @@ private struct NavigationDrawer: View {
             close()
         } label: {
             pill(selected: selected) {
-                Text(s.title ?? "Untitled session")
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
+                HStack(spacing: 8) {
+                    Text(s.title ?? "Untitled session")
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    SessionLiveIndicator(session: s)
+                }
             }
         }
         .buttonStyle(.plain)
