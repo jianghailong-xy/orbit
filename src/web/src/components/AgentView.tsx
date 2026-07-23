@@ -2366,6 +2366,44 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // ── `@` agent-mention autocomplete ─────────────────────────────────────────
+  // Type `@` to reference another agent on this runner; picking one inserts
+  // `@<name> ` as plain text. The in-session orchestrator reads the mention from
+  // the turn (sent verbatim) and can hand work off to that agent via its session
+  // tools — so this is purely a composer convenience with no separate send path.
+  // Mirrors the `/` menu above and the task-comment mention menu (TaskDetailPanel).
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
+  const mentionToken = /(?:^|\s)@([^\s@]*)$/.exec(text)?.[1] ?? null;
+  const mentionMatches = useMemo(() => {
+    if (mentionToken === null) return [];
+    const q = mentionToken.toLowerCase();
+    return agentsForRunner
+      .filter((a) => a.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
+        const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
+        return pa - pb || a.name.localeCompare(b.name);
+      })
+      .slice(0, 8);
+  }, [agentsForRunner, mentionToken]);
+  useEffect(() => {
+    setMentionIndex(0);
+  }, [mentionToken]);
+  const showMention =
+    mentionToken !== null &&
+    mentionToken !== mentionDismissed &&
+    !selectedDeleted &&
+    !selectedMissing &&
+    mentionMatches.length > 0;
+  const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
+  const pickMention = (name: string): void => {
+    // Replace only the trailing `@token` ($1 preserves the start-or-whitespace before it),
+    // so picking an agent mid-message doesn't clobber text typed earlier.
+    setText(text.replace(/(^|\s)@([^\s@]*)$/, `$1@${name} `));
+    setMentionDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
   // with a space when mid-message) so slashToken matches and the menu pops.
   const insertSlash = (scope: 'command' | 'skill'): void => {
@@ -3139,6 +3177,27 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
+          {showMention && (
+            <div className="composer-slash-menu" role="listbox">
+              {mentionMatches.map((a, i) => (
+                <div
+                  key={a.id}
+                  role="option"
+                  aria-selected={i === mentionIdx}
+                  className={`composer-slash-item${i === mentionIdx ? ' is-active' : ''}`}
+                  // mousedown (not click) + preventDefault keeps focus in the textarea.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickMention(a.name);
+                  }}
+                  onMouseEnter={() => setMentionIndex(i)}
+                >
+                  <span className="composer-slash-name">@{a.name}</span>
+                  <span className="composer-slash-type">agent</span>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Hidden picker the `添加图片` menu item triggers; we upload via addImage
               ourselves and reset value so re-picking the same file fires onChange again. */}
           <input
@@ -3257,6 +3316,28 @@ export function AgentView({ runner }: { runner: Runner }) {
             // One keydown handler: drive the menu while open, else Up/Down recall
             // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
             onKeyDown={(e) => {
+              if (showMention && !e.nativeEvent.isComposing) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setMentionIndex((i) => (i + 1) % mentionMatches.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  pickMention(mentionMatches[mentionIdx].name);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setMentionDismissed(mentionToken);
+                  return;
+                }
+              }
               if (showSlash && !e.nativeEvent.isComposing) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
