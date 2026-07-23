@@ -296,17 +296,30 @@ final class ConsoleModel {
         // never in practice — fetch just the newest page over HTTP, fold it in, then stream live
         // from its max seq. Cold open only: a restored reducer already carries its transcript and
         // maxSeq, so it skips straight to the SSE resume below (which streams seq > maxSeq).
-        if reducer.state.maxSeq == 0, !sessionID.isEmpty {
-            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
-                reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
-                publishStateNow()
+        let coldOpen = reducer.state.maxSeq == 0
+        if coldOpen, !sessionID.isEmpty {
+            // Retry the tail seed a few times before giving up. A transient failure here (common on
+            // mobile) used to fall straight through to the SSE loop below with `sinceSeq: 0`, replaying
+            // the WHOLE transcript byte-by-byte — the exact "very slow to sync a long session" path.
+            // The `where` clause stops the loop the instant a page seeds (applyTailPage advances
+            // maxSeq); if all attempts fail the server still caps a cursor-less replay (SSE_REPLAY_CAP),
+            // so it degrades gracefully rather than dumping the full history.
+            for attempt in 0..<3 where reducer.state.maxSeq == 0 {
+                if Task.isCancelled { return }
+                if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
+                    reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
+                    publishStateNow()
+                } else if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
+                }
             }
         }
         // Seed the "Background processes" tray with the server's authoritative, complete list — every
         // Bash(run_in_background) the session launched, not just the few whose launch sits in the loaded
         // tail window, and the output of agent shells whose live tail was never persisted. Kicked so it
-        // doesn't delay the first paint; re-kicked on each reconnect below to pick up new/finished shells.
-        if !sessionID.isEmpty { Task { [weak self] in await self?.refreshBackground() } }
+        // doesn't delay the first paint. `force` on a cold open (the tray has no cached seed yet); a warm
+        // reopen keeps its cached tray and lets the reconnect throttle in `refreshBackground` decide.
+        if !sessionID.isEmpty { Task { [weak self] in await self?.refreshBackground(force: coldOpen) } }
 
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
@@ -921,13 +934,26 @@ final class ConsoleModel {
         publishStateNow()
     }
 
+    /// Wall-clock time of the last successful `/background` fetch, for the reconnect throttle below.
+    private var lastBackgroundFetch: Date?
+
     /// Fetch the session's authoritative background-shell list (GET /sessions/:id/background) and seed
     /// it into the reducer. This surfaces every shell the session launched — including older ones whose
     /// launch has scrolled out of (or never entered) the loaded event window — and recovers the output
     /// of agent shells whose live `background_output` tail is broadcast-only and so never persisted.
     /// `seedBackground` merges live-preservingly, so this is safe to call on open and on every reconnect.
-    private func refreshBackground() async {
+    ///
+    /// `/background` scans the session's whole tool-event history (no seq bound), so on a long
+    /// web-accumulated session it's the priciest per-open query — and `run()` re-kicks it on EVERY
+    /// reconnect, including the frequent clean-end-of-turn ones. So throttle to at most once per 30s: a
+    /// real suspension gap (the only reconnect that can change the shell set unobserved) is virtually
+    /// always longer than that, while an end-of-turn reconnect is seconds. `force` bypasses the throttle
+    /// for a cold-open seed (nothing cached yet). Failures don't stamp the clock, so they re-fetch freely.
+    private func refreshBackground(force: Bool = false) async {
+        let now = Date()
+        if !force, let last = lastBackgroundFetch, now.timeIntervalSince(last) < 30 { return }
         guard let dtos = try? await api.backgroundShells(sessionID: sessionID) else { return }
+        lastBackgroundFetch = now
         reducer.seedBackground(dtos.map { $0.asBackgroundProc() })
         publishStateNow()
     }

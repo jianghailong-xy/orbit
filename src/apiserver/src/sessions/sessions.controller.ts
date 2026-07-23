@@ -41,6 +41,15 @@ import { SessionsService } from './sessions.service';
  *  ERR_HTTP2_PROTOCOL_ERROR and reconnect-storms. Clients discard the frame by its `ping` type. */
 const KEEPALIVE_MS = 20_000;
 
+/** Cap the SSE history replay when a client connects WITHOUT a `sinceSeq` cursor. Without this,
+ *  a cursor-less connect replays the entire transcript over SSE — hundreds of KB the client parses
+ *  byte-by-byte, so on a long web-accumulated session the newest reply takes many seconds to
+ *  surface (or never). Clients open cold via `GET /events/page?tail=N` and then resume the SSE with
+ *  `sinceSeq=<max>`, so this bound only affects the fallback/cursor-less path; older history is
+ *  paged in over `/events/page`. Matches the client tail-page size (web `TAIL_PAGE`, iOS `tailPage`).
+ *  A cursor'd connect is never capped — it must send the full gap or the transcript would hole. */
+const SSE_REPLAY_CAP = 200;
+
 @UseGuards(JwtAuthGuard)
 @Controller('sessions')
 export class SessionsController {
@@ -315,12 +324,17 @@ export class SessionsController {
     ).pipe(
       switchMap((session) => {
         if (!session) return throwError(() => new ForbiddenException('session not found'));
+        // With a cursor: replay the full gap after it (seq asc) — never capped, or the transcript
+        // would hole. Without one: replay only the newest SSE_REPLAY_CAP, fetched seq desc so the
+        // LIMIT keeps the newest rows, then reversed back to seq asc below — see SSE_REPLAY_CAP.
+        const capped = !seqFilter;
         const history$ = from(
           this.prisma.runEvent.findMany({
             where: { sessionId: id, ...(seqFilter ? { seq: seqFilter } : {}) },
-            orderBy: { seq: 'asc' },
+            orderBy: { seq: capped ? 'desc' : 'asc' },
+            ...(capped ? { take: SSE_REPLAY_CAP } : {}),
           }),
-        ).pipe(concatMap((rows) => from(rows)));
+        ).pipe(concatMap((rows) => from(capped ? [...rows].reverse() : rows)));
         const live$ = this.realtime.streamForRun(id);
         return concat(history$, live$);
       }),

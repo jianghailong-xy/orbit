@@ -358,6 +358,10 @@ const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
 // Distance from the top (px) at which scrolling up pulls in the next older page.
 const LOAD_OLDER_AT = 400;
+// How long a cached /background scan stays fresh. `/background` scans the session's whole
+// tool-event history, so re-opening a session (or scrubbing the list) within this window paints
+// the cached shells instead of re-running that scan — see bgCacheRef.
+const BG_TTL_MS = 30_000;
 
 interface TranscriptCacheEntry {
   events: RunEvent[];
@@ -803,6 +807,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // agent's Read polls). The loaded event window only holds recent launches, so the tray merges
   // this complete set with its live-derived overlay — see BackgroundShellsTray.
   const [serverBgShells, setServerBgShells] = useState<BgShell[]>([]);
+  // Per-session cache of the server /background scan. The tray is cleared to [] on every switch, so
+  // the throttle in the SSE effect repopulates from here (not just skips) when it's still fresh.
+  const bgCacheRef = useRef<Map<string, { at: number; shells: BgShell[] }>>(new Map());
   const [images, setImages] = useState<ComposerImage[]>([]); // images staged in the composer
   // Images already sent, keyed by their turnId. The runner echoes only the turn's text,
   // so these local previews are joined back into the user bubble (and the queued bubble)
@@ -1532,28 +1539,46 @@ export function AgentView({ runner }: { runner: Runner }) {
         .catch(() => undefined);
       // The complete background-shell list (all launches, output recovered from Read polls) —
       // the loaded event window only holds the most recent launches, so without this the tray
-      // under-counts a long session. Merged with the live-derived overlay in the tray.
-      getBackgroundShells(selectedId)
-        .then(setServerBgShells)
-        .catch(() => undefined);
+      // under-counts a long session. Merged with the live-derived overlay in the tray. Throttled
+      // per session (BG_TTL_MS): this is a whole-history scan, so a re-open within the window paints
+      // the cached shells instead of re-running it. A failed fetch isn't cached, so it retries next open.
+      const bgCached = bgCacheRef.current.get(selectedId);
+      if (bgCached && Date.now() - bgCached.at < BG_TTL_MS) {
+        setServerBgShells(bgCached.shells);
+      } else {
+        getBackgroundShells(selectedId)
+          .then((shells) => {
+            bgCacheRef.current.set(selectedId, { at: Date.now(), shells });
+            setServerBgShells(shells);
+          })
+          .catch(() => undefined);
+      }
       // Tail-first: on a cache miss, fetch just the newest page so the transcript opens
       // straight at the latest message, then open the SSE from that page's max seq so it
       // streams only new events (no full-history replay). With a cached transcript already on
       // screen, skip straight to the SSE, which replays only the gap after the cached seq.
       const boot = async (): Promise<void> => {
         if (cached.length === 0) {
-          try {
-            const page = await getSessionEventPage(selectedId, { tail: TAIL_PAGE });
-            if (closed) return;
-            accRef.current = page.events;
-            for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-            oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-            hasMoreOlderRef.current = page.hasMore;
-            lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-            setEvents(accRef.current);
-            writeCache();
-          } catch {
-            // Fall through to the SSE, which will replay from seq 0 as before.
+          // Retry the tail seed a few times before giving up. A transient failure here used to fall
+          // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
+          // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const page = await getSessionEventPage(selectedId, { tail: TAIL_PAGE });
+              if (closed) return;
+              accRef.current = page.events;
+              for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+              oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+              hasMoreOlderRef.current = page.hasMore;
+              lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+              setEvents(accRef.current);
+              writeCache();
+              break;
+            } catch {
+              if (closed) return;
+              // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
+              if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+            }
           }
           if (closed) return;
         }
