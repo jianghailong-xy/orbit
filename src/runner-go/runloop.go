@@ -383,20 +383,21 @@ func runLoop(cfg *RunnerConfig) {
 				agent.Provider = r.Provider
 			}
 			startSession(&ClaimedSession{
-				SessionID:        r.SessionID,
-				Title:            r.Title,
-				Provider:         r.Provider,
-				Agent:            agent,
-				WorkDir:          r.WorkDir,
-				Branch:           r.Branch,
-				AutoInitGit:      r.AutoInitGit,
-				MergeTarget:      r.MergeTarget,
-				AgentID:          r.AgentID,
-				TaskID:           r.TaskID,
-				Reclaimed:        true,
-				SessionUUID:      r.SessionUUID,
-				RuntimeSessionID: r.RuntimeSessionID,
-				MaxSeq:           r.MaxSeq,
+				SessionID:          r.SessionID,
+				Title:              r.Title,
+				Provider:           r.Provider,
+				Agent:              agent,
+				WorkDir:            r.WorkDir,
+				Branch:             r.Branch,
+				AutoInitGit:        r.AutoInitGit,
+				MergeTarget:        r.MergeTarget,
+				AgentID:            r.AgentID,
+				TaskID:             r.TaskID,
+				AllowOrchestration: r.AllowOrchestration,
+				Reclaimed:          true,
+				SessionUUID:        r.SessionUUID,
+				RuntimeSessionID:   r.RuntimeSessionID,
+				MaxSeq:             r.MaxSeq,
 			})
 		}
 		reclaimed = true

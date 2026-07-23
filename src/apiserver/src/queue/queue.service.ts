@@ -182,6 +182,9 @@ export class QueueService {
       // Injected into the runtime process so the `orbit mcp` server knows its context.
       agentId: session.agentId ?? undefined,
       taskId: session.taskId ?? undefined,
+      // Mirror the agent's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
+      // and `orbit mcp` exposes the session_* tools only for enabled agents.
+      allowOrchestration: agent?.enableOrchestration ?? false,
       agent: {
         provider,
         // Resolved above: a per-session/agent override (coerced for built-ins so the runner

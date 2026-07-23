@@ -484,6 +484,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID,
 		"ORBIT_TASK_ID="+job.TaskID,
+		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
 	stdin, err := cmd.StdinPipe()

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -31,6 +32,7 @@ func cmdMcp() {
 		agentID:               os.Getenv("ORBIT_AGENT_ID"),
 		taskID:                os.Getenv("ORBIT_TASK_ID"),
 		allowPermissionPrompt: mcpPermissionPromptEnabled(),
+		allowOrchestration:    mcpOrchestrationEnabled(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -41,6 +43,7 @@ type mcpServer struct {
 	agentID               string // attributes created tasks/comments; "" => server falls back to USER
 	taskID                string // the "current task" default for get/update/comment
 	allowPermissionPrompt bool   // Claude-only live approval bridge
+	allowOrchestration    bool   // L3: expose session_* tools (Agent.enableOrchestration)
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -52,6 +55,27 @@ func mcpPermissionPromptEnabled() bool {
 	default:
 		return true
 	}
+}
+
+const envMCPOrchestration = "ORBIT_ALLOW_ORCHESTRATION"
+
+// mcpOrchestrationEnabled gates the session_* tools. Unlike the permission prompt it defaults
+// OFF: only an agent whose enableOrchestration is set (surfaced via this env) may orchestrate.
+func mcpOrchestrationEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(envMCPOrchestration))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// orchestrationEnv renders the ORBIT_ALLOW_ORCHESTRATION value the runner injects at spawn.
+func orchestrationEnv(allow bool) string {
+	if allow {
+		return "1"
+	}
+	return "0"
 }
 
 // ── JSON-RPC 2.0 wire types ────────────────────────────────────────────────
@@ -118,7 +142,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt)}), true
+		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt, s.allowOrchestration)}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -147,6 +171,8 @@ func (s *mcpServer) err(id json.RawMessage, code int, msg string) rpcResponse {
 // ── Tools ───────────────────────────────────────────────────────────────────
 
 const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID unset)"
+
+const orchestrationOffMsg = "session orchestration is not enabled for this agent"
 
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
@@ -234,6 +260,81 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.createTaskList(title)
 		if err != nil {
 			return toolResult("create task-list failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_create":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		prompt := getString(args, "prompt")
+		if prompt == "" {
+			return toolResult("prompt is required", true)
+		}
+		body := map[string]interface{}{"prompt": prompt}
+		copyIfPresent(body, args, "title", "model")
+		// Default the runner agent to the current one unless the caller names another.
+		if id := getString(args, "agentId"); id != "" {
+			body["agentId"] = id
+		} else if s.agentID != "" {
+			body["agentId"] = s.agentID
+		}
+		raw, err := s.t.createSession(s.sessionID, body)
+		if err != nil {
+			return toolResult("create session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_list":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		raw, err := s.t.listSessions(sessionListQuery(args))
+		if err != nil {
+			return toolResult("list sessions failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_get":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.getSession(id)
+		if err != nil {
+			return toolResult("get session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_send":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		msg := getString(args, "message")
+		if id == "" || msg == "" {
+			return toolResult("sessionId and message are required", true)
+		}
+		raw, err := s.t.sendSessionMessage(id, map[string]interface{}{"message": msg})
+		if err != nil {
+			return toolResult("send message failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_interrupt":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.interruptSession(id)
+		if err != nil {
+			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -380,7 +481,7 @@ func (s *mcpServer) resolveTaskID(args map[string]interface{}) (string, bool) {
 
 // toolDescriptors is the tools/list payload. Claude namespaces these as
 // mcp__orbit__<name> for the allowlist; the agent allowlist defaults to mcp__orbit__*.
-func toolDescriptors(includePermissionPrompt bool) []map[string]interface{} {
+func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[string]interface{} {
 	str := map[string]interface{}{"type": "string"}
 	taskIDProp := map[string]interface{}{"type": "string", "description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted"}
 	promptDesc := map[string]interface{}{"type": "string", "description": "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."}
@@ -443,6 +544,42 @@ func toolDescriptors(includePermissionPrompt bool) []map[string]interface{} {
 			"inputSchema": obj(map[string]interface{}{"title": str}, "title"),
 		},
 	}
+	if includeOrchestration {
+		sessionIDProp := map[string]interface{}{"type": "string", "description": "Target session id."}
+		sessionStatus := map[string]interface{}{"type": "string", "enum": []string{"PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED", "PARKED"}}
+		tools = append(tools,
+			map[string]interface{}{
+				"name":        "session_create",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. agentId defaults to the current agent. Requires orchestration to be enabled for this agent.",
+				"inputSchema": obj(map[string]interface{}{
+					"prompt":  promptDesc,
+					"agentId": map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it; defaults to the current agent."},
+					"title":   str,
+					"model":   str,
+				}, "prompt"),
+			},
+			map[string]interface{}{
+				"name":        "session_list",
+				"description": "List this owner's sessions (optionally filter by status or parentSessionId). Use to see what other sessions are doing and to collect the children you spawned (pass your own session id as parentSessionId).",
+				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
+			},
+			map[string]interface{}{
+				"name":        "session_get",
+				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result).",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "session_send",
+				"description": "Send a follow-up message to a running or queued session (e.g. steer a sub-agent that's going off track).",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp, "message": str}, "sessionId", "message"),
+			},
+			map[string]interface{}{
+				"name":        "session_interrupt",
+				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward).",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+		)
+	}
 	if includePermissionPrompt {
 		tools = append(tools, map[string]interface{}{
 			// Claude Code's --permission-prompt-tool target. Claude calls it (not the
@@ -466,6 +603,21 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 		"content": []map[string]interface{}{{"type": "text", "text": text}},
 		"isError": isErr,
 	}
+}
+
+// sessionListQuery builds the optional ?status=&parentSessionId= filter for session_list.
+func sessionListQuery(args map[string]interface{}) string {
+	q := url.Values{}
+	if v := getString(args, "status"); v != "" {
+		q.Set("status", v)
+	}
+	if v := getString(args, "parentSessionId"); v != "" {
+		q.Set("parentSessionId", v)
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
 }
 
 func getString(args map[string]interface{}, key string) string {

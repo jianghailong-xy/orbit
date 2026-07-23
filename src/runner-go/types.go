@@ -240,6 +240,9 @@ type ClaimedSession struct {
 	// so the `orbit mcp` server can attribute task work and resolve the current task.
 	AgentID string `json:"agentId,omitempty"`
 	TaskID  string `json:"taskId,omitempty"`
+	// AllowOrchestration mirrors the agent's enableOrchestration; injected as
+	// ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes the session_* tools.
+	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
 	// Reclaimed marks a session re-attached after a runner restart: the claude
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
@@ -300,6 +303,8 @@ type ReclaimSession struct {
 	// Injected into the claude process, cf. ClaimedSession.AgentID/TaskID.
 	AgentID string `json:"agentId,omitempty"`
 	TaskID  string `json:"taskId,omitempty"`
+	// AllowOrchestration, cf. ClaimedSession.AllowOrchestration.
+	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.

@@ -402,3 +402,41 @@ func (t *Transport) createTaskList(title string) (json.RawMessage, error) {
 	err := t.do(nil, "POST", "/runner/task-lists", map[string]string{"title": title}, &out, taskOpTimeout)
 	return out, err
 }
+
+// ── Session orchestration ops for the `orbit mcp` server (L3) ──────────────
+// Owner-scoped, runner-token-authenticated. createSession passes the current session as
+// X-Orbit-Session-Id so the server attributes the child and enforces the orchestration guards.
+
+func (t *Transport) createSession(parentSessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	var h map[string]string
+	if parentSessionID != "" {
+		h = map[string]string{"X-Orbit-Session-Id": parentSessionID}
+	}
+	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, h)
+	return out, err
+}
+
+func (t *Transport) listSessions(query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) getSession(id string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/sessions/"+id, nil, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) sendSessionMessage(id string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+id+"/turns", body, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) interruptSession(id string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+id+"/interrupt", nil, &out, taskOpTimeout)
+	return out, err
+}

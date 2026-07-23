@@ -401,6 +401,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"
+		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 	)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()

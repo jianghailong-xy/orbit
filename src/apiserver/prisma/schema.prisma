@@ -249,6 +249,10 @@ model Agent {
   // concurrent sessions then share one working tree); the merge/commit/diff machinery is skipped
   // since there's no isolated branch.
   enableWorktree     Boolean  @default(false) @map("enable_worktree")
+  // Opt-in per agent (default off): may this agent's in-session coding agent spawn and manage
+  // OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those tools
+  // aren't exposed and the runner-token spawn endpoint refuses.
+  enableOrchestration Boolean @default(false) @map("enable_orchestration")
   // The branch this agent's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Agent-scoped so a chosen target sticks across all the agent's sessions.
@@ -291,6 +295,12 @@ model Session {
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId            String?   @map("task_id") @db.Uuid
   task              Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
+  // Set when another session's agent spawned this one via the orbit mcp session_create tool
+  // (L3 orchestration). Detaches (SetNull) if the parent is purged; drives the orchestration
+  // tree, the spawn-depth / child-count guards, and attribution.
+  parentSessionId   String?   @map("parent_session_id") @db.Uuid
+  parent            Session?  @relation("SessionSpawn", fields: [parentSessionId], references: [id], onDelete: SetNull)
+  children          Session[] @relation("SessionSpawn")
   // Batch-run grouping: when a session is dispatched as part of a "批量运行" batch,
   // these tag it with that batch's id and the batch's own concurrency cap. The claim
   // queue gates live sessions per batch on batchMaxConcurrent — independent of, and on
@@ -445,6 +455,7 @@ model Session {
 
   @@index([assignedRunnerId, status])
   @@index([batchId, status])
+  @@index([parentSessionId])
   @@index([ownerId])
   @@index([status])
   @@map("session")

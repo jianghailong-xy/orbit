@@ -340,6 +340,9 @@ export interface ClaimedSession {
   agentId?: string;
   /** DB id of the parent Task this session runs under, if any (ORBIT_TASK_ID). */
   taskId?: string;
+  /** Whether this session's agent may orchestrate other sessions (Agent.enableOrchestration).
+   *  Injected as ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes session_* tools. */
+  allowOrchestration?: boolean;
 }
 
 export interface RunEventBatch {
@@ -485,6 +488,8 @@ export interface ReclaimSession {
   agentId?: string;
   /** DB id of the parent Task this session runs under, if any (ORBIT_TASK_ID). */
   taskId?: string;
+  /** Orchestration opt-in, cf. ClaimedSession.allowOrchestration. */
+  allowOrchestration?: boolean;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */

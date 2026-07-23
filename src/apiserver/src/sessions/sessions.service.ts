@@ -121,7 +121,7 @@ export class SessionsService {
   async create(
     ownerId: string,
     dto: CreateSessionDto,
-    opts?: { source?: string; batch?: { id: string; maxConcurrent: number } },
+    opts?: { source?: string; batch?: { id: string; maxConcurrent: number }; parentSessionId?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
@@ -208,6 +208,7 @@ export class SessionsService {
         source: opts?.source ?? 'user',
         batchId: opts?.batch?.id ?? null,
         batchMaxConcurrent: opts?.batch?.maxConcurrent ?? null,
+        parentSessionId: opts?.parentSessionId ?? null,
         creatorId: ownerId,
         ownerId,
       },
@@ -262,6 +263,100 @@ export class SessionsService {
     } catch {
       // best-effort; the raw fallback title simply stays
     }
+  }
+
+  // ── L3 orchestration: an in-session agent spawning/managing OTHER sessions ──
+  // The runner-token session_* tools are the only callers. Depth caps recursion; the
+  // child-count + shared-batch caps bound fan-out so a rogue orchestrator can't storm the queue.
+  private static readonly MAX_SPAWN_DEPTH = 2; // root may spawn; its children may not
+  private static readonly MAX_CHILDREN_PER_SESSION = 10;
+  private static readonly CHILD_CONCURRENCY = 3;
+
+  /**
+   * Spawn a child session from a parent session's agent (orbit mcp `session_create`). The
+   * parent's agent must have orchestration enabled; the child is attributed to the parent
+   * (parentSessionId) and joins the parent's batch so fan-out stays concurrency-capped.
+   * Enforces the depth and child-count guards. Returns a compact handle to poll via get().
+   */
+  async spawnFromSession(
+    ownerId: string,
+    parentSessionId: string,
+    dto: { prompt: string; agentId?: string; title?: string; model?: string },
+  ): Promise<{ id: string; status: RunStatus; title: string }> {
+    if (!dto.prompt) throw new BadRequestException('prompt is required');
+    const parent = await this.prisma.session.findFirst({
+      where: { id: parentSessionId, ownerId },
+      select: { id: true, batchId: true, agent: { select: { enableOrchestration: true } } },
+    });
+    if (!parent) throw new NotFoundException('parent session not found');
+    if (!parent.agent?.enableOrchestration) {
+      throw new ForbiddenException('orchestration is not enabled for this agent');
+    }
+    if ((await this.spawnDepth(parentSessionId)) >= SessionsService.MAX_SPAWN_DEPTH) {
+      throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
+    }
+    const siblings = await this.prisma.session.count({ where: { ownerId, parentSessionId } });
+    if (siblings >= SessionsService.MAX_CHILDREN_PER_SESSION) {
+      throw new ForbiddenException(`child-session limit (${SessionsService.MAX_CHILDREN_PER_SESSION}) reached`);
+    }
+    // Children share a batch (rooted at the parent's own id) so the claim queue caps how many
+    // run concurrently, on top of the runner's own max_concurrent.
+    const batchId = parent.batchId ?? parentSessionId;
+    const created = await this.create(
+      ownerId,
+      { prompt: dto.prompt, title: dto.title, agentId: dto.agentId ?? undefined, model: dto.model },
+      {
+        source: 'system',
+        parentSessionId,
+        batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
+      },
+    );
+    return { id: created.id, status: created.status, title: created.title };
+  }
+
+  /** Length of the parent chain ending at `sessionId` — the depth a new child of it would sit
+   *  at. Bounded walk (stops at the cap) so a cyclic/corrupt chain can never loop forever. */
+  private async spawnDepth(sessionId: string): Promise<number> {
+    let depth = 0;
+    let cur: string | null = sessionId;
+    while (cur && depth <= SessionsService.MAX_SPAWN_DEPTH) {
+      const row: { parentSessionId: string | null } | null = await this.prisma.session.findUnique({
+        where: { id: cur },
+        select: { parentSessionId: true },
+      });
+      if (!row) break;
+      depth++;
+      cur = row.parentSessionId;
+    }
+    return depth;
+  }
+
+  /** Owner-scoped session list for orchestration (orbit mcp `session_list`): compact rows with
+   *  optional status / parent filter. Distinct from the UI `list` below (view tabs, previews). */
+  async listForOrchestration(
+    ownerId: string,
+    filters: { status?: RunStatus; parentSessionId?: string },
+  ) {
+    return this.prisma.session.findMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+        ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        agentId: true,
+        parentSessionId: true,
+        lastAssistantText: true,
+        lastTurnAt: true,
+        createdAt: true,
+      },
+      orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
+      take: 100,
+    });
   }
 
   async list(

@@ -425,6 +425,7 @@ export class RunnerApiController {
         mergeTarget: s.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
         agentId: s.agentId ?? undefined,
         taskId: s.taskId ?? undefined,
+        allowOrchestration: agent?.enableOrchestration ?? false,
       });
     }
     return { sessions: out };
