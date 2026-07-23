@@ -943,9 +943,13 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
+  // The chosen answer for an AskUserQuestion lives only in the result text
+  // ("The user answered: …"); pass it in so the historical card can highlight
+  // the picked option(s).
+  const answer = node.result ? resultText(node.result.content) : '';
   const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
-    () => describeTool(node.name, node.input, isShell),
-    [node.name, node.input, isShell],
+    () => describeTool(node.name, node.input, isShell, answer),
+    [node.name, node.input, isShell, answer],
   );
   const exp = useContext(ExportCtx);
   const isSubAgent = node.name === 'Task' || node.name === 'Agent';
@@ -1163,7 +1167,7 @@ type ToolDesc = {
 
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
-function describeTool(name: string, input: any, isShell?: boolean): ToolDesc {
+function describeTool(name: string, input: any, isShell?: boolean, answer?: string): ToolDesc {
   const i = input ?? {};
   // A user-run `!`-shell command (not Claude's Bash tool): show the command inline in the
   // folded row and render as a terminal-flavoured "Shell" card (ToolView auto-opens it).
@@ -1248,7 +1252,7 @@ function describeTool(name: string, input: any, isShell?: boolean): ToolDesc {
         icon: <QuestionCircleOutlined />,
         tone: 'agent',
         summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
-        body: qs.length ? <Questions questions={qs} /> : undefined,
+        body: qs.length ? <Questions questions={qs} answer={answer} /> : undefined,
       };
     }
     default:
@@ -1469,8 +1473,13 @@ function Todos({ todos }: { todos: any[] }) {
 }
 
 // Questions renders an AskUserQuestion input: each question as a card with its
-// header, prompt text, and the selectable options (label + description).
-function Questions({ questions }: { questions: any[] }) {
+// header, prompt text, and the options (label + description). Once answered, the
+// option(s) the user picked are highlighted. `answer` is the raw result text
+// ("The user answered: "Q"="A". …"); it only ever contains the chosen answers,
+// each wrapped in double quotes, so an option is picked iff its quoted label
+// appears there (the quotes avoid matching a label that's a substring of the
+// echoed question, and a typed-in custom answer simply matches no option).
+function Questions({ questions, answer }: { questions: any[]; answer?: string }) {
   return (
     <div className="chat-questions">
       {questions.map((q: any, k: number) => (
@@ -1478,12 +1487,16 @@ function Questions({ questions }: { questions: any[] }) {
           {q?.header && <div className="chat-q-header">{q.header}</div>}
           {q?.question && <div className="chat-q-text">{String(q.question)}</div>}
           <div className="chat-q-opts">
-            {(q?.options ?? []).map((o: any, j: number) => (
-              <div className="chat-q-opt" key={j}>
-                <span className="chat-q-opt-label">{o?.label ?? ''}</span>
-                {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
-              </div>
-            ))}
+            {(q?.options ?? []).map((o: any, j: number) => {
+              const label = o?.label ?? '';
+              const picked = !!answer && !!label && answer.includes(`"${label}"`);
+              return (
+                <div className={`chat-q-opt${picked ? ' is-picked' : ''}`} key={j}>
+                  <span className="chat-q-opt-label">{label}</span>
+                  {o?.description && <span className="chat-q-opt-desc">{o.description}</span>}
+                </div>
+              );
+            })}
           </div>
           {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
         </div>

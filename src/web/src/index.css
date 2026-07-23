@@ -4090,6 +4090,16 @@ body {
   font-size: 12px;
   color: var(--text-2);
 }
+/* Historical variant (in the transcript): highlight the option(s) the user
+   picked. inset box-shadow (not border) so the outline adds no layout shift. */
+.chat-q-opt.is-picked:not(.chat-q-opt-btn) {
+  background: var(--brand-tint);
+  box-shadow: inset 0 0 0 1px var(--brand-border);
+}
+.chat-q-opt.is-picked:not(.chat-q-opt-btn) .chat-q-opt-label::before {
+  content: '✓ ';
+  color: var(--brand);
+}
 .chat-q-multi {
   margin-top: 6px;
   font-size: 11px;
