@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // orbit mcp — a minimal Model Context Protocol server (JSON-RPC 2.0 over stdio,
@@ -283,6 +284,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if err != nil {
 			return toolResult("create session failed: "+err.Error(), true)
 		}
+		if getBool(args, "wait") {
+			return s.waitForSession(raw)
+		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_list":
@@ -335,6 +339,36 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.interruptSession(id)
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_merge":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "targetBranch")
+		raw, err := s.t.mergeSession(id, body)
+		if err != nil {
+			return toolResult("merge session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_end":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.endSession(id)
+		if err != nil {
+			return toolResult("end session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -556,6 +590,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"agentId": map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it; defaults to the current agent."},
 					"title":   str,
 					"model":   str,
+					"wait":    map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
@@ -576,6 +611,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			map[string]interface{}{
 				"name":        "session_interrupt",
 				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward).",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "session_merge",
+				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict.",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp, "targetBranch": str}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "session_end",
+				"description": "End a session (park it; it can be resumed later). Frees its runner slot.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
 			},
 		)
@@ -603,6 +648,59 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 		"content": []map[string]interface{}{{"type": "text", "text": text}},
 		"isError": isErr,
 	}
+}
+
+// sessionWaitInterval * maxSessionWaitPolls caps how long session_create(wait) blocks the
+// parent's tool call before handing back the last known state (~3s * 200 = ~10 min).
+const sessionWaitInterval = 3 * time.Second
+const maxSessionWaitPolls = 200
+
+// waitForSession blocks until the freshly-created child session settles — i.e. leaves
+// PENDING/RUNNING (reaching AWAITING_INPUT once its first turn produced a result, or a
+// terminal state) — then returns its full row so the caller reads the result inline.
+func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
+	var c struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(created, &c) != nil || c.ID == "" {
+		return toolResult(prettyJSON(created), false) // no id to poll; hand back what we have
+	}
+	for i := 0; i < maxSessionWaitPolls; i++ {
+		time.Sleep(sessionWaitInterval)
+		raw, err := s.t.getSession(c.ID)
+		if err != nil {
+			return toolResult("wait: get session failed: "+err.Error(), true)
+		}
+		var st struct {
+			Status string `json:"status"`
+		}
+		if json.Unmarshal(raw, &st) == nil && sessionSettled(st.Status) {
+			return toolResult(prettyJSON(raw), false)
+		}
+	}
+	// Timed out still running: return the latest state (non-error) so the agent can poll on.
+	raw, err := s.t.getSession(c.ID)
+	if err != nil {
+		return toolResult("wait timed out; get session failed: "+err.Error(), true)
+	}
+	return toolResult(prettyJSON(raw), false)
+}
+
+// sessionSettled reports whether a session has no active turn running (its result is ready).
+func sessionSettled(status string) bool {
+	switch status {
+	case "PENDING", "RUNNING", "":
+		return false
+	default:
+		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED, PARKED
+	}
+}
+
+func getBool(args map[string]interface{}, key string) bool {
+	if v, ok := args[key].(bool); ok {
+		return v
+	}
+	return false
 }
 
 // sessionListQuery builds the optional ?status=&parentSessionId= filter for session_list.

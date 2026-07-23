@@ -440,3 +440,15 @@ func (t *Transport) interruptSession(id string) (json.RawMessage, error) {
 	err := t.do(nil, "POST", "/runner/sessions/"+id+"/interrupt", nil, &out, taskOpTimeout)
 	return out, err
 }
+
+func (t *Transport) mergeSession(id string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+id+"/merge", body, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) endSession(id string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+id+"/end", nil, &out, taskOpTimeout)
+	return out, err
+}

@@ -45,7 +45,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt"} {
+	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt", "session_merge", "session_end"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -72,7 +72,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt"} {
+	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt", "session_merge", "session_end"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])
@@ -86,6 +86,19 @@ func TestSessionListQuery(t *testing.T) {
 	}
 	if q := sessionListQuery(map[string]interface{}{"status": "RUNNING"}); q != "?status=RUNNING" {
 		t.Fatalf("status query = %q", q)
+	}
+}
+
+func TestSessionSettled(t *testing.T) {
+	for _, s := range []string{"PENDING", "RUNNING", ""} {
+		if sessionSettled(s) {
+			t.Fatalf("sessionSettled(%q) = true, want false", s)
+		}
+	}
+	for _, s := range []string{"AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED"} {
+		if !sessionSettled(s) {
+			t.Fatalf("sessionSettled(%q) = false, want true", s)
+		}
 	}
 }
 

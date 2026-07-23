@@ -44,6 +44,8 @@ export class CreateAgentDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
+  // Opt-in: may this agent's sessions orchestrate other sessions via orbit mcp (default off).
+  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
 }
 
 export class UpdateAgentDto {
@@ -68,6 +70,7 @@ export class UpdateAgentDto {
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
+  @IsOptional() @IsBoolean() enableOrchestration?: boolean;
 }
 
 // The full agent list in the desired sidebar order; each id's index becomes its position.

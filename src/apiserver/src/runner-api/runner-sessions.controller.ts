@@ -72,4 +72,18 @@ export class RunnerSessionsController {
   interruptSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
     return this.sessions.interrupt(runner.ownerId, id);
   }
+
+  @Post('sessions/:id/merge')
+  mergeSession(
+    @CurrentRunner() runner: Runner,
+    @Param('id') id: string,
+    @Body() dto: { targetBranch?: string },
+  ) {
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch);
+  }
+
+  @Post('sessions/:id/end')
+  endSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+    return this.sessions.end(runner.ownerId, id);
+  }
 }

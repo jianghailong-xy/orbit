@@ -54,6 +54,7 @@ interface Agent {
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
+  enableOrchestration?: boolean;
 }
 
 const fmtTime = (d?: string | null): string =>
@@ -204,6 +205,7 @@ export function RunnerDetailPage() {
   const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
+  const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
   // New agents start from the user's saved defaults (Settings → Agent defaults),
@@ -241,6 +243,7 @@ export function RunnerDetailPage() {
         appendSystemPrompt: fAppend.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
         enableWorktree: fEnableWorktree,
+        enableOrchestration: fEnableOrchestration,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -272,6 +275,7 @@ export function RunnerDetailPage() {
     setFAppend('');
     setFWorkDir('');
     setFEnableWorktree(false);
+    setFEnableOrchestration(false);
     setFEnv([]);
     setFormOpen(true);
   };
@@ -287,6 +291,7 @@ export function RunnerDetailPage() {
     setFAppend(a.appendSystemPrompt ?? '');
     setFWorkDir(a.workDir ?? '');
     setFEnableWorktree(a.enableWorktree ?? false);
+    setFEnableOrchestration(a.enableOrchestration ?? false);
     setFEnv(Object.entries(a.env ?? {}).map(([key, value]) => ({ key, value })));
     setFormOpen(true);
   };
@@ -369,6 +374,17 @@ export function RunnerDetailPage() {
           <span style={{ fontSize: 12, opacity: 0.65 }}>
             Run each session in its own git worktree. Off → sessions run directly in the working
             directory with no isolation.
+          </span>
+        </div>
+      </div>
+      <div className="rd-form-field">
+        <div className="rd-form-label">Session orchestration</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Switch checked={fEnableOrchestration} onChange={setFEnableOrchestration} />
+          <span style={{ fontSize: 12, opacity: 0.65 }}>
+            Let this agent's sessions spawn and manage other sessions via the orbit MCP session
+            tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator
+            agents.
           </span>
         </div>
       </div>

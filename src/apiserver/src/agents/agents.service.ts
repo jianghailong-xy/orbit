@@ -65,6 +65,7 @@ export class AgentsService {
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
+        enableOrchestration: dto.enableOrchestration ?? false,
       },
     });
   }
@@ -128,6 +129,7 @@ export class AgentsService {
       enabled: dto.enabled,
       autoInitGit: dto.autoInitGit,
       enableWorktree: dto.enableWorktree,
+      enableOrchestration: dto.enableOrchestration,
     };
     if (dto.allowedTools) data.allowedTools = dto.allowedTools as Prisma.InputJsonValue;
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
