@@ -39,6 +39,21 @@ public enum Approvals {
         return .tool
     }
 
+    /// True when a transcript tool card merely duplicates a still-pending question/plan approval:
+    /// the live interactive `ApprovalCard` renders the same question/plan just below, so also drawing
+    /// the read-only tool card double-shows it. Suppress the card until it resolves (its `result`
+    /// lands), after which it's the historical record (question + chosen answer, or the plan). Mirrors
+    /// web Transcript.tsx (`(AskUserQuestion|ExitPlanMode) && live && !result → return null`). Matched
+    /// by kind: an AskUserQuestion/ExitPlanMode blocks the turn, so at most one question/plan approval
+    /// is ever pending at a time.
+    public static func duplicatesPendingApproval(_ item: TranscriptItem,
+                                                 pendingApprovals: [PendingApproval]) -> Bool {
+        guard case .toolCall(let card) = item, card.result == nil else { return false }
+        let k = kind(toolName: card.name)
+        guard k == .question || k == .plan else { return false }
+        return pendingApprovals.contains { $0.kind == k }
+    }
+
     /// Parse `input.questions` → structured questions for the form. Empty when not an
     /// AskUserQuestion (or malformed).
     public static func parseQuestions(from input: JSONValue) -> [AskQuestion] {

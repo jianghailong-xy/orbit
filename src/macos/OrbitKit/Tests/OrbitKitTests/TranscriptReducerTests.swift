@@ -88,6 +88,45 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(s.maxSeq, 10)
     }
 
+    /// An AskUserQuestion arrives as BOTH a `tool_use` (read-only tool card) and an `approval_request`
+    /// (interactive card). While the question is pending, only the interactive card should show — the
+    /// read-only card is suppressed to avoid double-displaying the question (web parity); once answered
+    /// it becomes the historical record.
+    func testAskUserQuestionCardSuppressedWhileApprovalPending() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("q1"), "name": .string("AskUserQuestion"),
+            "input": .object(["questions": .array([.object([
+                "question": .string("Pick one"),
+                "options": .array([.object(["label": .string("A")]), .object(["label": .string("B")])])])])])])))
+        r.apply(RunEvent(seq: 0, type: .approvalRequest, payload: .object([
+            "id": .string("ap-q1"), "toolName": .string("AskUserQuestion"),
+            "input": .object(["questions": .array([.object(["question": .string("Pick one")])])])])))
+
+        let card = r.state.items.first { if case .toolCall = $0 { return true }; return false }!
+        XCTAssertTrue(Approvals.duplicatesPendingApproval(card, pendingApprovals: r.state.pendingApprovals),
+                      "read-only question card must be hidden while its approval is pending")
+
+        // Answered: tool_result sets the card's result and the approval resolves → shown as history.
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("q1"), "content": .string("A")])))
+        r.apply(RunEvent(seq: 0, type: .approvalResolved, payload: .object(["id": .string("ap-q1")])))
+        let answered = r.state.items.first { if case .toolCall = $0 { return true }; return false }!
+        XCTAssertFalse(Approvals.duplicatesPendingApproval(answered, pendingApprovals: r.state.pendingApprovals),
+                       "answered question card must render as the historical record")
+
+        // A regular tool-permission approval never suppresses its tool card.
+        var r2 = TranscriptReducer()
+        r2.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("b1"), "name": .string("Bash"),
+            "input": .object(["command": .string("rm x")])])))
+        r2.apply(RunEvent(seq: 0, type: .approvalRequest, payload: .object([
+            "id": .string("ap-b1"), "toolName": .string("Bash"),
+            "input": .object(["command": .string("rm x")])])))
+        let bash = r2.state.items.first { if case .toolCall = $0 { return true }; return false }!
+        XCTAssertFalse(Approvals.duplicatesPendingApproval(bash, pendingApprovals: r2.state.pendingApprovals))
+    }
+
     /// The runner keys background events by `shellId`/`toolUseId` and re-sends the WHOLE output
     /// tail under `content` on every change (a capped file snapshot, not a delta). Repeated
     /// `background_output` events must REPLACE the tail, and the process id must track shellId —
