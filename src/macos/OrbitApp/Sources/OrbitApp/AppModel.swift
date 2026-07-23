@@ -99,6 +99,16 @@ final class AppModel {
     /// live by the same control-plane stream that drives the list.
     var recentSessions: [Session] { RecentsLogic.recent(sessions, limit: sessions.count) }
 
+    /// The compact drawer lists the open session twice when its runner group is expanded — once as the
+    /// owning agent's row (`selectedAgentID`) and once as its Recents row (`selectedAgentSessionID`) —
+    /// which lit both pills. This flags when the session is genuinely a Recents row, so the agent row can
+    /// yield to the more specific Recents pill and only one row highlights. It stays false for a session
+    /// with no Recents row (e.g. a deep-linked non-active session), so that agent row keeps its pill.
+    var selectedSessionInRecents: Bool {
+        guard let id = selectedAgentSessionID else { return false }
+        return recentSessions.contains { $0.id == id }
+    }
+
     let tokenStore: TokenStore
     let notifications = NotificationManager()
     private(set) var baseURL: URL?

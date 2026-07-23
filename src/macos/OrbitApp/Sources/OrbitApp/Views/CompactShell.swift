@@ -573,7 +573,10 @@ private struct NavigationDrawer: View {
     /// A compact agent row: just the name (which already carries the "@ provider" suffix, so it
     /// disambiguates on its own) plus a disabled pill. Tapping jumps straight to the agent.
     private func agentRow(_ agent: Agent) -> some View {
+        // Yield the pill to the Recents row when the open session is listed there, so the same session
+        // isn't highlighted twice (agent row + Recents). Without a Recents row the agent row keeps it.
         let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
+            && !model.selectedSessionInRecents
         return Button {
             openAgent(agent.id)
         } label: {
