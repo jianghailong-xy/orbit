@@ -140,8 +140,30 @@ func (t *Transport) postEvents(sessionID string, batch RunEventBatch) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
 }
 
-func (t *Transport) complete(sessionID string, b CompleteRequest) error {
-	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/complete", b, nil, 35*time.Second)
+// complete finalizes the session server-side and reports back whether the isolated worktree
+// checkout should be kept (resumable end) or removed (the session was archived/deleted).
+// Defaults to keep on any transport error, so an unreachable server never destroys a checkout.
+func (t *Transport) complete(sessionID string, b CompleteRequest) (bool, error) {
+	var r CompleteResponse
+	if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/complete", b, &r, 35*time.Second); err != nil {
+		return true, err
+	}
+	return r.KeepCheckout, nil
+}
+
+// worktreesRemovable asks the control plane which of the given session ids (leftover worktree
+// checkouts) may be garbage-collected. Ids absent from the reply belong to still-resumable
+// sessions and must be kept.
+func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var r WorktreesRemovableResponse
+	if err := t.do(nil, "POST", "/runner/sessions/worktrees-removable",
+		map[string][]string{"ids": ids}, &r, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return r.Removable, nil
 }
 
 // inbox long-polls for the next user turn of an interactive session; returns nil

@@ -415,7 +415,7 @@ func runLoop(cfg *RunnerConfig) {
 			liveSet[id] = true
 		}
 		mu.Unlock()
-		gcWorktrees(liveSet)
+		gcWorktrees(t, liveSet)
 		gcUploads(liveSet)
 	}
 

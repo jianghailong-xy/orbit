@@ -43,10 +43,14 @@ import {
   RunnerRegisterResponse,
   SessionCommitResultRequest,
   SessionCompleteRequest,
+  SessionCompleteResponse,
   SessionDiffResultRequest,
+  SessionEndReason,
   SessionMergeResultRequest,
   TurnAttachment,
   TurnCompleteRequest,
+  WorktreesRemovableRequest,
+  WorktreesRemovableResponse,
   gracefulEndStatus,
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
@@ -838,6 +842,17 @@ export class RunnerApiController {
         })),
         skipDuplicates: true,
       });
+      // Any persisted agent activity is liveness — reset the idle clock so the reaper
+      // (reaper.service.ts) doesn't idle-reap a session that's actively working. Autonomous /
+      // scheduled turns stream events through here WITHOUT going through /turn-complete (the only
+      // other runner path that advances lastTurnAt), so without this a busy session whose last
+      // *queued* turn is older than IDLE_AFTER_MS gets torn down mid-turn. Guarded to live +
+      // not-cancelled so a late batch can't perturb a session already being torn down; server
+      // `now` keeps it monotonic (a retried/duplicate batch only ever advances it, never regresses).
+      await this.prisma.session.updateMany({
+        where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
+        data: { lastTurnAt: new Date() },
+      });
     }
 
     // Codex reports its runtime session id in the app-server `system` init/resumed
@@ -1039,8 +1054,15 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id') sessionId: string,
     @Body() dto: SessionCompleteRequest,
-  ) {
+  ): Promise<SessionCompleteResponse> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
+    // Keep the isolated worktree checkout for any resumable end — idle-park, user-end,
+    // task-done, or a plain cancel all leave the session reopenable, so its checkout (and
+    // whatever untracked scratch lives in it) must survive. Drop it only when the user
+    // archived (completed) or deleted the session — the two genuinely terminal actions.
+    const keepCheckout =
+      session.endReason !== SessionEndReason.COMPLETED &&
+      session.endReason !== SessionEndReason.DELETED;
     const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
     if (!TERMINAL.includes(dto.status as RunStatus)) {
       throw new BadRequestException('completion status must be terminal');
@@ -1126,7 +1148,7 @@ export class RunnerApiController {
       }
       return true;
     });
-    if (!finalized) return { ok: true };
+    if (!finalized) return { ok: true, keepCheckout };
 
     this.realtime.publish(sessionId, {
       seq: Number.MAX_SAFE_INTEGER,
@@ -1134,7 +1156,31 @@ export class RunnerApiController {
       ts: new Date().toISOString(),
       payload: { status: effectiveStatus, final: true },
     });
-    return { ok: true };
+    return { ok: true, keepCheckout };
+  }
+
+  /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,
+   *  return which are safe to remove. A checkout is kept while its session still exists and is
+   *  neither archived (completed) nor deleted — it stays resumable, so idle-parked sessions
+   *  survive a runner restart. Everything else (archived, deleted, or no longer a session) is
+   *  removable leftover. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/worktrees-removable')
+  async worktreesRemovable(
+    @CurrentRunner() _runner: { id: string },
+    @Body() dto: WorktreesRemovableRequest,
+  ): Promise<WorktreesRemovableResponse> {
+    const ids = (dto.ids ?? []).slice(0, 1000);
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const valid = ids.filter((id) => UUID.test(id));
+    const keepRows = valid.length
+      ? await this.prisma.session.findMany({
+          where: { id: { in: valid }, archivedAt: null, deletedAt: null },
+          select: { id: true },
+        })
+      : [];
+    const keep = new Set(keepRows.map((r) => r.id));
+    return { removable: ids.filter((id) => !keep.has(id)) };
   }
 
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar

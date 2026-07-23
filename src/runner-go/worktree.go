@@ -686,8 +686,8 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 }
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
-// ref. For a finished SUCCEEDED/FAILED session; a cancelled session keeps its checkout for
-// a possible resume and is reaped by gcWorktrees instead.
+// ref. Called only when the server reports the session as non-resumable (archived/deleted);
+// a resumable end keeps its checkout, and any stale one is later reaped by gcWorktrees.
 func removeWorktree(wt *Worktree) {
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
 		logln("worktree remove failed for", wt.Session+":", err)
@@ -1135,20 +1135,31 @@ func clip(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// gcWorktrees removes leftover session checkouts whose session is no longer live — a crash
-// between finalize and remove, or a cancelled session never resumed. `live` is the set of
-// session ids the runner is currently driving. Branches are always preserved.
-func gcWorktrees(live map[string]bool) {
+// gcWorktrees removes leftover session checkouts that the control plane confirms are gone —
+// a session the user archived or deleted, or one that no longer exists. `live` is the set of
+// session ids the runner is currently driving (never candidates). A checkout for a session
+// that is merely parked/failed but still resumable is KEPT, so an idle-parked session's
+// worktree survives a runner restart. Branches are always preserved. On any query failure the
+// candidates are left untouched — GC never destroys a checkout it couldn't confirm removable.
+func gcWorktrees(t *Transport, live map[string]bool) {
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return
 	}
+	var candidates []string
 	for _, e := range entries {
-		if !e.IsDir() || live[e.Name()] {
-			continue
+		if e.IsDir() && !live[e.Name()] {
+			candidates = append(candidates, e.Name())
 		}
-		path := filepath.Join(root, e.Name())
+	}
+	removable, err := t.worktreesRemovable(candidates)
+	if err != nil {
+		logln("gc: worktrees-removable query failed, keeping all orphan checkouts:", err)
+		return
+	}
+	for _, name := range removable {
+		path := filepath.Join(root, name)
 		// Resolve the main repo via the checkout's common git dir (<repo>/.git), so we can
 		// `worktree remove` it cleanly; fall back to a plain dir removal otherwise.
 		if common, err := git(path, "rev-parse", "--git-common-dir"); err == nil && common != "" {
@@ -1157,13 +1168,13 @@ func gcWorktrees(live map[string]bool) {
 			}
 			repoRoot := filepath.Dir(common)
 			if _, err := git(repoRoot, "worktree", "remove", "--force", path); err == nil {
-				_, _ = git(repoRoot, "update-ref", "-d", baseRefName(e.Name()))
-				logln("gc: removed orphan worktree", e.Name())
+				_, _ = git(repoRoot, "update-ref", "-d", baseRefName(name))
+				logln("gc: removed orphan worktree", name)
 				continue
 			}
 		}
 		_ = os.RemoveAll(path)
-		logln("gc: removed orphan worktree dir", e.Name())
+		logln("gc: removed orphan worktree dir", name)
 	}
 }
 

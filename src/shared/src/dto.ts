@@ -579,6 +579,30 @@ export interface SessionCompleteRequest {
 }
 
 /**
+ * Control plane → runner response for POST /runner/sessions/:id/complete. `keepCheckout`
+ * tells the runner whether to preserve the session's isolated worktree checkout: kept for
+ * any resumable end (idle-park / user-end / task-done / cancel — the session can be
+ * reopened), dropped only when the user archived (completed) or deleted the session.
+ */
+export interface SessionCompleteResponse {
+  ok: boolean;
+  keepCheckout: boolean;
+}
+
+/** Runner → control plane: given the session ids of leftover worktree checkouts, ask which
+ *  are safe to garbage-collect. Sent by the runner's startup worktree GC. */
+export interface WorktreesRemovableRequest {
+  ids: string[];
+}
+
+/** Control plane → runner: the subset of the queried ids whose checkout may be removed —
+ *  a session that was archived (completed) or deleted, or is no longer a session at all.
+ *  Any id absent from this list belongs to a still-resumable session and must be kept. */
+export interface WorktreesRemovableResponse {
+  removable: string[];
+}
+
+/**
  * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
  * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
  * means a precondition failed (workDir not on a clean main, branch missing, …). `message`

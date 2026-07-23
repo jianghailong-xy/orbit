@@ -230,10 +230,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	// Finalize the session's worktree (when isolated): commit the work onto its branch and
 	// compute the diff, so the branch is usable for a manual merge even after the checkout
-	// is removed. A SUCCEEDED/FAILED run is done — drop the checkout (the branch stays); a
-	// CANCELLED one keeps its checkout for a possible resume and is reaped by gcWorktrees.
-	// A cancelled run is still resumable (server settles it PARKED for idle/user-end), so its
-	// finalize commit is a *park checkpoint* — tagged for undo-on-resume rather than permanent.
+	// is removed. Whether to drop the checkout is the SERVER's call (keepCheckout): any
+	// resumable end — idle-park, user-end, task-done, or cancel — keeps it so the session
+	// (and its untracked scratch) can be reopened; only an archive (completed) or delete
+	// removes it. The finalize commit doubles as a *park checkpoint* for a resumable end —
+	// tagged for undo-on-resume rather than permanent.
 	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	if runtimeProvider(job) == providerClaude {
 		cr.ClaudeSessionID = job.SessionUUID
@@ -245,12 +246,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		cr.MergeTargets = mergeTargetsForWT(job.WT)
 	}
-	if err := t.complete(job.SessionID, cr); err != nil {
+	keepCheckout, err := t.complete(job.SessionID, cr)
+	if err != nil {
 		logln("complete failed for", job.SessionID+":", err)
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
 	}
-	if job.WT != nil && (status == stSucceeded || status == stFailed) {
+	if job.WT != nil && !keepCheckout {
 		removeWorktree(job.WT)
 	}
 }

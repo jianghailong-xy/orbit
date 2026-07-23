@@ -401,6 +401,20 @@ type CompleteRequest struct {
 	MergeTargets []string `json:"mergeTargets,omitempty"`
 }
 
+// CompleteResponse is the control plane's reply to /complete. KeepCheckout is false only
+// when the user archived or deleted the session; for any resumable end it is true, so the
+// runner preserves the isolated worktree checkout.
+type CompleteResponse struct {
+	Ok           bool `json:"ok"`
+	KeepCheckout bool `json:"keepCheckout"`
+}
+
+// WorktreesRemovableResponse lists which of the queried session ids have a removable
+// checkout (archived / deleted / no longer a session); any id absent must be kept.
+type WorktreesRemovableResponse struct {
+	Removable []string `json:"removable"`
+}
+
 type Manifest struct {
 	Version string `json:"version"`
 }
