@@ -99,7 +99,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, ChatImage, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, ChatImage, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
@@ -2931,7 +2931,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                   </div>
                 </div>
               )}
-              <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+              <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
+                <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+              </SessionNavCtx.Provider>
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}

@@ -3921,6 +3921,84 @@ body {
   color: var(--text-1);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+/* session_create result → a clickable card that links to the spawned child session.
+   Tone (--tone/--tone-bg) comes from the chat-tone-agent class on the card. */
+.chat-session-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--tone);
+  background: var(--bg-raised);
+}
+.chat-session-card.is-clickable {
+  cursor: pointer;
+}
+.chat-session-card.is-clickable:hover {
+  background: var(--bg-hover);
+  border-color: var(--tone);
+}
+.chat-session-card-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--tone-bg);
+  color: var(--tone);
+  font-size: 14px;
+}
+.chat-session-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-session-card-title {
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-session-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-4);
+}
+.chat-session-card-agent {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text-3);
+}
+.chat-session-card-provider {
+  text-transform: capitalize;
+}
+.chat-session-card-status {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+.chat-session-card-open {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--tone);
+}
 .chat-tool-summary {
   flex: 0 1 auto;
   min-width: 0;

@@ -28,7 +28,25 @@ struct ToolCardView: View {
     private var hasDetail: Bool { d.hasBody || hasResult }
     private var isOpen: Bool { expanded && hasDetail }
 
+    /// A successful `mcp__orbit__session_create` whose JSON result parsed — rendered as a tappable
+    /// "jump to child session" card instead of the folded JSON (web parity: SessionCreateCard).
+    private var sessionCreate: SessionCreatePayload? {
+        guard card.name == "mcp__orbit__session_create", card.status == .ok,
+              let result = card.result, let data = result.data(using: .utf8),
+              let p = try? JSONDecoder().decode(SessionCreatePayload.self, from: data),
+              !p.id.isEmpty else { return nil }
+        return p
+    }
+
     var body: some View {
+        if let payload = sessionCreate {
+            SessionCreateCardView(payload: payload)
+        } else {
+            defaultBody
+        }
+    }
+
+    private var defaultBody: some View {
         // Folded rows read as a flowing, rail-marked list; once expanded the card regains a
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
@@ -126,6 +144,61 @@ struct ToolCardView: View {
                             in: RoundedRectangle(cornerRadius: 6))
             }
         }
+    }
+}
+
+/// Shape of a `mcp__orbit__session_create` tool result (`{id,title,status,agentName,provider}`).
+private struct SessionCreatePayload: Decodable {
+    let id: String
+    var title: String?
+    var status: String?
+    var agentName: String?
+    var provider: String?
+}
+
+/// Renders a successful `mcp__orbit__session_create` as a tappable card that opens the spawned child
+/// session. `payload.id` is the child's raw session id; `route(to:)` is the same entry a notification
+/// / deep link uses. Web parity: Transcript.tsx `SessionCreateCard` + `.chat-session-card`.
+private struct SessionCreateCardView: View {
+    let payload: SessionCreatePayload
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.orbitMeta).foregroundStyle(Color.purple)
+                .frame(width: 26, height: 26)
+                .background(Color.purple.opacity(0.14), in: RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 2) {
+                Text((payload.title?.isEmpty == false) ? payload.title! : "New session")
+                    .font(.orbitMono.weight(.semibold)).foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
+                HStack(spacing: 8) {
+                    if let a = payload.agentName, !a.isEmpty {
+                        Text(a).font(.orbitMonoFine).foregroundStyle(.secondary)
+                    }
+                    if let p = payload.provider, !p.isEmpty {
+                        Text(p.capitalized).font(.orbitMonoFine).foregroundStyle(.secondary)
+                    }
+                    if let st = payload.status, !st.isEmpty {
+                        Text(st.uppercased()).font(.orbitSectionLabel).tracking(0.4)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.purple.opacity(0.14), in: Capsule())
+                            .foregroundStyle(Color.purple)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            (Text("Open ") + Text(Image(systemName: "chevron.right")))
+                .font(.orbitLabel).foregroundStyle(Color.purple)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(Color.gray.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) { Rectangle().fill(Color.purple).frame(width: 3) }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay { RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.12), lineWidth: 1) }
+        .contentShape(Rectangle())
+        .onTapGesture { app.route(to: .session(payload.id)) }
     }
 }
 

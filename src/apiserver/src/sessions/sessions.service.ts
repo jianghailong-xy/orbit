@@ -282,7 +282,7 @@ export class SessionsService {
     ownerId: string,
     parentSessionId: string,
     dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
-  ): Promise<{ id: string; status: RunStatus; title: string }> {
+  ): Promise<{ id: string; status: RunStatus; title: string; agentName: string | null; provider: string }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     const parent = await this.prisma.session.findFirst({
       where: { id: parentSessionId, ownerId },
@@ -320,7 +320,18 @@ export class SessionsService {
         batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
       },
     );
-    return { id: created.id, status: created.status, title: created.title };
+    // Surface the target agent's name + provider so the web/native transcript can render a
+    // rich "session created" card (title · agent · provider) that links to the child.
+    const targetAgent = created.agentId
+      ? await this.prisma.agent.findFirst({ where: { id: created.agentId }, select: { name: true } })
+      : null;
+    return {
+      id: created.id,
+      status: created.status,
+      title: created.title,
+      agentName: targetAgent?.name ?? null,
+      provider: created.provider,
+    };
   }
 
   /** The effort a normal new session under this agent would inherit: the agent's own effort if

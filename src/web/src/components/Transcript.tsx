@@ -72,6 +72,11 @@ export interface ExportMode {
 }
 export const ExportCtx = createContext<ExportMode | null>(null);
 
+// Jump-to-session for the "session created" card (mcp__orbit__session_create result). AgentView
+// provides a navigator; the shared/public page and static export leave it null so the card
+// renders non-clickable there (a logged-out or offline viewer can't open another session).
+export const SessionNavCtx = createContext<((rawId: string) => void) | null>(null);
+
 // ── session-wide image preview ──────────────────────────────────────────────
 // Every image thumbnail in the transcript (user-sent, durable attachment, tool
 // result) registers here so one full-screen lightbox can page across all of them
@@ -991,6 +996,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // resolved (result arrives) or the session has ended, show it as the historical
   // record (question + chosen answer, or the plan).
   if ((node.name === 'AskUserQuestion' || node.name === 'ExitPlanMode') && live && !node.result) return null;
+  // A spawned child session (mcp__orbit__session_create): once its result is back, render a
+  // clickable card that jumps to the child instead of the default folded JSON.
+  if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
+    return <SessionCreateCard result={node.result.content} />;
+  }
   return (
     <div
       className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${
@@ -1530,6 +1540,46 @@ function Questions({ questions, answer }: { questions: any[]; answer?: string })
           {q?.multiSelect && <div className="chat-q-multi">multi-select</div>}
         </div>
       ))}
+    </div>
+  );
+}
+
+// SessionCreateCard renders the result of mcp__orbit__session_create as a clickable card that
+// jumps to the spawned child session, instead of the default folded JSON blob.
+function SessionCreateCard({ result }: { result: any }) {
+  const nav = useContext(SessionNavCtx);
+  let s: any = null;
+  try {
+    s = JSON.parse(resultText(result));
+  } catch {
+    return null;
+  }
+  if (!s || typeof s.id !== 'string') return null;
+  const clickable = !!nav;
+  return (
+    <div
+      className={`chat-session-card chat-tone-agent${clickable ? ' is-clickable' : ''}`}
+      onClick={clickable ? () => nav!(s.id) : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => (e.key === 'Enter' || e.key === ' ') && nav!(s.id) : undefined}
+    >
+      <span className="chat-session-card-icon">
+        <ApiOutlined />
+      </span>
+      <span className="chat-session-card-main">
+        <span className="chat-session-card-title">{s.title || 'New session'}</span>
+        <span className="chat-session-card-meta">
+          {s.agentName && <span className="chat-session-card-agent">{s.agentName}</span>}
+          {s.provider && <span className="chat-session-card-provider">{s.provider}</span>}
+          {s.status && <span className="chat-session-card-status">{String(s.status).toLowerCase()}</span>}
+        </span>
+      </span>
+      {clickable && (
+        <span className="chat-session-card-open">
+          Open <RightOutlined />
+        </span>
+      )}
     </div>
   );
 }
