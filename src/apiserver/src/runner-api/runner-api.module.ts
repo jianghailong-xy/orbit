@@ -6,6 +6,8 @@ import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
+import { RunnerAgentsController } from './runner-agents.controller';
+import { AgentsService } from '../agents/agents.service';
 import { PushModule } from '../push/push.module';
 
 @Module({
@@ -16,7 +18,7 @@ import { PushModule } from '../push/push.module';
   imports: [SessionsModule, PushModule],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
-  controllers: [RunnerApiController, RunnerTasksController, RunnerSessionsController],
-  providers: [RunnerAuthGuard, TasksService, TaskListsService],
+  controllers: [RunnerApiController, RunnerTasksController, RunnerSessionsController, RunnerAgentsController],
+  providers: [RunnerAuthGuard, TasksService, TaskListsService, AgentsService],
 })
 export class RunnerApiModule {}

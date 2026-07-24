@@ -281,7 +281,7 @@ export class SessionsService {
   async spawnFromSession(
     ownerId: string,
     parentSessionId: string,
-    dto: { prompt: string; agentId?: string; title?: string; model?: string },
+    dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ): Promise<{ id: string; status: RunStatus; title: string }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     const parent = await this.prisma.session.findFirst({
@@ -302,9 +302,12 @@ export class SessionsService {
     // Children share a batch (rooted at the parent's own id) so the claim queue caps how many
     // run concurrently, on top of the runner's own max_concurrent.
     const batchId = parent.batchId ?? parentSessionId;
+    // Resolve an @-mentioned agent name to its id (owner-scoped). An explicit agentId wins.
+    const agentId =
+      dto.agentId ?? (dto.agentName ? await this.resolveAgentByName(ownerId, dto.agentName) : undefined);
     const created = await this.create(
       ownerId,
-      { prompt: dto.prompt, title: dto.title, agentId: dto.agentId ?? undefined, model: dto.model },
+      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model },
       {
         source: 'system',
         parentSessionId,
@@ -312,6 +315,18 @@ export class SessionsService {
       },
     );
     return { id: created.id, status: created.status, title: created.title };
+  }
+
+  /** Resolve an @-mentioned agent name to its id within the owner. Throws on no/ambiguous match. */
+  private async resolveAgentByName(ownerId: string, name: string): Promise<string> {
+    const matches = await this.prisma.agent.findMany({
+      where: { ownerId, name, deletedAt: null },
+      select: { id: true },
+      take: 2,
+    });
+    if (matches.length === 0) throw new BadRequestException(`no agent named "${name}"`);
+    if (matches.length > 1) throw new BadRequestException(`multiple agents named "${name}"; use agentId`);
+    return matches[0].id;
   }
 
   /** Length of the parent chain ending at `sessionId` — the depth a new child of it would sit

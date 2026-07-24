@@ -452,3 +452,32 @@ func (t *Transport) endSession(id string) (json.RawMessage, error) {
 	err := t.do(nil, "POST", "/runner/sessions/"+id+"/end", nil, &out, taskOpTimeout)
 	return out, err
 }
+
+// ── Agent management ops for the `orbit mcp` server (L3 orchestration) ──────
+// Owner-scoped via the runner token; gated server-side on the CALLING session's agent
+// having orchestration enabled (passed as X-Orbit-Session-Id, like session_create).
+
+func orchestratorHeader(sessionID string) map[string]string {
+	if sessionID == "" {
+		return nil
+	}
+	return map[string]string{"X-Orbit-Session-Id": sessionID}
+}
+
+func (t *Transport) listAgents(sessionID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", "/runner/agents", nil, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	return out, err
+}
+
+func (t *Transport) createAgent(sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/agents", body, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	return out, err
+}
+
+func (t *Transport) updateAgent(sessionID, id string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "PATCH", "/runner/agents/"+id, body, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	return out, err
+}

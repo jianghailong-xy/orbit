@@ -274,9 +274,12 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"prompt": prompt}
 		copyIfPresent(body, args, "title", "model")
-		// Default the runner agent to the current one unless the caller names another.
+		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
+		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
 			body["agentId"] = id
+		} else if name := getString(args, "agentName"); name != "" {
+			body["agentName"] = name
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
@@ -369,6 +372,51 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.endSession(id)
 		if err != nil {
 			return toolResult("end session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "agent_list":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		raw, err := s.t.listAgents(s.sessionID)
+		if err != nil {
+			return toolResult("list agents failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "agent_create":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		name := getString(args, "name")
+		if name == "" {
+			return toolResult("name is required", true)
+		}
+		body := map[string]interface{}{"name": name}
+		copyIfPresent(body, args, "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree")
+		raw, err := s.t.createAgent(s.sessionID, body)
+		if err != nil {
+			return toolResult("create agent failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "agent_update":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "agentId")
+		if id == "" {
+			return toolResult("agentId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "name", "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree")
+		if len(body) == 0 {
+			return toolResult("no fields to update", true)
+		}
+		raw, err := s.t.updateAgent(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("update agent failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -597,13 +645,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
-				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. agentId defaults to the current agent. Requires orchestration to be enabled for this agent.",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent.",
 				"inputSchema": obj(map[string]interface{}{
-					"prompt":  promptDesc,
-					"agentId": map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it; defaults to the current agent."},
-					"title":   str,
-					"model":   str,
-					"wait":    map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
+					"prompt":    promptDesc,
+					"agentId":   map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it (by id); defaults to the current agent."},
+					"agentName": map[string]interface{}{"type": "string", "description": "Route to an agent by name (e.g. from an @mention). Resolved to that owner's agent; ignored if agentId is set."},
+					"title":     str,
+					"model":     str,
+					"wait":      map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
 				}, "prompt"),
 			},
 			map[string]interface{}{
@@ -635,6 +684,42 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"name":        "session_end",
 				"description": "End a session (park it; it can be resumed later). Frees its runner slot.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "agent_list",
+				"description": "List this owner's agents (id, name, provider, model, workDir, runner). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"inputSchema": obj(map[string]interface{}{}),
+			},
+			map[string]interface{}{
+				"name":        "agent_create",
+				"description": "Create a new agent under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"inputSchema": obj(map[string]interface{}{
+					"name":               str,
+					"description":        str,
+					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | a configured provider slug. Defaults to claude."},
+					"model":              str,
+					"systemPrompt":       str,
+					"appendSystemPrompt": str,
+					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
+					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner."},
+					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
+				}, "name"),
+			},
+			map[string]interface{}{
+				"name":        "agent_update",
+				"description": "Update an existing agent's fields (name, model, system prompt, workDir, etc.). Cannot change the orchestration permission (human-only, web UI).",
+				"inputSchema": obj(map[string]interface{}{
+					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
+					"name":               str,
+					"description":        str,
+					"provider":           str,
+					"model":              str,
+					"systemPrompt":       str,
+					"appendSystemPrompt": str,
+					"workDir":            str,
+					"runnerId":           str,
+					"enableWorktree":     map[string]interface{}{"type": "boolean"},
+				}, "agentId"),
 			},
 		)
 	}

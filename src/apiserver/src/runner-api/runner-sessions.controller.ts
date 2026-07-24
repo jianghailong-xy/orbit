@@ -33,7 +33,7 @@ export class RunnerSessionsController {
   createSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') parentSessionId: string | undefined,
-    @Body() dto: { prompt: string; agentId?: string; title?: string; model?: string },
+    @Body() dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ) {
     if (!parentSessionId) throw new BadRequestException('missing parent session context');
     return this.sessions.spawnFromSession(runner.ownerId, parentSessionId, dto);
