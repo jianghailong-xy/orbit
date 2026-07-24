@@ -5,6 +5,8 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
@@ -34,14 +36,35 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 
+// How often the auto-run reconciler re-checks for ready-but-unstarted tasks (see
+// reconcileReadyTasks). This is only a backstop — the instant path is triggerDependents,
+// fired the moment a prerequisite reaches DONE — so a coarse cadence is enough.
+const RECONCILE_INTERVAL_MS = 60_000;
+
 @Injectable()
-export class TasksService {
+export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TasksService.name);
+  private reconcileTimer?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
   ) {}
+
+  onModuleInit(): void {
+    // Periodic backstop for auto-run edges triggerDependents can't catch (see
+    // reconcileReadyTasks). Single-replica assumption, same as ReaperService.
+    this.reconcileTimer = setInterval(() => {
+      this.reconcileReadyTasks().catch((e) =>
+        this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
+      );
+    }, RECONCILE_INTERVAL_MS);
+    this.reconcileTimer.unref(); // don't keep the process alive just for this timer
+  }
+
+  onModuleDestroy(): void {
+    if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+  }
 
   /**
    * A task may only be assigned to an agent the same user owns — otherwise a user
@@ -352,6 +375,49 @@ export class TasksService {
       } catch (e) {
         this.logger.warn(
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Periodic backstop for the auto-run edge triggerDependents can miss. triggerDependents
+   * fires only at the instant a prerequisite reaches DONE, so a dependent that is READY
+   * then but not yet runnable — no assignee, its assignee's runner offline, or a transient
+   * execute() failure — is left OPEN and never revisited. This pass re-dispatches any task
+   * that has since become genuinely runnable: OPEN, opted into auto-run, all prerequisites
+   * DONE (READY — it therefore HAS prerequisites; a task with none is never auto-run), its
+   * assignee bound to a runner, and not already occupied by a live/queued session.
+   * execute()'s own session dedup makes a redundant pass a no-op, so it is safe to repeat.
+   */
+  private async reconcileReadyTasks(): Promise<void> {
+    const candidates = await this.prisma.task.findMany({
+      where: {
+        status: TaskStatus.OPEN,
+        autoRunWhenReady: true,
+        // Assignee bound to a runner — the exact gap triggerDependents skips ("stays ready
+        // for later"). Once a runner is attached, the task becomes eligible here.
+        assignee: { runnerId: { not: null } },
+        // Must have prerequisites; a dependency-free task is never part of auto-run.
+        dependsOn: { some: {} },
+        // Not already being worked or queued: don't double-dispatch, and don't re-poke an
+        // idle AWAITING_INPUT/INTERRUPTED session every pass. Same set as reclaimStalledTask.
+        sessions: { none: { status: { in: TASK_OCCUPYING } } },
+      },
+      select: { id: true, ownerId: true },
+    });
+    if (candidates.length === 0) return;
+    // Keep only those whose prerequisites are ALL DONE now (READY). BLOCKED /
+    // BLOCKED_FAILED are left for the normal flow / a human to resolve.
+    const states = await this.dependencyStatesFor(candidates.map((t) => t.id));
+    for (const t of candidates) {
+      if ((states.get(t.id) ?? 'NONE') !== 'READY') continue;
+      try {
+        await this.execute(t.ownerId, t.id);
+        this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
+      } catch (e) {
+        this.logger.warn(
+          `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
         );
       }
     }
