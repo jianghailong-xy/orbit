@@ -44,6 +44,9 @@ struct ProseSegment: Hashable {
     /// Parse `text` as inline Markdown (bold/italic/code/links/strikethrough). Off for the user
     /// bubble and fenced code, which are rendered verbatim.
     var markdown: Bool = false
+    /// Overlay tappable `.link` attributes on detected URLs. On for the plain user bubble (its text
+    /// is not Markdown, so links can't come from a `run.link`); off everywhere else.
+    var detectLinks: Bool = false
     /// Tint inline `code` runs, mirroring the web `.md code` chip. Off inside headings (a bar behind a
     /// filename in a big bold heading reads as clutter — matches `inlineMarkdown(codeBackground:)`).
     var codeBackground: Bool = true
@@ -68,9 +71,11 @@ struct SelectableText: UIViewRepresentable {
 
     /// Leaf: a single run of text — the user bubble, a fenced code block, or one standalone block.
     init(text: String, role: ProseRole = .body, ink: ProseInk = .transcript,
-         markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil) {
+         markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil,
+         detectLinks: Bool = false) {
         self.segments = [ProseSegment(text: text, role: role, markdown: markdown,
-                                      codeBackground: codeBackground, leadingMarker: leadingMarker)]
+                                      codeBackground: codeBackground, leadingMarker: leadingMarker,
+                                      detectLinks: detectLinks)]
         self.ink = ink
     }
 
@@ -181,6 +186,9 @@ struct SelectableText: UIViewRepresentable {
         }
 
         let source = seg.markdown ? inlineMarkdownAttributed(seg.text) : AttributedString(seg.text)
+        // Where this segment's text lands in `result` — a plain segment's pieces reproduce `seg.text`
+        // 1:1 (only '\n' → U+2028, same UTF-16 length), so a match range on `seg.text` maps here.
+        let contentStart = result.length
         for run in source.runs {
             // Soft breaks inside a paragraph become LINE SEPARATORs so they wrap without picking up
             // paragraph spacing — only the real block break (the styled `\n` below) gets the gap.
@@ -205,6 +213,15 @@ struct SelectableText: UIViewRepresentable {
             }
             if let link = run.link { attrs[.link] = link }
             result.append(NSAttributedString(string: piece, attributes: attrs))
+        }
+
+        // Plain user bubble: overlay `.link` on any bare URLs so they're tappable (a selectable,
+        // non-editable UITextView opens `.link` runs on tap; `linkTextAttributes` tints them).
+        if seg.detectLinks {
+            for (range, url) in LinkDetection.matches(in: seg.text) {
+                result.addAttribute(.link, value: url,
+                                    range: NSRange(location: contentStart + range.location, length: range.length))
+            }
         }
 
         if trailingNewline {

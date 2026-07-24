@@ -3272,6 +3272,12 @@ body {
   margin: 0;
   max-width: 100%;
 }
+/* Bare URLs in a user message are linkified (see linkifyUserText); underline + brand colour so
+   they read as clickable against the tinted bubble. break-word already lets a long link wrap. */
+.chat-user a {
+  color: var(--brand);
+  text-decoration: underline;
+}
 /* The whole meta row (copy + time) is hidden until hover — the time is not shown at rest,
    per request. It still reserves height (occupies flow), so revealing it never overlaps the
    next message and never shifts layout. */

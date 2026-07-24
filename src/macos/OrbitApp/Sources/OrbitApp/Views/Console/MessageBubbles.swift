@@ -48,11 +48,11 @@ struct UserBubbleView: View {
                     // Read-only UITextView so a portion of the message can be selected + copied by
                     // hand — the `meta` copy button is hover-revealed and never shows on iOS. Plain
                     // text (the user turn isn't Markdown-rendered). macOS keeps the selectable `Text`.
-                    SelectableText(text: shown, role: .body, ink: .primary)
+                    SelectableText(text: shown, role: .body, ink: .primary, detectLinks: true)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                     #else
-                    Text(shown).textSelection(.enabled)
+                    Text(LinkDetection.attributed(shown)).textSelection(.enabled)
                         .font(.orbitProse)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))

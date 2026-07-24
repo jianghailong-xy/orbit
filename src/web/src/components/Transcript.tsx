@@ -29,6 +29,7 @@ import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
+import { splitLinks } from '../lib/linkify';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -390,13 +391,29 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
 // resumed/old sessions can still carry big messages.
 const USER_BUBBLE_TRUNCATE = 6000;
 
+// Render a verbatim user message with bare http(s) URLs turned into clickable links (new tab).
+// The text is otherwise untouched — splitLinks only carves out the URL runs — so pre-wrap keeps
+// every space/newline and a literal '#'/'*' still renders as itself.
+function linkifyUserText(text: string): ReactNode[] {
+  return splitLinks(text).map((seg, i) =>
+    seg.type === 'url' ? (
+      <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer">
+        {seg.value}
+      </a>
+    ) : (
+      seg.value
+    ),
+  );
+}
+
 // User message bubble. Input is kept verbatim (pre-wrap), not Markdown-parsed, so a
-// literal '#' or '*' the user typed isn't reinterpreted. Any images sent with the turn
-// render above the text (an image-only turn has empty text) — prefer the local preview
-// (instant), falling back to the durable refs when there's none. Below the bubble a
-// right-aligned meta row (copy button · relative time) fades in on hover, like Claude;
-// it's absolutely positioned so it never adds height, and lives inside the hover wrap so
-// the pointer can travel down onto it without dismissing it (CSS :hover hits ancestors).
+// literal '#' or '*' the user typed isn't reinterpreted (only bare URLs are linkified,
+// see linkifyUserText). Any images sent with the turn render above the text (an image-only
+// turn has empty text) — prefer the local preview (instant), falling back to the durable
+// refs when there's none. Below the bubble a right-aligned meta row (copy button · relative
+// time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
+// and lives inside the hover wrap so the pointer can travel down onto it without dismissing
+// it (CSS :hover hits ancestors).
 function UserBubble({ node }: { node: TextNode }) {
   const exp = useContext(ExportCtx);
   const [copied, setCopied] = useState(false);
@@ -438,7 +455,7 @@ function UserBubble({ node }: { node: TextNode }) {
             ))}
           </div>
         )}
-        {shownText}
+        {linkifyUserText(shownText)}
       </div>
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
