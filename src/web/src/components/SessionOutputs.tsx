@@ -5,6 +5,7 @@ import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
+import { copyText } from '../lib/clipboard';
 import { sessionDiffQuery } from '../lib/queries';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
@@ -91,10 +92,7 @@ export function SessionOutputs({
   const [openFile, setOpenFile] = useState<string | null>(null);
   useEffect(() => setOpenFile(null), [detail?.id]);
   const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text)?.then(
-      () => message.success('Copied'),
-      () => message.error('Copy failed'),
-    );
+    void copyText(text).then((ok) => (ok ? message.success('Copied') : message.error('Copy failed')));
   };
 
   const iso = detail?.isolationStatus;

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Modal, Popconfirm } from 'antd';
 import { useEffect, useState } from 'react';
 import { disableSessionShare, enableSessionShare } from '../api';
+import { copyText } from '../lib/clipboard';
 
 /**
  * Share dialog for one session: mint / show / revoke a public read-only link (`/s/<token>`).
@@ -56,13 +57,14 @@ export function ShareModal({
 
   const copy = () => {
     if (!url) return;
-    void navigator.clipboard
-      ?.writeText(url)
-      ?.then(() => {
+    void copyText(url).then((ok) => {
+      if (ok) {
         setCopied(true);
         message.success('Link copied');
-      })
-      ?.catch(() => message.error('Could not copy'));
+      } else {
+        message.error('Could not copy');
+      }
+    });
   };
 
   return (

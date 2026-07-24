@@ -4,6 +4,7 @@ import { Segmented } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { copyText } from '../lib/clipboard';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
 
@@ -89,10 +90,12 @@ export function RunnerRegisterGuide() {
   const { install: installCmd, register: registerCmd } = buildCommands(__PUBLIC_ORIGIN__);
 
   const copy = (key: string, text: string) => {
-    void navigator.clipboard?.writeText(text)?.catch(() => {});
-    setCopied(key);
-    // Revert the “✓ Copied” affordance after a beat (unless another copy supersedes it).
-    setTimeout(() => setCopied((k) => (k === key ? null : k)), 1600);
+    void copyText(text).then((ok) => {
+      if (!ok) return;
+      setCopied(key);
+      // Revert the “✓ Copied” affordance after a beat (unless another copy supersedes it).
+      setTimeout(() => setCopied((k) => (k === key ? null : k)), 1600);
+    });
   };
 
   // Reuse the sidebar's runner-online signal (same ['runners'] query + cache); poll a

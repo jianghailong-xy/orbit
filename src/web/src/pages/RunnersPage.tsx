@@ -13,6 +13,7 @@ import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
 
@@ -85,9 +86,11 @@ export function RunnersPage() {
 
   const copyToken = () => {
     if (!revealed) return;
-    void navigator.clipboard?.writeText(revealed.token)?.catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    void copyText(revealed.token).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
   };
 
   const open = (r: Runner) => navigate(`/runners/${encodeId(r.id)}`);

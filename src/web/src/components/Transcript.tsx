@@ -29,6 +29,7 @@ import type { ReactNode } from 'react';
 import { isApiErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
+import { copyText } from '../lib/clipboard';
 import { splitLinks } from '../lib/linkify';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -426,9 +427,11 @@ function UserBubble({ node }: { node: TextNode }) {
   const longText = node.text.length > USER_BUBBLE_TRUNCATE;
   const shownText = longText && !expanded && !exp ? node.text.slice(0, USER_BUBBLE_TRUNCATE) : node.text;
   const copy = () => {
-    void navigator.clipboard?.writeText(node.text)?.catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    void copyText(node.text).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
   };
   // Inline images come from the instant local previews when present, else from durable refs
   // (fetched on demand); non-image files always render as a downloadable chip.
@@ -705,9 +708,11 @@ function CodeBlock({ children }: any) {
   const copy = () => {
     const text = preRef.current?.textContent ?? '';
     if (!text) return;
-    void navigator.clipboard?.writeText(text)?.catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
+    void copyText(text).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
   };
   return (
     <div className="md-codeblock">
