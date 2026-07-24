@@ -64,6 +64,7 @@ import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
+import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -561,6 +562,7 @@ export class RunnerApiController {
     if (rows.length === 0) return null;
     const t = rows[0];
     let attachments: TurnAttachment[] | undefined;
+    let content = t.content ?? undefined;
     if (t.kind === 'message' || t.kind === 'shell') {
       // A shell turn runs on the runner too, so flip RUNNING the same way — it serializes
       // a concurrent send and keeps the idle reaper off while the command executes.
@@ -576,17 +578,32 @@ export class RunnerApiController {
       // content blocks, anything else written to the worktree). Shell turns have none, so
       // the field is omitted.
       if (t.kind === 'message') {
-        const atts = await this.prisma.attachment.findMany({
-          where: { turnId: t.id },
-          select: { id: true, mimeType: true, fileName: true },
-          orderBy: { createdAt: 'asc' },
+        // A message turn that already produced claude-side output is a re-delivery of a turn
+        // interrupted mid-flight: its runner died/restarted before acking, so the at-least-once
+        // lease re-delivered it. claude already has this message in the context `--resume`
+        // restores, so re-feeding the original text would re-run its side effects (e.g. a deploy
+        // that restarted this very runner). Deliver a continue nudge instead — and skip its
+        // attachments, already in that restored context. A turn with no output yet never reached
+        // claude (a first send, or a still-pending re-delivery), so it's delivered unchanged.
+        const started = await this.prisma.runEvent.findFirst({
+          where: { turnId: t.id, type: { in: [...CLAUDE_STARTED_EVENT_TYPES] } },
+          select: { id: true },
         });
-        if (atts.length > 0) {
-          attachments = atts.map((a) => ({
-            id: a.id,
-            mimeType: a.mimeType,
-            fileName: a.fileName ?? undefined,
-          }));
+        if (started) {
+          content = buildResumeContinuation(t.content);
+        } else {
+          const atts = await this.prisma.attachment.findMany({
+            where: { turnId: t.id },
+            select: { id: true, mimeType: true, fileName: true },
+            orderBy: { createdAt: 'asc' },
+          });
+          if (atts.length > 0) {
+            attachments = atts.map((a) => ({
+              id: a.id,
+              mimeType: a.mimeType,
+              fileName: a.fileName ?? undefined,
+            }));
+          }
         }
       }
     } else {
@@ -601,7 +618,7 @@ export class RunnerApiController {
       turnId: t.id,
       seq: t.seq,
       kind: t.kind as ConversationTurnKind,
-      content: t.content ?? undefined,
+      content,
       attachments,
     };
   }
