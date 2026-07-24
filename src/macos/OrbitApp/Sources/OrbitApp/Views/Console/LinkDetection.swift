@@ -11,11 +11,19 @@ enum LinkDetection {
 
     /// URL matches in `text` as UTF-16 (`NSString`) ranges, so they map straight onto an
     /// `NSAttributedString`. Empty when there are none (or the detector failed to build).
+    ///
+    /// Restricted to explicit `http(s)://` links so all three platforms behave identically: the web
+    /// user bubble linkifies only `https?://…` (see `lib/linkify.ts`), whereas NSDataDetector also
+    /// resolves bare `www.` hosts and email addresses — we drop those here to match web.
     static func matches(in text: String) -> [(range: NSRange, url: URL)] {
         guard let detector, !text.isEmpty else { return [] }
-        let full = NSRange(location: 0, length: (text as NSString).length)
+        let ns = text as NSString
+        let full = NSRange(location: 0, length: ns.length)
         return detector.matches(in: text, range: full).compactMap { m in
-            m.url.map { (m.range, $0) }
+            guard let url = m.url else { return nil }
+            let matched = ns.substring(with: m.range).lowercased()
+            guard matched.hasPrefix("http://") || matched.hasPrefix("https://") else { return nil }
+            return (m.range, url)
         }
     }
 
