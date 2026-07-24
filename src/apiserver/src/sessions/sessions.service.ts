@@ -314,7 +314,8 @@ export class SessionsService {
       ownerId,
       { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, effort },
       {
-        source: 'system',
+        // Not source:'system' — orchestrated children appear in the normal (Active) list like any
+        // session; the parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
         batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
       },
