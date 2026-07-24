@@ -203,7 +203,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate")
+		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "dependsOnTaskIds", "autoRunWhenReady")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -221,7 +221,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "autoRunWhenReady")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -540,13 +540,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string.",
+			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Create tasks in dependency order so each can reference the ids returned by earlier calls (e.g. S1 dependsOn [S0], S2 dependsOn [S1]).",
 			"inputSchema": obj(map[string]interface{}{
 				"title":       str,
 				"description": promptDesc,
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
 				"dueDate":     str,
+				"dependsOnTaskIds": map[string]interface{}{
+					"type":        "array",
+					"items":       str,
+					"description": "Prerequisite task ids this task waits on (each must be owned by the caller). The task is BLOCKED until every prerequisite is DONE, then runs. Use this instead of writing 'wait for X' preconditions into the description. Cannot form a cycle.",
+				},
+				"autoRunWhenReady": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no dependsOnTaskIds.",
+				},
 			}, "title"),
 		},
 		{
@@ -560,6 +569,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
 				"dueDate":     map[string]interface{}{"type": []string{"string", "null"}},
+				"autoRunWhenReady": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+				},
 			}),
 		},
 		{
