@@ -43,11 +43,33 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchSessions = (): void => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     };
-    const scheduleRefresh = (): void => {
+    // The task list/board queries: main list & sidebar count (['tasks']), the single-list view
+    // (['task-list', id]), the sidebar lists (['task-lists']), and an open detail (['task', id]).
+    // Refetched only on a `task.*` event (or on reconnect), so an unrelated session event doesn't
+    // needlessly refetch them. This is what makes MCP-created/updated tasks appear without a
+    // manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
+    const refetchTasks = (): void => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      void qc.invalidateQueries({ queryKey: ['task-list'] });
+      void qc.invalidateQueries({ queryKey: ['task-lists'] });
+      void qc.invalidateQueries({ queryKey: ['task'] });
+    };
+    let pendingSessions = false;
+    let pendingTasks = false;
+    const scheduleRefresh = (type: string): void => {
+      if (type.startsWith('task.')) pendingTasks = true;
+      else pendingSessions = true;
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
-        refetchSessions();
+        if (pendingSessions) {
+          pendingSessions = false;
+          refetchSessions();
+        }
+        if (pendingTasks) {
+          pendingTasks = false;
+          refetchTasks();
+        }
       }, REFRESH_DEBOUNCE_MS);
     };
     // Close the stream and schedule a backoff reconnect. Guarded by `dropped` so it fires once per
@@ -68,7 +90,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         fails = 0;
         lastMsgAt = Date.now();
         setLive(true);
-        refetchSessions(); // no sinceSeq replay — reconcile with a fresh snapshot on (re)connect
+        // No sinceSeq replay — reconcile both lists with a fresh snapshot on (re)connect so
+        // task changes missed during the gap surface too.
+        refetchSessions();
+        refetchTasks();
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
@@ -80,7 +105,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         }
         // Drop the keepalive ping and any frame without a sessionId (matches the native decode).
         if (!ev || ev.type === 'ping' || !ev.sessionId) return;
-        scheduleRefresh();
+        scheduleRefresh(ev.type ?? '');
       };
       es.onerror = () => drop();
     }

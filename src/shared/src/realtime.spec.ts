@@ -3,9 +3,10 @@ import { isLifecycleType, RunEventType } from './enums';
 import { ControlEventType } from './realtime';
 
 describe('control-plane protocol', () => {
-  it('lifecycle signals are exactly session_created/session_ended — transcript types are not', () => {
+  it('lifecycle signals are session_created/session_ended/task_changed — transcript types are not', () => {
     expect(isLifecycleType(RunEventType.SESSION_CREATED)).toBe(true);
     expect(isLifecycleType(RunEventType.SESSION_ENDED)).toBe(true);
+    expect(isLifecycleType(RunEventType.TASK_CHANGED)).toBe(true);
     for (const t of [
       RunEventType.STATUS,
       RunEventType.TEXT_DELTA,

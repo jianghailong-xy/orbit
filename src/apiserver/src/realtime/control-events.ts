@@ -35,6 +35,8 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.APPROVAL_RESOLVED;
     case RunEventType.BACKGROUND_TASK:
       return ControlEventType.BACKGROUND_TASK;
+    case RunEventType.TASK_CHANGED:
+      return ControlEventType.TASK_CHANGED;
     default:
       return null;
   }

@@ -28,6 +28,10 @@ export enum ControlEventType {
   APPROVAL_RESOLVED = 'approval.resolved',
   /** A background shell the agent launched finished (completed/failed/killed). */
   BACKGROUND_TASK = 'background.task',
+  /** A task (work item) the owner can see was created or updated — usually via an agent's MCP
+   *  task_create/task_update. `data` is a `ControlTaskChanged`; it's only a nudge to refetch the
+   *  task list/board. `sessionId` names the task's creator session (its scope on this stream). */
+  TASK_CHANGED = 'task.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -82,4 +86,10 @@ export interface ControlBackgroundTask {
   name: string;
   status: string;
   exitCode?: number;
+}
+
+/** `data` for `task.changed`. The client just refetches its task queries; the id is carried for
+ *  future fine-grained cache updates and logging. */
+export interface ControlTaskChanged {
+  taskId: string;
 }

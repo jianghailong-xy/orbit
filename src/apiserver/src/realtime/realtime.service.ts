@@ -263,6 +263,20 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A task (work item) the owner can see changed — created or updated, almost always via MCP.
+   *  Published on the task's creator session so it rides the same hub + NOTIFY bridge and resolves
+   *  to that owner; streamForUser maps it to ControlEventType.TASK_CHANGED. Best-effort like the
+   *  session signals: a task with no owned creator session simply doesn't push (the client's
+   *  interval poll still catches it). */
+  publishTaskChanged(sessionId: string, taskId: string): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.TASK_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { taskId },
+    });
+  }
+
   // ── user-scoped control plane (SSE: GET /api/events) ────────────────────
   //
   // One per-user stream multiplexes lifecycle/status/approval/background events across ALL of
@@ -312,6 +326,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         break;
       case ControlEventType.BACKGROUND_TASK:
         data = backgroundPayloadOf(ev.payload) as unknown as Record<string, unknown>;
+        break;
+      case ControlEventType.TASK_CHANGED:
+        // A pure nudge to refetch the owner's task list — no DB augmentation needed; the id
+        // travels straight through from publishTaskChanged.
+        data = { taskId: String(ev.payload.taskId ?? '') };
         break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED:

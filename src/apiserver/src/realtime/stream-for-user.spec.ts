@@ -160,6 +160,26 @@ test('publishSessionEnded surfaces as session.ended with status+endReason', asyn
   assert.deepEqual(got[0].data, { status: 'SUCCEEDED', endReason: 'completed' });
 });
 
+test('publishTaskChanged surfaces as task.changed with the taskId, scoped to the session owner', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishTaskChanged('sessA', 'task123');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'task.changed');
+  assert.equal(mine[0].sessionId, 'sessA');
+  assert.deepEqual(mine[0].data, { taskId: 'task123' });
+  // Routed by the creating session's owner — another user never sees it.
+  assert.equal(theirs.length, 0);
+});
+
 test('lifecycle signals never enter a per-session transcript stream', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const transcript: unknown[] = [];
@@ -167,11 +187,12 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
 
   svc.publishSessionCreated('sessA');
   svc.publishSessionEnded('sessA', RunStatus.SUCCEEDED, SessionEndReason.COMPLETED);
+  svc.publishTaskChanged('sessA', 'task123');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });
   await delay(20);
   sub.unsubscribe();
 
-  // Only the real run event arrives; both lifecycle signals are filtered out.
+  // Only the real run event arrives; all three lifecycle signals are filtered out.
   assert.equal(transcript.length, 1);
   assert.equal((transcript[0] as { type: string }).type, 'status');
 });

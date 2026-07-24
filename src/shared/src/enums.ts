@@ -116,12 +116,22 @@ export enum RunEventType {
   // isLifecycleType). streamForUser maps them to ControlEventType.SESSION_CREATED / SESSION_ENDED.
   SESSION_CREATED = 'session_created',
   SESSION_ENDED = 'session_ended',
+  // A task (work item) the owner can see was created or updated — almost always via an agent's
+  // MCP task_create/task_update. Like the session_* signals above it rides the realtime hub for
+  // the free cross-replica NOTIFY bridge, is NEVER persisted, and NEVER enters a per-session
+  // transcript stream (isLifecycleType). streamForUser maps it to ControlEventType.TASK_CHANGED
+  // so the owner's task list/board refreshes live instead of waiting for its poll.
+  TASK_CHANGED = 'task_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
  *  hub but filtered OUT of every per-session transcript stream and never persisted. */
 export function isLifecycleType(t: RunEventType): boolean {
-  return t === RunEventType.SESSION_CREATED || t === RunEventType.SESSION_ENDED;
+  return (
+    t === RunEventType.SESSION_CREATED ||
+    t === RunEventType.SESSION_ENDED ||
+    t === RunEventType.TASK_CHANGED
+  );
 }
 
 /** Lifecycle of a human-facing work item (Task). */

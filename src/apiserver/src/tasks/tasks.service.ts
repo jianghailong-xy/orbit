@@ -12,6 +12,7 @@ import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
@@ -49,6 +50,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
+    // @Global RealtimeModule, so no import needed here (nor in RunnerApiModule, which also
+    // instantiates this service). Used to push task changes to the owner's control-plane stream.
+    private readonly realtime: RealtimeService,
   ) {}
 
   onModuleInit(): void {
@@ -170,6 +174,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         skipDuplicates: true,
       });
     }
+    // Push the new task to the owner's control-plane stream (GET /api/events) so their task
+    // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
+    // show up after a manual refresh". Scoped via the creating session (the MCP path always
+    // sends one); a task created without an owned session just falls back to the poll. Mirrors
+    // SessionsService.create's publishSessionCreated.
+    if (sessionId) this.realtime.publishTaskChanged(sessionId, task.id);
     return task;
   }
 
@@ -328,6 +338,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       data.list = dto.listId ? { connect: { id: dto.listId } } : { disconnect: true };
     }
     const updated = await this.prisma.task.update({ where: { id }, data });
+    // Same live-refresh nudge as create(): an agent's task_update (e.g. marking a task DONE)
+    // changes what the list shows, so route a task.changed via the task's creator session so
+    // the owner's list reflects it without a manual refresh. Null for the rare web-created task
+    // (no creator session) — those fall back to the poll.
+    if (before.creatorSessionId) this.realtime.publishTaskChanged(before.creatorSessionId, id);
     // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
     // (both the user PATCH and the agent's task_update MCP flow through here). On the
     // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
@@ -475,6 +490,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         mentions: mentioned.map((a) => a.id),
       },
     });
+    // A new comment changes the list's comment count and the open detail view, so give it the
+    // same live-refresh nudge as create()/update() — routed via the task's creator session.
+    if (task.creatorSessionId) this.realtime.publishTaskChanged(task.creatorSessionId, id);
     // Notify & trigger each mentioned agent. Best-effort: a trigger failure (e.g. the
     // agent has no runner) must never fail the comment write.
     for (const agent of mentioned) {
