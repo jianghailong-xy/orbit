@@ -305,9 +305,14 @@ export class SessionsService {
     // Resolve an @-mentioned agent name to its id (owner-scoped). An explicit agentId wins.
     const agentId =
       dto.agentId ?? (dto.agentName ? await this.resolveAgentByName(ownerId, dto.agentName) : undefined);
+    // Give the child a real effort like a normal new session would (the target agent's own
+    // effort, else the owner's account default). create() normalizes it per provider (codex maps
+    // max→xhigh). Without this the child's effort is empty, so a codex child falls back to the
+    // runner's codex config default — which can be invalid for its model → 400 on the first turn.
+    const effort = await this.resolveDefaultEffort(ownerId, agentId);
     const created = await this.create(
       ownerId,
-      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model },
+      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, effort },
       {
         source: 'system',
         parentSessionId,
@@ -315,6 +320,25 @@ export class SessionsService {
       },
     );
     return { id: created.id, status: created.status, title: created.title };
+  }
+
+  /** The effort a normal new session under this agent would inherit: the agent's own effort if
+   *  set, else the owner's account default (UserPreferences.defaultEffort). create() normalizes
+   *  it per provider. Returns undefined only when neither is set. */
+  private async resolveDefaultEffort(ownerId: string, agentId?: string): Promise<string | undefined> {
+    if (agentId) {
+      const agent = await this.prisma.agent.findFirst({
+        where: { id: agentId, ownerId, deletedAt: null },
+        select: { effort: true },
+      });
+      if (agent?.effort) return agent.effort;
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { preferences: true },
+    });
+    const prefs = (user?.preferences ?? {}) as { defaultEffort?: string };
+    return prefs.defaultEffort || undefined;
   }
 
   /** Resolve an @-mentioned agent name to its id within the owner. Throws on no/ambiguous match. */
