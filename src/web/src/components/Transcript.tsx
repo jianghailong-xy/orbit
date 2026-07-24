@@ -1472,13 +1472,25 @@ function Todos({ todos }: { todos: any[] }) {
   );
 }
 
+// labelPicked reports whether an option was chosen, given the answer result text
+// (… "Q"="A". — multi-select joins the picks as "a,b,c" inside the one quote
+// pair). The text only ever contains the picked labels, each bounded by a quote
+// or a comma, so a label is picked iff it appears delimited that way. The
+// boundary check keeps a label that's merely a substring of the echoed question
+// (or of a longer sibling label) from matching; a typed-in custom answer is no
+// option's label, so it highlights nothing.
+function labelPicked(answer: string, label: string): boolean {
+  if (!answer || !label) return false;
+  const bound = (c: string | undefined) => c === '"' || c === ',';
+  for (let i = answer.indexOf(label); i >= 0; i = answer.indexOf(label, i + 1)) {
+    if (bound(answer[i - 1]) && bound(answer[i + label.length])) return true;
+  }
+  return false;
+}
+
 // Questions renders an AskUserQuestion input: each question as a card with its
-// header, prompt text, and the options (label + description). Once answered, the
-// option(s) the user picked are highlighted. `answer` is the raw result text
-// ("The user answered: "Q"="A". …"); it only ever contains the chosen answers,
-// each wrapped in double quotes, so an option is picked iff its quoted label
-// appears there (the quotes avoid matching a label that's a substring of the
-// echoed question, and a typed-in custom answer simply matches no option).
+// header, prompt text, and the options (label + description); once answered, the
+// option(s) the user picked are highlighted (see labelPicked).
 function Questions({ questions, answer }: { questions: any[]; answer?: string }) {
   return (
     <div className="chat-questions">
@@ -1489,7 +1501,7 @@ function Questions({ questions, answer }: { questions: any[]; answer?: string })
           <div className="chat-q-opts">
             {(q?.options ?? []).map((o: any, j: number) => {
               const label = o?.label ?? '';
-              const picked = !!answer && !!label && answer.includes(`"${label}"`);
+              const picked = !!answer && labelPicked(answer, label);
               return (
                 <div className={`chat-q-opt${picked ? ' is-picked' : ''}`} key={j}>
                   <span className="chat-q-opt-label">{label}</span>
