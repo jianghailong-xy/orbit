@@ -8,7 +8,7 @@ import { CreateAgentDto, UpdateAgentDto } from './dto';
 // are blocked unless allow-listed. Default new agents to allow the whole orbit server.
 const ORBIT_MCP_TOOL = 'mcp__orbit__*';
 const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
-  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
+  [AgentProvider.CLAUDE]: 'claude-opus-5',
   [AgentProvider.CODEX]: 'gpt-5.6-sol',
 };
 

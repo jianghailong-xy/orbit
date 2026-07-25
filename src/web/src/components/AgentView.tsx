@@ -3475,7 +3475,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   value: m,
                   // Carry the Auto-mode constraint on the greyed option itself, where it's
                   // actionable, instead of in a row-wide paragraph.
-                  label: m === 'Auto' && !autoOk ? 'Auto (needs Fable 5, Opus 4.8, or Sonnet 5)' : m,
+                  label: m === 'Auto' && !autoOk ? 'Auto (needs Fable 5, Opus 5, Opus 4.8, or Sonnet 5)' : m,
                   disabled: m === 'Auto' && !autoOk,
                 }))}
                 disabled={!configEditable}

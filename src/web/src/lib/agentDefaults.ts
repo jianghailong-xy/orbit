@@ -39,6 +39,7 @@ export const mergedProviderOptions = (
 // `label` is the friendly display name shown in every picker.
 export const CLAUDE_MODEL_OPTIONS = [
   { value: 'claude-fable-5', label: 'Fable 5' },
+  { value: 'claude-opus-5', label: 'Opus 5' },
   { value: 'claude-opus-4-8', label: 'Opus 4.8' },
   { value: 'claude-sonnet-5', label: 'Sonnet 5' },
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
@@ -61,11 +62,12 @@ export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
 export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS];
 
 // Per-model context-window size (max input tokens), for the composer's context-usage
-// gauge. Claude values are the models' true windows (Opus 4.8 / Sonnet 5 / Fable 5 = 1M,
-// Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with Swift's
-// AgentDefaults.contextWindow(for:).
+// gauge. Claude values are the models' true windows (Opus 5 / Opus 4.8 / Sonnet 5 /
+// Fable 5 = 1M, Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with
+// Swift's AgentDefaults.contextWindow(for:).
 export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-fable-5': 1_000_000,
+  'claude-opus-5': 1_000_000,
   'claude-opus-4-8': 1_000_000,
   'claude-sonnet-5': 1_000_000,
   'claude-haiku-4-5': 200_000,
@@ -111,7 +113,7 @@ export const contextWindowFor = (
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
-  claude: 'claude-opus-4-8',
+  claude: 'claude-opus-5',
   codex: 'gpt-5.6-sol',
 };
 
@@ -182,9 +184,14 @@ export const MODE_OPTIONS = [
 ];
 
 // Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
-export const AUTO_CAPABLE_MODELS = new Set(['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5']);
+export const AUTO_CAPABLE_MODELS = new Set([
+  'claude-fable-5',
+  'claude-opus-5',
+  'claude-opus-4-8',
+  'claude-sonnet-5',
+]);
 export const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
 
 // App defaults used when the user has set no preference of their own.
-export const DEFAULT_MODEL = 'claude-opus-4-8';
+export const DEFAULT_MODEL = 'claude-opus-5';
 export const DEFAULT_PERMISSION_MODE = 'auto';

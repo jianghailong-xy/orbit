@@ -61,6 +61,7 @@ public enum AgentDefaults {
 
     public static let claudeModels: [ModelOption] = [
         ModelOption(id: "claude-fable-5", name: "Fable 5"),
+        ModelOption(id: "claude-opus-5", name: "Opus 5"),
         ModelOption(id: "claude-opus-4-8", name: "Opus 4.8"),
         ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
         ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
@@ -75,7 +76,7 @@ public enum AgentDefaults {
         ModelOption(id: "gpt-5.4-mini", name: "GPT-5.4 Mini"),
     ]
 
-    public static let defaultModelID = "claude-opus-4-8"
+    public static let defaultModelID = "claude-opus-5"
 
     /// The models a provider's pickers offer. Anything that isn't exactly "codex" is Claude —
     /// matching apiserver's `agentProvider()`, so a stale provider string can't empty the menu.
@@ -150,12 +151,12 @@ public enum AgentDefaults {
     }
 
     /// Per-model context-window size (max input tokens), for the composer's context-usage
-    /// gauge. Claude values are the models' true windows (Opus 4.8 / Sonnet 5 / Fable 5 =
-    /// 1M, Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with web's
-    /// CONTEXT_WINDOW_BY_MODEL.
+    /// gauge. Claude values are the models' true windows (Opus 5 / Opus 4.8 / Sonnet 5 /
+    /// Fable 5 = 1M, Haiku 4.5 = 200K); Codex is a best-effort default. Keep in sync with
+    /// web's CONTEXT_WINDOW_BY_MODEL.
     private static func knownContextWindow(for id: String) -> Int? {
         switch id {
-        case "claude-fable-5", "claude-opus-4-8", "claude-sonnet-5": return 1_000_000
+        case "claude-fable-5", "claude-opus-5", "claude-opus-4-8", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
         case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": return 372_000
         case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini": return 400_000

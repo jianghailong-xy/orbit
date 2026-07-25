@@ -4,7 +4,7 @@ import { AgentProvider } from './enums';
  *  Mirrors the clients' defaults (web `lib/agentDefaults` DEFAULT_MODEL_BY_PROVIDER, Swift
  *  `AgentDefaults.defaultModel(for:)`). Kept here so the server has a single source of truth. */
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
-  [AgentProvider.CLAUDE]: 'claude-opus-4-8',
+  [AgentProvider.CLAUDE]: 'claude-opus-5',
   [AgentProvider.CODEX]: 'gpt-5.6-sol',
 };
 
