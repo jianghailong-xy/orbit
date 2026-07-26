@@ -1,5 +1,6 @@
 import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
+import { presetDefaultModel } from './preset-overlay';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
@@ -16,6 +17,8 @@ export interface ModelProviderRow {
   baseUrl: string;
   apiKeyEnc: string;
   defaultModel: string | null;
+  /** Set when the row follows a vendor preset — its default model resolves from the catalogue. */
+  presetSlug?: string | null;
   enabled: boolean;
 }
 
@@ -55,9 +58,13 @@ export function resolveProviderExec(args: {
     return {
       provider: runtime,
       // A custom provider's model space is its own; never coerce it through the claude/gpt
-      // prefix guard. Prefer an explicit session/agent pick, else the provider's default.
+      // prefix guard. Prefer an explicit session/agent pick, else the provider's default — which
+      // a preset-backed row takes from the catalogue, so a retired model id can't outlive it here.
       model:
-        sessionModel || agentModel || customRow.defaultModel || DEFAULT_MODEL_BY_PROVIDER[runtime],
+        sessionModel ||
+        agentModel ||
+        presetDefaultModel(customRow) ||
+        DEFAULT_MODEL_BY_PROVIDER[runtime],
       // Provider env wins over any user-set agent env (e.g. a hand-typed ANTHROPIC_BASE_URL).
       env: { ...(agentEnv ?? {}), ...injectedEnv(customRow) },
     };

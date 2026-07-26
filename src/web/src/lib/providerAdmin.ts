@@ -17,6 +17,9 @@ export interface ProviderRow {
   baseUrl: string;
   models: ProviderModelRow[];
   defaultModel: string | null;
+  /** The vendor preset this row follows, if any: `models`/`defaultModel` above are the preset's
+   *  current ones, resolved server-side. NULL means the row maintains its own list. */
+  presetSlug: string | null;
   enabled: boolean;
   hasApiKey: boolean;
 }

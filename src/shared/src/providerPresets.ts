@@ -1,8 +1,12 @@
-// Official preset templates for the Add-provider form: picking one pre-fills the
-// slug/label/endpoint/model list so the admin only enters an API key. Phase 1 borrows
-// the claude runtime, so every preset here is a vendor's OFFICIAL Anthropic-compatible
-// endpoint (the same ones their docs give for Claude Code). Endpoints and model ids
-// verified against vendor docs 2026-07; models move fast — the form stays editable.
+// The official vendor catalogue. Connecting a provider picks one of these: the endpoint and the
+// model list come from here, so the user only enters an API key. A configured provider keeps a
+// link back to its preset (ModelProvider.presetSlug), and the server resolves that row's models
+// and default model from this file on every read — which is what makes an entry added here reach
+// providers that were configured months ago. Shared so the apiserver (the resolver) and the web
+// form (the gallery) can never disagree; the native clients read the resolved rows off the API.
+//
+// Endpoints and model ids verified against vendor docs 2026-07. `brand`/`keyUrl` are for the web
+// gallery only — they're here so adding a vendor stays a single-file edit.
 export interface ProviderPresetModel {
   value: string;
   label: string;
@@ -143,3 +147,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyUrl: 'https://bailian.console.aliyun.com',
   },
 ];
+
+/** The preset a configured provider follows, or undefined for a self-maintained one. */
+export function providerPreset(presetSlug?: string | null): ProviderPreset | undefined {
+  return presetSlug ? PROVIDER_PRESETS.find((p) => p.slug === presetSlug) : undefined;
+}

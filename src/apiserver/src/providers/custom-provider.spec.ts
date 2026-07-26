@@ -1,6 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { encryptSecret } from './provider-crypto';
+import { providerPreset } from '@orbit/shared';
 import { isBuiltinProvider, resolveProviderExec } from './custom-provider';
 
 const row = (over: Partial<Parameters<typeof resolveProviderExec>[0]['customRow'] & object> = {}) => ({
@@ -46,6 +47,26 @@ test('custom-provider', async (t) => {
     });
     assert.equal(exec.provider, 'codex');
     assert.equal(exec.model, 'gpt-5.6-sol');
+  });
+
+  await t.test('preset-backed provider: a retired stored default yields to the catalogue', () => {
+    // The row was created when Anthropic's preset defaulted to a model we no longer list; nothing
+    // has been saved since, so only the preset link can keep dispatch off a dead model id.
+    const exec = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: row({ presetSlug: 'anthropic', defaultModel: 'claude-opus-4-0' }),
+      sessionModel: null,
+      agentModel: null,
+    });
+    assert.equal(exec.model, providerPreset('anthropic')!.defaultModel);
+    // An explicit pick still wins over both.
+    const picked = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: row({ presetSlug: 'anthropic', defaultModel: 'claude-opus-4-0' }),
+      sessionModel: 'claude-haiku-4-5-20251001',
+      agentModel: null,
+    });
+    assert.equal(picked.model, 'claude-haiku-4-5-20251001');
   });
 
   await t.test('custom provider: borrows claude, injects anthropic env, keeps its own model', () => {

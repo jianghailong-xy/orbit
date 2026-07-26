@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, providerPreset, type ProviderPreset } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
+import { withPreset } from './preset-overlay';
 
 const BUILTIN_SLUGS = new Set<string>([AgentProvider.CLAUDE, AgentProvider.CODEX]);
 const SLUG_RE = /^[a-z][a-z0-9-]*$/;
@@ -14,12 +15,22 @@ export class ProvidersService {
 
   /** De-sensitized picker catalog (no key, no baseUrl): the shared providers plus the
    *  caller's own personal ones. Enabled only. */
-  listPublic(userId: string) {
-    return this.prisma.modelProvider.findMany({
+  async listPublic(userId: string) {
+    const rows = await this.prisma.modelProvider.findMany({
       where: { enabled: true, OR: [{ ownerId: null }, { ownerId: userId }] },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
-      select: { slug: true, label: true, runtime: true, models: true, defaultModel: true },
+      select: {
+        slug: true,
+        label: true,
+        runtime: true,
+        models: true,
+        defaultModel: true,
+        presetSlug: true,
+      },
     });
+    // Every client — web, iOS, macOS — reads its model list from here, so resolving the preset
+    // once on this side is what keeps a catalogue update from needing a client release.
+    return rows.map((r) => withPreset(r));
   }
 
   /** Admin management list: the SHARED (ownerId null) providers only — never another
@@ -45,16 +56,28 @@ export class ProvidersService {
   async create(ownerId: string | null, dto: CreateModelProviderDto) {
     const slug = dto.slug.trim().toLowerCase();
     this.assertSlug(slug);
+    // Following a preset means the catalogue supplies the models — a list sent alongside it would
+    // only be a stale copy of the same thing. What's stored is a snapshot: reads serve the preset,
+    // so this only ever surfaces if we stop shipping that preset.
+    const preset = this.assertPreset(dto.presetSlug);
+    const models = preset
+      ? preset.models.map((m) => ({
+          value: m.value,
+          label: m.label,
+          ...(m.contextWindow != null ? { contextWindow: m.contextWindow } : {}),
+        }))
+      : (dto.models ?? []);
     try {
       const row = await this.prisma.modelProvider.create({
         data: {
           slug,
           label: dto.label,
-          runtime: dto.runtime ?? 'claude',
+          runtime: dto.runtime ?? preset?.runtime ?? 'claude',
           baseUrl: dto.baseUrl,
           apiKeyEnc: encryptSecret(dto.apiKey),
-          models: (dto.models ?? []) as Prisma.InputJsonValue,
-          defaultModel: dto.defaultModel ?? dto.models?.[0]?.value ?? null,
+          models: models as Prisma.InputJsonValue,
+          defaultModel: preset?.defaultModel ?? dto.defaultModel ?? dto.models?.[0]?.value ?? null,
+          presetSlug: preset?.slug ?? null,
           enabled: dto.enabled ?? true,
           ownerId,
         },
@@ -80,6 +103,9 @@ export class ProvidersService {
       enabled: dto.enabled,
     };
     if (dto.models) data.models = dto.models as Prisma.InputJsonValue;
+    // An explicit null detaches the row from its preset: the caller edited the model list, so it
+    // becomes self-maintained. Omitted leaves the link as it is.
+    if (dto.presetSlug !== undefined) data.presetSlug = this.assertPreset(dto.presetSlug)?.slug ?? null;
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
     if (dto.apiKey) data.apiKeyEnc = encryptSecret(dto.apiKey);
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
@@ -144,6 +170,14 @@ export class ProvidersService {
     return row;
   }
 
+  /** The preset a write asks to follow — undefined for none, a 400 for one we don't ship. */
+  private assertPreset(slug?: string | null): ProviderPreset | undefined {
+    if (!slug) return undefined;
+    const preset = providerPreset(slug);
+    if (!preset) throw new BadRequestException(`unknown provider preset "${slug}"`);
+    return preset;
+  }
+
   private assertSlug(slug: string) {
     if (!SLUG_RE.test(slug)) {
       throw new BadRequestException('slug must be lowercase letters/digits/hyphen, starting with a letter');
@@ -190,8 +224,10 @@ export class ProvidersService {
     return '';
   }
 
-  // Drop the encrypted key from any browser-facing payload; expose only whether one is set.
+  // Drop the encrypted key from any browser-facing payload; expose only whether one is set. The
+  // management surfaces read the same preset-resolved catalogue the pickers do, so the form shows
+  // what a session would actually get.
   private desensitize({ apiKeyEnc, ...rest }: Prisma.ModelProviderGetPayload<object>) {
-    return { ...rest, hasApiKey: !!apiKeyEnc };
+    return { ...withPreset(rest), hasApiKey: !!apiKeyEnc };
   }
 }

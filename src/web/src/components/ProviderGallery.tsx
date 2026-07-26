@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { PROVIDER_PRESETS, type ProviderBrand } from '../lib/providerPresets';
+import { PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { scopeSuffix, type ProviderScope } from '../lib/providerAdmin';
 
