@@ -1873,9 +1873,23 @@ export function AgentView({ runner }: { runner: Runner }) {
   // it (it's no longer cancellable) it'll arrive in the transcript via its `user` event.
   const cancelQueued = async (turnId: string): Promise<void> => {
     if (!selectedId) return;
+    const withdrawn = queued.find((x) => x.turnId === turnId);
     setQueued((q) => q.filter((x) => x.turnId !== turnId));
     try {
       await cancelQueuedTurn(selectedId, turnId);
+      // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
+      // message back into the composer so it can be edited and resent. Only restored once the
+      // DELETE succeeds — a rejected withdraw means the runner already leased it, so it lands
+      // in the transcript and restoring would duplicate it. Unlike Stop (offered only with an
+      // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
+      // read through textRef, since the awaited gap may have outdated this render's `text`.
+      const body = withdrawn?.content.trim();
+      if (body && !textRef.current.trim()) setText(body);
+      const droppedImages = withdrawn?.attachments?.length ?? turnImages[turnId]?.length ?? 0;
+      if (droppedImages)
+        message.info(
+          `${droppedImages} image${droppedImages > 1 ? 's' : ''} from that message weren't restored — re-add if needed`,
+        );
     } catch {
       message.info('This message is already being processed and cannot be withdrawn');
     }

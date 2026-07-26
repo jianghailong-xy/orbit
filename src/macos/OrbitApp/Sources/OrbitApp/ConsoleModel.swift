@@ -831,6 +831,16 @@ final class ConsoleModel {
         publishStateNow()
         do {
             try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+            // Withdrawing shouldn't silently eat what the user typed (interrupt parity): fold the
+            // message back into the composer so it can be edited and resent. Only once the DELETE
+            // succeeds — a rejected withdraw means the runner already leased it, so it lands in the
+            // transcript and restoring would duplicate it. Unlike Stop (offered only with an empty
+            // composer), Cancel is reachable mid-draft, so an in-progress draft always wins.
+            // Attachments aren't rehydrated (the composer needs their bytes), matching interrupt.
+            let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty, composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                composerText = body
+            }
         } catch {
             showTransientStatus("This message is already being processed and can't be withdrawn")
         }
