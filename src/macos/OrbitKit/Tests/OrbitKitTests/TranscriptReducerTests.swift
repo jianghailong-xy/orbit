@@ -413,6 +413,25 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.queued.isEmpty)
     }
 
+    /// The queued bubble's Cancel button withdraws one waiting message by id, leaving any other
+    /// queued sends untouched (the server DELETE targets the same single turn). A lost race is a
+    /// no-op: if the runner already leased it, its durable `user` event just lands normally, since
+    /// `appendUser` finds nothing left in the queue to reconcile.
+    func testRemoveQueuedWithdrawsOneWaitingMessage() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .textDelta, payload: .object(["delta": .string("working")])))
+        r.addOptimisticUser(clientTurnId: "c1", text: "first queued", queued: true)
+        r.addOptimisticUser(clientTurnId: "c2", text: "second queued", queued: true)
+        let firstID = r.state.queued[0].id
+
+        r.removeQueued(id: firstID)
+        XCTAssertEqual(r.state.queued.map(\.text), ["second queued"], "only the targeted turn is withdrawn")
+        XCTAssertEqual(r.state.items.count, 1, "the streaming reply is undisturbed")
+
+        r.removeQueued(id: "not-a-real-id")   // unknown id → no-op
+        XCTAssertEqual(r.state.queued.count, 1)
+    }
+
     /// The durable `user` event carries `attachments` ([{id,mime,name}]) and a `ts` — both must
     /// land on the bubble so it can render image thumbnails / file chips and a relative time
     /// (web parity; the runner echoes `attachments`, not `attachmentIds`).

@@ -251,7 +251,8 @@ struct TranscriptView: View {
                 // — they haven't been asked yet, so they're never the sticky "Your question" (web's
                 // `:not(.chat-queued)`).
                 ForEach(console.state.queued, id: \.id) { bubble in
-                    UserBubbleView(bubble: bubble)
+                    UserBubbleView(bubble: bubble,
+                                   onCancelQueued: { Task { await console.cancelQueued(bubble) } })
                         .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)

@@ -812,6 +812,22 @@ final class ConsoleModel {
         catch { statusMessage = "Interrupt failed" }
     }
 
+    /// Withdraw a message still waiting behind the in-flight turn (the queued bubble's Cancel button,
+    /// web parity). Removes it from the local queue optimistically for instant feedback, then issues
+    /// the server DELETE. Gated in the UI on a known `turnId` (the DELETE needs it); if the runner has
+    /// already leased the message the server rejects the withdraw (409) and its durable `user` event
+    /// lands it in the transcript as usual — so a lost race is a no-op, not an error.
+    func cancelQueued(_ bubble: UserBubble) async {
+        guard let turnId = bubble.turnId else { return }
+        reducer.removeQueued(id: bubble.id)
+        publishStateNow()
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            showTransientStatus("This message is already being processed and can't be withdrawn")
+        }
+    }
+
     /// `+` menu → Attach image / Upload file: read a picked file, enforce the size cap (web
     /// parity), and upload it via the existing attachment path.
     func attachFile(url: URL) async {

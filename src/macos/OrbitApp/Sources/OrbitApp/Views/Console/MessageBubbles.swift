@@ -12,6 +12,9 @@ import OrbitKit
 /// revealing it never shifts the message below.
 struct UserBubbleView: View {
     let bubble: UserBubble
+    /// Provided only for the queued tail (`ConsoleView`): withdraws this still-waiting message.
+    /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
+    var onCancelQueued: (() -> Void)? = nil
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
@@ -120,6 +123,16 @@ struct UserBubbleView: View {
                 }
                 if bubble.pending {
                     Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
+                    // A queued message can be withdrawn until the runner leases it (web parity). Offered
+                    // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
+                    // after send. `contentShape` widens the small hit target for touch.
+                    if bubble.queued, bubble.turnId != nil, let onCancel = onCancelQueued {
+                        Button { onCancel() } label: {
+                            Text("Cancel").font(.orbitMeta)
+                        }
+                        .buttonStyle(.plain).foregroundStyle(.tint)
+                        .padding(.leading, 2).contentShape(Rectangle())
+                    }
                 } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }

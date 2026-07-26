@@ -201,6 +201,14 @@ public struct TranscriptReducer: Sendable, Codable {
         state.items[i] = .user(b)
     }
 
+    /// Withdraw a still-queued message locally (the queued bubble's Cancel button). The server-side
+    /// `DELETE …/turns/:turnId` is fired by the caller; if the runner already leased it, its durable
+    /// `user` event simply lands as a normal transcript row (`appendUser` finds no queue entry to
+    /// reconcile, since it's gone by then). Web parity: `setQueued(q ⇒ q.filter(…))`.
+    public mutating func removeQueued(id: String) {
+        state.queued.removeAll { $0.id == id }
+    }
+
     // MARK: - assistant / thinking streaming
 
     private mutating func appendAssistantDelta(_ delta: String) {
