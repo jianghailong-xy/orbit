@@ -131,20 +131,35 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// the web transcript renders the same blocks inline via `resultImages()`.
     public var resultImages: [Data]
     public var status: ToolStatus
+    /// seq of the `tool_use` event, and whether the server clipped its `input` to a preview.
+    /// Expanding the card refetches the call whole (`APIClient.eventFull`).
+    public var inputSeq: Int
+    public var inputTruncated: Bool
+    /// The same pair for the `tool_result` — a different event with its own seq.
+    public var resultSeq: Int?
+    public var resultTruncated: Bool
 
     public init(id: String, name: String, input: JSONValue, result: String?,
-                resultImages: [Data] = [], status: ToolStatus) {
+                resultImages: [Data] = [], status: ToolStatus,
+                inputSeq: Int = 0, inputTruncated: Bool = false,
+                resultSeq: Int? = nil, resultTruncated: Bool = false) {
         self.id = id
         self.name = name
         self.input = input
         self.result = result
         self.resultImages = resultImages
         self.status = status
+        self.inputSeq = inputSeq
+        self.inputTruncated = inputTruncated
+        self.resultSeq = resultSeq
+        self.resultTruncated = resultTruncated
     }
 
     // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
     // (the key just defaults to empty) instead of discarding the whole cached session.
-    enum CodingKeys: String, CodingKey { case id, name, input, result, resultImages, status }
+    enum CodingKeys: String, CodingKey {
+        case id, name, input, result, resultImages, status, inputSeq, inputTruncated, resultSeq, resultTruncated
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -153,6 +168,10 @@ public struct ToolCard: Equatable, Sendable, Codable {
         result = try c.decodeIfPresent(String.self, forKey: .result)
         resultImages = (try? c.decodeIfPresent([Data].self, forKey: .resultImages)) ?? []
         status = try c.decode(ToolStatus.self, forKey: .status)
+        inputSeq = (try? c.decodeIfPresent(Int.self, forKey: .inputSeq)) ?? 0
+        inputTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .inputTruncated)) ?? false
+        resultSeq = try? c.decodeIfPresent(Int.self, forKey: .resultSeq)
+        resultTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .resultTruncated)) ?? false
     }
 }
 

@@ -776,6 +776,39 @@ final class TranscriptReducerTests: XCTestCase {
                                          status: "running", outputTail: "", startedAt: "2026-07-10T00:00:01Z")])
         XCTAssertEqual(r.state.background.first?.status, "completed", "a settled row is never resurrected")
     }
+
+    /// A tool card carries the seq + `truncated` flag of BOTH the call and its result, so an
+    /// expanded card knows which events to refetch whole (`APIClient.eventFull`). The two are
+    /// separate events with separate seqs — mixing them up would fetch the wrong payload.
+    func testToolCardRecordsWhatWasClippedAndWhere() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 11, type: .toolUse, payload: .object(["toolUseId": .string("t9"),
+                                                                    "name": .string("Write"),
+                                                                    "input": .object(["content": .string("first 2KB")])]),
+                         truncated: true))
+        r.apply(RunEvent(seq: 12, type: .toolResult, payload: .object(["toolUseId": .string("t9"),
+                                                                       "content": .string("clipped output")]),
+                         truncated: true))
+        let card = r.state.items.last?.asTool
+        XCTAssertEqual(card?.inputSeq, 11)
+        XCTAssertEqual(card?.inputTruncated, true)
+        XCTAssertEqual(card?.resultSeq, 12)
+        XCTAssertEqual(card?.resultTruncated, true)
+    }
+
+    /// The common case: nothing was clipped, so no card ever asks for a refetch.
+    func testUnclippedToolCardIsNotFlagged() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 3, type: .toolUse, payload: .object(["toolUseId": .string("t1"),
+                                                                   "name": .string("Bash"),
+                                                                   "input": .object(["command": .string("ls")])])))
+        r.apply(RunEvent(seq: 4, type: .toolResult, payload: .object(["toolUseId": .string("t1"),
+                                                                      "content": .string("a.txt")])))
+        let card = r.state.items.last?.asTool
+        XCTAssertEqual(card?.inputTruncated, false)
+        XCTAssertEqual(card?.resultTruncated, false)
+        XCTAssertEqual(card?.resultSeq, 4)
+    }
 }
 
 // Test-only convenience accessors (kept out of the library surface).

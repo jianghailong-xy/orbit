@@ -13,15 +13,19 @@ public struct RunEvent: Codable, Equatable, Sendable {
     public let turnId: String?
     /// Event-type-specific data.
     public let payload: JSONValue
+    /// The server clipped this tool call/result to a preview (`APIClient.maxEventPayload`).
+    /// Expanding the card refetches the payload whole via `APIClient.eventFull`.
+    public let truncated: Bool
 
-    enum CodingKeys: String, CodingKey { case seq, type, ts, turnId, payload }
+    enum CodingKeys: String, CodingKey { case seq, type, ts, turnId, payload, truncated }
 
-    public init(seq: Int, type: RunEventType, ts: String? = nil, turnId: String? = nil, payload: JSONValue = .null) {
+    public init(seq: Int, type: RunEventType, ts: String? = nil, turnId: String? = nil, payload: JSONValue = .null, truncated: Bool = false) {
         self.seq = seq
         self.type = type
         self.ts = ts
         self.turnId = turnId
         self.payload = payload
+        self.truncated = truncated
     }
 
     public init(from decoder: Decoder) throws {
@@ -32,6 +36,7 @@ public struct RunEvent: Codable, Equatable, Sendable {
         self.ts = try? c.decodeIfPresent(String.self, forKey: .ts)
         self.turnId = try? c.decodeIfPresent(String.self, forKey: .turnId)
         self.payload = (try? c.decodeIfPresent(JSONValue.self, forKey: .payload)) ?? .null
+        self.truncated = (try? c.decodeIfPresent(Bool.self, forKey: .truncated)) ?? false
     }
 }
 

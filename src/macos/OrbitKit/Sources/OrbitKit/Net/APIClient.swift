@@ -17,6 +17,13 @@ public enum APIError: Error, Equatable {
 /// Uses `dataTask` + a continuation rather than `data(for:)` so it compiles on Linux
 /// Foundation too; the surface is plain `async`/`await`.
 public final class APIClient: @unchecked Sendable {
+    /// Longest string the server keeps inside a tool call/result before clipping it to a preview
+    /// and marking the event `truncated`. A folded tool card shows a dozen lines, so ~2KB is
+    /// already more than it can display; the whole payload is refetched per card from `eventFull`
+    /// when the user expands it. Sent on both the page fetch and the SSE so a card looks the same
+    /// whichever way it arrived. Web parity: `MAX_EVENT_PAYLOAD`.
+    public static let maxEventPayload = 2048
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -113,7 +120,15 @@ public final class APIClient: @unchecked Sendable {
         if let tail { q.append(URLQueryItem(name: "tail", value: String(tail))) }
         if let before { q.append(URLQueryItem(name: "before", value: String(before))) }
         if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
+        q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
         return try await get("sessions/\(sessionID)/events/page", query: q)
+    }
+
+    /// One event's untrimmed payload (GET /sessions/:id/events/:seq/full) — fetched when the user
+    /// expands a card that arrived `truncated`, so a big Read output or Write body crosses the
+    /// network only if someone actually opens it. Web parity: `getSessionEventFull`.
+    public func eventFull(sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("sessions/\(sessionID)/events/\(seq)/full")
     }
 
     /// The session's complete background-shell list (GET /sessions/:id/background): every

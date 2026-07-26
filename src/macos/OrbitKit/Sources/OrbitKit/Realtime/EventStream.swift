@@ -46,7 +46,12 @@ public struct URLSessionEventStream: EventStreaming {
                 do {
                     var comps = URLComponents(url: baseURL.appendingPathComponent("api/sessions/\(sessionID)/events"),
                                               resolvingAgainstBaseURL: false)!
-                    comps.queryItems = [URLQueryItem(name: "sinceSeq", value: String(sinceSeq))]
+                    comps.queryItems = [
+                        URLQueryItem(name: "sinceSeq", value: String(sinceSeq)),
+                        // Same preview-sized tool bodies the page fetch asks for, so a card looks
+                        // identical whether it arrived by replay or live (APIClient.maxEventPayload).
+                        URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+                    ]
                     var req = URLRequest(url: comps.url!)
                     req.timeoutInterval = 3600
                     req.setValue("text/event-stream", forHTTPHeaderField: "Accept")

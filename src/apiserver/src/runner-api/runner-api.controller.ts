@@ -68,6 +68,7 @@ import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-co
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { isNoiseSystemEvent } from '../common/system-noise';
 
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
@@ -1087,7 +1088,13 @@ export class RunnerApiController {
     // park; gating on RUNNING alone dropped every turn's tail from the live stream
     // (it only reappeared on refresh, via replay).
     if (LIVE.includes(session.status)) {
-      for (const e of events) this.realtime.publish(sessionId, e);
+      for (const e of events) {
+        // Persisted above either way — but a `system` progress ping renders as nothing on every
+        // client, so spending a frame on it only costs the reader bandwidth. The replay paths
+        // drop the same events (notNoiseSql), so live and replayed transcripts agree.
+        if (isNoiseSystemEvent(e)) continue;
+        this.realtime.publish(sessionId, e);
+      }
     }
     return { ok: true };
   }

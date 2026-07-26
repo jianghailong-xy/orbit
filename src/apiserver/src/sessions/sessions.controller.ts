@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,8 +15,10 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest } from '@orbit/shared';
+import { notNoiseSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
@@ -33,6 +36,7 @@ import {
   SessionTurnDto,
 } from './dto';
 import { SessionsService } from './sessions.service';
+import { parseMaxPayload, truncatePayload } from './truncate-payload';
 
 /** ~20s data-plane keepalive (mirrors EventsController): a `ping` data frame — Nest's @Sse can't
  *  emit raw `:` comments — sent on the per-session transcript stream so an *idle* session (one
@@ -300,7 +304,9 @@ export class SessionsController {
    * A page of a session's persisted events for tail-first lazy loading. `tail=N` returns the
    * newest N (initial paint, so a long transcript opens straight at the latest message instead
    * of replaying its whole history); `before=<seq>&limit=N` returns the N events just older
-   * than a seq (scroll-up). `hasMore` signals older events remain.
+   * than a seq (scroll-up). `hasMore` signals older events remain. `maxPayload=N` opts into
+   * preview-sized tool bodies (see truncate-payload); omitting it returns them whole, which is
+   * what a client built before this endpoint learned to refetch expects.
    */
   @Get(':id/events/page')
   eventPage(
@@ -309,6 +315,7 @@ export class SessionsController {
     @Query('tail') tail?: string,
     @Query('before') before?: string,
     @Query('limit') limit?: string,
+    @Query('maxPayload') maxPayload?: string,
   ) {
     const num = (s?: string): number | undefined => {
       const n = Number(s);
@@ -318,17 +325,36 @@ export class SessionsController {
       tail: num(tail),
       before: num(before),
       limit: num(limit),
+      maxPayload: parseMaxPayload(maxPayload),
     });
   }
 
-  /** Replays a session's persisted events, then streams live ones over SSE. */
+  /** One event's untrimmed payload — what a client fetches when the user expands a card that
+   *  arrived `truncated`. Declared after `:id/events/page`, which it can't shadow (different
+   *  segment count), and below the SSE `:id/events` for the same reason. */
+  @Get(':id/events/:seq/full')
+  eventFull(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Param('seq') seq: string,
+  ) {
+    const n = Number(seq);
+    if (!Number.isFinite(n)) throw new BadRequestException('seq must be a number');
+    return this.sessions.getEventFull(user.userId, id, Math.trunc(n));
+  }
+
+  /** Replays a session's persisted events, then streams live ones over SSE. `maxPayload` trims
+   *  bulky tool bodies on both halves alike (see truncate-payload), so a card looks the same
+   *  whether it arrived by replay or live. */
   @AllowQueryToken()
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,
     @Param('id', Base62UuidPipe) id: string,
     @Query('sinceSeq') sinceSeq?: string,
+    @Query('maxPayload') maxPayload?: string,
   ): Observable<MessageEvent> {
+    const cap = parseMaxPayload(maxPayload);
     // On reconnect, replay only events after sinceSeq (the client also dedups by
     // seq, but this avoids re-sending a long transcript every time).
     const since = Number(sinceSeq);
@@ -346,36 +372,52 @@ export class SessionsController {
         // With a cursor: replay the full gap after it (seq asc) — never capped, or the transcript
         // would hole. Without one: replay only the newest SSE_REPLAY_CAP, fetched seq desc so the
         // LIMIT keeps the newest rows, then reversed back to seq asc below — see SSE_REPLAY_CAP.
+        // `notNoiseSql` skips the `system` progress pings no client renders (they stay in the
+        // table; this is the wire). It matches what the live broadcast already drops, so a
+        // replayed transcript and a live one carry the same events — and it makes SSE_REPLAY_CAP
+        // count renderable events rather than being spent three-quarters on pings.
         const capped = !seqFilter;
+        const gap = seqFilter ? Prisma.sql`AND seq > ${seqFilter.gt}` : Prisma.empty;
+        const order = capped ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+        const limit = capped ? Prisma.sql`LIMIT ${SSE_REPLAY_CAP}` : Prisma.empty;
         const history$ = from(
-          this.prisma.runEvent.findMany({
-            where: { sessionId: id, ...(seqFilter ? { seq: seqFilter } : {}) },
-            orderBy: { seq: capped ? 'desc' : 'asc' },
-            ...(capped ? { take: SSE_REPLAY_CAP } : {}),
-          }),
+          this.prisma.$queryRaw<
+            { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+          >`
+            SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+            FROM run_event
+            WHERE session_id = ${id}::uuid
+              ${gap}
+              AND ${notNoiseSql}
+            ORDER BY seq ${order}
+            ${limit}
+          `,
         ).pipe(concatMap((rows) => from(capped ? [...rows].reverse() : rows)));
         const live$ = this.realtime.streamForRun(id);
         return concat(history$, live$);
       }),
-      map(
-        (e: {
-          seq: number;
-          type: string;
-          payload: unknown;
-          turnId?: string | null;
-          ts?: string;
-          createdAt?: Date;
-        }) =>
-          ({
-            data: {
-              seq: e.seq,
-              type: e.type,
-              payload: e.payload,
-              turnId: e.turnId ?? null,
-              ts: e.ts ?? e.createdAt,
-            },
-          }) as MessageEvent,
-      ),
+      map((e: {
+        seq: number;
+        type: string;
+        payload: unknown;
+        turnId?: string | null;
+        ts?: string;
+        createdAt?: Date;
+      }) => {
+        const cut = cap
+          ? truncatePayload(e.type, e.payload, cap)
+          : { payload: e.payload, truncated: false };
+        return {
+          data: {
+            seq: e.seq,
+            type: e.type,
+            payload: cut.payload,
+            turnId: e.turnId ?? null,
+            ts: e.ts ?? e.createdAt,
+            ...(cut.truncated ? { truncated: true } : {}),
+          },
+        } as MessageEvent;
+      }),
     );
     // Keep the stream from going byte-idle (see KEEPALIVE_MS): merge a `ping` every ~20s alongside
     // the events. The ownership check above rejects a non-owner within a single DB round-trip —

@@ -109,6 +109,7 @@ import {
   type PermissionRule,
   pinSession,
   purgeSession,
+  getSessionEventFull,
   getSessionEventPage,
   renameSession,
   restoreSession,
@@ -119,7 +120,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, ChatImage, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, ChatImage, EventFullCtx, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
@@ -974,6 +975,13 @@ export function AgentView({ runner }: { runner: Runner }) {
         setLoadingOlder(false);
       });
   }, [selectedId]);
+  // Pull back the untrimmed payload of an event the server clipped to a preview (see
+  // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
+  // Read output or Write body only crosses the network if someone actually opens it.
+  const fetchEventFull = useCallback(
+    (seq: number) => getSessionEventFull(selectedId ?? '', seq),
+    [selectedId],
+  );
   // Recompute, on scroll and after content changes: are we at the bottom, and which top-level
   // user bubble (if any) has scrolled above the viewport top (= the prompt to surface)?
   const measure = useCallback(() => {
@@ -3178,7 +3186,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </div>
               )}
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
-                <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                <EventFullCtx.Provider value={fetchEventFull}>
+                  <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />

@@ -27,8 +27,26 @@ export function mergeBackgroundShells(server: BgShell[], live: BgShell[]): BgShe
     const s = byId.get(l.shellId);
     // Keep the server row for a shell that already terminated there, unless the live row is fresher
     // (only possible while it's still running); otherwise the live row wins / introduces the shell.
-    if (s && l.status === 'running') byId.set(l.shellId, l);
+    if (s && l.status === 'running') byId.set(l.shellId, keepNewerOutput(l, s));
     else if (!s) byId.set(l.shellId, l);
   }
   return [...byId.values()].sort((a, b) => a.startedSeq - b.startedSeq);
+}
+
+/**
+ * Take the running shell's live row but keep whichever *output snapshot* is newer. The server
+ * scans every persisted event and reads each Read poll whole; this client derives from a loaded
+ * window whose bulky tool results arrive clipped to a preview (api.ts MAX_EVENT_PAYLOAD). So when
+ * the server's snapshot is at least as recent, it's the better copy — the live row only genuinely
+ * leads once its own (never-clipped, never-persisted) background_output tail has advanced past it.
+ */
+function keepNewerOutput(live: BgShell, server: BgShell): BgShell {
+  if (server.latestOutputSeq == null) return live;
+  if (live.latestOutputSeq != null && live.latestOutputSeq > server.latestOutputSeq) return live;
+  return {
+    ...live,
+    latestOutput: server.latestOutput,
+    latestOutputSeq: server.latestOutputSeq,
+    latestOutputTs: server.latestOutputTs,
+  };
 }

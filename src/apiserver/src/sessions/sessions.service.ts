@@ -29,6 +29,8 @@ import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery } from './search-query';
+import { notNoiseSql } from '../common/system-noise';
+import { truncatePayload } from './truncate-payload';
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -930,13 +932,27 @@ export class SessionsService {
    * newest N events (initial paint); `before`+`limit` return the N events immediately older
    * than a seq (scroll-up). Both share one newest-first query that takes one extra row to
    * report `hasMore`, then returns the page in chronological (seq asc) order.
+   *
+   * Two things shrink what a page costs on a slow link. The `system` progress pings no client
+   * renders are filtered out in the query (notNoiseSql) — they're still stored, they just don't
+   * ride the wire, and filtering in SQL rather than after it means `take` counts events the
+   * reader can actually see. And `maxPayload` (opt-in, see truncate-payload) clips bulky tool
+   * call/result bodies to a preview and marks those events `truncated`, so the client downloads
+   * what the folded transcript shows and refetches the rest per card from getEventFull.
    */
   async getEventPage(
     userId: string,
     id: string,
-    opts: { tail?: number; before?: number; limit?: number },
+    opts: { tail?: number; before?: number; limit?: number; maxPayload?: number },
   ): Promise<{
-    events: { seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }[];
+    events: {
+      seq: number;
+      type: string;
+      payload: unknown;
+      turnId: string | null;
+      ts: Date;
+      truncated?: true;
+    }[];
     hasMore: boolean;
   }> {
     const session = await this.prisma.session.findFirst({
@@ -945,27 +961,70 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException('session not found');
     const take = Math.min(Math.max(Math.trunc(opts.limit ?? opts.tail ?? 200), 1), 500);
-    const where: { sessionId: string; seq?: { lt: number } } = { sessionId: id };
-    if (typeof opts.before === 'number' && Number.isFinite(opts.before)) {
-      where.seq = { lt: opts.before };
-    }
-    const rows = await this.prisma.runEvent.findMany({
-      where,
-      orderBy: { seq: 'desc' },
-      take: take + 1, // one extra row: its presence means older events remain
-      select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
-    });
+    const before =
+      typeof opts.before === 'number' && Number.isFinite(opts.before)
+        ? Prisma.sql`AND seq < ${Math.trunc(opts.before)}`
+        : Prisma.empty;
+    // Raw because notNoiseSql needs a jsonb key-subtraction Prisma's filter language can't spell.
+    // Index Scan Backward on (session_id, seq) still drives it — the filter just skips pings on
+    // the way, and the scan stops as soon as `take + 1` renderable rows are in hand.
+    const rows = await this.prisma.$queryRaw<
+      { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
+    >`
+      SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        ${before}
+        AND ${notNoiseSql}
+      ORDER BY seq DESC
+      LIMIT ${take + 1}
+    `; // one extra row: its presence means older events remain
     const hasMore = rows.length > take;
     const page = (hasMore ? rows.slice(0, take) : rows).reverse(); // back to seq asc
     return {
       hasMore,
-      events: page.map((e) => ({
-        seq: e.seq,
-        type: e.type,
-        payload: e.payload,
-        turnId: e.turnId ?? null,
-        ts: e.createdAt,
-      })),
+      events: page.map((e) => {
+        const cut = opts.maxPayload
+          ? truncatePayload(e.type, e.payload, opts.maxPayload)
+          : { payload: e.payload, truncated: false };
+        return {
+          seq: e.seq,
+          type: e.type,
+          payload: cut.payload,
+          turnId: e.turnId ?? null,
+          ts: e.createdAt,
+          ...(cut.truncated ? { truncated: true as const } : {}),
+        };
+      }),
+    };
+  }
+
+  /**
+   * One event's untrimmed payload, fetched when the user expands a card whose page/stream copy
+   * came back `truncated`. Keyed by seq (unique per session) rather than row id, since that's
+   * the only identity a client holds.
+   */
+  async getEventFull(
+    userId: string,
+    id: string,
+    seq: number,
+  ): Promise<{ seq: number; type: string; payload: unknown; turnId: string | null; ts: Date }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const row = await this.prisma.runEvent.findFirst({
+      where: { sessionId: id, seq },
+      select: { seq: true, type: true, payload: true, turnId: true, createdAt: true },
+    });
+    if (!row) throw new NotFoundException('event not found');
+    return {
+      seq: row.seq,
+      type: row.type,
+      payload: row.payload,
+      turnId: row.turnId ?? null,
+      ts: row.createdAt,
     };
   }
 

@@ -13,36 +13,69 @@ import OrbitKit
 /// name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.
 struct ToolCardView: View {
     let card: ToolCard
-    private let d: ToolDisplay
+    /// Pulls back one event's untrimmed payload (ConsoleModel.fullPayload) for a card the server
+    /// clipped to a preview. nil where no console owns the transcript (previews, tests).
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
+    private let previewDisplay: ToolDisplay
     @State private var expanded: Bool
+    // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
+    // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
+    @State private var fullDisplay: ToolDisplay?
+    @State private var fullResult: String?
 
-    init(card: ToolCard) {
+    init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
+        self.fullPayload = fullPayload
         let display = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
-        self.d = display
+        self.previewDisplay = display
         let hasResult = (card.result?.isEmpty == false) || !card.resultImages.isEmpty
         _expanded = State(initialValue: display.autoOpen && (display.hasBody || hasResult))
     }
 
+    private var d: ToolDisplay { fullDisplay ?? previewDisplay }
+    private var result: String? { fullResult ?? card.result }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty }
     private var hasDetail: Bool { d.hasBody || hasResult }
     private var isOpen: Bool { expanded && hasDetail }
 
     /// A successful `mcp__orbit__session_create` whose JSON result parsed — rendered as a tappable
     /// "jump to child session" card instead of the folded JSON (web parity: SessionCreateCard).
+    /// Parses even while folded, which is why `resolveFull` fetches this card's result regardless
+    /// of the fold: a clipped copy is truncated JSON and would never decode.
     private var sessionCreate: SessionCreatePayload? {
         guard card.name == "mcp__orbit__session_create", card.status == .ok,
-              let result = card.result, let data = result.data(using: .utf8),
+              let result, let data = result.data(using: .utf8),
               let p = try? JSONDecoder().decode(SessionCreatePayload.self, from: data),
               !p.id.isEmpty else { return nil }
         return p
     }
+    private var needsWholeResult: Bool { card.name == "mcp__orbit__session_create" }
 
     var body: some View {
-        if let payload = sessionCreate {
-            SessionCreateCardView(payload: payload)
-        } else {
-            defaultBody
+        Group {
+            if let payload = sessionCreate {
+                SessionCreateCardView(payload: payload)
+            } else if card.resultTruncated, needsWholeResult, fullResult == nil {
+                EmptyView()   // nothing to show until the untrimmed JSON lands
+            } else {
+                defaultBody
+            }
+        }
+        .task(id: expanded) { await resolveFull() }
+    }
+
+    /// Refetch whatever this card had clipped, once it's open (or immediately for a card that
+    /// parses its result while folded). Runs at most once per payload: each guard re-checks the
+    /// state it fills, so re-opening a resolved card is a no-op.
+    @MainActor private func resolveFull() async {
+        guard let fullPayload else { return }
+        if expanded, card.inputTruncated, fullDisplay == nil, let p = await fullPayload(card.inputSeq) {
+            let input = p["input"] ?? .null
+            fullDisplay = ToolDisplay.describe(name: card.name, input: input, status: card.status, id: card.id)
+        }
+        if expanded || needsWholeResult, card.resultTruncated, fullResult == nil,
+           let seq = card.resultSeq, let p = await fullPayload(seq) {
+            fullResult = p["content"]?.stringValue ?? p["content"]?.asString
         }
     }
 
@@ -127,7 +160,7 @@ struct ToolCardView: View {
                     }
                 }
             }
-            if let result = card.result, !result.isEmpty {
+            if let result, !result.isEmpty {
                 let isErr = card.status == .error
                 // Mirrors web `.chat-result`: a tinted panel (red on error, neutral otherwise) with a
                 // small uppercase label. The output text itself stays muted even on error (only the

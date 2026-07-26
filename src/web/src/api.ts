@@ -150,11 +150,17 @@ export async function api<T = unknown>(
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/** Longest string the server keeps inside a tool call/result before clipping it to a preview and
+ *  marking the event `truncated`. A folded tool card shows ~12 lines, so ~2KB is already more than
+ *  it can display; the untouched payload is refetched per card from getSessionEventFull when the
+ *  user expands it. Sent on both the page fetch and the SSE so a card looks the same either way. */
+export const MAX_EVENT_PAYLOAD = 2048;
+
 /** SSE URL for a session's event stream (token in query, since EventSource has no headers). */
 export const sessionEventsUrl = (sessionId: string, sinceSeq?: number): string => {
   const tok = encodeURIComponent(getToken() ?? '');
   const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
-  return `/api/sessions/${sessionId}/events?access_token=${tok}${since}`;
+  return `/api/sessions/${sessionId}/events?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
 };
 
 export interface EventPageEvent {
@@ -163,6 +169,8 @@ export interface EventPageEvent {
   payload: any;
   turnId: string | null;
   ts: string;
+  /** The server clipped this event's tool body to a preview — expand the card to refetch it whole. */
+  truncated?: boolean;
 }
 
 /** A page of a session's persisted events, chronological (seq asc). `hasMore` = older
@@ -183,8 +191,14 @@ export const getSessionEventPage = (
   if (opts.tail != null) qs.set('tail', String(opts.tail));
   if (opts.before != null) qs.set('before', String(opts.before));
   if (opts.limit != null) qs.set('limit', String(opts.limit));
+  qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`);
 };
+
+/** The untrimmed payload of one event, fetched when the user expands a card that arrived
+ *  `truncated` — so a big Read/Write body costs a request only if someone actually opens it. */
+export const getSessionEventFull = (id: string, seq: number): Promise<EventPageEvent> =>
+  api<EventPageEvent>(`/sessions/${id}/events/${seq}/full`);
 
 /** The authoritative, complete list of background shells the session ever launched (derived
  *  server-side over ALL persisted events, with output recovered from the agent's Read polls).

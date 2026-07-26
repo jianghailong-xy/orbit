@@ -289,7 +289,8 @@ public struct TranscriptReducer: Sendable, Codable {
             let desc = input["description"]?.stringValue
             bgLaunch[id] = (command: command, description: desc?.isEmpty == false ? desc : nil)
         }
-        state.items.append(.toolCall(ToolCard(id: id, name: name, input: input, result: nil, status: .running)))
+        state.items.append(.toolCall(ToolCard(id: id, name: name, input: input, result: nil, status: .running,
+                                              inputSeq: ev.seq, inputTruncated: ev.truncated)))
     }
 
     private mutating func closeTool(_ ev: RunEvent) {
@@ -314,6 +315,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 card.result = result
                 card.resultImages = images
                 card.status = isError ? .error : .ok
+                card.resultSeq = ev.seq
+                card.resultTruncated = ev.truncated
                 state.items[idx] = .toolCall(card)
                 return
             }

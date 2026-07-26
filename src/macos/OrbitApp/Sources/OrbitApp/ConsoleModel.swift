@@ -493,6 +493,15 @@ final class ConsoleModel {
         publishStateNow()
     }
 
+    /// The untrimmed payload of one event, for a tool card whose call/result the server clipped to
+    /// a preview (`APIClient.maxEventPayload`). The card asks for this only when the user expands
+    /// it, so a big Read output or Write body crosses the network only if someone opens it. nil on
+    /// failure — the card keeps showing the preview it already has.
+    func fullPayload(seq: Int) async -> JSONValue? {
+        guard !sessionID.isEmpty else { return nil }
+        return try? await api.eventFull(sessionID: sessionID, seq: seq).payload
+    }
+
     // MARK: composer
 
     /// The status that drives send decisions: the stream status, upgraded to the server's

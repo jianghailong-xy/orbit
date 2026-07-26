@@ -204,7 +204,7 @@ struct TranscriptView: View {
                     // the interactive card until it resolves, then this card becomes the historical
                     // record (web parity: Transcript.tsx hides the read-only copy while `live && !result`).
                     if !Approvals.duplicatesPendingApproval(item, pendingApprovals: console.state.pendingApprovals) {
-                        TranscriptItemView(item: item)
+                        TranscriptItemView(item: item, fullPayload: console.fullPayload)
                             .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
                             // Row-level preferences must sit OUTSIDE `AnchorRow`: it wraps content in an
                             // `if #available` (`_ConditionalContent`), and `listRow*` set inside that branch
@@ -841,12 +841,14 @@ final class QuestionRuler {
 
 struct TranscriptItemView: View {
     let item: TranscriptItem
+    /// Refetch for a tool card the server clipped to a preview (ConsoleModel.fullPayload).
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
     var body: some View {
         switch item {
         case .user(let b):      UserBubbleView(bubble: b)
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
-        case .toolCall(let c):  ToolCardView(card: c)
+        case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):

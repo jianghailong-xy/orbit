@@ -53,6 +53,9 @@ export interface RunEvent {
   payload: any;
   turnId?: string | null;
   ts?: string;
+  /** The server clipped this tool call/result to a preview (api.ts MAX_EVENT_PAYLOAD). Expanding
+   *  the card refetches the payload whole through EventFullCtx. */
+  truncated?: boolean;
 }
 
 /** A locally-known image attachment for a user turn, keyed by turnId. The bytes are the
@@ -77,6 +80,34 @@ export const ExportCtx = createContext<ExportMode | null>(null);
 // provides a navigator; the shared/public page and static export leave it null so the card
 // renders non-clickable there (a logged-out or offline viewer can't open another session).
 export const SessionNavCtx = createContext<((rawId: string) => void) | null>(null);
+
+// Refetch one event's untrimmed payload by seq. AgentView provides it; the shared/public page
+// leaves it null, since that endpoint never clips (nothing there is ever `truncated`).
+export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null>(null);
+
+/**
+ * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
+ * A folded card costs nothing: the whole point of the server-side clip is that a big Read output
+ * or Write body only crosses the network if someone actually looks at it. Returns null until it
+ * lands (and forever if the fetch fails), so callers fall back to the preview they already have.
+ */
+function useFullPayload(seq: number, truncated: boolean | undefined, want: boolean): any {
+  const fetchFull = useContext(EventFullCtx);
+  const [full, setFull] = useState<any>(null);
+  useEffect(() => {
+    if (!want || !truncated || full || !fetchFull) return;
+    let alive = true;
+    fetchFull(seq)
+      .then((e) => {
+        if (alive) setFull(e?.payload ?? null);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [want, truncated, full, fetchFull, seq]);
+  return full;
+}
 
 // ── session-wide image preview ──────────────────────────────────────────────
 // Every image thumbnail in the transcript (user-sent, durable attachment, tool
@@ -150,7 +181,10 @@ type ToolNode = {
   id: string;
   name: string;
   input: any;
-  result?: { content: any; isError?: boolean };
+  // Set when the server clipped `input` to a preview; opening the card refetches it by `seq`.
+  truncated?: boolean;
+  // `seq` is the *result* event's own seq (≠ the call's), which is what refetches its content.
+  result?: { content: any; isError?: boolean; seq: number; truncated?: boolean };
   children: Node[];
 };
 type TextNode = {
@@ -167,7 +201,7 @@ type TextNode = {
   // preview). Images render inline; non-image files render as a downloadable chip.
   attachmentRefs?: { id: string; mime?: string; name?: string }[];
 };
-type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean };
+type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
 type ErrorNode = { kind: 'error'; seq: number; message: string };
 type Node = ToolNode | TextNode | ResultNode | MarkerNode | ErrorNode;
@@ -246,6 +280,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           id: String(p.id ?? ''),
           name: String(p.name ?? 'tool'),
           input: p.input,
+          truncated: ev.truncated,
           children: [],
         };
         if (node.id) byId.set(node.id, node);
@@ -258,10 +293,16 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           (p.toolUseId ? byId.get(String(p.toolUseId)) : undefined) ??
           (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
         if (t) {
-          t.result = { content: p.content, isError: !!p.isError };
+          t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated };
           if (t === lastOpenTool) lastOpenTool = undefined;
         } else {
-          into(parent).push({ kind: 'result', seq: ev.seq, content: p.content, isError: !!p.isError });
+          into(parent).push({
+            kind: 'result',
+            seq: ev.seq,
+            content: p.content,
+            isError: !!p.isError,
+            truncated: ev.truncated,
+          });
         }
         break;
       }
@@ -371,6 +412,14 @@ function isGroupableTool(node: Node): node is ToolNode {
   );
 }
 
+// A tool_result with no call to attach to (a legacy transcript with no tool_use id, or one whose
+// call sits outside the loaded window). It renders unfolded, so a clipped one is pulled whole
+// straight away rather than on expand.
+function StandaloneResult({ node }: { node: ResultNode }) {
+  const full = useFullPayload(node.seq, node.truncated, true);
+  return <ToolResult seq={node.seq} content={full ? full.content : node.content} isError={node.isError} />;
+}
+
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
     case 'user':
@@ -382,7 +431,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'tool':
       return <ToolView node={node} live={live} />;
     case 'result':
-      return <ToolResult seq={node.seq} content={node.content} isError={node.isError} />;
+      return <StandaloneResult node={node} />;
     case 'divider':
       return <div className="chat-turn-divider" />;
     case 'interrupt':
@@ -964,28 +1013,16 @@ function Thinking({ text }: { text: string }) {
 // clicking expands to show the call body, any sub-agent transcript, and the
 // result. Failed calls open by default so an error is never hidden behind a fold.
 function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
-  // node.input keeps its reference across tree rebuilds (the source event object is
-  // reused when events are appended), so this holds the computed body/icon — and the
-  // <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding each append.
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
-  // The chosen answer for an AskUserQuestion lives only in the result text
-  // ("The user answered: …"); pass it in so the historical card can highlight
-  // the picked option(s).
-  const answer = node.result ? resultText(node.result.content) : '';
-  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
-    () => describeTool(node.name, node.input, isShell, answer),
-    [node.name, node.input, isShell, answer],
-  );
   const exp = useContext(ExportCtx);
-  const isSubAgent = node.name === 'Task' || node.name === 'Agent';
-  const p = path ? splitPath(path) : null;
-  const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // A plan or a question to the user is the point of the turn — open it by
   // default; errors also auto-open; a result carrying an image (a screenshot the
   // agent produced for the user) opens so the picture shows without a click. A
   // static export opens every card (nothing can be un-folded after the fact).
+  // Deliberately keyed on the *preview* result: images are never clipped, so this
+  // can't depend on the refetch below (which is itself gated on being open).
   const defaultOpen =
     !!exp ||
     !!node.result?.isError ||
@@ -995,6 +1032,34 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     resultImages(node.result?.content).length > 0;
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const open = manualOpen ?? defaultOpen;
+  // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
+  // then — and for the folded majority, forever — the server's preview is what renders.
+  const fullInput = useFullPayload(node.seq, node.truncated, open);
+  // The session-created card parses its result as JSON even while folded, so a clipped copy would
+  // fail to parse and render nothing — it needs the whole result regardless of the fold.
+  const needsWholeResult = node.name === 'mcp__orbit__session_create';
+  const fullResult = useFullPayload(
+    node.result?.seq ?? 0,
+    node.result?.truncated,
+    (open || needsWholeResult) && !!node.result,
+  );
+  const input = fullInput?.input ?? node.input;
+  const resultContent = fullResult ? fullResult.content : node.result?.content;
+  // The chosen answer for an AskUserQuestion lives only in the result text
+  // ("The user answered: …"); pass it in so the historical card can highlight
+  // the picked option(s).
+  const answer = node.result ? resultText(resultContent) : '';
+  // `input` keeps its reference across tree rebuilds (the source event object is reused when
+  // events are appended, and a refetched payload is held in state), so this holds the computed
+  // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
+  // on each append.
+  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
+    () => describeTool(node.name, input, isShell, answer),
+    [node.name, input, isShell, answer],
+  );
+  const isSubAgent = node.name === 'Task' || node.name === 'Agent';
+  const p = path ? splitPath(path) : null;
+  const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
   // interactive card (ApprovalPanel) is shown separately — don't also render this
   // read-only copy in the transcript (it would duplicate the question/plan). Once
@@ -1004,7 +1069,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A spawned child session (mcp__orbit__session_create): once its result is back, render a
   // clickable card that jumps to the child instead of the default folded JSON.
   if (node.name === 'mcp__orbit__session_create' && node.result && !node.result.isError) {
-    return <SessionCreateCard result={node.result.content} />;
+    // Nothing to render until the untrimmed result lands (see needsWholeResult).
+    if (node.result.truncated && !fullResult) return null;
+    return <SessionCreateCard result={resultContent} />;
   }
   return (
     <div
@@ -1041,7 +1108,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </div>
           )}
           {node.result && (
-            <ToolResult seq={node.seq} content={node.result.content} isError={node.result.isError} compact markdown={isSubAgent} />
+            <ToolResult seq={node.seq} content={resultContent} isError={node.result.isError} compact markdown={isSubAgent} />
           )}
         </div>
       )}
