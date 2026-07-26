@@ -168,7 +168,7 @@ func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
 		},
 	})
 
-	handleCodexAppNotification(codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil)
+	handleCodexAppNotification(codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
 
 	if active.result.ContextTokens != 91_000 {
 		t.Fatalf("ContextTokens = %d, want 91000", active.result.ContextTokens)

@@ -770,8 +770,10 @@ func TestFreshenBaseShaAfterRebase(t *testing.T) {
 	// The root checkout sits on main in real deployments (the branch lives in a separate
 	// worktree); the candidate fork is computed against the ROOT's HEAD, not the branch.
 	mustGit(t, repo, "checkout", "main")
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/feat")
 
-	wt := &Worktree{Path: repo, Branch: "orbit/feat", BaseSha: oldFork, RepoDir: repo, Session: "s3"}
+	wt := &Worktree{Path: wtPath, Branch: "orbit/feat", BaseSha: oldFork, RepoDir: repo, Session: "s3"}
 	freshenBaseSha(wt)
 	if wt.BaseSha != newFork {
 		t.Errorf("rebased branch must re-base onto the new fork, got %s want %s", wt.BaseSha, newFork)
