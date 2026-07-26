@@ -58,7 +58,6 @@ export function SessionOutputs({
   committing,
   onAdopt,
   adopting,
-  onStartFollowUp,
   turnActive,
 }: {
   detail?: SessionDetail | null;
@@ -93,9 +92,6 @@ export function SessionOutputs({
    *  re-points the session to that branch so Merge/diff act on the real work. */
   onAdopt?: () => void;
   adopting?: boolean;
-  /** Provided by the parent; opens a fresh compose on this session's agent (a new branch forked
-   *  from current main), so a done/merged session isn't manually repurposed for follow-up work. */
-  onStartFollowUp?: () => void;
 }) {
   const { message } = AntApp.useApp();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
@@ -223,7 +219,6 @@ export function SessionOutputs({
               onMerge={onMergeToMain}
               onResolveInSession={onResolveInSession}
               resolving={resolving}
-              onStartFollowUp={onStartFollowUp}
             />
           ))}
       </div>
@@ -301,25 +296,6 @@ function AdoptButton({
   );
 }
 
-/** A quiet "start a fresh session on this agent (new branch from main)" link, shown beside the
- *  merged / "In main" chips so a done session isn't manually repurposed for follow-up work. */
-function FollowUpLink({ onStartFollowUp }: { onStartFollowUp?: () => void }) {
-  if (!onStartFollowUp) return null;
-  return (
-    <button
-      type="button"
-      className="wt-followup"
-      title="Start a new session on this agent, forked fresh from main"
-      onClick={(e) => {
-        e.stopPropagation();
-        onStartFollowUp();
-      }}
-    >
-      + New from main
-    </button>
-  );
-}
-
 /** Compact "Merge to main" control on the worktree bar — a split button once the work is
  *  committed: the left segment merges into the default target (main, else master), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
@@ -341,7 +317,6 @@ function MergeButton({
   onMerge,
   onResolveInSession,
   resolving,
-  onStartFollowUp,
 }: {
   status?: SessionDetail['mergeStatus'];
   /** Why the last merge failed (for an 'error'); surfaced on the failed button's hover. */
@@ -362,9 +337,6 @@ function MergeButton({
   onMerge?: (target?: string) => void;
   onResolveInSession?: () => void;
   resolving?: boolean;
-  /** Opens a fresh compose on this session's agent (new branch from main); rendered as a quiet
-   *  link beside the merged / "In main" chips so a done session isn't manually repurposed. */
-  onStartFollowUp?: () => void;
 }) {
   // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
   // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
@@ -378,11 +350,8 @@ function MergeButton({
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
     return (
-      <span className="wt-merge-done-wrap">
-        <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
-          ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
-        </span>
-        <FollowUpLink onStartFollowUp={onStartFollowUp} />
+      <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
+        ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
       </span>
     );
   }
@@ -395,11 +364,8 @@ function MergeButton({
     const landed =
       mergeTarget || (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : 'main');
     return (
-      <span className="wt-merge-done-wrap">
-        <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
-          ✓ In {landed}
-        </span>
-        <FollowUpLink onStartFollowUp={onStartFollowUp} />
+      <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
+        ✓ In {landed}
       </span>
     );
   }

@@ -3281,11 +3281,6 @@ export function AgentView({ runner }: { runner: Runner }) {
           }
           adopting={adoptMut.isPending}
           onAdopt={selectedId ? () => adoptMut.mutate(selectedId) : undefined}
-          onStartFollowUp={
-            detailForSelected?.agent?.id
-              ? () => navigate(`/agents/${encodeId(detailForSelected.agent!.id)}/new`)
-              : undefined
-          }
         />
         {/* Background processes the agent launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
