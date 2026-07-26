@@ -12,6 +12,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { ProvidersPage } from './pages/ProvidersPage';
+import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -120,12 +121,39 @@ export function App() {
               }
             />
             {/* Providers is for everyone (each user's own BYOK list; admins also manage the
-                shared ones there). Keep the old admin-only path as a redirect. */}
+                shared ones there). Connecting one is its own two-page flow — pick a vendor,
+                then paste a key — so "/providers/new/anthropic" can be linked to directly.
+                "?scope=shared" targets the admin list. Keep the old admin-only path as a
+                redirect. */}
             <Route
               path="providers"
               element={
                 <DocView>
                   <ProvidersPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="providers/new"
+              element={
+                <DocView>
+                  <ProviderPickPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="providers/new/:slug"
+              element={
+                <DocView>
+                  <ProviderConnectPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="providers/:id"
+              element={
+                <DocView>
+                  <ProviderConnectPage />
                 </DocView>
               }
             />
