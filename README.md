@@ -97,8 +97,8 @@ npm run dev:web
 
 There's no self-service signup. On a fresh deployment, the web UI sends the first visitor to
 a one-time `/setup` screen that creates the first account (which becomes ADMIN); provision
-any further users with the `add-user` skill. Then log in, open the UI, create an agent, and
-follow the in-app guide to register a runner machine.
+any further users from the admin **Users** page. Then log in, open the UI, create an agent,
+and follow the in-app guide to register a runner machine.
 
 ### Deploy the full stack (Docker Compose)
 
