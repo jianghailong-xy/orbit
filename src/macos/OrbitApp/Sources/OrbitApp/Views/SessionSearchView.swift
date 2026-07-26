@@ -70,7 +70,11 @@ struct SessionSearchView: View {
             .navigationTitle("Search Sessions")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
+                    // `.cancelAction` is what binds Esc — the placement above only decides where the
+                    // button sits. Without it a sheet swallows Esc, and on macOS the search field
+                    // would eat the key to clear itself instead of closing the palette.
                     Button("Done") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                 }
             }
         }
