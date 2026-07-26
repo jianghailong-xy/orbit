@@ -38,6 +38,9 @@ const (
 	// case the header is enforced later. If Anthropic rotates it, the request 4xx's
 	// and we degrade gracefully rather than break.
 	planUsageBeta = "oauth-2025-04-20"
+	// Codex's limit ID for the plan's own bucket — the one Orbit displays. Model and
+	// product buckets carry their own IDs (codex_bengalfox for Spark, say).
+	codexPlanLimitID = "codex"
 )
 
 // PlanUsageWindow is one rate-limit window. Claude reports named windows (rolling
@@ -143,7 +146,14 @@ func (p *planUsageProbe) mergeCodexRateLimits(raw map[string]interface{}) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	current, _ := p.val.Load().(*PlanUsage)
-	if current != nil && current.LimitID != "" && current.LimitID != update.LimitID {
+	// Which bucket counts as the plan's own: whatever the last read reported, or
+	// the default id before any read has landed — a session running a model with
+	// its own bucket must not become the displayed one just because it spoke first.
+	plan := codexPlanLimitID
+	if current != nil && current.LimitID != "" {
+		plan = current.LimitID
+	}
+	if update.LimitID != plan {
 		return
 	}
 	p.val.Store(mergeCodexPlanUsage(current, update))
@@ -404,7 +414,9 @@ func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error
 
 func startCodexUsageAppServer(ctx context.Context) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	stateDir := filepath.Join(os.TempDir(), "orbit-codex-usage-state")
+	// Per-uid: hosts run one runner per user, and a 0700 state dir left by whichever
+	// runner started first would make `codex app-server` fail for all the others.
+	stateDir := filepath.Join(os.TempDir(), fmt.Sprintf("orbit-codex-usage-state-%d", os.Getuid()))
 	_ = os.MkdirAll(stateDir, 0o700)
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
 	cmd := exec.CommandContext(procCtx, "codex", args...)
@@ -462,13 +474,13 @@ func codexRateLimitSnapshot(result map[string]interface{}) map[string]interface{
 		return snapshot
 	}
 	limits := mapValue(firstPresent(result, "rateLimitsByLimitId", "rate_limits_by_limit_id"))
-	return mapValue(limits["codex"])
+	return mapValue(limits[codexPlanLimitID])
 }
 
 func codexPlanUsageFromSnapshot(snapshot map[string]interface{}) *PlanUsage {
 	limitID := firstString(snapshot, "limitId", "limit_id")
 	if limitID == "" {
-		limitID = "codex"
+		limitID = codexPlanLimitID
 	}
 	limitName := firstString(snapshot, "limitName", "limit_name")
 	primary := codexRateLimitWindow(false, mapValue(snapshot["primary"]))

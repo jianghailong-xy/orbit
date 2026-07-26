@@ -150,6 +150,42 @@ func TestPlanUsageProbeIgnoresRollingUpdatesForOtherBuckets(t *testing.T) {
 	}
 }
 
+// A runner whose reads keep failing has no cached snapshot; a Spark-model session's
+// rolling update must not become the one displayed bucket by arriving first.
+func TestPlanUsageProbeIgnoresOtherBucketsBeforeAnyRead(t *testing.T) {
+	p := newCodexPlanUsageProbe()
+
+	p.mergeCodexRateLimits(map[string]interface{}{
+		"limitId":   "codex_spark",
+		"limitName": "GPT-5.3-Codex-Spark",
+		"primary":   map[string]interface{}{"usedPercent": float64(0), "windowDurationMins": float64(10080)},
+	})
+
+	if got := p.snapshot(); got != nil {
+		t.Fatalf("snapshot = %#v, want none", got)
+	}
+}
+
+// Accounts whose plan bucket is not the default ID still track their own rolling
+// updates once a read has established which bucket that is.
+func TestPlanUsageProbeTracksNonDefaultPlanBucket(t *testing.T) {
+	p := newCodexPlanUsageProbe()
+	p.store(codexPlanUsageFromSnapshot(map[string]interface{}{
+		"limitId": "codex_business",
+		"primary": map[string]interface{}{"usedPercent": float64(18), "windowDurationMins": float64(10080)},
+	}))
+
+	p.mergeCodexRateLimits(map[string]interface{}{
+		"limitId": "codex_business",
+		"primary": map[string]interface{}{"usedPercent": float64(24), "windowDurationMins": float64(10080)},
+	})
+
+	got := p.snapshot()
+	if got.Primary == nil || got.Primary.Utilization != 24 {
+		t.Fatalf("unexpected primary: %#v", got.Primary)
+	}
+}
+
 func TestCodexWindowLabelMatchesTUI(t *testing.T) {
 	tests := []struct {
 		name      string
