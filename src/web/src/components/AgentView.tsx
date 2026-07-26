@@ -2659,7 +2659,14 @@ export function AgentView({ runner }: { runner: Runner }) {
             children: [
               {
                 key: 'all',
-                label: 'All',
+                // Colourless by nature, but it still takes the swatch column (an unpainted
+                // dot) so every name in the menu starts on the same edge.
+                label: (
+                  <span className="scope-tag-label">
+                    <span className="session-section-dot" />
+                    All
+                  </span>
+                ),
                 icon: tagFilter === null ? <CheckOutlined /> : <span />,
                 onClick: () => setTagFilter(null),
               },
