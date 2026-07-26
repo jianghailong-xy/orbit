@@ -43,11 +43,17 @@ export function slashToken(text: string): string | null {
   return /(?:^|\s)\/(\S*)$/.exec(text)?.[1] ?? null;
 }
 
+// A command name is a single bare word: commands and skills are discovered from filenames
+// (`commands/<name>.md`, `skills/<name>/SKILL.md`), so a separator can never appear inside one.
+// Text that merely starts with a slash — an absolute path (`/tmp/foo 删掉吧`), a comment
+// (`// TODO`), a regex — is prose, and must send as-is instead of tripping the
+// unsupported-command guard. A bare `/` still reports the empty name so the guard can ask
+// for a command to be picked.
+const COMMAND_WORD = /^\/([A-Za-z0-9][A-Za-z0-9_.:-]*)?(?:\s|$)/;
+
 export function slashCommandName(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed.startsWith('/')) return null;
-  const first = trimmed.split(/\s+/, 1)[0] ?? '/';
-  return first.slice(1);
+  const m = COMMAND_WORD.exec(text.trim());
+  return m ? (m[1] ?? '') : null;
 }
 
 export function isLocalSlashCommand(name: string): boolean {

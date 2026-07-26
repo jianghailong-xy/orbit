@@ -300,6 +300,15 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(ComposerHostCommand.commandName(in: "/"), "")
         XCTAssertTrue(ComposerHostCommand.isLocal("STATUS"))
 
+        // Slash-led prose is text, not a command: a path, a comment or non-ASCII after the
+        // slash must send as typed instead of tripping the unsupported-command guard.
+        XCTAssertNil(ComposerHostCommand.commandName(in: "/tmp/orbit-codex-usage-state 删掉吧"))
+        XCTAssertNil(ComposerHostCommand.commandName(in: "/root/orbit"))
+        XCTAssertNil(ComposerHostCommand.commandName(in: "// TODO: fix this"))
+        XCTAssertNil(ComposerHostCommand.commandName(in: "/删掉这个目录"))
+        XCTAssertEqual(ComposerHostCommand.commandName(in: "/code-review"), "code-review")
+        XCTAssertEqual(ComposerHostCommand.commandName(in: "/plugin:skill arg"), "plugin:skill")
+
         let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App", sessionTitle: "Current session", sessionStatus: "RUNNING",
             model: "gpt-5.6-sol", effort: "", contextTokens: 94_500, contextWindow: 372_000,

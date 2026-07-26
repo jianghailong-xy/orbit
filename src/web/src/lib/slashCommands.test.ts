@@ -28,6 +28,17 @@ describe('slashCommands', () => {
     expect(slashCommandName('/')).toBe('');
   });
 
+  it('reads slash-led prose as text, not as a command', () => {
+    expect(slashCommandName('/tmp/orbit-codex-usage-state 删掉吧')).toBeNull();
+    expect(slashCommandName('/root/orbit')).toBeNull();
+    expect(slashCommandName('/dev/null 是什么')).toBeNull();
+    expect(slashCommandName('// TODO: fix this')).toBeNull();
+    expect(slashCommandName('/删掉这个目录')).toBeNull();
+    // Still a command name: dots, dashes and namespace colons are legal in one.
+    expect(slashCommandName('/code-review')).toBe('code-review');
+    expect(slashCommandName('/plugin:skill arg')).toBe('plugin:skill');
+  });
+
   it('matches local and runner slash items with scope filtering', () => {
     const items = [
       ...LOCAL_SLASH_ITEMS,

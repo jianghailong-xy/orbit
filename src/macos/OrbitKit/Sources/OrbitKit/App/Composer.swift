@@ -157,11 +157,24 @@ public enum ComposerHostCommand {
         SlashCommandInfo(name: status, description: "Show local session status", type: "local")
     ]
 
+    /// A command name is a single bare word: commands and skills are discovered from filenames
+    /// (`commands/<name>.md`, `skills/<name>/SKILL.md`), so a separator can never appear inside
+    /// one. Text that merely starts with a slash — an absolute path (`/tmp/foo 删掉吧`), a
+    /// comment (`// TODO`), a regex — is prose, and must send as-is instead of tripping the
+    /// unsupported-command guard. A bare `/` still reports the empty name so the guard can ask
+    /// for a command to be picked. Mirrors `slashCommandName` in the web composer.
     public static func commandName(in text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("/") else { return nil }
         guard let first = trimmed.split(maxSplits: 1, whereSeparator: { $0.isWhitespace }).first else { return "" }
-        return String(first.dropFirst())
+        let name = first.dropFirst()
+        if name.isEmpty { return "" }
+        func isNameChar(_ c: Character) -> Bool {
+            c.isASCII && (c.isLetter || c.isNumber || "_.:-".contains(c))
+        }
+        guard let head = name.first, head.isASCII, head.isLetter || head.isNumber,
+              name.allSatisfy(isNameChar) else { return nil }
+        return String(name)
     }
 
     public static func isLocal(_ name: String) -> Bool {
