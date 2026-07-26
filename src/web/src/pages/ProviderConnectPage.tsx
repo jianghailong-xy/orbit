@@ -5,7 +5,7 @@ import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { App as AntdApp, Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
-import { PROVIDER_PRESETS, type ProviderPreset } from '../lib/providerPresets';
+import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 
@@ -86,7 +86,9 @@ export function ProviderConnectPage() {
         </div>
       );
     }
-    return <ProviderForm key={row.id} editing={row} preset={PROVIDER_PRESETS.find((p) => p.slug === row.slug)} />;
+    // The vendor a row was created from is recorded on the row, not guessed from its slug — a
+    // second key for the same vendor lands on "anthropic-2" and is still an Anthropic provider.
+    return <ProviderForm key={row.id} editing={row} preset={providerPreset(row.presetSlug)} />;
   }
 
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
@@ -124,8 +126,16 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
     editing ? (editing.runtime === 'codex' ? 'codex' : 'claude') : (preset?.runtime ?? 'claude'),
   );
   // The model list is the system's — a preset's, or a saved row's. It shows as a one-line summary;
-  // editing it is an escape hatch for a model we don't know about yet.
+  // editing it is an escape hatch for a model the catalogue doesn't know about yet.
   const [modelsOpen, setModelsOpen] = useState(isCustom && !editing);
+  // Whether the list is still the preset's. The server resolves a following row's models from the
+  // catalogue on every read, so a new Claude model reaches this provider without anyone touching
+  // it — until someone edits the list here, which hands ownership back to them.
+  const [follows, setFollows] = useState(editing ? !!editing.presetSlug : !!preset);
+  const editModels = (next: DraftModel[]) => {
+    setModels(next);
+    setFollows(false);
+  };
   // Slug is derived from the name and never shown — until the server reports the one conflict only
   // the user can resolve (slugs are unique deployment-wide).
   const [slugOverride, setSlugOverride] = useState<string | null>(null);
@@ -155,6 +165,9 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
         : preset?.defaultModel && values.includes(preset.defaultModel)
           ? preset.defaultModel
           : undefined;
+      // Following means the server owns the list from here on; detaching hands it back. On create
+      // the link is only ever set, so there's nothing to send when there's no preset.
+      const link = follows && preset ? preset.slug : null;
       if (editing) {
         return api(`${PROVIDERS_BASE}/${editing.id}`, {
           method: 'PATCH',
@@ -164,6 +177,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
             baseUrl: baseUrl.trim(),
             models: modelPayload,
             defaultModel: dm,
+            presetSlug: link,
             enabled,
             // Omit the key to keep the stored one; send it only when a new one was typed.
             ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
@@ -180,6 +194,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
           apiKey: apiKey.trim(),
           models: modelPayload,
           defaultModel: dm,
+          ...(link ? { presetSlug: link } : {}),
           enabled,
         },
       });
@@ -403,7 +418,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                           value={m.value}
                           style={{ flex: 1, minWidth: 0 }}
                           onChange={(e) =>
-                            setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+                            editModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
                           }
                         />
                         <Input
@@ -411,7 +426,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                           value={m.label}
                           style={{ flex: 1, minWidth: 0 }}
                           onChange={(e) =>
-                            setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
+                            editModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
                           }
                         />
                         <InputNumber
@@ -420,20 +435,20 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                           min={0}
                           style={{ width: 140, flex: 'none' }}
                           onChange={(v) =>
-                            setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
+                            editModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
                           }
                         />
                         <Button
                           type="text"
                           icon={<DeleteOutlined />}
-                          onClick={() => setModels(models.filter((_, j) => j !== i))}
+                          onClick={() => editModels(models.filter((_, j) => j !== i))}
                         />
                       </div>
                     ))}
                     <Button
                       type="dashed"
                       icon={<PlusOutlined />}
-                      onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
+                      onClick={() => editModels([...models, { value: '', label: '', contextWindow: null }])}
                       block
                     >
                       Add model
@@ -449,9 +464,35 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                     <a onClick={() => setModelsOpen(true)}>Edit</a>
                   </div>
                 )}
-                {!modelsOpen && preset && (
+                {/* Who owns this list, and how to change hands. A following row is maintained for
+                    the user; once they edit it, keeping up with the vendor is on them. */}
+                {preset && (
                   <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
-                    Maintained by Orbit, from the official {preset.label} preset.
+                    {follows ? (
+                      <>
+                        Maintained by Orbit, from the official {preset.label} preset — new models
+                        appear here on their own.
+                        {modelsOpen && ' Editing the list stops that.'}
+                      </>
+                    ) : (
+                      <>
+                        This list is yours to maintain.{' '}
+                        <a
+                          onClick={() => {
+                            setModels(
+                              preset.models.map((m) => ({
+                                value: m.value,
+                                label: m.label,
+                                contextWindow: m.contextWindow ?? null,
+                              })),
+                            );
+                            setFollows(true);
+                          }}
+                        >
+                          Follow the {preset.label} preset again
+                        </a>
+                      </>
+                    )}
                   </div>
                 )}
               </Field>

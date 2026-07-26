@@ -800,9 +800,15 @@ model ModelProvider {
   // selected into a browser-facing payload.
   apiKeyEnc    String   @map("api_key_enc")
   // Picker model list: [{ value, label, contextWindow? }]. `value` is the runtime model id
-  // passed as --model (e.g. "deepseek-chat").
+  // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken
+  // at write time; reads serve the preset's current list instead (see presetSlug).
   models       Json     @default("[]")
   defaultModel String?  @map("default_model")
+  // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row follows. Set → its model list and
+  // default model resolve from the preset on every read, so a model added to the catalogue reaches
+  // providers configured long before it existed. NULL → self-maintained: a custom endpoint, or a
+  // preset row whose model list the user edited by hand (editing detaches it).
+  presetSlug   String?  @map("preset_slug")
   enabled      Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position     Int?

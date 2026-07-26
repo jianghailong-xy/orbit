@@ -12,9 +12,12 @@ export class CreateModelProviderDto {
   @IsString() @MinLength(1) baseUrl!: string;
   /** Plaintext provider API key; stored AES-GCM encrypted, never returned to the browser. */
   @IsString() @MinLength(1) apiKey!: string;
-  /** Picker model list: [{ value, label, contextWindow? }]. */
+  /** Picker model list: [{ value, label, contextWindow? }]. Ignored when `presetSlug` is set. */
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
+  /** Follow a vendor preset (@orbit/shared PROVIDER_PRESETS): it supplies the model list and the
+   *  default model, on every read, for as long as the link holds. */
+  @IsOptional() @IsString() presetSlug?: string;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
@@ -36,5 +39,8 @@ export class UpdateModelProviderDto {
   @IsOptional() @IsString() @MinLength(1) apiKey?: string;
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
+  /** Omit to leave the preset link alone; send null to detach (the model list becomes the row's
+   *  own), or a preset slug to attach. */
+  @IsOptional() @IsString() presetSlug?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
