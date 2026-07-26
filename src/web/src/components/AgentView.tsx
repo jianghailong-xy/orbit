@@ -12,6 +12,7 @@ import {
   ConsoleSqlOutlined,
   DeleteOutlined,
   DisconnectOutlined,
+  DownOutlined,
   EyeOutlined,
   InfoCircleOutlined,
   LoadingOutlined,
@@ -30,7 +31,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Segmented, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
@@ -354,6 +355,16 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
     </Popover>
   );
 }
+
+// The slices of the session list, in menu order. Active is the overwhelmingly common
+// one, so the other three live in the header's scope menu rather than a permanent tab row.
+type SessionView = 'active' | 'archived' | 'deleted' | 'system';
+const SESSION_VIEWS: { value: SessionView; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Completed' },
+  { value: 'system', label: 'System' },
+  { value: 'deleted', label: 'Trash' },
+];
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -789,7 +800,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
   // Which slice of the session list to show: active, archived, system, or trash.
-  const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
+  const [view, setView] = useState<SessionView>('active');
   // Optional narrowing/sectioning of the list by tag, mirroring the iOS drawer's filter menu.
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -1147,9 +1158,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
   // the selected session's own agent.
   const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? detailForSelected?.agent?.id ?? null;
-  // The tab the user actually sees: a system session forces the System tab even when
-  // `view` is still 'active' (e.g. deep-linking one — the Segmented highlights it as
-  // System). The list and arrow-nav must step through that tab's sessions, not `view`'s.
+  // The view the user actually sees: a system session forces System even when `view` is
+  // still 'active' (e.g. deep-linking one — the header's scope menu reads System). The
+  // list and arrow-nav must step through that view's sessions, not `view`'s.
   const onSystemTab = view === 'system' || selected?.source === 'system';
   const visibleSessions = useMemo(() => {
     let list = scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions;
@@ -1224,10 +1235,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     navigate,
   ]);
 
-  // Step the open session up/down the visible list. Shared by the window-level Up/Down
-  // handler and the Segmented's capture handler below. Returns false (a no-op) at the
-  // list ends, on an empty list, or on the trash tab with nothing open. With
-  // nothing selected, Down enters from the top, Up from the bottom.
+  // Step the open session up/down the visible list, for the window-level Up/Down handler
+  // below. Returns false (a no-op) at the list ends, on an empty list, or on the trash
+  // view with nothing open. With nothing selected, Down enters from the top, Up from
+  // the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
       if (!selectedId && view !== 'active' && view !== 'system' && view !== 'archived') return false;
@@ -1247,8 +1258,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Up/Down arrows step through the session list (left column), switching the open
   // session like tabs. Skipped while typing in an input/textarea (so the composer and
-  // Ant dropdowns keep their own arrows). The Active/Completed/System tabs swallow
-  // Up/Down themselves via onKeyDownCapture below, so a focused tab steps sessions too.
+  // Ant dropdowns keep their own arrows).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -2584,6 +2594,64 @@ export function AgentView({ runner }: { runner: Runner }) {
   // has no agent in the URL, so fall back to the open session's agent, then runner.
   const headAgentName =
     lockedAgent?.name ?? selected?.agent?.name ?? runner.displayName ?? runner.name;
+  // The view the header names (and the menu check-marks). A system session forces System
+  // even when `view` is still 'active' — deep-linking one lands that way, and the label has
+  // to match the conversation that's open.
+  const shownView: SessionView = selected?.source === 'system' ? 'system' : effectiveView;
+  // Switching view while a session transcript is open closes it: the open session belongs
+  // to the view it was opened from, so browsing another one means leaving the conversation.
+  const switchView = (next: SessionView): void => {
+    setView(next);
+    if (!selectedId) return;
+    const a = scopeAgentId ?? agentsForRunner[0]?.id;
+    navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+  };
+  // One menu for everything that scopes the list: which slice (exclusive), then the tag
+  // narrowing and sectioning. Tag entries only appear once the owner has tags; the view
+  // entries always do, so Trash is reachable without ever having made one.
+  const scopeItems: MenuProps['items'] = [
+    {
+      key: 'view',
+      type: 'group',
+      label: 'View',
+      children: SESSION_VIEWS.map((v) => ({
+        key: v.value,
+        label: v.label,
+        icon: shownView === v.value ? <CheckOutlined /> : <span />,
+        onClick: () => switchView(v.value),
+      })),
+    },
+    ...(sessionTags.length > 0
+      ? [
+          { key: 'tag-divider', type: 'divider' as const },
+          {
+            key: 'filter',
+            icon: <TagOutlined />,
+            label: 'Filter by Tag',
+            children: [
+              {
+                key: 'all',
+                label: 'All',
+                icon: tagFilter === null ? <CheckOutlined /> : <span />,
+                onClick: () => setTagFilter(null),
+              },
+              ...sessionTags.map((t) => ({
+                key: t.id,
+                label: t.name,
+                icon: tagFilter === t.id ? <CheckOutlined /> : <span />,
+                onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
+              })),
+            ],
+          },
+          {
+            key: 'group',
+            label: 'Group by Tag',
+            icon: groupByTag ? <CheckOutlined /> : <span />,
+            onClick: () => setGroupByTag((g) => !g),
+          },
+        ]
+      : []),
+  ];
   // Header subtitle: the two things the composer below doesn't already show — current
   // state and when it was last active. (turns/cost dropped; model/agent live in the
   // composer pills.)
@@ -2619,93 +2687,25 @@ export function AgentView({ runner }: { runner: Runner }) {
         <div className="session-col-head">
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
-          {/* Tag filter + grouping, folded into one menu (as on iOS) rather than a persistent
-              chip row — the row read as clutter there. Hidden until the owner has any tag. */}
-          {sessionTags.length > 0 && (
-            <Dropdown
-              trigger={['click']}
-              placement="bottomRight"
-              menu={{
-                items: [
-                  {
-                    key: 'filter',
-                    icon: <TagOutlined />,
-                    label: 'Filter by Tag',
-                    children: [
-                      {
-                        key: 'all',
-                        label: 'All',
-                        icon: tagFilter === null ? <CheckOutlined /> : <span />,
-                        onClick: () => setTagFilter(null),
-                      },
-                      ...sessionTags.map((t) => ({
-                        key: t.id,
-                        label: t.name,
-                        icon: tagFilter === t.id ? <CheckOutlined /> : <span />,
-                        onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
-                      })),
-                    ],
-                  },
-                  {
-                    key: 'group',
-                    label: 'Group by Tag',
-                    icon: groupByTag ? <CheckOutlined /> : <span />,
-                    onClick: () => setGroupByTag((g) => !g),
-                  },
-                ],
-              }}
+          {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
+              chip row — both read as clutter in a narrow column, and Active is nearly always
+              the answer. The trigger names the current view so a list scoped to
+              Completed/System/Trash always explains itself. (The native clients still tab.) */}
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
+            <span
+              className={`session-scope-menu${shownView !== 'active' || tagFilter || groupByTag ? ' on' : ''}`}
+              title="Switch view, filter and group"
             >
-              <span
-                className={`session-tag-menu${tagFilter || groupByTag ? ' on' : ''}`}
-                title="Filter and group by tag"
-              >
-                <TagOutlined />
-              </span>
-            </Dropdown>
-          )}
+              {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+              <DownOutlined />
+            </span>
+          </Dropdown>
         </div>
         <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
           {isStandalone && !isMobile && <kbd className="session-new-kbd">{NEW_SESSION_HINT}</kbd>}
         </div>
-        <Segmented
-          block
-          size="small"
-          // A focused tab otherwise eats Up/Down two ways: rc-segmented's own onKeyDown
-          // and the native radio-group arrow navigation (the options share a name). Catch
-          // them in the capture phase and kill both — stopPropagation for the former,
-          // preventDefault for the latter — so Up/Down steps the session list instead.
-          // Left/Right fall through and still switch tabs; stopPropagation also keeps the
-          // window handler above from double-firing.
-          onKeyDownCapture={(e) => {
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-            if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-            e.stopPropagation();
-            e.preventDefault();
-            stepSession(e.key === 'ArrowDown' ? 1 : -1);
-          }}
-          // Deep-linking a system session lands with view='active'; highlight System
-          // once it resolves so the tab matches the open conversation.
-          value={selected?.source === 'system' ? 'system' : effectiveView}
-          onChange={(v) => {
-            const next = v as 'active' | 'archived' | 'deleted' | 'system';
-            setView(next);
-            // Switching tabs while a session transcript is open closes it: the open
-            // session belongs to the tab it was opened from, so browsing another tab
-            // means leaving the conversation.
-            if (selectedId) {
-              const a = scopeAgentId ?? agentsForRunner[0]?.id;
-              navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
-            }
-          }}
-          options={[
-            { label: 'Active', value: 'active' },
-            { label: 'Completed', value: 'archived' },
-            { label: 'System', value: 'system' },
-            { label: 'Trash', value: 'deleted' },
-          ]}
-        />
         <div className="agent-sessions session-col-list" ref={listRef}>
           {visibleSessions.length === 0 && (
             <div className="chat-note">

@@ -1685,22 +1685,33 @@ body {
   font-size: 11px;
   color: var(--text-4);
 }
-/* Tag filter + grouping menu; tinted while either is on so the narrowed list is explained. */
-.session-tag-menu {
+/* View + tag menu. Names the current view rather than showing a bare icon, so the list is
+   never silently scoped; tinted once it's off its defaults so a narrowed list is explained. */
+.session-scope-menu {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
   flex: none;
-  padding: 2px 4px;
+  padding: 2px 6px;
   border-radius: 6px;
-  color: var(--text-4);
+  color: var(--text-3);
   font-size: 13px;
   cursor: pointer;
 }
-.session-tag-menu:hover {
+.session-scope-menu .anticon {
+  font-size: 10px;
+  color: var(--text-4);
+}
+.session-scope-menu:hover {
   background: var(--bg-sunken);
   color: var(--text-2);
 }
-.session-tag-menu.on {
+.session-scope-menu.on,
+.session-scope-menu.on .anticon {
   color: var(--brand);
+}
+.session-scope-menu.on {
   background: var(--brand-tint);
 }
 .session-row.active {
