@@ -3,8 +3,15 @@ import { providerPreset } from '@orbit/shared';
 /** The fields of a ModelProvider row the preset governs (a subset of the Prisma row). */
 export interface PresetBackedRow {
   presetSlug?: string | null;
+  /** False for a row that keeps its vendor identity but maintains its own model list. */
+  followsPreset?: boolean;
   models?: unknown;
   defaultModel: string | null;
+}
+
+/** The catalogue governing this row's models, or undefined when the row governs its own. */
+function governing(row: PresetBackedRow) {
+  return row.followsPreset ? providerPreset(row.presetSlug) : undefined;
 }
 
 /**
@@ -15,7 +22,7 @@ export interface PresetBackedRow {
  * model) yields to the preset's current choice rather than reaching the runner as a dead `-m`.
  */
 export function presetDefaultModel(row: PresetBackedRow): string | null {
-  const preset = providerPreset(row.presetSlug);
+  const preset = governing(row);
   if (!preset) return row.defaultModel;
   const stored = row.defaultModel;
   return stored && preset.models.some((m) => m.value === stored) ? stored : preset.defaultModel;
@@ -28,11 +35,11 @@ export function presetDefaultModel(row: PresetBackedRow): string | null {
  * off the API and hold no catalogue of their own.
  *
  * A row that follows nothing (a custom endpoint, or one whose list the user edited) is returned
- * untouched, as is one pointing at a preset we no longer ship — there the stored copy is all we
- * have, and it's better than an empty picker.
+ * untouched, as is one whose preset we no longer ship — there the stored copy is all we have, and
+ * it's better than an empty picker.
  */
 export function withPreset<T extends PresetBackedRow>(row: T): T {
-  const preset = providerPreset(row.presetSlug);
+  const preset = governing(row);
   if (!preset) return row;
   // Only the two fields the row already declares are replaced, so the shape is unchanged.
   return { ...row, models: preset.models, defaultModel: presetDefaultModel(row) } as T;

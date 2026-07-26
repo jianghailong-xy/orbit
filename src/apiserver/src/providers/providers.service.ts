@@ -5,9 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
 import { withPreset } from './preset-overlay';
-
-const BUILTIN_SLUGS = new Set<string>([AgentProvider.CLAUDE, AgentProvider.CODEX]);
-const SLUG_RE = /^[a-z][a-z0-9-]*$/;
+import { pickFreeSlug, slugBase } from './provider-slug';
 
 @Injectable()
 export class ProvidersService {
@@ -26,6 +24,7 @@ export class ProvidersService {
         models: true,
         defaultModel: true,
         presetSlug: true,
+        followsPreset: true,
       },
     });
     // Every client — web, iOS, macOS — reads its model list from here, so resolving the preset
@@ -54,41 +53,57 @@ export class ProvidersService {
 
   /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */
   async create(ownerId: string | null, dto: CreateModelProviderDto) {
-    const slug = dto.slug.trim().toLowerCase();
-    this.assertSlug(slug);
-    // Following a preset means the catalogue supplies the models — a list sent alongside it would
-    // only be a stale copy of the same thing. What's stored is a snapshot: reads serve the preset,
-    // so this only ever surfaces if we stop shipping that preset.
     const preset = this.assertPreset(dto.presetSlug);
-    const models = preset
-      ? preset.models.map((m) => ({
+    // Following means the catalogue supplies the models — a list sent alongside it would only be a
+    // stale copy of the same thing. What's stored is then a snapshot: reads serve the preset, so it
+    // only ever surfaces if we stop shipping that preset.
+    const follows = !!preset && dto.followsPreset !== false;
+    const models = follows
+      ? preset!.models.map((m) => ({
           value: m.value,
           label: m.label,
           ...(m.contextWindow != null ? { contextWindow: m.contextWindow } : {}),
         }))
       : (dto.models ?? []);
-    try {
-      const row = await this.prisma.modelProvider.create({
-        data: {
-          slug,
-          label: dto.label,
-          runtime: dto.runtime ?? preset?.runtime ?? 'claude',
-          baseUrl: dto.baseUrl,
-          apiKeyEnc: encryptSecret(dto.apiKey),
-          models: models as Prisma.InputJsonValue,
-          defaultModel: preset?.defaultModel ?? dto.defaultModel ?? dto.models?.[0]?.value ?? null,
-          presetSlug: preset?.slug ?? null,
-          enabled: dto.enabled ?? true,
-          ownerId,
-        },
-      });
-      return this.desensitize(row);
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new BadRequestException('a provider with this slug already exists');
+    const base = slugBase(dto.slug ?? preset?.slug ?? dto.label);
+    const data = {
+      label: dto.label,
+      runtime: dto.runtime ?? preset?.runtime ?? 'claude',
+      baseUrl: dto.baseUrl,
+      apiKeyEnc: encryptSecret(dto.apiKey),
+      models: models as Prisma.InputJsonValue,
+      defaultModel: (follows ? preset!.defaultModel : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
+      // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
+      presetSlug: preset?.slug ?? null,
+      followsPreset: follows,
+      enabled: dto.enabled ?? true,
+      ownerId,
+    };
+    // Two people connecting the same vendor at once would pick the same free slug, so a lost race
+    // just re-picks against what's now taken rather than surfacing as an error about an identifier
+    // nobody chose.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return this.desensitize(
+          await this.prisma.modelProvider.create({ data: { ...data, slug: await this.freeSlug(base) } }),
+        );
+      } catch (e) {
+        const raced = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+        if (!raced || attempt >= 4) throw e;
       }
-      throw e;
     }
+  }
+
+  /** An unused slug for this base — see pickFreeSlug for why a collision is routine. */
+  private async freeSlug(base: string) {
+    const rows = await this.prisma.modelProvider.findMany({
+      where: { slug: { startsWith: base } },
+      select: { slug: true },
+    });
+    return pickFreeSlug(
+      base,
+      rows.map((r) => r.slug),
+    );
   }
 
   /** Update a provider within one ownership scope: admins pass null (shared rows),
@@ -103,9 +118,9 @@ export class ProvidersService {
       enabled: dto.enabled,
     };
     if (dto.models) data.models = dto.models as Prisma.InputJsonValue;
-    // An explicit null detaches the row from its preset: the caller edited the model list, so it
-    // becomes self-maintained. Omitted leaves the link as it is.
-    if (dto.presetSlug !== undefined) data.presetSlug = this.assertPreset(dto.presetSlug)?.slug ?? null;
+    // False hands the model list back to the row (the caller edited it); true takes the preset's
+    // again. The vendor identity isn't editable — it's what the provider was created from.
+    if (dto.followsPreset !== undefined) data.followsPreset = dto.followsPreset;
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
     if (dto.apiKey) data.apiKeyEnc = encryptSecret(dto.apiKey);
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
@@ -176,13 +191,6 @@ export class ProvidersService {
     const preset = providerPreset(slug);
     if (!preset) throw new BadRequestException(`unknown provider preset "${slug}"`);
     return preset;
-  }
-
-  private assertSlug(slug: string) {
-    if (!SLUG_RE.test(slug)) {
-      throw new BadRequestException('slug must be lowercase letters/digits/hyphen, starting with a letter');
-    }
-    if (BUILTIN_SLUGS.has(slug)) throw new BadRequestException(`"${slug}" is a built-in provider`);
   }
 
   // Reject anything but an http(s) URL to a non-internal host, so the test probe can't be aimed

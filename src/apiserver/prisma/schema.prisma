@@ -804,11 +804,15 @@ model ModelProvider {
   // at write time; reads serve the preset's current list instead (see presetSlug).
   models       Json     @default("[]")
   defaultModel String?  @map("default_model")
-  // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row follows. Set → its model list and
-  // default model resolve from the preset on every read, so a model added to the catalogue reaches
-  // providers configured long before it existed. NULL → self-maintained: a custom endpoint, or a
-  // preset row whose model list the user edited by hand (editing detaches it).
+  // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row was created from — its identity,
+  // fixed for life: the logo it shows and the vendor it "is", even when its own slug had to be
+  // suffixed. NULL for a custom endpoint.
   presetSlug   String?  @map("preset_slug")
+  // Whether the preset also OWNS the model list: true → models and default model resolve from the
+  // catalogue on every read, so one added there reaches providers configured long before it
+  // existed. Editing the list by hand clears this (the row keeps its identity, and can opt back
+  // in); `models` above is then the row's own.
+  followsPreset Boolean @default(false) @map("follows_preset")
   enabled      Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position     Int?

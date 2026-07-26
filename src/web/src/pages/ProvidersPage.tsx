@@ -33,13 +33,12 @@ export function ProvidersPage() {
     {
       title: 'Provider',
       key: 'provider',
+      // The dispatch slug is the server's to generate and nobody's to read, so the row shows the
+      // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
       render: (_, p) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <ProviderTile slug={p.slug} label={p.label} size={32} />
-          <div>
-            <div style={{ fontWeight: 600 }}>{p.label}</div>
-            <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.slug}</code>
-          </div>
+          <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
+          <div style={{ fontWeight: 600 }}>{p.label}</div>
         </div>
       ),
     },

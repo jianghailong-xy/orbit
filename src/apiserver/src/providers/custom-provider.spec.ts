@@ -54,7 +54,7 @@ test('custom-provider', async (t) => {
     // has been saved since, so only the preset link can keep dispatch off a dead model id.
     const exec = resolveProviderExec({
       declaredProvider: 'anthropic',
-      customRow: row({ presetSlug: 'anthropic', defaultModel: 'claude-opus-4-0' }),
+      customRow: row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-0' }),
       sessionModel: null,
       agentModel: null,
     });
@@ -62,7 +62,7 @@ test('custom-provider', async (t) => {
     // An explicit pick still wins over both.
     const picked = resolveProviderExec({
       declaredProvider: 'anthropic',
-      customRow: row({ presetSlug: 'anthropic', defaultModel: 'claude-opus-4-0' }),
+      customRow: row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-0' }),
       sessionModel: 'claude-haiku-4-5-20251001',
       agentModel: null,
     });
