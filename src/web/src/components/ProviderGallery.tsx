@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { PROVIDER_PRESETS, type ProviderBrand } from '../lib/providerPresets';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
-import { scopeSuffix, type ProviderScope } from '../lib/providerAdmin';
 
 // The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
 // derived from its label.
@@ -73,12 +72,11 @@ export function ProviderTile({
 
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
  *  deep-linkable (/providers/new/anthropic) and the browser's back button works. */
-export function ProviderGallery({ scope }: { scope: ProviderScope }) {
-  const suffix = scopeSuffix(scope);
+export function ProviderGallery() {
   return (
     <div className="provider-gallery">
       {PROVIDER_PRESETS.map((p) => (
-        <Link key={p.slug} to={`/providers/new/${p.slug}${suffix}`} className="provider-card">
+        <Link key={p.slug} to={`/providers/new/${p.slug}`} className="provider-card">
           <ProviderTile slug={p.slug} label={p.label} />
           <div style={{ minWidth: 0 }}>
             <div className="pc-name">{p.label}</div>
@@ -88,7 +86,7 @@ export function ProviderGallery({ scope }: { scope: ProviderScope }) {
           </div>
         </Link>
       ))}
-      <Link to={`/providers/new/custom${suffix}`} className="provider-card custom">
+      <Link to="/providers/new/custom" className="provider-card custom">
         <ProviderTile slug="custom" label="Custom" muted />
         <div style={{ minWidth: 0 }}>
           <div className="pc-name">Custom</div>

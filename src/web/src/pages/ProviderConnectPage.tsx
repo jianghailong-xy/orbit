@@ -1,18 +1,12 @@
 import { type ReactNode, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { App as AntdApp, Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS, type ProviderPreset } from '../lib/providerPresets';
-import {
-  PROVIDER_SCOPES,
-  providerScopeFrom,
-  scopeSuffix,
-  type ProviderRow,
-  type ProviderScope,
-} from '../lib/providerAdmin';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -28,22 +22,18 @@ interface DraftModel {
  * step, so picking a vendor is a normal navigation — back button included.
  */
 export function ProviderPickPage() {
-  const [params] = useSearchParams();
-  const scope = providerScopeFrom(params.get('scope'));
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <Link className="provider-back" to="/providers">
         ‹ All providers
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>
-        {scope === 'shared' ? 'Add a shared provider' : 'Add a provider'}
+        Add a provider
       </h1>
       <p style={{ color: 'var(--text-3)', fontSize: 13, marginTop: -8, marginBottom: 20 }}>
-        {scope === 'shared'
-          ? 'Shared providers use the deployment key and are available to every user here.'
-          : 'Pick a model provider to get started. Each uses your own key, visible only to you.'}
+        Pick a model provider to get started. Each uses your own key, visible only to you.
       </p>
-      <ProviderGallery scope={scope} />
+      <ProviderGallery />
       <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 14 }}>
         Can't find your provider? Choose Custom to enter an endpoint.
       </div>
@@ -53,20 +43,17 @@ export function ProviderPickPage() {
 
 /**
  * Step 2 of adding a provider (/providers/new/:slug), and the edit form (/providers/:id): paste a
- * key, optionally probe it, and save. `?scope=shared` targets the admin-managed list.
+ * key, optionally probe it, and save.
  *
- * Editing needs the row, and the management APIs only list — so the page reads the same cached
+ * Editing needs the row, and the management API only lists — so the page reads the same cached
  * list the providers page fills and picks its id out of it.
  */
 export function ProviderConnectPage() {
   const { slug, id } = useParams();
-  const [params] = useSearchParams();
-  const scope = providerScopeFrom(params.get('scope'));
-  const { basePath, listKey } = PROVIDER_SCOPES[scope];
 
   const providers = useQuery({
-    queryKey: listKey,
-    queryFn: () => api<ProviderRow[]>(basePath),
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
     enabled: !!id,
   });
 
@@ -89,38 +76,22 @@ export function ProviderConnectPage() {
         </div>
       );
     }
-    return (
-      <ProviderForm
-        key={row.id}
-        scope={scope}
-        editing={row}
-        preset={PROVIDER_PRESETS.find((p) => p.slug === row.slug)}
-      />
-    );
+    return <ProviderForm key={row.id} editing={row} preset={PROVIDER_PRESETS.find((p) => p.slug === row.slug)} />;
   }
 
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
-  if (!preset && slug !== 'custom') return <Navigate to={`/providers/new${scopeSuffix(scope)}`} replace />;
-  return <ProviderForm key={slug} scope={scope} preset={preset} />;
+  if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
+  return <ProviderForm key={slug} preset={preset} />;
 }
 
 /**
  * The connect/edit form. Mounted fresh per vendor (or per edited row), so its fields seed from the
  * preset — or the stored row — once, at mount.
  */
-function ProviderForm({
-  scope,
-  preset,
-  editing,
-}: {
-  scope: ProviderScope;
-  preset?: ProviderPreset;
-  editing?: ProviderRow;
-}) {
+function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: ProviderRow }) {
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { basePath, listKey } = PROVIDER_SCOPES[scope];
   // A custom provider names itself; a preset ships every field but the key.
   const isCustom = !preset;
 
@@ -169,7 +140,7 @@ function ProviderForm({
         }));
       const dm = defaultModel.trim() || undefined;
       if (editing) {
-        return api(`${basePath}/${editing.id}`, {
+        return api(`${PROVIDERS_BASE}/${editing.id}`, {
           method: 'PATCH',
           body: {
             label: label.trim(),
@@ -183,7 +154,7 @@ function ProviderForm({
           },
         });
       }
-      return api(basePath, {
+      return api(PROVIDERS_BASE, {
         method: 'POST',
         body: {
           slug: slug.trim().toLowerCase(),
@@ -198,9 +169,9 @@ function ProviderForm({
       });
     },
     onSuccess: () => {
-      // Both this scope's list and the de-sensitized ['providers'] catalog the pickers read
+      // Both this list and the de-sensitized ['providers'] catalog the pickers read
       // must refresh on any change.
-      void qc.invalidateQueries({ queryKey: listKey });
+      void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/providers');
@@ -230,7 +201,7 @@ function ProviderForm({
 
   return (
     <div className="provider-form">
-      <Link className="provider-back" to={editing ? '/providers' : `/providers/new${scopeSuffix(scope)}`}>
+      <Link className="provider-back" to={editing ? '/providers' : '/providers/new'}>
         ‹ All providers
       </Link>
       <h1 className="page-title" style={{ marginTop: 8 }}>

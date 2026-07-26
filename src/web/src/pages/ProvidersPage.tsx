@@ -2,52 +2,27 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
-import { meQuery, providersQuery } from '../lib/queries';
-import { PROVIDER_SCOPES, scopeSuffix, type ProviderRow, type ProviderScope } from '../lib/providerAdmin';
+import { providersQuery } from '../lib/queries';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 
 /**
- * Model providers: "My providers" is every user's personal (BYOK) list — their own API key,
- * visible only to them (/providers/mine). Admins additionally manage the shared providers
- * every user sees (/admin/providers). Both sections share one table (ProviderSection); only the
- * scope and copy differ. Adding or editing one happens on its own page (ProviderConnectPage),
- * so a vendor's setup is deep-linkable.
+ * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
+ * (/providers/mine). Adding or editing one happens on its own page (ProviderConnectPage), so a
+ * vendor's setup is deep-linkable.
  */
 export function ProvidersPage() {
-  const me = useQuery(meQuery());
-  return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <h1 className="page-title">Providers</h1>
-      <ProviderSection
-        title="My providers"
-        hint="Personal providers use your own API key and are visible only to you."
-        scope="mine"
-      />
-      {me.data?.role === 'ADMIN' && (
-        <ProviderSection
-          title="Shared providers"
-          hint="Available to every user on this deployment. Admin only."
-          scope="shared"
-        />
-      )}
-    </div>
-  );
-}
-
-function ProviderSection({ title, hint, scope }: { title: string; hint: string; scope: ProviderScope }) {
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const { basePath, listKey } = PROVIDER_SCOPES[scope];
-  const providers = useQuery({ queryKey: listKey, queryFn: () => api<ProviderRow[]>(basePath) });
-  const suffix = scopeSuffix(scope);
+  const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => api(`${basePath}/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      // Both this section's list and the de-sensitized ['providers'] catalog the pickers read
+      // Both this list and the de-sensitized ['providers'] catalog the pickers read
       // must refresh on any change.
-      void qc.invalidateQueries({ queryKey: listKey });
+      void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success('Provider deleted');
     },
@@ -91,7 +66,7 @@ function ProviderSection({ title, hint, scope }: { title: string; hint: string; 
       align: 'right',
       render: (_, p) => (
         <Space>
-          <Button size="small" onClick={() => navigate(`/providers/${p.id}${suffix}`)}>
+          <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
             Edit
           </Button>
           <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
@@ -105,13 +80,17 @@ function ProviderSection({ title, hint, scope }: { title: string; hint: string; 
   ];
 
   return (
-    <div style={{ marginBottom: 32 }}>
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 style={{ marginBottom: 0 }}>{title}</h2>
-          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>{hint}</div>
+          <h1 className="page-title" style={{ marginBottom: 0 }}>
+            Providers
+          </h1>
+          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+            Providers use your own API key and are visible only to you.
+          </div>
         </div>
-        <Button type="primary" onClick={() => navigate(`/providers/new${suffix}`)}>
+        <Button type="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
       </div>
@@ -129,7 +108,7 @@ function ProviderSection({ title, hint, scope }: { title: string; hint: string; 
         <div className="provider-empty">
           <h3>Connect your first provider</h3>
           <p>Pick a provider and paste your API key — that's it.</p>
-          <ProviderGallery scope={scope} />
+          <ProviderGallery />
         </div>
       ) : (
         <Table

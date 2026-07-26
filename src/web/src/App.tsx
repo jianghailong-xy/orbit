@@ -120,11 +120,9 @@ export function App() {
                 </DocView>
               }
             />
-            {/* Providers is for everyone (each user's own BYOK list; admins also manage the
-                shared ones there). Connecting one is its own two-page flow — pick a vendor,
-                then paste a key — so "/providers/new/anthropic" can be linked to directly.
-                "?scope=shared" targets the admin list. Keep the old admin-only path as a
-                redirect. */}
+            {/* Providers is for everyone (each user's own BYOK list). Connecting one is its own
+                two-page flow — pick a vendor, then paste a key — so "/providers/new/anthropic"
+                can be linked to directly. Keep the old admin-only path as a redirect. */}
             <Route
               path="providers"
               element={
