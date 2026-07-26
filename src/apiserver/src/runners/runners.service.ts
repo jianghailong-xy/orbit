@@ -59,6 +59,9 @@ export class RunnersService {
         planUsage: true,
         // Runtime model catalog reported by the runner (Codex model picker source).
         modelCatalog: true,
+        // Engine install/sign-in state — the Providers page reads this to show the local
+        // logins alongside the API keys, and which runners are missing one.
+        engines: true,
       },
     });
     // How many slots each runner is currently using, so the list can show

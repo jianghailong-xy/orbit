@@ -237,6 +237,42 @@ func signInEngine(spec engineSpec) bool {
 	return true
 }
 
+// wireAuth maps the tri-state probe onto the wire's string form (@orbit/shared
+// EngineAuthState). authUnknown stays distinct from authNo on purpose: "we couldn't
+// tell" and "signed out" call for different UI, and conflating them means telling
+// people to re-run a login that was fine.
+func wireAuth(a authState) string {
+	switch a {
+	case authYes:
+		return "yes"
+	case authNo:
+		return "no"
+	default:
+		return "unknown"
+	}
+}
+
+// probeEngineStatuses checks every engine and returns the heartbeat's wire form. Same
+// checkEngine the doctor uses, so `orbit doctor` and the web UI can't disagree about a
+// machine. Each engine costs two short-timeout subprocesses (`--version` + an auth
+// status command), so callers run this on a slow background cadence — never inline on
+// the heartbeat.
+func probeEngineStatuses() []EngineStatus {
+	servicePath := serviceLoginPath()
+	out := make([]EngineStatus, 0, len(engineSpecs))
+	for _, spec := range engineSpecs {
+		h := checkEngine(spec, servicePath)
+		out = append(out, EngineStatus{
+			Provider:      spec.bin, // bin names match the provider constants (see engineSpec)
+			Installed:     h.installed,
+			Version:       h.version,
+			Auth:          wireAuth(h.auth),
+			OnServicePath: h.onServicePath,
+		})
+	}
+	return out
+}
+
 // runDoctor checks every engine and prints status. When fix is true and stdin is
 // interactive, it offers to install anything missing and to sign in anything not
 // signed in, re-checking after each. proxyVars are threaded into installer commands

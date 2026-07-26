@@ -152,6 +152,10 @@ model Runner {
   planUsage         Json?      @map("plan_usage")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?      @map("model_catalog")
+  // Install + sign-in state of this machine's Claude/Codex CLIs, reported via heartbeat.
+  // Array of @orbit/shared EngineStatus. This is the only way the control plane learns
+  // about a local login — the credential itself lives on the runner's disk, not here.
+  engines           Json?      @map("engines")
 
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).

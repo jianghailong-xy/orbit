@@ -183,6 +183,19 @@ func runLoop(cfg *RunnerConfig) {
 	}
 	go refreshModelCatalog()
 
+	// Engine install/sign-in state for this machine, so the control plane can render a local
+	// login as a first-class model credential instead of a blank. Probed in the background at
+	// a slow cadence (each engine costs two short subprocesses) and attached to the heartbeat.
+	var enginesMu sync.Mutex
+	var hbEngines []EngineStatus
+	refreshEngines := func() {
+		statuses := probeEngineStatuses()
+		enginesMu.Lock()
+		hbEngines = statuses
+		enginesMu.Unlock()
+	}
+	go refreshEngines()
+
 	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
 	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
@@ -217,6 +230,9 @@ func runLoop(cfg *RunnerConfig) {
 				if cycles%120 == 0 { // model catalog (Codex + Claude) every ~60 min
 					go refreshModelCatalog()
 				}
+				if cycles%20 == 0 { // engine install/sign-in state every ~10 min
+					go refreshEngines()
+				}
 				mu.Lock()
 				idle := int(maxConcurrent.Load()) - len(active)
 				cancels := make(map[string]context.CancelFunc, len(active))
@@ -239,6 +255,9 @@ func runLoop(cfg *RunnerConfig) {
 				modelCatalogMu.Lock()
 				modelCatalog := hbModelCatalog
 				modelCatalogMu.Unlock()
+				enginesMu.Lock()
+				engines := hbEngines
+				enginesMu.Unlock()
 				// Live worktree diff per running session, so the web's status bar appears
 				// mid-turn instead of only after a turn completes. Computed outside the lock
 				// (git can be slow); a just-finalized session is filtered server-side by status.
@@ -263,6 +282,7 @@ func runLoop(cfg *RunnerConfig) {
 					PlanUsage:    combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 					ModelCatalog: modelCatalog,
 					Sessions:     liveSessions,
+					Engines:      engines,
 				})
 				if err != nil {
 					logln("heartbeat failed:", err)

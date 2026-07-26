@@ -60,6 +60,21 @@ type HeartbeatRequest struct {
 	// Sessions carries each running session's live worktree diff so the web status bar
 	// appears mid-turn, not just at turn-complete. Empty when no isolated session runs.
 	Sessions []SessionLiveState `json:"sessions,omitempty"`
+	// Engines is this machine's Claude/Codex CLI state (installed, version, signed in),
+	// so the control plane can show a local login the way it shows an API key. Nil until
+	// the first probe completes — never blocks the heartbeat.
+	Engines []EngineStatus `json:"engines,omitempty"`
+}
+
+// EngineStatus mirrors @orbit/shared EngineStatus: one engine CLI as found on disk.
+// Auth is a tri-state string ("yes"|"no"|"unknown") — an ambiguous probe must not read
+// as signed out, or the UI tells people to re-run a login they don't need.
+type EngineStatus struct {
+	Provider      string `json:"provider"`
+	Installed     bool   `json:"installed"`
+	Version       string `json:"version,omitempty"`
+	Auth          string `json:"auth"`
+	OnServicePath bool   `json:"onServicePath"`
 }
 
 // SessionLiveState is one running session's live worktree state, reported each heartbeat

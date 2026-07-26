@@ -1,0 +1,14 @@
+-- Record each runner's engine (Claude Code / Codex) install + sign-in state, reported on the
+-- heartbeat.
+--
+-- A local login is a model credential exactly like an API key — it's just stored on a machine
+-- instead of in this database, which is why the control plane has never been able to say anything
+-- about it. `orbit doctor` already computes installed/version/signed-in/on-service-PATH on the
+-- runner; it only ever printed them to that machine's terminal. Without this column the Providers
+-- UI can show a user their keys but not the subscription their agents actually run on, and a
+-- lapsed login first surfaces as a turn that dies halfway through.
+--
+-- Nullable with no default, like plan_usage and model_catalog: NULL means "this runner hasn't told
+-- us" (too old to report, or not yet through its first probe), which reads differently from a row
+-- saying an engine is missing. The UI needs to distinguish those two.
+ALTER TABLE "runner" ADD COLUMN "engines" JSONB;

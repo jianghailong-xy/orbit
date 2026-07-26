@@ -1,8 +1,12 @@
 import type { RunnerModelCatalog } from '@orbit/shared';
 
+// The built-in providers: the CLI signed in on the runner itself, billed to that subscription.
+// The suffix is load-bearing — a configured Anthropic API key sits in the same dropdown under a
+// name like "Anthropic (Claude)", and picking the wrong one is the difference between a
+// subscription the user already pays for and per-token billing.
 export const PROVIDER_OPTIONS = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'codex', label: 'Codex' },
+  { value: 'claude', label: 'Claude · runner login' },
+  { value: 'codex', label: 'Codex · runner login' },
 ];
 
 type ModelOption = { value: string; label: string };

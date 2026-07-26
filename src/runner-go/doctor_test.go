@@ -135,3 +135,40 @@ func TestRunInstallCmdReportsFailure(t *testing.T) {
 		t.Fatal("a non-zero installer must report failure")
 	}
 }
+
+func TestWireAuthKeepsUnknownDistinct(t *testing.T) {
+	// "couldn't tell" must not collapse into "signed out" — the UI turns `no` into a
+	// prompt to re-run a login, which is wrong when the probe was merely inconclusive.
+	for _, c := range []struct {
+		in   authState
+		want string
+	}{{authYes, "yes"}, {authNo, "no"}, {authUnknown, "unknown"}} {
+		if got := wireAuth(c.in); got != c.want {
+			t.Fatalf("wireAuth(%v) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestProbeEngineStatusesCoversEverySpec(t *testing.T) {
+	// Every engine reports a row whatever this machine has installed: a missing row reads
+	// as "old runner, nothing reported", which is a different thing from "not installed".
+	// (Install state itself isn't asserted — the probe reads the service login PATH, so it
+	// finds whatever the test host really has; checkEngine's own tests cover detection.)
+	got := probeEngineStatuses()
+	if len(got) != len(engineSpecs) {
+		t.Fatalf("got %d statuses for %d engines", len(got), len(engineSpecs))
+	}
+	for i, s := range got {
+		if s.Provider != engineSpecs[i].bin {
+			t.Fatalf("status %d provider = %q, want %q", i, s.Provider, engineSpecs[i].bin)
+		}
+		switch s.Auth {
+		case "yes", "no", "unknown":
+		default:
+			t.Fatalf("%s auth = %q, want one of yes/no/unknown", s.Provider, s.Auth)
+		}
+		if !s.Installed && s.Version != "" {
+			t.Fatalf("%s reports a version while not installed", s.Provider)
+		}
+	}
+}

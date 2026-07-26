@@ -290,6 +290,9 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Engine install/sign-in state — how a local login becomes visible to the UI at all.
+        // Older runners omit it, which stays NULL ("not reported") rather than "no engines".
+        engines: (dto?.engines ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
     // Persist each running session's live worktree diff so the composer's status bar can

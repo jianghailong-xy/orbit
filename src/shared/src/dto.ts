@@ -207,6 +207,30 @@ export interface PlanUsage extends PlanUsageSnapshot {
   codex?: PlanUsageSnapshot;
 }
 
+/** Whether an engine's CLI says it is signed in. Ambiguous answers stay `unknown` rather than
+ *  collapsing to `no` — telling someone to re-run a login they don't need is its own bug. */
+export type EngineAuthState = 'yes' | 'no' | 'unknown';
+
+/**
+ * One coding-engine CLI (Claude Code / Codex) as it exists on a runner's disk.
+ *
+ * A local login is a model credential just like an API key — the difference is that it lives on
+ * a machine instead of in this database, so the control plane can only know about it if the
+ * runner says so. Without this the UI can't tell a signed-in engine from a missing one, and a
+ * lapsed subscription only surfaces as a turn that fails halfway.
+ */
+export interface EngineStatus {
+  /** The runtime this engine backs — an AgentProvider value ('claude' | 'codex'). */
+  provider: string;
+  installed: boolean;
+  /** `<bin> --version`, when it answered. */
+  version?: string;
+  auth: EngineAuthState;
+  /** Present on the background service's PATH. False = works in a shell but not under the
+   *  runner service, which is the failure that otherwise looks like "the CLI is fine". */
+  onServicePath: boolean;
+}
+
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more concurrent sessions the runner can accept right now. */
@@ -221,6 +245,9 @@ export interface RunnerHeartbeatRequest {
   planUsage?: PlanUsage;
   /** Runtime model catalog reported by this runner. Absent on older runners. */
   modelCatalog?: RunnerModelCatalog;
+  /** Install + sign-in state of this machine's engine CLIs, so a local login shows up in the
+   *  UI next to the API keys. Absent on older runners (the UI then says "not reported"). */
+  engines?: EngineStatus[];
   /** Live worktree state for each session this runner is currently running, so the
    *  composer's status bar appears mid-turn — not just after a turn completes. Absent
    *  from older runners (the bar then waits for the first turn-complete as before). */
