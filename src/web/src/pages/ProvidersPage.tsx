@@ -84,6 +84,7 @@ export function ProvidersPage() {
                   <ApiKeyBlock
                     key={p.id}
                     provider={p}
+                    vendorLabel={g.label}
                     onEdit={() => navigate(`/providers/${p.id}`)}
                     onDelete={() => deleteMut.mutate(p.id)}
                   />
@@ -180,18 +181,24 @@ function RunnerLine({ runner }: { runner: LocalLoginOnRunner }) {
 
 function ApiKeyBlock({
   provider,
+  vendorLabel,
   onEdit,
   onDelete,
 }: {
   provider: ProviderRow;
+  vendorLabel: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  // The name only earns a line when it says something the card heading didn't — a default-named
+  // key under its own vendor would just print "Anthropic (Claude)" twice. A renamed one, or a
+  // second key the user distinguished by name, still shows.
+  const named = provider.label !== vendorLabel;
   return (
     <div className="conn-row">
       <div className="conn-main">
         <div className="conn-title">
-          {provider.label}
+          {named && provider.label}
           <span className="conn-kind">API key</span>
           {!provider.enabled && <span className="conn-kind off">Disabled</span>}
         </div>
