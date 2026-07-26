@@ -21,9 +21,11 @@ const queryClient = new QueryClient({
 
 // Toasts drop below the header band instead of AntD's default 8px, which lands them right on
 // the session title / status line (and the toast card swallows clicks, so it also blocked the
-// double-click-to-rename target). 104px clears the tallest header we render: the conversation
-// header with a task back-link above the title (92px), and the mobile "Orbit" top bar plus
-// session-list head (100px). Applies to every toast — they all go through App.useApp().
+// double-click-to-rename target). This offset positions the notice holder; the card itself
+// paints 8px lower (the notice wrapper's padding), so it starts at 112px — clear of the
+// tallest headers we render: the conversation header with a task back-link above the title
+// (105px) and the mobile "Orbit" top bar plus session-list head (100px), both measured with
+// the toast live. Applies to every toast — they all go through App.useApp().
 const TOAST_TOP = 104;
 
 // Feeds AntD the matching theme for the resolved light/dark mode; custom CSS is
