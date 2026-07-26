@@ -208,6 +208,21 @@ final class AppModel {
         }
     }
 
+    /// Persist a model pick as the owning agent's default, so the next new session — here or on
+    /// another device — seeds this model. The per-agent port of `rememberDefaultEffort`: effort is
+    /// account-level, but a model is provider-specific, so it belongs on the agent, not user prefs.
+    /// Fire-and-forget and quiet: the pill already reflects the pick, so a failed sync is non-fatal.
+    /// Skips a no-op re-select of the model the agent already defaults to; reloads the list on
+    /// success so a later draft seeds from the new default.
+    func rememberDefaultModel(agentID: String, model: String) {
+        guard let api, agents?.agent(agentID)?.model != model else { return }
+        Task {
+            if (try? await api.updateAgent(agentID, UpdateAgentRequest(model: model))) != nil {
+                await agents?.load()
+            }
+        }
+    }
+
     /// Returns nil on success, else a message. Wrong current password is a 400 (not a 401, so it
     /// won't bounce the session).
     func changePassword(current: String, new: String) async -> String? {

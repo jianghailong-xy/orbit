@@ -63,7 +63,11 @@ struct LocalStatusCard: Identifiable, Equatable, Sendable {
 @Observable
 final class ConsoleModel {
     let sessionID: String
-    let agentID: String?
+    /// The owning agent's id. Seeded at init (always for a draft; when threaded through `focus`
+    /// for a live console) and re-adopted from the session payload in `loadContext`, so even a
+    /// console restored from disk without one can still write a model pick back to its agent
+    /// (ComposerView's model picker → `AppModel.rememberDefaultModel`).
+    private(set) var agentID: String?
     /// Non-nil when this is a draft (pre-session) console backing the "new session" composer: it
     /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
     /// (see `createDraftSession`). A live console leaves this nil.
@@ -542,6 +546,9 @@ final class ConsoleModel {
         guard let s = try? await api.session(sessionID) else { return }
         serverStatus = s.status
         agentName = s.agent?.name
+        // Adopt the owning agent's id too (a console opened by session id may have been created
+        // without one), so a model pick here can be written back to the agent as its new default.
+        if let aid = s.agent?.id { agentID = aid }
         provider = s.provider ?? s.agent?.provider ?? "claude"
         if let m = s.model { modelID = m }
         // A stored mode is adopted verbatim; a session with no stored mode falls back to

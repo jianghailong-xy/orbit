@@ -3552,6 +3552,20 @@ export function AgentView({ runner }: { runner: Runner }) {
                     setModel(v);
                     if (drop) setMode('Default');
                   }
+                  // Remember as the owning agent's default so the next new session — here or on
+                  // iOS/macOS — seeds this model (the per-agent port of the effort write below; a
+                  // model is provider-specific, so it lives on the agent, not account prefs).
+                  // Optimistically patch the cached agents list so the draft seed effect and other
+                  // views see it, then persist best-effort.
+                  const writeAgentId = live ? selected?.agent?.id : agentId;
+                  if (writeAgentId) {
+                    qc.setQueryData<any[]>(agentsQuery().queryKey, (prev) =>
+                      prev?.map((a) => (a.id === writeAgentId ? { ...a, model: v } : a)) ?? prev,
+                    );
+                    void api(`/agents/${writeAgentId}`, { method: 'PATCH', body: { model: v } }).catch(
+                      () => {},
+                    );
+                  }
                 }}
                 options={modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)}
                 disabled={!configEditable}

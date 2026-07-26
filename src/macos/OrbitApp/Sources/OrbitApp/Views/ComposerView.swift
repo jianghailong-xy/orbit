@@ -219,6 +219,13 @@ struct ComposerView: View {
                         Button {
                             console.modelID = m.id
                             Task { await console.applyConfig(model: m.id) }
+                            // Remember this as the owning agent's default so the next new session
+                            // (here or on another device) seeds it — the per-agent port of the
+                            // effort write below. `applyConfig` handles this session's own model;
+                            // this updates the agent the session belongs to.
+                            if let aid = console.agentID {
+                                app.rememberDefaultModel(agentID: aid, model: m.id)
+                            }
                         } label: {
                             menuItemLabel(m.name, selected: m.id == console.modelID)
                         }
