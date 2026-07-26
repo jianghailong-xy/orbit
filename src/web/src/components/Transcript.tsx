@@ -1147,7 +1147,7 @@ function latestToolSummary(node: ToolNode, desc: ToolDesc): { text: string; mono
   if (node.name === 'Bash' && typeof input.command === 'string' && input.command) {
     return { text: input.command, mono: true };
   }
-  if (desc.path) return { text: desc.path, mono: true };
+  if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };
   return undefined;
@@ -1635,6 +1635,16 @@ function splitPath(path: string): { base: string; dir: string } {
   if (cut < 0) return { base: clean, dir: '' };
   const segs = clean.slice(0, cut).split('/').filter(Boolean);
   return { base: clean.slice(cut + 1), dir: segs.length ? `…/${segs[segs.length - 1]}/` : '/' };
+}
+
+// A worktree-isolated session runs its tools under <home>/.orbit/worktrees/<id>/;
+// that absolute prefix is ephemeral machine scratch, so strip it and show the path
+// relative to the repo root. Paths outside a worktree are returned unchanged.
+const WORKTREE_RE = /\.orbit\/worktrees\/[^/]+\//;
+function relPath(path: string): string {
+  const m = WORKTREE_RE.exec(path);
+  if (!m) return path;
+  return path.slice(m.index + m[0].length) || path;
 }
 
 // Read's offset/limit → a compact line-range badge (e.g. L240–400) instead of an
