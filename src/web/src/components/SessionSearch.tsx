@@ -70,6 +70,16 @@ export function SessionSearch() {
   // whole point. `/` is not bound — it would collide with the composer's slash-command menu.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // Esc is handled here rather than left to the Modal: AntD binds its own Esc to a keydown on
+      // `.ant-modal-wrap`, so it only fires while focus sits inside the dialog. Focus lands there
+      // via afterOpenChange, but anything that moves it out — tabbing to another window and back,
+      // a click that ends up on the body — silently kills the key while the footer still promises
+      // "esc close". Not preventDefault'd, and a no-op state set while closed, so every other Esc
+      // consumer (the composer's slash menu, an open AntD dropdown) is unaffected.
+      if (e.key === 'Escape') {
+        setOpen(false);
+        return;
+      }
       if (e.key !== 'k' && e.key !== 'K') return;
       if (!e.metaKey && !e.ctrlKey) return;
       if (e.altKey || e.shiftKey) return;
