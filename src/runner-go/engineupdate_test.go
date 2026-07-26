@@ -6,11 +6,18 @@ import (
 )
 
 func TestUpdateErrDetail(t *testing.T) {
-	// Prefers the CLI's last output line (the actionable one) over the Go error.
-	if got := updateErrDetail(errors.New("exit status 1"), []byte("npm WARN foo\nnpm ERR! code EACCES\n")); got != "npm ERR! code EACCES" {
-		t.Fatalf("want last output line, got %q", got)
+	// Prefers the line naming the cause (EACCES) over npm's "see the log" trailer, which
+	// is the actual last line — the whole point of scanning past package-manager trailers.
+	npmOut := "npm error code EACCES\nnpm error syscall rename\nnpm error path /usr/lib/node_modules/@openai/codex\nnpm error A complete log of this run can be found in: /root/.npm/_logs/x-debug-0.log\n"
+	if got := updateErrDetail(errors.New("exit status 243"), []byte(npmOut)); got != "npm error code EACCES" {
+		t.Fatalf("want EACCES cause line, got %q", got)
 	}
-	// Falls back to the error when the command produced no output.
+	// No EACCES/permission line: falls back to the last error line (still skipping the trailer).
+	genOut := "warming up\nError: network unreachable\nA complete log of this run can be found in: /x.log\n"
+	if got := updateErrDetail(errors.New("exit status 1"), []byte(genOut)); got != "Error: network unreachable" {
+		t.Fatalf("want last error line, got %q", got)
+	}
+	// Falls back to the Go error when the command produced no output.
 	if got := updateErrDetail(errors.New(`exec: "sh": not found`), nil); got != `exec: "sh": not found` {
 		t.Fatalf("want error fallback, got %q", got)
 	}

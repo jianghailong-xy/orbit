@@ -41,6 +41,7 @@ Usage:
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the Claude/Codex CLIs are installed, signed in, and on the service PATH
+  orbit engine-update               Update the Claude/Codex CLIs now (the daily check, on demand)
   orbit resume [session-id]         Resume a session in this terminal via claude --resume
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
@@ -132,6 +133,16 @@ Usage:
 
 Use this if the startup auto-update isn't working.
 `,
+	"engine-update": `orbit engine-update — update the coding-engine CLIs now
+
+Usage:
+  orbit engine-update
+
+Runs each installed engine's own updater (claude update / codex update) once, against the
+binary the background service resolves on its PATH — the same check the runner runs ~10 min
+after startup and every 24h. Unlike the daily run it can't see live sessions, so prefer
+running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGINE_UPDATE.
+`,
 	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
 
 Usage:
@@ -191,6 +202,8 @@ func main() {
 		cmdResume(args[1:])
 	case "upgrade":
 		cmdUpgrade()
+	case "engine-update":
+		cmdEngineUpdate()
 	case "mcp":
 		cmdMcp()
 	case "version", "--version", "-v":
