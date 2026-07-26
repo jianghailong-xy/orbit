@@ -116,6 +116,38 @@ func mergeTargetFor(sessionID string) string {
 	return mergeTargetBySession[sessionID]
 }
 
+// currentBranch returns the worktree's actual checked-out branch (git symbolic-ref --short HEAD),
+// or "" when HEAD is detached or git errors. This is the branch the agent is really on right now —
+// it diverges from wt.Branch (the branch Orbit forked at claim) when the agent runs `git checkout
+// -b` inside the worktree, moving the work onto a branch Orbit isn't tracking. Reported each
+// heartbeat as WorktreeBranch so the server can flag the divergence and offer "Adopt".
+func currentBranch(wt *Worktree) string {
+	if wt == nil || wt.Path == "" {
+		return ""
+	}
+	b, err := git(wt.Path, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(b)
+}
+
+// effectiveBranch is the branch every live worktree computation (diff base, "already merged")
+// judges: the worktree's real HEAD if it's on a branch, else the recorded fork branch. Following
+// the real HEAD keeps the status bar honest after an in-worktree `git checkout -b` — the bar then
+// reports the NEW branch's merge state, not the stale (often already-merged) branch Orbit forked at
+// claim, which is exactly the "still shows ✓ In main / unmergeable" bug. Equal to wt.Branch in the
+// common case (no checkout), so it's a no-op there.
+func effectiveBranch(wt *Worktree) string {
+	if cur := currentBranch(wt); cur != "" {
+		return cur
+	}
+	if wt != nil {
+		return wt.Branch
+	}
+	return ""
+}
+
 // branchMergedInto reports whether the worktree's branch has already landed in its merge target
 // (the session's remembered target, else main, else master), so the status bar shows a "✓ In
 // main" chip instead of a redundant Merge button. Two ways it can already be there: the branch
@@ -128,7 +160,14 @@ func mergeTargetFor(sessionID string) string {
 // branch is the target, or git can't decide — a conservative default that keeps the actionable
 // Merge button.
 func branchMergedInto(wt *Worktree) bool {
-	if wt == nil || wt.Branch == "" {
+	if wt == nil {
+		return false
+	}
+	// Judge the branch the worktree is ACTUALLY on (effectiveBranch), not the frozen fork branch —
+	// so after an in-worktree `git checkout -b` the verdict tracks the new branch's work instead of
+	// the (often already-merged) branch Orbit forked at claim.
+	branch := effectiveBranch(wt)
+	if branch == "" {
 		return false
 	}
 	var target string
@@ -138,7 +177,7 @@ func branchMergedInto(wt *Worktree) bool {
 			break
 		}
 	}
-	if target == "" || target == wt.Branch {
+	if target == "" || target == branch {
 		return false
 	}
 	// A branch that never committed past its fork point still has its tip sitting at BaseSha,
@@ -147,7 +186,7 @@ func branchMergedInto(wt *Worktree) bool {
 	// the work landed; otherwise there was nothing to merge. (Genuinely merged branches keep
 	// their commits ahead of the old fork point, so they still count as ahead here.)
 	if wt.BaseSha != "" {
-		ahead, err := git(wt.RepoDir, "rev-list", "--count", wt.BaseSha+".."+wt.Branch)
+		ahead, err := git(wt.RepoDir, "rev-list", "--count", wt.BaseSha+".."+branch)
 		if err == nil && strings.TrimSpace(ahead) == "0" {
 			return false
 		}
@@ -156,7 +195,7 @@ func branchMergedInto(wt *Worktree) bool {
 	// command-line `push origin HEAD:main`). `merge-base --is-ancestor A B` exits 0 when A is an
 	// ancestor of B, non-zero otherwise; git() returns a non-nil error for any non-zero exit, so
 	// err == nil ⇔ already merged.
-	if _, err := git(wt.RepoDir, "merge-base", "--is-ancestor", wt.Branch, target); err == nil {
+	if _, err := git(wt.RepoDir, "merge-base", "--is-ancestor", branch, target); err == nil {
 		return true
 	}
 	// Slow path — the branch's work landed in the target under NEW commit hashes, so is-ancestor
@@ -167,7 +206,7 @@ func branchMergedInto(wt *Worktree) bool {
 	// commit accounted for ('-', none '+') ⇒ the work is in the target under a different identity —
 	// still merged. Any '+' (or a git error / empty output) stays conservatively false, keeping the
 	// actionable Merge button.
-	out, err := git(wt.RepoDir, "cherry", target, wt.Branch)
+	out, err := git(wt.RepoDir, "cherry", target, branch)
 	if err != nil {
 		return false
 	}
@@ -303,7 +342,10 @@ func freshenBaseSha(wt *Worktree) {
 	if wt == nil || wt.BaseSha == "" || wt.Branch == "" {
 		return
 	}
-	wt.BaseSha = resolveBaseSha(wt.RepoDir, wt.Session, wt.Branch, wt.BaseSha)
+	// Resolve against the worktree's real HEAD (effectiveBranch): after an in-worktree checkout -b
+	// the diff should be based on the new branch's fork point, so it shows the new branch's delta
+	// rather than mis-basing on the branch Orbit forked at claim.
+	wt.BaseSha = resolveBaseSha(wt.RepoDir, wt.Session, effectiveBranch(wt), wt.BaseSha)
 }
 
 func shortSha(sha string) string {
@@ -732,6 +774,7 @@ type mergeOutcome struct {
 //   - otherwise (a release/develop branch, or main when the root is on something else): the
 //     target isn't checked out anywhere, so move its ref directly. Fails cleanly if the target
 //     is checked out in another worktree.
+//
 // A rebase conflict returns a "conflict" outcome (aborted cleanly); any precondition failure
 // returns "error" with an actionable message; the UI keeps a copyable `git merge` fallback. The
 // session branch is never rewritten or deleted. Serialized by mergeLock so concurrent merges

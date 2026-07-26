@@ -226,6 +226,7 @@ struct BranchLabelView: View {
 /// optional target-branch menu; pending → "Merging…"; merged → a ✓ chip; already-in-main → "✓ In
 /// main"; conflict on main/master → "Resolve in session"; other failure → "Retry merge".
 private struct WorktreeMergeControl: View {
+    @Environment(AppModel.self) private var app
     let console: ConsoleModel
     let detail: SessionDetail
     let branch: String
@@ -243,14 +244,26 @@ private struct WorktreeMergeControl: View {
         // The user's caret pick re-points the primary button until they merge (falls back if the
         // picked branch is no longer an offered target).
         let picked = selectedTarget.flatMap { targets.contains($0) ? $0 : nil }
+        // Branch divergence: the agent ran `git checkout -b` inside the worktree, so its real HEAD
+        // (worktreeBranch) is no longer the branch Orbit tracks. Merge / "✓ In main" would act on the
+        // wrong (tracked) branch, so we surface the untracked branch + an Adopt action instead.
+        let diverged = (detail.worktreeBranch.map { !$0.isEmpty && $0 != branch }) ?? false
 
-        if status == "merged" {
+        if diverged, let wb = detail.worktreeBranch {
+            adoptControl(worktreeBranch: wb, busy: busy)
+        } else if status == "merged" {
             let elsewhere = detail.mergeTarget != nil && detail.mergeTarget != "main" && detail.mergeTarget != "master"
-            WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))
+            HStack(spacing: 8) {
+                WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))
+                followUpButton
+            }
         } else if detail.branchMerged == true && status == nil {
             let landed = detail.mergeTarget
                 ?? (targets.contains("main") ? "main" : targets.contains("master") ? "master" : "main")
-            WTChip(title: "✓ In \(landed)")
+            HStack(spacing: 8) {
+                WTChip(title: "✓ In \(landed)")
+                followUpButton
+            }
         } else if status == "pending" {
             WTPillButton(title: "Merging…", disabled: true) {}
         } else if status == "conflict" || status == "error" {
@@ -269,6 +282,32 @@ private struct WorktreeMergeControl: View {
             mergeSplit(title: "Merge to \(target ?? "main")",
                        tint: .accentColor, busy: busy, primaryTarget: target,
                        targets: targets, currentTarget: target)
+        }
+    }
+
+    /// Divergence flag + Adopt action, shown in the merge slot when the worktree's real HEAD has
+    /// left the tracked branch (mirrors web's AdoptButton): names the untracked branch and adopts it
+    /// (re-points the session) so Merge/diff act on the real work instead of a stale "✓ In main".
+    private func adoptControl(worktreeBranch: String, busy: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text("⚠ On \(worktreeBranch)")
+                .font(.orbitLabel.weight(.semibold)).foregroundStyle(.orange).lineLimit(1)
+                .help("This worktree is on \"\(worktreeBranch)\", which Orbit isn't tracking — the session tracks \"\(branch)\". Adopt it to merge and diff the work on this branch.")
+            WTPillButton(title: busy ? "Adopting…" : "Adopt", tint: .orange, disabled: busy) {
+                Task { await console.worktree.adopt() }
+            }
+        }
+    }
+
+    /// A quiet "start a fresh session on this agent (new branch from main)" link beside the merged /
+    /// "In main" chips, so a done session isn't manually repurposed for follow-up work.
+    @ViewBuilder private var followUpButton: some View {
+        if let agentID = detail.agent?.id {
+            Button { app.composeWithAgent(agentID) } label: {
+                Text("+ New from main").font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .help("Start a new session on this agent, forked fresh from main")
         }
     }
 

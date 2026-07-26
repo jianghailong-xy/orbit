@@ -414,6 +414,12 @@ export const mergeSessionToMain = (sessionId: string, targetBranch?: string) =>
 export const commitSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/commit`, { method: 'POST' });
 
+/** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
+ *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
+ *  Pure server-side re-point; the change reflects on the next detail fetch. */
+export const adoptSessionBranch = (sessionId: string) =>
+  api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
+
 // Soft visibility actions for ended sessions. Archive hides a session into the
 // Archived view; delete moves it to the trash. Both keep all data; restore (which
 // clears both) brings it back to the active list. Purge is the only hard delete: it
@@ -563,6 +569,11 @@ export interface SessionDetail {
   // redundant Merge button (the work merged out-of-band, e.g. a command-line push). Null = not
   // reported (older runner / not recomputed since) → the bar keeps its mergeStatus behavior.
   branchMerged?: boolean | null;
+  // The worktree's ACTUAL current HEAD branch, as last reported by the runner. Normally equals
+  // `branch`; it differs when the agent ran `git checkout -b` inside the worktree, moving the work
+  // onto a branch Orbit isn't tracking. When it differs, the bar flags the divergence ("On <branch>
+  // — not tracked") instead of a stale "✓ In main" and offers Adopt (re-points `branch` here).
+  worktreeBranch?: string | null;
   // Live-worktree commit state (see commitSession). worktreeDirty drives the bar's primary
   // action — true → Commit, false → Merge — when the runner reports it (null = not reported,
   // so the bar falls back to the session lifecycle). commitStatus is 'pending' while the

@@ -489,7 +489,7 @@ func TestMergeToMainDivergedLocalTargetErrors(t *testing.T) {
 	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
 
 	mustGit(t, repo, "checkout", "main")
-	advanceOriginMain(t, repo, "upstream.txt", "upstream\n") // origin/main = base+upstream
+	advanceOriginMain(t, repo, "upstream.txt", "upstream\n")                      // origin/main = base+upstream
 	commitFile(t, repo, "local.txt", "local only\n", "local-only commit on main") // local main = base+local
 	mainBefore := mustGit(t, repo, "rev-parse", "main")
 
@@ -780,5 +780,104 @@ func TestFreshenBaseShaAfterRebase(t *testing.T) {
 	freshenBaseSha(wt)
 	if wt.BaseSha != newFork {
 		t.Errorf("healthy base must be stable, got %s", wt.BaseSha)
+	}
+}
+
+// TestBranchMergedInto_AfterMergeRecommit is the after-merge re-commit acceptance case: once a
+// session's branch is merged, committing MORE work on the same branch must re-enable Merge (the
+// branch is no longer fully in main) and re-base the diff on the merge point so it shows only the
+// new delta — not the already-merged commits. Models production, where the repo root sits on the
+// merge target (main) while isolated sessions run in their own worktrees, so resolveBaseSha's
+// merge-base(HEAD, branch) candidate advances the base the moment new work lands.
+func TestBranchMergedInto_AfterMergeRecommit(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir()) // throwaway rebase worktree lands under a temp ORBIT_HOME
+	repo := initRepo(t)                 // main + base commit
+	fork := mustGit(t, repo, "rev-parse", "HEAD")
+
+	// A session forks orbit/foo at the fork point and commits one unit of work.
+	mustGit(t, repo, "checkout", "-b", "orbit/foo")
+	commitFile(t, repo, "a.txt", "a\n", "A")
+	mustGit(t, repo, "checkout", "main")
+
+	// Merge it to main (root is on main → fast-forward in place, as in production).
+	if out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/foo", SessionID: "s1"}); out.Status != "merged" {
+		t.Fatalf("merge failed: %q %s", out.Status, out.Message)
+	}
+	mergeTip := mustGit(t, repo, "rev-parse", "main")
+
+	// Right after the merge: base stays at the fork, and the branch reads as "in main".
+	base1 := resolveBaseSha(repo, "s1", "orbit/foo", fork)
+	if base1 != fork {
+		t.Errorf("base should stay at fork right after merge: want %s, got %s", fork, base1)
+	}
+	if !branchMergedInto(&Worktree{Branch: "orbit/foo", BaseSha: base1, RepoDir: repo, Session: "s1"}) {
+		t.Error("branch should read as merged (✓ In main) right after the merge")
+	}
+
+	// The session commits MORE work on the same branch after the merge.
+	mustGit(t, repo, "checkout", "orbit/foo")
+	commitFile(t, repo, "g.txt", "g\n", "C (post-merge work)")
+	mustGit(t, repo, "checkout", "main")
+
+	// Base must advance to the merge tip (so the diff drops the already-merged commit)…
+	base2 := resolveBaseSha(repo, "s1", "orbit/foo", base1)
+	if base2 != mergeTip {
+		t.Errorf("base must advance to the merge tip after new work: want %s, got %s", mergeTip, base2)
+	}
+	// …the branch must no longer read as merged (Merge button returns)…
+	if branchMergedInto(&Worktree{Branch: "orbit/foo", BaseSha: base2, RepoDir: repo, Session: "s1"}) {
+		t.Error("branch must NOT read as merged after new post-merge work — Merge should re-enable")
+	}
+	// …and the diff on the advanced base shows ONLY the new file, not the already-merged one.
+	files := diffFiles(repo, base2, "orbit/foo")
+	if len(files) != 1 || files[0].Path != "g.txt" {
+		t.Errorf("diff should show only the new post-merge delta (g.txt), got %+v", files)
+	}
+}
+
+// TestBranchMergedInto_CheckoutBFollowsNewBranch: when the agent runs `git checkout -b` inside the
+// worktree, the merged-verdict must follow the worktree's ACTUAL HEAD, not the frozen fork branch.
+// A session whose original branch is already in main but whose worktree has moved to a fresh,
+// unmerged branch must read as NOT merged — so the bar surfaces the new branch instead of a stale
+// "✓ In main".
+func TestBranchMergedInto_CheckoutBFollowsNewBranch(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+
+	// orbit/foo forks, does work, and is merged to main.
+	mustGit(t, repo, "checkout", "-b", "orbit/foo")
+	commitFile(t, repo, "a.txt", "a\n", "A")
+	mustGit(t, repo, "checkout", "main")
+	if out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/foo", SessionID: "s2"}); out.Status != "merged" {
+		t.Fatalf("merge failed: %q %s", out.Status, out.Message)
+	}
+
+	// The session runs in a real worktree checked out on the (now-merged) orbit/foo.
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	mustGit(t, repo, "worktree", "add", wtPath, "orbit/foo")
+	wt := &Worktree{Path: wtPath, Branch: "orbit/foo", RepoDir: repo, Session: "s2"}
+
+	// Baseline: still on the tracked branch → reads as merged (✓ In main).
+	if got := currentBranch(wt); got != "orbit/foo" {
+		t.Fatalf("worktree should be on orbit/foo, got %q", got)
+	}
+	if !branchMergedInto(wt) {
+		t.Error("baseline: merged branch on its own worktree should read as In main")
+	}
+
+	// The agent starts fresh work on a new branch inside the worktree.
+	mustGit(t, wtPath, "checkout", "-b", "feature-2")
+	if err := os.WriteFile(filepath.Join(wtPath, "n.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, wtPath, "add", ".")
+	mustGit(t, wtPath, "commit", "-m", "new branch work")
+
+	// The verdict must follow the real HEAD (feature-2, unmerged) — NOT the frozen orbit/foo.
+	if got := currentBranch(wt); got != "feature-2" {
+		t.Fatalf("worktree should be on feature-2, got %q", got)
+	}
+	if branchMergedInto(wt) {
+		t.Error("after checkout -b to an unmerged branch, must NOT read as In main (surface the new branch)")
 	}
 }

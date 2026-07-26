@@ -1332,6 +1332,48 @@ export class SessionsService {
   }
 
   /**
+   * Adopt the worktree's ACTUAL current HEAD branch as the session's tracked branch. When the
+   * agent ran `git checkout -b` inside the worktree, the work moved onto a branch Orbit wasn't
+   * tracking — `session.branch` still names the original (often already-merged) branch, so the bar
+   * shows "On <worktreeBranch> — not tracked" instead of a stale "✓ In main". Adopting re-points
+   * `branch` to that HEAD so Merge / diff / the "in main" verdict all act on the real work.
+   *
+   * Pure server-side: the runner already computes live worktree state (diff base, branchMerged)
+   * on its real HEAD and the merge command reads `session.branch` fresh each heartbeat, so no
+   * runner round-trip is needed — the swap takes effect on the next report. The stale fork point
+   * and merge verdict are cleared so the runner's next report re-derives them for the new branch.
+   */
+  async adoptWorktreeBranch(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    if (!session) throw new NotFoundException('session not found');
+    if (session.isolationStatus !== 'worktree') {
+      throw new BadRequestException('session has no worktree to adopt a branch from');
+    }
+    const target = session.worktreeBranch?.trim();
+    if (!target) {
+      throw new ConflictException('the runner has not reported the worktree branch yet');
+    }
+    if (target === session.branch) {
+      throw new BadRequestException('the worktree is already on the tracked branch');
+    }
+    await this.prisma.session.update({
+      where: { id },
+      data: {
+        branch: target,
+        // The adopted branch has its own fork point + merge state: clear the stale ones (they
+        // described the old branch) so the runner's next report — computed on this HEAD — re-derives
+        // the diff base and the "in main" verdict afresh.
+        baseSha: null,
+        mergeStatus: null,
+        mergeError: null,
+        mergedAt: null,
+        branchMerged: null,
+      },
+    });
+    return { ok: true, branch: target };
+  }
+
+  /**
    * Stop a session and settle it to CANCELLED — unlike {@link end}, which PARKS the
    * session as dormant/resumable. A live session has its claude process torn down
    * (endLive, reason CANCELLED so /complete finalizes CANCELLED not PARKED). A still-

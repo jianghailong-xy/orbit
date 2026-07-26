@@ -265,6 +265,12 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch))
     }
 
+    /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
+    /// session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
+    public func adoptBranch(sessionID: String) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/adopt-branch", body: Optional<Empty>.none)
+    }
+
     // MARK: attachments
 
     @discardableResult

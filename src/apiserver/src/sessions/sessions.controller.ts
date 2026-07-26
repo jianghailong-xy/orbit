@@ -187,6 +187,13 @@ export class SessionsController {
     return this.sessions.commitWorktree(user.userId, id);
   }
 
+  /** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
+   *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main". */
+  @Post(':id/adopt-branch')
+  adoptWorktreeBranch(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.adoptWorktreeBranch(user.userId, id);
+  }
+
   /** Enable a public read-only share link for this session (mints/returns its shareToken). */
   @Post(':id/share')
   share(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {

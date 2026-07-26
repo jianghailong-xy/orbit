@@ -76,6 +76,7 @@ import {
   type ApprovalInfo,
   archiveSession,
   cancelQueuedTurn,
+  adoptSessionBranch,
   commitSession,
   createInteractiveSession,
   decideApproval,
@@ -2024,6 +2025,17 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  // Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
+  // session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
+  // Pure server-side re-point; invalidate detail so the bar re-derives (divergence clears).
+  const adoptMut = useMutation({
+    mutationFn: (id: string) => adoptSessionBranch(id),
+    onSuccess: (res) => {
+      message.success(`Now tracking ${res.branch}`);
+      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
@@ -3143,6 +3155,13 @@ export function AgentView({ runner }: { runner: Runner }) {
           onCommit={
             selectedId && detailForSelected?.branch
               ? () => commitMut.mutate(selectedId)
+              : undefined
+          }
+          adopting={adoptMut.isPending}
+          onAdopt={selectedId ? () => adoptMut.mutate(selectedId) : undefined}
+          onStartFollowUp={
+            detailForSelected?.agent?.id
+              ? () => navigate(`/agents/${encodeId(detailForSelected.agent!.id)}/new`)
               : undefined
           }
         />
