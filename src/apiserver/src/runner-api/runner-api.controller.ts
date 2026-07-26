@@ -432,6 +432,27 @@ export class RunnerApiController {
         allowOrchestration: agent?.enableOrchestration ?? false,
       });
     }
+    // Release the leases the dead process took to its grave. A restart-time inbox
+    // long-poll can lease a message the runner never feeds claude — its drain cancels
+    // the poller and drops the pulled turn — and that orphaned IN_FLIGHT turn then
+    // blocks every message queued behind it (see dequeueTurn's `NOT EXISTS inflight`)
+    // for the rest of its 5-minute lease. This runner has just re-attached, so nothing
+    // is holding those leases any more: expire them so the first inbox poll re-delivers
+    // (as a continue nudge when the turn already produced output) instead of leaving
+    // the user's follow-ups sitting at "Queued".
+    if (out.length > 0) {
+      await this.prisma.conversationTurn.updateMany({
+        where: {
+          sessionId: { in: out.map((s) => s.sessionId) },
+          kind: { in: ['message', 'shell'] },
+          status: 'IN_FLIGHT',
+        },
+        // Dated into the past, not at "now": dequeueTurn tests `lease_deadline_at < now()`
+        // against the DB clock, so an exactly-now deadline would hinge on the two statements
+        // never sharing a timestamp.
+        data: { leaseDeadlineAt: new Date(Date.now() - 1000) },
+      });
+    }
     return { sessions: out };
   }
 
