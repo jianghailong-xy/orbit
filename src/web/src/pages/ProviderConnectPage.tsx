@@ -23,16 +23,6 @@ interface DraftModel {
   contextWindow: number | null;
 }
 
-/** The slug is an internal identifier, so it's derived from the name rather than asked for. */
-function slugify(label: string): string {
-  const s = label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return /^[a-z]/.test(s) ? s : s && `p-${s}`;
-}
-
 /**
  * Step 1 of adding a provider (/providers/new): pick a vendor. Its own page rather than a modal
  * step, so picking a vendor is a normal navigation — back button included.
@@ -152,16 +142,13 @@ function ProviderForm({
   const [modelsOpen, setModelsOpen] = useState(isCustom && !editing);
   // Whether the list is still the preset's. The server resolves a following row's models from the
   // catalogue on every read, so a new Claude model reaches this provider without anyone touching
-  // it — until someone edits the list here, which hands ownership back to them.
-  const [follows, setFollows] = useState(editing ? !!editing.presetSlug : !!preset);
+  // it — until someone edits the list here, which hands ownership back to them. The row stays an
+  // Anthropic one either way; only ownership of the list changes.
+  const [follows, setFollows] = useState(editing ? editing.followsPreset : !!preset);
   const editModels = (next: DraftModel[]) => {
     setModels(next);
     setFollows(false);
   };
-  // Slug is derived from the name and never shown — until the server reports the one conflict only
-  // the user can resolve (slugs are unique deployment-wide).
-  const [slugOverride, setSlugOverride] = useState<string | null>(null);
-  const slug = editing?.slug ?? slugOverride ?? preset?.slug ?? slugify(label);
   // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
@@ -187,9 +174,6 @@ function ProviderForm({
         : preset?.defaultModel && values.includes(preset.defaultModel)
           ? preset.defaultModel
           : undefined;
-      // Following means the server owns the list from here on; detaching hands it back. On create
-      // the link is only ever set, so there's nothing to send when there's no preset.
-      const link = follows && preset ? preset.slug : null;
       if (editing) {
         return api(`${basePath}/${editing.id}`, {
           method: 'PATCH',
@@ -199,24 +183,26 @@ function ProviderForm({
             baseUrl: baseUrl.trim(),
             models: modelPayload,
             defaultModel: dm,
-            presetSlug: link,
+            // Who owns the list from here on; the vendor identity is fixed at creation.
+            followsPreset: follows,
             enabled,
             // Omit the key to keep the stored one; send it only when a new one was typed.
             ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
           },
         });
       }
+      // No slug: the server derives one from the preset or the name and suffixes it until it's
+      // free, so connecting a vendor someone else already connected just works.
       return api(basePath, {
         method: 'POST',
         body: {
-          slug: slug.trim().toLowerCase(),
           label: label.trim(),
           runtime,
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim(),
           models: modelPayload,
           defaultModel: dm,
-          ...(link ? { presetSlug: link } : {}),
+          ...(preset ? { presetSlug: preset.slug, followsPreset: follows } : {}),
           enabled,
         },
       });
@@ -229,22 +215,12 @@ function ProviderForm({
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/providers');
     },
-    onError: (e: Error) => {
-      // Slugs are unique deployment-wide, so a name can collide with another user's provider.
-      // Surface the identifier only now, when changing it is the way out.
-      if (/slug/i.test(e.message)) {
-        setSlugOverride(slug);
-        setAdvOpen(true);
-      }
-      message.error(e.message || 'Failed');
-    },
+    onError: (e: Error) => message.error(e.message || 'Failed'),
   });
 
-  // Create needs a key; edit keeps the stored one when left blank. slug/label/baseUrl always required.
+  // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
   const canSave =
-    label.trim() !== '' &&
-    baseUrl.trim() !== '' &&
-    (editing ? true : slug.trim() !== '' && apiKey.trim() !== '');
+    label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : apiKey.trim() !== '');
   // The model the probe pings with: the one a session would get by default.
   const probeModel = (
     preset?.defaultModel ||
@@ -287,7 +263,14 @@ function ProviderForm({
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
   // provider has no identity yet, so it gets none.
   const identity = editing
-    ? { ...editing, count: editing.models?.length ?? 0, counted: 'configured' }
+    ? {
+        ...editing,
+        // The logo follows the vendor, not the row's identifier — a second Anthropic key sits on
+        // "anthropic-2" and is still Anthropic.
+        slug: editing.presetSlug ?? editing.slug,
+        count: editing.models?.length ?? 0,
+        counted: 'configured',
+      }
     : preset
       ? { ...preset, runtime: preset.runtime ?? 'claude', count: preset.models.length, counted: 'included' }
       : null;
@@ -413,16 +396,6 @@ function ProviderForm({
                     </div>
                   </Field>
                 </>
-              )}
-              {/* Only shown once the server reports a slug collision — see saveMut.onError. */}
-              {slugOverride !== null && !editing && (
-                <Field label="Identifier">
-                  <Input value={slugOverride} onChange={(e) => setSlugOverride(e.target.value)} />
-                  <div style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>
-                    That identifier is taken — pick another. Lowercase letters, digits and hyphens,
-                    starting with a letter. Fixed once created.
-                  </div>
-                </Field>
               )}
               <Field label="Models">
                 {modelsOpen ? (

@@ -17,8 +17,10 @@ export interface ModelProviderRow {
   baseUrl: string;
   apiKeyEnc: string;
   defaultModel: string | null;
-  /** Set when the row follows a vendor preset — its default model resolves from the catalogue. */
+  /** The vendor preset this row came from, and whether it still owns the model list — when it
+   *  does, the default model resolves from the catalogue rather than from the row. */
   presetSlug?: string | null;
+  followsPreset?: boolean;
   enabled: boolean;
 }
 

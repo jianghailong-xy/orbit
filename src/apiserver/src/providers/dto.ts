@@ -6,7 +6,9 @@ import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class
 const RUNTIMES = ['claude', 'codex'];
 
 export class CreateModelProviderDto {
-  @IsString() @MinLength(1) slug!: string;
+  /** Preferred dispatch identifier. Normally omitted: the server derives one from the preset or
+   *  the label and suffixes it until it's free, since nothing outside the DB refers to it. */
+  @IsOptional() @IsString() slug?: string;
   @IsString() @MinLength(1) label!: string;
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;
   @IsString() @MinLength(1) baseUrl!: string;
@@ -15,9 +17,12 @@ export class CreateModelProviderDto {
   /** Picker model list: [{ value, label, contextWindow? }]. Ignored when `presetSlug` is set. */
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
-  /** Follow a vendor preset (@orbit/shared PROVIDER_PRESETS): it supplies the model list and the
-   *  default model, on every read, for as long as the link holds. */
+  /** The vendor preset (@orbit/shared PROVIDER_PRESETS) this provider is being created from: its
+   *  identity for life. */
   @IsOptional() @IsString() presetSlug?: string;
+  /** Whether that preset also owns the model list — the default when a preset is named. Pass false
+   *  to start out maintaining it yourself. */
+  @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
 
@@ -39,8 +44,8 @@ export class UpdateModelProviderDto {
   @IsOptional() @IsString() @MinLength(1) apiKey?: string;
   @IsOptional() @IsArray() models?: { value: string; label: string; contextWindow?: number }[];
   @IsOptional() @IsString() defaultModel?: string;
-  /** Omit to leave the preset link alone; send null to detach (the model list becomes the row's
-   *  own), or a preset slug to attach. */
-  @IsOptional() @IsString() presetSlug?: string | null;
+  /** Hand the model list back to the row (false) or to its preset (true); omit to leave ownership
+   *  as it is. The vendor identity itself is fixed at creation. */
+  @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
