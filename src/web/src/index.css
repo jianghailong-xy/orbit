@@ -1636,6 +1636,73 @@ body {
      list never scrolls sideways (titles/previews already ellipsize). */
   overflow-x: hidden;
 }
+/* Recency ("Today", "Previous 7 Days", …) / tag section headings over the rows below them.
+   Sticky so the heading of the group being scrolled through stays legible, and light enough
+   that the rows — not the headings — carry the list's weight. */
+.session-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 2px 4px;
+  background: var(--bg-base);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-section-head:first-child {
+  padding-top: 2px;
+}
+/* The tag's own colour, so a "Group by Tag" heading reads as that tag at a glance. */
+.session-section-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+/* Per-row tag dots (up to 3, then "+N"), matching the native row's. Colour alone identifies the
+   tag; the title tooltip names them. */
+.session-tag-dots {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* The title row is baseline-aligned; bare dots have no baseline of their own, so centre them
+     against the title instead of letting them hang off the row's. */
+  align-self: center;
+  gap: 3px;
+}
+.session-tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.session-tag-more {
+  font-size: 11px;
+  color: var(--text-4);
+}
+/* Tag filter + grouping menu; tinted while either is on so the narrowed list is explained. */
+.session-tag-menu {
+  margin-left: auto;
+  flex: none;
+  padding: 2px 4px;
+  border-radius: 6px;
+  color: var(--text-4);
+  font-size: 13px;
+  cursor: pointer;
+}
+.session-tag-menu:hover {
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+.session-tag-menu.on {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
 .session-row.active {
   background: var(--brand-tint);
   --row-bg: var(--brand-tint);

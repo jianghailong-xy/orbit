@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { api, getSession, getSessionDiff } from '../api';
+import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './agentDefaults';
 
 export type { ConfiguredProvider };
@@ -89,6 +90,18 @@ export const sessionsQuery = (opts: { runnerId?: string | null; view?: string | 
     queryFn: () => api<any[]>(`/sessions${suffix ? `?${suffix}` : ''}`),
   });
 };
+
+/**
+ * The signed-in user's session-tag library, ordered system-first by the server — the source for
+ * the list's tag filter and its "Group by Tag" section headings. Rarely changes and cheap, so the
+ * console just holds it for the session; edits happen on the native clients' tag picker.
+ */
+export const sessionTagsQuery = () =>
+  queryOptions({
+    queryKey: ['session-tags'] as const,
+    queryFn: () => api<SessionTagRef[]>('/session-tags'),
+    staleTime: 5 * 60_000,
+  });
 
 /**
  * One session's detail — resolves the runner/agent behind a `/sessions/:id` deep link.

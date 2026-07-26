@@ -25,6 +25,7 @@ import {
   PushpinFilled,
   PushpinOutlined,
   ShareAltOutlined,
+  TagOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -32,6 +33,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Segmented, Select, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
+  Fragment,
   type MouseEvent as ReactMouseEvent,
   type TouchEvent as ReactTouchEvent,
   useCallback,
@@ -45,7 +47,21 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
-import { agentsQuery, type Me, meQuery, providersQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import {
+  agentsQuery,
+  type Me,
+  meQuery,
+  providersQuery,
+  sessionQuery,
+  sessionsQuery,
+  sessionTagsQuery,
+} from '../lib/queries';
+import {
+  type SessionTagRef,
+  sessionTagSections,
+  sessionTimeSections,
+  sessionsWithTag,
+} from '../lib/sessionGrouping';
 import {
   type ConfiguredProvider,
   contextWindowFor,
@@ -774,6 +790,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [effort, setEffort] = useState('');
   // Which slice of the session list to show: active, archived, system, or trash.
   const [view, setView] = useState<'active' | 'archived' | 'deleted' | 'system'>('active');
+  // Optional narrowing/sectioning of the list by tag, mirroring the iOS drawer's filter menu.
+  // Both are view-local UI state (not persisted) — the same as the native list.
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [groupByTag, setGroupByTag] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Touch swipe-to-reveal for session rows: hover has no touch equivalent, so on mobile the
   // row's actions (pin/complete, or the ⋯ menu) hide behind a leftward swipe instead.
@@ -1027,6 +1047,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
   const controlLive = useControlPlaneLive();
   const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: controlLive ? false : 4000 });
+  // The owner's tag library, for the filter menu and the "Group by Tag" headings.
+  const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
@@ -1136,8 +1158,32 @@ export function AgentView({ runner }: { runner: Runner }) {
     // System tab; hide them from the Active list.
     if (onSystemTab) list = list.filter((s) => s.source === 'system');
     else if (view === 'active') list = list.filter((s) => s.source !== 'system');
+    // The tag filter narrows here rather than at render so arrow-nav, auto-select and
+    // "open the next session after archiving" all step through what's actually on screen.
+    if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
-  }, [sessions, scopeAgentId, view, onSystemTab]);
+  }, [sessions, scopeAgentId, view, onSystemTab, tagFilter]);
+
+  // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
+  // tag when the user switches grouping — both from the pure groupers shared in shape with
+  // OrbitKit's, over the already console-sorted list. Pinning only applies on the Active tab, and
+  // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
+  // Note the Completed tab is server-ordered by archived_at while bucketing reads last activity,
+  // so its rows are grouped by when they last ran, not by when they were filed — same as iOS.
+  const sections = useMemo(
+    () =>
+      groupByTag
+        ? sessionTagSections(visibleSessions).map((s) => ({
+            key: s.tag?.id ?? '__untagged__',
+            tag: s.tag,
+            title: s.tag?.name ?? 'Untagged',
+            sessions: s.sessions,
+          }))
+        : sessionTimeSections(visibleSessions, {
+            pinnedFirst: view === 'active' && !tagFilter,
+          }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
+    [visibleSessions, groupByTag, view, tagFilter],
+  );
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/agents/<id>/new),
@@ -2556,6 +2602,50 @@ export function AgentView({ runner }: { runner: Runner }) {
         <div className="session-col-head">
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
+          {/* Tag filter + grouping, folded into one menu (as on iOS) rather than a persistent
+              chip row — the row read as clutter there. Hidden until the owner has any tag. */}
+          {sessionTags.length > 0 && (
+            <Dropdown
+              trigger={['click']}
+              placement="bottomRight"
+              menu={{
+                items: [
+                  {
+                    key: 'filter',
+                    icon: <TagOutlined />,
+                    label: 'Filter by Tag',
+                    children: [
+                      {
+                        key: 'all',
+                        label: 'All',
+                        icon: tagFilter === null ? <CheckOutlined /> : <span />,
+                        onClick: () => setTagFilter(null),
+                      },
+                      ...sessionTags.map((t) => ({
+                        key: t.id,
+                        label: t.name,
+                        icon: tagFilter === t.id ? <CheckOutlined /> : <span />,
+                        onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
+                      })),
+                    ],
+                  },
+                  {
+                    key: 'group',
+                    label: 'Group by Tag',
+                    icon: groupByTag ? <CheckOutlined /> : <span />,
+                    onClick: () => setGroupByTag((g) => !g),
+                  },
+                ],
+              }}
+            >
+              <span
+                className={`session-tag-menu${tagFilter || groupByTag ? ' on' : ''}`}
+                title="Filter and group by tag"
+              >
+                <TagOutlined />
+              </span>
+            </Dropdown>
+          )}
         </div>
         <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
@@ -2602,164 +2692,196 @@ export function AgentView({ runner }: { runner: Runner }) {
         <div className="agent-sessions session-col-list" ref={listRef}>
           {visibleSessions.length === 0 && (
             <div className="chat-note">
-              {view === 'active'
-                ? 'No sessions yet.'
-                : view === 'archived'
-                  ? 'No completed sessions.'
-                  : view === 'system'
-                    ? 'No system sessions.'
-                    : 'Trash is empty.'}
+              {tagFilter
+                ? 'No sessions with this tag.'
+                : view === 'active'
+                  ? 'No sessions yet.'
+                  : view === 'archived'
+                    ? 'No completed sessions.'
+                    : view === 'system'
+                      ? 'No system sessions.'
+                      : 'Trash is empty.'}
             </div>
           )}
-          {visibleSessions.map((s) => {
-            const ended = TERMINAL.includes(s.status);
-            const restoreItem = {
-              key: 'restore',
-              icon: <UndoOutlined />,
-              label: 'Restore',
-              onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                domEvent.stopPropagation();
-                restoreMut.mutate(s.id);
-              },
-            };
-            const deleteItem = {
-              key: 'delete',
-              icon: <DeleteOutlined />,
-              label: 'Delete',
-              danger: true,
-              onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                domEvent.stopPropagation();
-                deleteMut.mutate(s.id);
-              },
-            };
-            const purgeItem = {
-              key: 'purge',
-              icon: <DeleteOutlined />,
-              label: 'Delete permanently',
-              danger: true,
-              onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                domEvent.stopPropagation();
-                confirmPurge(s.id);
-              },
-            };
-            const menuItems: MenuProps['items'] =
-              view === 'archived'
-                ? [restoreItem, { type: 'divider' }, deleteItem]
-                : view === 'system'
-                  ? [deleteItem]
-                  : view === 'deleted'
-                    ? [restoreItem, { type: 'divider' }, purgeItem]
-                    : [restoreItem];
-            // Active, System and Completed (archived) rows open their transcript; only
-            // Trash (deleted) rows stay closed.
-            const openable = view !== 'deleted';
-            const line = sessionLine(s, openable);
-            const swiped = swipeOpenId === s.id;
-            const dragging = swipeDragId === s.id;
-            const swipeTx = dragging ? swipeDx : swiped ? -swipeReveal : 0;
-            return (
-              <div
-                className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'active' && s.pinnedAt ? ' pinned' : ''}${swiped ? ' swipe-open' : ''}`}
-                key={s.id}
-                onClick={() => {
-                  if (swipeClickGuard.current) {
-                    swipeClickGuard.current = false;
-                    return; // this click merely ends a swipe
-                  }
-                  if (swipeOpenId) {
-                    setSwipeOpenId(null); // a tap anywhere on an open row just closes it
-                    return;
-                  }
-                  if (openable) navigate(`/sessions/${encodeId(s.id)}`);
-                }}
-                onTouchStart={(e) => onRowTouchStart(e, s.id)}
-                onTouchMove={onRowTouchMove}
-                onTouchEnd={onRowTouchEnd}
-                onTouchCancel={onRowTouchCancel}
-              >
-                <div
-                  className={`session-swipe${dragging ? ' dragging' : ''}`}
-                  style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
-                >
-                  <span className="session-icon">
-                    <StatusIcon session={s} completed={view === 'archived'} />
-                  </span>
-                  <div className="session-main">
-                    <div className="session-title-row">
-                      <div className="session-title">{s.title}</div>
-                      {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
-                        <Tooltip
-                          title={
-                            s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'
-                          }
-                          placement="top"
-                          open={hoverTipOpen}
-                        >
-                          <span className="session-merge-badge">⚠</span>
-                        </Tooltip>
-                      )}
-                      <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
-                    </div>
-                    {line ? (
-                      <div
-                        className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                      >
-                        {line.text}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="session-right">
-                  <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                    {view === 'active' ? (
-                      <>
-                        <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
-                          <span
-                            className="session-kebab session-pin-toggle"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-                              setSwipeOpenId(null);
-                            }}
-                          >
-                            {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
-                          </span>
-                        </Tooltip>
-                        <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top" open={hoverTipOpen}>
-                          <span
-                            className="session-kebab session-complete"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              archiveMut.mutate(s.id);
-                              setSwipeOpenId(null);
-                            }}
-                          >
-                            <CheckOutlined />
-                          </span>
-                        </Tooltip>
-                      </>
-                    ) : (
-                      <Dropdown
-                        trigger={['click']}
-                        placement="bottomRight"
-                        open={menuOpenId === s.id}
-                        onOpenChange={(o) => setMenuOpenId(o ? s.id : null)}
-                        menu={{ items: menuItems }}
-                      >
-                        <span
-                          className="session-kebab"
-                          title="More actions"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreOutlined />
-                        </span>
-                      </Dropdown>
-                    )}
-                  </div>
-                </div>
+          {sections.map((sec) => (
+            <Fragment key={sec.key}>
+              <div className="session-section-head">
+                {sec.tag && (
+                  <span className="session-section-dot" style={{ background: sec.tag.color }} />
+                )}
+                {sec.title}
               </div>
-            );
-          })}
+              {sec.sessions.map((s) => {
+                const ended = TERMINAL.includes(s.status);
+                const restoreItem = {
+                  key: 'restore',
+                  icon: <UndoOutlined />,
+                  label: 'Restore',
+                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
+                    domEvent.stopPropagation();
+                    restoreMut.mutate(s.id);
+                  },
+                };
+                const deleteItem = {
+                  key: 'delete',
+                  icon: <DeleteOutlined />,
+                  label: 'Delete',
+                  danger: true,
+                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
+                    domEvent.stopPropagation();
+                    deleteMut.mutate(s.id);
+                  },
+                };
+                const purgeItem = {
+                  key: 'purge',
+                  icon: <DeleteOutlined />,
+                  label: 'Delete permanently',
+                  danger: true,
+                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
+                    domEvent.stopPropagation();
+                    confirmPurge(s.id);
+                  },
+                };
+                const menuItems: MenuProps['items'] =
+                  view === 'archived'
+                    ? [restoreItem, { type: 'divider' }, deleteItem]
+                    : view === 'system'
+                      ? [deleteItem]
+                      : view === 'deleted'
+                        ? [restoreItem, { type: 'divider' }, purgeItem]
+                        : [restoreItem];
+                // Active, System and Completed (archived) rows open their transcript; only
+                // Trash (deleted) rows stay closed.
+                const openable = view !== 'deleted';
+                const line = sessionLine(s, openable);
+                const swiped = swipeOpenId === s.id;
+                const dragging = swipeDragId === s.id;
+                const swipeTx = dragging ? swipeDx : swiped ? -swipeReveal : 0;
+                return (
+                  <div
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'active' && s.pinnedAt ? ' pinned' : ''}${swiped ? ' swipe-open' : ''}`}
+                    key={s.id}
+                    onClick={() => {
+                      if (swipeClickGuard.current) {
+                        swipeClickGuard.current = false;
+                        return; // this click merely ends a swipe
+                      }
+                      if (swipeOpenId) {
+                        setSwipeOpenId(null); // a tap anywhere on an open row just closes it
+                        return;
+                      }
+                      if (openable) navigate(`/sessions/${encodeId(s.id)}`);
+                    }}
+                    onTouchStart={(e) => onRowTouchStart(e, s.id)}
+                    onTouchMove={onRowTouchMove}
+                    onTouchEnd={onRowTouchEnd}
+                    onTouchCancel={onRowTouchCancel}
+                  >
+                    <div
+                      className={`session-swipe${dragging ? ' dragging' : ''}`}
+                      style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
+                    >
+                      <span className="session-icon">
+                        <StatusIcon session={s} completed={view === 'archived'} />
+                      </span>
+                      <div className="session-main">
+                        <div className="session-title-row">
+                          <div className="session-title">{s.title}</div>
+                          {(s.tags ?? []).length > 0 && (
+                            <Tooltip
+                              title={(s.tags as SessionTagRef[]).map((t) => t.name).join(', ')}
+                              placement="top"
+                              open={hoverTipOpen}
+                            >
+                              <span className="session-tag-dots">
+                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => (
+                                  <span
+                                    key={t.id}
+                                    className="session-tag-dot"
+                                    style={{ background: t.color }}
+                                  />
+                                ))}
+                                {s.tags.length > 3 && (
+                                  <span className="session-tag-more">+{s.tags.length - 3}</span>
+                                )}
+                              </span>
+                            </Tooltip>
+                          )}
+                          {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
+                            <Tooltip
+                              title={
+                                s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'
+                              }
+                              placement="top"
+                              open={hoverTipOpen}
+                            >
+                              <span className="session-merge-badge">⚠</span>
+                            </Tooltip>
+                          )}
+                          <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
+                        </div>
+                        {line ? (
+                          <div
+                            className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                          >
+                            {line.text}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="session-right">
+                      <div className="session-actions" onClick={(e) => e.stopPropagation()}>
+                        {view === 'active' ? (
+                          <>
+                            <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
+                              <span
+                                className="session-kebab session-pin-toggle"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
+                                  setSwipeOpenId(null);
+                                }}
+                              >
+                                {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
+                              </span>
+                            </Tooltip>
+                            <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top" open={hoverTipOpen}>
+                              <span
+                                className="session-kebab session-complete"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  archiveMut.mutate(s.id);
+                                  setSwipeOpenId(null);
+                                }}
+                              >
+                                <CheckOutlined />
+                              </span>
+                            </Tooltip>
+                          </>
+                        ) : (
+                          <Dropdown
+                            trigger={['click']}
+                            placement="bottomRight"
+                            open={menuOpenId === s.id}
+                            onOpenChange={(o) => setMenuOpenId(o ? s.id : null)}
+                            menu={{ items: menuItems }}
+                          >
+                            <span
+                              className="session-kebab"
+                              title="More actions"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreOutlined />
+                            </span>
+                          </Dropdown>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </Fragment>
+          ))}
         </div>
       </aside>
 
