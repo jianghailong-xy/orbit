@@ -35,6 +35,7 @@ import {
   type DragEvent as ReactDragEvent,
   Fragment,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type TouchEvent as ReactTouchEvent,
   useCallback,
   useEffect,
@@ -2625,16 +2626,27 @@ export function AgentView({ runner }: { runner: Runner }) {
     navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
+  // Selection reads on the trailing edge, not in a leading icon column. The tag names already
+  // need a swatch in front of them, and a leading check on top of that pushed every label so
+  // far off the left edge that the menu read as right-heavy. Always rendered (blank when off)
+  // so a row's width doesn't change as the selection moves.
+  const checkSlot = (on: boolean): ReactNode => (
+    <span className="scope-menu-check">{on ? <CheckOutlined /> : null}</span>
+  );
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
-  // No group headings: the trigger already names the axis, and every row's icon column is a
-  // check-mark slot, which is what marks the four views as a mutually exclusive set.
+  // No group headings: the trigger already names the axis, and the shared check column is
+  // what marks the four views as a mutually exclusive set.
   const scopeItems: MenuProps['items'] = [
     ...SESSION_VIEWS.map((v) => ({
       key: v.value,
-      label: v.label,
-      icon: shownView === v.value ? <CheckOutlined /> : <span />,
+      label: (
+        <span className="scope-menu-row">
+          {v.label}
+          {checkSlot(shownView === v.value)}
+        </span>
+      ),
       onClick: () => switchView(v.value),
     })),
     ...(sessionTags.length > 0
@@ -2642,9 +2654,6 @@ export function AgentView({ runner }: { runner: Runner }) {
           { key: 'tag-divider', type: 'divider' as const },
           {
             key: 'filter',
-            // The icon column carries selection state only — a decorative tag glyph here
-            // would read as a third check-mark. Placeholder keeps the label aligned.
-            icon: <span />,
             label: (
               <span className="scope-menu-row">
                 Filter by Tag
@@ -2662,34 +2671,41 @@ export function AgentView({ runner }: { runner: Runner }) {
                 // Colourless by nature, but it still takes the swatch column (an unpainted
                 // dot) so every name in the menu starts on the same edge.
                 label: (
-                  <span className="scope-tag-label">
-                    <span className="session-section-dot" />
-                    All
+                  <span className="scope-menu-row">
+                    <span className="scope-tag-label">
+                      <span className="session-section-dot" />
+                      All
+                    </span>
+                    {checkSlot(tagFilter === null)}
                   </span>
                 ),
-                icon: tagFilter === null ? <CheckOutlined /> : <span />,
                 onClick: () => setTagFilter(null),
               },
               // Colour is how a tag is identified everywhere else (the row dots, the
-              // "Group by Tag" headings), so carry the swatch here too — in the label,
-              // never in the icon column, which stays the check-mark's alone.
+              // "Group by Tag" headings), so carry the swatch here too.
               ...sessionTags.map((t) => ({
                 key: t.id,
                 label: (
-                  <span className="scope-tag-label">
-                    <span className="session-section-dot" style={{ background: t.color }} />
-                    {t.name}
+                  <span className="scope-menu-row">
+                    <span className="scope-tag-label">
+                      <span className="session-section-dot" style={{ background: t.color }} />
+                      {t.name}
+                    </span>
+                    {checkSlot(tagFilter === t.id)}
                   </span>
                 ),
-                icon: tagFilter === t.id ? <CheckOutlined /> : <span />,
                 onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
               })),
             ],
           },
           {
             key: 'group',
-            label: 'Group by Tag',
-            icon: groupByTag ? <CheckOutlined /> : <span />,
+            label: (
+              <span className="scope-menu-row">
+                Group by Tag
+                {checkSlot(groupByTag)}
+              </span>
+            ),
             onClick: () => setGroupByTag((g) => !g),
           },
         ]

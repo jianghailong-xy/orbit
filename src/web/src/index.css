@@ -1745,12 +1745,21 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Swatch + name for a tag in the filter submenu. The dot lives in the label rather than the
-   icon column so that column keeps meaning "selected" and nothing else. */
+/* Swatch + name for a tag in the filter submenu. */
 .scope-tag-label {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* The check sits at the row's trailing edge instead of ahead of the label, so names start on
+   the menu's left padding rather than behind two leading columns. Fixed width and always
+   present, so selecting a different row doesn't resize the menu. */
+.scope-menu-check {
+  flex: none;
+  width: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1;
 }
 .session-row.active {
   background: var(--brand-tint);
