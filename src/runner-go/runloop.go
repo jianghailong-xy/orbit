@@ -165,6 +165,11 @@ func runLoop(cfg *RunnerConfig) {
 	}
 	go refreshModelCatalog()
 
+	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
+	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
+	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
+	go engineUpdateLoop(loopCtx, activeProviderCount, doctorProxyVars(cfg.ServerURL))
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	go func() {

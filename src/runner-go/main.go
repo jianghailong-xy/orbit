@@ -52,6 +52,7 @@ no API key is required.
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
   ORBIT_NO_SELFUPDATE      Disable the startup auto-update
+  ORBIT_NO_ENGINE_UPDATE   Disable the daily Claude/Codex CLI update check
 `
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.

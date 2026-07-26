@@ -19,6 +19,7 @@ type engineSpec struct {
 	name          string   // display name, e.g. "Claude Code"
 	bin           string   // executable on PATH, e.g. "claude"
 	installCmd    string   // recommended install, run via `sh -c` when the user consents
+	updateCmd     string   // in-place update run daily by engineUpdateLoop; empty => re-run installCmd (idempotent)
 	installAlt    string   // alternative shown if the default install is declined/fails
 	loginArgs     []string // interactive sign-in argv (prints a URL — works over SSH)
 	loginHeadless string   // headless/token alternative for an unattended service
@@ -39,6 +40,7 @@ var engineSpecs = []engineSpec{
 		name:          "Claude Code",
 		bin:           providerClaude,
 		installCmd:    "curl -fsSL https://claude.ai/install.sh | bash",
+		updateCmd:     "claude update",
 		installAlt:    "npm install -g @anthropic-ai/claude-code",
 		loginArgs:     []string{"auth", "login"},
 		loginHeadless: "claude setup-token",
