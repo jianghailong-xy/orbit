@@ -1714,6 +1714,23 @@ body {
 .session-scope-menu.on {
   background: var(--brand-tint);
 }
+/* "Filter by Tag" carries the tag it's filtering to on the right, so the current filter
+   reads without opening the submenu. Absent (not "All") while unfiltered — the default
+   state should stay quiet. */
+.scope-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.scope-menu-value {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+  font-size: 12px;
+}
 .session-row.active {
   background: var(--brand-tint);
   --row-bg: var(--brand-tint);

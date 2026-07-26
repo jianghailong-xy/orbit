@@ -26,7 +26,6 @@ import {
   PushpinFilled,
   PushpinOutlined,
   ShareAltOutlined,
-  TagOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
@@ -2606,28 +2605,36 @@ export function AgentView({ runner }: { runner: Runner }) {
     const a = scopeAgentId ?? agentsForRunner[0]?.id;
     navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
-  // One menu for everything that scopes the list: which slice (exclusive), then the tag
-  // narrowing and sectioning. Tag entries only appear once the owner has tags; the view
-  // entries always do, so Trash is reachable without ever having made one.
+  // One menu for everything that scopes the list: which slice (exclusive), then — below a
+  // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
+  // tags; the view entries always do, so Trash is reachable without ever having made one.
+  // No group headings: the trigger already names the axis, and every row's icon column is a
+  // check-mark slot, which is what marks the four views as a mutually exclusive set.
   const scopeItems: MenuProps['items'] = [
-    {
-      key: 'view',
-      type: 'group',
-      label: 'View',
-      children: SESSION_VIEWS.map((v) => ({
-        key: v.value,
-        label: v.label,
-        icon: shownView === v.value ? <CheckOutlined /> : <span />,
-        onClick: () => switchView(v.value),
-      })),
-    },
+    ...SESSION_VIEWS.map((v) => ({
+      key: v.value,
+      label: v.label,
+      icon: shownView === v.value ? <CheckOutlined /> : <span />,
+      onClick: () => switchView(v.value),
+    })),
     ...(sessionTags.length > 0
       ? [
           { key: 'tag-divider', type: 'divider' as const },
           {
             key: 'filter',
-            icon: <TagOutlined />,
-            label: 'Filter by Tag',
+            // The icon column carries selection state only — a decorative tag glyph here
+            // would read as a third check-mark. Placeholder keeps the label aligned.
+            icon: <span />,
+            label: (
+              <span className="scope-menu-row">
+                Filter by Tag
+                {tagFilter && (
+                  <span className="scope-menu-value">
+                    {sessionTags.find((t) => t.id === tagFilter)?.name}
+                  </span>
+                )}
+              </span>
+            ),
             children: [
               {
                 key: 'all',
