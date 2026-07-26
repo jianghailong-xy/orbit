@@ -2756,15 +2756,6 @@ export function AgentView({ runner }: { runner: Runner }) {
         <div className="session-col-head">
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
-          {/* The palette's click target. ⌘K is the primary way in; this is what makes it
-              reachable on a touch device, where there is no keyboard to press it with. */}
-          <span
-            className="session-col-search"
-            title={`Search sessions (${SEARCH_HINT})`}
-            onClick={openSessionSearch}
-          >
-            <SearchOutlined />
-          </span>
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
               chip row — both read as clutter in a narrow column, and Active is nearly always
               the answer. The trigger names the current view so a list scoped to
@@ -2783,6 +2774,25 @@ export function AgentView({ runner }: { runner: Runner }) {
           <PlusOutlined />
           <span>New session</span>
           {isStandalone && !isMobile && <kbd className="session-new-kbd">{NEW_SESSION_HINT}</kbd>}
+        </div>
+        {/* The palette's click target, shaped like the field it opens rather than a bare glyph in
+            the header. ⌘K stays the primary way in; this is the only one on a touch device, where
+            there's no keyboard to press it with and a `title` tooltip never shows — so the label
+            and the target size have to carry it. */}
+        <div
+          className="session-search"
+          role="button"
+          tabIndex={0}
+          onClick={openSessionSearch}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            openSessionSearch();
+          }}
+        >
+          <SearchOutlined />
+          <span>Search sessions</span>
+          {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>
         <div className="agent-sessions session-col-list" ref={listRef}>
           {visibleSessions.length === 0 && (

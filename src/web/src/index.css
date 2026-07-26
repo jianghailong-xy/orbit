@@ -1631,6 +1631,47 @@ body {
   background: var(--brand-tint);
   border-color: var(--brand-border);
 }
+/* Search row. Shaped like the field it opens instead of a bare magnifier, so it reads as
+   "search" without a tooltip, and full-width so it's a real target on touch — the one place
+   ⌘K can't be pressed. Sits under New session and stays quiet: same column, lower priority. */
+.session-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 34px;
+  margin: 0 0 8px;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+.session-search:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--text-2);
+}
+/* Drop the focus ring on mouse click; keep it for keyboard navigation. */
+.session-search:focus {
+  outline: none;
+}
+.session-search:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.session-search-kbd {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-3);
+}
 .session-col .ant-segmented {
   flex: none;
   margin: 0 0 8px;
@@ -6019,21 +6060,4 @@ body {
   background: var(--bg-raised);
   font-family: inherit;
   font-size: 11px;
-}
-/* Magnifier in the session column header — the no-keyboard way into the palette. Takes the
-   `margin-left: auto` so it and the scope menu sit together at the right edge. */
-.session-col-search {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-  flex: none;
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: var(--text-3);
-  font-size: 14px;
-  cursor: pointer;
-}
-.session-col-search:hover {
-  background: var(--bg-sunken);
-  color: var(--text-2);
 }
