@@ -21,7 +21,11 @@ packages:
 
 settings:
   base:
-    MARKETING_VERSION: "0.1.0"
+    # Local-build placeholders only — a tagged release.yml build overrides both on the xcodebuild
+    # command line (MARKETING_VERSION from the tag, CURRENT_PROJECT_VERSION from the commit count),
+    # so what ships to TestFlight never comes from here. XcodeGen's spec is static, so this one
+    # can't be derived from the newest tag the way build-dmg.sh and release.yml now are.
+    MARKETING_VERSION: "0.1.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"            # Swift 5 language mode — matches OrbitKit/OrbitApp (relaxed concurrency)
     DEVELOPMENT_TEAM: ""           # injected locally / in CI (App Store Connect team id)

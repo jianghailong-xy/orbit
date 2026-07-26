@@ -23,12 +23,20 @@ The tag is the single source of truth for the version:
 
 ## How to use
 
-1. **Pick the version.** If the user didn't give one, look at the latest tag and propose the next
-   patch/minor — confirm before tagging:
+1. **Pick the version.** `release.sh next` resolves it from the newest tag — the next beta in the
+   current series, or `X.Y.(Z+1)-beta.1` if the newest tag is a stable release. Confirm the
+   resolved version before tagging; pass an explicit version for anything else (a stable release,
+   or opening a new minor).
 
    ```bash
-   git tag --list 'v*' --sort=-v:refname | head -1
+   git -c versionsort.suffix=-beta tag --list 'v*' --sort=-v:refname | head -1
    ```
+
+   **A beta belongs to the version it precedes, not the one already out.** `0.1.1-beta.2` sorts
+   *below* `0.1.1`, so once `X.Y.Z` ships stable, its betas are spent — the next beta must open on
+   `X.Y.(Z+1)`. Missing that bump is what left the counter running to `0.1.1-beta.100` on a version
+   that was never released. `next` handles the bump; if you pass a version by hand, check it
+   sorts above the newest stable tag.
 
 2. **Always cut from `main`, synced with `origin/main`.** Check out `main` and pull before tagging.
    Tagging a feature/session branch — or a `main` that's behind `origin/main` — ships a tree that's
@@ -46,8 +54,9 @@ The tag is the single source of truth for the version:
 3. **Run the helper** (resolves the repo root itself):
 
    ```bash
-   .claude/skills/release/release.sh 0.2.0          # stable macOS + iOS TestFlight
-   .claude/skills/release/release.sh 0.2.0-beta.3   # macOS beta channel + iOS TestFlight
+   .claude/skills/release/release.sh next            # next beta after the newest tag
+   .claude/skills/release/release.sh 0.2.0           # stable macOS + iOS TestFlight
+   .claude/skills/release/release.sh 0.2.0-beta.3    # macOS beta channel + iOS TestFlight
    ```
 
    It validates the version, refuses a dirty tree or an already-used tag (local or remote), creates

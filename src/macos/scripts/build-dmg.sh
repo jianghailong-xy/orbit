@@ -2,7 +2,11 @@
 set -euo pipefail
 APP_NAME="Orbit"
 BUNDLE_ID="${BUNDLE_ID:-com.orbit.macos}"
-VERSION="${VERSION:-0.1.0}"
+# Release builds get VERSION from the git tag (release.yml); a local build falls back to the newest
+# tag rather than a hardcoded default that silently goes stale. versionsort.suffix=-beta sorts
+# -beta.N below its stable, so a shipped X.Y.Z wins over its own betas.
+VERSION="${VERSION:-$(git -C "$(dirname "$0")" -c versionsort.suffix=-beta tag --list 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1 | sed 's/^v//')}"
+VERSION="${VERSION:-0.0.0}"    # no tags (shallow clone) → placeholder
 SIGN_ID="${SIGN_ID:--}"        # "-" = ad-hoc (本机用). Developer ID 才能分发给别人
 ARCHS="${ARCHS:-arm64}"        # 设 "arm64 x86_64" 出通用二进制
 here="$(cd "$(dirname "$0")" && pwd)"
