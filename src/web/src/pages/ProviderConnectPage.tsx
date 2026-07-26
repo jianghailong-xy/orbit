@@ -17,6 +17,16 @@ interface DraftModel {
   contextWindow: number | null;
 }
 
+/** The slug is an internal identifier, so it's derived from the name rather than asked for. */
+function slugify(label: string): string {
+  const s = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return /^[a-z]/.test(s) ? s : s && `p-${s}`;
+}
+
 /**
  * Step 1 of adding a provider (/providers/new): pick a vendor. Its own page rather than a modal
  * step, so picking a vendor is a normal navigation — back button included.
@@ -92,15 +102,14 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
   const { message } = AntdApp.useApp();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  // A custom provider names itself; a preset ships every field but the key.
+  // A custom provider names itself and declares its own endpoint; a preset ships every field but
+  // the key, so those fields live behind Advanced.
   const isCustom = !preset;
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
-  const [slug, setSlug] = useState(editing?.slug ?? preset?.slug ?? '');
   const [label, setLabel] = useState(editing?.label ?? preset?.label ?? '');
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
-  const [defaultModel, setDefaultModel] = useState(editing?.defaultModel ?? preset?.defaultModel ?? '');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [models, setModels] = useState<DraftModel[]>(
     (editing?.models ?? preset?.models ?? []).map((m) => ({
@@ -109,24 +118,21 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
       contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : null,
     })),
   );
-  // Anthropic-compatible (claude) vs OpenAI-compatible (codex) endpoint dialect.
+  // Anthropic-compatible (claude) vs OpenAI-compatible (codex) endpoint dialect. A preset knows its
+  // own dialect, so only a custom provider is asked.
   const [runtime, setRuntime] = useState<'claude' | 'codex'>(
     editing ? (editing.runtime === 'codex' ? 'codex' : 'claude') : (preset?.runtime ?? 'claude'),
   );
-
-  // Stateless pre-save probe of the endpoint + typed key (POST /providers/test).
-  const testMut = useMutation({
-    mutationFn: () =>
-      api<{ ok: boolean; status?: number; message: string }>('/providers/test', {
-        method: 'POST',
-        body: {
-          baseUrl: baseUrl.trim(),
-          apiKey: apiKey.trim(),
-          model: defaultModel.trim() || models.find((m) => m.value.trim())?.value || '',
-          runtime,
-        },
-      }),
-  });
+  // The model list is the system's — a preset's, or a saved row's. It shows as a one-line summary;
+  // editing it is an escape hatch for a model we don't know about yet.
+  const [modelsOpen, setModelsOpen] = useState(isCustom && !editing);
+  // Slug is derived from the name and never shown — until the server reports the one conflict only
+  // the user can resolve (slugs are unique deployment-wide).
+  const [slugOverride, setSlugOverride] = useState<string | null>(null);
+  const slug = editing?.slug ?? slugOverride ?? preset?.slug ?? slugify(label);
+  // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
+  const [probeError, setProbeError] = useState<string | null>(null);
+  const [probing, setProbing] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -138,7 +144,17 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
           label: m.label.trim(),
           ...(m.contextWindow != null ? { contextWindow: m.contextWindow } : {}),
         }));
-      const dm = defaultModel.trim() || undefined;
+      // The default model is the system's pick, not a typed field: the preset's choice, else the
+      // first row (the server's own fallback when we omit it). On edit, an omitted default keeps
+      // the stored one — so it's sent only to correct a value the model list no longer contains.
+      const values = modelPayload.map((m) => m.value);
+      const dm = editing
+        ? editing.defaultModel && values.includes(editing.defaultModel)
+          ? undefined
+          : values[0]
+        : preset?.defaultModel && values.includes(preset.defaultModel)
+          ? preset.defaultModel
+          : undefined;
       if (editing) {
         return api(`${PROVIDERS_BASE}/${editing.id}`, {
           method: 'PATCH',
@@ -176,7 +192,15 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/providers');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => {
+      // Slugs are unique deployment-wide, so a name can collide with another user's provider.
+      // Surface the identifier only now, when changing it is the way out.
+      if (/slug/i.test(e.message)) {
+        setSlugOverride(slug);
+        setAdvOpen(true);
+      }
+      message.error(e.message || 'Failed');
+    },
   });
 
   // Create needs a key; edit keeps the stored one when left blank. slug/label/baseUrl always required.
@@ -184,11 +208,43 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
     label.trim() !== '' &&
     baseUrl.trim() !== '' &&
     (editing ? true : slug.trim() !== '' && apiKey.trim() !== '');
-  // A test needs somewhere to send it, a key to send, and a model to probe with.
-  const canTest =
-    baseUrl.trim() !== '' &&
-    apiKey.trim() !== '' &&
-    (defaultModel.trim() !== '' || models.some((m) => m.value.trim() !== ''));
+  // The model the probe pings with: the one a session would get by default.
+  const probeModel = (
+    preset?.defaultModel ||
+    editing?.defaultModel ||
+    models.find((m) => m.value.trim())?.value ||
+    ''
+  ).trim();
+
+  /**
+   * The single commit action. Connecting a provider *is* checking it works, so the probe rides
+   * along with the save instead of sitting in its own step: one tiny request to the endpoint, then
+   * the write. A failed probe stops short of saving and offers "Save anyway" — some endpoints
+   * refuse a bare ping. Without a fresh key (an edit that keeps the stored one) there's nothing to
+   * probe with, so it saves directly.
+   */
+  const connect = async () => {
+    setProbeError(null);
+    if (apiKey.trim() && probeModel) {
+      setProbing(true);
+      try {
+        const r = await api<{ ok: boolean; message: string }>('/providers/test', {
+          method: 'POST',
+          body: { baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), model: probeModel, runtime },
+        });
+        if (!r.ok) {
+          setProbeError(r.message);
+          return;
+        }
+      } catch (e) {
+        setProbeError((e as Error).message || 'Could not reach the endpoint');
+        return;
+      } finally {
+        setProbing(false);
+      }
+    }
+    saveMut.mutate();
+  };
 
   const title = editing ? `Edit ${editing.label}` : preset ? `Connect ${preset.label}` : 'Add a custom provider';
   // The hero above the form: the row being edited, or the vendor being connected. A blank custom
@@ -221,14 +277,48 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
         </div>
       )}
 
+      {/* A custom provider's dialect, endpoint and name are decisions only the user can make, so
+          they lead the walkthrough. A preset already knows all three. */}
       {isCustom && (
-        <Step num={1} title={editing ? 'Label' : 'Name this provider'} hideNum={!!editing}>
-          <Input placeholder="e.g. My provider" value={label} onChange={(e) => setLabel(e.target.value)} />
-        </Step>
+        <>
+          <Step num={1} title={editing ? 'Name' : 'Name this provider'} hideNum={!!editing}>
+            <Input placeholder="e.g. My provider" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </Step>
+
+          <Step num={2} title="Endpoint" hideNum={!!editing}>
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              <Select<'claude' | 'codex'>
+                value={runtime}
+                onChange={(v) => {
+                  setRuntime(v);
+                  setProbeError(null);
+                }}
+                style={{ width: '100%' }}
+                options={[
+                  { value: 'claude', label: 'Anthropic-compatible (Claude)' },
+                  { value: 'codex', label: 'OpenAI-compatible (Codex)' },
+                ]}
+              />
+              <Input
+                placeholder="https://api.example.com/anthropic"
+                value={baseUrl}
+                onChange={(e) => {
+                  setBaseUrl(e.target.value);
+                  setProbeError(null);
+                }}
+              />
+            </Space>
+            <div className="ps-hint">
+              {runtime === 'codex'
+                ? 'The API dialect this endpoint speaks, and its base URL (e.g. up to /v1).'
+                : 'The API dialect this endpoint speaks, and its base URL (the one the vendor documents for Claude Code).'}
+            </div>
+          </Step>
+        </>
       )}
 
       <Step
-        num={isCustom ? 2 : 1}
+        num={isCustom ? 3 : 1}
         title={preset ? `Paste your ${preset.label} API key` : 'API key'}
         link={
           preset?.keyUrl && (
@@ -237,181 +327,168 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
             </a>
           )
         }
-        hideNum={!!editing}
+        hideNum={!isCustom || !!editing}
       >
+        {/* The stored key never comes back to the browser, so whether one exists is said by the
+            placeholder rather than by a second line of hint. */}
         <Input.Password
-          placeholder={editing ? 'Leave blank to keep the current key' : 'Provider API key'}
+          placeholder={editing?.hasApiKey ? 'Leave blank to keep the current key' : 'Provider API key'}
           value={apiKey}
           onChange={(e) => {
             setApiKey(e.target.value);
-            testMut.reset();
+            setProbeError(null);
           }}
           autoComplete="new-password"
         />
-        <div className="ps-hint">Stored encrypted — never sent back to your browser.</div>
-      </Step>
-
-      <Step num={isCustom ? 3 : 2} title="Check the connection" hideNum={!!editing}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button onClick={() => testMut.mutate()} disabled={!canTest} loading={testMut.isPending}>
-            Test connection
-          </Button>
-          {!testMut.isPending && testMut.data?.ok && (
-            <span style={{ color: 'var(--success)', fontSize: 13, fontWeight: 500 }}>
-              ✓ {testMut.data.message}
-            </span>
-          )}
-          {!testMut.isPending && testMut.data && !testMut.data.ok && (
-            <span style={{ color: 'var(--error)', fontSize: 13 }}>{testMut.data.message}</span>
-          )}
-          {!testMut.isPending && testMut.isError && (
-            <span style={{ color: 'var(--error)', fontSize: 13 }}>
-              {(testMut.error as Error)?.message || 'Test failed'}
-            </span>
-          )}
+        <div className="ps-hint">
+          Stored encrypted — never sent back to your browser.
+          {apiKey.trim() ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
         </div>
-        <div className="ps-hint">Sends one tiny request to the endpoint. Optional — you can save without it.</div>
       </Step>
 
       <div className="provider-adv" style={{ marginTop: 20 }}>
         <div className={`provider-adv-head${advOpen ? ' open' : ''}`} onClick={() => setAdvOpen((v) => !v)}>
           <span className="pa-chev">▸</span>
           <span>Advanced</span>
-          {preset && !editing && <span className="provider-adv-badge">Auto-filled</span>}
+          {preset && <span className="provider-adv-badge">{editing ? 'From preset' : 'Auto-filled'}</span>}
         </div>
         {advOpen && (
           <div className="provider-adv-body">
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               {preset && (
-                <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                  Filled from the official {preset.label} preset — most people don't need to change these.
-                </div>
+                <>
+                  <Field label="Name">
+                    <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+                  </Field>
+                  <Field label="Endpoint">
+                    <Input
+                      value={baseUrl}
+                      onChange={(e) => {
+                        setBaseUrl(e.target.value);
+                        setProbeError(null);
+                      }}
+                    />
+                    <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
+                      {preset.note ??
+                        (preset.runtime === 'codex'
+                          ? `${preset.label}'s OpenAI-compatible endpoint.`
+                          : `The endpoint ${preset.label} documents for Claude Code.`)}
+                    </div>
+                  </Field>
+                </>
               )}
-              <Field label="Runtime">
-                <Select<'claude' | 'codex'>
-                  value={runtime}
-                  onChange={(v) => {
-                    setRuntime(v);
-                    testMut.reset();
-                  }}
-                  style={{ width: '100%' }}
-                  options={[
-                    { value: 'claude', label: 'Anthropic-compatible (Claude)' },
-                    { value: 'codex', label: 'OpenAI-compatible (Codex)' },
-                  ]}
-                />
-                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-                  The API dialect this endpoint speaks — a preset sets it for you.
-                </div>
-              </Field>
-              {!isCustom && (
-                <Field label="Label">
-                  <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+              {/* Only shown once the server reports a slug collision — see saveMut.onError. */}
+              {slugOverride !== null && !editing && (
+                <Field label="Identifier">
+                  <Input value={slugOverride} onChange={(e) => setSlugOverride(e.target.value)} />
+                  <div style={{ color: 'var(--error)', fontSize: 12, marginTop: 4 }}>
+                    That identifier is taken — pick another. Lowercase letters, digits and hyphens,
+                    starting with a letter. Fixed once created.
+                  </div>
                 </Field>
               )}
-              <Field label="Slug">
-                <Input
-                  placeholder="e.g. deepseek"
-                  value={slug}
-                  disabled={!!editing}
-                  onChange={(e) => setSlug(e.target.value)}
-                />
-                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-                  Lowercase letters, digits and hyphens, starting with a letter. Can't be claude or codex.
-                  Fixed once created.
-                </div>
-              </Field>
-              <Field label="Base URL">
-                <Input
-                  placeholder="https://api.example.com/anthropic"
-                  value={baseUrl}
-                  onChange={(e) => {
-                    setBaseUrl(e.target.value);
-                    testMut.reset();
-                  }}
-                />
-                <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 4 }}>
-                  {preset?.note ??
-                    (runtime === 'codex'
-                      ? 'An OpenAI-compatible endpoint (its base URL, e.g. up to /v1).'
-                      : 'An Anthropic-compatible endpoint (the one the vendor documents for Claude Code).')}
-                </div>
-              </Field>
               <Field label="Models">
-                {models.map((m, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                    <Input
-                      placeholder="model id (value)"
-                      value={m.value}
-                      onChange={(e) =>
-                        setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
-                      }
-                    />
-                    <Input
-                      placeholder="Label"
-                      value={m.label}
-                      onChange={(e) =>
-                        setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
-                      }
-                    />
-                    <InputNumber
-                      placeholder="Context"
-                      value={m.contextWindow}
-                      min={0}
-                      style={{ width: 140, flex: 'none' }}
-                      onChange={(v) =>
-                        setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
-                      }
-                    />
+                {modelsOpen ? (
+                  <>
+                    <div className="pf-models-head">
+                      <span>Model ID</span>
+                      <span>Display name</span>
+                      <span>Context</span>
+                      <span />
+                    </div>
+                    {models.map((m, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <Input
+                          placeholder="e.g. claude-opus-4-8"
+                          value={m.value}
+                          style={{ flex: 1, minWidth: 0 }}
+                          onChange={(e) =>
+                            setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+                          }
+                        />
+                        <Input
+                          placeholder="e.g. Claude Opus 4.8"
+                          value={m.label}
+                          style={{ flex: 1, minWidth: 0 }}
+                          onChange={(e) =>
+                            setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
+                          }
+                        />
+                        <InputNumber
+                          placeholder="200000"
+                          value={m.contextWindow}
+                          min={0}
+                          style={{ width: 140, flex: 'none' }}
+                          onChange={(v) =>
+                            setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
+                          }
+                        />
+                        <Button
+                          type="text"
+                          icon={<DeleteOutlined />}
+                          onClick={() => setModels(models.filter((_, j) => j !== i))}
+                        />
+                      </div>
+                    ))}
                     <Button
-                      type="text"
-                      icon={<DeleteOutlined />}
-                      onClick={() => setModels(models.filter((_, j) => j !== i))}
-                    />
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
+                      block
+                    >
+                      Add model
+                    </Button>
+                  </>
+                ) : (
+                  <div className="pf-models-sum">
+                    <span className="pf-sum-list">
+                      {models.length
+                        ? models.map((m) => m.label || m.value).join(' · ')
+                        : 'No models yet — the picker will have nothing to offer.'}
+                    </span>
+                    <a onClick={() => setModelsOpen(true)}>Edit</a>
                   </div>
-                ))}
-                <Button
-                  type="dashed"
-                  icon={<PlusOutlined />}
-                  onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
-                  block
-                >
-                  Add model
-                </Button>
-              </Field>
-              <Field label="Default model">
-                <Input
-                  placeholder="Model id used by default (optional)"
-                  value={defaultModel}
-                  onChange={(e) => setDefaultModel(e.target.value)}
-                />
+                )}
+                {!modelsOpen && preset && (
+                  <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
+                    Maintained by Orbit, from the official {preset.label} preset.
+                  </div>
+                )}
               </Field>
             </Space>
           </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
-        <Switch checked={enabled} onChange={setEnabled} />
-        <span>Enabled</span>
-        <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-          Disabled providers are hidden from the pickers.
-        </span>
-      </div>
+      {/* Nobody adds a provider they want switched off, so this is an edit-time control. */}
+      {editing && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20 }}>
+          <Switch checked={enabled} onChange={setEnabled} />
+          <span>Enabled</span>
+          <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
+            Disabled providers are hidden from the pickers.
+          </span>
+        </div>
+      )}
 
       <div className="provider-actions">
-        <span style={{ color: 'var(--text-3)', fontSize: 12, lineHeight: 1.4 }}>
-          {preset && !editing ? 'Everything else uses sensible defaults.' : ''}
+        <span style={{ color: 'var(--error)', fontSize: 12, lineHeight: 1.4 }}>
+          {probing ? <span style={{ color: 'var(--text-3)' }}>Testing the connection…</span> : probeError}
         </span>
         <Space>
+          {probeError && (
+            <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
+              Save anyway
+            </Button>
+          )}
           <Button onClick={() => navigate('/providers')}>Cancel</Button>
           <Button
             type="primary"
             disabled={!canSave}
-            loading={saveMut.isPending}
-            onClick={() => canSave && saveMut.mutate()}
+            loading={probing || saveMut.isPending}
+            onClick={() => canSave && void connect()}
           >
-            {editing ? 'Save' : 'Create'}
+            {editing ? 'Save' : 'Connect'}
           </Button>
         </Space>
       </div>
