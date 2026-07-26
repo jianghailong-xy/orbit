@@ -224,7 +224,7 @@ struct BranchLabelView: View {
 
 /// Status-aware "Merge to main" control (mirrors web `MergeButton`): idle → a Merge button with an
 /// optional target-branch menu; pending → "Merging…"; merged → a ✓ chip; already-in-main → "✓ In
-/// main"; conflict on main/master → "Resolve in session"; other failure → "Retry merge".
+/// main"; conflict → "Resolve in session"; error → "Retry merge".
 private struct WorktreeMergeControl: View {
     let console: ConsoleModel
     let detail: SessionDetail
@@ -260,9 +260,12 @@ private struct WorktreeMergeControl: View {
         } else if status == "pending" {
             WTPillButton(title: "Merging…", disabled: true) {}
         } else if status == "conflict" || status == "error" {
-            if WorktreeBarLogic.resolvable(mergeStatus: status, mergeTarget: detail.mergeTarget) {
+            if WorktreeBarLogic.resolvable(mergeStatus: status) {
+                let onto = WorktreeBarLogic.conflictTarget(
+                    mergeTarget: detail.mergeTarget, targets: targets,
+                    agentDefaultTarget: detail.agent?.defaultMergeTarget)
                 WTPillButton(title: busy ? "Resuming…" : "Resolve in session", tint: .red, disabled: busy) {
-                    Task { await console.worktree.resolveInSession(branch: branch) }
+                    Task { await console.worktree.resolveInSession(branch: branch, target: onto) }
                 }
             } else {
                 let target = picked ?? detail.mergeTarget ?? defaultTarget

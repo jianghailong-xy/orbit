@@ -79,9 +79,10 @@ export function SessionOutputs({
    *  else master). The outcome surfaces via detail.mergeStatus/mergeError (parent polls). */
   onMergeToMain?: (target?: string) => void;
   merging?: boolean;
-  /** Provided by the parent; on a conflict/error, resumes the session so its agent rebases the
-   *  branch onto the latest main and resolves the conflicts (after which the merge fast-forwards). */
-  onResolveInSession?: () => void;
+  /** Provided by the parent; on a conflict, resumes the session so its agent rebases the branch
+   *  onto the merge target and resolves the conflicts (after which the merge fast-forwards).
+   *  Receives the branch that conflicted, so the agent rebases onto the right one. */
+  onResolveInSession?: (target: string) => void;
   resolving?: boolean;
   /** Provided by the parent (owns the mutation); enables the "Commit" button shown while the
    *  live worktree is dirty. The outcome surfaces via detail.commitStatus/worktreeDirty. */
@@ -301,7 +302,7 @@ function AdoptButton({
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
  *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the agent rebases the
- *  branch onto main and fixes the conflicts — offered only for a main/master target); error →
+ *  branch onto the target and fixes the conflicts); error →
  *  "Retry merge" (a precondition failure like a dirty main that a rebase can't fix — re-runs the
  *  same target). The failure detail + a copyable rebase fallback live in the expandable file
  *  panel below. With no reported targets (older runner) the caret is
@@ -335,7 +336,7 @@ function MergeButton({
    *  button — the work already landed (e.g. an out-of-band command-line push). */
   alreadyMerged?: boolean;
   onMerge?: (target?: string) => void;
-  onResolveInSession?: () => void;
+  onResolveInSession?: (target: string) => void;
   resolving?: boolean;
 }) {
   // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
@@ -369,6 +370,13 @@ function MergeButton({
       </span>
     );
   }
+  // The left-segment default: the agent's remembered target if it's still on offer, else main,
+  // else master, else the first reported branch; undefined means "let the runner auto-detect"
+  // (the original behavior, and the older-runner case where `targets` is empty). Retry re-runs
+  // the SAME target that failed; a fresh merge uses the default.
+  const remembered = agentDefaultTarget && targets.includes(agentDefaultTarget) ? agentDefaultTarget : undefined;
+  const defaultTarget =
+    remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   const failed = status === 'conflict' || status === 'error';
   // The reason a failed merge shows on hover: the runner's precondition message for an 'error'
   // (e.g. "develop has uncommitted changes…"), or a fixed note for a 'conflict' (mirroring the
@@ -378,14 +386,16 @@ function MergeButton({
     status === 'conflict'
       ? 'Merge conflict — aborted, working tree left clean. Resolve it from the panel below.'
       : mergeError || 'Merge failed — see the panel below.';
-  // Resolve-in-session has the agent rebase the branch onto main and fix conflicts — meaningful
-  // only for a real merge *conflict* whose target IS main/master. An 'error' outcome is a
-  // precondition failure (a dirty main checkout, the target checked out elsewhere, … — see the
-  // runner's mergeToMain) that a rebase can't fix; it, and a conflict on some other target, fall
-  // through to a plain "Retry merge" (+ the failure detail in the panel below).
-  const resolvable =
-    status === 'conflict' && (!mergeTarget || mergeTarget === 'main' || mergeTarget === 'master');
-  if (failed && onResolveInSession && resolvable) {
+  // Resolve-in-session has the agent rebase the branch onto the merge target and fix the
+  // conflicts — the only useful action after a *conflict*, whatever the target: the merge aborted
+  // cleanly and moved neither tip, so retrying it replays the same rebase and conflicts
+  // identically. An 'error' outcome is different — a precondition failure (a dirty target
+  // checkout, the target checked out elsewhere, … — see the runner's mergeToMain) that a rebase
+  // can't fix — so that one keeps the plain "Retry merge": the user clears the precondition, then
+  // retries. A null mergeTarget means the runner auto-detected it; name it the same way the retry
+  // label does.
+  const conflictTarget = mergeTarget ?? defaultTarget ?? 'main';
+  if (status === 'conflict' && onResolveInSession) {
     return (
       <Tooltip
         placement="top"
@@ -393,7 +403,7 @@ function MergeButton({
           <>
             {failureHint}
             <br />
-            Resume the session to have its agent rebase onto main and resolve it.
+            Resume the session to have its agent rebase onto {conflictTarget} and resolve it.
           </>
         }
       >
@@ -403,7 +413,7 @@ function MergeButton({
           disabled={resolving}
           onClick={(e) => {
             e.stopPropagation();
-            onResolveInSession();
+            onResolveInSession(conflictTarget);
           }}
         >
           {resolving ? 'Resuming…' : 'Resolve in session'}
@@ -414,13 +424,6 @@ function MergeButton({
   if (!onMerge) return null;
   const pending = busy || status === 'pending';
 
-  // The left-segment default: the agent's remembered target if it's still on offer, else main,
-  // else master, else the first reported branch; undefined means "let the runner auto-detect"
-  // (the original behavior, and the older-runner case where `targets` is empty). Retry re-runs
-  // the SAME target that failed; a fresh merge uses the default.
-  const remembered = agentDefaultTarget && targets.includes(agentDefaultTarget) ? agentDefaultTarget : undefined;
-  const defaultTarget =
-    remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   // The target the primary button will merge into: the user's caret pick if it's still offered, else
   // the default. Picking in the caret only re-points this — the merge waits for the primary click.
   const effectiveTarget =

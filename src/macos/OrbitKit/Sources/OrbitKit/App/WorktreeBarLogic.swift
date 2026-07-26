@@ -57,12 +57,20 @@ public enum WorktreeBarLogic {
         return targets.first
     }
 
-    /// Whether a failed merge can be resolved in-session: true only for a real *conflict* whose
-    /// target is main/master (the agent can rebase onto it and fix it). An `error` (a precondition
-    /// failure a rebase can't fix) or a conflict on some other target is not resolvable — the bar
-    /// offers a plain "Retry merge" instead.
-    public static func resolvable(mergeStatus: String?, mergeTarget: String?) -> Bool {
-        mergeStatus == "conflict" && (mergeTarget == nil || mergeTarget == "main" || mergeTarget == "master")
+    /// Whether a failed merge can be resolved in-session: true for a real *conflict*, whatever the
+    /// target — the merge aborted cleanly and moved neither tip, so retrying it replays the same
+    /// rebase and conflicts identically; only the agent rebasing onto the target can clear it. An
+    /// `error` is a precondition failure a rebase can't fix, so the bar keeps a plain "Retry merge"
+    /// for it (the user clears the precondition, then retries).
+    public static func resolvable(mergeStatus: String?) -> Bool {
+        mergeStatus == "conflict"
+    }
+
+    /// The branch a conflicted merge was rebasing onto, for the resolve prompt: the recorded
+    /// target, else the default the runner would have auto-detected.
+    public static func conflictTarget(mergeTarget: String?, targets: [String],
+                                      agentDefaultTarget: String?) -> String {
+        mergeTarget ?? defaultTarget(targets: targets, agentDefaultTarget: agentDefaultTarget) ?? "main"
     }
 
     /// User-facing reason for the failed commit/merge state. The runner keeps raw git output in
