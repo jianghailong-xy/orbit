@@ -2619,6 +2619,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     const a = scopeAgentId ?? agentsForRunner[0]?.id;
     navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
+  const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
@@ -2642,9 +2643,10 @@ export function AgentView({ runner }: { runner: Runner }) {
             label: (
               <span className="scope-menu-row">
                 Filter by Tag
-                {tagFilter && (
+                {activeTag && (
                   <span className="scope-menu-value">
-                    {sessionTags.find((t) => t.id === tagFilter)?.name}
+                    <span className="session-section-dot" style={{ background: activeTag.color }} />
+                    <span className="scope-menu-value-text">{activeTag.name}</span>
                   </span>
                 )}
               </span>
@@ -2656,9 +2658,17 @@ export function AgentView({ runner }: { runner: Runner }) {
                 icon: tagFilter === null ? <CheckOutlined /> : <span />,
                 onClick: () => setTagFilter(null),
               },
+              // Colour is how a tag is identified everywhere else (the row dots, the
+              // "Group by Tag" headings), so carry the swatch here too — in the label,
+              // never in the icon column, which stays the check-mark's alone.
               ...sessionTags.map((t) => ({
                 key: t.id,
-                label: t.name,
+                label: (
+                  <span className="scope-tag-label">
+                    <span className="session-section-dot" style={{ background: t.color }} />
+                    {t.name}
+                  </span>
+                ),
                 icon: tagFilter === t.id ? <CheckOutlined /> : <span />,
                 onClick: () => setTagFilter(tagFilter === t.id ? null : t.id),
               })),
