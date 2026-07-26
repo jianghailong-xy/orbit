@@ -236,6 +236,7 @@ func runLoop(cfg *RunnerConfig) {
 						WorktreeDirty:   worktreeIsDirty(j.WT),
 						MergeTargets:    mergeTargetsForWT(j.WT),
 						BranchMerged:    branchMergedInto(j.WT),
+						WorktreeBranch:  currentBranch(j.WT),
 					})
 				}
 				resp, err := t.heartbeat(HeartbeatRequest{

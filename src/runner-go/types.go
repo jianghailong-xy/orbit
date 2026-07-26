@@ -80,6 +80,12 @@ type SessionLiveState struct {
 	// merge under new SHAs). Drives the bar's "✓ In main" chip over a redundant Merge button. No
 	// omitempty (false must be sent so the server can clear a stale true).
 	BranchMerged bool `json:"branchMerged"`
+	// WorktreeBranch is the worktree's ACTUAL current HEAD branch (git symbolic-ref). Normally
+	// equals the session's tracked branch; it differs when the agent/user ran `git checkout -b`
+	// inside the worktree, so the work now lives on a branch Orbit isn't tracking. The server
+	// compares it to session.branch to flag divergence (and offer "Adopt"). Omitted when HEAD is
+	// detached / the session isn't isolated → the server keeps its last value.
+	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
 // SlashCommandInfo mirrors @orbit/shared: one `/`-invocable asset (command or skill).
@@ -182,6 +188,8 @@ type DiffResultRequest struct {
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
 	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
 	BranchMerged bool `json:"branchMerged"`
+	// WorktreeBranch: the worktree's actual current HEAD branch (see SessionLiveState.WorktreeBranch).
+	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
 type MeResponse struct {
@@ -343,6 +351,8 @@ type TurnCompleteRequest struct {
 	// The turn-end snapshot an idle session shows, so an out-of-band merge is reflected here too.
 	// No omitempty (false must be sent so the server can clear a stale true).
 	BranchMerged bool `json:"branchMerged"`
+	// WorktreeBranch: the worktree's actual current HEAD branch (see SessionLiveState.WorktreeBranch).
+	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
 type RunEvent struct {
@@ -405,6 +415,9 @@ type CompleteRequest struct {
 	// MergeTargets is the repo's candidate merge-target branches at completion (see
 	// SessionLiveState.MergeTargets), populating the ended session's "Merge to…" dropdown.
 	MergeTargets []string `json:"mergeTargets,omitempty"`
+	// WorktreeBranch: the worktree's actual HEAD branch at completion (see SessionLiveState); lets
+	// the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch.
+	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
 // CompleteResponse is the control plane's reply to /complete. KeepCheckout is false only

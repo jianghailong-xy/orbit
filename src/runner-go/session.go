@@ -242,6 +242,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	if job.WT != nil {
 		cr.Branch = job.WT.Branch
 		cr.BaseSha = job.WT.BaseSha
+		// The worktree's ACTUAL HEAD branch (before finalize/removal): differs from cr.Branch when
+		// the agent ran `git checkout -b` inside the checkout, so the server can flag it / offer Adopt.
+		cr.WorktreeBranch = currentBranch(job.WT)
 		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		cr.MergeTargets = mergeTargetsForWT(job.WT)
@@ -659,10 +662,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// there's no redelivery to dedup against.
 				liveFiles, livePatches := liveDiff(job.WT)
 				if err := t.diffResult(job.SessionID, DiffResultRequest{
-					ChangedFiles:  liveFiles,
-					ChangedDiff:   livePatches,
-					WorktreeDirty: worktreeIsDirty(job.WT),
-					BranchMerged:  branchMergedInto(job.WT),
+					ChangedFiles:   liveFiles,
+					ChangedDiff:    livePatches,
+					WorktreeDirty:  worktreeIsDirty(job.WT),
+					BranchMerged:   branchMergedInto(job.WT),
+					WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}
@@ -782,6 +786,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					ChangedDiff:      livePatches,
 					WorktreeDirty:    worktreeIsDirty(job.WT),
 					BranchMerged:     branchMergedInto(job.WT),
+					WorktreeBranch:   currentBranch(job.WT),
 				}); err != nil {
 					logln("turn-complete failed for", job.SessionID+":", err)
 				}

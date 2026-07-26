@@ -56,6 +56,9 @@ export function SessionOutputs({
   resolving,
   onCommit,
   committing,
+  onAdopt,
+  adopting,
+  onStartFollowUp,
   turnActive,
 }: {
   detail?: SessionDetail | null;
@@ -85,6 +88,14 @@ export function SessionOutputs({
    *  live worktree is dirty. The outcome surfaces via detail.commitStatus/worktreeDirty. */
   onCommit?: () => void;
   committing?: boolean;
+  /** Provided by the parent (owns the mutation); enables the "Adopt branch" action shown when the
+   *  worktree's real HEAD (detail.worktreeBranch) has diverged from the tracked `branch`. Adopting
+   *  re-points the session to that branch so Merge/diff act on the real work. */
+  onAdopt?: () => void;
+  adopting?: boolean;
+  /** Provided by the parent; opens a fresh compose on this session's agent (a new branch forked
+   *  from current main), so a done/merged session isn't manually repurposed for follow-up work. */
+  onStartFollowUp?: () => void;
 }) {
   const { message } = AntApp.useApp();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
@@ -147,6 +158,12 @@ export function SessionOutputs({
   // Hold "Merge to main" while a turn is in flight: a clean worktree mid-turn is just a
   // transient checkpoint the agent is still building on, not finished work ready for main.
   const showMerge = mergeReady && !turnActive;
+  // Branch divergence: the agent ran `git checkout -b` inside the worktree, so its real HEAD
+  // (worktreeBranch) is no longer the branch Orbit tracks. Merge/diff/the "in main" verdict all
+  // refer to the (often already-merged) tracked branch, which is misleading — so in the merge slot
+  // we surface the untracked branch + an Adopt action instead of a stale "✓ In main" / Merge button.
+  const worktreeBranch = detail.worktreeBranch ?? null;
+  const diverged = !!worktreeBranch && worktreeBranch !== branch;
 
   return (
     <>
@@ -175,6 +192,9 @@ export function SessionOutputs({
           </span>
         </span>
         <span className="wt-spacer" />
+        {/* Divergence takes over the merge slot: while the worktree is on an untracked branch,
+            Merge / "✓ In main" would act on the wrong (tracked) branch, so we show Adopt instead.
+            Commit still works (it commits the real HEAD), so it's left available while dirty. */}
         {showCommit && (
           <CommitButton
             status={detail.commitStatus}
@@ -183,20 +203,29 @@ export function SessionOutputs({
             onCommit={onCommit}
           />
         )}
-        {showMerge && (
-          <MergeButton
-            status={detail.mergeStatus}
-            mergeError={detail.mergeError}
-            busy={merging}
-            targets={detail.mergeTargets ?? []}
-            mergeTarget={detail.mergeTarget}
-            agentDefaultTarget={detail.agent?.defaultMergeTarget}
-            alreadyMerged={detail.branchMerged === true}
-            onMerge={onMergeToMain}
-            onResolveInSession={onResolveInSession}
-            resolving={resolving}
-          />
-        )}
+        {showMerge &&
+          (diverged ? (
+            <AdoptButton
+              worktreeBranch={worktreeBranch as string}
+              trackedBranch={branch}
+              busy={adopting}
+              onAdopt={onAdopt}
+            />
+          ) : (
+            <MergeButton
+              status={detail.mergeStatus}
+              mergeError={detail.mergeError}
+              busy={merging}
+              targets={detail.mergeTargets ?? []}
+              mergeTarget={detail.mergeTarget}
+              agentDefaultTarget={detail.agent?.defaultMergeTarget}
+              alreadyMerged={detail.branchMerged === true}
+              onMerge={onMergeToMain}
+              onResolveInSession={onResolveInSession}
+              resolving={resolving}
+              onStartFollowUp={onStartFollowUp}
+            />
+          ))}
       </div>
       {failed && (
         <div className="wt-merge wt-bar-fail">
@@ -234,6 +263,63 @@ export function SessionOutputs({
   );
 }
 
+/** Shown in the merge slot when the worktree's real HEAD has diverged from the tracked branch (an
+ *  in-worktree `git checkout -b`): names the untracked branch and offers Adopt, which re-points the
+ *  session so Merge/diff act on the real work instead of a stale "✓ In main". */
+function AdoptButton({
+  worktreeBranch,
+  trackedBranch,
+  busy,
+  onAdopt,
+}: {
+  worktreeBranch: string;
+  trackedBranch: string;
+  busy?: boolean;
+  onAdopt?: () => void;
+}) {
+  return (
+    <span className="wt-diverged">
+      <Tooltip
+        title={`This worktree is on "${worktreeBranch}", which Orbit isn't tracking — the session tracks "${trackedBranch}". Adopt it to merge and diff the work on this branch.`}
+      >
+        <span className="wt-diverged-label">⚠ On {worktreeBranch}</span>
+      </Tooltip>
+      {onAdopt && (
+        <button
+          type="button"
+          className="wt-adopt"
+          disabled={busy}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdopt();
+          }}
+        >
+          {busy ? 'Adopting…' : 'Adopt'}
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A quiet "start a fresh session on this agent (new branch from main)" link, shown beside the
+ *  merged / "In main" chips so a done session isn't manually repurposed for follow-up work. */
+function FollowUpLink({ onStartFollowUp }: { onStartFollowUp?: () => void }) {
+  if (!onStartFollowUp) return null;
+  return (
+    <button
+      type="button"
+      className="wt-followup"
+      title="Start a new session on this agent, forked fresh from main"
+      onClick={(e) => {
+        e.stopPropagation();
+        onStartFollowUp();
+      }}
+    >
+      + New from main
+    </button>
+  );
+}
+
 /** Compact "Merge to main" control on the worktree bar — a split button once the work is
  *  committed: the left segment merges into the default target (main, else master), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
@@ -255,6 +341,7 @@ function MergeButton({
   onMerge,
   onResolveInSession,
   resolving,
+  onStartFollowUp,
 }: {
   status?: SessionDetail['mergeStatus'];
   /** Why the last merge failed (for an 'error'); surfaced on the failed button's hover. */
@@ -275,6 +362,9 @@ function MergeButton({
   onMerge?: (target?: string) => void;
   onResolveInSession?: () => void;
   resolving?: boolean;
+  /** Opens a fresh compose on this session's agent (new branch from main); rendered as a quiet
+   *  link beside the merged / "In main" chips so a done session isn't manually repurposed. */
+  onStartFollowUp?: () => void;
 }) {
   // Local filter text for the merge-target dropdown; antd theme tokens style the custom popup panel
   // so it tracks the app's light/dark surface. Declared before the early returns below to keep hook
@@ -288,8 +378,11 @@ function MergeButton({
     // Annotate the target only when it's an unusual one — keep the common main/master merge clean.
     const elsewhere = mergeTarget && mergeTarget !== 'main' && mergeTarget !== 'master';
     return (
-      <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
-        ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
+      <span className="wt-merge-done-wrap">
+        <span className="wt-merge-done" title={`Merged into ${mergeTarget || 'main'}`}>
+          ✓ Merged{elsewhere ? ` → ${mergeTarget}` : ''}
+        </span>
+        <FollowUpLink onStartFollowUp={onStartFollowUp} />
       </span>
     );
   }
@@ -302,8 +395,11 @@ function MergeButton({
     const landed =
       mergeTarget || (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : 'main');
     return (
-      <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
-        ✓ In {landed}
+      <span className="wt-merge-done-wrap">
+        <span className="wt-merge-done" title={`This branch is already in ${landed}`}>
+          ✓ In {landed}
+        </span>
+        <FollowUpLink onStartFollowUp={onStartFollowUp} />
       </span>
     );
   }

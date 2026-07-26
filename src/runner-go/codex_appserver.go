@@ -151,6 +151,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			ChangedDiff:      livePatches,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
+			WorktreeBranch:   currentBranch(job.WT),
 		}); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
@@ -389,10 +390,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		case "diff":
 			liveFiles, livePatches := liveDiff(job.WT)
 			if err := t.diffResult(job.SessionID, DiffResultRequest{
-				ChangedFiles:  liveFiles,
-				ChangedDiff:   livePatches,
-				WorktreeDirty: worktreeIsDirty(job.WT),
-				BranchMerged:  branchMergedInto(job.WT),
+				ChangedFiles:   liveFiles,
+				ChangedDiff:    livePatches,
+				WorktreeDirty:  worktreeIsDirty(job.WT),
+				BranchMerged:   branchMergedInto(job.WT),
+				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {
 				logln("diff-result failed for", job.SessionID+":", err)
 			}

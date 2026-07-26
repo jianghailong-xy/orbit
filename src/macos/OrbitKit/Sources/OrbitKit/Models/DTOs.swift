@@ -417,6 +417,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// True when the branch tip already landed in the default target — the bar shows a "✓ In main"
     /// chip instead of a redundant Merge button.
     public let branchMerged: Bool?
+    /// The worktree's ACTUAL current HEAD branch, as last reported by the runner. Normally equals
+    /// `branch`; it differs when the agent ran `git checkout -b` inside the worktree, moving the work
+    /// onto a branch Orbit isn't tracking. When it differs, the bar flags the divergence ("On <branch>
+    /// — not tracked") instead of a stale "✓ In main" and offers Adopt (re-points `branch` here).
+    public let worktreeBranch: String?
     /// Commit outcome: pending | committed | nochange | error. Nil until the user commits.
     public let commitStatus: String?
     public let commitError: String?
@@ -429,7 +434,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public init(id: String, branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
-                mergeTargets: [String]? = nil, branchMerged: Bool? = nil,
+                mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil) {
         self.id = id
@@ -442,6 +447,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.mergeTarget = mergeTarget
         self.mergeTargets = mergeTargets
         self.branchMerged = branchMerged
+        self.worktreeBranch = worktreeBranch
         self.commitStatus = commitStatus
         self.commitError = commitError
         self.agent = agent

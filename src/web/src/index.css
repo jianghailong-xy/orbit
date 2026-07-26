@@ -2186,6 +2186,58 @@ body {
   font-weight: 600;
   color: var(--success);
 }
+/* Merged / "In main" chip paired with a quiet "new from main" follow-up link. */
+.wt-merge-done-wrap {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* A quiet link to start a fresh session on this agent (forked from main) beside the done chip. */
+.wt-followup {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wt-followup:hover {
+  color: var(--brand);
+  text-decoration: underline;
+}
+/* Branch divergence: the worktree is on a branch Orbit isn't tracking (an in-worktree checkout -b).
+   An amber flag naming the untracked branch, with an Adopt action to re-point the session. */
+.wt-diverged {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.wt-diverged-label {
+  font-weight: 600;
+  color: var(--warning);
+  cursor: default;
+}
+.wt-adopt {
+  flex: none;
+  padding: 2px 10px;
+  border: 1px solid var(--warning-border);
+  border-radius: 6px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wt-adopt:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.wt-adopt:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 /* Split "Merge to <branch>" button: the main action butted up against a caret that opens a
    dropdown of other branches to merge into. The main button's right border is the divider. */
 .wt-merge-split-wrap {

@@ -248,6 +248,11 @@ export interface SessionLiveState {
    *  place of a redundant Merge button. Always sent (false when not), so the server can clear a
    *  stale true; absent only from older runners (the bar keeps its mergeStatus behavior). */
   branchMerged?: boolean;
+  /** The worktree's ACTUAL current HEAD branch (git symbolic-ref). Normally equals the session's
+   *  tracked `branch`; it differs when the agent ran `git checkout -b` inside the worktree, moving
+   *  the work onto a branch Orbit isn't tracking. The server compares it to `session.branch` to
+   *  flag divergence (and offer "Adopt"). Absent when HEAD is detached / older runners → keep last. */
+  worktreeBranch?: string;
 }
 
 export interface RunnerHeartbeatResponse {
@@ -526,6 +531,8 @@ export interface TurnCompleteRequest {
    *  turn-end snapshot an idle session shows until its next turn, so a branch merged out-of-band
    *  is reflected here. Always sent (false when not); absent only from older runners. */
   branchMerged?: boolean;
+  /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
+  worktreeBranch?: string;
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner
@@ -581,6 +588,9 @@ export interface SessionCompleteRequest {
   /** The repo's candidate merge-target branches at completion (see SessionLiveState.mergeTargets),
    *  so the ended session's "Merge to…" dropdown is populated. */
   mergeTargets?: string[];
+  /** The worktree's actual HEAD branch at completion (see SessionLiveState.worktreeBranch); lets
+   *  the server flag / offer "Adopt" for a session that finished on an in-worktree checkout -b branch. */
+  worktreeBranch?: string;
 }
 
 /**
@@ -643,6 +653,8 @@ export interface SessionDiffResultRequest {
   /** Whether the branch already landed in the default merge target (see SessionLiveState).
    *  Recomputed with the diff, so opening the diff drawer refreshes it for an idle session. */
   branchMerged?: boolean;
+  /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
+  worktreeBranch?: string;
 }
 
 export interface ArtifactResultRequest {

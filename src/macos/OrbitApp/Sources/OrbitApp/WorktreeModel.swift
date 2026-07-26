@@ -93,6 +93,18 @@ final class WorktreeModel {
         await loadDetail()
     }
 
+    /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
+    /// session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
+    /// Pure server-side re-point; reload so the bar re-derives (the divergence flag clears).
+    func adopt() async {
+        busy = true
+        defer { busy = false }
+        do { try await api.adoptBranch(sessionID: sessionID) }
+        catch { onStatus(Self.actionFailure("Adopt failed", error: error)); return }
+        onInfo("Now tracking this worktree's branch")
+        await loadDetail()
+    }
+
     /// Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
     /// onto the latest main and fixes the conflicts (it has the context for its own changes). The
     /// resume clears the stale mergeStatus server-side, so the bar offers Merge again once it's done.

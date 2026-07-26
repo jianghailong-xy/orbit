@@ -312,6 +312,9 @@ export class RunnerApiController {
                 // Whether the branch already landed in main → bar shows "✓ In main", not a
                 // redundant Merge button (older runners omit it → left untouched).
                 ...(s.branchMerged !== undefined ? { branchMerged: s.branchMerged } : {}),
+                // The worktree's actual HEAD branch → the bar flags divergence from the tracked
+                // `branch` and offers Adopt (older runners omit it → left untouched).
+                ...(s.worktreeBranch !== undefined ? { worktreeBranch: s.worktreeBranch } : {}),
               },
             });
             // New commits after an earlier merge: retire the stale "✓ Merged" so the bar
@@ -756,6 +759,8 @@ export class RunnerApiController {
           // Whether the branch already landed in main — the turn-end snapshot an idle session
           // shows, so the bar offers "✓ In main" not a redundant Merge (older runners omit it).
           ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
+          // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
+          ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
@@ -1115,6 +1120,9 @@ export class RunnerApiController {
           // and the per-file diff summary. Each left untouched when the runner omits it.
           branch: dto.branch ?? undefined,
           baseSha: dto.baseSha ?? undefined,
+          // The worktree's actual HEAD branch at completion → the bar flags divergence from the
+          // tracked `branch` / offers Adopt for a session that finished on a checkout -b branch.
+          ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
             ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
@@ -1224,6 +1232,11 @@ export class RunnerApiController {
         mergeStatus: dto.status,
         mergeError: merged ? null : (dto.message ?? null),
         mergedAt: merged ? new Date() : null,
+        // On a successful merge, advance the recorded fork point to the merge tip (the runner's
+        // own git base-ref self-heals to the same commit on its next diff, so this keeps the DB
+        // record in step). Later commits then form a fresh delta against the merged base rather
+        // than re-counting the just-merged work. Only when the runner reported the new tip.
+        ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
       },
     });
     return { ok: true };
@@ -1279,6 +1292,8 @@ export class RunnerApiController {
         // Recomputed with the diff, so opening the drawer refreshes "✓ In main" for an idle
         // session merged out-of-band (older runners omit it → left untouched).
         ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
+        // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
+        ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
       },
     });
     // Only persist the patches once we've confirmed the session is still live (count > 0);

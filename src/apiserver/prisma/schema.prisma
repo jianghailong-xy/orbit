@@ -411,6 +411,12 @@ model Session {
   // runner hasn't reported it (older runner / not yet recomputed) → the bar keeps its
   // mergeStatus-driven behavior.
   branchMerged      Boolean?  @map("branch_merged")
+  // The worktree's ACTUAL current HEAD branch, as last reported by the runner (git symbolic-ref).
+  // Normally equals `branch`; it differs when the agent ran `git checkout -b` inside the worktree,
+  // moving the work onto a branch Orbit isn't tracking. When it differs, the status bar flags the
+  // divergence ("On <branch> — not tracked") instead of a stale "✓ In main", and offers Adopt
+  // (which re-points `branch` here). Null = not isolated / not reported (older runner).
+  worktreeBranch    String?   @map("worktree_branch")
   // ── "Commit" (UI button on the worktree status bar, for a live session) ─────
   // worktreeDirty is the runner's last-reported `git status` for the live worktree: true
   // → the bar shows Commit (commit the uncommitted work onto `branch`), false → Merge.
