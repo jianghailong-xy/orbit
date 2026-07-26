@@ -228,11 +228,16 @@ jobs:
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          MKT="0.1.0"
+          # On a tag the tag drives the version; a manual dispatch falls back to the newest tag
+          # rather than a hardcoded default that silently goes stale.
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             MKT="${GITHUB_REF_NAME#v}"     # v0.1.2 or v0.1.2-beta.3 → 0.1.2-beta.3
-            MKT="${MKT%%-*}"               # strip any -beta.N → numeric X.Y.Z (CFBundleShortVersionString)
+          else
+            MKT="$(git -c versionsort.suffix=-beta tag --list 'v[0-9]*' --sort=-v:refname | head -1)"
+            MKT="${MKT#v}"
           fi
+          MKT="${MKT%%-*}"                 # strip any -beta.N → numeric X.Y.Z (CFBundleShortVersionString)
+          MKT="${MKT:-0.0.0}"              # no tags (shallow clone) → placeholder
           BUILD="$(git rev-list --count HEAD)"
           echo "Building marketing $MKT (build $BUILD) with profile '$PROVISION_PROFILE_NAME'"
           xcodebuild \
