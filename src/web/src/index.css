@@ -5792,6 +5792,50 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* Model rows are a small table, and their placeholders vanish once filled — so the columns are
+   labelled. Widths track the inputs underneath. */
+.pf-models-head {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.pf-models-head span:nth-child(1),
+.pf-models-head span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.pf-models-head span:nth-child(3) {
+  flex: none;
+  width: 140px;
+}
+.pf-models-head span:nth-child(4) {
+  flex: none;
+  width: 32px;
+}
+
+/* The list Orbit maintains: one line and a way in, not a spreadsheet to review. */
+.pf-models-sum {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.pf-models-sum .pf-sum-list {
+  flex: 1;
+  min-width: 0;
+}
+.pf-models-sum a {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 /* ── ⌘K session search palette ──────────────────────────────────────────────
    A command palette, so it sits high on the screen (Modal `top`) and owns its own
    chrome: no antd title bar, no footer buttons, body padding stripped. The three
