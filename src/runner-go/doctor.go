@@ -46,9 +46,15 @@ var engineSpecs = []engineSpec{
 		loginHeadless: "claude setup-token",
 	},
 	{
-		name:          "Codex",
-		bin:           providerCodex,
-		installCmd:    "npm install -g @openai/codex",
+		name:       "Codex",
+		bin:        providerCodex,
+		installCmd: "npm install -g @openai/codex",
+		// `codex update` updates whichever install is on PATH (standalone or npm global).
+		// Falling back to installCmd instead would run `npm i -g`, which targets `npm prefix
+		// -g` regardless of what PATH actually resolves — silently upgrading a copy the runner
+		// never execs (root: standalone ~/.local/bin wins over the npm global), and failing
+		// with EACCES when the service user doesn't own that prefix.
+		updateCmd:     "codex update",
 		installAlt:    "brew install codex   (macOS)",
 		loginArgs:     []string{"login"},
 		loginHeadless: "set OPENAI_API_KEY in the service env",
