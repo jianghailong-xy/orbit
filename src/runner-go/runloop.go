@@ -29,6 +29,24 @@ type liveSession struct {
 	job    *ClaimedSession
 }
 
+// carryOverModelCatalog keeps a provider's last good model list when this round's refresh produced
+// nothing for it. The heartbeat replaces the server's stored catalog wholesale, so a half-failed
+// round — `codex debug models` erroring mid-`codex update`, one CLI briefly off PATH — would
+// otherwise blank the other provider until the next hourly refresh. The clients read Codex context
+// windows from this catalog and nowhere else, so a blanked list is a visibly wrong context gauge.
+func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
+	if prev == nil || next == nil {
+		return next
+	}
+	if len(next.Codex) == 0 {
+		next.Codex = prev.Codex
+	}
+	if len(next.Claude) == 0 {
+		next.Claude = prev.Claude
+	}
+	return next
+}
+
 func runLoop(cfg *RunnerConfig) {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
 
@@ -160,7 +178,7 @@ func runLoop(cfg *RunnerConfig) {
 			return // nothing fetched this round — leave the last good catalog in place
 		}
 		modelCatalogMu.Lock()
-		hbModelCatalog = catalog
+		hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
 		modelCatalogMu.Unlock()
 	}
 	go refreshModelCatalog()

@@ -127,13 +127,19 @@ final class AgentDefaultsTests: XCTestCase {
                        1_000_000)
     }
 
-    func testKnownModelContextWindowWinsOverRunnerCatalog() {
+    func testCodexContextWindowComesFromRunnerCatalog() {
         let catalog = RunnerModelCatalog(
-            claude: nil,
+            claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", priority: nil,
+                                     contextWindow: nil, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)],
             codex: [RunnerModelInfo(value: "gpt-5.5", label: "GPT-5.5", priority: nil,
                                     contextWindow: 272_000, reasoningLevels: nil,
                                     defaultReasoningLevel: nil, serviceTiers: nil)])
-        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: catalog), 400_000)
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: catalog), 272_000)
+        // Claude windows stay static — no catalog reports them.
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-5", catalog: catalog), 1_000_000)
+        // No catalog (runner offline / codex missing) → the generic default.
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: nil), 200_000)
     }
 
     func testUnknownModelContextWindowFallsBackToRunnerCatalog() {

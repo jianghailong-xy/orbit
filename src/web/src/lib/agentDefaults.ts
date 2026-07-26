@@ -62,19 +62,15 @@ export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
 
 export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS];
 
-// Per-model context-window size (max input tokens), for the composer's context-usage
-// gauge. Claude values are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K);
-// Codex is a best-effort default. Keep in sync with Swift's AgentDefaults.contextWindow(for:).
+// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
+// Claude only: these are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K), and
+// the Claude CLI has no way to report them, so they have to live here. Codex models are absent on
+// purpose — the runner catalog carries their real `context_window` from `codex debug models`, so
+// it stays right as Codex ships new models. Keep in sync with Swift's knownContextWindow(for:).
 export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-opus-5': 1_000_000,
   'claude-sonnet-5': 1_000_000,
   'claude-haiku-4-5': 200_000,
-  'gpt-5.6-sol': 372_000,
-  'gpt-5.6-terra': 372_000,
-  'gpt-5.6-luna': 372_000,
-  'gpt-5.5': 400_000,
-  'gpt-5.4': 400_000,
-  'gpt-5.4-mini': 400_000,
 };
 export const DEFAULT_CONTEXT_WINDOW = 200_000;
 const catalogOptionsForProvider = (

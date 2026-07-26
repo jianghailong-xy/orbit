@@ -151,15 +151,16 @@ public enum AgentDefaults {
             : [.default, .low, .medium, .high, .xhigh, .max]
     }
 
-    /// Per-model context-window size (max input tokens), for the composer's context-usage
-    /// gauge. Claude values are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K);
-    /// Codex is a best-effort default. Keep in sync with web's CONTEXT_WINDOW_BY_MODEL.
+    /// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
+    /// Claude only: these are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K),
+    /// and the Claude CLI has no way to report them, so they have to live here. Codex models are
+    /// absent on purpose — the runner catalog carries their real `context_window` from
+    /// `codex debug models`, so it stays right as Codex ships new models. Keep in sync with web's
+    /// CONTEXT_WINDOW_BY_MODEL.
     private static func knownContextWindow(for id: String) -> Int? {
         switch id {
         case "claude-opus-5", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
-        case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna": return 372_000
-        case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini": return 400_000
         default: return nil
         }
     }

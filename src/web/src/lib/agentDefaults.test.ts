@@ -1,14 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
-import { contextWindowFor, type ConfiguredProvider } from './agentDefaults';
+import { contextWindowFor, DEFAULT_CONTEXT_WINDOW, type ConfiguredProvider } from './agentDefaults';
 
 describe('contextWindowFor', () => {
-  it('uses the built-in known-model window before the runner catalog value', () => {
+  it('takes Codex windows from the runner catalog, not a built-in guess', () => {
     const catalog: RunnerModelCatalog = {
       codex: [{ value: 'gpt-5.5', label: 'GPT-5.5', contextWindow: 272_000 }],
     };
 
-    expect(contextWindowFor('gpt-5.5', catalog)).toBe(400_000);
+    expect(contextWindowFor('gpt-5.5', catalog)).toBe(272_000);
+  });
+
+  it('uses the built-in Claude windows, which no catalog reports', () => {
+    const catalog: RunnerModelCatalog = {
+      claude: [{ value: 'claude-opus-5', label: 'Opus 5' }],
+    };
+
+    expect(contextWindowFor('claude-opus-5', catalog)).toBe(1_000_000);
+  });
+
+  it('falls back to the default window when the catalog is missing', () => {
+    expect(contextWindowFor('gpt-5.5', null)).toBe(DEFAULT_CONTEXT_WINDOW);
   });
 
   it('uses runner catalog windows for models unknown to the built-in table', () => {
