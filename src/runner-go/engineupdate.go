@@ -79,10 +79,13 @@ func updateEngine(spec engineSpec, servicePath string, proxyVars []envVar) {
 		logln("engine-update:", spec.name, "failed:", updateErrDetail(err, out))
 		return
 	}
-	if after := checkEngine(spec, serviceLoginPath()).version; after != "" && after != before.version {
+	// Re-measure on the SAME PATH used for `before`, so the comparison is apples-to-apples.
+	if after := checkEngine(spec, servicePath).version; after != "" && after != before.version {
 		logln("engine-update:", spec.name, "updated", before.version, "->", after)
 	} else {
-		logln("engine-update:", spec.name, "already up to date ("+before.version+")")
+		// Name the binary we measured: an update that exits 0 without moving the version is
+		// usually one that wrote to a different install than the one PATH resolves.
+		logln("engine-update:", spec.name, "already up to date ("+before.version+" at "+before.path+")")
 	}
 }
 
