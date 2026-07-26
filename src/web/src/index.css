@@ -190,6 +190,15 @@ body {
   background: var(--scrollbar-hover);
 }
 
+/* Toasts (AntD message): cap the card so a long one — a merge conflict, a failure detail —
+   wraps into a compact block instead of stretching into a full-width banner across the app.
+   Its vertical offset is set in main.tsx (App message.top) so it clears the header band.
+   text-align:start because the wrapper centres text, which reads badly once it wraps. */
+.ant-message-notice-content {
+  max-width: min(560px, calc(100vw - 32px));
+  text-align: start;
+}
+
 /* ---- App shell: side nav | main region (master/detail) ---- */
 .app-shell {
   display: flex;

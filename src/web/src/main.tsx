@@ -19,13 +19,20 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 });
 
+// Toasts drop below the header band instead of AntD's default 8px, which lands them right on
+// the session title / status line (and the toast card swallows clicks, so it also blocked the
+// double-click-to-rename target). 104px clears the tallest header we render: the conversation
+// header with a task back-link above the title (92px), and the mobile "Orbit" top bar plus
+// session-list head (100px). Applies to every toast — they all go through App.useApp().
+const TOAST_TOP = 104;
+
 // Feeds AntD the matching theme for the resolved light/dark mode; custom CSS is
 // driven separately via <html data-theme> (see lib/theme).
 function ThemedConfig({ children }: { children: React.ReactNode }) {
   const { resolved } = useThemeMode();
   return (
     <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}>
-      <AntApp>{children}</AntApp>
+      <AntApp message={{ top: TOAST_TOP }}>{children}</AntApp>
     </ConfigProvider>
   );
 }
