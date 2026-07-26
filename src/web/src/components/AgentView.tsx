@@ -2073,22 +2073,27 @@ export function AgentView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
   });
   // Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
-  // onto the latest main and fixes the conflicts (it has the context for its own changes); the
-  // rebase bakes the resolution into the branch's commits, so the runner's rebase merge then
-  // fast-forwards cleanly. resume() clears the stale mergeStatus, so the bar offers "Merge to
-  // main" again once the agent finishes.
+  // onto the target that conflicted and fixes the conflicts (it has the context for its own
+  // changes); the rebase bakes the resolution into the branch's commits, so the runner's rebase
+  // merge then fast-forwards cleanly. resume() clears the stale mergeStatus, so the bar offers
+  // "Merge to <target>" again once the agent finishes.
   const resolveMut = useMutation({
-    mutationFn: (vars: { id: string; branch: string }) =>
+    mutationFn: (vars: { id: string; branch: string; target: string }) =>
       resumeSession(
         vars.id,
-        'Rebase this branch onto the latest main and resolve any conflicts.\n\n' +
+        'Rebase this branch onto the latest ' +
+          vars.target +
+          ' and resolve any conflicts.\n\n' +
           "You're in this session's isolated git worktree, checked out on " +
           vars.branch +
-          '. Run git rebase main — it may stop on conflicts. For each, resolve every conflict' +
+          '. Run git rebase ' +
+          vars.target +
+          ' — it may stop on conflicts. For each, resolve every conflict' +
           ' using your knowledge of the changes made on this branch, git add the resolved' +
           ' files, then git rebase --continue, repeating until the rebase completes. Do not' +
-          ' push. Once the rebase finishes, the branch can be merged into main cleanly from the' +
-          ' status bar above the composer.',
+          ' push. Once the rebase finishes, the branch can be merged into ' +
+          vars.target +
+          ' cleanly from the status bar above the composer.',
       ),
     onSuccess: () => {
       message.success('Resuming the session to resolve the conflict…');
@@ -3318,7 +3323,8 @@ export function AgentView({ runner }: { runner: Runner }) {
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch
-              ? () => resolveMut.mutate({ id: selectedId, branch: detailForSelected.branch! })
+              ? (target: string) =>
+                  resolveMut.mutate({ id: selectedId, branch: detailForSelected.branch!, target })
               : undefined
           }
           committing={commitMut.isPending}

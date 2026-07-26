@@ -106,19 +106,19 @@ final class WorktreeModel {
     }
 
     /// Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
-    /// onto the latest main and fixes the conflicts (it has the context for its own changes). The
-    /// resume clears the stale mergeStatus server-side, so the bar offers Merge again once it's done.
-    /// Same prompt web sends from `resolveMut`.
-    func resolveInSession(branch: String) async {
+    /// onto the target that conflicted and fixes the conflicts (it has the context for its own
+    /// changes). The resume clears the stale mergeStatus server-side, so the bar offers Merge again
+    /// once it's done. Same prompt web sends from `resolveMut`.
+    func resolveInSession(branch: String, target: String) async {
         busy = true
         defer { busy = false }
-        let content = "Rebase this branch onto the latest main and resolve any conflicts.\n\n"
+        let content = "Rebase this branch onto the latest \(target) and resolve any conflicts.\n\n"
             + "You're in this session's isolated git worktree, checked out on \(branch). "
-            + "Run git rebase main — it may stop on conflicts. For each, resolve every conflict "
+            + "Run git rebase \(target) — it may stop on conflicts. For each, resolve every conflict "
             + "using your knowledge of the changes made on this branch, git add the resolved "
             + "files, then git rebase --continue, repeating until the rebase completes. Do not "
-            + "push. Once the rebase finishes, the branch can be merged into main cleanly from the "
-            + "status bar above the composer."
+            + "push. Once the rebase finishes, the branch can be merged into \(target) cleanly from "
+            + "the status bar above the composer."
         do {
             _ = try await api.resume(sessionID: sessionID,
                                      ResumeRequest(clientTurnId: UUID().uuidString, content: content,

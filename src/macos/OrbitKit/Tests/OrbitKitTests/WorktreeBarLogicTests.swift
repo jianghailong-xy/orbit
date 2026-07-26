@@ -82,13 +82,29 @@ final class WorktreeBarLogicTests: XCTestCase {
 
     // MARK: resolvable
 
-    func testResolvableOnlyForConflictOnMainMaster() {
-        XCTAssertTrue(WorktreeBarLogic.resolvable(mergeStatus: "conflict", mergeTarget: nil))
-        XCTAssertTrue(WorktreeBarLogic.resolvable(mergeStatus: "conflict", mergeTarget: "main"))
-        XCTAssertTrue(WorktreeBarLogic.resolvable(mergeStatus: "conflict", mergeTarget: "master"))
-        XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: "conflict", mergeTarget: "develop"))
-        XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: "error", mergeTarget: "main"))
-        XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: nil, mergeTarget: "main"))
+    /// Any conflict is resolvable, whatever the target — retrying it would replay the same rebase.
+    /// An `error` is a precondition failure a rebase can't fix, so it stays a plain retry.
+    func testResolvableForAnyConflictNotForError() {
+        XCTAssertTrue(WorktreeBarLogic.resolvable(mergeStatus: "conflict"))
+        XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: "error"))
+        XCTAssertFalse(WorktreeBarLogic.resolvable(mergeStatus: nil))
+    }
+
+    func testConflictTargetNamesTheBranchThatConflicted() {
+        // The recorded target wins, even when it isn't main/master.
+        XCTAssertEqual(
+            WorktreeBarLogic.conflictTarget(mergeTarget: "release/1.2", targets: ["main", "release/1.2"],
+                                            agentDefaultTarget: nil),
+            "release/1.2")
+        // Auto-detected merge (no recorded target) → the default the runner would have picked.
+        XCTAssertEqual(
+            WorktreeBarLogic.conflictTarget(mergeTarget: nil, targets: ["master", "dev"],
+                                            agentDefaultTarget: nil),
+            "master")
+        // Nothing reported (older runner) → main.
+        XCTAssertEqual(
+            WorktreeBarLogic.conflictTarget(mergeTarget: nil, targets: [], agentDefaultTarget: nil),
+            "main")
     }
 
     // MARK: failure detail
