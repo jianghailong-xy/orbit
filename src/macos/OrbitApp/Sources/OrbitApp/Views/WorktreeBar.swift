@@ -226,7 +226,6 @@ struct BranchLabelView: View {
 /// optional target-branch menu; pending → "Merging…"; merged → a ✓ chip; already-in-main → "✓ In
 /// main"; conflict on main/master → "Resolve in session"; other failure → "Retry merge".
 private struct WorktreeMergeControl: View {
-    @Environment(AppModel.self) private var app
     let console: ConsoleModel
     let detail: SessionDetail
     let branch: String
@@ -253,17 +252,11 @@ private struct WorktreeMergeControl: View {
             adoptControl(worktreeBranch: wb, busy: busy)
         } else if status == "merged" {
             let elsewhere = detail.mergeTarget != nil && detail.mergeTarget != "main" && detail.mergeTarget != "master"
-            HStack(spacing: 8) {
-                WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))
-                followUpButton
-            }
+            WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))
         } else if detail.branchMerged == true && status == nil {
             let landed = detail.mergeTarget
                 ?? (targets.contains("main") ? "main" : targets.contains("master") ? "master" : "main")
-            HStack(spacing: 8) {
-                WTChip(title: "✓ In \(landed)")
-                followUpButton
-            }
+            WTChip(title: "✓ In \(landed)")
         } else if status == "pending" {
             WTPillButton(title: "Merging…", disabled: true) {}
         } else if status == "conflict" || status == "error" {
@@ -296,18 +289,6 @@ private struct WorktreeMergeControl: View {
             WTPillButton(title: busy ? "Adopting…" : "Adopt", tint: .orange, disabled: busy) {
                 Task { await console.worktree.adopt() }
             }
-        }
-    }
-
-    /// A quiet "start a fresh session on this agent (new branch from main)" link beside the merged /
-    /// "In main" chips, so a done session isn't manually repurposed for follow-up work.
-    @ViewBuilder private var followUpButton: some View {
-        if let agentID = detail.agent?.id {
-            Button { app.composeWithAgent(agentID) } label: {
-                Text("+ New from main").font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .buttonStyle(.plain)
-            .help("Start a new session on this agent, forked fresh from main")
         }
     }
 
