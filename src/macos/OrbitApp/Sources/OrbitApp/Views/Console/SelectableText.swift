@@ -74,8 +74,8 @@ struct SelectableText: UIViewRepresentable {
          markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil,
          detectLinks: Bool = false) {
         self.segments = [ProseSegment(text: text, role: role, markdown: markdown,
-                                      codeBackground: codeBackground, leadingMarker: leadingMarker,
-                                      detectLinks: detectLinks)]
+                                      detectLinks: detectLinks, codeBackground: codeBackground,
+                                      leadingMarker: leadingMarker)]
         self.ink = ink
     }
 
