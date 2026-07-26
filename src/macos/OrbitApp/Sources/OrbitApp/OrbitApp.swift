@@ -67,6 +67,13 @@ struct OrbitApp: App {
             // shortcuts fire from any view (not just the sidebar) and are discoverable in the menu
             // bar. The list past nine agents is reachable from the sidebar only.
             CommandMenu("Go") {
+                // ⌘K → the cross-scope session palette. Lives in Go, alongside ⌘1…⌘9: it's the
+                // same act (jump somewhere), just not limited to the nine agents or to the
+                // sessions the sidebar's current scope happens to be showing.
+                Button("Search Sessions…") { model.searchOpen = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .disabled(!model.signedIn)
+                Divider()
                 ForEach(Array(model.orderedAgents.prefix(9).enumerated()), id: \.element.id) { pair in
                     Button("\(pair.offset + 1)  \(pair.element.name)") {
                         model.selectAgent(at: pair.offset)
@@ -111,6 +118,7 @@ struct RootView: View {
     var body: some View {
         if model.signedIn {
             MainView()
+                .sessionSearchSheet(model)
         } else {
             LoginView()
         }

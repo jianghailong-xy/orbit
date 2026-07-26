@@ -513,3 +513,67 @@ public struct MergeRequest: Codable, Sendable {
     public let targetBranch: String?
     public init(targetBranch: String? = nil) { self.targetBranch = targetBranch }
 }
+
+// MARK: - Session search (⌘K)
+
+/// Which field a search hit matched on. Mirrors the server's `SessionSearchMatchField`; decoded
+/// leniently (see `SessionSearchHit`) so a field added server-side can't break an older client.
+public enum SessionSearchMatchField: String, Codable, Sendable {
+    case title, prompt, reply, message, branch, agent, task
+    /// Not a match: tags the rows returned for an empty query, where the palette lists recents.
+    case recent
+}
+
+/// One row of `GET /sessions/search`. Deliberately thinner than the list-shaped `Session` — the
+/// palette shows a glyph, a title, an agent name and a snippet, and nothing else.
+public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let status: RunStatus
+    public let agent: SessionAgentRef?
+    public let runnerId: String?
+    public let taskId: String?
+    public let taskTitle: String?
+    public let lastTurnAt: String?
+    public let createdAt: String?
+    /// Set when the session lives in Completed / Trash — the row badges where it is, so a hit the
+    /// user can't find in the sidebar explains itself instead of looking like a ghost.
+    public let archivedAt: String?
+    public let deletedAt: String?
+    /// Carried so `SessionStatusGlyph` reports the same wording here as in the session list.
+    public let endReason: String?
+    public let matchField: SessionSearchMatchField
+    /// A whitespace-collapsed window around the match; nil for a `recent` row. The match is
+    /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
+    public let snippet: String?
+
+    /// Unknown `matchField` values decode to `.message` rather than failing the whole response: a
+    /// newer server adding a field must not blank the palette on an older client.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        status = try c.decode(RunStatus.self, forKey: .status)
+        agent = try c.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
+        runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
+        taskId = try c.decodeIfPresent(String.self, forKey: .taskId)
+        taskTitle = try c.decodeIfPresent(String.self, forKey: .taskTitle)
+        lastTurnAt = try c.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+        archivedAt = try c.decodeIfPresent(String.self, forKey: .archivedAt)
+        deletedAt = try c.decodeIfPresent(String.self, forKey: .deletedAt)
+        endReason = try c.decodeIfPresent(String.self, forKey: .endReason)
+        snippet = try c.decodeIfPresent(String.self, forKey: .snippet)
+        let raw = try c.decodeIfPresent(String.self, forKey: .matchField) ?? ""
+        matchField = SessionSearchMatchField(rawValue: raw) ?? .message
+    }
+}
+
+/// `GET /sessions/search`. `contentSearched` is false when the query was too short to search the
+/// long text bodies (see the server's CONTENT_MIN_CHARS), so the UI can say only names were
+/// matched instead of quietly returning less.
+public struct SessionSearchResponse: Codable, Equatable, Sendable {
+    public let q: String
+    public let contentSearched: Bool
+    public let hits: [SessionSearchHit]
+}

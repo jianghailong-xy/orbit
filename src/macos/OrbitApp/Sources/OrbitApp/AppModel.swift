@@ -477,6 +477,21 @@ final class AppModel {
         return s.agent?.id ?? s.agentId
     }
 
+    // MARK: session search (⌘K)
+
+    /// Drives the ⌘K palette's sheet. Held here rather than in the view so the menu command (macOS)
+    /// and the toolbar button (iOS) open the same one from outside its own view tree.
+    var searchOpen = false
+
+    /// Cross-scope session search — every agent, runner and lifecycle scope at once, plus
+    /// conversation text. An empty `q` is a real request, answered with recents, which is what
+    /// makes ⌘K a session switcher too. Returns nil on any failure; the palette shows "no results"
+    /// rather than an error, since it's a transient overlay the user can just retype into.
+    func searchSessions(_ q: String) async -> SessionSearchResponse? {
+        guard let api else { return nil }
+        return try? await api.searchSessions(q: q)
+    }
+
     // MARK: keyboard commands (⌘N new session · ⌘1…⌘9 switch agent)
 
     /// Agents in sidebar display order — the order ⌘1…⌘9 index into (and the sidebar renders).

@@ -74,6 +74,18 @@ export class SessionsController {
     return this.sessions.list(user.userId, { runnerId, view });
   }
 
+  // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
+  // routes in declaration order, so below it the literal path would be swallowed as an id.
+  // An empty `q` returns recents, which is what makes the palette a session switcher too.
+  @Get('search')
+  search(
+    @CurrentUser() user: AuthUser,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.sessions.search(user.userId, q, Number(limit) || 20);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.sessions.get(user.userId, id);

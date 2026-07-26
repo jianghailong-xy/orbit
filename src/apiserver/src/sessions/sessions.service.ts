@@ -20,6 +20,7 @@ import {
   MAX_PROMPT_CHARS,
   RunEventType,
   SessionEndReason,
+  type SessionSearchHit,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -27,6 +28,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
+import { normalizeSearchQuery, type NormalizedSearchQuery } from './search-query';
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -408,6 +410,277 @@ export class SessionsService {
       orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     });
+  }
+
+  /**
+   * Cross-scope session search backing the clients' ⌘K palette.
+   *
+   * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (active,
+   * completed, system and trash — "the one I'm thinking of" is usually filed away, and the hit
+   * carries archivedAt/deletedAt so the row can say where it lives), and it reaches into
+   * conversation text, which no list payload ever carries.
+   *
+   * Two tiers, both trigram-indexed (migration 0068):
+   *  - metadata — title / prompt / last reply / branch on the session row, plus the joined agent
+   *    and task names. Runs for any query length.
+   *  - conversation text — the durable `user` + `assistant` events. Gated on CONTENT_MIN_CHARS;
+   *    see search-query.ts for why that floor is the index's, not a product decision.
+   *
+   * An empty query returns recents, so ⌘K doubles as a session switcher.
+   */
+  async search(ownerId: string, q: string | undefined, limit: number) {
+    const take = Math.min(Math.max(limit || 20, 1), 50);
+    const norm = normalizeSearchQuery(q);
+    if (!norm) {
+      const recents = await this.searchRows(ownerId, null, take);
+      return { q: '', contentSearched: false, hits: recents };
+    }
+    const hits = await this.searchRows(ownerId, norm, take);
+    return { q: norm.raw, contentSearched: norm.searchContent, hits };
+  }
+
+  /**
+   * The search query itself (and, with `norm === null`, the plain recents list that backs an empty
+   * palette). Raw SQL for the same reason `list` is: the snippet window has to be cut in SQL —
+   * a match can sit 5 KB into a prompt or a message, so neither `left()` nor a Prisma `select`
+   * can produce it, and shipping whole message bodies to slice them in Node would defeat the
+   * point of a fast palette.
+   */
+  private async searchRows(
+    ownerId: string,
+    norm: NormalizedSearchQuery | null,
+    take: number,
+  ): Promise<SessionSearchHit[]> {
+    type Row = {
+      id: string;
+      title: string;
+      status: RunStatus;
+      agentId: string | null;
+      agentName: string | null;
+      runnerId: string | null;
+      taskId: string | null;
+      taskTitle: string | null;
+      lastTurnAt: Date | null;
+      createdAt: Date;
+      archivedAt: Date | null;
+      deletedAt: Date | null;
+      endReason: string | null;
+      matchField: SessionSearchHit['matchField'];
+      snippet: string | null;
+    };
+
+    // The conversation-text tier is composed in or out HERE, at SQL-build time, rather than being
+    // gated by a `AND ${norm.searchContent}` bind parameter inside the query. A parameter can't be
+    // folded away when the plan is prepared, so the sub-3-character case would still execute the
+    // very scan the floor exists to prevent — the 533ms one.
+    const contentCte =
+      norm && norm.searchContent
+        ? Prisma.sql`
+            -- One row per session: the most recent matching message. DISTINCT ON needs the
+            -- leading ORDER BY key to be the grouping column, hence session_id then seq DESC.
+            SELECT DISTINCT ON (e.session_id)
+              e.session_id,
+              e.payload->>'text' AS match_text
+            FROM run_event e
+            -- Not merely a lookup: run_event has no owner column, so this join IS the
+            -- authorization boundary for conversation text. Never drop it.
+            JOIN session s ON s.id = e.session_id
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND e.type IN ('user', 'assistant')
+              AND (e.payload->>'text') ILIKE ${norm.pattern}
+            ORDER BY e.session_id, e.seq DESC
+          `
+        : Prisma.sql`SELECT NULL::uuid AS session_id, NULL::text AS match_text WHERE false`;
+
+    // The columns a hit may be attributed to, in rank order — the single source the three places
+    // that must agree are generated from: the match_field CASE, the match_text CASE, and the
+    // re-test predicate. Written out three times by hand they drift, and the failure is quiet:
+    // a field reported as the match with a snippet that doesn't contain the query.
+    //
+    // Below the floor the two long bodies drop out of the list entirely, so a short query can't
+    // reach them through ANY branch (a session admitted by its agent's name would otherwise still
+    // be labelled 'prompt' and hand back a snippet cut from a 7 KB body).
+    const pattern = norm?.pattern ?? '';
+    const fields: { field: SessionSearchHit['matchField']; col: Prisma.Sql }[] = [
+      { field: 'title', col: Prisma.sql`s.title` },
+      ...(norm?.searchContent
+        ? [
+            { field: 'prompt' as const, col: Prisma.sql`s.prompt` },
+            { field: 'reply' as const, col: Prisma.sql`s.last_assistant_text` },
+          ]
+        : []),
+      { field: 'branch', col: Prisma.sql`s.branch` },
+      { field: 'agent', col: Prisma.sql`a.name` },
+      { field: 'task', col: Prisma.sql`t.title` },
+    ];
+    const matchFieldCase = Prisma.sql`CASE ${Prisma.join(
+      fields.map((f) => Prisma.sql`WHEN ${f.col} ILIKE ${pattern} THEN ${f.field}::text`),
+      ' ',
+    )} END`;
+    const matchTextCase = Prisma.sql`CASE ${Prisma.join(
+      fields.map((f) => Prisma.sql`WHEN ${f.col} ILIKE ${pattern} THEN ${f.col}`),
+      ' ',
+    )} END`;
+    const retest = Prisma.join(
+      fields.map((f) => Prisma.sql`${f.col} ILIKE ${pattern}`),
+      ' OR ',
+    );
+
+    // The session-side predicate, likewise chosen by the floor. Above it, the long bodies are in
+    // play and the predicate is written against the exact expression session_search_trgm indexes.
+    // Below it, that same expression would be a trap: the index can't answer a 2-character
+    // pattern, so Postgres would build a multi-KB concatenation for all 1.3k rows and ILIKE it
+    // (128ms) to return 512 mostly-meaningless hits. Matching the short name columns instead is
+    // 4.4ms and returns 51 — see CONTENT_MIN_CHARS.
+    const sessionPredicate = norm?.searchContent
+      ? Prisma.sql`
+          (
+            coalesce(s.title, '') || ' ' ||
+            coalesce(s.prompt, '') || ' ' ||
+            coalesce(s.last_assistant_text, '') || ' ' ||
+            coalesce(s.branch, '')
+          ) ILIKE ${pattern}`
+      : Prisma.sql`(s.title ILIKE ${pattern} OR s.branch ILIKE ${pattern})`;
+
+    // Rank buckets first (a title hit beats a hit buried in a message), then the list's own
+    // recency order inside each bucket — for switching sessions "the one I touched most
+    // recently" beats "the one with the most matches" every time.
+    const rows = norm
+      ? await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+          WITH meta_ids AS (
+            -- A UNION of independently index-usable branches, NOT one OR-chain. Written as
+            -- "... OR a.name ILIKE ... OR t.title ILIKE ..." against the joined tables, the
+            -- planner cannot use session_search_trgm at all and falls back to scanning every
+            -- session row with six ILIKEs over multi-KB text — measured at 279ms versus 132ms
+            -- for this shape on the same data, with the common-word case the worst hit.
+            SELECT s.id
+            FROM session s
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND ${sessionPredicate}
+            UNION
+            -- Joined names resolve against their own tiny tables first (~10 agents, ~500 tasks),
+            -- leaving the session side a cheap uuid comparison. Folding these into the session
+            -- index instead would mean reindexing every session whenever an agent is renamed.
+            SELECT s.id FROM session s
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND s.agent_id IN (SELECT id FROM agent WHERE name ILIKE ${norm.pattern})
+            UNION
+            SELECT s.id FROM session s
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND s.task_id IN (SELECT id FROM task WHERE title ILIKE ${norm.pattern})
+          ),
+          meta AS (
+            SELECT
+              s.id AS session_id,
+              ${matchFieldCase} AS match_field,
+              ${matchTextCase}  AS match_text
+            FROM meta_ids mi
+            JOIN session s ON s.id = mi.id
+            LEFT JOIN agent a ON a.id = s.agent_id
+            LEFT JOIN task  t ON t.id = s.task_id
+            -- Concatenating the columns with a space invents adjacencies that don't exist: a
+            -- query spanning the seam ("foo bar" where the title ends in "foo" and the prompt
+            -- opens with "bar") matches the indexed expression while matching no actual field.
+            -- Re-testing the columns individually drops those, and guarantees the CASEs above
+            -- always find a branch — without it they'd fall through to NULL and produce a hit
+            -- with no snippet. Runs only on rows the index already admitted.
+            WHERE ${retest}
+          ),
+          content AS (
+            ${contentCte}
+          ),
+          hit AS (
+            SELECT
+              COALESCE(m.session_id, c.session_id) AS session_id,
+              COALESCE(m.match_field, 'message')   AS match_field,
+              COALESCE(m.match_text, c.match_text) AS match_text
+            FROM meta m
+            FULL OUTER JOIN content c ON c.session_id = m.session_id
+          )
+          SELECT
+            s.id, s.title, s.status,
+            a.id   AS "agentId",
+            a.name AS "agentName",
+            s.assigned_runner_id AS "runnerId",
+            s.task_id AS "taskId",
+            t.title   AS "taskTitle",
+            s.last_turn_at AS "lastTurnAt",
+            s.created_at   AS "createdAt",
+            s.archived_at  AS "archivedAt",
+            s.deleted_at   AS "deletedAt",
+            s.end_reason   AS "endReason",
+            h.match_field  AS "matchField",
+            -- A ±60-character window around the first literal occurrence. strpos() is literal
+            -- while ILIKE is not, which is exactly why the pattern escapes % and _ (see
+            -- search-query.ts) — otherwise the two could disagree and strpos would return 0.
+            -- greatest()/least() keep the window in range if they ever do disagree anyway.
+            substr(
+              h.match_text,
+              greatest(1, strpos(lower(h.match_text), lower(${norm.raw})) - 60),
+              length(${norm.raw}) + 120
+            ) AS "snippet"
+          FROM hit h
+          JOIN session s ON s.id = h.session_id
+          LEFT JOIN agent a ON a.id = s.agent_id
+          LEFT JOIN task  t ON t.id = s.task_id
+          ORDER BY
+            CASE h.match_field
+              WHEN 'title'  THEN 0
+              WHEN 'prompt' THEN 1
+              WHEN 'reply'  THEN 2
+              WHEN 'message' THEN 3
+              WHEN 'branch' THEN 4
+              WHEN 'agent'  THEN 5
+              ELSE 6
+            END,
+            s.last_turn_at DESC NULLS LAST,
+            s.created_at DESC
+          LIMIT ${take}::int
+        `)
+      : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
+          SELECT
+            s.id, s.title, s.status,
+            a.id   AS "agentId",
+            a.name AS "agentName",
+            s.assigned_runner_id AS "runnerId",
+            s.task_id AS "taskId",
+            t.title   AS "taskTitle",
+            s.last_turn_at AS "lastTurnAt",
+            s.created_at   AS "createdAt",
+            s.archived_at  AS "archivedAt",
+            s.deleted_at   AS "deletedAt",
+            s.end_reason   AS "endReason",
+            'recent'::text AS "matchField",
+            NULL::text AS "snippet"
+          FROM session s
+          LEFT JOIN agent a ON a.id = s.agent_id
+          LEFT JOIN task  t ON t.id = s.task_id
+          WHERE s.owner_id = ${ownerId}::uuid
+            AND s.deleted_at IS NULL
+          ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
+          LIMIT ${take}::int
+        `);
+
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      agent: r.agentId ? { id: r.agentId, name: r.agentName ?? '' } : null,
+      runnerId: r.runnerId,
+      taskId: r.taskId,
+      taskTitle: r.taskTitle,
+      lastTurnAt: r.lastTurnAt,
+      createdAt: r.createdAt,
+      archivedAt: r.archivedAt,
+      deletedAt: r.deletedAt,
+      endReason: r.endReason,
+      matchField: r.matchField,
+      // Collapse the whitespace a snippet cut out of a markdown reply is full of, so the palette
+      // row reads as one line instead of an accordion of blank space. This is also why no match
+      // offset is carried: collapsing shifts every position, so clients locate the query inside
+      // the finished snippet instead.
+      snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
+    }));
   }
 
   async list(

@@ -663,3 +663,55 @@ export interface ArtifactResultRequest {
   attachmentId?: string;
   message?: string;
 }
+
+/**
+ * Which field a session-search hit matched on. Ordered by how strong a signal it is when the
+ * user is trying to re-find a session, which is exactly the order the server ranks by:
+ * a title hit is almost always the one you meant; a hit buried in one message is the weakest.
+ * `recent` is not a match at all — it tags the rows returned for an empty query, where the
+ * palette doubles as a session switcher.
+ */
+export type SessionSearchMatchField =
+  | 'title'
+  | 'prompt'
+  | 'reply'
+  | 'message'
+  | 'branch'
+  | 'agent'
+  | 'task'
+  | 'recent';
+
+/** One row of GET /sessions/search. Deliberately thinner than a session-list row — the palette
+ *  renders a title, a status glyph, an agent name and a snippet, and nothing else. */
+export interface SessionSearchHit {
+  id: string;
+  title: string;
+  status: string;
+  agent: { id: string; name: string } | null;
+  runnerId: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  lastTurnAt: string | Date | null;
+  createdAt: string | Date;
+  /** Set when the session lives in Completed / Trash — the row badges where it is, because a
+   *  search that silently returned archived rows would look like it was showing active ones. */
+  archivedAt: string | Date | null;
+  deletedAt: string | Date | null;
+  /** Why the session ended — carried so the clients' shared status-label logic reports the same
+   *  wording here as in the session list (a benign recycle reads "Dormant", not "Cancelled"). */
+  endReason: string | null;
+  matchField: SessionSearchMatchField;
+  /** A whitespace-collapsed window around the match, or null for a `recent` row. Clients
+   *  highlight by locating the query inside it — no offset is carried, since collapsing the
+   *  whitespace would invalidate one anyway. */
+  snippet: string | null;
+}
+
+/** GET /sessions/search. `contentSearched` is false when the query was too short to search
+ *  conversation text (see CONTENT_MIN_CHARS), so the UI can say so rather than quietly
+ *  returning metadata-only results. */
+export interface SessionSearchResponse {
+  q: string;
+  contentSearched: boolean;
+  hits: SessionSearchHit[];
+}

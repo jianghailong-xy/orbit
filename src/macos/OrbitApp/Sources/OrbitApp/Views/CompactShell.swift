@@ -354,12 +354,26 @@ private struct NavigationDrawer: View {
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
         return VStack(alignment: .leading, spacing: 0) {
-            Text("Orbit")
-                .font(.title2.weight(.bold))
-                .padding(.leading, DrawerMetrics.textLeading)
-                .padding(.trailing, DrawerMetrics.hInset)
-                .padding(.top, 14)
-                .padding(.bottom, 8)
+            HStack {
+                Text("Orbit")
+                    .font(.title2.weight(.bold))
+                // The ⌘K palette's touch entry point. It sits here, above Recents, because it does
+                // what Recents does — jump to a session — just without being limited to the most
+                // recent ones or to any one agent. iPad keyboards get ⌘K itself as well.
+                Spacer()
+                Button {
+                    close()
+                    model.searchOpen = true
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Search sessions")
+                .keyboardShortcut("k", modifiers: .command)
+            }
+            .padding(.leading, DrawerMetrics.textLeading)
+            .padding(.trailing, DrawerMetrics.hInset)
+            .padding(.top, 14)
+            .padding(.bottom, 8)
 
             List {
                 // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings and

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { MenuOutlined } from '@ant-design/icons';
 import { Outlet, useLocation } from 'react-router-dom';
 import { TasksSidePanel } from './TasksSidePanel';
+import { SessionSearch } from './SessionSearch';
 import { ControlPlaneProvider } from '../lib/useControlPlane';
 
 // The app shell: a persistent side nav plus a content region (the routed <Outlet/>).
@@ -33,6 +34,9 @@ export function AppShell() {
       </header>
       <TasksSidePanel open={navOpen} />
       {navOpen && <div className="app-nav-backdrop" onClick={() => setNavOpen(false)} />}
+      {/* The ⌘K session palette. Mounted here (not in the agent console) so the shortcut works
+          from every route, including the task list and settings pages. */}
+      <SessionSearch />
       <Outlet />
     </div>
     </ControlPlaneProvider>

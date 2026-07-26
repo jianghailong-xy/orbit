@@ -41,6 +41,21 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     /// The glyph for a session, mirroring web `StatusIcon({ session, completed })`.
     /// `completed` = the Completed (archived) tab is showing this row; `deleted` = the Trash tab.
     public static func make(for s: Session, completed: Bool = false, deleted: Bool = false) -> SessionStatusGlyph {
+        make(status: s.status, completed: completed, deleted: deleted,
+             pendingApprovals: s.pendingApprovals, runningBgCount: s.runningBgCount,
+             error: s.error, endReason: s.endReason)
+    }
+
+    /// The same mapping over plain fields, for callers that hold something other than a list-shaped
+    /// `Session` — the ⌘K search hit, whose payload is deliberately thinner. Faking a `Session` to
+    /// call the overload above would mean getting a long memberwise init exactly right for no gain.
+    public static func make(status: RunStatus,
+                            completed: Bool = false,
+                            deleted: Bool = false,
+                            pendingApprovals: Int? = nil,
+                            runningBgCount: Int? = nil,
+                            error: String? = nil,
+                            endReason: String? = nil) -> SessionStatusGlyph {
         // Trash tab: a soft-deleted session reads as deleted regardless of its settled status —
         // web branches on `deletedAt` first with the same neutral ⊖ + "Deleted" tooltip.
         if deleted {
@@ -48,19 +63,19 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         }
         // Completed tab: the user deliberately filed this session, so it reads as done even though
         // its status settles to CANCELLED async. A genuine FAILED still falls through to its glyph.
-        if completed && s.status != .failed {
+        if completed && status != .failed {
             return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed")
         }
-        switch s.status {
+        switch status {
         case .running:
-            if (s.pendingApprovals ?? 0) > 0 {
+            if (pendingApprovals ?? 0) > 0 {
                 return .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval")
             }
             return .init(shape: .spinner, tone: .brand, label: "Running")
 
         case .awaitingInput:
-            if (s.runningBgCount ?? 0) > 0 {
-                return .init(shape: .spinner, tone: .brand, label: SessionLine.bgRunningLabel(s.runningBgCount ?? 0))
+            if (runningBgCount ?? 0) > 0 {
+                return .init(shape: .spinner, tone: .brand, label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
             }
             return .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply")
 
@@ -68,27 +83,27 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed")
 
         case .failed:
-            let err = (s.error ?? "").lowercased()
+            let err = (error ?? "").lowercased()
             if err.contains("offline") {
                 return .init(shape: .symbol("wifi.slash"), tone: .neutral,
                              label: "Disconnected — runner went offline")
             }
-            let detail = (s.error?.isEmpty == false) ? s.error! : "Failed"
+            let detail = (error?.isEmpty == false) ? error! : "Failed"
             return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
 
         case .parked, .cancelled, .interrupted:
             // Default to dormant (resumable); ⊖ only for a positively-terminal end. A legacy row
             // with an unknown reason fails to the neutral, resumable read.
-            let reason = s.endReason ?? ""
+            let reason = endReason ?? ""
             let terminalCancel =
                 reason == "orphaned" || reason == "deleted" || reason == "completed" ||
-                reason == "cancelled" || (s.status == .interrupted && reason.isEmpty)
+                reason == "cancelled" || (status == .interrupted && reason.isEmpty)
             if !terminalCancel {
                 return .init(shape: .symbol("pause.circle"), tone: .neutral,
                              label: "Dormant — send a message to resume")
             }
             let label = reason == "orphaned" ? "Ended — task already finished"
-                      : s.status == .interrupted ? "Interrupted"
+                      : status == .interrupted ? "Interrupted"
                       : "Cancelled"
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: label)
 

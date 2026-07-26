@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
+import type { SessionSearchResponse } from '@orbit/shared';
 import { api, getSession, getSessionDiff } from '../api';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './agentDefaults';
@@ -90,6 +91,22 @@ export const sessionsQuery = (opts: { runnerId?: string | null; view?: string | 
     queryFn: () => api<any[]>(`/sessions${suffix ? `?${suffix}` : ''}`),
   });
 };
+
+/**
+ * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
+ * search is its own cache entry — retyping a query the user just backspaced out of answers from
+ * cache instead of re-hitting the server. An empty `q` is a real request, not a disabled one: the
+ * server answers it with recents, which is what makes the palette a session switcher.
+ */
+export const sessionSearchQuery = (q: string) =>
+  queryOptions({
+    queryKey: ['session-search', q] as const,
+    queryFn: () =>
+      api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
+    // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
+    // one palette session and keeps arrow-keying through results from refetching.
+    staleTime: 60_000,
+  });
 
 /**
  * The signed-in user's session-tag library, ordered system-first by the server — the source for

@@ -88,6 +88,16 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    /// Cross-scope session search for the ⌘K palette — spans every agent, runner and lifecycle
+    /// scope (Active, Completed, System, Trash) and reaches into conversation text, none of which
+    /// `listSessions` can do. An empty `q` is a real request, answered with recents.
+    public func searchSessions(q: String, limit: Int = 20) async throws -> SessionSearchResponse {
+        try await get("sessions/search", query: [
+            URLQueryItem(name: "q", value: q),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ])
+    }
+
     /// GET /sessions/:id decoded to the worktree-status-bar detail (branch, changedFiles, merge /
     /// commit status, targets). Same endpoint as `session(_:)`, but decodes the richer worktree
     /// fields the list-shaped `Session` drops.

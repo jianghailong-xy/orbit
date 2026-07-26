@@ -25,6 +25,7 @@ import {
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
+  SearchOutlined,
   ShareAltOutlined,
   ThunderboltOutlined,
   UndoOutlined,
@@ -57,6 +58,7 @@ import {
   sessionsQuery,
   sessionTagsQuery,
 } from '../lib/queries';
+import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
 import {
   type SessionTagRef,
   sessionTagSections,
@@ -524,7 +526,7 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
-function statusLabel(session: any): string {
+export function statusLabel(session: any): string {
   if (session.deletedAt) return 'Deleted';
   if (session.archivedAt && session.status !== 'FAILED') return 'Completed';
   const status: string = session.status;
@@ -557,7 +559,7 @@ function statusLabel(session: any): string {
 // `status` collapses every graceful end to CANCELLED, so `endReason` is what tells a
 // benign recycle (idle/task-done/user-ended — resumable, shown as paused) apart from a
 // real cancel/orphan (shown as ⊖).
-function StatusIcon({ session, completed }: { session: any; completed?: boolean }) {
+export function StatusIcon({ session, completed }: { session: any; completed?: boolean }) {
   const status: string = session.status;
   const fontSize = 16;
   if (session.deletedAt)
@@ -2746,6 +2748,15 @@ export function AgentView({ runner }: { runner: Runner }) {
         <div className="session-col-head">
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
+          {/* The palette's click target. ⌘K is the primary way in; this is what makes it
+              reachable on a touch device, where there is no keyboard to press it with. */}
+          <span
+            className="session-col-search"
+            title={`Search sessions (${SEARCH_HINT})`}
+            onClick={openSessionSearch}
+          >
+            <SearchOutlined />
+          </span>
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
               chip row — both read as clutter in a narrow column, and Active is nearly always
               the answer. The trigger names the current view so a list scoped to

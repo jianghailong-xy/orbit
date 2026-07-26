@@ -68,6 +68,7 @@ private struct RootView: View {
             }
             // Register for "needs your reply" pushes once signed in (idempotent).
             .task { model.enablePush() }
+            .sessionSearchSheet(model)
         } else {
             LoginView()
         }

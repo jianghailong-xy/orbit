@@ -5741,3 +5741,164 @@ body {
   font-size: 14px;
   color: var(--text-3);
 }
+
+/* ── ⌘K session search palette ──────────────────────────────────────────────
+   A command palette, so it sits high on the screen (Modal `top`) and owns its own
+   chrome: no antd title bar, no footer buttons, body padding stripped. The three
+   regions — input, results, hint bar — mirror the session list's own vocabulary so a
+   result row reads the same as the row it will navigate to. */
+.ssearch-modal .ant-modal-content {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.ssearch-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  height: 52px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.ssearch-head-icon {
+  color: var(--text-3);
+  font-size: 16px;
+}
+.ssearch-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text-1);
+}
+.ssearch-input::placeholder {
+  color: var(--text-4);
+}
+/* Capped so a long result set scrolls inside the palette instead of running off-screen. */
+.ssearch-list {
+  max-height: min(52vh, 440px);
+  overflow-y: auto;
+}
+.ssearch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+/* One highlight, driven by the keyboard cursor — hover sets that cursor rather than painting a
+   second, competing highlight, so mouse and keyboard can never disagree about the Enter target. */
+.ssearch-row.active {
+  background: var(--bg-hover);
+}
+.ssearch-body {
+  flex: 1;
+  min-width: 0;
+}
+.ssearch-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ssearch-title {
+  font-size: 14px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* "Completed" / "Trash": this hit is real but isn't in the Active list the sidebar is showing. */
+.ssearch-badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 17px;
+}
+.ssearch-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ssearch-meta > span + span::before {
+  content: '·';
+  margin-right: 6px;
+}
+.ssearch-agent {
+  color: var(--text-2);
+}
+.ssearch-snippet {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 17px;
+  /* The server already caps the window; this keeps a wide match to one line in the row. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ssearch-snippet mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--brand-tint-hover);
+  color: var(--brand-strong);
+}
+.ssearch-empty {
+  padding: 28px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.ssearch-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ssearch-hint-warn {
+  color: var(--warning);
+}
+.ssearch-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--text-4);
+}
+.ssearch-keys kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-family: inherit;
+  font-size: 11px;
+}
+/* Magnifier in the session column header — the no-keyboard way into the palette. Takes the
+   `margin-left: auto` so it and the scope menu sit together at the right edge. */
+.session-col-search {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+.session-col-search:hover {
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
