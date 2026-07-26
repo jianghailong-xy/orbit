@@ -136,20 +136,31 @@ func runLoop(cfg *RunnerConfig) {
 	// follow the runner instead of a hardcoded web/mobile list.
 	var modelCatalogMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
+	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
+	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
+	// hourly (see the heartbeat loop): model lineups change rarely, and the Claude fetch spawns a
+	// few `claude -p` processes, so there's no reason to run it often.
 	refreshModelCatalog := func() {
-		if !codexCLIAvailable() {
-			return
+		catalog := &ModelCatalog{}
+		if codexCLIAvailable() {
+			if models, err := fetchCodexModelCatalog(loopCtx); err != nil {
+				logln("codex model catalog refresh failed:", err)
+			} else {
+				catalog.Codex = models
+			}
 		}
-		models, err := fetchCodexModelCatalog(loopCtx)
-		if err != nil {
-			logln("codex model catalog refresh failed:", err)
-			return
+		if claudeCLIAvailable() {
+			if models, err := fetchClaudeModelCatalog(loopCtx); err != nil {
+				logln("claude model catalog refresh failed:", err)
+			} else {
+				catalog.Claude = models
+			}
 		}
-		if len(models) == 0 {
-			return
+		if len(catalog.Codex) == 0 && len(catalog.Claude) == 0 {
+			return // nothing fetched this round — leave the last good catalog in place
 		}
 		modelCatalogMu.Lock()
-		hbModelCatalog = &ModelCatalog{Codex: models}
+		hbModelCatalog = catalog
 		modelCatalogMu.Unlock()
 	}
 	go refreshModelCatalog()
@@ -179,6 +190,8 @@ func runLoop(cfg *RunnerConfig) {
 					assetMu.Lock()
 					hbCommands, hbSkills = c, s
 					assetMu.Unlock()
+				}
+				if cycles%120 == 0 { // model catalog (Codex + Claude) every ~60 min
 					go refreshModelCatalog()
 				}
 				mu.Lock()

@@ -93,7 +93,8 @@ type SlashCommandInfo struct {
 }
 
 type ModelCatalog struct {
-	Codex []ModelInfo `json:"codex,omitempty"`
+	Codex  []ModelInfo `json:"codex,omitempty"`
+	Claude []ModelInfo `json:"claude,omitempty"`
 }
 
 type ModelInfo struct {
