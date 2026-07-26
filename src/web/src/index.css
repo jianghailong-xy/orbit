@@ -5649,6 +5649,36 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A vendor the user has already connected. The card still connects another key, so it keeps the
+   normal surface and marks itself at the edges: a tinted border and a check. */
+.provider-card.connected {
+  border-color: var(--success-border);
+}
+.provider-card.connected .pc-sub {
+  color: var(--success);
+  font-weight: 500;
+}
+.provider-card .pc-logo {
+  position: relative;
+  flex: none;
+  display: grid;
+}
+.provider-card .pc-check {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-raised);
+  background: var(--success-solid);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
 
 .provider-tile {
   flex: none;
@@ -5738,6 +5768,17 @@ body {
   margin: 0 0 20px;
   font-size: 14px;
   color: var(--text-3);
+}
+
+/* The gallery below an existing list. */
+.provider-more {
+  margin-top: 28px;
+}
+.provider-more h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 /* The connect page (/providers/new/:slug, /providers/:id): a narrow, numbered walkthrough. */

@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
+import { api } from '../api';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 
 // The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
@@ -71,21 +74,59 @@ export function ProviderTile({
 }
 
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
- *  deep-linkable (/providers/new/anthropic) and the browser's back button works. */
+ *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
+ *
+ *  A vendor already connected says so on its card — otherwise the gallery is a wall of identical
+ *  logos with no way to tell what's set up. It stays a link either way: a second key for the same
+ *  vendor is a supported thing to want. */
 export function ProviderGallery() {
+  const providers = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+  });
+  // How many of the user's providers each vendor accounts for. A row records the preset it was
+  // created from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts
+  // towards Anthropic.
+  const connected = new Map<string, number>();
+  for (const p of providers.data ?? []) {
+    if (p.presetSlug) connected.set(p.presetSlug, (connected.get(p.presetSlug) ?? 0) + 1);
+  }
+
   return (
     <div className="provider-gallery">
-      {PROVIDER_PRESETS.map((p) => (
-        <Link key={p.slug} to={`/providers/new/${p.slug}`} className="provider-card">
-          <ProviderTile slug={p.slug} label={p.label} />
-          <div style={{ minWidth: 0 }}>
-            <div className="pc-name">{p.label}</div>
-            <div className="pc-sub">
-              {p.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'}
+      {PROVIDER_PRESETS.map((p) => {
+        const count = connected.get(p.slug) ?? 0;
+        return (
+          <Link
+            key={p.slug}
+            to={`/providers/new/${p.slug}`}
+            className={`provider-card${count ? ' connected' : ''}`}
+          >
+            {/* The check rides on the logo's corner rather than the row, so marking a card costs
+                no width — these names already fill it. */}
+            <span className="pc-logo">
+              <ProviderTile slug={p.slug} label={p.label} />
+              {count > 0 && (
+                <span className="pc-check" aria-hidden="true">
+                  ✓
+                </span>
+              )}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div className="pc-name">{p.label}</div>
+              <div className="pc-sub">
+                {count === 0
+                  ? p.runtime === 'codex'
+                    ? 'OpenAI-compatible'
+                    : 'Anthropic-compatible'
+                  : count === 1
+                    ? 'Connected'
+                    : `Connected · ${count} keys`}
+              </div>
             </div>
-          </div>
-        </Link>
-      ))}
+          </Link>
+        );
+      })}
       <Link to="/providers/new/custom" className="provider-card custom">
         <ProviderTile slug="custom" label="Custom" muted />
         <div style={{ minWidth: 0 }}>

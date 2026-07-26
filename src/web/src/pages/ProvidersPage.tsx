@@ -110,13 +110,21 @@ export function ProvidersPage() {
           <ProviderGallery />
         </div>
       ) : (
-        <Table
-          rowKey="id"
-          style={{ marginTop: 12 }}
-          dataSource={providers.data ?? []}
-          columns={columns}
-          pagination={false}
-        />
+        <>
+          <Table
+            rowKey="id"
+            style={{ marginTop: 12 }}
+            dataSource={providers.data ?? []}
+            columns={columns}
+            pagination={false}
+          />
+          {/* The gallery stays on the page once the list isn't empty: it's how another vendor gets
+              connected, and it's where "which of these do I already have?" gets answered. */}
+          <div className="provider-more">
+            <h3>Connect another provider</h3>
+            <ProviderGallery />
+          </div>
+        </>
       )}
     </div>
   );
