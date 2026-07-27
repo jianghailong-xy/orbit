@@ -332,6 +332,33 @@ private struct CornerCutout: Shape {
     }
 }
 
+/// The opaque fill behind the drawer's circular icon buttons — one step up from `drawerSurface` so the
+/// disc reads in both modes. Deliberately not the translucent `.quaternary` used for inline badges: the
+/// bottom bar floats over the scrolling rail, and a see-through disc would show session titles sliding
+/// behind the glyph.
+private let drawerChip = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 44 / 255, green: 44 / 255, blue: 46 / 255, alpha: 1)   // #2C2C2E
+        : UIColor(white: 0.925, alpha: 1)                                     // #ECECEC
+})
+
+/// The ChatGPT-style circular chrome for a drawer icon button (search at the top, Settings at the
+/// bottom): one glyph on a 44pt neutral disc — also the HIG minimum tap target. The disc is a
+/// fixed-size container, so the glyph uses the Dynamic-Type-static `orbitControlGlyph`; a scaling
+/// token would overflow it at the larger text sizes.
+private struct DrawerCircleGlyph: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.orbitControlGlyph.weight(.semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .background(drawerChip, in: Circle())
+            .contentShape(Circle())
+    }
+}
+
 /// One place for the drawer's spacing rhythm so every row lines up on the same grid. Tuned for a
 /// calm, ChatGPT-style rail: roomy ~44pt rows, a hair of space between them, and a rounded selection
 /// pill that's inset from both edges rather than an edge-to-edge tint.
@@ -343,8 +370,9 @@ private enum DrawerMetrics {
     static let textLeading = hInset + padH         // 22 — aligns the title/section headers to row content
 }
 
-/// The left navigation drawer: the section rail (mirroring the web sidebar) over the account footer.
-/// The current section is highlighted.
+/// The left navigation drawer: a search header over the section rail (mirroring the web sidebar), with
+/// a floating New session / Settings action bar laid over the rail's bottom. The current section is
+/// highlighted.
 private struct NavigationDrawer: View {
     @Environment(AppModel.self) private var model
     let close: () -> Void
@@ -378,8 +406,9 @@ private struct NavigationDrawer: View {
                     close()
                     model.searchOpen = true
                 } label: {
-                    Image(systemName: "magnifyingglass")
+                    DrawerCircleGlyph(systemName: "magnifyingglass")
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("Search sessions")
                 .keyboardShortcut("k", modifiers: .command)
             }
@@ -389,9 +418,9 @@ private struct NavigationDrawer: View {
             .padding(.bottom, 8)
 
             List {
-                // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings and
-                // Admin fold into the account footer menu below. The runner-grouped agents still surface
-                // each machine by name — so the rail is just Agents (as machines) + Tasks.
+                // Runners is dropped from the drawer rail on iOS (it lives under Settings); Settings is
+                // the action bar's gear below, and Admin sits inside Settings. The runner-grouped agents
+                // still surface each machine by name — so the rail is just Agents (as machines) + Tasks.
                 ForEach(AppSection.visible(isAdmin: isAdmin).filter { ![.runners, .settings, .admin].contains($0) }) { section in
                     // The Agents nav row is replaced in place by its runner-grouped agents. Each runner
                     // is a collapsible row (icon · online dot · agent count) that expands to its agents,
@@ -427,18 +456,64 @@ private struct NavigationDrawer: View {
                 expandedRunners.insert(key)
                 didSeedExpansion = true
             }
-
-            Divider()
-            AccountFooter(onSelectSection: { section in
-                model.selectedSection = section
-                close()
-            })
-                .background(.bar)
+            // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
+            // divider, so the list keeps the full drawer height and rows slide under the buttons. The
+            // matching bottom scroll margin lets the last row still be scrolled clear of them.
+            .contentMargins(.bottom, 60, for: .scrollContent)
+            .overlay(alignment: .bottom) { actionBar }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         // One level below the content card's background (ChatGPT-style), so the undimmed white card
         // separates from the drawer in light mode and the shadow band stays visible in dark mode.
         .background(drawerSurface)
+    }
+
+    // MARK: Action bar
+
+    /// The drawer's floating action bar, mirroring ChatGPT's: a prominent "New session" capsule with a
+    /// circular Settings button trailing it, laid over the rail instead of docked under a divider.
+    /// It replaces the account footer that used to sit here — Settings already shows the signed-in
+    /// account and now carries the actions that footer's menu owned (Admin, Sign out), so the avatar
+    /// row is redundant. "New session" starts a draft with the current agent (`currentAgentID`, the
+    /// same target as macOS ⌘N), which is the compact shell's only entry point that doesn't first
+    /// require navigating to that agent's session list.
+    private var actionBar: some View {
+        let canCompose = model.currentAgentID != nil
+        return HStack(spacing: 12) {
+            Button {
+                model.newSessionInCurrentAgent()
+                close()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.pencil")
+                    Text("New session")
+                }
+                .font(.orbitControl.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 11)
+                .background(Color.accentColor.opacity(canCompose ? 1 : 0.35), in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canCompose)
+
+            Spacer(minLength: 8)
+
+            Button {
+                model.selectedSection = .settings
+                close()
+            } label: {
+                DrawerCircleGlyph(systemName: AppSection.settings.systemImage)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppSection.settings.title)
+        }
+        // One shadow pass over both controls (the Spacer contributes nothing), so each shape gets the
+        // soft lift that separates it from the rail scrolling underneath.
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        .padding(.horizontal, DrawerMetrics.hInset)
+        .padding(.bottom, 8)
     }
 
     /// Shared chrome for a tappable drawer row: a consistent height and an inset, rounded selection
