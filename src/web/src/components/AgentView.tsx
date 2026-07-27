@@ -1143,6 +1143,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   const selected = selectedFromList ?? selectedFromDetail;
   const selectedMissing = !!selectedId && !selected && sessionDetailQ.isError;
   const selectedDeleted = !!selected?.deletedAt;
+  // Filed as Completed (the Archived tab). List rows don't carry archived_at (see
+  // SessionsService.list), so the detail is the only source — it's fetched for whatever
+  // session is open, which is exactly when this is read (the header's ⋮ menu).
+  const selectedArchived = !!detailForSelected?.archivedAt;
   // A merge's outcome lands asynchronously (≤1 heartbeat after the click) — but the only place
   // it surfaces is the worktree status bar, and only if the user is still on this session with the
   // file panel expanded. Toast the landing (success or the failure reason) the moment it flips off
@@ -3161,6 +3165,20 @@ export function AgentView({ runner }: { runner: Runner }) {
                         },
                       ]
                     : [
+                        // A Completed session is filed away, not gone — offer the same Restore
+                        // its row has on the Completed tab, so one opened from there can be put
+                        // back on Active without going back to hunt for the row.
+                        ...(selectedArchived
+                          ? [
+                              {
+                                key: 'restore',
+                                icon: <UndoOutlined />,
+                                label: 'Restore',
+                                onClick: () => restoreMut.mutate(selected.id),
+                              },
+                              { type: 'divider' as const },
+                            ]
+                          : []),
                         {
                           key: 'share',
                           icon: <ShareAltOutlined />,
