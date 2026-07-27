@@ -277,6 +277,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** An agent the owner can see was created or updated via MCP. Published on the calling
+   *  (orchestrator) session — the only session context that path has — so it rides the same hub
+   *  and resolves to that owner; streamForUser maps it to ControlEventType.AGENT_CHANGED. */
+  publishAgentChanged(sessionId: string, agentId: string): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.AGENT_CHANGED,
+      ts: new Date().toISOString(),
+      payload: { agentId },
+    });
+  }
+
   // ── user-scoped control plane (SSE: GET /api/events) ────────────────────
   //
   // One per-user stream multiplexes lifecycle/status/approval/background events across ALL of
@@ -331,6 +343,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // A pure nudge to refetch the owner's task list — no DB augmentation needed; the id
         // travels straight through from publishTaskChanged.
         data = { taskId: String(ev.payload.taskId ?? '') };
+        break;
+      case ControlEventType.AGENT_CHANGED:
+        // Same: a nudge to refetch the owner's agent list. The id here is the CHANGED agent —
+        // the envelope's `agentId` stays the calling session's agent.
+        data = { agentId: String(ev.payload.agentId ?? '') };
         break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED:

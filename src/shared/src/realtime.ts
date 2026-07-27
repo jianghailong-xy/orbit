@@ -32,6 +32,10 @@ export enum ControlEventType {
    *  task_create/task_update. `data` is a `ControlTaskChanged`; it's only a nudge to refetch the
    *  task list/board. `sessionId` names the task's creator session (its scope on this stream). */
   TASK_CHANGED = 'task.changed',
+  /** An agent the owner can see was created or updated — via an orchestrator's MCP
+   *  agent_create/agent_update. `data` is a `ControlAgentChanged`; like `task.changed` it's only a
+   *  nudge to refetch the agent list. `sessionId` names the calling (orchestrator) session. */
+  AGENT_CHANGED = 'agent.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -92,4 +96,11 @@ export interface ControlBackgroundTask {
  *  future fine-grained cache updates and logging. */
 export interface ControlTaskChanged {
   taskId: string;
+}
+
+/** `data` for `agent.changed`. As with `task.changed`, the client just refetches its agent list;
+ *  the id is carried for future fine-grained cache updates and logging. NOTE: this is the CHANGED
+ *  agent, not the envelope's `agentId` (which is the calling session's agent). */
+export interface ControlAgentChanged {
+  agentId: string;
 }

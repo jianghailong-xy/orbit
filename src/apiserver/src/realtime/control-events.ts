@@ -37,6 +37,8 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.BACKGROUND_TASK;
     case RunEventType.TASK_CHANGED:
       return ControlEventType.TASK_CHANGED;
+    case RunEventType.AGENT_CHANGED:
+      return ControlEventType.AGENT_CHANGED;
     default:
       return null;
   }
