@@ -28,6 +28,9 @@ struct ConsoleView: View {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
                     TranscriptView(console: console)
+                    // Errors only, and sticky until the ✕ — this band is in flow, so anything that
+                    // comes and goes on a timer here shoves the composer around while the user is
+                    // typing in it. Confirmations belong in the toast host (see `showToast`).
                     if let msg = console.statusMessage {
                         HStack {
                             Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)

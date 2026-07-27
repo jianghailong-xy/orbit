@@ -110,36 +110,3 @@ extension View {
         modifier(SessionRowActions(session: session, scope: scope, onTag: onTag))
     }
 }
-
-// MARK: - Undo toast
-
-private struct SessionUndoToast: ViewModifier {
-    @Environment(AppModel.self) private var model
-
-    func body(content: Content) -> some View {
-        content
-            .overlay(alignment: .bottom) {
-                if let undo = model.sessionUndo {
-                    HStack(spacing: 12) {
-                        Text(undo.message).foregroundStyle(.white)
-                        Spacer(minLength: 12)
-                        Button("Undo") { model.undoSessionAction() }
-                            .font(.body.weight(.semibold))
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .background(.black.opacity(0.85), in: Capsule())
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .id(undo.id)
-                }
-            }
-            .animation(.snappy, value: model.sessionUndo)
-    }
-}
-
-extension View {
-    /// Floats the "Completed / Deleted … Undo" toast above the shell. Attach once at a root shell.
-    func sessionUndoToast() -> some View { modifier(SessionUndoToast()) }
-}

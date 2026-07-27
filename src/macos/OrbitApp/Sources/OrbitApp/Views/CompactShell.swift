@@ -157,7 +157,7 @@ struct CompactShell: View {
             // Stream lifecycle: start exactly the focused session's SSE and stop any other, from this
             // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
             .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
-            .sessionUndoToast()
+            .toastHost()
         }
     }
 

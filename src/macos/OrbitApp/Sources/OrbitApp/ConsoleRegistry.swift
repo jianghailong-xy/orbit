@@ -22,6 +22,9 @@ final class ConsoleRegistry {
     /// Shared image cache for user-turn attachments, injected into the transcript (one per instance
     /// so a session switch doesn't re-fetch). Seeded on send for an instant sent-image preview.
     let attachments: AttachmentImageStore
+    /// Where a console's fleeting confirmations go — the app's toast host. Set once by `AppModel` and
+    /// handed to every console this registry makes, so a `ConsoleModel` needn't know about `AppModel`.
+    @ObservationIgnored var onToast: (String) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -72,6 +75,7 @@ final class ConsoleRegistry {
                                  configuredProvidersLoaded: configuredProvidersLoaded,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
+        model.onToast = { [weak self] msg in self?.onToast(msg) }
         return model
     }
 
@@ -143,8 +147,10 @@ final class ConsoleRegistry {
     private func makeModel(_ sessionID: String, agentID: String?) -> ConsoleModel {
         let restored = store.load(sessionID: sessionID)
         if let restored { savedSeq[sessionID] = restored.state.maxSeq }
-        return ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
-                            tokenStore: tokenStore, attachments: attachments, restoring: restored)
+        let model = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
+                                 tokenStore: tokenStore, attachments: attachments, restoring: restored)
+        model.onToast = { [weak self] msg in self?.onToast(msg) }
+        return model
     }
 
     /// Snapshot a console's reducer and write it, unless nothing advanced since the last write.

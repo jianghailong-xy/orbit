@@ -145,9 +145,13 @@ final class ConsoleModel {
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
 
+    /// The sticky error line above the composer. Errors only — it's about the message you just tried
+    /// to send, so it belongs next to the input and stays until the ✕. Fleeting confirmations must
+    /// *not* land here: the line is in-flow, so each one reflowed the composer up and back down
+    /// mid-typing. They go to the app's toast host instead — see `showTransientStatus`.
     var statusMessage: String?
-    /// Auto-dismiss timer for a transient/informational `statusMessage` — see `showTransientStatus`.
-    private var statusDismissTask: Task<Void, Never>?
+    /// Sink for a fleeting confirmation — the app's toast host, injected by `ConsoleRegistry`.
+    @ObservationIgnored var onToast: (String) -> Void = { _ in }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
     /// composer. Keep a short in-memory tail, matching the web client; these are intentionally not
     /// persisted because no corresponding runner event exists.
@@ -226,28 +230,20 @@ final class ConsoleModel {
         wireWorktree()
     }
 
-    /// Hand the worktree sub-model the host context it needs: the live status (its poll cadence) and
-    /// the console status line (its action failures, plus the transient resume confirmation). Weak —
-    /// it must not retain the console it's owned by.
+    /// Hand the worktree sub-model the host context it needs: the live status (its poll cadence), the
+    /// console status line (its action failures) and the toast host (its confirmations). Weak — it
+    /// must not retain the console it's owned by.
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onStatus = { [weak self] msg in self?.statusMessage = msg }
         worktree.onInfo = { [weak self] msg in self?.showTransientStatus(msg) }
     }
 
-    /// Show a fleeting, informational status line that auto-clears after a few seconds — the native
-    /// equivalent of web's `message.success` toast. Errors set `statusMessage` directly and stay put
-    /// until the user dismisses them via the banner's ✕; a confirmation like "Resuming…" would linger
-    /// there forever, so it goes through here instead.
+    /// Show a fleeting, informational message — the native equivalent of web's `message.success`
+    /// toast. It floats in the app's toast host under the nav bar, self-dismissing there; errors set
+    /// `statusMessage` directly and stay in the line above the composer until the user's ✕.
     func showTransientStatus(_ msg: String) {
-        statusDismissTask?.cancel()
-        statusMessage = msg
-        statusDismissTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 4_000_000_000)
-            // Only clear if it's still the same message — a later error may have replaced it.
-            guard let self, self.statusMessage == msg else { return }
-            self.statusMessage = nil
-        }
+        onToast(msg)
     }
 
     /// Snapshot the full reducer (state + dedup/cursor internals) for the local store. Restoring

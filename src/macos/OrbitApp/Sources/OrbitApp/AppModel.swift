@@ -211,6 +211,9 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
+        // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
+        // one toast host, not the status line above the composer — see `showToast`.
+        consoleRegistry?.onToast = { [weak self] msg in self?.showToast(msg) }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
         #endif
@@ -948,15 +951,17 @@ final class AppModel {
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
-    /// A just-performed reversible action, surfaced as an Undo toast for a few seconds. Moving to
-    /// Open is the universal undo — the server's `restore` clears both completion and trash state.
-    struct SessionUndo: Identifiable, Equatable {
+    /// A fleeting message floated by the app's single toast host (see `toastHost()`) — the native
+    /// equivalent of web's `message.*` toasts. `undoSessionID` marks a just-performed reversible
+    /// action and adds the inline Undo button; moving to Open is the universal undo — the server's
+    /// `restore` clears both completion and trash state.
+    struct Toast: Identifiable, Equatable {
         let id = UUID()
         let message: String
-        let sessionID: String
+        var undoSessionID: String?
     }
-    var sessionUndo: SessionUndo?
-    private var undoDismiss: Task<Void, Never>?
+    var toast: Toast?
+    private var toastDismiss: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
     /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
@@ -966,17 +971,21 @@ final class AppModel {
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
     }
 
-    private func offerUndo(_ message: String, sessionID: String) {
-        sessionUndo = SessionUndo(message: message, sessionID: sessionID)
-        undoDismiss?.cancel()
-        undoDismiss = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
+    /// Float `message` as a toast for a few seconds. One carrying an action lives longer — the reader
+    /// has to take it in *and* decide whether to undo, which doesn't fit the 4s a bare confirmation
+    /// needs. Console-side confirmations arrive here too (see `ConsoleRegistry.onToast`).
+    func showToast(_ message: String, undoSessionID: String? = nil) {
+        toast = Toast(message: message, undoSessionID: undoSessionID)
+        toastDismiss?.cancel()
+        let seconds: UInt64 = undoSessionID == nil ? 4 : 6
+        toastDismiss = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             guard !Task.isCancelled else { return }
-            self?.sessionUndo = nil
+            self?.toast = nil
         }
     }
 
-    func dismissUndo() { undoDismiss?.cancel(); sessionUndo = nil }
+    func dismissToast() { toastDismiss?.cancel(); toast = nil }
 
     /// Complete a session, drop it from any open pane and offer Undo.
     func completeSession(_ id: String) {
@@ -991,7 +1000,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            offerUndo("Completed", sessionID: id)
+            showToast("Completed", undoSessionID: id)
         }
     }
 
@@ -1019,7 +1028,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            offerUndo("Deleted", sessionID: id)
+            showToast("Deleted", undoSessionID: id)
         }
     }
 
@@ -1102,9 +1111,9 @@ final class AppModel {
     }
 
     func undoSessionAction() {
-        guard let undo = sessionUndo else { return }
-        moveSessionToOpen(undo.sessionID)
-        dismissUndo()
+        guard let sessionID = toast?.undoSessionID else { return }
+        moveSessionToOpen(sessionID)
+        dismissToast()
     }
 
     // MARK: routing + notification intents
