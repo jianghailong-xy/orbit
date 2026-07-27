@@ -6,7 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateSessionTagDto, UpdateSessionTagDto } from './dto';
 
 // The 7 always-present preset-color tags (positions 0..6), seeded per owner on first use.
@@ -39,7 +41,12 @@ const TAG_ORDER: Prisma.SessionTagOrderByWithRelationInput[] = [
 
 @Injectable()
 export class SessionTagsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // @Global RealtimeModule. The tag library belongs to the owner, not to a session, so library
+    // edits push user-scoped; applying tags to a session refreshes that session's list row.
+    private readonly realtime: RealtimeService,
+  ) {}
 
   /** Idempotently create this owner's 7 system tags (no-op once they exist). Keyed on the
    *  (ownerId, name) unique, so it's safe to call on every list/create. */
@@ -68,10 +75,12 @@ export class SessionTagsService {
     });
     const position = (agg._max.position ?? SYSTEM_TAGS.length - 1) + 1;
     try {
-      return await this.prisma.sessionTag.create({
+      const tag = await this.prisma.sessionTag.create({
         data: { name: dto.name.trim(), color: dto.color, ownerId, isSystem: false, position },
         select: TAG_SELECT,
       });
+      this.realtime.publishForUser(ownerId, RunEventType.TAG_CHANGED, tag.id);
+      return tag;
     } catch (e) {
       throw this.rethrowNameConflict(e);
     }
@@ -86,7 +95,7 @@ export class SessionTagsService {
       throw new BadRequestException('nothing to update');
     }
     try {
-      return await this.prisma.sessionTag.update({
+      const updated = await this.prisma.sessionTag.update({
         where: { id },
         data: {
           ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
@@ -94,6 +103,8 @@ export class SessionTagsService {
         },
         select: TAG_SELECT,
       });
+      this.realtime.publishForUser(ownerId, RunEventType.TAG_CHANGED, id);
+      return updated;
     } catch (e) {
       throw this.rethrowNameConflict(e);
     }
@@ -106,6 +117,7 @@ export class SessionTagsService {
     }
     // Links cascade away at the DB level; the sessions themselves are untouched.
     await this.prisma.sessionTag.delete({ where: { id } });
+    this.realtime.publishForUser(ownerId, RunEventType.TAG_CHANGED, id);
     return { ok: true };
   }
 
@@ -128,6 +140,8 @@ export class SessionTagsService {
         ? [this.prisma.sessionTagLink.createMany({ data: ids.map((tagId) => ({ sessionId, tagId })) })]
         : []),
     ]);
+    // The list row shows a session's tag dots, so refresh that row on the other clients too.
+    this.realtime.publishSessionUpdated(sessionId);
     return this.tagsForSession(sessionId);
   }
 

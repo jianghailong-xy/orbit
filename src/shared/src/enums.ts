@@ -122,6 +122,16 @@ export enum RunEventType {
   // never persisted, never in a transcript stream; streamForUser maps it to
   // ControlEventType.AGENT_CHANGED so the owner's agent list refreshes without a manual reload.
   AGENT_CHANGED = 'agent_changed',
+  // A session's list-visible fields changed outside a turn — today only a rename, which no
+  // STATUS/TURN_END accompanies. Maps to ControlEventType.SESSION_UPDATED, so the client gets the
+  // same full summary it upserts for a status change.
+  SESSION_UPDATED = 'session_updated',
+  // Owner-level libraries: task lists, session tags, model providers. These have no session to
+  // hang off, so they're published USER-SCOPED (RealtimeService.publishForUser) — same hub, same
+  // NOTIFY bridge, but routed by owner id instead of by session.
+  TASK_LIST_CHANGED = 'task_list_changed',
+  TAG_CHANGED = 'tag_changed',
+  PROVIDER_CHANGED = 'provider_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -130,8 +140,12 @@ export function isLifecycleType(t: RunEventType): boolean {
   return (
     t === RunEventType.SESSION_CREATED ||
     t === RunEventType.SESSION_ENDED ||
+    t === RunEventType.SESSION_UPDATED ||
     t === RunEventType.TASK_CHANGED ||
-    t === RunEventType.AGENT_CHANGED
+    t === RunEventType.AGENT_CHANGED ||
+    t === RunEventType.TASK_LIST_CHANGED ||
+    t === RunEventType.TAG_CHANGED ||
+    t === RunEventType.PROVIDER_CHANGED
   );
 }
 

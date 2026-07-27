@@ -60,28 +60,40 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchAgents = (): void => {
       void qc.invalidateQueries({ queryKey: ['agents'] });
     };
-    let pendingSessions = false;
-    let pendingTasks = false;
-    let pendingAgents = false;
+    // The owner's tag library and the deployment's provider catalog: both are edited elsewhere
+    // (tags on the native clients, providers in the admin area) and neither polls, so push is the
+    // only way another client's edit reaches this tab.
+    const refetchTags = (): void => {
+      void qc.invalidateQueries({ queryKey: ['session-tags'] });
+    };
+    const refetchProviders = (): void => {
+      void qc.invalidateQueries({ queryKey: ['providers'] });
+    };
+    const REFETCH: Record<string, () => void> = {
+      sessions: refetchSessions,
+      tasks: refetchTasks,
+      agents: refetchAgents,
+      tags: refetchTags,
+      providers: refetchProviders,
+    };
+    // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
+    // delta), so this is a plain type-prefix → group map. Note the pairs: an agent rename and a
+    // tag recolor both change what the SESSION list rows render, so they refresh that too.
+    const groupsFor = (type: string): string[] => {
+      if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
+      if (type.startsWith('agent.')) return ['agents', 'sessions'];
+      if (type.startsWith('tag.')) return ['tags', 'sessions'];
+      if (type.startsWith('provider.')) return ['providers'];
+      return ['sessions'];
+    };
+    const pending = new Set<string>();
     const scheduleRefresh = (type: string): void => {
-      if (type.startsWith('task.')) pendingTasks = true;
-      else if (type.startsWith('agent.')) pendingAgents = true;
-      else pendingSessions = true;
+      for (const g of groupsFor(type)) pending.add(g);
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
-        if (pendingSessions) {
-          pendingSessions = false;
-          refetchSessions();
-        }
-        if (pendingTasks) {
-          pendingTasks = false;
-          refetchTasks();
-        }
-        if (pendingAgents) {
-          pendingAgents = false;
-          refetchAgents();
-        }
+        for (const g of pending) REFETCH[g]?.();
+        pending.clear();
       }, REFRESH_DEBOUNCE_MS);
     };
     // Close the stream and schedule a backoff reconnect. Guarded by `dropped` so it fires once per
@@ -103,22 +115,21 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         lastMsgAt = Date.now();
         setLive(true);
         // No sinceSeq replay — reconcile every list with a fresh snapshot on (re)connect so
-        // task/agent changes missed during the gap surface too.
-        refetchSessions();
-        refetchTasks();
-        refetchAgents();
+        // changes missed during the gap surface too.
+        for (const refetch of Object.values(REFETCH)) refetch();
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
-        let ev: { type?: string; sessionId?: string };
+        let ev: { type?: string };
         try {
           ev = JSON.parse(e.data);
         } catch {
           return;
         }
-        // Drop the keepalive ping and any frame without a sessionId (matches the native decode).
-        if (!ev || ev.type === 'ping' || !ev.sessionId) return;
-        scheduleRefresh(ev.type ?? '');
+        // Dispatch on `type` alone: the keepalive ping is the only frame to drop, and the
+        // user-scoped library events (tag/provider/task-list) legitimately carry no sessionId.
+        if (!ev?.type || ev.type === 'ping') return;
+        scheduleRefresh(ev.type);
       };
       es.onerror = () => drop();
     }

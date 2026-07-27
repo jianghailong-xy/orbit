@@ -23,6 +23,7 @@ import {
   backgroundPayloadOf,
   controlTypeFor,
   errorPayloadOf,
+  isUserScopedType,
 } from './control-events';
 
 const EVENT_CHANNEL = 'orbit_event';
@@ -56,6 +57,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
   private readonly ownerCache = new Map<string, { ownerId: string; agentId: string | null }>();
   private static readonly OWNER_CACHE_MAX = 10_000;
+  /** Hub key prefix for user-scoped events (see publishForUser). Session ids are UUIDs, so this
+   *  namespace can never collide with one. */
+  private static readonly USER_SCOPE = 'user:';
+  /** The "every user" owner id inside that namespace (see publishForAllUsers). */
+  private static readonly USER_SCOPE_ALL = '*';
   // Events that can lower an owner's "needs you" badge (an increment is already covered by the
   // approval-create alert push). On any of these, nudge PushService to reconcile and silently sync
   // the badge to the owner's other devices, incl. backgrounded iOS. See docs/cross-platform-badge-sync.md.
@@ -290,6 +296,47 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A session's list-visible fields changed with no turn behind it — a rename, a tag edit. Rides
+   *  the session.updated path, so the client refreshes the same list row it already upserts on a
+   *  status change (no new client-side handling needed). */
+  publishSessionUpdated(sessionId: string): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.SESSION_UPDATED,
+      ts: new Date().toISOString(),
+      payload: {},
+    });
+  }
+
+  /**
+   * Publish an event that belongs to a USER rather than to one session — the owner's task lists,
+   * session tags, and configured providers, none of which have a session to hang off.
+   *
+   * The hub is keyed by session id, so these ride a reserved `user:<ownerId>` key: it can never
+   * collide with a real session id (a UUID), `streamForRun` therefore never matches it, and
+   * `toControlEvent` recognizes the prefix and routes by owner without a DB lookup. Same NOTIFY
+   * bridge, same coalescing on the client — only the scoping differs.
+   */
+  publishForUser(ownerId: string, type: RunEventType, id: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${ownerId}`, {
+      seq: 0,
+      type,
+      ts: new Date().toISOString(),
+      payload: { id },
+    });
+  }
+
+  /** Same, but for a deployment-wide change every user sees — today only the shared (admin-owned)
+   *  model providers. Reaches every connected stream; keep it to genuinely global, low-rate edits. */
+  publishForAllUsers(type: RunEventType, id: string): void {
+    this.publish(`${RealtimeService.USER_SCOPE}${RealtimeService.USER_SCOPE_ALL}`, {
+      seq: 0,
+      type,
+      ts: new Date().toISOString(),
+      payload: { id },
+    });
+  }
+
   // ── user-scoped control plane (SSE: GET /api/events) ────────────────────
   //
   // One per-user stream multiplexes lifecycle/status/approval/background events across ALL of
@@ -314,10 +361,25 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     sessionId: string,
     ev: NormalizedRunEvent,
   ): Promise<ControlEvent | null> {
-    const meta = await this.resolveOwner(sessionId);
-    if (!meta || meta.ownerId !== userId) return null;
     const type = controlTypeFor(ev.type);
     if (!type) return null;
+    // User-scoped library events (publishForUser) are keyed `user:<ownerId>`, not by a session:
+    // route them by that id and ship an empty sessionId — no owner lookup, nothing to summarize.
+    if (isUserScopedType(type)) {
+      const owner = sessionId.startsWith(RealtimeService.USER_SCOPE)
+        ? sessionId.slice(RealtimeService.USER_SCOPE.length)
+        : null;
+      if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
+      return {
+        type,
+        sessionId: '',
+        agentId: null,
+        ts: ev.ts ?? new Date().toISOString(),
+        data: { id: String(ev.payload.id ?? '') },
+      };
+    }
+    const meta = await this.resolveOwner(sessionId);
+    if (!meta || meta.ownerId !== userId) return null;
 
     let data: Record<string, unknown>;
     switch (type) {

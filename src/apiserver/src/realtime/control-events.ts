@@ -39,9 +39,27 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TASK_CHANGED;
     case RunEventType.AGENT_CHANGED:
       return ControlEventType.AGENT_CHANGED;
+    case RunEventType.SESSION_UPDATED:
+      return ControlEventType.SESSION_UPDATED;
+    case RunEventType.TASK_LIST_CHANGED:
+      return ControlEventType.TASK_LIST_CHANGED;
+    case RunEventType.TAG_CHANGED:
+      return ControlEventType.TAG_CHANGED;
+    case RunEventType.PROVIDER_CHANGED:
+      return ControlEventType.PROVIDER_CHANGED;
     default:
       return null;
   }
+}
+
+/** The user-scoped library events: they carry no session, so `toControlEvent` routes them by owner
+ *  id and ships an empty `sessionId` (see the ControlEvent doc comment). */
+export function isUserScopedType(t: ControlEventType): boolean {
+  return (
+    t === ControlEventType.TASK_LIST_CHANGED ||
+    t === ControlEventType.TAG_CHANGED ||
+    t === ControlEventType.PROVIDER_CHANGED
+  );
 }
 
 /** `data` for `session.error`. Decision Q3: errors carry their own event. `recoverable` is only

@@ -1,17 +1,26 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
+import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
 @Injectable()
 export class TaskListsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // @Global RealtimeModule. A list has no session to hang an event off (the MCP tasklist_create
+    // path included), so these push user-scoped — see RealtimeService.publishForUser.
+    private readonly realtime: RealtimeService,
+  ) {}
 
   async create(ownerId: string, dto: CreateTaskListDto) {
     if (!dto.title) throw new BadRequestException('title is required');
-    return this.prisma.taskList.create({
+    const list = await this.prisma.taskList.create({
       data: { title: dto.title, ownerId },
     });
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, list.id);
+    return list;
   }
 
   async list(ownerId: string) {
@@ -134,13 +143,16 @@ export class TaskListsService {
 
   async update(ownerId: string, id: string, dto: UpdateTaskListDto) {
     await this.get(ownerId, id);
-    return this.prisma.taskList.update({ where: { id }, data: { title: dto.title } });
+    const list = await this.prisma.taskList.update({ where: { id }, data: { title: dto.title } });
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
+    return list;
   }
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
     // Tasks are detached (list_id -> null) by the SET NULL FK, not deleted.
     await this.prisma.taskList.delete({ where: { id } });
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return { ok: true };
   }
 }

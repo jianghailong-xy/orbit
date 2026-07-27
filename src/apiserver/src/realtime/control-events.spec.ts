@@ -6,6 +6,7 @@ import {
   backgroundPayloadOf,
   controlTypeFor,
   errorPayloadOf,
+  isUserScopedType,
 } from './control-events';
 
 test('controlTypeFor maps the forwarded subset', () => {
@@ -22,6 +23,28 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.SESSION_ENDED), ControlEventType.SESSION_ENDED);
   assert.equal(controlTypeFor(RunEventType.TASK_CHANGED), ControlEventType.TASK_CHANGED);
   assert.equal(controlTypeFor(RunEventType.AGENT_CHANGED), ControlEventType.AGENT_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.SESSION_UPDATED), ControlEventType.SESSION_UPDATED);
+  assert.equal(controlTypeFor(RunEventType.TASK_LIST_CHANGED), ControlEventType.TASK_LIST_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.TAG_CHANGED), ControlEventType.TAG_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.PROVIDER_CHANGED), ControlEventType.PROVIDER_CHANGED);
+});
+
+test('only the owner-library events are user-scoped', () => {
+  for (const t of [
+    ControlEventType.TASK_LIST_CHANGED,
+    ControlEventType.TAG_CHANGED,
+    ControlEventType.PROVIDER_CHANGED,
+  ]) {
+    assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
+  }
+  for (const t of [
+    ControlEventType.SESSION_UPDATED,
+    ControlEventType.TASK_CHANGED,
+    ControlEventType.AGENT_CHANGED,
+    ControlEventType.APPROVAL_REQUESTED,
+  ]) {
+    assert.equal(isUserScopedType(t), false, `${t} is session-scoped`);
+  }
 });
 
 test('controlTypeFor drops transcript/data-plane events', () => {
