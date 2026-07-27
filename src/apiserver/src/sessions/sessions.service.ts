@@ -16,6 +16,7 @@ import {
   AgentProvider,
   type BgShell,
   deriveBackgroundShells,
+  type EventSearchResponse,
   FilePatch,
   MAX_PROMPT_CHARS,
   RunEventType,
@@ -996,6 +997,95 @@ export class SessionsService {
           ...(cut.truncated ? { truncated: true as const } : {}),
         };
       }),
+    };
+  }
+
+  /**
+   * Find inside ONE session, over its whole history rather than the tail the client happens to
+   * have loaded — the transcript is tail-first, so "where did I see that" is usually older than
+   * the loaded window, and half of it (folded tool bodies, payloads the page trimmed to a
+   * preview) isn't in the client's DOM at all even when it is loaded.
+   *
+   * A plain scan, deliberately: bounded to one session, the partial index that skips noise
+   * events leaves only renderable rows — 258 of 27k in the largest session here, p99 789 — so
+   * the ILIKE runs over a few hundred payloads. Measured 26ms warm / 98ms cold on that largest
+   * session. That's also why CONTENT_MIN_CHARS doesn't apply: the global palette's floor exists
+   * because a sub-trigram pattern makes pg_trgm recheck every indexed row in the *deployment*,
+   * which a single session's few hundred rows can't reproduce.
+   */
+  async searchEvents(
+    userId: string,
+    id: string,
+    q: string | undefined,
+    limit?: number,
+  ): Promise<EventSearchResponse> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const norm = normalizeSearchQuery(q);
+    if (!norm) return { q: '', total: 0, hits: [] };
+    const take = Math.min(Math.max(Math.trunc(limit ?? 100), 1), 200);
+
+    const rows = await this.prisma.$queryRaw<
+      { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
+    >(Prisma.sql`
+      WITH body AS (
+        SELECT
+          seq, type, created_at, payload,
+          -- Every string a transcript card can show, in one column so the match and the snippet
+          -- can never disagree about where the hit is. The two JSON casts (a tool's input, and a
+          -- tool_result whose content is an array of blocks rather than a plain string) search
+          -- the JSON *encoding*, so a query containing a quote or a newline won't match inside
+          -- them — acceptable for what people actually search for (a path, a name, a phrase).
+          concat_ws(' ',
+            payload->>'text',
+            payload->>'name',
+            (payload->'input')::text,
+            CASE WHEN jsonb_typeof(payload->'content') = 'string'
+                 THEN payload->>'content'
+                 ELSE (payload->'content')::text END,
+            payload->>'message'
+          ) AS text
+        FROM run_event
+        WHERE session_id = ${id}::uuid
+          AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
+      )
+      SELECT
+        seq,
+        type,
+        created_at AS "ts",
+        payload->>'name' AS "toolName",
+        -- Counted over every match, not just the page: the UI says "100 of 240" rather than
+        -- implying the capped list is all there is. Window functions run before LIMIT.
+        (count(*) OVER ())::int AS "total",
+        -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
+        -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
+        -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
+        substr(
+          text,
+          greatest(1, strpos(lower(text), lower(${norm.raw})) - 60),
+          length(${norm.raw}) + 120
+        ) AS "snippet"
+      FROM body
+      WHERE text ILIKE ${norm.pattern}
+      ORDER BY seq DESC
+      LIMIT ${take}::int
+    `);
+
+    return {
+      q: norm.raw,
+      total: rows[0]?.total ?? 0,
+      hits: rows.map((r) => ({
+        seq: r.seq,
+        type: r.type,
+        toolName: r.toolName ?? null,
+        ts: r.ts,
+        // Collapsed for the same reason the palette collapses: a window cut out of a markdown
+        // body or a JSON blob is full of newlines and would render as an accordion.
+        snippet: (r.snippet ?? '').replace(/\s+/g, ' ').trim(),
+      })),
     };
   }
 

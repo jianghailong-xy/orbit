@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { SessionSearchResponse } from '@orbit/shared';
+import type { EventSearchResponse, SessionSearchResponse } from '@orbit/shared';
 import { api, getSession, getSessionDiff } from '../api';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './agentDefaults';
@@ -105,6 +105,24 @@ export const sessionSearchQuery = (q: string) =>
       api<SessionSearchResponse>(`/sessions/search?q=${encodeURIComponent(q)}&limit=20`),
     // A search result is a snapshot of a moving list; a minute of staleness is invisible inside
     // one palette session and keeps arrow-keying through results from refetching.
+    staleTime: 60_000,
+  });
+
+/**
+ * Find within one session, backing ⌘F. Searches the session's whole history server-side — the
+ * transcript only holds the tail it has lazily loaded, and folded tool bodies aren't in the DOM
+ * even when they are loaded, so the client can't answer this for itself.
+ *
+ * Keyed on (session, query) so backspacing through a query re-answers from cache. The 200 cap is
+ * the server's own maximum; `total` still reports every match, so a capped list can say so.
+ */
+export const sessionEventSearchQuery = (sessionId: string, q: string) =>
+  queryOptions({
+    queryKey: ['session-event-search', sessionId, q] as const,
+    queryFn: () =>
+      api<EventSearchResponse>(
+        `/sessions/${sessionId}/events/search?q=${encodeURIComponent(q)}&limit=200`,
+      ),
     staleTime: 60_000,
   });
 

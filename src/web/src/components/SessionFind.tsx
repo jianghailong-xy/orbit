@@ -1,33 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { CloseOutlined, DownOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons';
+import { CloseOutlined, DownOutlined, LoadingOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import type { EventSearchHit } from '@orbit/shared';
+import { sessionEventSearchQuery } from '../lib/queries';
+import { splitHighlight } from '../lib/searchHighlight';
 import { findMatches, type FindSegment } from '../lib/findMatches';
+import { relTime } from './Transcript';
 
 /**
- * Find-in-session (⌘F / Ctrl+F): a browser-style find bar scoped to the open transcript.
+ * Find within the open session (⌘F / Ctrl+F).
  *
- * Highlighting goes through the CSS Custom Highlight API rather than wrapping matches in `<mark>`
- * elements. The transcript is React-rendered and streams while you read it; injecting nodes into
- * it would have React reconcile against a tree it doesn't own (and, at worst, throw removing a
- * child it can't find). Highlights are painted from Ranges, leaving the DOM untouched.
+ * The search runs on the server, over the session's whole history. It has to: the transcript
+ * loads tail-first, so the client holds only the newest page or two, and even inside that window
+ * the bodies of folded tool cards and server-trimmed payload previews are not in the DOM. A find
+ * that only walked the DOM would answer "no matches" for things the session plainly contains.
+ *
+ * So the server owns the answer (which events match, and how many), and the client owns the
+ * showing of it: it loads back to a hit that isn't in the window yet, scrolls to it, and paints
+ * every occurrence in view through the CSS Custom Highlight API — Ranges, never injected `<mark>`
+ * elements, because the transcript is React-rendered and streams while you read it.
  */
-
-// TypeScript's lib.dom only generates HighlightRegistry's `forEach`, not the maplike members the
-// spec (and every implementation) actually has. Declared here rather than worked around with
-// casts, in the same spirit as RunnerRegisterGuide's `declare const __PUBLIC_ORIGIN__`.
-declare global {
-  interface HighlightRegistry {
-    set(name: string, highlight: Highlight): HighlightRegistry;
-    delete(name: string): boolean;
-  }
-}
 
 const HL_ALL = 'orbit-find';
 const HL_CURRENT = 'orbit-find-current';
-
-/** Without the Highlight API there is nothing to paint, so ⌘F is left to the browser instead of
- *  being swallowed by a find bar that can only count. */
-export const FIND_SUPPORTED =
-  typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
+/** Painting needs the Highlight API; the search itself doesn't, so everything else still works. */
+const CAN_PAINT = typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight === 'function';
 
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -40,12 +37,16 @@ export const openSessionFind = (): void => {
   window.dispatchEvent(new Event(OPEN_EVENT));
 };
 
-const DEBOUNCE_MS = 120;
-/** How many older pages one "search earlier" run may pull in before giving up — a bound on the
- *  requests a single ⇧↵ can fire against a session with tens of thousands of events. */
-const MAX_EARLIER_PAGES = 10;
-/** Keep the current match this far from the scroll container's edges. */
-const SCROLL_MARGIN = 80;
+/** Long enough that typing a word is one request, not five. */
+const DEBOUNCE_MS = 200;
+/** A ceiling on the pages one jump may pull in. The deepest session in this deployment holds
+ *  ~2,100 renderable events (11 pages of 200); 30 is headroom, not a working limit. */
+const MAX_LOAD_PAGES = 30;
+/** Keep a jumped-to match this far from the scroll container's top. */
+const SCROLL_MARGIN = 96;
+/** How long a jumped-to card stays outlined — enough to catch the eye when the match itself is
+ *  folded away inside it and nothing gets highlighted. */
+const FLASH_MS = 1400;
 
 /** Elements whose text is part of the surrounding sentence — a match may run straight through
  *  them. Anything else starts a new block (see FindSegment.block). */
@@ -57,6 +58,17 @@ const INLINE = new Set([
 /** Subtrees that hold no readable transcript text. */
 const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'SVG', 'CANVAS', 'TEXTAREA', 'INPUT', 'SELECT']);
 
+/** What kind of thing matched, for the result row. Tool hits show the tool's own name instead. */
+const TYPE_LABEL: Record<string, string> = {
+  user: 'You',
+  assistant: 'Reply',
+  thinking: 'Thinking',
+  error: 'Error',
+};
+
+const hitLabel = (hit: EventSearchHit): string =>
+  hit.toolName ?? TYPE_LABEL[hit.type] ?? (hit.type === 'tool_result' ? 'Tool output' : hit.type);
+
 interface Props {
   /** Resets the bar when the user switches sessions — the matches point at a DOM that's gone. */
   sessionId: string;
@@ -64,222 +76,235 @@ interface Props {
   containerRef: React.RefObject<HTMLDivElement | null>;
   /** Pulls in the next older page; resolves true when events were actually prepended. */
   loadOlder: () => Promise<boolean>;
-  /** Whether the server still holds older events than the ones loaded. */
+  /** Whether the server still holds events older than the ones loaded. */
   hasOlder: () => boolean;
+  /** The earliest seq currently in the transcript, or null while nothing is loaded — how a jump
+   *  knows whether its target is already in the window. */
+  oldestSeq: () => number | null;
 }
 
-export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder }: Props) {
+export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, oldestSeq }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<Range[]>([]);
-  const [index, setIndex] = useState(0);
-  const [searchingEarlier, setSearchingEarlier] = useState(false);
-  // Mirrors of the above for the callbacks that run outside React's render cycle (key handlers,
-  // the MutationObserver, the load-earlier loop), which must see the latest values.
-  const matchesRef = useRef<Range[]>([]);
-  const indexRef = useRef(0);
-  const queryRef = useRef('');
-  const openRef = useRef(false);
-  const earlierRef = useRef(false);
-  // Whether unsearched older events remain; refreshed on every scan so the count can say so.
-  const [olderPending, setOlderPending] = useState(false);
+  const [debounced, setDebounced] = useState('');
+  const [cursor, setCursor] = useState(-1); // index into hits; -1 = nothing selected yet
+  const [jumping, setJumping] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // The two callbacks the parent hands down, held in refs so every callback below can be stable.
-  // AgentView re-renders on each streamed chunk; if these leaked into dependency arrays the
-  // debounce effect would be torn down and restarted faster than its own timer could fire.
+  const listRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(false);
+  const queryRef = useRef('');
+  const hitsRef = useRef<EventSearchHit[]>([]);
+  const cursorRef = useRef(-1);
+  const jumpingRef = useRef(false);
+  /** The seq of the hit we last jumped to — what a rescan re-derives the current highlight from,
+   *  since a prepend or a streamed chunk replaces the Range objects wholesale. */
+  const currentSeqRef = useRef<number | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The callbacks the parent hands down, held in refs so every callback below stays stable:
+  // AgentView re-renders on each streamed chunk, and the debounce effect must not be torn down
+  // and restarted faster than its own timer can fire.
   const loadOlderRef = useRef(loadOlder);
   const hasOlderRef = useRef(hasOlder);
+  const oldestSeqRef = useRef(oldestSeq);
   useEffect(() => {
     loadOlderRef.current = loadOlder;
     hasOlderRef.current = hasOlder;
+    oldestSeqRef.current = oldestSeq;
   });
 
-  const paint = useCallback((ranges: Range[], idx: number) => {
-    if (!FIND_SUPPORTED) return;
+  const trimmed = debounced.trim();
+  const search = useQuery({
+    ...sessionEventSearchQuery(sessionId, trimmed),
+    enabled: open && trimmed.length > 0,
+    // Hold the previous hits while the next query is in flight, so the list doesn't blank out
+    // between keystrokes.
+    placeholderData: keepPreviousData,
+  });
+  // Newest first, as the server returns them: the matches nearest what the user is reading come
+  // first, and ↓ walks back through history from there.
+  const hits = trimmed ? (search.data?.hits ?? []) : [];
+  const total = trimmed ? (search.data?.total ?? 0) : 0;
+  hitsRef.current = hits;
+
+  // ── painting ────────────────────────────────────────────────────────────────────────────────
+
+  const paint = useCallback((ranges: Range[], current: Range | null) => {
+    if (!CAN_PAINT) return;
     if (!ranges.length) {
       CSS.highlights.delete(HL_ALL);
       CSS.highlights.delete(HL_CURRENT);
       return;
     }
     CSS.highlights.set(HL_ALL, new Highlight(...ranges));
-    const cur = ranges[idx];
-    if (!cur) {
+    if (!current) {
       CSS.highlights.delete(HL_CURRENT);
       return;
     }
-    const one = new Highlight(cur);
+    const one = new Highlight(current);
     one.priority = 1; // both highlights cover the current match; this one has to win
     CSS.highlights.set(HL_CURRENT, one);
   }, []);
 
-  const setResult = useCallback(
-    (ranges: Range[], idx: number) => {
-      matchesRef.current = ranges;
-      indexRef.current = idx;
-      setMatches(ranges);
-      setIndex(idx);
-      paint(ranges, idx);
-    },
-    [paint],
-  );
-
-  /** Every match currently in the transcript's DOM, as Ranges in document order. */
-  const scan = useCallback(
-    (q: string): Range[] => {
+  /** The element a hit's card starts at: the last `data-seq` stamp at or before it, so a match
+   *  folded inside a card (a tool_result, a grouped run, a sub-agent's events) resolves to the
+   *  card that contains it. */
+  const elementForSeq = useCallback(
+    (seq: number): HTMLElement | null => {
       const root = containerRef.current;
-      if (!root || !q) return [];
-      const nodes: Text[] = [];
-      const segments: FindSegment[] = [];
-      const blocks = new Map<Element, number>();
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          if (node.nodeType !== Node.ELEMENT_NODE) {
-            return node.nodeValue ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-          }
-          const el = node as Element;
-          // REJECT prunes the whole subtree; SKIP keeps walking into it but emits no element.
-          return SKIP.has(el.tagName) ||
-            el.hasAttribute('hidden') ||
-            el.getAttribute('aria-hidden') === 'true'
-            ? NodeFilter.FILTER_REJECT
-            : NodeFilter.FILTER_SKIP;
-        },
-      });
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        const parent = n.parentElement;
-        if (!parent) continue;
-        let block: Element = parent;
-        while (block !== root && INLINE.has(block.tagName) && block.parentElement) {
-          block = block.parentElement;
-        }
-        let id = blocks.get(block);
-        if (id === undefined) {
-          id = blocks.size;
-          blocks.set(block, id);
-        }
-        nodes.push(n as Text);
-        segments.push({ text: n.nodeValue as string, block: id });
+      if (!root) return null;
+      let best: HTMLElement | null = null;
+      for (const el of root.querySelectorAll<HTMLElement>('[data-seq]')) {
+        const s = Number(el.dataset.seq);
+        if (Number.isFinite(s) && s <= seq) best = el;
+        else if (s > seq) break; // document order is seq order
       }
-      return findMatches(segments, q).map((m) => {
-        const r = document.createRange();
-        r.setStart(nodes[m.startSeg], m.startOffset);
-        r.setEnd(nodes[m.endSeg], m.endOffset);
-        return r;
-      });
+      return best;
     },
     [containerRef],
   );
 
-  const scrollTo = useCallback(
-    (range: Range | undefined) => {
+  /**
+   * Re-run the in-DOM scan and repaint. The transcript changes constantly — a streamed chunk, a
+   * prepended page, a tool card the user expanded — and the Ranges are only valid for the DOM
+   * they were built from.
+   */
+  const rescan = useCallback((): void => {
+    const root = containerRef.current;
+    const q = queryRef.current;
+    if (!root || !q) {
+      paint([], null);
+      return;
+    }
+    const nodes: Text[] = [];
+    const segments: FindSegment[] = [];
+    const blocks = new Map<Element, number>();
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return node.nodeValue ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+        const el = node as Element;
+        // REJECT prunes the whole subtree; SKIP keeps walking into it but emits no element.
+        return SKIP.has(el.tagName) ||
+          el.hasAttribute('hidden') ||
+          el.getAttribute('aria-hidden') === 'true'
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_SKIP;
+      },
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const parent = n.parentElement;
+      if (!parent) continue;
+      let block: Element = parent;
+      while (block !== root && INLINE.has(block.tagName) && block.parentElement) {
+        block = block.parentElement;
+      }
+      let id = blocks.get(block);
+      if (id === undefined) {
+        id = blocks.size;
+        blocks.set(block, id);
+      }
+      nodes.push(n as Text);
+      segments.push({ text: n.nodeValue as string, block: id });
+    }
+    const ranges = findMatches(segments, q).map((m) => {
+      const r = document.createRange();
+      r.setStart(nodes[m.startSeg], m.startOffset);
+      r.setEnd(nodes[m.endSeg], m.endOffset);
+      return r;
+    });
+    // The current match is re-derived from the seq we jumped to, not remembered as an object.
+    const seq = currentSeqRef.current;
+    const host = seq == null ? null : elementForSeq(seq);
+    const current = host ? (ranges.find((r) => host.contains(r.startContainer)) ?? null) : null;
+    paint(ranges, current);
+  }, [containerRef, elementForSeq, paint]);
+
+  // ── jumping to a hit ────────────────────────────────────────────────────────────────────────
+
+  const scrollToHit = useCallback(
+    (host: HTMLElement) => {
       const root = containerRef.current;
-      if (!root || !range) return;
-      const r = range.getBoundingClientRect();
-      if (!r.height && !r.width) return; // collapsed (e.g. the node was replaced mid-stream)
+      if (!root) return;
       const c = root.getBoundingClientRect();
-      if (r.top >= c.top + SCROLL_MARGIN && r.bottom <= c.bottom - SCROLL_MARGIN) return;
-      root.scrollBy({ top: r.top - c.top - (c.height - r.height) / 2, behavior: 'smooth' });
+      // Prefer the match itself when it's rendered; fall back to the card that holds it (a
+      // folded tool body has no visible match to aim at).
+      const painted: Range[] = [];
+      if (CAN_PAINT) CSS.highlights.get(HL_CURRENT)?.forEach((r) => painted.push(r as Range));
+      const box = painted[0]?.getBoundingClientRect();
+      const target = box && (box.height || box.width) ? box : host.getBoundingClientRect();
+      root.scrollBy({ top: target.top - c.top - SCROLL_MARGIN, behavior: 'smooth' });
     },
     [containerRef],
   );
 
-  const goTo = useCallback(
-    (idx: number) => {
-      setResult(matchesRef.current, idx);
-      scrollTo(matchesRef.current[idx]);
-    },
-    [scrollTo, setResult],
-  );
+  const flash = useCallback((host: HTMLElement) => {
+    clearTimeout(flashTimer.current);
+    host.classList.add('find-flash');
+    flashTimer.current = setTimeout(() => host.classList.remove('find-flash'), FLASH_MS);
+  }, []);
 
   /**
-   * Re-run the search over what's now in the DOM, holding the current match in place — the
-   * transcript mutates constantly while a reply streams, and the highlight must not wander.
-   * Identity, not index: an older page prepended above shifts every index down.
+   * Go to hit `i`: load back until its event is in the transcript window, then scroll to it.
+   * Loading is deterministic — the server told us the seq, so this walks to a known destination
+   * rather than pulling pages hoping something turns up.
    */
-  const refresh = useCallback((): Range[] => {
-    const prev = matchesRef.current[indexRef.current];
-    const next = scan(queryRef.current);
-    const at = prev
-      ? next.findIndex((r) => r.startContainer === prev.startContainer && r.startOffset === prev.startOffset)
-      : -1;
-    setResult(next, at >= 0 ? at : Math.min(indexRef.current, Math.max(0, next.length - 1)));
-    setOlderPending(hasOlderRef.current());
-    return next;
-  }, [scan, setResult]);
-
-  /** A fresh query starts from what the user is looking at, the way a browser's find does, rather
-   *  than yanking them to the top of a long transcript. */
-  const runQuery = useCallback(
-    (q: string) => {
-      const root = containerRef.current;
-      const next = scan(q);
-      let idx = 0;
-      if (next.length && root) {
-        const top = root.getBoundingClientRect().top;
-        const below = next.findIndex((r) => r.getBoundingClientRect().bottom >= top);
-        idx = below >= 0 ? below : next.length - 1;
-      }
-      setResult(next, idx);
-      setOlderPending(hasOlderRef.current());
-      scrollTo(next[idx]);
-    },
-    [containerRef, scan, scrollTo, setResult],
-  );
-
-  /**
-   * Walk backwards into history: load older pages until one yields a match above the current one.
-   * This is what ⇧↵ at the oldest match does, and what it does when nothing is loaded that
-   * matches at all — so "not found" means "not in this session", not "not in the last 200 events".
-   */
-  const searchEarlier = useCallback(async () => {
-    if (earlierRef.current || !hasOlderRef.current()) return;
-    earlierRef.current = true;
-    setSearchingEarlier(true);
-    try {
-      for (let i = 0; i < MAX_EARLIER_PAGES && openRef.current && hasOlderRef.current(); i++) {
-        const prev = matchesRef.current[indexRef.current];
-        if (!(await loadOlderRef.current())) break;
-        // Let React commit the prepend (a task, then a frame) before reading the DOM back. If the
-        // paint is late the loop simply pulls another page; the observer below fixes the count.
+  const jumpTo = useCallback(
+    async (i: number) => {
+      const hit = hitsRef.current[i];
+      if (!hit || jumpingRef.current) return;
+      setCursor(i);
+      cursorRef.current = i;
+      currentSeqRef.current = hit.seq;
+      jumpingRef.current = true;
+      setJumping(true);
+      try {
+        for (let page = 0; page < MAX_LOAD_PAGES; page++) {
+          const oldest = oldestSeqRef.current();
+          if (oldest != null && oldest <= hit.seq) break;
+          if (!hasOlderRef.current()) break;
+          if (!(await loadOlderRef.current())) break;
+          if (!openRef.current) return;
+        }
+        // Let React commit any prepend (a task, then a frame) before reading the DOM back.
         await new Promise((r) => setTimeout(r, 0));
         await new Promise((r) => requestAnimationFrame(() => r(null)));
         if (!openRef.current) return;
-        const next = refresh();
-        if (!next.length) continue;
-        const at = prev
-          ? next.findIndex((r) => r.startContainer === prev.startContainer && r.startOffset === prev.startOffset)
-          : -1;
-        if (at > 0) return goTo(at - 1); // the nearest match in the newly loaded history
-        if (at < 0) return goTo(next.length - 1); // nothing to anchor to: take the newest match
+        rescan();
+        const host = elementForSeq(hit.seq);
+        if (host) {
+          scrollToHit(host);
+          flash(host);
+        }
+      } finally {
+        jumpingRef.current = false;
+        setJumping(false);
       }
-      // Exhausted (or capped): wrap to the last match like a browser rather than dead-ending.
-      if (matchesRef.current.length) goTo(matchesRef.current.length - 1);
-    } finally {
-      earlierRef.current = false;
-      setSearchingEarlier(false);
-    }
-  }, [goTo, refresh]);
+    },
+    [elementForSeq, flash, rescan, scrollToHit],
+  );
 
-  const next = useCallback(() => {
-    const n = matchesRef.current.length;
-    if (n) goTo((indexRef.current + 1) % n);
-  }, [goTo]);
-
-  const prev = useCallback(() => {
-    const n = matchesRef.current.length;
-    if (n && indexRef.current > 0) goTo(indexRef.current - 1);
-    else if (queryRef.current && hasOlderRef.current()) void searchEarlier();
-    else if (n) goTo(n - 1);
-  }, [goTo, searchEarlier]);
+  const step = useCallback(
+    (delta: number) => {
+      const n = hitsRef.current.length;
+      if (!n) return;
+      // From nothing selected, ↓ starts at the newest match and ↑ at the oldest.
+      const from = cursorRef.current;
+      const next = from < 0 ? (delta > 0 ? 0 : n - 1) : (from + delta + n) % n;
+      void jumpTo(next);
+    },
+    [jumpTo],
+  );
 
   const close = useCallback(() => setOpen(false), []);
 
+  // ── wiring ──────────────────────────────────────────────────────────────────────────────────
+
   // ⌘F / Ctrl+F while a transcript is open. Bound on the window (not the transcript) so it works
   // from the composer too, and preventDefault'd to take the key from the browser's own find —
-  // which would search the sidebar and header as readily as the conversation, and can't reach the
-  // history that hasn't been loaded yet.
+  // which searches the sidebar and header as readily as the conversation, and can reach neither
+  // the history that isn't loaded nor the bodies of folded cards.
   useEffect(() => {
-    if (!FIND_SUPPORTED) return;
     const onKey = (e: KeyboardEvent): void => {
       // Esc closes from wherever focus happens to be, not just from the input — the same trap the
       // ⌘K palette hit (3e8d888): a bar that stays put after Esc reads as stuck. Not
@@ -310,10 +335,11 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder }: Pr
   }, [open]);
 
   useEffect(() => {
-    queryRef.current = query;
-  }, [query]);
+    queryRef.current = debounced.trim();
+  }, [debounced]);
 
-  // Switching sessions invalidates every match (they hold nodes from the old transcript).
+  // Switching sessions invalidates everything: the hits belong to the old session and the
+  // Ranges to a DOM that's gone.
   useEffect(() => {
     setOpen(false);
   }, [sessionId]);
@@ -325,12 +351,20 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder }: Pr
       return;
     }
     setQuery('');
-    setResult([], 0);
-  }, [open, setResult]);
+    setDebounced('');
+    setCursor(-1);
+    cursorRef.current = -1;
+    currentSeqRef.current = null;
+    if (CAN_PAINT) {
+      CSS.highlights.delete(HL_ALL);
+      CSS.highlights.delete(HL_CURRENT);
+    }
+  }, [open]);
 
   useEffect(
     () => () => {
-      if (!FIND_SUPPORTED) return;
+      clearTimeout(flashTimer.current);
+      if (!CAN_PAINT) return;
       CSS.highlights.delete(HL_ALL);
       CSS.highlights.delete(HL_CURRENT);
     },
@@ -339,22 +373,31 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder }: Pr
 
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => runQuery(query), DEBOUNCE_MS);
+    const t = setTimeout(() => setDebounced(query), DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [open, query, runQuery]);
+  }, [open, query]);
 
-  // Keep the matches honest while the transcript changes underneath them — a streaming reply, a
-  // prepended older page, a tool card the user expanded. Painting highlights mutates nothing, so
-  // this can't feed itself.
+  // A new query drops the selection (nothing is jumped to until asked) and repaints what's in
+  // view, so the visible occurrences light up while the server answers.
   useEffect(() => {
-    if (!open || !FIND_SUPPORTED) return;
+    if (!open) return;
+    setCursor(-1);
+    cursorRef.current = -1;
+    currentSeqRef.current = null;
+    rescan();
+  }, [debounced, open, rescan]);
+
+  // Keep the painted matches honest while the transcript changes underneath them. Painting
+  // mutates nothing, so this can't feed itself.
+  useEffect(() => {
+    if (!open) return;
     const root = containerRef.current;
     if (!root) return;
     let t: number | undefined;
     const obs = new MutationObserver(() => {
       window.clearTimeout(t);
       t = window.setTimeout(() => {
-        if (queryRef.current && !earlierRef.current) refresh();
+        if (queryRef.current && !jumpingRef.current) rescan();
       }, 200);
     });
     obs.observe(root, { childList: true, subtree: true, characterData: true });
@@ -362,61 +405,95 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder }: Pr
       obs.disconnect();
       window.clearTimeout(t);
     };
-  }, [containerRef, open, refresh]);
+  }, [containerRef, open, rescan]);
+
+  // Keep the selected row visible while stepping past the fold.
+  useEffect(() => {
+    listRef.current?.querySelector('.find-row.active')?.scrollIntoView({ block: 'nearest' });
+  }, [cursor]);
 
   if (!open) return null;
 
-  const total = matches.length;
-  // The trailing "+" is the honest part: the count covers what's loaded, and older events the
-  // transcript hasn't pulled in yet may hold more (⇧↵ goes and gets them).
-  const count = searchingEarlier
+  const capped = total > hits.length;
+  const status = search.isFetching
     ? 'Searching…'
-    : query
-      ? `${total ? index + 1 : 0}/${total}${olderPending ? '+' : ''}`
-      : '';
+    : !trimmed
+      ? ''
+      : total === 0
+        ? 'No matches'
+        : `${cursor >= 0 ? `${cursor + 1}/` : ''}${hits.length}${capped ? ` of ${total}` : ''}`;
 
   return (
     <div className="find-bar" role="search">
-      <SearchOutlined className="find-bar-icon" />
-      <input
-        ref={inputRef}
-        className="find-bar-input"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          // Let an IME keep Enter for picking a candidate — the whole feature is unusable in
-          // Chinese otherwise.
-          if (e.nativeEvent.isComposing) return;
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            if (e.shiftKey) prev();
-            else next();
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            e.stopPropagation();
-            close();
-          }
-        }}
-        placeholder="Find in session…"
-        aria-label="Find in session"
-        spellCheck={false}
-        autoComplete="off"
-      />
-      <span
-        className={`find-bar-count${query && !total && !searchingEarlier ? ' find-bar-none' : ''}`}
-        title={olderPending ? 'Earlier messages are not loaded yet — ⇧↵ searches them' : undefined}
-      >
-        {count}
-      </span>
-      <button type="button" className="find-bar-btn" onClick={prev} title="Previous match (⇧↵)">
-        <UpOutlined />
-      </button>
-      <button type="button" className="find-bar-btn" onClick={next} title="Next match (↵)">
-        <DownOutlined />
-      </button>
-      <button type="button" className="find-bar-btn" onClick={close} title="Close (Esc)">
-        <CloseOutlined />
-      </button>
+      <div className="find-head">
+        <SearchOutlined className="find-icon" />
+        <input
+          ref={inputRef}
+          className="find-input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            // Let an IME keep Enter for picking a candidate — the whole feature is unusable in
+            // Chinese otherwise.
+            if (e.nativeEvent.isComposing) return;
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              step(e.shiftKey ? -1 : 1);
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              step(1);
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              step(-1);
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              close();
+            }
+          }}
+          placeholder="Find in session…"
+          aria-label="Find in session"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <span
+          className={`find-count${trimmed && !search.isFetching && total === 0 ? ' find-none' : ''}`}
+          title={capped ? `${total} matches — the newest ${hits.length} are listed` : undefined}
+        >
+          {jumping ? <LoadingOutlined spin /> : status}
+        </span>
+        <button type="button" className="find-btn" onClick={() => step(-1)} title="Previous match (⇧↵)">
+          <UpOutlined />
+        </button>
+        <button type="button" className="find-btn" onClick={() => step(1)} title="Next match (↵)">
+          <DownOutlined />
+        </button>
+        <button type="button" className="find-btn" onClick={close} title="Close (Esc)">
+          <CloseOutlined />
+        </button>
+      </div>
+
+      {hits.length > 0 && (
+        <div className="find-list" ref={listRef}>
+          {hits.map((hit, i) => (
+            <div
+              key={hit.seq}
+              className={`find-row${i === cursor ? ' active' : ''}`}
+              onClick={() => void jumpTo(i)}
+            >
+              <div className="find-row-head">
+                <span className="find-row-kind">{hitLabel(hit)}</span>
+                <span className="find-row-time">{relTime(String(hit.ts))}</span>
+              </div>
+              <div className="find-row-snippet">
+                {splitHighlight(hit.snippet, trimmed).map((seg, si) =>
+                  seg.match ? <mark key={si}>{seg.text}</mark> : <span key={si}>{seg.text}</span>,
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

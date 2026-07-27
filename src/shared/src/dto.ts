@@ -715,3 +715,30 @@ export interface SessionSearchResponse {
   contentSearched: boolean;
   hits: SessionSearchHit[];
 }
+
+/** One matching event from GET /sessions/:id/events/search — a place in the open transcript,
+ *  which the client reaches by loading back to `seq`. */
+export interface EventSearchHit {
+  seq: number;
+  /** The run_event type ('user' | 'assistant' | 'thinking' | 'tool_use' | 'tool_result' | …),
+   *  so the row can show what kind of thing matched without re-deriving it from the snippet. */
+  type: string;
+  /** The tool's name for a tool_use/tool_result hit, null otherwise. */
+  toolName: string | null;
+  ts: string | Date;
+  /** A whitespace-collapsed window around the match. Located by the client the same way the ⌘K
+   *  palette does — by finding the query inside the finished snippet, not by a carried offset. */
+  snippet: string;
+}
+
+/** GET /sessions/:id/events/search — find within one session, over its whole history rather
+ *  than the tail the client happens to have loaded. */
+export interface EventSearchResponse {
+  q: string;
+  /** Every match in the session, even when `hits` was capped — so the UI can say "showing 100
+   *  of 240" instead of implying the list is everything. */
+  total: number;
+  /** Newest first: the matches nearest what the user is reading come first, and the tail of a
+   *  long list is the part that gets cut. */
+  hits: EventSearchHit[];
+}

@@ -2532,33 +2532,38 @@ body {
   top: 12px;
   right: 20px;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 6px 5px 10px;
+  width: min(420px, calc(100% - 40px));
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-raised);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
 }
-.find-bar-icon {
+.find-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 10px;
+}
+.find-icon {
   color: var(--text-3);
   font-size: 13px;
 }
-.find-bar-input {
-  width: 190px;
+.find-input {
+  flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
   font-size: 13px;
   color: var(--text-1);
 }
-.find-bar-input::placeholder {
+.find-input::placeholder {
   color: var(--text-4);
 }
 /* Tabular figures so stepping through matches doesn't jiggle the buttons beside the count. */
-.find-bar-count {
-  min-width: 46px;
+.find-count {
+  min-width: 62px;
   text-align: right;
   padding-right: 4px;
   font-size: 12px;
@@ -2566,10 +2571,10 @@ body {
   color: var(--text-3);
   white-space: nowrap;
 }
-.find-bar-count.find-bar-none {
+.find-count.find-none {
   color: var(--error);
 }
-.find-bar-btn {
+.find-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2582,9 +2587,60 @@ body {
   font-size: 12px;
   cursor: pointer;
 }
-.find-bar-btn:hover {
+.find-btn:hover {
   background: var(--bg-hover);
   color: var(--text-1);
+}
+/* The server's hits — matches anywhere in the session, including history the transcript hasn't
+   loaded and tool bodies that are folded away. Capped so the list never swallows the transcript. */
+.find-list {
+  max-height: min(46vh, 300px);
+  overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+.find-row {
+  padding: 7px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.find-row:last-child {
+  border-bottom: none;
+}
+/* One highlight, driven by the keyboard cursor — hover sets that cursor rather than painting a
+   second, competing one (mirrors the ⌘K palette). */
+.find-row:hover {
+  background: var(--bg-hover);
+}
+.find-row.active {
+  background: var(--brand-tint);
+}
+.find-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.find-row-kind {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.find-row-snippet {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.find-row-snippet mark {
+  background: rgba(250, 204, 21, 0.45);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
 }
 /* Painted from Ranges via the CSS Custom Highlight API — see SessionFind. ::highlight() only
    accepts a handful of properties (colour, background, text-decoration, text-shadow). */
@@ -2594,6 +2650,19 @@ body {
 ::highlight(orbit-find-current) {
   background-color: #f5a623;
   color: #1f2329;
+}
+/* Outlines the card a jump landed on. Earns its keep when the match itself is folded away inside
+   it (a collapsed tool body), where there is no highlight to look at. */
+.find-flash {
+  animation: find-flash 1.4s ease-out;
+}
+@keyframes find-flash {
+  from {
+    box-shadow: 0 0 0 2px var(--warning-solid);
+  }
+  to {
+    box-shadow: 0 0 0 2px transparent;
+  }
 }
 :root[data-theme='dark'] .find-bar {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);

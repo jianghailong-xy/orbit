@@ -329,6 +329,23 @@ export class SessionsController {
     });
   }
 
+  /**
+   * Find within one session (the clients' ⌘F). Returns the matching events newest-first with a
+   * snippet each, plus the true total, so the client can walk back to a hit older than the
+   * transcript window it has loaded. Sibling of `:id/events/page`; same segment count, distinct
+   * literal, so neither shadows the other.
+   */
+  @Get(':id/events/search')
+  eventSearch(
+    @CurrentUser() user: AuthUser,
+    @Param('id', Base62UuidPipe) id: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const n = Number(limit);
+    return this.sessions.searchEvents(user.userId, id, q, Number.isFinite(n) ? n : undefined);
+  }
+
   /** One event's untrimmed payload — what a client fetches when the user expands a card that
    *  arrived `truncated`. Declared after `:id/events/page`, which it can't shadow (different
    *  segment count), and below the SSE `:id/events` for the same reason. */

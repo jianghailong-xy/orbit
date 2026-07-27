@@ -122,7 +122,7 @@ import {
 } from '../api';
 import { AttachmentImage, ChatImage, EventFullCtx, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
-import { FIND_HINT, FIND_SUPPORTED, openSessionFind, SessionFind } from './SessionFind';
+import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
@@ -984,9 +984,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     loadingOlderRef.current = inFlight;
     return inFlight;
   }, [selectedId]);
-  // Whether the server still holds events older than the loaded ones — read through a callback
-  // because the answer lives in a ref (the scroll handler's, kept out of render for cost).
+  // The tail-first window's edges, read through callbacks because they live in refs (kept out of
+  // render for cost). ⌘F needs both: whether older events exist, and how far back it has loaded.
   const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
+  const oldestSeqNow = useCallback(() => oldestSeqRef.current, []);
   // Pull back the untrimmed payload of an event the server clipped to a preview (see
   // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
   // Read output or Write body only crosses the network if someone actually opens it.
@@ -3133,17 +3134,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                     : [
                         // Keyboard-only would leave the feature undiscoverable, and unreachable
                         // for anyone on a trackpad-and-touch device.
-                        ...(FIND_SUPPORTED
-                          ? [
-                              {
-                                key: 'find',
-                                icon: <SearchOutlined />,
-                                label: `Find in session · ${FIND_HINT}`,
-                                onClick: () => openSessionFind(),
-                              },
-                              { type: 'divider' as const },
-                            ]
-                          : []),
+                        {
+                          key: 'find',
+                          icon: <SearchOutlined />,
+                          label: `Find in session · ${FIND_HINT}`,
+                          onClick: () => openSessionFind(),
+                        },
+                        { type: 'divider' as const },
                         {
                           key: 'share',
                           icon: <ShareAltOutlined />,
@@ -3324,6 +3321,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               containerRef={scrollRef}
               loadOlder={loadOlder}
               hasOlder={hasOlderNow}
+              oldestSeq={oldestSeqNow}
             />
           )}
           {selectedId && !atBottom && (
