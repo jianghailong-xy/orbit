@@ -54,10 +54,18 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       void qc.invalidateQueries({ queryKey: ['task-lists'] });
       void qc.invalidateQueries({ queryKey: ['task'] });
     };
+    // The agent list (sidebar, pickers, agent page). Like the task queries it only refetches on an
+    // `agent.*` event or on reconnect — it has no interval poll at all, so before this an agent
+    // created/updated through MCP (agent_create/agent_update) only appeared after a page reload.
+    const refetchAgents = (): void => {
+      void qc.invalidateQueries({ queryKey: ['agents'] });
+    };
     let pendingSessions = false;
     let pendingTasks = false;
+    let pendingAgents = false;
     const scheduleRefresh = (type: string): void => {
       if (type.startsWith('task.')) pendingTasks = true;
+      else if (type.startsWith('agent.')) pendingAgents = true;
       else pendingSessions = true;
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
@@ -69,6 +77,10 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         if (pendingTasks) {
           pendingTasks = false;
           refetchTasks();
+        }
+        if (pendingAgents) {
+          pendingAgents = false;
+          refetchAgents();
         }
       }, REFRESH_DEBOUNCE_MS);
     };
@@ -90,10 +102,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         fails = 0;
         lastMsgAt = Date.now();
         setLive(true);
-        // No sinceSeq replay — reconcile both lists with a fresh snapshot on (re)connect so
-        // task changes missed during the gap surface too.
+        // No sinceSeq replay — reconcile every list with a fresh snapshot on (re)connect so
+        // task/agent changes missed during the gap surface too.
         refetchSessions();
         refetchTasks();
+        refetchAgents();
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();

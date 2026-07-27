@@ -21,6 +21,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.SESSION_CREATED), ControlEventType.SESSION_CREATED);
   assert.equal(controlTypeFor(RunEventType.SESSION_ENDED), ControlEventType.SESSION_ENDED);
   assert.equal(controlTypeFor(RunEventType.TASK_CHANGED), ControlEventType.TASK_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.AGENT_CHANGED), ControlEventType.AGENT_CHANGED);
 });
 
 test('controlTypeFor drops transcript/data-plane events', () => {

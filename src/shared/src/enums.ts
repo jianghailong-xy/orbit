@@ -117,6 +117,11 @@ export enum RunEventType {
   // transcript stream (isLifecycleType). streamForUser maps it to ControlEventType.TASK_CHANGED
   // so the owner's task list/board refreshes live instead of waiting for its poll.
   TASK_CHANGED = 'task_changed',
+  // An agent the owner can see was created or updated via an orchestrator's MCP
+  // agent_create/agent_update. Same deal as TASK_CHANGED: rides the hub for the NOTIFY bridge,
+  // never persisted, never in a transcript stream; streamForUser maps it to
+  // ControlEventType.AGENT_CHANGED so the owner's agent list refreshes without a manual reload.
+  AGENT_CHANGED = 'agent_changed',
 }
 
 /** Control-plane-internal lifecycle signals (see RunEventType): published through the realtime
@@ -125,7 +130,8 @@ export function isLifecycleType(t: RunEventType): boolean {
   return (
     t === RunEventType.SESSION_CREATED ||
     t === RunEventType.SESSION_ENDED ||
-    t === RunEventType.TASK_CHANGED
+    t === RunEventType.TASK_CHANGED ||
+    t === RunEventType.AGENT_CHANGED
   );
 }
 

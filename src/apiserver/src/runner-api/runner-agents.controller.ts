@@ -15,6 +15,7 @@ import { PermissionMode } from '@orbit/shared';
 import { AgentsService } from '../agents/agents.service';
 import { CreateAgentDto, UpdateAgentDto } from '../agents/dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
@@ -51,6 +52,7 @@ export class RunnerAgentsController {
   constructor(
     private readonly agents: AgentsService,
     private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   @Get('agents')
@@ -71,7 +73,15 @@ export class RunnerAgentsController {
     await this.assertOrchestrator(runner.ownerId, sessionId);
     if (!body.name) throw new BadRequestException('name is required');
     // Bind to the calling runner by default so the new agent can actually run sessions.
-    return this.agents.create(runner.ownerId, this.sanitize(body, runner.id) as CreateAgentDto);
+    const agent = await this.agents.create(
+      runner.ownerId,
+      this.sanitize(body, runner.id) as CreateAgentDto,
+    );
+    // Push it to the owner's control-plane stream so their agent list shows it live instead of
+    // only after a manual reload — the agent-side mirror of TasksService's publishTaskChanged.
+    // Scoped via the calling session (assertOrchestrator already proved it's this owner's).
+    this.realtime.publishAgentChanged(sessionId!, agent.id);
+    return agent;
   }
 
   @Patch('agents/:id')
@@ -82,7 +92,13 @@ export class RunnerAgentsController {
     @Body() body: OrchestratorAgentInput,
   ) {
     await this.assertOrchestrator(runner.ownerId, sessionId);
-    return this.agents.update(runner.ownerId, id, this.sanitize(body) as UpdateAgentDto);
+    const agent = await this.agents.update(
+      runner.ownerId,
+      id,
+      this.sanitize(body) as UpdateAgentDto,
+    );
+    this.realtime.publishAgentChanged(sessionId!, id);
+    return agent;
   }
 
   /** Whitelist the caller's fields (drops enableOrchestration/enabled etc. an agent must not

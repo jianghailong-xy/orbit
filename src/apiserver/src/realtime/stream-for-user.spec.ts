@@ -180,6 +180,27 @@ test('publishTaskChanged surfaces as task.changed with the taskId, scoped to the
   assert.equal(theirs.length, 0);
 });
 
+test('publishAgentChanged surfaces as agent.changed with the changed agentId', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishAgentChanged('sessA', 'agentNew');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'agent.changed');
+  assert.equal(mine[0].sessionId, 'sessA');
+  // `data.agentId` is the CREATED agent; the envelope's stays the calling session's agent.
+  assert.deepEqual(mine[0].data, { agentId: 'agentNew' });
+  assert.equal(mine[0].agentId, 'agentA');
+  assert.equal(theirs.length, 0);
+});
+
 test('lifecycle signals never enter a per-session transcript stream', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const transcript: unknown[] = [];
@@ -188,11 +209,12 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   svc.publishSessionCreated('sessA');
   svc.publishSessionEnded('sessA', RunStatus.SUCCEEDED, SessionEndReason.COMPLETED);
   svc.publishTaskChanged('sessA', 'task123');
+  svc.publishAgentChanged('sessA', 'agentNew');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });
   await delay(20);
   sub.unsubscribe();
 
-  // Only the real run event arrives; all three lifecycle signals are filtered out.
+  // Only the real run event arrives; all four lifecycle signals are filtered out.
   assert.equal(transcript.length, 1);
   assert.equal((transcript[0] as { type: string }).type, 'status');
 });
