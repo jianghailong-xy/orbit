@@ -12,6 +12,11 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     #if os(macOS)
     @EnvironmentObject private var updater: UpdaterModel   // Sparkle; iOS updates via the App Store
+    #else
+    // iPhone (compact) reaches Settings from the drawer's action bar, which replaced the account
+    // footer — so the account actions that footer's menu carried live here. iPad keeps that footer
+    // and lists Admin in its sidebar, so both stay out of its Settings.
+    @Environment(\.horizontalSizeClass) private var hSize
     #endif
 
     @State private var theme = "system"
@@ -44,6 +49,26 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+
+                // Admin is off the compact drawer rail, and the account footer that used to link it
+                // is gone — so this is its entry point on iPhone. It switches section (rather than
+                // pushing) exactly as that menu item did.
+                if hSize == .compact, model.user?.role == "ADMIN" {
+                    Button {
+                        model.selectedSection = .admin
+                    } label: {
+                        HStack {
+                            Label(AppSection.admin.title, systemImage: AppSection.admin.systemImage)
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.forward")
+                                .font(.orbitMeta)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             #endif
 
@@ -53,6 +78,11 @@ struct SettingsView: View {
                     if let name = u.name, !name.isEmpty { LabeledContent("Name", value: name) }
                     if let role = u.role { LabeledContent("Role", value: role) }
                 }
+                #if os(iOS)
+                if hSize == .compact {
+                    Button("Sign out", role: .destructive) { model.logout() }
+                }
+                #endif
             }
 
             Section("Preferences") {

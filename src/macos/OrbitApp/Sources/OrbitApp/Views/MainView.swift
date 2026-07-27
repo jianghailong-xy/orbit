@@ -118,26 +118,12 @@ struct SectionSidebar: View {
 /// live in the window toolbar.
 struct AccountFooter: View {
     @Environment(AppModel.self) private var model
-    /// iOS folds Settings/Admin into this account menu (they're off the drawer rail), routing each
-    /// through this handler. macOS leaves them in the sidebar, so it passes nil and the menu shows
-    /// only Sign out.
-    var onSelectSection: ((AppSection) -> Void)? = nil
 
     var body: some View {
         let display = model.user?.name ?? model.user?.email
         Menu {
             // Menu items must be real controls — a bare `Text` gets dropped by AppKit, so the email
             // rides along as a Section header above the one action.
-            if let onSelectSection {
-                Button { onSelectSection(.settings) } label: {
-                    Label(AppSection.settings.title, systemImage: AppSection.settings.systemImage)
-                }
-                if model.user?.role == "ADMIN" {
-                    Button { onSelectSection(.admin) } label: {
-                        Label(AppSection.admin.title, systemImage: AppSection.admin.systemImage)
-                    }
-                }
-            }
             if let email = model.user?.email {
                 Section(email) {
                     Button("Sign out", role: .destructive) { model.logout() }
