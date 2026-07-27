@@ -201,6 +201,63 @@ test('publishAgentChanged surfaces as agent.changed with the changed agentId', a
   assert.equal(theirs.length, 0);
 });
 
+test('publishForUser reaches only that owner, with no session scope', async () => {
+  // No session rows at all: a user-scoped event must route without touching the session table.
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
+  svc.publishForUser('userA', RunEventType.TASK_LIST_CHANGED, 'list1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.deepEqual(
+    mine.map((e) => e.type),
+    ['tag.changed', 'task.list.changed'],
+  );
+  // The library belongs to the owner, not a session — the envelope says so.
+  assert.equal(mine[0].sessionId, '');
+  assert.equal(mine[0].agentId, null);
+  assert.deepEqual(mine[0].data, { id: 'tag1' });
+  assert.equal(theirs.length, 0);
+});
+
+test('publishForAllUsers reaches every stream (shared provider catalog)', async () => {
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishForAllUsers(RunEventType.PROVIDER_CHANGED, 'prov1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(theirs.length, 1);
+  assert.equal(mine[0].type, 'provider.changed');
+  assert.deepEqual(theirs[0].data, { id: 'prov1' });
+});
+
+test('publishSessionUpdated surfaces as session.updated with the current summary (rename)', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  sub.unsubscribe();
+
+  assert.equal(got.length, 1);
+  assert.equal(got[0].type, 'session.updated');
+  assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
+});
+
 test('lifecycle signals never enter a per-session transcript stream', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const transcript: unknown[] = [];
@@ -210,11 +267,13 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   svc.publishSessionEnded('sessA', RunStatus.SUCCEEDED, SessionEndReason.COMPLETED);
   svc.publishTaskChanged('sessA', 'task123');
   svc.publishAgentChanged('sessA', 'agentNew');
+  svc.publishSessionUpdated('sessA');
+  svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });
   await delay(20);
   sub.unsubscribe();
 
-  // Only the real run event arrives; all four lifecycle signals are filtered out.
+  // Only the real run event arrives; every lifecycle signal is filtered out.
   assert.equal(transcript.length, 1);
   assert.equal((transcript[0] as { type: string }).type, 'status');
 });

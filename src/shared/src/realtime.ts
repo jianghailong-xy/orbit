@@ -36,6 +36,13 @@ export enum ControlEventType {
    *  agent_create/agent_update. `data` is a `ControlAgentChanged`; like `task.changed` it's only a
    *  nudge to refetch the agent list. `sessionId` names the calling (orchestrator) session. */
   AGENT_CHANGED = 'agent.changed',
+  /** One of the owner's task lists changed (created/renamed/deleted). USER-SCOPED: `sessionId` is
+   *  empty. `data` is a `ControlResourceChanged`; a nudge to refetch the task-list queries. */
+  TASK_LIST_CHANGED = 'task.list.changed',
+  /** The owner's session-tag library changed. USER-SCOPED (see above). */
+  TAG_CHANGED = 'tag.changed',
+  /** The deployment's configured model providers changed. USER-SCOPED (see above). */
+  PROVIDER_CHANGED = 'provider.changed',
   /** Reserved generic notification channel — future pushes ride this without a protocol bump. */
   NOTIFICATION = 'notification',
 }
@@ -44,6 +51,9 @@ export enum ControlEventType {
  *  each event names its scope; `agentId` lets per-agent lists filter client-side. */
 export interface ControlEvent {
   type: ControlEventType;
+  /** The session this event is about — EMPTY for the user-scoped library events
+   *  (`task.list.changed` / `tag.changed` / `provider.changed`), which belong to the owner, not to
+   *  any one session. Clients must dispatch on `type`, not on the presence of a session id. */
   sessionId: string;
   agentId: string | null;
   /** ISO-8601. */
@@ -103,4 +113,11 @@ export interface ControlTaskChanged {
  *  agent, not the envelope's `agentId` (which is the calling session's agent). */
 export interface ControlAgentChanged {
   agentId: string;
+}
+
+/** `data` for the user-scoped library events (`task.list.changed` / `tag.changed` /
+ *  `provider.changed`). Same contract as the two above: refetch the matching list; the id is for
+ *  future fine-grained updates and logging. */
+export interface ControlResourceChanged {
+  id: string;
 }

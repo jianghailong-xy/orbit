@@ -15,6 +15,14 @@ public enum ControlEventType: String, Codable, Sendable {
     case approvalRequested = "approval.requested"
     case approvalResolved = "approval.resolved"
     case backgroundTask = "background.task"
+    /// A task / agent the owner can see changed — usually an agent's MCP task_*/agent_* call.
+    /// Only a nudge to reload that list.
+    case taskChanged = "task.changed"
+    case agentChanged = "agent.changed"
+    /// Owner-level libraries. These are USER-scoped: `sessionId` is empty (see ControlEvent).
+    case taskListChanged = "task.list.changed"
+    case tagChanged = "tag.changed"
+    case providerChanged = "provider.changed"
     case notification = "notification"
     case unknown
 
@@ -28,6 +36,10 @@ public enum ControlEventType: String, Codable, Sendable {
 /// each event names its scope; `agentId` lets per-agent lists filter client-side.
 public struct ControlEvent: Codable, Equatable, Sendable {
     public let type: ControlEventType
+    /// The session this event is about — EMPTY for the user-scoped library events
+    /// (`task.list.changed` / `tag.changed` / `provider.changed`), which belong to the owner rather
+    /// than to any session. Still non-optional: the keepalive ping omits the field entirely, and
+    /// that's what makes it fail to decode (see SSEDecoding.controlEvent).
     public let sessionId: String
     public let agentId: String?
     public let ts: String

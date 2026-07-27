@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, providerPreset, type ProviderPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
 import { withPreset } from './preset-overlay';
@@ -9,7 +10,12 @@ import { pickFreeSlug, slugBase } from './provider-slug';
 
 @Injectable()
 export class ProvidersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // @Global RealtimeModule. Providers back every client's model picker, so a change pushes to
+    // the owner (a personal BYOK row) or to everyone (a shared, admin-owned one).
+    private readonly realtime: RealtimeService,
+  ) {}
 
   /** De-sensitized picker catalog (no key, no baseUrl): the shared providers plus the
    *  caller's own personal ones. Enabled only. */
@@ -84,9 +90,11 @@ export class ProvidersService {
     // nobody chose.
     for (let attempt = 0; ; attempt++) {
       try {
-        return this.desensitize(
-          await this.prisma.modelProvider.create({ data: { ...data, slug: await this.freeSlug(base) } }),
-        );
+        const row = await this.prisma.modelProvider.create({
+          data: { ...data, slug: await this.freeSlug(base) },
+        });
+        this.publishChanged(ownerId, row.id);
+        return this.desensitize(row);
       } catch (e) {
         const raced = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
         if (!raced || attempt >= 4) throw e;
@@ -124,13 +132,22 @@ export class ProvidersService {
     // Only re-encrypt when a new key is supplied; an omitted key keeps the stored one.
     if (dto.apiKey) data.apiKeyEnc = encryptSecret(dto.apiKey);
     const row = await this.prisma.modelProvider.update({ where: { id }, data });
+    this.publishChanged(ownerId, row.id);
     return this.desensitize(row);
   }
 
   async remove(ownerId: string | null, id: string) {
     await this.getScoped(ownerId, id);
     await this.prisma.modelProvider.delete({ where: { id } });
+    this.publishChanged(ownerId, id);
     return { ok: true };
+  }
+
+  /** Push a provider change to the clients whose picker it affects: just the owner for a personal
+   *  row, everyone for a shared one (ownerId null = the admin-managed catalog). */
+  private publishChanged(ownerId: string | null, id: string): void {
+    if (ownerId) this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, id);
+    else this.realtime.publishForAllUsers(RunEventType.PROVIDER_CHANGED, id);
   }
 
   /**

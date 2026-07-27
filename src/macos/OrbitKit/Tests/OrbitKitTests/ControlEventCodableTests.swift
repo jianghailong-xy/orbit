@@ -104,6 +104,35 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertNil(ev.payload(ControlSessionSummary.self))
     }
 
+    func testDecodesTheListNudgeEvents() throws {
+        let agent = try decode("""
+        {"type":"agent.changed","sessionId":"s1","agentId":"a1","ts":"t","data":{"agentId":"new"}}
+        """)
+        XCTAssertEqual(agent.type, .agentChanged)
+        // The changed agent is in `data`; the envelope's agentId stays the calling session's.
+        XCTAssertEqual(agent.agentId, "a1")
+
+        let task = try decode("""
+        {"type":"task.changed","sessionId":"s1","agentId":null,"ts":"t","data":{"taskId":"t1"}}
+        """)
+        XCTAssertEqual(task.type, .taskChanged)
+    }
+
+    func testDecodesUserScopedLibraryEventsWithAnEmptySessionId() throws {
+        // These belong to the owner, not to a session, so the server ships sessionId "". The field
+        // is still PRESENT, which is what keeps them decodable while the ping (no field) isn't.
+        for (raw, expected) in [("task.list.changed", ControlEventType.taskListChanged),
+                                ("tag.changed", .tagChanged),
+                                ("provider.changed", .providerChanged)] {
+            let ev = try decode("""
+            {"type":"\(raw)","sessionId":"","agentId":null,"ts":"t","data":{"id":"x1"}}
+            """)
+            XCTAssertEqual(ev.type, expected)
+            XCTAssertEqual(ev.sessionId, "")
+            XCTAssertNil(ev.agentId)
+        }
+    }
+
     func testSSEDecodingDiscardsThePingKeepalive() {
         // The server's ~20s keepalive is a data frame `{"type":"ping"}` (Nest can't emit `:`
         // comments); it has no sessionId, so the decoder drops it — its bytes only feed the

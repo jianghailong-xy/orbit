@@ -2065,6 +2065,9 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     await this.prisma.session.update({ where: { id }, data: { title } });
+    // A rename has no STATUS/TURN_END behind it, so without this the owner's OTHER clients (and
+    // other tabs) keep the old title until the session's next turn.
+    this.realtime.publishSessionUpdated(id);
     return { ok: true, title };
   }
 

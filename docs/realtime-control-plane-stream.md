@@ -218,6 +218,17 @@ streamForUser(userId: string): Observable<ControlEvent> {
 - **ended**:`SessionsService.archive`(endReason=`completed`)+ `remove`(软删,endReason=`deleted`)→ `publishSessionEnded(id, status, endReason)`。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 status 决定离开 active),`PARKED` 仍留在 active(休眠)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
 - **evict-on-ended(Q4)**:`session.ended` 映射时顺手 `ownerCache.delete(sessionId)`。
 
+后续按同一机制补的合成信号(都进 `isLifecycleType`,都不持久化):`session_updated`(改名/打标签这类"列表行变了但没有 turn"的场景,复用 `session.updated` 的完整 summary)、`task_changed`(MCP `task_create/update/comment`)、`agent_changed`(MCP `agent_create/update`)。
+
+### 4.6.1 用户级作用域(没有 session 可借的变更)
+
+hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标签、模型 provider——压根不属于任何一个 session(MCP `tasklist_create`、原生端建标签、admin 配 provider 都是)。这类变更走 `RealtimeService.publishForUser(ownerId, type, id)`:
+
+- hub key 用保留前缀 `user:<ownerId>`。session id 是 UUID,**永不冲突**;`streamForRun` 因此天然匹配不到它,`toControlEvent` 认出前缀后**直接按 owner 路由,不查库**。多副本 NOTIFY 桥照旧白拿。
+- 事件类型:`task.list.changed` / `tag.changed` / `provider.changed`,`data` 统一是 `{ id }`(和 `task.changed` 一样,只是"去重新拉一下列表"的提示)。
+- 这些事件的 **`sessionId` 是空串**。客户端必须**按 `type` 派发**,不能再用"有没有 sessionId"来判断帧是否有效(keepalive ping 是**整个字段都没有**,原生解码器仍然靠这个把它丢掉)。
+- 全局变更(admin 管的 shared provider,人人可见)用 `publishForAllUsers`,内部 key 是 `user:*`,对每条流都放行。仅限真正全局、低频的编辑。
+
 ### 4.7 多副本、心跳、网关、鉴权
 
 - **多副本**:零改动。事件本来就经 `orbit_event` NOTIFY 桥到达每个副本的本地 hub;`streamForUser` 订阅的是同一个本地 hub,所以无论用户连到哪个副本都能收到全量。

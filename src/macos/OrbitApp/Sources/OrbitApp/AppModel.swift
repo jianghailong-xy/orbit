@@ -122,6 +122,9 @@ final class AppModel {
     private var controlTask: Task<Void, Never>?
     private(set) var controlPlaneLive = false
     private var controlRefreshScheduled = false
+    /// Same coalescing, for the owner-level lists a control event can dirty (see apply / LibraryTarget).
+    private var libraryRefreshScheduled = false
+    private var pendingLibraryRefresh: Set<LibraryTarget> = []
 
     private static let instanceKey = "orbit.instance"
     /// Remembers the last agent you selected so a cold launch lands there instead of always the
@@ -372,8 +375,12 @@ final class AppModel {
                     case .connected:
                         controlPlaneLive = true
                         await loadSessions()   // rebuild from snapshot, then follow
-                    case .event:
-                        scheduleControlRefresh()
+                        // No replay on this stream, so reconcile the lists that only push can
+                        // keep fresh (they have no poll at all) alongside the session snapshot.
+                        scheduleLibraryRefresh(.agents)
+                        scheduleLibraryRefresh(.tasks)
+                    case .event(let ev):
+                        apply(ev)
                     }
                 }
                 // Clean close — reconnect after a beat.
@@ -399,6 +406,41 @@ final class AppModel {
             }
         }
         controlPlaneLive = false
+    }
+
+    /// Route one control event. Every event nudges the session list (that's the coalesced snapshot
+    /// refresh the stream was built for); the library events additionally reload the model that
+    /// owns them, because nothing else does — the agent list, notably, was otherwise fetched once
+    /// at launch, so an agent created elsewhere (a teammate's browser, an MCP `agent_create`) never
+    /// showed up until the app was relaunched.
+    private func apply(_ ev: ControlEvent) {
+        switch ev.type {
+        // Providers ride along: AgentsModel.load() fetches the provider catalog with the list.
+        case .agentChanged, .providerChanged: scheduleLibraryRefresh(.agents)
+        case .taskChanged, .taskListChanged:  scheduleLibraryRefresh(.tasks)
+        default: break
+        }
+        scheduleControlRefresh()
+    }
+
+    /// The owner-level lists a control event can dirty, each backed by its own model.
+    enum LibraryTarget { case agents, tasks }
+
+    /// Coalesce library reloads the same way `scheduleControlRefresh` coalesces list refreshes —
+    /// an agent filing five tasks in a row should cost one reload, not five.
+    private func scheduleLibraryRefresh(_ target: LibraryTarget) {
+        pendingLibraryRefresh.insert(target)
+        guard !libraryRefreshScheduled else { return }
+        libraryRefreshScheduled = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard let self else { return }
+            self.libraryRefreshScheduled = false
+            let targets = self.pendingLibraryRefresh
+            self.pendingLibraryRefresh.removeAll()
+            if targets.contains(.agents) { await self.agents?.load() }
+            if targets.contains(.tasks) { await self.tasks?.load() }
+        }
     }
 
     /// Coalesce event-driven refreshes: a burst of control events (a turn ending fires STATUS +
