@@ -2589,6 +2589,79 @@ body {
   min-height: 0;
   overflow-y: auto;
 }
+/* Find in session (⌘F). Floats over the top-right of the transcript, browser-find style, and
+   sits outside .agent-sessions so its own text is never part of what it searches. */
+.find-bar {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+.find-bar-icon {
+  color: var(--text-3);
+  font-size: 13px;
+}
+.find-bar-input {
+  width: 190px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.find-bar-input::placeholder {
+  color: var(--text-4);
+}
+/* Tabular figures so stepping through matches doesn't jiggle the buttons beside the count. */
+.find-bar-count {
+  min-width: 46px;
+  text-align: right;
+  padding-right: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.find-bar-count.find-bar-none {
+  color: var(--error);
+}
+.find-bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.find-bar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+/* Painted from Ranges via the CSS Custom Highlight API — see SessionFind. ::highlight() only
+   accepts a handful of properties (colour, background, text-decoration, text-shadow). */
+::highlight(orbit-find) {
+  background-color: rgba(250, 204, 21, 0.4);
+}
+::highlight(orbit-find-current) {
+  background-color: #f5a623;
+  color: #1f2329;
+}
+:root[data-theme='dark'] .find-bar {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
 /* ChatGPT-style snap-to-latest button; only mounted while scrolled up off the tail. */
 .scroll-to-bottom {
   position: absolute;

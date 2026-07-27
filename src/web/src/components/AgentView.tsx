@@ -122,6 +122,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
+import { FIND_HINT, FIND_SUPPORTED, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
@@ -877,7 +878,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // handler; loadingOlder (state) drives the top "loading earlier" spinner.
   const oldestSeqRef = useRef<number | null>(null); // earliest loaded seq
   const hasMoreOlderRef = useRef(false); // older events exist before oldestSeq on the server
-  const loadingOlderRef = useRef(false);
+  // The in-flight page request, if any: it both guards against a second one and lets a caller
+  // that needs to know when older content has landed (⌘F's "search earlier") await the one
+  // already running instead of being told "no".
+  const loadingOlderRef = useRef<Promise<boolean> | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
   // scrollTop so the viewport stays put instead of jumping when older content grows above.
@@ -958,15 +962,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Tail-first lazy loading: pull in the next older page when the user scrolls near the top.
   // Guarded to one request in flight; prepends the page and stamps prependAnchorRef so the
   // layout effect below holds the viewport steady while older content grows above it.
-  const loadOlder = useCallback(() => {
-    if (!selectedId || loadingOlderRef.current || !hasMoreOlderRef.current) return;
+  // Resolves true when events were actually prepended, so an awaiting caller can tell "there's
+  // more history now" from "that was the end of it".
+  const loadOlder = useCallback((): Promise<boolean> => {
+    if (loadingOlderRef.current) return loadingOlderRef.current;
+    if (!selectedId || !hasMoreOlderRef.current) return Promise.resolve(false);
     const before = oldestSeqRef.current;
-    if (before == null) return;
-    loadingOlderRef.current = true;
+    if (before == null) return Promise.resolve(false);
     setLoadingOlder(true);
-    getSessionEventPage(selectedId, { before, limit: OLDER_PAGE })
+    const inFlight = getSessionEventPage(selectedId, { before, limit: OLDER_PAGE })
       .then((page) => {
-        if (selectedIdRef.current !== selectedId) return; // user switched sessions mid-fetch
+        if (selectedIdRef.current !== selectedId) return false; // user switched sessions mid-fetch
         const fresh = page.events.filter((e) => !seen.current.has(e.seq));
         for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
         if (fresh.length) {
@@ -982,13 +988,19 @@ export function AgentView({ runner }: { runner: Runner }) {
           oldestSeq: oldestSeqRef.current,
           hasMoreOlder: page.hasMore,
         });
+        return fresh.length > 0;
       })
-      .catch(() => undefined)
+      .catch(() => false)
       .finally(() => {
-        loadingOlderRef.current = false;
+        loadingOlderRef.current = null;
         setLoadingOlder(false);
       });
+    loadingOlderRef.current = inFlight;
+    return inFlight;
   }, [selectedId]);
+  // Whether the server still holds events older than the loaded ones — read through a callback
+  // because the answer lives in a ref (the scroll handler's, kept out of render for cost).
+  const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
   // Pull back the untrimmed payload of an event the server clipped to a preview (see
   // MAX_EVENT_PAYLOAD). The transcript calls this when the user expands such a card, so a big
   // Read output or Write body only crosses the network if someone actually opens it.
@@ -1460,7 +1472,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
-    loadingOlderRef.current = false;
+    loadingOlderRef.current = null;
     setLoadingOlder(false);
     if (!selectedId) {
       accRef.current = [];
@@ -3180,6 +3192,19 @@ export function AgentView({ runner }: { runner: Runner }) {
                         },
                       ]
                     : [
+                        // Keyboard-only would leave the feature undiscoverable, and unreachable
+                        // for anyone on a trackpad-and-touch device.
+                        ...(FIND_SUPPORTED
+                          ? [
+                              {
+                                key: 'find',
+                                icon: <SearchOutlined />,
+                                label: `Find in session · ${FIND_HINT}`,
+                                onClick: () => openSessionFind(),
+                              },
+                              { type: 'divider' as const },
+                            ]
+                          : []),
                         // A Completed session is filed away, not gone — offer the same Restore
                         // its row has on the Completed tab, so one opened from there can be put
                         // back on Active without going back to hunt for the row.
@@ -3371,6 +3396,14 @@ export function AgentView({ runner }: { runner: Runner }) {
             </div>
           ) : (
             <div className="agent-sessions" />
+          )}
+          {selectedId && (
+            <SessionFind
+              sessionId={selectedId}
+              containerRef={scrollRef}
+              loadOlder={loadOlder}
+              hasOlder={hasOlderNow}
+            />
           )}
           {selectedId && !atBottom && (
             <button className="scroll-to-bottom" aria-label="Scroll to bottom" onClick={scrollToBottom}>
