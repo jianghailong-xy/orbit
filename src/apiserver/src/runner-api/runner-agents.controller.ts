@@ -64,7 +64,7 @@ export class RunnerAgentsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() body: OrchestratorAgentInput,
   ) {
-    await this.assertOrchestrator(runner.ownerId, sessionId);
+    const scope = await this.assertOrchestrator(runner.ownerId, sessionId);
     if (!body.name) throw new BadRequestException('name is required');
     // Bind to the calling runner by default so the new agent can actually run sessions.
     const agent = await this.agents.create(
@@ -73,8 +73,8 @@ export class RunnerAgentsController {
     );
     // Push it to the owner's control-plane stream so their agent list shows it live instead of
     // only after a manual reload — the agent-side mirror of TasksService's publishTaskChanged.
-    // Scoped via the calling session (assertOrchestrator already proved it's this owner's).
-    this.realtime.publishAgentChanged(sessionId!, agent.id);
+    // Scoped via the calling session, which assertOrchestrator returned as this owner's.
+    this.realtime.publishAgentChanged(scope, agent.id);
     return agent;
   }
 
@@ -85,13 +85,13 @@ export class RunnerAgentsController {
     @Param('id') id: string,
     @Body() body: OrchestratorAgentInput,
   ) {
-    await this.assertOrchestrator(runner.ownerId, sessionId);
+    const scope = await this.assertOrchestrator(runner.ownerId, sessionId);
     const agent = await this.agents.update(
       runner.ownerId,
       id,
       this.sanitize(body) as UpdateAgentDto,
     );
-    this.realtime.publishAgentChanged(sessionId!, id);
+    this.realtime.publishAgentChanged(scope, id);
     return agent;
   }
 
@@ -111,8 +111,10 @@ export class RunnerAgentsController {
     };
   }
 
-  /** The calling session's agent must have orchestration enabled (mirrors session_create). */
-  private async assertOrchestrator(ownerId: string, sessionId: string | undefined): Promise<void> {
+  /** The calling session's agent must have orchestration enabled (mirrors session_create).
+   *  Returns that session's id — proven to exist under this owner — so the callers can scope a
+   *  control-plane publish to it without re-asserting it's non-null. */
+  private async assertOrchestrator(ownerId: string, sessionId: string | undefined): Promise<string> {
     if (!sessionId) throw new BadRequestException('missing session context');
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
@@ -121,5 +123,6 @@ export class RunnerAgentsController {
     if (!session?.agent?.enableOrchestration) {
       throw new ForbiddenException('orchestration is not enabled for this agent');
     }
+    return sessionId;
   }
 }
