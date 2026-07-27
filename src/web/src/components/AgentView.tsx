@@ -1348,19 +1348,32 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Claude's commands and skills are meaningless in that session — don't offer them, and
   // don't gate sending on them. `/status` is ours and stays.
   const codexComposer = shownProvider === 'codex';
+  // The selected session's permission mode as the SERVER resolves it: its own stored mode,
+  // else the owning agent's, else dontAsk (queue.service.ts buildSession). Reading the session
+  // row alone would show "Don't Ask" for every session that never stored one — and since the
+  // pills are authoritative on send, resuming one would then WRITE that dontAsk over the
+  // agent's real mode. The agent's mode comes from the detail (full agent row) or the agents
+  // list, whichever has landed.
+  const effectivePermissionMode: string =
+    selected?.permissionMode ??
+    detailForSelected?.agent?.permissionMode ??
+    agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
+    'dontAsk';
 
   // Seed the Mode/Model/Effort pills from a non-live (resumable) session's stored
   // config, so they show that session's real settings and an edit before a resume
   // carries through (resume re-spawns claude with the new value). Keyed on the id +
-  // liveness, not the polled object, so the 4s refetch can't clobber a user's edit.
+  // liveness, not the polled object, so the 4s refetch can't clobber a user's edit —
+  // the resolved mode joins them because it settles late on a cold deep-link (it needs
+  // the agent), and it's a value, so a poll returning the same config re-runs nothing.
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
     setModel(selected.model ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
-    setMode(PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default');
+    setMode(PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default');
     setEffort(normalizeEffortForProvider(provider, selected.effort ?? ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, live]);
+  }, [selected?.id, live, effectivePermissionMode]);
 
   // Composing a fresh session (no session selected): seed the model from the
   // picked agent's configured default (set on the Runner page). A selected
@@ -2625,7 +2638,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     [shownProvider, runner.name, runner.id, retryText, selectedDeleted, selectedMissing, sendMutate],
   );
   const shownMode: string = live
-    ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
+    ? (PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default')
     : mode;
   const shownEffort: string = normalizeEffortForProvider(
     shownProvider,

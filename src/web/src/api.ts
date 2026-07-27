@@ -560,7 +560,14 @@ export interface SessionDetail {
   // `defaultMergeTarget` is the branch this agent's sessions merge into by default,
   // remembered from the last target the user switched to in the merge dropdown (null = the
   // runner's auto-detected default). Agent-scoped, so it sticks across the agent's sessions.
-  agent: { id: string; provider?: string | null; defaultMergeTarget?: string | null } | null;
+  // `permissionMode` is the agent's configured default — what the server falls back to for a
+  // session that never stored one of its own (see queue.service.ts buildSession).
+  agent: {
+    id: string;
+    provider?: string | null;
+    defaultMergeTarget?: string | null;
+    permissionMode?: string | null;
+  } | null;
   branch?: string | null;
   baseSha?: string | null;
   changedFiles?: SessionChangedFile[] | null;
