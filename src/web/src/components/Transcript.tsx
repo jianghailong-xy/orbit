@@ -445,26 +445,38 @@ function StandaloneResult({ node }: { node: ResultNode }) {
   return <ToolResult seq={node.seq} content={full ? full.content : node.content} isError={node.isError} />;
 }
 
+// `data-seq` marks where each event's card starts, so ⌘F can scroll to a hit the server found by
+// seq. Only these top-level roots carry it: a lookup takes the last stamp at or before the target,
+// which resolves anything folded inside one (a tool_result, a grouped run, a sub-agent's events)
+// to the card that contains it.
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
     case 'user':
       return <UserBubble node={node} />;
     case 'assistant':
-      return <AssistantBubble text={node.text} />;
+      return <AssistantBubble text={node.text} seq={node.seq} />;
     case 'thinking':
-      return <Thinking text={node.text} />;
+      return <Thinking text={node.text} seq={node.seq} />;
     case 'tool':
       return <ToolView node={node} live={live} />;
     case 'result':
       return <StandaloneResult node={node} />;
     case 'divider':
-      return <div className="chat-turn-divider" />;
+      return <div className="chat-turn-divider" data-seq={node.seq} />;
     case 'interrupt':
-      return <div className="chat-note">⊘ interrupted</div>;
+      return (
+        <div className="chat-note" data-seq={node.seq}>
+          ⊘ interrupted
+        </div>
+      );
     case 'error':
-      return <div className="chat-error">✖ {node.message}</div>;
+      return (
+        <div className="chat-error" data-seq={node.seq}>
+          ✖ {node.message}
+        </div>
+      );
     case 'authError':
-      return <AuthErrorCard message={node.message} />;
+      return <AuthErrorCard message={node.message} seq={node.seq} />;
   }
 }
 
@@ -503,7 +515,7 @@ const LOCAL_LOGIN: Record<string, { login: string; headless: ReactNode }> = {
  * and with no context at all (shared/public page, static export) only the diagnosis is safe to
  * show — guessing a remedy there would send the reader to the wrong place.
  */
-function AuthErrorCard({ message }: { message: string }) {
+function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
   const [copied, setCopied] = useState(false);
   const local = help ? LOCAL_LOGIN[help.provider] : undefined;
@@ -516,7 +528,7 @@ function AuthErrorCard({ message }: { message: string }) {
     });
   };
   return (
-    <div className="chat-authfix">
+    <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
         <div className="chat-authfix-title">
@@ -656,7 +668,8 @@ function UserBubble({ node }: { node: TextNode }) {
 
 // Relative timestamp under a user bubble ("just now", "5m ago", "3h ago", "2d ago",
 // "1w ago"); older than ~4 weeks falls back to a short absolute month/day.
-function relTime(iso: string): string {
+// Exported for ⌘F's result rows, so a hit is dated the same way the bubble it points at is.
+export function relTime(iso: string): string {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return '';
   const diff = Date.now() - t;
@@ -1102,9 +1115,21 @@ export const MD = memo(function MD({
 // transcript node and the live streaming draft, so both look and behave identically.
 // While streaming we drop syntax highlighting (see MD) and mark the bubble so the
 // blinking caret CSS attaches.
-export function AssistantBubble({ text, streaming }: { text: string; streaming?: boolean }) {
+export function AssistantBubble({
+  text,
+  streaming,
+  seq,
+}: {
+  text: string;
+  streaming?: boolean;
+  // Absent for the live draft, which has no persisted event to point at yet.
+  seq?: number;
+}) {
   return (
-    <div className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}>
+    <div
+      className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
+      data-seq={seq}
+    >
       <MD highlight={!streaming}>{text}</MD>
     </div>
   );
@@ -1142,11 +1167,11 @@ function useThrottled(value: string, ms: number): string {
 }
 
 // ── thinking (collapsible) ──────────────────────────────────────────────────
-function Thinking({ text }: { text: string }) {
+function Thinking({ text, seq }: { text: string; seq?: number }) {
   const exp = useContext(ExportCtx);
   const [open, setOpen] = useState(!!exp);
   return (
-    <div className="chat-think">
+    <div className="chat-think" data-seq={seq}>
       <div className="chat-think-head" onClick={() => setOpen((o) => !o)}>
         {open ? <DownOutlined /> : <RightOutlined />} 💭 Thinking
       </div>
@@ -1226,6 +1251,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   }
   return (
     <div
+      data-seq={node.seq}
       className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${
         hasDetail && open ? ' is-open' : ''
       }`}
@@ -1287,6 +1313,7 @@ function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
   const toggle = () => setManualOpen((prev) => !(prev ?? (!!exp || summary.urgent)));
   return (
     <div
+      data-seq={nodes[0].seq}
       className={`chat-tool-card chat-tool-group chat-tone-${summary.tone}${open ? ' is-open' : ''}`}
     >
       <div className="chat-tool-row" onClick={toggle}>
@@ -1540,7 +1567,10 @@ function ToolResult({
   // still surface — otherwise a failed tool looks like it never ran.
   if (!text && images.length === 0 && !isError) return null;
   return (
-    <div className={`chat-result${isError ? ' is-error' : ''}${compact ? ' compact' : ''}`}>
+    <div
+      data-seq={seq}
+      className={`chat-result${isError ? ' is-error' : ''}${compact ? ' compact' : ''}`}
+    >
       {images.length > 0 && (
         <div className="chat-images">
           {images.map((src, i) => (
