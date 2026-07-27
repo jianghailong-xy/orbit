@@ -51,6 +51,18 @@ export class RunnerSessionsController {
     return this.sessions.listForOrchestration(runner.ownerId, { status: s, parentSessionId });
   }
 
+  // Same cross-scope search the clients' ⌘K palette runs (SessionsService.search), scoped to the
+  // runner's owner. MUST stay above `sessions/:id` — Nest matches in declaration order, so below
+  // it the literal path would be swallowed as an id.
+  @Get('sessions/search')
+  searchSessions(
+    @CurrentRunner() runner: Runner,
+    @Query('q') q: string | undefined,
+    @Query('limit') limit: string | undefined,
+  ) {
+    return this.sessions.search(runner.ownerId, q, Number(limit) || 20);
+  }
+
   @Get('sessions/:id')
   getSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
     return this.sessions.get(runner.ownerId, id);

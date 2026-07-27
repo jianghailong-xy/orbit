@@ -429,6 +429,12 @@ func (t *Transport) listSessions(query string) (json.RawMessage, error) {
 	return out, err
 }
 
+func (t *Transport) searchSessions(query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) getSession(id string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/sessions/"+id, nil, &out, taskOpTimeout)

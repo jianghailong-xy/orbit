@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -299,6 +300,19 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.listSessions(sessionListQuery(args))
 		if err != nil {
 			return toolResult("list sessions failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_search":
+		if !s.allowOrchestration {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		if getString(args, "query") == "" {
+			return toolResult("query is required", true)
+		}
+		raw, err := s.t.searchSessions(sessionSearchQuery(args))
+		if err != nil {
+			return toolResult("search sessions failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -676,6 +690,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"inputSchema": obj(map[string]interface{}{"status": sessionStatus, "parentSessionId": str}),
 			},
 			map[string]interface{}{
+				"name":        "session_search",
+				"description": "Find this owner's sessions by keyword when you don't know the id — matches session titles, opening prompts, last replies, branch names and the joined agent/task names, plus the conversation text itself for queries of 3+ characters (the response's `contentSearched` says whether message bodies were in scope). Spans every scope, including archived and trashed sessions; each hit carries `matchField` and a text snippet, plus archivedAt/deletedAt so you can tell where it lives. Use session_list instead to see what is running right now.",
+				"inputSchema": obj(map[string]interface{}{
+					"query": map[string]interface{}{"type": "string", "description": "Text to look for. Matched literally (case-insensitive), not as a regex or keyword set."},
+					"limit": map[string]interface{}{"type": "integer", "description": "Max hits to return. Default 20, capped at 50."},
+				}, "query"),
+			},
+			map[string]interface{}{
 				"name":        "session_get",
 				"description": "Get one session's current status and latest output (to collect a spawned sub-task's result).",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
@@ -835,6 +857,30 @@ func sessionListQuery(args map[string]interface{}) string {
 		return ""
 	}
 	return "?" + q.Encode()
+}
+
+// sessionSearchQuery builds ?q=&limit= for session_search. The server defaults and caps
+// the limit, so an absent or unparseable one is simply left off.
+func sessionSearchQuery(args map[string]interface{}) string {
+	q := url.Values{}
+	q.Set("q", getString(args, "query"))
+	if n := getNumber(args, "limit"); n > 0 {
+		q.Set("limit", strconv.Itoa(n))
+	}
+	return "?" + q.Encode()
+}
+
+// getNumber reads a numeric argument. JSON numbers decode to float64, but models routinely
+// send them quoted, so a numeric string counts too.
+func getNumber(args map[string]interface{}, key string) int {
+	switch v := args[key].(type) {
+	case float64:
+		return int(v)
+	case string:
+		n, _ := strconv.Atoi(v)
+		return n
+	}
+	return 0
 }
 
 func getString(args map[string]interface{}, key string) string {

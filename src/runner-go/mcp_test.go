@@ -48,7 +48,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -75,7 +75,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])
@@ -89,6 +89,33 @@ func TestSessionListQuery(t *testing.T) {
 	}
 	if q := sessionListQuery(map[string]interface{}{"status": "RUNNING"}); q != "?status=RUNNING" {
 		t.Fatalf("status query = %q", q)
+	}
+}
+
+func TestSessionSearchQuery(t *testing.T) {
+	if q := sessionSearchQuery(map[string]interface{}{"query": "merge conflict"}); q != "?q=merge+conflict" {
+		t.Fatalf("query = %q", q)
+	}
+	// A limit arrives as a JSON number, but models often quote it.
+	if q := sessionSearchQuery(map[string]interface{}{"query": "a", "limit": float64(5)}); q != "?limit=5&q=a" {
+		t.Fatalf("float limit query = %q", q)
+	}
+	if q := sessionSearchQuery(map[string]interface{}{"query": "a", "limit": "5"}); q != "?limit=5&q=a" {
+		t.Fatalf("string limit query = %q", q)
+	}
+	// An unusable limit is left off so the server's own default applies.
+	if q := sessionSearchQuery(map[string]interface{}{"query": "a", "limit": "many"}); q != "?q=a" {
+		t.Fatalf("bad limit query = %q", q)
+	}
+}
+
+// An empty query must be rejected locally: server-side it would mean "return recents",
+// which is session_list's job, not a search result.
+func TestSessionSearchRequiresQuery(t *testing.T) {
+	srv := &mcpServer{allowOrchestration: true}
+	res := srv.callTool("session_search", map[string]interface{}{})
+	if res["isError"] != true {
+		t.Fatalf("session_search with no query: isError = %#v", res["isError"])
 	}
 }
 
