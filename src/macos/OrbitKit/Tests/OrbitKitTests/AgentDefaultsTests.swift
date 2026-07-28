@@ -12,7 +12,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertFalse(codex.contains("claude-opus-4-8"))
 
         let claude = AgentDefaults.models(for: "claude").map(\.id)
-        XCTAssertEqual(claude, ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"])
+        XCTAssertEqual(claude, ["claude-fable-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"])
         XCTAssertFalse(claude.contains("gpt-5.6-sol"))
 
         // Unknown provider falls back to Claude, never to an empty menu.

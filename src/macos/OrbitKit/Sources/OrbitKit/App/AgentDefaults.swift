@@ -63,6 +63,7 @@ public enum AgentDefaults {
     /// models (Opus 4.8, Fable 5, …) aren't listed — like Claude Code, they stay reachable by pinning
     /// the id directly and render as their raw id, same as any other non-current model.
     public static let claudeModels: [ModelOption] = [
+        ModelOption(id: "claude-fable-5", name: "Fable 5"),
         ModelOption(id: "claude-opus-5", name: "Opus 5"),
         ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
         ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
@@ -159,7 +160,7 @@ public enum AgentDefaults {
     /// CONTEXT_WINDOW_BY_MODEL.
     private static func knownContextWindow(for id: String) -> Int? {
         switch id {
-        case "claude-opus-5", "claude-sonnet-5": return 1_000_000
+        case "claude-fable-5", "claude-opus-5", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
         default: return nil
         }
