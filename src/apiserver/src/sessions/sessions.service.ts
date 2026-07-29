@@ -139,23 +139,32 @@ export class SessionsService {
     // Per-agent worktree toggle: default off. An agent with it turned off (the default)
     // makes its sessions run with no branch, so the runner runs them in the shared workDir.
     let enableWorktree = false;
+    // The agent's configured permission mode, materialized onto the session below when the
+    // caller picked none (MCP spawns, task runs — the web/native composers always send one).
+    // The claim resolves session ?? agent ?? dontAsk anyway, so this doesn't change what the
+    // runner spawns with; it stops a NULL column from *reading* as "Don't Ask" in every
+    // client's Mode pill — a stale pill that the next resume writes back, silently
+    // downgrading a session that was really running the agent's mode.
+    let agentPermissionMode: string | undefined;
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { runnerId: true, provider: true, enableWorktree: true },
+        select: { runnerId: true, provider: true, enableWorktree: true, permissionMode: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
       provider = agent.provider ?? AgentProvider.CLAUDE;
       enableWorktree = agent.enableWorktree;
+      agentPermissionMode = agent.permissionMode;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { provider: true, enableWorktree: true },
+        select: { provider: true, enableWorktree: true, permissionMode: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       provider = agent.provider ?? AgentProvider.CLAUDE;
       enableWorktree = agent.enableWorktree;
+      agentPermissionMode = agent.permissionMode;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
@@ -204,7 +213,7 @@ export class SessionsService {
         // Codex creates/returns its own thread id after the first exec turn.
         claudeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
-        permissionMode: dto.permissionMode,
+        permissionMode: dto.permissionMode ?? agentPermissionMode,
         effort: normalizeEffortForProvider(runtime, dto.effort),
         agentId: dto.agentId,
         assignedRunnerId,
