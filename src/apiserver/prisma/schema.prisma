@@ -23,9 +23,10 @@ enum RunStatus {
   // Interactive sessions (Route B). Appended last to match ALTER TYPE ADD VALUE.
   AWAITING_INPUT
   INTERRUPTED
-  // Terminal-but-resumable: a gracefully recycled (idle/task-done) or user-ended session.
-  // Distinct from CANCELLED so the UI shows it as dormant. Appended last (ADD VALUE).
-  PARKED
+  // NOTE: the `run_status` DB type still carries a now-unused 'PARKED' label — Postgres has
+  // no ALTER TYPE ... DROP VALUE, and rebuilding the type would rewrite/lock `session`. It is
+  // absent here on purpose: migration 0071 backfilled every PARKED row to CANCELLED and no
+  // code path writes it any more, so no row can carry a value this enum can't decode.
 
   @@map("run_status")
 }

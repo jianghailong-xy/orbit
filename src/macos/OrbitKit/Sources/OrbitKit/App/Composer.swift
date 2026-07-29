@@ -19,7 +19,7 @@ public enum ComposerLogic {
     /// revives them via `--resume` (full context preserved).
     public static func availability(status: RunStatus) -> SendAvailability {
         switch status {
-        case .awaitingInput, .interrupted, .parked: return .sendNow
+        case .awaitingInput, .interrupted: return .sendNow
         case .running, .pending: return .queue
         case .succeeded, .failed, .cancelled: return .sendNow
         }
@@ -29,7 +29,7 @@ public enum ComposerLogic {
     /// than POST /turns.
     public static func shouldResume(status: RunStatus) -> Bool {
         switch status {
-        case .succeeded, .failed, .cancelled, .parked: return true
+        case .succeeded, .failed, .cancelled: return true
         default: return false
         }
     }
@@ -37,7 +37,7 @@ public enum ComposerLogic {
     /// Reconcile the stream-derived status with the server's REST status for the send decision.
     ///
     /// The SSE stream is authoritative for *live* transitions, but the *terminal* one
-    /// (SUCCEEDED / PARKED / CANCELLED / FAILED) is broadcast live-only — that event never lands
+    /// (SUCCEEDED / CANCELLED / FAILED) is broadcast live-only — that event never lands
     /// in the replayed durable log, so a client that opens (or reconnects to) an already-ended
     /// session never learns it ended and keeps the last live status. POST /turns then 409s with
     /// "the session has ended" instead of reviving via POST /resume. The REST status IS

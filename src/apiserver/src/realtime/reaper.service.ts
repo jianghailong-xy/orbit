@@ -195,7 +195,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   /**
    * Finalize a stalled live session, drain queued turns, signal + publish terminal.
    * `status` is FAILED for a genuine breakdown — `reason` is then recorded as the session's
-   * error — or the benign terminal state a graceful end would have reached (PARKED/
+   * error — or the benign terminal state a graceful end would have reached (CANCELLED/
    * SUCCEEDED) when the runner merely never acknowledged that end; there `reason` is only a
    * log/publish detail and no error is written. `resetTaskTo` is how a now-stalled
    * IN_PROGRESS task is reclaimed: OPEN for a retryable end (dead/partitioned runner,

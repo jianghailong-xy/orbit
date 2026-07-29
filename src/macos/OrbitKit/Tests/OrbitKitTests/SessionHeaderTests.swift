@@ -51,7 +51,7 @@ final class SessionHeaderTests: XCTestCase {
 
     func testStatusWordDormant() {
         // A dormant/resumable end (no hard reason) reads as "Dormant", not the accusatory "Cancelled".
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.parked)), "Dormant")
+        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled, endReason: "idle")), "Dormant")
         XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled)), "Dormant")
     }
 

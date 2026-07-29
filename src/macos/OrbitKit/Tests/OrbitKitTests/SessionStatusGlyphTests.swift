@@ -52,11 +52,14 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g, .init(shape: .symbol("clock"), tone: .neutral, label: "Queued"))
     }
 
-    func testParkedIsDormant() {
-        let g = SessionStatusGlyph.make(for: session(.parked))
-        XCTAssertEqual(g.shape, .symbol("pause.circle"))
-        XCTAssertEqual(g.tone, .neutral)
-        XCTAssertEqual(g.label, "Dormant — send a message to resume")
+    /// An idle recycle settles CANCELLED like a hard stop, so only the reason keeps it dormant.
+    func testIdleRecycleIsDormant() {
+        for reason in ["idle", "ended"] {
+            let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: reason))
+            XCTAssertEqual(g.shape, .symbol("pause.circle"), reason)
+            XCTAssertEqual(g.tone, .neutral, reason)
+            XCTAssertEqual(g.label, "Dormant — send a message to resume", reason)
+        }
     }
 
     func testCancelledWithHardReasonIsTerminal() {

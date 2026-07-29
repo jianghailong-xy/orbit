@@ -115,7 +115,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(ComposerLogic.availability(status: .running), .queue)
         XCTAssertEqual(ComposerLogic.availability(status: .pending), .queue)
         XCTAssertEqual(ComposerLogic.availability(status: .succeeded), .sendNow)
-        XCTAssertTrue(ComposerLogic.shouldResume(status: .parked))
+        XCTAssertTrue(ComposerLogic.shouldResume(status: .cancelled))
         XCTAssertFalse(ComposerLogic.shouldResume(status: .awaitingInput))
     }
 
@@ -123,10 +123,10 @@ final class Phase2LogicTests: XCTestCase {
         // The bug: the stream missed the (un-replayable) terminal broadcast and still looks
         // live, but the server says the session ended — trust the server so the composer resumes
         // instead of 409-ing on POST /turns.
-        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .awaitingInput, server: .parked), .parked)
+        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .awaitingInput, server: .cancelled), .cancelled)
         XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .running, server: .succeeded), .succeeded)
         XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .interrupted, server: .cancelled), .cancelled)
-        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .running, server: .parked), .parked)
+        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .running, server: .failed), .failed)
         // Only upgrades toward terminal: a stale terminal/non-terminal snapshot never overrides a
         // freshly-live stream (e.g. a resume just re-spawned the session, so the server is PENDING).
         XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .running, server: .pending), .running)
@@ -134,7 +134,7 @@ final class Phase2LogicTests: XCTestCase {
         // No server status (not yet fetched) → keep the stream status verbatim.
         XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .awaitingInput, server: nil), .awaitingInput)
         // Both terminal → the stream's own terminal value stands (no spurious change).
-        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .succeeded, server: .parked), .succeeded)
+        XCTAssertEqual(ComposerLogic.reconcileStatus(stream: .succeeded, server: .cancelled), .succeeded)
     }
 
     func testIsLive() {
@@ -142,7 +142,7 @@ final class Phase2LogicTests: XCTestCase {
         for s in [RunStatus.running, .pending, .awaitingInput, .interrupted] {
             XCTAssertTrue(ComposerLogic.isLive(status: s), "\(s) should be live")
         }
-        for s in [RunStatus.succeeded, .failed, .cancelled, .parked] {
+        for s in [RunStatus.succeeded, .failed, .cancelled] {
             XCTAssertFalse(ComposerLogic.isLive(status: s), "\(s) should not be live")
         }
     }
@@ -164,7 +164,7 @@ final class Phase2LogicTests: XCTestCase {
         // A non-running authoritative status stays Send, even if the stream is a stale `.running`
         // (e.g. the turn just ended but the reducer missed the un-replayed terminal transition).
         XCTAssertFalse(idle(session: .awaitingInput, stream: .running))
-        XCTAssertFalse(idle(session: .parked, stream: .running))
+        XCTAssertFalse(idle(session: .cancelled, stream: .running))
         // No session record yet (a fresh deep link before the list loads): fall back to the stream.
         XCTAssertTrue(idle(session: nil, stream: .running))
         XCTAssertFalse(idle(session: nil, stream: .awaitingInput))
@@ -196,7 +196,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerLogic.willQueue(authoritative: nil, reconciled: .running))
         XCTAssertTrue(ComposerLogic.willQueue(authoritative: nil, reconciled: .pending))
         XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .awaitingInput))
-        XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .parked))
+        XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .cancelled))
     }
 
     func testEffortLabelsAndWire() {

@@ -27,7 +27,7 @@ public enum SessionHeader {
             return "Completed"
         case .failed:
             return (s.error ?? "").lowercased().contains("offline") ? "Disconnected" : "Failed"
-        case .parked, .cancelled, .interrupted:
+        case .cancelled, .interrupted:
             let reason = s.endReason ?? ""
             let terminal =
                 reason == "orphaned" || reason == "deleted" || reason == "completed" ||

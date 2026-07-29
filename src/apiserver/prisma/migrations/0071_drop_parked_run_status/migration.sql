@@ -1,0 +1,15 @@
+-- Retire the PARKED run status (added in 0035), folding it back into CANCELLED.
+--
+-- PARKED was a second encoding of information `end_reason` already carried: every client
+-- (web AgentView, OrbitKit SessionStatusGlyph/SessionHeader) branches on PARKED and
+-- CANCELLED together and then decides dormant-vs-cancelled purely from end_reason, so the
+-- status value itself was never read on its own. Collapsing it is display-neutral: the
+-- backfilled rows keep end_reason 'idle'/'ended', neither of which is in the clients'
+-- terminal-cancel set, so they still render "Dormant — send a message to resume".
+--
+-- The `run_status` type keeps its now-unused 'PARKED' label: Postgres has no
+-- ALTER TYPE ... DROP VALUE, and rebuilding the type means rewriting `session` under an
+-- ACCESS EXCLUSIVE lock for no behavioural gain. The label is unreachable instead —
+-- gracefulEndStatus() no longer returns it and this backfill leaves no row holding it, so
+-- the Prisma enum (which omits it) can decode every row.
+UPDATE "session" SET "status" = 'CANCELLED' WHERE "status" = 'PARKED';
