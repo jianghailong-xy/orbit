@@ -46,6 +46,9 @@ export class CreateAgentDto {
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
   // Opt-in: may this agent's sessions orchestrate other sessions via orbit mcp (default off).
   @IsOptional() @IsBoolean() enableOrchestration?: boolean;
+  // Branch this agent's sessions merge into by default (null = the runner auto-detects
+  // main, else master). Also written implicitly when a session merges to an explicit target.
+  @IsOptional() @IsString() defaultMergeTarget?: string;
 }
 
 export class UpdateAgentDto {
@@ -71,6 +74,7 @@ export class UpdateAgentDto {
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
   @IsOptional() @IsBoolean() enableOrchestration?: boolean;
+  @IsOptional() @IsString() defaultMergeTarget?: string;
 }
 
 // The full agent list in the desired sidebar order; each id's index becomes its position.
