@@ -299,9 +299,21 @@ export class SessionsService {
     if ((await this.spawnDepth(parentSessionId)) >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
     }
-    const siblings = await this.prisma.session.count({ where: { ownerId, parentSessionId } });
+    // Only children still queued or in flight occupy the fan-out budget. Counting every child
+    // ever spawned would turn this into a lifetime quota, so a long-lived orchestrator would be
+    // locked out for good once it had spawned 10 — even with nothing running.
+    const siblings = await this.prisma.session.count({
+      where: {
+        ownerId,
+        parentSessionId,
+        deletedAt: null,
+        status: { in: [RunStatus.PENDING, ...SessionsService.LIVE] },
+      },
+    });
     if (siblings >= SessionsService.MAX_CHILDREN_PER_SESSION) {
-      throw new ForbiddenException(`child-session limit (${SessionsService.MAX_CHILDREN_PER_SESSION}) reached`);
+      throw new ForbiddenException(
+        `child-session limit (${SessionsService.MAX_CHILDREN_PER_SESSION} concurrent) reached`,
+      );
     }
     // Children share a batch (rooted at the parent's own id) so the claim queue caps how many
     // run concurrently, on top of the runner's own max_concurrent.
