@@ -394,7 +394,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("name is required", true)
 		}
 		body := map[string]interface{}{"name": name}
-		copyIfPresent(body, args, "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree")
+		copyIfPresent(body, args, "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		raw, err := s.t.createAgent(s.sessionID, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -410,7 +410,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("agentId is required", true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "name", "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree")
+		copyIfPresent(body, args, "name", "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -642,6 +642,22 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	if includeOrchestration {
 		sessionIDProp := map[string]interface{}{"type": "string", "description": "Target session id."}
 		sessionStatus := map[string]interface{}{"type": "string", "enum": []string{"PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED", "PARKED"}}
+		// Agent config shared by agent_create/agent_update. env is stored (and injected into the
+		// engine process) as a flat string map, so the whole map is replaced on every write.
+		envProp := map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": str,
+			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map — read the current one with agent_list and send the full merged set, or existing vars are dropped.",
+		}
+		permissionModeProp := map[string]interface{}{
+			"type":        "string",
+			"enum":        []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"},
+			"description": "How the agent's sessions handle tool-permission prompts. New agents default to dontAsk.",
+		}
+		mergeTargetProp := map[string]interface{}{
+			"type":        "string",
+			"description": "Branch this agent's sessions merge into by default. Omit to leave the runner's auto-detect (main, else master).",
+		}
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
@@ -703,6 +719,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
 					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
+					"env":                envProp,
+					"permissionMode":     permissionModeProp,
+					"defaultMergeTarget": mergeTargetProp,
 				}, "name"),
 			},
 			map[string]interface{}{
@@ -719,6 +738,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"workDir":            str,
 					"runnerId":           str,
 					"enableWorktree":     map[string]interface{}{"type": "boolean"},
+					"env":                envProp,
+					"permissionMode":     permissionModeProp,
+					"defaultMergeTarget": mergeTargetProp,
 				}, "agentId"),
 			},
 		)

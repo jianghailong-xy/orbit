@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Runner } from '@prisma/client';
+import { PermissionMode } from '@orbit/shared';
 import { AgentsService } from '../agents/agents.service';
 import { CreateAgentDto, UpdateAgentDto } from '../agents/dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,7 +32,12 @@ type OrchestratorAgentInput = {
   workDir?: string;
   runnerId?: string;
   enableWorktree?: boolean;
+  env?: unknown;
+  permissionMode?: string;
+  defaultMergeTarget?: string;
 };
+
+const PERMISSION_MODES: string[] = Object.values(PermissionMode);
 
 /**
  * Agent management for in-session orchestrators, reached by the `orbit mcp` server with the
@@ -80,8 +86,13 @@ export class RunnerAgentsController {
   }
 
   /** Whitelist the caller's fields (drops enableOrchestration/enabled etc. an agent must not
-   *  control). On create, default runnerId to the calling runner so the agent can run. */
+   *  control). On create, default runnerId to the calling runner so the agent can run.
+   *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
+   *  to check — the free-form fields are validated here instead. */
   private sanitize(body: OrchestratorAgentInput, defaultRunnerId?: string) {
+    if (body.permissionMode !== undefined && !PERMISSION_MODES.includes(body.permissionMode)) {
+      throw new BadRequestException(`permissionMode must be one of: ${PERMISSION_MODES.join(', ')}`);
+    }
     return {
       name: body.name,
       description: body.description,
@@ -92,7 +103,25 @@ export class RunnerAgentsController {
       workDir: body.workDir,
       runnerId: body.runnerId ?? defaultRunnerId,
       enableWorktree: body.enableWorktree,
+      env: this.normalizeEnv(body.env),
+      permissionMode: body.permissionMode,
+      defaultMergeTarget: body.defaultMergeTarget,
     };
+  }
+
+  /** The runner decodes `env` into a map[string]string, so a nested/non-string value would
+   *  break every subsequent claim for that agent. Reject it at the write instead. */
+  private normalizeEnv(env: unknown): Record<string, string> | undefined {
+    if (env === undefined || env === null) return undefined;
+    if (typeof env !== 'object' || Array.isArray(env)) {
+      throw new BadRequestException('env must be an object of string values');
+    }
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env as Record<string, unknown>)) {
+      if (typeof v !== 'string') throw new BadRequestException(`env.${k} must be a string`);
+      out[k] = v;
+    }
+    return out;
   }
 
   /** The calling session's agent must have orchestration enabled (mirrors session_create). */

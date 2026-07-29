@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -100,6 +103,77 @@ func TestSessionSettled(t *testing.T) {
 			t.Fatalf("sessionSettled(%q) = false, want true", s)
 		}
 	}
+}
+
+// The agent tools must advertise the full config surface an orchestrator may write, and
+// actually forward it — a param in the schema that callTool drops is silently ignored.
+func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
+	tools := toolDescriptors(false, true)
+	for _, name := range []string{"agent_create", "agent_update"} {
+		props := mcpToolProps(tools, name)
+		for _, field := range []string{"env", "permissionMode", "defaultMergeTarget"} {
+			if props[field] == nil {
+				t.Fatalf("%s inputSchema missing %s", name, field)
+			}
+		}
+		// Still human-only: an agent must not be able to grant orchestration.
+		if props["enableOrchestration"] != nil {
+			t.Fatalf("%s must not expose enableOrchestration", name)
+		}
+	}
+
+	var gotPath string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"id":"a1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{allowOrchestration: true, sessionID: "s1", t: NewTransport(srv.URL, "tok")}
+	args := map[string]interface{}{
+		"name":               "child",
+		"agentId":            "a1",
+		"env":                map[string]interface{}{"FOO": "bar"},
+		"permissionMode":     "acceptEdits",
+		"defaultMergeTarget": "develop",
+	}
+	for _, tc := range []struct{ tool, path string }{
+		{"agent_create", "/api/runner/agents"},
+		{"agent_update", "/api/runner/agents/a1"},
+	} {
+		name := tc.tool
+		gotBody = nil
+		if res := mcp.callTool(name, args); res["isError"] == true {
+			t.Fatalf("%s returned an error: %#v", name, res["content"])
+		}
+		if gotPath != tc.path {
+			t.Fatalf("%s hit %q, want %q", name, gotPath, tc.path)
+		}
+		if env, _ := gotBody["env"].(map[string]interface{}); env["FOO"] != "bar" {
+			t.Fatalf("%s body env = %#v", name, gotBody["env"])
+		}
+		if gotBody["permissionMode"] != "acceptEdits" {
+			t.Fatalf("%s body permissionMode = %#v", name, gotBody["permissionMode"])
+		}
+		if gotBody["defaultMergeTarget"] != "develop" {
+			t.Fatalf("%s body defaultMergeTarget = %#v", name, gotBody["defaultMergeTarget"])
+		}
+	}
+}
+
+// mcpToolProps returns a tool's inputSchema properties map.
+func mcpToolProps(tools []map[string]interface{}, name string) map[string]interface{} {
+	for _, tool := range tools {
+		if tool["name"] != name {
+			continue
+		}
+		schema, _ := tool["inputSchema"].(map[string]interface{})
+		props, _ := schema["properties"].(map[string]interface{})
+		return props
+	}
+	return nil
 }
 
 func hasMCPTool(tools []map[string]interface{}, name string) bool {
