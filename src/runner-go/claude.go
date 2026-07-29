@@ -113,6 +113,16 @@ func isAPIError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "API Error")
 }
 
+// isAuthError reports whether a result/assistant text carries a sign-in failure — this
+// machine's stored credentials being gone, expired or rejected ("Failed to authenticate:
+// OAuth session expired and could not be refreshed"). It arrives the same way an API error
+// does (assistant text + a "success" result), so it needs the same rescue from resultFrom;
+// it's split out because the control plane renders it as sign-in guidance rather than a bare
+// error. Heuristic; keep in sync with isAuthErrorText in @orbit/shared.
+func isAuthError(s string) bool {
+	return strings.HasPrefix(strings.TrimSpace(s), "Failed to authenticate")
+}
+
 // contextTokensFromAssistant returns the context-window occupancy after a *top-level*
 // assistant message: the tokens sent to produce it (fresh input + cache reads + cache
 // writes) plus the tokens it generated — the same figure Claude Code's own context

@@ -3911,6 +3911,103 @@ body {
   margin: 6px 0;
 }
 
+/* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
+   part of the conversation rather than as chrome. */
+.chat-authfix {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  background: var(--warning-bg);
+  font-size: 13px;
+}
+.chat-authfix-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-authfix-icon {
+  color: var(--warning);
+}
+.chat-authfix-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.chat-authfix-msg {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+  word-break: break-word;
+}
+.chat-authfix-desc {
+  margin: 8px 0 0;
+  color: var(--text-2);
+}
+.chat-authfix-cmd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.chat-authfix-cmd code {
+  font-size: 12.5px;
+  color: var(--text-1);
+  word-break: break-all;
+}
+.chat-authfix-prompt {
+  margin-right: 8px;
+  color: var(--text-3);
+  user-select: none;
+}
+.chat-authfix-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-authfix-copy:hover {
+  color: var(--text-1);
+  border-color: var(--text-3);
+}
+.chat-authfix-copy.copied {
+  color: var(--success);
+  border-color: currentColor;
+}
+.chat-authfix-alt {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.chat-authfix-alt code {
+  font-size: 12px;
+}
+.chat-authfix-retry {
+  margin-top: 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.chat-authfix-retry:hover {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+
 /* ── rich transcript: Markdown + per-tool cards + sub-agent nesting ───────── */
 .md {
   font-size: 14px;

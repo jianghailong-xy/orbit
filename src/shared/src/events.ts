@@ -53,6 +53,22 @@ export function isApiErrorText(text: string | null | undefined): boolean {
 }
 
 /**
+ * Does an assistant message / result text carry a *sign-in* failure — the runtime's stored
+ * credentials being gone, expired or rejected ("Failed to authenticate: OAuth session expired
+ * and could not be refreshed")? Like an API error this arrives as plain `assistant` text with a
+ * `success` result, so nothing upstream treats the turn as failed; unlike one it is not
+ * retryable by the model, and the remedy is a human action on the runner (or in Providers).
+ * Kept separate from `isApiErrorText` precisely because the remedy differs — the UI shows
+ * sign-in guidance rather than a bare error line.
+ *
+ * Keys on the runtime's stable `Failed to authenticate` prefix. Heuristic, intentionally
+ * narrow; keep in sync with the runner's Go check (isAuthError in claude.go).
+ */
+export function isAuthErrorText(text: string | null | undefined): boolean {
+  return !!text && text.trimStart().startsWith('Failed to authenticate');
+}
+
+/**
  * A tool_result payload's text, flattened. Claude Code delivers `content` as either a plain
  * string or an array of `{ type, text }` blocks; both collapse to one string here.
  */

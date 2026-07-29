@@ -744,11 +744,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			} else if r.Status == stFailed {
 				turnStatus = stFailed
 			}
-			// A Claude API error returns as assistant text + a "success" result with no
-			// is_error, so it slips past resultFrom. Treat the turn as failed so the
-			// control plane surfaces it (and reclaims a task session) instead of parking
-			// the session as if the turn succeeded.
-			if turnStatus == stSucceeded && (isAPIError(r.Result) || isAPIError(lastAssistantText)) {
+			// A Claude API error — or an expired sign-in — returns as assistant text + a
+			// "success" result with no is_error, so it slips past resultFrom. Treat the turn
+			// as failed so the control plane surfaces it (and reclaims a task session)
+			// instead of parking the session as if the turn succeeded.
+			if turnStatus == stSucceeded &&
+				(isAPIError(r.Result) || isAPIError(lastAssistantText) ||
+					isAuthError(r.Result) || isAuthError(lastAssistantText)) {
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
