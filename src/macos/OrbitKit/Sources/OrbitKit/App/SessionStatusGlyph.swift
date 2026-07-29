@@ -91,7 +91,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             let detail = (error?.isEmpty == false) ? error! : "Failed"
             return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
 
-        case .parked, .cancelled, .interrupted:
+        case .cancelled, .interrupted:
             // Default to dormant (resumable); ⊖ only for a positively-terminal end. A legacy row
             // with an unknown reason fails to the neutral, resumable read.
             let reason = endReason ?? ""

@@ -271,6 +271,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             id: true,
             title: true,
             status: true,
+            // A graceful recycle and a hard stop both settle CANCELLED, so the panel's run
+            // chip needs the reason to tell "dormant" from "cancelled" (see TaskDetailPanel).
+            endReason: true,
             createdAt: true,
             agent: { select: { name: true } },
           },

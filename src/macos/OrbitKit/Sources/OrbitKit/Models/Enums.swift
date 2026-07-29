@@ -14,8 +14,6 @@ public enum RunStatus: String, Codable, Sendable {
     case awaitingInput = "AWAITING_INPUT"
     /// A turn was interrupted by the user; the session stays alive.
     case interrupted = "INTERRUPTED"
-    /// Terminal but resumable: gracefully torn down, revived by sending a message.
-    case parked = "PARKED"
 
     /// Statuses where the session is live / resumable (composer should allow sending).
     public var isLive: Bool {

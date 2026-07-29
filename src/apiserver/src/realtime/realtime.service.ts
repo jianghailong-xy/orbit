@@ -253,7 +253,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   /** A session left the owner's active list (archived → completed, or soft-deleted). Terminal
    *  RUN statuses are NOT signalled here — they already flow as STATUS → session.updated; and
-   *  PARKED stays in the active list, so recycling isn't an "ended" either (see the design doc). */
+   *  a gracefully recycled session stays in the active list, so recycling isn't an "ended"
+   *  either (see the design doc). */
   publishSessionEnded(sessionId: string, status: RunStatus | string, endReason: SessionEndReason): void {
     this.publish(sessionId, {
       seq: 0,

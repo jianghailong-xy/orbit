@@ -1122,10 +1122,10 @@ export class RunnerApiController {
     // runner reports — the graceful-end 'end' turn often wins the race over the
     // heartbeat cancel and would otherwise land the session SUCCEEDED. The end reason
     // decides the terminal state: TASK_DONE means the agent finished its task, so settle
-    // SUCCEEDED (a completed run must never read as cancelled). IDLE/ENDED (idle-recycle
-    // or a user end with work still possible) settle PARKED — terminal but resumable, so
-    // the list shows it as dormant rather than cancelled. A hard end
-    // (archive=completed / delete=deleted) keeps CANCELLED.
+    // SUCCEEDED (a completed run must never read as cancelled). Every other graceful end
+    // — IDLE/ENDED (idle-recycle or a user end with work still possible) as much as a hard
+    // archive=completed / delete=deleted — settles CANCELLED; `endReason` rides along and is
+    // what makes the first two read as dormant rather than cancelled in the clients.
     const effectiveStatus: RunStatus = session.cancelRequestedAt
       ? ((gracefulEndStatus(session.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
       : (dto.status as RunStatus);

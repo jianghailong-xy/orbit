@@ -54,6 +54,10 @@ public enum MenuBar {
         case .running: return "Running"
         case .awaitingInput: return "Awaiting input"
         case .pending: return "Queued"
+        // An idle recycle / user end settles CANCELLED just like a hard stop, so the raw
+        // status would call a merely dormant session "Cancelled". Only `endReason` separates
+        // them — defer to the reason-aware word rather than spell the rule out a third time.
+        case .cancelled: return SessionHeader.statusWord(for: s)
         default: return s.status.rawValue.capitalized
         }
     }

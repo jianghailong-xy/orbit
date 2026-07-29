@@ -641,7 +641,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	if includeOrchestration {
 		sessionIDProp := map[string]interface{}{"type": "string", "description": "Target session id."}
-		sessionStatus := map[string]interface{}{"type": "string", "enum": []string{"PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED", "PARKED"}}
+		sessionStatus := map[string]interface{}{"type": "string", "enum": []string{"PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED"}}
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
@@ -790,7 +790,7 @@ func sessionSettled(status string) bool {
 	case "PENDING", "RUNNING", "":
 		return false
 	default:
-		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED, PARKED
+		return true // AWAITING_INPUT, SUCCEEDED, FAILED, CANCELLED, INTERRUPTED
 	}
 }
 

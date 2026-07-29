@@ -28,7 +28,8 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
 // RunStatus (session.status) -> a single run's badge label + tone. The task header uses
 // STATUS_META; a run's enum is different (PENDING/RUNNING/SUCCEEDED/FAILED/CANCELLED/
 // AWAITING_INPUT/INTERRUPTED). AWAITING_INPUT means the turn finished and the agent is
-// waiting on you, so it gets a distinct amber tone rather than a neutral grey.
+// waiting on you, so it gets a distinct amber tone rather than a neutral grey. Read it
+// through runStatusMeta below, not directly — CANCELLED needs the end reason.
 const RUN_STATUS_META: Record<string, { label: string; tone: string }> = {
   PENDING: { label: 'Queued', tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
@@ -37,9 +38,19 @@ const RUN_STATUS_META: Record<string, { label: string; tone: string }> = {
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },
-  // Ended but resumable (idle/task-done recycle or user-ended) — dormant, not cancelled.
-  PARKED: { label: 'Parked', tone: 'muted' },
 };
+
+// End reasons that make a CANCELLED run a *positively* terminal one. Anything else — an
+// idle recycle, a user end, or a legacy row with no reason recorded — is dormant and
+// resumable, so it must not wear the accusatory "Cancelled". Same set (and same
+// fail-to-neutral default) as AgentView's status glyph, which is the other place a
+// graceful end has to be told apart from a hard stop now that both settle CANCELLED.
+const HARD_END_REASONS = new Set(['orphaned', 'deleted', 'completed', 'cancelled']);
+
+const runStatusMeta = (s: { status: string; endReason?: string | null }) =>
+  s.status === 'CANCELLED' && !HARD_END_REASONS.has(s.endReason ?? '')
+    ? { label: 'Dormant', tone: 'muted' }
+    : (RUN_STATUS_META[s.status] ?? { label: s.status, tone: 'muted' });
 
 // The task counts as "执行中" only while one of its sessions is actually working:
 // queued for a runner slot (PENDING) or running (RUNNING). AWAITING_INPUT and
@@ -635,7 +646,7 @@ export function TaskDetailPanel({
               <div className="tdp-muted">No runs yet</div>
             ) : (
               sessions.map((s: any) => {
-                const meta = RUN_STATUS_META[s.status] ?? { label: s.status, tone: 'muted' };
+                const meta = runStatusMeta(s);
                 return (
                   <Link
                     key={s.id}

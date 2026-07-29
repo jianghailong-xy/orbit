@@ -1033,7 +1033,6 @@ export class SessionsService {
     RunStatus.SUCCEEDED,
     RunStatus.FAILED,
     RunStatus.CANCELLED,
-    RunStatus.PARKED,
   ];
 
   /**
@@ -1312,13 +1311,13 @@ export class SessionsService {
     RunStatus.INTERRUPTED,
   ];
 
+  // Not live: resume() revives these (and archive/delete/config treat them as
+  // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
+  // (idle recycle / user end) — `endReason` is what tells those apart for display.
   private static readonly TERMINAL: RunStatus[] = [
     RunStatus.SUCCEEDED,
     RunStatus.FAILED,
     RunStatus.CANCELLED,
-    // Ended but resumable: not live, so resume() revives it (and archive/delete/config
-    // treat it as already-ended) — same as CANCELLED, minus the "cancelled" stigma.
-    RunStatus.PARKED,
   ];
 
   // A runner heartbeats every 30s; a missed window reads as offline. Resuming needs
@@ -1704,9 +1703,9 @@ export class SessionsService {
   }
 
   /**
-   * Stop a session and settle it to CANCELLED — unlike {@link end}, which PARKS the
-   * session as dormant/resumable. A live session has its claude process torn down
-   * (endLive, reason CANCELLED so /complete finalizes CANCELLED not PARKED). A still-
+   * Stop a session and settle it to CANCELLED with endReason 'cancelled' — unlike
+   * {@link end}, which reaches the same status under 'ended' and so still reads as
+   * dormant/resumable. A live session has its claude process torn down (endLive). A still-
    * queued PENDING session is finalized in place: there's no claude to tear down and a
    * runner may never claim it (offline / batch concurrency cap full), so endLive alone
    * would leave it stuck PENDING — finalizing directly is what lets a batch-stop drop

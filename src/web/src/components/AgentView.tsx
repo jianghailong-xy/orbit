@@ -178,7 +178,7 @@ const fmtBytes = (n: number): string => {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED', 'PARKED'];
+const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
 // Session statuses that occupy one of the runner's maxConcurrent slots.
 const SLOT_HELD = ['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'];
 // UI label <-> claude --permission-mode value — the full set claude 2.1.x accepts.
@@ -551,7 +551,7 @@ export function statusLabel(session: any): string {
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
   }
-  if (status === 'PARKED' || status === 'CANCELLED' || status === 'INTERRUPTED') {
+  if (status === 'CANCELLED' || status === 'INTERRUPTED') {
     const reason: string = session.endReason ?? '';
     const terminal =
       reason === 'orphaned' ||
@@ -636,11 +636,11 @@ export function StatusIcon({ session, completed }: { session: any; completed?: b
       </Tooltip>
     );
   }
-  if (status === 'PARKED' || status === 'CANCELLED' || status === 'INTERRUPTED') {
+  if (status === 'CANCELLED' || status === 'INTERRUPTED') {
     const reason: string = session.endReason ?? '';
-    // Default to dormant, ⊖ only for a positively-terminal end. PARKED is resumable by
-    // definition; a benign recycle (idle/task_done) or user-end is too; and a legacy
-    // CANCELLED row with an unknown (null/pre-migration) reason should fail to the
+    // Default to dormant, ⊖ only for a positively-terminal end. A benign recycle
+    // (idle/task_done) or a user-end is resumable even though it settles CANCELLED; and a
+    // legacy CANCELLED row with an unknown (null/pre-migration) reason should fail to the
     // neutral, resumable read — "we don't know why it ended" must not render as the
     // accusatory "Cancelled". The hard ends keep ⊖: orphaned/deleted/completed, plus a
     // bare INTERRUPTED (a turn cut short with no graceful-end reason recorded).
@@ -1503,9 +1503,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           lastSeq = Math.max(lastSeq, ev.seq);
         }
         if (ev.payload?.final) {
-          // Session finalized (turn-complete failure, idle-recycle to PARKED, or a user
-          // end). Drop the live connection so we don't hold an idle stream — but a
-          // PARKED/ended session is resumable IN PLACE (same selectedId, so this effect
+          // Session finalized (turn-complete failure, idle-recycle, or a user end). Drop
+          // the live connection so we don't hold an idle stream — but a gracefully-ended
+          // session is resumable IN PLACE (same selectedId, so this effect
           // doesn't re-run), and a resumed turn's events would be published to a stream
           // we'd have permanently closed, leaving the open transcript stale while the
           // polled sidebar advances. So pause instead of closing for good; the liveness

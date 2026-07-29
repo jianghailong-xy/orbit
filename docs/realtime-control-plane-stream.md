@@ -215,7 +215,7 @@ streamForUser(userId: string): Observable<ControlEvent> {
 发的位置:
 
 - **created**:`SessionsService.create`(新建)+ `restore`(从归档/回收站恢复,重回 active)→ `publishSessionCreated`。`streamForUser` 补全完整 summary。
-- **ended**:`SessionsService.archive`(endReason=`completed`)+ `remove`(软删,endReason=`deleted`)→ `publishSessionEnded(id, status, endReason)`。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 status 决定离开 active),`PARKED` 仍留在 active(休眠)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
+- **ended**:`SessionsService.archive`(endReason=`completed`)+ `remove`(软删,endReason=`deleted`)→ `publishSessionEnded(id, status, endReason)`。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 status 决定离开 active),而**优雅回收**(endReason `idle`/`ended`,同样落 CANCELLED)仍留在 active(休眠)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
 - **evict-on-ended(Q4)**:`session.ended` 映射时顺手 `ownerCache.delete(sessionId)`。
 
 ### 4.7 多副本、心跳、网关、鉴权

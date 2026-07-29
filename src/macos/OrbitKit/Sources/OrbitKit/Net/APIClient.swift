@@ -153,8 +153,9 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
     }
 
-    // Lifecycle: gracefully end (PARKED), archive/restore (hide/unhide), hard delete. After any
-    // of these the caller refetches the list (`view=active|archived|deleted`).
+    // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), archive/restore
+    // (hide/unhide), hard delete. After any of these the caller refetches the list
+    // (`view=active|archived|deleted`).
     public func endSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/end", body: Optional<Empty>.none) }
     public func archiveSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none) }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }

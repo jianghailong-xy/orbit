@@ -441,8 +441,9 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 }
 
 // parkCheckpointTrailer marks a finalize commit as a *park checkpoint*: the snapshot taken when
-// a still-resumable session (idle-recycled or user-ended, which the server settles PARKED) is
-// torn down, so its in-progress work is durable on the branch even after the checkout is GC'd.
+// a still-resumable session (idle-recycled or user-ended, which the server settles CANCELLED under
+// an `idle`/`ended` endReason) is torn down, so its in-progress work is durable on the branch even
+// after the checkout is GC'd.
 // It is NOT a real end. On the next resume, uncommitParkCheckpoint soft-resets it so the work
 // returns to an uncommitted working tree and the agent continues without a stray checkpoint
 // polluting the branch history. A genuine end (SUCCEEDED/FAILED) commits WITHOUT this trailer,

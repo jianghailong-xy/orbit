@@ -12,14 +12,6 @@ export enum RunStatus {
   AWAITING_INPUT = 'AWAITING_INPUT',
   /** A turn was interrupted by the user; the session stays alive (Route B). */
   INTERRUPTED = 'INTERRUPTED',
-  /**
-   * Terminal but resumable: the session's claude process was gracefully torn down — the
-   * runner recycled it (idle / its task finished) or the user ended it — yet sending a
-   * message revives it (--resume keeps full context). Split out of CANCELLED so the UI
-   * reads it as dormant, not cancelled; `endReason` records which graceful end it was.
-   * Appended last to match ALTER TYPE ADD VALUE.
-   */
-  PARKED = 'PARKED',
 }
 
 /**
@@ -37,7 +29,7 @@ export enum SessionEndReason {
   COMPLETED = 'completed', // user marked it complete (archived)
   DELETED = 'deleted', // user deleted it (trash)
   ORPHANED = 'orphaned', // never-claimed run for an already-finished task
-  CANCELLED = 'cancelled', // user stopped the run (batch-stop) — settles CANCELLED, not PARKED
+  CANCELLED = 'cancelled', // user stopped the run (batch-stop) — reads as a hard cancel, not dormant
 }
 
 /**
@@ -45,9 +37,12 @@ export enum SessionEndReason {
  * wasn't one (a hard archive/delete/batch-stop, or no reason recorded). TASK_DONE settles
  * SUCCEEDED — the agent finished its work, and a completed run must never read as
  * cancelled. IDLE/ENDED (idle recycle, or a user end with work still possible) settle
- * PARKED: terminal but resumable, so the list shows them as dormant. Shared so the two
- * places that finalize such an end — the runner's /complete and the reaper's backstop for
- * an end the runner never acknowledged — can't drift apart.
+ * CANCELLED; the *status* is deliberately coarse and `endReason` is what makes those two
+ * read as dormant rather than cancelled (see SessionEndReason). Returning CANCELLED here
+ * rather than null is load-bearing for the reaper: its forceFinalize defaults to FAILED,
+ * so null would resurface an unacknowledged idle recycle as a run failure. Shared so the
+ * two places that finalize such an end — the runner's /complete and the reaper's backstop
+ * for an end the runner never acknowledged — can't drift apart.
  */
 export function gracefulEndStatus(endReason: string | null | undefined): RunStatus | null {
   switch (endReason) {
@@ -55,7 +50,7 @@ export function gracefulEndStatus(endReason: string | null | undefined): RunStat
       return RunStatus.SUCCEEDED;
     case SessionEndReason.IDLE:
     case SessionEndReason.ENDED:
-      return RunStatus.PARKED;
+      return RunStatus.CANCELLED;
     default:
       return null;
   }
