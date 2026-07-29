@@ -7,6 +7,7 @@ import {
   TRASH_RETENTION_DAYS,
   gracefulEndStatus,
   isApiErrorText,
+  isAuthErrorText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -150,10 +151,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         // Backstop for a task run whose last turn ended in a Claude API error (e.g.
-        // content filtering): the SDK reports it as a successful turn, so an older
-        // runner parks the session at AWAITING_INPUT and the task stays IN_PROGRESS
-        // with nothing watching. (Current runners flag the turn FAILED at the source,
-        // so this only catches sessions a stale runner left behind.) Finalize FAILED and
+        // content filtering) or an expired sign-in: the SDK reports it as a successful
+        // turn, so an older runner parks the session at AWAITING_INPUT and the task stays
+        // IN_PROGRESS with nothing watching. (Current runners flag the turn FAILED at the
+        // source, so this only catches sessions a stale runner left behind — which outlive
+        // a release, since a runner only self-updates at startup.) Finalize FAILED and
         // reclaim the task as FAILED. Task-bound, online, not-being-cancelled only.
         if (s.status === RunStatus.AWAITING_INPUT && s.taskId && !s.cancelRequestedAt) {
           const last = await this.prisma.runEvent.findFirst({
@@ -162,8 +164,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             select: { payload: true },
           });
           const text = (last?.payload as { text?: string } | null)?.text;
-          if (isApiErrorText(text)) {
-            await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'run failed (API error)', {
+          if (isApiErrorText(text) || isAuthErrorText(text)) {
+            const why = isAuthErrorText(text) ? 'run failed (sign-in expired)' : 'run failed (API error)';
+            await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, why, {
               resetTaskTo: TaskStatus.FAILED,
               failureDetail: text,
             });

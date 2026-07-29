@@ -22,11 +22,12 @@ import {
   RightOutlined,
   SearchOutlined,
   ToolOutlined,
+  WarningFilled,
 } from '@ant-design/icons';
 import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { isApiErrorText } from '@orbit/shared';
+import { isApiErrorText, isAuthErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
@@ -84,6 +85,24 @@ export const SessionNavCtx = createContext<((rawId: string) => void) | null>(nul
 // Refetch one event's untrimmed payload by seq. AgentView provides it; the shared/public page
 // leaves it null, since that endpoint never clips (nothing there is ever `truncated`).
 export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null>(null);
+
+/**
+ * What a sign-in failure card should tell this session's viewer, and how to act on it. The
+ * remedy depends on where the credentials live, which the transcript can't know: a built-in
+ * `claude`/`codex` provider runs on the runner's own OAuth login (fix it on that machine), any
+ * other slug is a configured API key (fix it in Providers). AgentView supplies this; the
+ * shared/public page and the static export leave it null, so the card there degrades to the
+ * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
+ */
+export interface AuthErrorHelp {
+  /** Session's provider slug — 'claude' | 'codex' | a configured provider. */
+  provider: string;
+  /** Runner display name, so the card names the machine to fix. */
+  runnerName?: string;
+  /** Re-send the last user message, once the user has signed back in. */
+  onRetry?: () => void;
+}
+export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
 /**
  * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
@@ -204,7 +223,8 @@ type TextNode = {
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
 type ErrorNode = { kind: 'error'; seq: number; message: string };
-type Node = ToolNode | TextNode | ResultNode | MarkerNode | ErrorNode;
+type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+type Node = ToolNode | TextNode | ResultNode | MarkerNode | ErrorNode | AuthErrorNode;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
@@ -265,8 +285,11 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const text = String(p.text);
           // A Claude API error (e.g. content filtering) comes back as an assistant text
           // block, not an `error` event — render it as an error so the failed turn is
-          // unmistakable instead of looking like a normal reply.
-          if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
+          // unmistakable instead of looking like a normal reply. An expired sign-in arrives
+          // the same way but gets its own card: the fix is a human action, so a bare error
+          // line would leave the user staring at a diagnosis with no remedy.
+          if (isAuthErrorText(text)) into(parent).push({ kind: 'authError', seq: ev.seq, message: text });
+          else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
         }
         break;
@@ -438,7 +461,103 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       return <div className="chat-note">⊘ interrupted</div>;
     case 'error':
       return <div className="chat-error">✖ {node.message}</div>;
+    case 'authError':
+      return <AuthErrorCard message={node.message} />;
   }
+}
+
+/**
+ * Sign-in commands for the two built-in providers, mirroring the runner's own `orbit doctor`
+ * (engineSpecs in doctor.go): the interactive sign-in, plus the headless alternative for a
+ * machine with no browser. Kept in step with doctor.go — the user may well run doctor next.
+ */
+const LOCAL_LOGIN: Record<string, { login: string; headless: ReactNode }> = {
+  claude: {
+    login: 'claude auth login',
+    headless: (
+      <>
+        Use <code>claude setup-token</code> and set the token in the runner's service env.
+      </>
+    ),
+  },
+  codex: {
+    login: 'codex login',
+    headless: (
+      <>
+        Set <code>OPENAI_API_KEY</code> in the runner's service env.
+      </>
+    ),
+  },
+};
+
+/**
+ * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
+ * ordinary assistant text ("Failed to authenticate: OAuth session expired…"), which reads like
+ * the agent's own reply and tells the user nothing about what to do — so this card names the
+ * machine, gives the exact command to run there, and offers to re-send once they're back in.
+ *
+ * Three shapes, because the remedy depends on where the credentials live (see AuthErrorHelp):
+ * a built-in provider signs in on the runner itself, any other slug is a configured API key,
+ * and with no context at all (shared/public page, static export) only the diagnosis is safe to
+ * show — guessing a remedy there would send the reader to the wrong place.
+ */
+function AuthErrorCard({ message }: { message: string }) {
+  const help = useContext(AuthErrorCtx);
+  const [copied, setCopied] = useState(false);
+  const local = help ? LOCAL_LOGIN[help.provider] : undefined;
+  const copy = () => {
+    if (!local) return;
+    void copyText(local.login).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return (
+    <div className="chat-authfix">
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {!help
+            ? 'Authentication failed'
+            : local
+              ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+              : 'Provider authentication failed'}
+        </div>
+      </div>
+      <div className="chat-authfix-msg">{message}</div>
+      {local ? (
+        <>
+          <div className="chat-authfix-desc">
+            This runner signs in with its own account, so the fix has to happen on that machine.
+            Run:
+          </div>
+          <div className="chat-authfix-cmd">
+            <code>
+              <span className="chat-authfix-prompt">$</span>
+              {local.login}
+            </code>
+            <button className={`chat-authfix-copy ${copied ? 'copied' : ''}`} onClick={copy} type="button">
+              {copied ? <CheckOutlined /> : <CopyOutlined />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          {/* The runner runs unattended, so a browser-less machine needs the token path instead. */}
+          <div className="chat-authfix-alt">No browser on that machine? {local.headless}</div>
+        </>
+      ) : help ? (
+        <div className="chat-authfix-desc">
+          The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
+          send your message again.
+        </div>
+      ) : null}
+      {help?.onRetry && (
+        <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
+          Retry — re-send my last message
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Collapse a user bubble past this many characters: a pasted blob would otherwise lay out as

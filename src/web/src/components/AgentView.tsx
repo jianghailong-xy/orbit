@@ -120,7 +120,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, ChatImage, EventFullCtx, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
@@ -240,6 +240,18 @@ function lastContextTokens(events: RunEvent[]): number {
     if (typeof ct === 'number' && ct > 0) return ct;
   }
   return 0;
+}
+
+// The most recent message the user sent, for the sign-in card's Retry. A turn that died on an
+// expired login consumed its prompt without answering it, so re-sending that exact text is the
+// resume — there's nothing to salvage from the failed turn itself.
+function lastUserText(events: RunEvent[]): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type !== 'user') continue;
+    const t = (events[i].payload as { text?: unknown } | undefined)?.text;
+    if (typeof t === 'string' && t.trim()) return t;
+  }
+  return '';
 }
 
 // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
@@ -2574,6 +2586,24 @@ export function AgentView({ runner }: { runner: Runner }) {
     : (pickedAgent?.provider ?? 'claude');
   const shownPlanUsage = usageSnapshotForProvider(runner.planUsage, shownProvider);
   const contextTokens = lastContextTokens(events);
+  // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
+  // there's actually a message to re-send and the session can take one — a deleted/missing
+  // session would just throw out of the send mutation.
+  const retryText = lastUserText(events);
+  const sendMutate = send.mutate;
+  const authErrorHelp: AuthErrorHelp = useMemo(
+    () => ({
+      provider: shownProvider,
+      runnerName: runner.name,
+      onRetry:
+        retryText && !selectedDeleted && !selectedMissing
+          ? () => sendMutate({ content: retryText, images: [] })
+          : undefined,
+    }),
+    // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
+    // rebuild this every render and re-render the card through the context.
+    [shownProvider, runner.name, retryText, selectedDeleted, selectedMissing, sendMutate],
+  );
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')
     : mode;
@@ -3197,7 +3227,9 @@ export function AgentView({ runner }: { runner: Runner }) {
               )}
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
                 <EventFullCtx.Provider value={fetchEventFull}>
-                  <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                  <AuthErrorCtx.Provider value={authErrorHelp}>
+                    <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                  </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
               {localStatusCards.map((card) => (

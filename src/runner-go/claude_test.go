@@ -37,3 +37,27 @@ func TestContextTokensFromAssistant(t *testing.T) {
 		t.Fatalf("no usage = %d, want 0", got)
 	}
 }
+
+// Both rescues key on a text prefix and must stay disjoint: an API error is retryable and
+// renders as a bare error, an auth error needs a human to sign in and renders as guidance.
+func TestIsAPIErrorAndIsAuthError(t *testing.T) {
+	cases := []struct {
+		text      string
+		api, auth bool
+	}{
+		{"API Error: 500", true, false},
+		{"  API Error: overloaded", true, false},
+		{"Failed to authenticate: OAuth session expired and could not be refreshed", false, true},
+		{"  Failed to authenticate: invalid API key", false, true},
+		{"all good", false, false},
+		{"", false, false},
+	}
+	for _, c := range cases {
+		if got := isAPIError(c.text); got != c.api {
+			t.Errorf("isAPIError(%q) = %v, want %v", c.text, got, c.api)
+		}
+		if got := isAuthError(c.text); got != c.auth {
+			t.Errorf("isAuthError(%q) = %v, want %v", c.text, got, c.auth)
+		}
+	}
+}
