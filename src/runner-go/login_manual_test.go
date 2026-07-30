@@ -29,13 +29,26 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 		if res.Status != loginAwaitingCode {
 			t.Fatalf("expected %q, got %q (%s)", loginAwaitingCode, res.Status, res.Message)
 		}
-		// Second report: feed a bogus code and confirm it reaches the CLI and resolves.
+		if res.URL == "" {
+			t.Fatal("no sign-in URL scraped")
+		}
+		// Feed a bogus code. The CLI answers with "Invalid code." on the same prompt — it does not
+		// exit and does not re-prompt — so this is the assertion that the rejection watcher is
+		// keyed on something that actually happens. It hung here until the 10-minute timeout when
+		// the watcher was (wrongly) looking for a second prompt instead.
 		r.submitCode("definitely-not-a-real-code", func(res2 LoginResultRequest) { got <- res2 })
 		select {
 		case res2 := <-got:
-			t.Logf("after bogus code: status=%s message=%s", res2.Status, res2.Message)
-		case <-time.After(90 * time.Second):
-			t.Log("no terminal report within 90s (CLI may still be retrying) — URL scrape still proven")
+			t.Logf("after bogus code: status=%s message=%q", res2.Status, res2.Message)
+			if res2.Status != loginAwaitingCode || res2.Message == "" {
+				t.Errorf("a rejected code should come back as %q with an explanation, got %q/%q",
+					loginAwaitingCode, res2.Status, res2.Message)
+			}
+			if res2.URL == "" {
+				t.Error("the still-valid sign-in URL was not republished with the rejection")
+			}
+		case <-time.After(60 * time.Second):
+			t.Fatal("a rejected code produced no report — the rejection watcher is not firing")
 		}
 	case <-time.After(75 * time.Second):
 		t.Fatal("relay never reported a sign-in URL")

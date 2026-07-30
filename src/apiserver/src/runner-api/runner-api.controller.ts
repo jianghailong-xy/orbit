@@ -416,8 +416,8 @@ export class RunnerApiController {
       where: { id: runner.id },
       data: {
         loginStatus: status,
-        // A retry after a rejected code carries a fresh URL (the old challenge is spent), so
-        // always take the reported one; clear any code still queued against the dead URL.
+        // A retry after a rejected code republishes the same still-valid URL, so just take
+        // whatever the runner reported; clear any code still queued behind it either way.
         loginUrl: status === 'awaiting_code' ? (body.url ?? null) : null,
         loginCode: null,
         loginMessage: body.message ?? null,

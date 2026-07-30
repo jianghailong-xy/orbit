@@ -89,19 +89,41 @@ func TestSubmitCodeWithNoRelayReportsFailure(t *testing.T) {
 	}
 }
 
-// A rejected code makes the CLI re-prompt with a NEW url — the old challenge/state are spent —
-// so the retry the user is shown must be the newest one, not the first.
-func TestLatestLoginURLPrefersTheNewest(t *testing.T) {
+func TestLatestLoginURLTakesTheLast(t *testing.T) {
 	first := "https://claude.com/cai/oauth/authorize?code=true&state=OLD&code_challenge=aaa"
 	second := "https://claude.com/cai/oauth/authorize?code=true&state=NEW&code_challenge=bbb"
-	out := "Paste code here if prompted > \r\n" + first + "\r\nbad code\r\n" +
-		"If the browser didn't open, visit: " + second + "\r\nPaste code here if prompted > "
-	got := latestLoginURL(out)
-	if got != second {
-		t.Fatalf("latestLoginURL = %q, want the newest %q", got, second)
+	if got := latestLoginURL(first + "\r\nnoise\r\n" + second); got != second {
+		t.Fatalf("latestLoginURL = %q, want the last %q", got, second)
 	}
-	// And the re-prompt is the only rejection signal there is.
-	if strings.Count(out, loginPromptMarker) != 2 {
-		t.Fatalf("prompt marker %q no longer counts re-prompts", loginPromptMarker)
+	if got := latestLoginURL("nothing here"); got != "" {
+		t.Fatalf("latestLoginURL on non-sign-in output = %q, want empty", got)
+	}
+}
+
+// Rejection detection keys on the CLI's actual behaviour, captured from a real bad paste:
+//
+//	Paste code here if prompted > Invalid code. Please make sure the full code was copied.
+//
+// The CLI does NOT re-prompt and does NOT start a new OAuth exchange — the prompt is printed
+// once and the process keeps waiting on the same challenge. An earlier version of this keyed on
+// a second prompt appearing, which never happens, so a bad code hung the card until timeout.
+func TestRejectionMarkerMatchesRealCLIOutput(t *testing.T) {
+	const afterBadPaste = "\r\nPaste code here if prompted > Invalid code. Please make sure the full code was copied."
+	before := realLoginOutput
+	after := realLoginOutput + afterBadPaste
+
+	if strings.Count(before, loginInvalidCodeMarker) != 0 {
+		t.Fatalf("marker %q already present before any paste", loginInvalidCodeMarker)
+	}
+	if strings.Count(after, loginInvalidCodeMarker) != 1 {
+		t.Fatalf("marker %q did not catch the rejection", loginInvalidCodeMarker)
+	}
+	// A second bad paste must also register, so counting (not presence) is what the watcher uses.
+	if strings.Count(after+afterBadPaste, loginInvalidCodeMarker) != 2 {
+		t.Error("a second rejection was not counted")
+	}
+	// The prompt itself is printed once and stays that way — the thing we used to count.
+	if strings.Count(after, "Paste code here") != 2 {
+		t.Log("note: prompt appears twice here only because the fixture concatenates two renders")
 	}
 }
