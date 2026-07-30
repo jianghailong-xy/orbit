@@ -201,6 +201,9 @@ func runLoop(cfg *RunnerConfig) {
 		mergingNow := map[string]bool{}
 		committingNow := map[string]bool{}
 		artifactNow := map[string]bool{}
+		// The one browser-less sign-in this runner may have in flight — it writes the machine's
+		// single credentials file, so it guards itself rather than keying off a request id.
+		login := &loginRelay{}
 		for {
 			select {
 			case <-hbStop:
@@ -353,6 +356,22 @@ func runLoop(cfg *RunnerConfig) {
 						delete(artifactNow, req.RequestID)
 						mergeMu.Unlock()
 					}(a)
+				}
+				// Drive the browser-less sign-in the user started from the web. Both actions are
+				// idempotent: the server redelivers each one until a status report moves it on,
+				// and the relay itself refuses to start a second CLI while one is running.
+				if lr := resp.LoginRequest; lr != nil {
+					report := func(res LoginResultRequest) {
+						if err := t.loginResult(res); err != nil {
+							logln("login-result POST failed:", err)
+						}
+					}
+					switch lr.Action {
+					case "start":
+						login.start(report)
+					case "code":
+						login.submitCode(lr.Code, report)
+					}
 				}
 			}
 		}

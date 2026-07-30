@@ -39,6 +39,8 @@ import {
   RunInboxResponse,
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
+  LoginCommand,
+  LoginResult,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   SessionCommitResultRequest,
@@ -71,6 +73,9 @@ import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { isNoiseSystemEvent } from '../common/system-noise';
 
+// Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
+// point, so anything still marked in-flight past this window has no process behind it.
+const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -332,17 +337,93 @@ export class RunnerApiController {
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
+    let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       mergeRequests = await this.realtime.drainMergeRequests(runner.id);
       commitRequests = await this.realtime.drainCommitRequests(runner.id);
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
+      loginRequest = await this.drainLoginRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart.
-    return { cancelSessionIds, maxConcurrent: updated.maxConcurrent, mergeRequests, commitRequests, artifactRequests };
+    return {
+      cancelSessionIds,
+      maxConcurrent: updated.maxConcurrent,
+      mergeRequests,
+      commitRequests,
+      artifactRequests,
+      loginRequest,
+    };
+  }
+
+  /**
+   * The next step of this runner's sign-in relay, if one is in flight.
+   *
+   * `pending` re-delivers `start` every heartbeat until the runner's first status report moves
+   * the row to `awaiting_code` — the runner's own guard makes the repeat a no-op. A pasted code
+   * is delivered exactly once and cleared immediately: it is single-use, so re-sending it after
+   * the CLI consumed it would only ever fail, and holding it longer keeps a credential at rest
+   * for no reason.
+   *
+   * An abandoned relay is swept here rather than by a timer: the runner kills its own CLI after
+   * loginRelayTimeout, so a row still `pending`/`awaiting_code` past that window has no process
+   * behind it and would otherwise block sign-in forever.
+   */
+  private async drainLoginRequest(runnerId: string): Promise<LoginCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { loginStatus: true, loginCode: true, loginAt: true },
+    });
+    if (!r?.loginStatus) return undefined;
+    const started = r.loginAt?.getTime() ?? 0;
+    if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
+      if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code') {
+        await this.prisma.runner.update({
+          where: { id: runnerId },
+          data: {
+            loginStatus: 'failed',
+            loginCode: null,
+            loginMessage: 'Sign-in timed out — start it again.',
+          },
+        });
+      }
+      return undefined;
+    }
+    if (r.loginStatus === 'pending') return { action: 'start' };
+    if (r.loginStatus === 'awaiting_code' && r.loginCode) {
+      await this.prisma.runner.update({ where: { id: runnerId }, data: { loginCode: null } });
+      return { action: 'code', code: r.loginCode };
+    }
+    return undefined;
+  }
+
+  /**
+   * Runner → control plane: one step of the sign-in relay. Authenticated as the runner, and
+   * scoped to it, so a runner can only ever move its own row.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('login-result')
+  @HttpCode(200)
+  async loginResult(@CurrentRunner() runner: { id: string }, @Body() body: LoginResult) {
+    const status = body?.status;
+    if (status !== 'awaiting_code' && status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown login status');
+    }
+    await this.prisma.runner.update({
+      where: { id: runner.id },
+      data: {
+        loginStatus: status,
+        // A retry after a rejected code carries a fresh URL (the old challenge is spent), so
+        // always take the reported one; clear any code still queued against the dead URL.
+        loginUrl: status === 'awaiting_code' ? (body.url ?? null) : null,
+        loginCode: null,
+        loginMessage: body.message ?? null,
+      },
+    });
+    return { ok: true };
   }
 
   // ── Interactive sessions (Route B) ──

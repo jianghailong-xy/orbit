@@ -3993,6 +3993,102 @@ body {
 .chat-authfix-alt code {
   font-size: 12px;
 }
+/* Browser-driven runner sign-in, inside the sign-in card. */
+.rsi {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.rsi-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+  font-size: 13px;
+}
+.rsi-hint {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.rsi-warn {
+  margin-bottom: 8px;
+  color: var(--warning);
+  font-size: 12px;
+}
+.rsi-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.rsi-open:hover {
+  background: var(--brand-strong);
+  color: #fff;
+}
+.rsi-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rsi-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-size: 13px;
+  font-family: inherit;
+}
+.rsi-input:focus {
+  outline: none;
+  border-color: var(--brand-border);
+}
+.rsi-btn {
+  flex: none;
+  padding: 5px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rsi-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.rsi-link {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.rsi-link:hover {
+  color: var(--text-1);
+}
+.rsi-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success);
+  font-size: 13px;
+}
+
 .chat-authfix-retry {
   margin-top: 10px;
   padding: 5px 12px;

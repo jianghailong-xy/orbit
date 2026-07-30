@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
+import { CreateEnrollmentTokenDto, SubmitLoginCodeDto, UpdateRunnerDto } from './dto';
 import { RunnersService } from './runners.service';
 
 @UseGuards(JwtAuthGuard)
@@ -46,6 +46,33 @@ export class RunnersController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateRunnerDto) {
     return this.runners.updateRunner(user.userId, id, dto);
+  }
+
+  // Browser-less sign-in relay for one runner. Owner-scoped in the service (a non-owner gets a
+  // 404, same as every other :id route here), because these drive credential writes on that
+  // machine. The pasted code is single-use and never read back.
+  @Get(':id/login')
+  loginState(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.getLoginState(user.userId, id);
+  }
+
+  @Post(':id/login')
+  startLogin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.startLogin(user.userId, id);
+  }
+
+  @Post(':id/login/code')
+  submitLoginCode(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SubmitLoginCodeDto,
+  ) {
+    return this.runners.submitLoginCode(user.userId, id, dto.code);
+  }
+
+  @Delete(':id/login')
+  cancelLogin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.cancelLogin(user.userId, id);
   }
 
   @Post(':id/rotate-token')

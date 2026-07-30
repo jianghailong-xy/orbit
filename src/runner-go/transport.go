@@ -188,6 +188,12 @@ func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
 }
 
+// loginResult reports one step of the browser-less sign-in relay: the URL to approve, then
+// whether this machine ended up signed in.
+func (t *Transport) loginResult(b LoginResultRequest) error {
+	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
+}
+
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
 func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)

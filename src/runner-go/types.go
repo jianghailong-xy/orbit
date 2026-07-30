@@ -128,6 +128,28 @@ type HeartbeatResponse struct {
 	CommitRequests []CommitCommand `json:"commitRequests,omitempty"`
 	// Legacy assistant artifacts to upload from this runner's per-session uploads dir.
 	ArtifactRequests []ArtifactCommand `json:"artifactRequests,omitempty"`
+	// An interactive `claude auth login` the user drove from the web: `start` to launch it (we
+	// reply with the URL to approve), then `code` carrying what they pasted back. Nil on older
+	// control planes, and whenever no sign-in is in flight for this runner.
+	LoginRequest *LoginCommand `json:"loginRequest,omitempty"`
+}
+
+// LoginCommand mirrors @orbit/shared: one step of the browser-less sign-in relay. Redelivered
+// every heartbeat until the runner reports a status that moves the server on, so both actions
+// must be idempotent.
+type LoginCommand struct {
+	Action string `json:"action"` // "start" | "code"
+	// The authorization code the user pasted, for action "code".
+	Code string `json:"code,omitempty"`
+}
+
+// LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
+// can show the URL to approve and then the outcome. `URL` is set only with status
+// "awaiting_code"; `Message` carries the reason for "failed".
+type LoginResultRequest struct {
+	Status  string `json:"status"`
+	URL     string `json:"url,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into

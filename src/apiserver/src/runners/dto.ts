@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -11,4 +11,9 @@ export class UpdateRunnerDto {
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
   // 1 (0 would stall the runner); 64 is a sanity ceiling against a fat-fingered value.
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+}
+
+/** The authorization code the user pasted back from the hosted OAuth callback page. */
+export class SubmitLoginCodeDto {
+  @IsString() @MinLength(1) code!: string;
 }
