@@ -10,14 +10,24 @@ const prisma = {
   session: { findFirst: async () => ({ agent: { enableOrchestration: true } }) },
 } as never;
 
-/** Builds a controller whose AgentsService just captures the sanitized DTO. */
+/** Builds a controller whose AgentsService just captures the sanitized DTO, plus the
+ *  control-plane push each write fires (see `published`). */
 function makeController() {
-  const seen: { create?: Record<string, unknown>; update?: Record<string, unknown> } = {};
+  const seen: {
+    create?: Record<string, unknown>;
+    update?: Record<string, unknown>;
+    published?: [string, string];
+  } = {};
   const agents = {
     create: async (_ownerId: string, dto: Record<string, unknown>) => (seen.create = dto),
     update: async (_ownerId: string, _id: string, dto: Record<string, unknown>) => (seen.update = dto),
   } as never;
-  return { controller: new RunnerAgentsController(agents, prisma), seen };
+  const realtime = {
+    publishAgentChanged: (sessionId: string, agentId: string) => {
+      seen.published = [sessionId, agentId];
+    },
+  } as never;
+  return { controller: new RunnerAgentsController(agents, prisma, realtime), seen };
 }
 
 test('create forwards the agent config fields an orchestrator may set', async () => {
@@ -49,6 +59,8 @@ test('update forwards them too', async () => {
   assert.equal(seen.update?.defaultMergeTarget, 'main');
   // No runner rebind unless the caller asked for one.
   assert.equal(seen.update?.runnerId, undefined);
+  // The agent list refresh is scoped to the CALLING session, and names the updated agent.
+  assert.deepEqual(seen.published, ['s1', 'a1']);
 });
 
 test('enableOrchestration and enabled are still dropped (human-only, web UI)', async () => {
