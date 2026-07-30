@@ -15,15 +15,13 @@ type OS = 'macOS' | 'Linux' | 'Windows';
 // origin, injected at build time from the PUBLIC_ORIGIN env (.env → web build arg).
 declare const __PUBLIC_ORIGIN__: string;
 
-// Only the install line differs per OS; everything else is identical.
-function buildCommands(origin: string): { install: Record<OS, string>; register: string } {
+// One command per OS: the install script ends by exec'ing `orbit register`, so there is no
+// separate register step to copy.
+function buildInstallCommands(origin: string): Record<OS, string> {
   return {
-    install: {
-      macOS: `curl -fsSL ${origin}/install.sh | bash`,
-      Linux: `curl -fsSL ${origin}/install.sh | bash`,
-      Windows: `irm ${origin}/install.ps1 | iex`,
-    },
-    register: 'orbit register',
+    macOS: `curl -fsSL ${origin}/install.sh | bash`,
+    Linux: `curl -fsSL ${origin}/install.sh | bash`,
+    Windows: `irm ${origin}/install.ps1 | iex`,
   };
 }
 
@@ -48,53 +46,19 @@ function CommandBox({ cmd, copied, onCopy }: { cmd: string; copied: boolean; onC
   );
 }
 
-function Step({
-  index,
-  done,
-  lineDone,
-  last,
-  title,
-  desc,
-  children,
-}: {
-  index: number;
-  done: boolean;
-  lineDone?: boolean;
-  last?: boolean;
-  title: string;
-  desc: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="runner-step">
-      <div className="runner-step-rail">
-        <div className={`runner-step-dot ${done ? 'done' : ''}`}>
-          {done ? <CheckOutlined /> : index}
-        </div>
-        {!last && <div className={`runner-step-line ${lineDone ? 'done' : ''}`} />}
-      </div>
-      <div className="runner-step-body">
-        <div className="runner-step-title">{title}</div>
-        <div className="runner-step-desc">{desc}</div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 /** Right-pane guide for connecting a new runner machine (shown from the side panel's “Add”). */
 export function RunnerRegisterGuide() {
   const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
-  const [copied, setCopied] = useState<string | null>(null);
-  const { install: installCmd, register: registerCmd } = buildCommands(__PUBLIC_ORIGIN__);
+  const [copied, setCopied] = useState(false);
+  const installCmd = buildInstallCommands(__PUBLIC_ORIGIN__);
 
-  const copy = (key: string, text: string) => {
+  const copy = (text: string) => {
     void copyText(text).then((ok) => {
       if (!ok) return;
-      setCopied(key);
-      // Revert the “✓ Copied” affordance after a beat (unless another copy supersedes it).
-      setTimeout(() => setCopied((k) => (k === key ? null : k)), 1600);
+      setCopied(true);
+      // Revert the “✓ Copied” affordance after a beat.
+      setTimeout(() => setCopied(false), 1600);
     });
   };
 
@@ -132,8 +96,9 @@ export function RunnerRegisterGuide() {
       <div className="runner-center">
         <h1 className="page-title">Add a runner</h1>
         <p className="runner-sub">
-          A runner is a machine that runs Claude Code tasks for you. Run these on the machine you
-          want to add — it appears in the list on the left once it comes online.
+          A runner is a machine that runs Claude Code tasks for you. Run this one command on the
+          machine you want to add — it installs the orbit CLI, then opens your browser to confirm
+          the machine belongs to you. It appears in the list on the left once it comes online.
         </p>
 
         <Segmented
@@ -143,34 +108,7 @@ export function RunnerRegisterGuide() {
           options={['macOS', 'Linux', 'Windows']}
         />
 
-        {/* Step 1 reads as complete by design; step 2 flips to done on handshake. */}
-        <Step
-          index={1}
-          done
-          lineDone={connected}
-          title="Install the CLI"
-          desc="Installs the orbit CLI on this machine."
-        >
-          <CommandBox
-            cmd={installCmd[os]}
-            copied={copied === 'install'}
-            onCopy={() => copy('install', installCmd[os])}
-          />
-        </Step>
-
-        <Step
-          index={2}
-          done={connected}
-          last
-          title="Register & approve"
-          desc="Opens your browser to confirm this machine belongs to you."
-        >
-          <CommandBox
-            cmd={registerCmd}
-            copied={copied === 'register'}
-            onCopy={() => copy('register', registerCmd)}
-          />
-        </Step>
+        <CommandBox cmd={installCmd[os]} copied={copied} onCopy={() => copy(installCmd[os])} />
 
         {connected ? (
           <div className="runner-status connected">

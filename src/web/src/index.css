@@ -2779,61 +2779,6 @@ body {
   margin-bottom: 28px;
 }
 
-/* vertical stepper: numbered dot + connector line, green check when complete */
-.runner-step {
-  display: flex;
-  gap: 14px;
-}
-.runner-step-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: none;
-}
-.runner-step-dot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-3);
-  background: var(--bg-raised);
-  border: 1.5px solid var(--border);
-}
-.runner-step-dot.done {
-  color: var(--bg-raised);
-  background: var(--success-solid);
-  border-color: var(--success-solid);
-}
-.runner-step-line {
-  flex: 1;
-  width: 2px;
-  min-height: 24px;
-  margin: 4px 0;
-  background: var(--border);
-}
-.runner-step-line.done {
-  background: var(--success-solid);
-}
-.runner-step-body {
-  flex: 1;
-  min-width: 0;
-  padding-bottom: 24px;
-}
-.runner-step-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.runner-step-desc {
-  margin: 2px 0 12px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-
 /* command box: monospace on light grey + an explicit Copy button */
 .runner-cmd {
   display: flex;
@@ -2888,7 +2833,7 @@ body {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 12px;
+  margin-top: 20px;
   padding: 16px 18px;
   border-radius: 10px;
 }

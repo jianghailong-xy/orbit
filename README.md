@@ -122,15 +122,19 @@ deployment's origin (baked in at build time via `PUBLIC_ORIGIN`; the UI's **Add 
 page prints these commands pre-filled for you):
 
 ```bash
-# 1. install the static `orbit` binary (no Node needed)
+# install the static `orbit` binary (no Node needed) and register this machine —
+# the script hands off to `orbit register`, which opens your browser to approve and
+# auto-installs + starts a background service (systemd / launchd)
 curl -fsSL https://orbit.example.com/install.sh | bash
 
-# 2. register this machine (opens your browser to approve)
-#    this auto-installs + starts a background service (systemd / launchd)
-orbit register --labels sg,hdfs --max-concurrent 2
+# register options go after `-s --`:
+curl -fsSL https://orbit.example.com/install.sh | bash -s -- --labels sg,hdfs --max-concurrent 2
 
-#    ...or run it in the foreground instead of installing a service:
-orbit register --foreground --labels sg,hdfs
+# ...or run it in the foreground instead of installing a service:
+curl -fsSL https://orbit.example.com/install.sh | bash -s -- --foreground --labels sg,hdfs
+
+# ...or install the binary only (also the default with no terminal, e.g. in CI):
+curl -fsSL https://orbit.example.com/install.sh | ORBIT_NO_REGISTER=1 bash
 ```
 
 The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the runner

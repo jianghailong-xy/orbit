@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Install the Orbit runner CLI:  curl -fsSL https://orbitd.io/install.sh | bash
+# Install the Orbit runner CLI and register this machine:
+#   curl -fsSL https://orbitd.io/install.sh | bash
+# Extra args go to `orbit register`:  ... | bash -s -- --labels sg --max-concurrent 2
+# Set ORBIT_NO_REGISTER=1 to install the binary only.
 set -euo pipefail
 
 BASE_URL="${ORBIT_BASE_URL:-https://orbitd.io}"
@@ -46,4 +49,12 @@ trap - EXIT
 ver="$("$target" version 2>/dev/null || echo '?')"
 echo ""
 echo "✓ orbit ${ver} installed to ${target}"
+
+# Hand straight off to `orbit register` so install + connect is one command. `curl … | bash`
+# leaves stdin bound to the pipe, so reattach the terminal first — otherwise register's
+# prompts (runner name, engine install, sudo for the background service) read EOF and
+# silently take defaults. Without a terminal (CI, image build) just print the next step.
+if [ -z "${ORBIT_NO_REGISTER:-}" ] && { : < /dev/tty; } 2>/dev/null; then
+  exec "$target" register ${1+"$@"} < /dev/tty
+fi
 echo "Next:  orbit register"
