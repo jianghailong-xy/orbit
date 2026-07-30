@@ -87,10 +87,16 @@ export function SessionSearch() {
       setOpen((v) => !v);
     };
     const onOpen = (): void => setOpen(true);
-    window.addEventListener('keydown', onKey);
+    // Capture phase, which on `window` is the very first stop of the whole dispatch. Keyboard
+    // extensions (Vimium and friends) bind Esc at document capture to blur the focused field and
+    // swallow the key, so a bubble-phase listener never sees the first press: it only unfocuses
+    // the search box, and closing takes a second Esc. Capturing here means the palette gets the
+    // key first. Still nothing is preventDefault'd or stopped, so those extensions — and every
+    // other Esc/⌘K consumer — keep receiving it.
+    window.addEventListener('keydown', onKey, true);
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => {
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
       window.removeEventListener(OPEN_EVENT, onOpen);
     };
   }, []);
