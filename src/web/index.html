@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- Safari tints its toolbars with this — on an iPhone that's the bottom address bar.
+         Without it the bar samples whatever page content happens to sit against its edge,
+         so its shade drifts as the list scrolls under it. Pinned to --bg-base, the canvas
+         every view ends on (the session column's bottom padding, the composer), so the bar
+         reads as part of the app instead of a separate strip. Resolved before first paint
+         by the script below and kept in sync afterwards by lib/theme.tsx. -->
+    <meta id="theme-color" name="theme-color" content="#ffffff" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
@@ -19,6 +26,11 @@
             m === 'dark' ||
             (m === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
           document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+          // Same first-paint reasoning as the theme above: Safari reads theme-color at
+          // load, so setting it here stops the address bar flashing the wrong shade.
+          // Hexes mirror --bg-base in index.css (also duplicated in lib/theme.tsx).
+          var mc = document.getElementById('theme-color');
+          if (mc) mc.setAttribute('content', dark ? '#202023' : '#ffffff');
         } catch (e) {}
       })();
     </script>
