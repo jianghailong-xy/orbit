@@ -188,6 +188,10 @@ func runLoop(cfg *RunnerConfig) {
 	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
 	go engineUpdateLoop(loopCtx, activeProviderCount, doctorProxyVars(cfg.ServerURL))
 
+	// Engines are installed on demand rather than at register time; this is the consent
+	// that was collected there (see ensureEngine).
+	configureEngineInstall(cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	go func() {
@@ -368,7 +372,7 @@ func runLoop(cfg *RunnerConfig) {
 					}
 					switch lr.Action {
 					case "start":
-						login.start(lr.Attempt, report)
+						login.start(lr.Attempt, lr.Engine, report)
 					case "code":
 						login.submitCode(lr.Code, report)
 					}

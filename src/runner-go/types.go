@@ -143,6 +143,9 @@ type HeartbeatResponse struct {
 // must be idempotent.
 type LoginCommand struct {
 	Action string `json:"action"` // "start" | "code"
+	// Which CLI to sign in: "claude" | "codex". Empty from an older control plane, which only
+	// ever drove claude.
+	Engine string `json:"engine,omitempty"`
 	// The authorization code the user pasted, for action "code".
 	Code string `json:"code,omitempty"`
 	// Identifies this sign-in (the server's login_at). Lets the runner tell a redelivered start
@@ -152,12 +155,14 @@ type LoginCommand struct {
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
-// can show the URL to approve and then the outcome. `URL` is set only with status
-// "awaiting_code"; `Message` carries the reason for "failed".
+// can show the URL to approve and then the outcome. `URL` is set with "awaiting_code" and
+// "awaiting_approval"; `UserCode` only with the latter (the device flow's one-time code, which
+// the user types on that page); `Message` carries the reason for "failed".
 type LoginResultRequest struct {
-	Status  string `json:"status"`
-	URL     string `json:"url,omitempty"`
-	Message string `json:"message,omitempty"`
+	Status   string `json:"status"`
+	URL      string `json:"url,omitempty"`
+	UserCode string `json:"userCode,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into

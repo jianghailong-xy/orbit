@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -21,7 +22,7 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 
 	got := make(chan LoginResultRequest, 4)
 	r := &loginRelay{}
-	r.start("attempt-1", func(res LoginResultRequest) { got <- res })
+	r.start("attempt-1", providerClaude, func(res LoginResultRequest) { got <- res })
 
 	select {
 	case res := <-got:
@@ -52,5 +53,41 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 		}
 	case <-time.After(75 * time.Second):
 		t.Fatal("relay never reported a sign-in URL")
+	}
+}
+
+// The same check for codex's device flow, opt-in via ORBIT_MANUAL_LOGIN_CHECK=1. CODEX_HOME is
+// redirected so this cannot read or write the machine's real credentials — the flow is started
+// and abandoned, never approved.
+//
+// Worth running after a codex CLI upgrade: the relay scrapes both halves (page URL and one-time
+// code) out of the CLI's own output, and there is no way to notice that output changing shape
+// except by looking at it.
+func TestManualCodexDeviceLoginEndToEnd(t *testing.T) {
+	if os.Getenv("ORBIT_MANUAL_LOGIN_CHECK") != "1" {
+		t.Skip("manual check")
+	}
+	t.Setenv("CODEX_HOME", t.TempDir())
+
+	got := make(chan LoginResultRequest, 4)
+	r := &loginRelay{}
+	r.start("attempt-1", providerCodex, func(res LoginResultRequest) { got <- res })
+
+	select {
+	case res := <-got:
+		t.Logf("status=%s url=%s code=%s message=%s", res.Status, res.URL, res.UserCode, res.Message)
+		if res.Status != loginAwaitingApproval {
+			t.Fatalf("expected %q, got %q (%s)", loginAwaitingApproval, res.Status, res.Message)
+		}
+		if res.URL == "" || res.UserCode == "" {
+			t.Fatalf("device flow needs both halves, got url=%q code=%q", res.URL, res.UserCode)
+		}
+		// The point of the device flow: nothing here is served from the runner, so the user's
+		// browser never has to reach that machine.
+		if strings.Contains(res.URL, "localhost") || strings.Contains(res.URL, "127.0.0.1") {
+			t.Fatalf("device URL points back at the runner: %s", res.URL)
+		}
+	case <-time.After(75 * time.Second):
+		t.Fatal("relay never reported a device code")
 	}
 }

@@ -28,6 +28,7 @@ import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { isApiErrorText, isAuthErrorText } from '@orbit/shared';
+import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
@@ -338,9 +339,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       case 'interrupt':
         into(parent).push({ kind: 'interrupt', seq: ev.seq });
         break;
-      case 'error':
-        into(parent).push({ kind: 'error', seq: ev.seq, message: String(p.message ?? 'error') });
+      case 'error': {
+        // The runner reports a signed-out engine as an error event rather than assistant text
+        // (there is no model in the loop yet — it never got to spawn), but the remedy is the
+        // same human action, so it earns the same card instead of a bare error line.
+        const msg = String(p.message ?? 'error');
+        if (isAuthErrorText(msg)) into(parent).push({ kind: 'authError', seq: ev.seq, message: msg });
+        else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
+      }
       default:
         break; // system / status — not part of the chat transcript
     }
@@ -498,7 +505,8 @@ const LOCAL_LOGIN: Record<string, { login: string; headless: ReactNode }> = {
     login: 'codex login',
     headless: (
       <>
-        Set <code>OPENAI_API_KEY</code> in the runner's service env.
+        Run <code>codex login --device-auth</code> there — plain <code>codex login</code> waits on
+        a localhost callback that only that machine's own browser can reach.
       </>
     ),
   },
@@ -544,10 +552,13 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         <>
           {/* Signing in from here is the path that needs nothing on the runner but the CLI, so
               it leads; the copy-paste command below stays as the fallback for when the relay
-              can't read a URL (an older CLI, no `script` on that box). Claude only — codex's
-              sign-in hasn't been put through the relay. */}
-          {help?.runnerId && help.provider === 'claude' && (
-            <RunnerSignIn runnerId={help.runnerId} onDone={help.onRetry} />
+              can't read a URL (an older CLI, no `script` on that box). */}
+          {help?.runnerId && (
+            <RunnerSignIn
+              runnerId={help.runnerId}
+              engine={help.provider as LoginEngine}
+              onDone={help.onRetry}
+            />
           )}
           <div className="chat-authfix-desc">
             Or fix it on the machine itself — this runner signs in with its own account. Run:

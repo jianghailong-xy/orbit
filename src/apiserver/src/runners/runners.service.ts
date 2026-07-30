@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import type { RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
+import type { LoginEngine, RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
@@ -211,13 +211,15 @@ export class RunnersService {
    * returned exactly once — same one-shot contract as enrollment.
    */
   /**
-   * Ask this runner to start a browser-less `claude auth login`. The next heartbeat picks it up;
-   * the runner reports back the URL to approve, then whether it ended up signed in.
+   * Ask this runner to start a browser-less sign-in for one engine. The next heartbeat picks it
+   * up; the runner reports back what the user has to do (a URL to approve, plus a one-time code
+   * for codex's device flow), then whether it ended up signed in.
    *
    * Starting over is always allowed: the runner's relay kills a previous CLI when it starts a
    * new one, and a user staring at a stuck card needs a way out that isn't waiting ten minutes.
+   * One relay at a time per runner, so asking for codex while claude's is in flight replaces it.
    */
-  async startLogin(ownerId: string, id: string): Promise<RunnerLoginState> {
+  async startLogin(ownerId: string, id: string, engine: LoginEngine = 'claude'): Promise<RunnerLoginState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.status === 'OFFLINE') {
@@ -227,7 +229,9 @@ export class RunnersService {
       where: { id },
       data: {
         loginStatus: 'pending',
+        loginEngine: engine,
         loginUrl: null,
+        loginUserCode: null,
         loginCode: null,
         loginMessage: null,
         loginAt: new Date(),
@@ -240,6 +244,9 @@ export class RunnersService {
    * Hand the runner the authorization code the user pasted. Stored for the next heartbeat to
    * deliver, then cleared — it is single-use, and useless without the PKCE verifier that never
    * leaves the runner process.
+   *
+   * Only the paste-back flow ever reaches here: codex's device flow sits in `awaiting_approval`,
+   * where the code goes to the browser, not through us.
    */
   async submitLoginCode(ownerId: string, id: string, code: string): Promise<RunnerLoginState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
@@ -269,7 +276,15 @@ export class RunnersService {
     if (!runner) throw new NotFoundException('runner not found');
     const r = await this.prisma.runner.update({
       where: { id },
-      data: { loginStatus: null, loginUrl: null, loginCode: null, loginMessage: null, loginAt: null },
+      data: {
+        loginStatus: null,
+        loginEngine: null,
+        loginUrl: null,
+        loginUserCode: null,
+        loginCode: null,
+        loginMessage: null,
+        loginAt: null,
+      },
     });
     return loginStateOf(r);
   }
@@ -293,11 +308,16 @@ export class RunnersService {
 /** Project a runner row onto the browser-facing relay view (no code, ever). */
 function loginStateOf(r: {
   loginStatus: string | null;
+  loginEngine: string | null;
   loginUrl: string | null;
+  loginUserCode: string | null;
   loginMessage: string | null;
 }): RunnerLoginState {
   return {
     status: (r.loginStatus as RunnerLoginState['status']) ?? null,
+    // A row written before the relay drove anything but claude carries no engine.
+    engine: r.loginStatus ? ((r.loginEngine as LoginEngine) ?? 'claude') : null,
+    userCode: r.loginUserCode,
     url: r.loginUrl,
     message: r.loginMessage,
   };

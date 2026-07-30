@@ -302,10 +302,14 @@ func envWithAgent(agentEnv map[string]string) []string {
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{})) (string, bool, bool) {
 	provider := runtimeProvider(job)
-	// Fail fast with an actionable message if the engine CLI isn't on PATH — the
-	// provider constants match the binary names. ended=true so we don't respawn.
-	if _, err := exec.LookPath(provider); err != nil {
-		emit(evError, map[string]interface{}{"message": engineMissingMessage(provider)})
+	// The engine CLI is installed on demand, so this is where a runner that has never
+	// run this provider gets it — and where a machine that can't (no consent, install
+	// failed, installed but signed out) fails with something actionable instead of a
+	// raw "failed to spawn" from exec. ended=true so we don't respawn.
+	if msg := ensureEngine(ctx, provider, func(note string) {
+		emit(evAssistant, map[string]interface{}{"text": note})
+	}); msg != "" {
+		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
 	if provider == providerCodex {

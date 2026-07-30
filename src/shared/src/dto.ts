@@ -284,18 +284,26 @@ export interface RunnerHeartbeatResponse {
   loginRequest?: LoginCommand;
 }
 
+/** The two engines a runner signs in with its own OAuth login, rather than an API key. */
+export type LoginEngine = 'claude' | 'codex';
+
 /**
  * Control plane → runner: drive the interactive sign-in on the runner's own machine.
  *
- * `start` launches `claude auth login` under a pty; the runner reports back the URL it prints,
- * which the user approves in their own browser (the CLI's redirect_uri is Anthropic-hosted, so
- * the browser never needs to reach the runner). `code` carries what they pasted back.
+ * `start` launches the engine's sign-in; the runner reports back what the user needs. The two
+ * engines differ in kind: `claude auth login` prints a URL whose redirect_uri is Anthropic-hosted
+ * and then waits for the code that page gives the user (`code` carries it back), while
+ * `codex login --device-auth` prints a URL *and* a one-time code to enter there, then polls for
+ * the approval itself. Either way the user's browser never has to reach the runner — which plain
+ * `codex login` would require, since it serves its callback on localhost on that machine.
  *
  * Redelivered every heartbeat until the runner's status report moves the server on, so both
  * actions must be idempotent on the runner.
  */
 export interface LoginCommand {
   action: 'start' | 'code';
+  /** Which CLI to sign in. Absent from an older control plane, which only ever drove claude. */
+  engine?: LoginEngine;
   /** The authorization code the user pasted, for `code`. */
   code?: string;
   /** Identifies this sign-in, so the runner can tell a redelivered `start` from one the user
@@ -305,16 +313,23 @@ export interface LoginCommand {
 
 /** Runner → control plane: progress of a sign-in relay. */
 export interface LoginResult {
-  /** `awaiting_code` carries `url`; `failed` carries `message`. */
-  status: 'awaiting_code' | 'done' | 'failed';
+  /** `awaiting_code` (paste-back flow) and `awaiting_approval` (device flow) carry `url`; only
+   *  the latter carries `userCode`; `failed` carries `message`. */
+  status: 'awaiting_code' | 'awaiting_approval' | 'done' | 'failed';
   url?: string;
+  /** The one-time code the user types on the sign-in page, for the device flow. */
+  userCode?: string;
   message?: string;
 }
 
 /** Browser-facing view of a runner's sign-in relay, for the card that drives it. */
 export interface RunnerLoginState {
-  status: 'pending' | 'awaiting_code' | 'done' | 'failed' | null;
+  status: 'pending' | 'awaiting_code' | 'awaiting_approval' | 'done' | 'failed' | null;
+  /** Which engine this relay is signing in; null when nothing is in flight. */
+  engine: LoginEngine | null;
   url: string | null;
+  /** Set with `awaiting_approval`: the code to enter on the page at `url`. */
+  userCode: string | null;
   message: string | null;
 }
 

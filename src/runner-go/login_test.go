@@ -136,7 +136,7 @@ func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
 	r := &loginRelay{running: true, attempt: "A"}
 
 	// Same attempt redelivered: no-op, and the running relay is left alone.
-	r.start("A", func(LoginResultRequest) { t.Error("redelivered start should not report") })
+	r.start("A", providerClaude, func(LoginResultRequest) { t.Error("redelivered start should not report") })
 	r.mu.Lock()
 	stillRunning, keptAttempt := r.running, r.attempt
 	r.mu.Unlock()
@@ -145,11 +145,81 @@ func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
 	}
 
 	// An empty attempt (older control plane) keeps the old no-op behaviour rather than churning.
-	r.start("", func(LoginResultRequest) { t.Error("empty attempt should not restart") })
+	r.start("", providerClaude, func(LoginResultRequest) { t.Error("empty attempt should not restart") })
 	r.mu.Lock()
 	stillRunning = r.running
 	r.mu.Unlock()
 	if !stillRunning {
 		t.Error("an attempt-less start from an old control plane should not preempt")
+	}
+}
+
+// Verbatim shape of what `codex login --device-auth` writes (codex-cli 0.146.0), colour codes and
+// all. Two things matter and both arrive coloured, so a scrape has to stop at the escape byte:
+// the sign-in page, and the one-time code the user types there. Unlike claude's flow nothing is
+// pasted back — the CLI polls for the approval itself.
+const realCodexDeviceOutput = "\r\nWelcome to Codex [v\x1b[90m0.146.0\x1b[0m]\r\n" +
+	"\x1b[90mOpenAI's command-line coding agent\x1b[0m\r\n\r\n" +
+	"Follow these steps to sign in with ChatGPT using device code authorization:\r\n\r\n" +
+	"1. Open this link in your browser and sign in to your account\r\n" +
+	"   \x1b[94mhttps://auth.openai.com/codex/device\x1b[0m\r\n\r\n" +
+	"2. Enter this one-time code \x1b[90m(expires in 15 minutes)\x1b[0m\r\n" +
+	"   \x1b[94mZXHO-K06HC\x1b[0m\r\n\r\n" +
+	"\x1b[90mContinue only if you started this login in Codex. If a website or another person gave you this code, cancel.\x1b[0m\r\n"
+
+func TestCodexDeviceScrape(t *testing.T) {
+	res := loginFlowFor(providerCodex).progress(realCodexDeviceOutput)
+	if res == nil {
+		t.Fatal("nothing scraped from real device-auth output")
+	}
+	if res.Status != loginAwaitingApproval {
+		t.Errorf("device flow waits on an approval, not a paste: %q", res.Status)
+	}
+	if res.URL != "https://auth.openai.com/codex/device" {
+		t.Errorf("URL scrape ran into the colour reset or came up short: %q", res.URL)
+	}
+	if res.UserCode != "ZXHO-K06HC" {
+		t.Errorf("one-time code scrape: got %q", res.UserCode)
+	}
+}
+
+// Both halves are useless alone — a URL with no code leaves the user staring at a page they can't
+// get past — so the relay must not report until it has seen both.
+func TestCodexDeviceScrapeWaitsForBothHalves(t *testing.T) {
+	progress := loginFlowFor(providerCodex).progress
+	urlOnly := realCodexDeviceOutput[:strings.Index(realCodexDeviceOutput, "2. Enter this")]
+	if res := progress(urlOnly); res != nil {
+		t.Errorf("reported with no code yet: %+v", res)
+	}
+	if res := progress("Welcome to Codex\r\nnothing here yet"); res != nil {
+		t.Errorf("reported from unrelated output: %+v", res)
+	}
+	// The code is only read from the line that announces it, so an id printed elsewhere can't
+	// be mistaken for one.
+	if got := codexDeviceCode("warning: ABCD-12345 is deprecated\r\n"); got != "" {
+		t.Errorf("matched a code outside the one-time-code line: %q", got)
+	}
+}
+
+// The device flow is the whole point: plain `codex login` serves its callback on localhost:1455
+// on the runner, which is exactly the browser the user doesn't have. It also prints to plain
+// stdout, so unlike claude's TUI it needs no pty.
+func TestCodexLoginFlowUsesDeviceAuth(t *testing.T) {
+	f := loginFlowFor(providerCodex)
+	if f.cmdLine() != "codex login --device-auth" {
+		t.Fatalf("codex must be driven through the device flow, got %q", f.cmdLine())
+	}
+	if f.pty {
+		t.Error("codex's device flow prints to plain stdout — no pty needed")
+	}
+	if f.takesCode {
+		t.Error("the device flow completes on its own; there is no code to hand back")
+	}
+	// An older control plane sends no engine at all, and only ever drove claude.
+	for _, engine := range []string{"", providerClaude} {
+		c := loginFlowFor(engine)
+		if c.engine != providerClaude || !c.pty || !c.takesCode {
+			t.Errorf("engine %q should map to claude's paste-back flow, got %+v", engine, c)
+		}
 	}
 }

@@ -409,18 +409,37 @@ func printEngineHints(healths []engineHealth) {
 	}
 }
 
+// specFor looks up an engine by its binary name (which is also its provider slug).
+func specFor(bin string) (engineSpec, bool) {
+	for _, s := range engineSpecs {
+		if s.bin == bin {
+			return s, true
+		}
+	}
+	return engineSpec{}, false
+}
+
 // engineMissingMessage is the runtime error shown when a session's engine binary
 // isn't on the runner's PATH, so the failure points at a fix instead of a raw
 // "failed to spawn" from exec.
 func engineMissingMessage(bin string) string {
 	name := bin
-	for _, s := range engineSpecs {
-		if s.bin == bin {
-			name = s.name
-			break
-		}
+	if s, ok := specFor(bin); ok {
+		name = s.name
 	}
 	return fmt.Sprintf("%s CLI (%q) not found on this runner's PATH — run `orbit doctor` on the runner to install it and sign in.", name, bin)
+}
+
+// engineSignedOutMessage is the runtime error for an engine that is installed but has
+// no credentials. Phrased as an authentication failure on purpose: that is what the web
+// transcript keys on to offer its sign-in card (isAuthErrorText in @orbit/shared), which
+// signs this machine in from the browser — the fix a human has to make either way.
+func engineSignedOutMessage(bin string) string {
+	name, hint := bin, "sign in on that machine"
+	if s, ok := specFor(bin); ok {
+		name, hint = s.name, "run `"+s.loginCmd()+"` on that machine"
+	}
+	return fmt.Sprintf("Failed to authenticate: %s is installed on this runner but not signed in — sign in from here, or %s.", name, hint)
 }
 
 // doctorProxyVars derives proxy env for installer commands from the environment,

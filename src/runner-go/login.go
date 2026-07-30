@@ -17,12 +17,15 @@ import (
 // CLI is killed and the slot freed, otherwise one abandoned attempt would block sign-in forever.
 const loginRelayTimeout = 10 * time.Minute
 
-// Login relay statuses reported to the control plane. They mirror the `login_status` column, and
-// awaitingCode is the only non-terminal one the server acts on (it forwards the pasted code).
+// Login relay statuses reported to the control plane. They mirror the `login_status` column.
+// awaitingCode is the only one the server acts on (it forwards the pasted code); awaitingApproval
+// is the device flow's equivalent, where there is nothing to hand back — the user types the code
+// into the browser and the CLI polls for it.
 const (
-	loginAwaitingCode = "awaiting_code"
-	loginDone         = "done"
-	loginFailed       = "failed"
+	loginAwaitingCode     = "awaiting_code"
+	loginAwaitingApproval = "awaiting_approval"
+	loginDone             = "done"
+	loginFailed           = "failed"
 )
 
 // The sign-in URL claude prints. It is emitted inside an OSC 8 hyperlink and then repeated in
@@ -46,6 +49,75 @@ func latestLoginURL(s string) string {
 		return ""
 	}
 	return m[len(m)-1]
+}
+
+// What `codex login --device-auth` prints: a fixed sign-in page, then a one-time code to type
+// there. Both arrive coloured, so a match ends at the escape byte that closes the colour.
+var (
+	codexDeviceURLRe  = regexp.MustCompile(`https://auth\.openai\.com/[^\s\x1b\x07"']*device[^\s\x1b\x07"']*`)
+	codexDeviceCodeRe = regexp.MustCompile(`[A-Z0-9]{4,}-[A-Z0-9]{4,}`)
+)
+
+// codexDeviceCode pulls the one-time code out of the CLI's output. Anchored to the line that
+// announces it ("2. Enter this one-time code") so nothing else that happens to look like a code
+// — a build tag, an id in a warning — can be mistaken for one.
+func codexDeviceCode(s string) string {
+	i := strings.Index(s, "one-time code")
+	if i < 0 {
+		return ""
+	}
+	return codexDeviceCodeRe.FindString(s[i:])
+}
+
+// loginFlow is how one engine's sign-in is driven. The two differ in kind, not in detail:
+//
+//   - claude prints a URL whose redirect_uri is Anthropic-hosted, then waits on stdin for the
+//     code that page hands the user. It is a TUI, so it needs a pty to print anything at all.
+//   - codex's `--device-auth` prints a URL *and* a one-time code to enter there, then polls for
+//     the approval itself. Nothing is handed back, and it is plain stdout — no pty needed.
+//
+// Plain `codex login` is not an option here: it serves its callback on localhost:1455 on the
+// runner, which the user's browser can't reach (see engineSpec.loginRemoteFlag).
+type loginFlow struct {
+	engine string
+	argv   []string
+	pty    bool
+	// progress scrapes the accumulated output for what the user needs next, returning nil
+	// until it's all there.
+	progress func(out string) *LoginResultRequest
+	// takesCode is set for a flow the user pastes a code back into.
+	takesCode bool
+}
+
+func (f loginFlow) cmdLine() string { return strings.Join(f.argv, " ") }
+
+func loginFlowFor(engine string) loginFlow {
+	if engine == providerCodex {
+		return loginFlow{
+			engine: providerCodex,
+			argv:   []string{providerCodex, "login", "--device-auth"},
+			progress: func(out string) *LoginResultRequest {
+				u, code := codexDeviceURLRe.FindString(out), codexDeviceCode(out)
+				if u == "" || code == "" {
+					return nil
+				}
+				return &LoginResultRequest{Status: loginAwaitingApproval, URL: u, UserCode: code}
+			},
+		}
+	}
+	// Anything else (including the empty engine an older control plane sends) is claude.
+	return loginFlow{
+		engine: providerClaude,
+		argv:   []string{providerClaude, "auth", "login"},
+		pty:    true,
+		progress: func(out string) *LoginResultRequest {
+			if u := latestLoginURL(out); u != "" {
+				return &LoginResultRequest{Status: loginAwaitingCode, URL: u}
+			}
+			return nil
+		},
+		takesCode: true,
+	}
 }
 
 // loginRelay drives one interactive `claude auth login` on this machine while the user approves
@@ -92,7 +164,26 @@ func ptyCommand(ctx context.Context, argv ...string) *exec.Cmd {
 // `start` until our first status report lands, so repeats of the SAME attempt must be ignored —
 // but a DIFFERENT attempt means the user asked again (typically after cancelling), and that has
 // to preempt whatever is still running, or they wait out the old CLI's timeout for nothing.
-func (r *loginRelay) start(attempt string, report func(LoginResultRequest)) {
+func (r *loginRelay) start(attempt, engine string, report func(LoginResultRequest)) {
+	flow := loginFlowFor(engine)
+	// Cheap pre-check for the heartbeat's redelivery of a start we are already running: the real
+	// decision is made under the lock below, this just keeps the probe that follows from running
+	// a subprocess every heartbeat for a sign-in that is already in flight.
+	r.mu.Lock()
+	redelivered := r.running && (attempt == "" || attempt == r.attempt)
+	r.mu.Unlock()
+	if redelivered {
+		return
+	}
+	// A codex old enough to lack the device flow can't be signed in from here at all, and its
+	// error would surface as "couldn't read a sign-in URL" — say what actually has to happen.
+	if flow.engine == providerCodex {
+		spec, _ := specFor(providerCodex)
+		if path, ok := lookEngine(providerCodex); !ok || !supportsLoginFlag(path, spec) {
+			report(LoginResultRequest{Status: loginFailed, Message: "this runner's codex is too old to sign in from the browser — run `codex update` on that machine, or sign in there with `codex login`"})
+			return
+		}
+	}
 	r.mu.Lock()
 	if r.running {
 		if attempt == "" || attempt == r.attempt {
@@ -107,13 +198,24 @@ func (r *loginRelay) start(attempt string, report func(LoginResultRequest)) {
 		r.running = false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loginRelayTimeout)
-	cmd := ptyCommand(ctx, providerClaude, "auth", "login")
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		r.mu.Unlock()
-		cancel()
-		report(LoginResultRequest{Status: loginFailed, Message: "could not open a pipe to the sign-in: " + err.Error()})
-		return
+	var cmd *exec.Cmd
+	if flow.pty {
+		cmd = ptyCommand(ctx, flow.argv...)
+	} else {
+		cmd = exec.CommandContext(ctx, flow.argv[0], flow.argv[1:]...)
+	}
+	// Only a flow that takes a pasted code needs a writable stdin; the device flow completes
+	// on its own, so there is nothing to hold open.
+	var stdin io.WriteCloser
+	if flow.takesCode {
+		p, err := cmd.StdinPipe()
+		if err != nil {
+			r.mu.Unlock()
+			cancel()
+			report(LoginResultRequest{Status: loginFailed, Message: "could not open a pipe to the sign-in: " + err.Error()})
+			return
+		}
+		stdin = p
 	}
 	out := &syncBuffer{}
 	cmd.Stdout = out
@@ -121,21 +223,23 @@ func (r *loginRelay) start(attempt string, report func(LoginResultRequest)) {
 	if err := cmd.Start(); err != nil {
 		r.mu.Unlock()
 		cancel()
-		_ = stdin.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
 		// `script` missing is the one failure worth naming precisely: everything else the user
 		// can act on, but this one means the relay can never work on this machine.
-		report(LoginResultRequest{Status: loginFailed, Message: signInStartError(err)})
+		report(LoginResultRequest{Status: loginFailed, Message: signInStartError(err, flow)})
 		return
 	}
 	r.running, r.stdin, r.cancel, r.out, r.attempt = true, stdin, cancel, out, attempt
 	r.mu.Unlock()
 
-	go r.pump(attempt, cmd, out, cancel, stdin, report)
+	go r.pump(attempt, flow, cmd, out, cancel, stdin, report)
 }
 
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit
 // and report whether this machine ended up signed in.
-func (r *loginRelay) pump(attempt string, cmd *exec.Cmd, out *syncBuffer, cancel context.CancelFunc, stdin io.WriteCloser, report func(LoginResultRequest)) {
+func (r *loginRelay) pump(attempt string, flow loginFlow, cmd *exec.Cmd, out *syncBuffer, cancel context.CancelFunc, stdin io.WriteCloser, report func(LoginResultRequest)) {
 	// Wait in its own goroutine so the URL poll below can tell "still running" from "already
 	// exited" — cmd.ProcessState stays nil until Wait returns, so it can't answer that itself.
 	waited := make(chan error, 1)
@@ -143,7 +247,9 @@ func (r *loginRelay) pump(attempt string, cmd *exec.Cmd, out *syncBuffer, cancel
 
 	defer func() {
 		cancel()
-		_ = stdin.Close()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
 		r.mu.Lock()
 		// Only clear if we are still the current attempt — a newer start() may already own these.
 		if r.attempt == attempt {
@@ -152,17 +258,17 @@ func (r *loginRelay) pump(attempt string, cmd *exec.Cmd, out *syncBuffer, cancel
 		r.mu.Unlock()
 	}()
 
-	// Poll the accumulated output for the URL rather than scanning lines: the TUI redraws with
-	// carriage returns and no trailing newline, so a line scanner can sit on a complete URL
-	// indefinitely waiting for an EOL that only arrives later.
+	// Poll the accumulated output rather than scanning lines: the TUI redraws with carriage
+	// returns and no trailing newline, so a line scanner can sit on a complete URL indefinitely
+	// waiting for an EOL that only arrives later.
 	urlDeadline := time.After(90 * time.Second)
 	var exitErr error
 	exited := false
 	sent := false
 poll:
 	for {
-		if m := latestLoginURL(out.String()); m != "" {
-			report(LoginResultRequest{Status: loginAwaitingCode, URL: m})
+		if res := flow.progress(out.String()); res != nil {
+			report(*res)
 			sent = true
 			break
 		}
@@ -185,7 +291,7 @@ poll:
 		}
 		report(LoginResultRequest{
 			Status:  loginFailed,
-			Message: "couldn't read a sign-in URL from the CLI — run `claude auth login` on this machine instead",
+			Message: "couldn't read a sign-in URL from the CLI — run `" + flow.cmdLine() + "` on this machine instead",
 		})
 		return
 	}
@@ -195,7 +301,7 @@ poll:
 	}
 	// The CLI's exit code isn't a reliable success signal, so ask the question `orbit doctor`
 	// asks: is this machine actually signed in now?
-	if probeAuthNow() == authYes {
+	if probeAuthNow(flow.engine) == authYes {
 		report(LoginResultRequest{Status: loginDone})
 		return
 	}
@@ -260,22 +366,18 @@ func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginR
 	}
 }
 
-// probeAuthNow re-runs doctor's sign-in probe against the claude binary on the service PATH.
-func probeAuthNow() authState {
-	path, ok := lookPathIn(providerClaude, serviceLoginPath())
+// probeAuthNow re-runs doctor's sign-in probe against the engine binary on the service PATH.
+func probeAuthNow(engine string) authState {
+	path, ok := lookEngine(engine)
 	if !ok {
-		if p, err := exec.LookPath(providerClaude); err == nil {
-			path = p
-		} else {
-			return authUnknown
-		}
+		return authUnknown
 	}
-	return probeAuth(providerClaude, path)
+	return probeAuth(engine, path)
 }
 
-func signInStartError(err error) string {
-	if strings.Contains(err.Error(), "executable file not found") {
-		return "this machine has no `script` command, which the browser-less sign-in needs — run `claude auth login` on it directly"
+func signInStartError(err error, flow loginFlow) string {
+	if flow.pty && strings.Contains(err.Error(), "executable file not found") {
+		return "this machine has no `script` command, which the browser-less sign-in needs — run `" + flow.cmdLine() + "` on it directly"
 	}
 	return "could not start the sign-in: " + firstLine(err.Error())
 }

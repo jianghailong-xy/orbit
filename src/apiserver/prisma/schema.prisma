@@ -162,16 +162,24 @@ model Runner {
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?      @map("model_catalog")
 
-  // Browser-less `claude auth login` relay. The runner drives the CLI under a pty on its own
-  // machine while the user approves in their own browser and pastes the code back here, so a
-  // machine with no terminal access can still be signed in. State, not history: one sign-in at
-  // a time per runner, since the CLI writes that machine's single credentials file.
+  // Browser-less sign-in relay for this machine's Claude/Codex CLI. The runner drives the CLI
+  // on its own machine while the user approves in their own browser, so a machine with no
+  // terminal access can still be signed in. State, not history: one sign-in at a time per
+  // runner, since each CLI writes that machine's single credentials file.
   //   NULL       — nothing in flight
   //   pending    — user asked to sign in; the next heartbeat tells the runner to start
   //   awaiting_code — loginUrl holds the link to approve; loginCode carries the user's paste
+  //   awaiting_approval — device flow (codex): loginUrl + loginUserCode are what the user
+  //                       enters in the browser; nothing comes back through us
   //   done | failed — terminal, loginMessage explains a failure
   loginStatus  String?   @map("login_status")
+  // Which CLI the relay is driving: 'claude' | 'codex'. NULL on a row written before the relay
+  // handled more than claude.
+  loginEngine  String?   @map("login_engine")
   loginUrl     String?   @map("login_url")
+  // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
+  // the opposite direction from loginCode.
+  loginUserCode String?  @map("login_user_code")
   // The pasted authorization code, cleared as soon as the heartbeat hands it to the runner. It
   // is single-use and worthless without the PKCE verifier, which never leaves the runner.
   loginCode    String?   @map("login_code")

@@ -52,6 +52,11 @@ type RunnerConfig struct {
 	// Fallback project directory for sessions whose agent carries no workDir. The
 	// server normally drives claude's cwd per session from the session's agent.
 	WorkDir string `json:"workDir,omitempty"`
+	// AutoInstallEngines is the consent `orbit register` asks for once: may this runner
+	// install a missing coding CLI itself, the first time a session needs one? Absent in
+	// an older config reads as "no" — a background service must not start installing
+	// software on someone's machine unasked.
+	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per

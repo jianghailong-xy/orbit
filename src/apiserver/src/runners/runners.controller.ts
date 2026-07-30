@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateEnrollmentTokenDto, SubmitLoginCodeDto, UpdateRunnerDto } from './dto';
+import { CreateEnrollmentTokenDto, StartLoginDto, SubmitLoginCodeDto, UpdateRunnerDto } from './dto';
 import { RunnersService } from './runners.service';
 
 @UseGuards(JwtAuthGuard)
@@ -57,8 +57,8 @@ export class RunnersController {
   }
 
   @Post(':id/login')
-  startLogin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.runners.startLogin(user.userId, id);
+  startLogin(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: StartLoginDto) {
+    return this.runners.startLogin(user.userId, id, dto?.engine ?? 'claude');
   }
 
   @Post(':id/login/code')

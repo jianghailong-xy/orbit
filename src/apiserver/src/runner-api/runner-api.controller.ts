@@ -375,17 +375,22 @@ export class RunnerApiController {
   private async drainLoginRequest(runnerId: string): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
-      select: { loginStatus: true, loginCode: true, loginAt: true },
+      select: { loginStatus: true, loginEngine: true, loginCode: true, loginAt: true },
     });
     if (!r?.loginStatus) return undefined;
     const started = r.loginAt?.getTime() ?? 0;
     if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
-      if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code') {
+      if (
+        r.loginStatus === 'pending' ||
+        r.loginStatus === 'awaiting_code' ||
+        r.loginStatus === 'awaiting_approval'
+      ) {
         await this.prisma.runner.update({
           where: { id: runnerId },
           data: {
             loginStatus: 'failed',
             loginCode: null,
+            loginUserCode: null,
             loginMessage: 'Sign-in timed out — start it again.',
           },
         });
@@ -393,7 +398,12 @@ export class RunnerApiController {
       return undefined;
     }
     if (r.loginStatus === 'pending')
-      return { action: 'start', attempt: r.loginAt?.toISOString() ?? '' };
+      return {
+        action: 'start',
+        // NULL predates the relay driving anything but claude.
+        engine: (r.loginEngine as LoginCommand['engine']) ?? 'claude',
+        attempt: r.loginAt?.toISOString() ?? '',
+      };
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({ where: { id: runnerId }, data: { loginCode: null } });
       return { action: 'code', code: r.loginCode };
@@ -410,16 +420,24 @@ export class RunnerApiController {
   @HttpCode(200)
   async loginResult(@CurrentRunner() runner: { id: string }, @Body() body: LoginResult) {
     const status = body?.status;
-    if (status !== 'awaiting_code' && status !== 'done' && status !== 'failed') {
+    if (
+      status !== 'awaiting_code' &&
+      status !== 'awaiting_approval' &&
+      status !== 'done' &&
+      status !== 'failed'
+    ) {
       throw new BadRequestException('Unknown login status');
     }
+    const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
     await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
         loginStatus: status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
         // whatever the runner reported; clear any code still queued behind it either way.
-        loginUrl: status === 'awaiting_code' ? (body.url ?? null) : null,
+        loginUrl: waiting ? (body.url ?? null) : null,
+        // Only the device flow carries one, and it dies with the attempt it belongs to.
+        loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
         loginMessage: body.message ?? null,
       },

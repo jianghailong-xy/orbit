@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import type { LoginEngine } from '@orbit/shared';
 
 export class CreateEnrollmentTokenDto {
   @IsOptional() @IsString() label?: string;
@@ -16,4 +17,9 @@ export class UpdateRunnerDto {
 /** The authorization code the user pasted back from the hosted OAuth callback page. */
 export class SubmitLoginCodeDto {
   @IsString() @MinLength(1) code!: string;
+}
+
+/** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
+export class StartLoginDto {
+  @IsOptional() @IsIn(['claude', 'codex']) engine?: LoginEngine;
 }

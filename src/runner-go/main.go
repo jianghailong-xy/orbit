@@ -77,6 +77,9 @@ Options:
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
+  --auto-install-engines   Let the runner install a missing Claude/Codex CLI itself, the first
+  --no-auto-install-engines  time a session needs one. Asked interactively when neither is
+                           passed; an unattended register defaults to not installing.
   --proxy [<url>]          Use an HTTP proxy for claude on the runner so it can reach
                            the Anthropic API on a proxied network. Bare --proxy uses
                            $https_proxy/$http_proxy; or pass a URL. If omitted and a
@@ -268,7 +271,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 			os.Exit(1)
 		}
 		finishRegister(res.RunnerID, res.RunnerToken, res.Name,
-			server, labels, maxConcurrent, workDir, withService, foreground, proxyVars)
+			server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
 		return
 	}
 
@@ -296,7 +299,7 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 		}
 		if poll.Status == "approved" {
 			finishRegister(poll.RunnerID, poll.RunnerToken, poll.Name,
-				server, labels, maxConcurrent, workDir, withService, foreground, proxyVars)
+				server, labels, maxConcurrent, workDir, withService, foreground, proxyVars, bools)
 			return
 		}
 		if poll.Status == "expired" {
@@ -307,9 +310,26 @@ func cmdRegister(flags map[string]string, bools map[string]bool) {
 	os.Exit(1)
 }
 
+// autoInstallConsent decides whether this runner may install an engine CLI on its own when a
+// session first needs one (see ensureEngine). Explicit flags win; otherwise we ask. An
+// unattended register — a provisioning script, no terminal to answer — records no consent
+// rather than assuming it: installing software on someone's machine is not a default.
+func autoInstallConsent(bools map[string]bool) bool {
+	switch {
+	case bools["no-auto-install-engines"]:
+		return false
+	case bools["auto-install-engines"]:
+		return true
+	case interactive():
+		return confirm("\nMay this runner install a coding CLI by itself when a session first needs one?\n"+
+			"  (otherwise that session fails and you install it here with `orbit doctor`)\n  [Y/n] ", true)
+	}
+	return false
+}
+
 // finishRegister persists the machine runner credential and installs the
 // background service (unless running in the foreground).
-func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool, proxyVars []envVar) {
+func finishRegister(runnerID, runnerToken, name string, server string, labels []string, maxConcurrent int, workDir string, withService, foreground bool, proxyVars []envVar, bools map[string]bool) {
 	cfg := &RunnerConfig{
 		ServerURL: server, RunnerID: runnerID, RunnerToken: runnerToken,
 		Name: name, Labels: labels, MaxConcurrent: maxConcurrent, WorkDir: workDir,
@@ -320,11 +340,18 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 	}
 	fmt.Printf("\n✓ registered runner %q (%s).\n", cfg.Name, cfg.RunnerID)
 
-	// Registration doesn't install the coding CLIs — check them here (and offer to
-	// install what's missing) so the gap is closed now, not hit as a "failed to
-	// spawn" the first time a session runs. Runs before setupService so a freshly
-	// installed engine gets baked into the service PATH. Best-effort; never blocks.
-	runDoctor(true, proxyVars)
+	// Report the engines but install nothing: which ones this machine needs depends on
+	// the agents you point at it, which don't exist yet. They're installed on demand
+	// instead, the first time a session actually asks for one — so all registration
+	// needs is the consent for that, which has to be collected here because the runtime
+	// install happens unattended.
+	runDoctor(false, proxyVars)
+	cfg.AutoInstallEngines = autoInstallConsent(bools)
+	if err := saveConfig(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to save config:", err)
+		os.Exit(1)
+	}
+	fmt.Println("\nSign in to the engines you'll use: press the sign-in button in Orbit, or run `orbit doctor` here.")
 
 	if foreground {
 		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
