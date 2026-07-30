@@ -19,6 +19,14 @@ import (
 
 const maxRespawns = 5
 
+// mcpToolTimeoutMs is the largest per-server MCP tool timeout claude accepts (~24.8
+// days), which is as close to "never" as its config allows. Setting it raises BOTH of
+// claude's limits for that server: the idle timeout (no response or progress; 30 min
+// by default on stdio) and the hard wall-clock cap. It has to be a large number rather
+// than a disabling 0 — claude silently drops any timeout below 1000ms and falls back
+// to those same defaults, so 0 would look configured while changing nothing.
+const mcpToolTimeoutMs = 2147483647
+
 const (
 	providerClaude = "claude"
 	providerCodex  = "codex"
@@ -354,12 +362,20 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Always pass an --mcp-config: merge the agent's configured servers with the
 	// built-in `orbit` server (this same binary in `mcp` mode), so every session can
 	// manage Tasks. os.Executable() is resolved per-spawn, so it survives self-update.
+	// The orbit entry carries an explicit timeout because permission_prompt blocks on a
+	// human, which claude otherwise aborts after its 30-minute idle default (see
+	// mcpToolTimeoutMs). Scoping it to this server leaves the agent's own MCP servers on
+	// claude's normal timeouts, where an unresponsive server SHOULD self-heal.
 	servers := map[string]interface{}{}
 	for k, v := range a.McpConfig {
 		servers[k] = v
 	}
 	if exe, err := os.Executable(); err == nil {
-		servers["orbit"] = map[string]interface{}{"command": exe, "args": []string{"mcp"}}
+		servers["orbit"] = map[string]interface{}{
+			"command": exe,
+			"args":    []string{"mcp"},
+			"timeout": mcpToolTimeoutMs,
+		}
 	}
 	if len(servers) > 0 {
 		mcpPath := filepath.Join(scratchDir, "mcp.json")

@@ -431,10 +431,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	}
 }
 
-// maxApprovalPolls caps the total wait for a human decision (~25s per poll), so a
-// forgotten approval can't wedge the claude process forever.
-const maxApprovalPolls = 300
-
 // permissionPrompt is claude's --permission-prompt-tool: it registers the gated tool
 // call as a pending approval, blocks until a human allows/denies it (re-polling across
 // the server's long-poll windows), and returns the decision in the shape claude wants:
@@ -455,7 +451,11 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if err != nil {
 		return toolResult(denyJSON("could not register approval: "+err.Error()), false)
 	}
-	for i := 0; i < maxApprovalPolls; i++ {
+	// Poll without a wall-clock cap: an approval is an asynchronous ask of a human who
+	// may be asleep, and a self-imposed deadline turns "not answered yet" into a hard
+	// deny. Nothing leaks — this server is claude's stdio child, so cancelling the
+	// session kills claude, our stdin hits EOF and the process exits mid-poll.
+	for {
 		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
 		if err != nil {
 			return toolResult(denyJSON("approval poll failed: "+err.Error()), false)
@@ -479,7 +479,6 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		}
 		// PENDING: the server's long-poll window elapsed undecided — re-poll.
 	}
-	return toolResult(denyJSON("approval timed out"), false)
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the
