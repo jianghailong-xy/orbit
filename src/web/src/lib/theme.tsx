@@ -19,6 +19,19 @@ function resolve(mode: ThemeMode): Resolved {
   return mode;
 }
 
+// Mirrors --bg-base in index.css (and the boot script in index.html, which has to inline
+// them to beat first paint). The canvas every view ends on, so Safari's toolbars — the
+// bottom address bar on an iPhone — read as part of the page rather than a separate strip.
+const THEME_COLOR: Record<Resolved, string> = { light: '#ffffff', dark: '#202023' };
+
+// theme-color has to track the *resolved* theme rather than a `media` query on the tag,
+// because the mode is an account preference: an explicit light/dark choice can disagree
+// with the OS, and a media-keyed tag would follow the OS and leave the bar mismatched.
+function applyResolved(r: Resolved): void {
+  document.documentElement.setAttribute('data-theme', r);
+  document.getElementById('theme-color')?.setAttribute('content', THEME_COLOR[r]);
+}
+
 type Ctx = { mode: ThemeMode; resolved: Resolved; setMode: (m: ThemeMode) => void };
 const ThemeContext = createContext<Ctx | null>(null);
 
@@ -46,7 +59,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const r = resolve(mode);
     setResolved(r);
-    document.documentElement.setAttribute('data-theme', r);
+    applyResolved(r);
     localStorage.setItem(STORAGE_KEY, mode);
   }, [mode]);
 
@@ -57,7 +70,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const onChange = () => {
       const r = m.matches ? 'dark' : 'light';
       setResolved(r);
-      document.documentElement.setAttribute('data-theme', r);
+      applyResolved(r);
     };
     m.addEventListener('change', onChange);
     return () => m.removeEventListener('change', onChange);
