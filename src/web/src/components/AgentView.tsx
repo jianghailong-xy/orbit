@@ -2595,6 +2595,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     () => ({
       provider: shownProvider,
       runnerName: runner.name,
+      runnerId: runner.id,
       onRetry:
         retryText && !selectedDeleted && !selectedMissing
           ? () => sendMutate({ content: retryText, images: [] })
@@ -2602,7 +2603,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
-    [shownProvider, runner.name, retryText, selectedDeleted, selectedMissing, sendMutate],
+    [shownProvider, runner.name, runner.id, retryText, selectedDeleted, selectedMissing, sendMutate],
   );
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[selected.permissionMode ?? 'dontAsk'] ?? 'Default')

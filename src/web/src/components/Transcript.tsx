@@ -32,6 +32,7 @@ import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api'
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import { splitLinks } from '../lib/linkify';
+import { RunnerSignIn } from './RunnerSignIn';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
 // bearer-guarded owner route; the public shared page overrides it with the share-token route
@@ -99,6 +100,8 @@ export interface AuthErrorHelp {
   provider: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
+  /** Runner id, which unlocks signing in from the browser instead of on that machine. */
+  runnerId?: string;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
 }
@@ -528,9 +531,15 @@ function AuthErrorCard({ message }: { message: string }) {
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
         <>
+          {/* Signing in from here is the path that needs nothing on the runner but the CLI, so
+              it leads; the copy-paste command below stays as the fallback for when the relay
+              can't read a URL (an older CLI, no `script` on that box). Claude only — codex's
+              sign-in hasn't been put through the relay. */}
+          {help?.runnerId && help.provider === 'claude' && (
+            <RunnerSignIn runnerId={help.runnerId} onDone={help.onRetry} />
+          )}
           <div className="chat-authfix-desc">
-            This runner signs in with its own account, so the fix has to happen on that machine.
-            Run:
+            Or fix it on the machine itself — this runner signs in with its own account. Run:
           </div>
           <div className="chat-authfix-cmd">
             <code>

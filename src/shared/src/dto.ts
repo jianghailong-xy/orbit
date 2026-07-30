@@ -275,6 +275,40 @@ export interface RunnerHeartbeatResponse {
    *  before they were persisted as attachments. The runner uploads them back to the control
    *  plane so historical transcript links can download. */
   artifactRequests?: ArtifactCommand[];
+  /** One step of a browser-less `claude auth login` the user started from the web. Absent on
+   *  older control planes, and whenever no sign-in is in flight for this runner. */
+  loginRequest?: LoginCommand;
+}
+
+/**
+ * Control plane → runner: drive the interactive sign-in on the runner's own machine.
+ *
+ * `start` launches `claude auth login` under a pty; the runner reports back the URL it prints,
+ * which the user approves in their own browser (the CLI's redirect_uri is Anthropic-hosted, so
+ * the browser never needs to reach the runner). `code` carries what they pasted back.
+ *
+ * Redelivered every heartbeat until the runner's status report moves the server on, so both
+ * actions must be idempotent on the runner.
+ */
+export interface LoginCommand {
+  action: 'start' | 'code';
+  /** The authorization code the user pasted, for `code`. */
+  code?: string;
+}
+
+/** Runner → control plane: progress of a sign-in relay. */
+export interface LoginResult {
+  /** `awaiting_code` carries `url`; `failed` carries `message`. */
+  status: 'awaiting_code' | 'done' | 'failed';
+  url?: string;
+  message?: string;
+}
+
+/** Browser-facing view of a runner's sign-in relay, for the card that drives it. */
+export interface RunnerLoginState {
+  status: 'pending' | 'awaiting_code' | 'done' | 'failed' | null;
+  url: string | null;
+  message: string | null;
 }
 
 /** Control plane → runner: merge one session's worktree branch into a target branch. */

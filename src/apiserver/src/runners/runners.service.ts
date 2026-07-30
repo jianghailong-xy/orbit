@@ -1,6 +1,12 @@
-import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import type { SlashCommandInfo } from '@orbit/shared';
+import type { RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
@@ -204,6 +210,70 @@ export class RunnersService {
    * config.json runnerToken is updated and it is restarted. The raw token is
    * returned exactly once — same one-shot contract as enrollment.
    */
+  /**
+   * Ask this runner to start a browser-less `claude auth login`. The next heartbeat picks it up;
+   * the runner reports back the URL to approve, then whether it ended up signed in.
+   *
+   * Starting over is always allowed: the runner's relay kills a previous CLI when it starts a
+   * new one, and a user staring at a stuck card needs a way out that isn't waiting ten minutes.
+   */
+  async startLogin(ownerId: string, id: string): Promise<RunnerLoginState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only sign in while connected');
+    }
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: {
+        loginStatus: 'pending',
+        loginUrl: null,
+        loginCode: null,
+        loginMessage: null,
+        loginAt: new Date(),
+      },
+    });
+    return loginStateOf(r);
+  }
+
+  /**
+   * Hand the runner the authorization code the user pasted. Stored for the next heartbeat to
+   * deliver, then cleared — it is single-use, and useless without the PKCE verifier that never
+   * leaves the runner process.
+   */
+  async submitLoginCode(ownerId: string, id: string, code: string): Promise<RunnerLoginState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.loginStatus !== 'awaiting_code') {
+      throw new BadRequestException('This runner is not waiting for a sign-in code');
+    }
+    const trimmed = code?.trim();
+    if (!trimmed) throw new BadRequestException('Code is empty');
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: { loginCode: trimmed, loginMessage: null },
+    });
+    return loginStateOf(r);
+  }
+
+  /** Current relay state for the card to poll. */
+  async getLoginState(ownerId: string, id: string): Promise<RunnerLoginState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    return loginStateOf(runner);
+  }
+
+  /** Abandon an in-flight relay so the card can be dismissed without waiting for the timeout. */
+  async cancelLogin(ownerId: string, id: string): Promise<RunnerLoginState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: { loginStatus: null, loginUrl: null, loginCode: null, loginMessage: null, loginAt: null },
+    });
+    return loginStateOf(r);
+  }
+
   async rotateToken(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
@@ -218,4 +288,17 @@ export class RunnersService {
     await this.prisma.runner.delete({ where: { id } });
     return { ok: true };
   }
+}
+
+/** Project a runner row onto the browser-facing relay view (no code, ever). */
+function loginStateOf(r: {
+  loginStatus: string | null;
+  loginUrl: string | null;
+  loginMessage: string | null;
+}): RunnerLoginState {
+  return {
+    status: (r.loginStatus as RunnerLoginState['status']) ?? null,
+    url: r.loginUrl,
+    message: r.loginMessage,
+  };
 }
