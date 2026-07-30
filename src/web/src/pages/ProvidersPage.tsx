@@ -5,6 +5,7 @@ import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { ClaudeSubscriptionCard } from '../components/ClaudeSubscriptionCard';
 
 /**
  * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
@@ -93,6 +94,10 @@ export function ProvidersPage() {
           Add provider
         </Button>
       </div>
+
+      {/* Above the BYOK list on purpose: an expired runner login is what sends people here, and
+          this is the one fix that covers every runner at once. */}
+      <ClaudeSubscriptionCard />
 
       {providers.isLoading ? (
         <Table

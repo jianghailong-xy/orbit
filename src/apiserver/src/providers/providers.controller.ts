@@ -1,7 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateModelProviderDto, TestModelProviderDto, UpdateModelProviderDto } from './dto';
+import {
+  CreateModelProviderDto,
+  SetClaudeOauthTokenDto,
+  TestModelProviderDto,
+  UpdateModelProviderDto,
+} from './dto';
 import { ProvidersService } from './providers.service';
 
 /**
@@ -44,5 +49,24 @@ export class ProvidersController {
   @Delete('mine/:id')
   removeMine(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.providers.remove(user.userId, id);
+  }
+
+  // Account-level Claude subscription token (`claude setup-token`), injected as
+  // CLAUDE_CODE_OAUTH_TOKEN on every runner this user dispatches to. Owner-scoped by
+  // construction — the userId comes from the JWT, never from the path — and the token is
+  // write-only: GET reports only whether one is set.
+  @Get('subscription')
+  getSubscription(@CurrentUser() user: AuthUser) {
+    return this.providers.getClaudeOauthToken(user.userId);
+  }
+
+  @Put('subscription')
+  setSubscription(@CurrentUser() user: AuthUser, @Body() dto: SetClaudeOauthTokenDto) {
+    return this.providers.setClaudeOauthToken(user.userId, dto.token);
+  }
+
+  @Delete('subscription')
+  clearSubscription(@CurrentUser() user: AuthUser) {
+    return this.providers.clearClaudeOauthToken(user.userId);
   }
 }

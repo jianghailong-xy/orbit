@@ -53,8 +53,11 @@ export function resolveProviderExec(args: {
   sessionModel?: string | null;
   agentModel?: string | null;
   agentEnv?: Record<string, string> | null;
+  /** The session owner's decrypted Claude subscription token, if they configured one. Applies
+   *  only to the built-in claude runtime — a configured provider carries its own credentials. */
+  claudeOauthToken?: string | null;
 }): { provider: AgentProvider; model: string; env?: Record<string, string> } {
-  const { customRow, sessionModel, agentModel, agentEnv } = args;
+  const { customRow, sessionModel, agentModel, agentEnv, claudeOauthToken } = args;
   if (customRow && customRow.enabled) {
     const runtime = runtimeOf(customRow);
     return {
@@ -71,12 +74,20 @@ export function resolveProviderExec(args: {
       env: { ...(agentEnv ?? {}), ...injectedEnv(customRow) },
     };
   }
-  // Built-in (or stale/disabled custom slug → treat as claude): the pre-existing behavior.
+  // Built-in (or stale/disabled custom slug → treat as claude): the pre-existing behavior,
+  // plus the owner's subscription token when they configured one. Injected only for the claude
+  // runtime (it is an Anthropic credential) and only as a *default* — an agent that hand-sets
+  // CLAUDE_CODE_OAUTH_TOKEN keeps its own value, matching how agentEnv already wins for
+  // built-ins. Without it the runner just uses whatever local login that machine has.
   const provider =
     args.declaredProvider === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+  const env =
+    provider === AgentProvider.CLAUDE && claudeOauthToken
+      ? { CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken, ...(agentEnv ?? {}) }
+      : (agentEnv ?? undefined);
   return {
     provider,
     model: modelForProvider(provider, sessionModel ?? agentModel),
-    env: agentEnv ?? undefined,
+    env,
   };
 }

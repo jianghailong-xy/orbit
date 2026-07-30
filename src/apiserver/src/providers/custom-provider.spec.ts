@@ -119,4 +119,71 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, 'claude-opus-4-8');
     assert.deepEqual(exec.env, { A: '1' });
   });
+
+  // The account-level subscription token supplies credentials for the BUILT-IN claude runtime
+  // on every runner; it must not leak into codex, and must not override a configured provider
+  // (which carries its own key) or an agent that hand-set the variable.
+  await t.test('subscription token: injected for built-in claude, alongside agent env', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'claude',
+      customRow: null,
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { KEEP: '1' },
+      claudeOauthToken: 'sk-ant-oat-abc',
+    });
+    assert.equal(exec.provider, 'claude');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat-abc');
+    assert.equal(exec.env?.KEEP, '1');
+  });
+
+  await t.test('subscription token: never injected for the codex runtime', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'codex',
+      customRow: null,
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+      claudeOauthToken: 'sk-ant-oat-abc',
+    });
+    assert.equal(exec.provider, 'codex');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+  });
+
+  await t.test('subscription token: a configured provider keeps its own credentials', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+      claudeOauthToken: 'sk-ant-oat-abc',
+    });
+    assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'sk-ds');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+  });
+
+  await t.test('subscription token: an agent that hand-set the variable wins', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'claude',
+      customRow: null,
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'agent-owned' },
+      claudeOauthToken: 'sk-ant-oat-abc',
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, 'agent-owned');
+  });
+
+  await t.test('no token configured leaves the built-in claude env untouched', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'claude',
+      customRow: null,
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { A: '1' },
+      claudeOauthToken: null,
+    });
+    assert.deepEqual(exec.env, { A: '1' });
+  });
 });

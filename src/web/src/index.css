@@ -5889,6 +5889,65 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 
+/* Account-level Claude subscription token — the fleet-wide alternative to per-runner login. */
+.claude-sub {
+  margin-top: 16px;
+  padding: 18px 20px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.claude-sub-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.claude-sub-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.claude-sub-sub {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.claude-sub-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--success-border);
+  border-radius: 999px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 500;
+}
+.claude-sub-meta {
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.claude-sub-steps {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.claude-sub-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  max-width: 560px;
+}
+.claude-sub-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .provider-empty {
   margin-top: 12px;
   padding: 28px;

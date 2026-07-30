@@ -238,4 +238,50 @@ export class ProvidersService {
   private desensitize({ apiKeyEnc, ...rest }: Prisma.ModelProviderGetPayload<object>) {
     return { ...withPreset(rest), hasApiKey: !!apiKeyEnc };
   }
+
+  /** Whether this account has a Claude subscription token, and when it was last set. The token
+   *  itself is never returned — there is no read path for it outside dispatch. */
+  async getClaudeOauthToken(userId: string): Promise<ClaudeOauthTokenStatus> {
+    const row = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { claudeOauthTokenEnc: true, claudeOauthTokenSetAt: true },
+    });
+    return {
+      configured: !!row?.claudeOauthTokenEnc,
+      setAt: row?.claudeOauthTokenSetAt?.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * Store (or rotate) this account's Claude subscription token. `claude setup-token` prints it
+   * on a line of its own; users paste it with stray whitespace often enough that trimming here
+   * is worth more than rejecting it. We deliberately do NOT probe it: the subscription endpoint
+   * has no cheap unauthenticated-safe health call, and a wrong token already surfaces clearly as
+   * the sign-in card on the next turn.
+   */
+  async setClaudeOauthToken(userId: string, token: string): Promise<ClaudeOauthTokenStatus> {
+    const trimmed = token.trim();
+    if (!trimmed) throw new BadRequestException('Token is empty');
+    const row = await this.prisma.user.update({
+      where: { id: userId },
+      data: { claudeOauthTokenEnc: encryptSecret(trimmed), claudeOauthTokenSetAt: new Date() },
+      select: { claudeOauthTokenSetAt: true },
+    });
+    return { configured: true, setAt: row.claudeOauthTokenSetAt?.toISOString() ?? null };
+  }
+
+  /** Forget this account's token; sessions fall back to each runner's own local login. */
+  async clearClaudeOauthToken(userId: string): Promise<ClaudeOauthTokenStatus> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { claudeOauthTokenEnc: null, claudeOauthTokenSetAt: null },
+    });
+    return { configured: false, setAt: null };
+  }
+}
+
+/** Browser-facing view of the account token: whether it exists, never what it is. */
+export interface ClaudeOauthTokenStatus {
+  configured: boolean;
+  setAt: string | null;
 }
