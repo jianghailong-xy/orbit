@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp } from 'antd';
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -14,6 +13,7 @@ import type { RunEvent } from './Transcript';
 import { Pre } from './Transcript';
 import type { BgShell, BgShellStatus } from '../lib/backgroundShells';
 import { deriveBackgroundShells, mergeBackgroundShells } from '../lib/backgroundShells';
+import { useToast } from '../lib/toast';
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
@@ -39,7 +39,7 @@ export function BackgroundShellsTray({
   live?: boolean;
   serverShells?: BgShell[];
 }) {
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const shells = useMemo(
     () =>
       mergeBackgroundShells(serverShells ?? [], deriveBackgroundShells(events, { sessionLive: !!live })),

@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Card, Segmented, Select } from 'antd';
+import { Card, Segmented, Select } from 'antd';
 import { api } from '../api';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { useToast } from '../lib/toast';
 import {
   CLAUDE_MODEL_OPTIONS,
   MODE_OPTIONS,
@@ -36,7 +37,7 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
 // Personal preferences. Appearance is account-synced via the theme context; the
 // "Agent defaults" pre-fill the runner's new-agent form and persist per account.
 export function SettingsPage() {
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const { mode, setMode } = useThemeMode();
   const me = useQuery(meQuery());

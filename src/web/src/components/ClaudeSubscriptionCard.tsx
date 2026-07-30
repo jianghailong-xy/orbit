@@ -1,8 +1,9 @@
 import { CheckCircleFilled } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Button, Input, Popconfirm } from 'antd';
+import { Button, Input, Popconfirm } from 'antd';
 import { useState } from 'react';
 import { api } from '../api';
+import { useToast } from '../lib/toast';
 
 const SUBSCRIPTION_PATH = '/providers/subscription';
 export const SUBSCRIPTION_KEY = ['providers', 'subscription'] as const;
@@ -25,7 +26,7 @@ interface SubscriptionStatus {
  * exists and when it was stored. Replacing means pasting a new one.
  */
 export function ClaudeSubscriptionCard() {
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const [token, setToken] = useState('');
   const [editing, setEditing] = useState(false);

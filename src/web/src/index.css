@@ -201,13 +201,66 @@ body {
   background: var(--scrollbar-hover);
 }
 
-/* Toasts (AntD message): cap the card so a long one — a merge conflict, a failure detail —
-   wraps into a compact block instead of stretching into a full-width banner across the app.
-   Its vertical offset is set in main.tsx (App message.top) so it clears the header band.
-   text-align:start because the wrapper centres text, which reads badly once it wraps. */
+/* Toasts (AntD message): a top-right notification stack. The transcript is a growing content
+   stream, so a centred overlay lands right on whatever you just scrolled to; parking the cards
+   in the corner keeps the conversation column and the session title clear. AntD has no
+   placement option for message, so we right-align its full-width wrapper. Fixed width keeps a
+   stack's edges flush; text-align:start because the wrapper's alignment would otherwise
+   ragged-right the wrapped lines. Vertical offset is main.tsx's TOAST_TOP (clears the header).
+   !important only on the declarations AntD itself sets: its cssinjs rules are injected after
+   this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice-wrapper …`, i.e.
+   specificity (0,2,0)/(0,3,0) — nothing we can write flatly outranks them. The ones AntD
+   leaves alone (width, the card's text-align, user-select) land without it. */
+.ant-message-notice-wrapper {
+  text-align: right !important;
+  padding-right: 16px !important;
+}
 .ant-message-notice-content {
-  max-width: min(560px, calc(100vw - 32px));
+  width: 360px;
+  max-width: calc(100vw - 32px);
   text-align: start;
+  /* Toasts don't take clicks — the card floats over the header's right edge and used to
+     swallow them (it blocked the double-click-to-rename target). Errors opt back in below:
+     they stay put until dismissed, so they have to be clickable and selectable. */
+  pointer-events: none !important;
+}
+.ant-message-notice-content:has(.toast-err) {
+  pointer-events: auto !important;
+  user-select: text;
+}
+/* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
+   AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
+   so the × would have nothing to push against; let that span fill the card instead. */
+.ant-message-custom-content > span:has(> .toast-err) {
+  flex: 1;
+  min-width: 0;
+}
+/* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
+   × instead of centred against the whole block. (0,3,0) to outrank AntD's own align-items. */
+.ant-message-notice-content:has(.toast-err) .ant-message-custom-content {
+  align-items: flex-start;
+}
+.toast-err {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.toast-err-text {
+  min-width: 0;
+}
+.toast-err-close {
+  flex: none;
+  margin-left: auto;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.toast-err-close:hover {
+  color: var(--text-1);
 }
 
 /* ---- App shell: side nav | main region (master/detail) ---- */

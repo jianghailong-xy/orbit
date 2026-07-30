@@ -30,6 +30,7 @@ import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, providersQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
 import { planUsageRows } from '../lib/planUsage';
+import { useToast } from '../lib/toast';
 import {
   AUTO_CAPABLE_MODELS,
   DEFAULT_MODEL,
@@ -143,7 +144,8 @@ export function RunnerDetailPage() {
   // /runners/<base62> — decode the route param to the runner's UUID.
   const runnerId = decodeId(useParams().id);
   const navigate = useNavigate();
-  const { modal, message } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
 
   const runners = useQuery({

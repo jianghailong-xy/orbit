@@ -16,6 +16,7 @@ import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
+import { useToast } from '../lib/toast';
 
 // Compact relative time for heartbeats (which arrive every ~30s, so seconds matter).
 const fmtAgo = (d?: string | null): string => {
@@ -37,7 +38,8 @@ const fmtAgo = (d?: string | null): string => {
 // manage the agents that run under it.
 export function RunnersPage() {
   const navigate = useNavigate();
-  const { modal, message } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
 
   const runners = useQuery({

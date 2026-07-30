@@ -1,8 +1,9 @@
-import { App as AntApp, Button, Card, Form, Input, Typography } from 'antd';
+import { Button, Card, Form, Input, Typography } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { Navigate } from 'react-router-dom';
 import { api, setSession } from '../api';
 import { setupStatusQuery } from '../lib/queries';
+import { useToast } from '../lib/toast';
 
 interface AuthResponse {
   accessToken: string;
@@ -16,7 +17,7 @@ interface AuthResponse {
  * onboarding step.
  */
 export function SetupPage() {
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const status = useQuery(setupStatusQuery());
 
   // One-time door: once a user exists, setup is closed. If we land here afterwards

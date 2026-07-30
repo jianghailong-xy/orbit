@@ -1,5 +1,6 @@
-import { App as AntApp, Button, Card, Form, Input } from 'antd';
+import { Button, Card, Form, Input } from 'antd';
 import { api, setSession } from '../api';
+import { useToast } from '../lib/toast';
 
 interface AuthResponse {
   accessToken: string;
@@ -7,7 +8,7 @@ interface AuthResponse {
 }
 
 export function LoginPage() {
-  const { message } = AntApp.useApp();
+  const message = useToast();
 
   const submit = async (values: Record<string, string>) => {
     try {

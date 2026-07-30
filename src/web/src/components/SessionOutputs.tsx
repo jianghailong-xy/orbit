@@ -1,5 +1,5 @@
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { App as AntApp, Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
+import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
 import { sessionDiffQuery } from '../lib/queries';
+import { useToast } from '../lib/toast';
 import hljs from 'highlight.js/lib/core';
 import typescript from 'highlight.js/lib/languages/typescript';
 import javascript from 'highlight.js/lib/languages/javascript';
@@ -94,7 +95,7 @@ export function SessionOutputs({
   onAdopt?: () => void;
   adopting?: boolean;
 }) {
-  const { message } = AntApp.useApp();
+  const message = useToast();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
   // open session changes so a switched-to session never inherits the previous one's open file.
   const [openFile, setOpenFile] = useState<string | null>(null);

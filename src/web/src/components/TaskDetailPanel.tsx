@@ -1,6 +1,6 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
+import { Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -8,6 +8,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { useToast } from '../lib/toast';
 
 // The detail panel's width is drag-resizable; persist the choice so it sticks across reloads.
 // Until the user resizes, width stays null and the CSS clamp (responsive default) wins.
@@ -143,7 +144,7 @@ export function TaskDetailPanel({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const [draft, setDraft] = useState('');
   // Drag-resizable panel width (null until the user resizes — see TDP_WIDTH_* + startResize).
   const asideRef = useRef<HTMLElement>(null);

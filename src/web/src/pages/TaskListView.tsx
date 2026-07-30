@@ -12,7 +12,6 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  App as AntApp,
   Avatar,
   Button,
   Checkbox,
@@ -30,6 +29,7 @@ import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { useToast } from '../lib/toast';
 
 // Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED).
 const matchesFilter = (status: string, f: string): boolean => {
@@ -127,7 +127,7 @@ function StatusPill({
 // render it, so all of its state is scoped to this component.
 export function TaskListView() {
   const loc = useLocation();
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   // Multi-select for batch actions, keyed by task id, scoped to the visible rows.

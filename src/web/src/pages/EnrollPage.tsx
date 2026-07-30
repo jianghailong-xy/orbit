@@ -1,6 +1,7 @@
-import { Alert, App as AntApp, Button, Card, Descriptions, Result, Spin, Tag } from 'antd';
+import { Alert, Button, Card, Descriptions, Result, Spin, Tag } from 'antd';
 import { useEffect, useState } from 'react';
 import { api } from '../api';
+import { useToast } from '../lib/toast';
 
 interface DeviceInfo {
   userCode: string;
@@ -14,7 +15,7 @@ interface DeviceInfo {
 
 /** Browser approval page for `orbit register` (reached via /enroll?code=XXXX-XXXX). */
 export function EnrollPage() {
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const code = new URLSearchParams(window.location.search).get('code') ?? '';
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [loading, setLoading] = useState(true);

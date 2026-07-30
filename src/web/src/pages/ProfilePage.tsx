@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { App as AntdApp, Button, Card, Form, Input } from 'antd';
+import { Button, Card, Form, Input } from 'antd';
 import { api } from '../api';
 import { meQuery } from '../lib/queries';
+import { useToast } from '../lib/toast';
 
 interface PwdValues {
   currentPassword: string;
@@ -13,7 +14,7 @@ interface PwdValues {
 // account security. The only action is changing your own password (re-verified
 // server-side; the existing session keeps working — no token revocation).
 export function ProfilePage() {
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const [form] = Form.useForm<PwdValues>();
 
   const me = useQuery(meQuery());

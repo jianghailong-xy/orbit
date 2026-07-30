@@ -12,6 +12,7 @@ import {
   type TableColumnsType,
 } from 'antd';
 import { api } from '../api';
+import { useToast } from '../lib/toast';
 
 interface AdminUser {
   id: string;
@@ -29,7 +30,8 @@ interface CreateResult {
 // Admin-only account management (gated by role on both the nav entry and every
 // endpoint). Create/reset return a one-time password shown once in a dialog.
 export function AdminUsersPage() {
-  const { message, modal } = AntdApp.useApp();
+  const { modal } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const users = useQuery({
     queryKey: ['admin', 'users'],

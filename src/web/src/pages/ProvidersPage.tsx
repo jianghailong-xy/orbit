@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntdApp, Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
+import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { ClaudeSubscriptionCard } from '../components/ClaudeSubscriptionCard';
+import { useToast } from '../lib/toast';
 
 /**
  * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
@@ -13,7 +14,7 @@ import { ClaudeSubscriptionCard } from '../components/ClaudeSubscriptionCard';
  * vendor's setup is deep-linkable.
  */
 export function ProvidersPage() {
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });

@@ -2,12 +2,13 @@ import { type ReactNode, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { App as AntdApp, Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
+import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
 // blank) rather than the wire's optional number, so an empty cell round-trips cleanly.
@@ -91,7 +92,7 @@ export function ProviderConnectPage() {
  * preset — or the stored row — once, at mount.
  */
 function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: ProviderRow }) {
-  const { message } = AntdApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // A custom provider names itself and declares its own endpoint; a preset ships every field but

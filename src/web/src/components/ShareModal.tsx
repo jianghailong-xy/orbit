@@ -1,9 +1,10 @@
 import { CheckOutlined, CopyOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Modal, Popconfirm } from 'antd';
+import { Button, Modal, Popconfirm } from 'antd';
 import { useEffect, useState } from 'react';
 import { disableSessionShare, enableSessionShare } from '../api';
 import { copyText } from '../lib/clipboard';
+import { useToast } from '../lib/toast';
 
 /**
  * Share dialog for one session: mint / show / revoke a public read-only link (`/s/<token>`).
@@ -21,7 +22,7 @@ export function ShareModal({
   sessionId: string;
   initialToken: string | null;
 }) {
-  const { message } = AntApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const [token, setToken] = useState<string | null>(initialToken);
   const [copied, setCopied] = useState(false);

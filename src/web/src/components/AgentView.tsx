@@ -127,6 +127,7 @@ import type { Runner } from './TasksSidePanel';
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
+import { useToast } from '../lib/toast';
 
 interface RunEvent {
   seq: number;
@@ -745,7 +746,8 @@ function SessionStatusCard({ card }: { card: LocalStatusCard }) {
 const lastSessionByAgent = new Map<string, string>();
 
 export function AgentView({ runner }: { runner: Runner }) {
-  const { message, modal } = AntApp.useApp();
+  const { modal } = AntApp.useApp();
+  const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The signed-in user, for the account-synced default effort (seeds a new session's Effort
@@ -1164,15 +1166,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (d.mergeStatus === 'merged') {
       message.success(`Merged into ${target} ✓`);
     } else if (d.mergeStatus === 'conflict') {
-      message.error({
-        content: `Merge into ${target} hit a conflict — aborted, your branch is untouched. Resolve it from the status bar.`,
-        duration: 8,
-      });
+      message.error(
+        `Merge into ${target} hit a conflict — aborted, your branch is untouched. Resolve it from the status bar.`,
+      );
     } else {
-      message.error({
-        content: `Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`,
-        duration: 8,
-      });
+      message.error(`Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`);
     }
   }, [detailForSelected, message]);
   const live = selected && !selectedDeleted ? !TERMINAL.includes(selected.status) : false;
