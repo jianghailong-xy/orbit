@@ -29,7 +29,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
-import { normalizeSearchQuery, type NormalizedSearchQuery } from './search-query';
+import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { truncatePayload } from './truncate-payload';
 
@@ -1031,7 +1031,10 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    const norm = normalizeSearchQuery(q);
+    // Both sides lose `*` and backticks (see the column below), so the query is stripped with the
+    // same brush before it's escaped — otherwise searching for something the user copied out of a
+    // rendered reply, marks and all, would match nothing.
+    const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) return { q: '', total: 0, hits: [] };
     const take = Math.min(Math.max(Math.trunc(limit ?? 100), 1), 200);
 
@@ -1046,14 +1049,22 @@ export class SessionsService {
           -- tool_result whose content is an array of blocks rather than a plain string) search
           -- the JSON *encoding*, so a query containing a quote or a newline won't match inside
           -- them — acceptable for what people actually search for (a path, a name, a phrase).
-          concat_ws(' ',
-            payload->>'text',
-            payload->>'name',
-            (payload->'input')::text,
-            CASE WHEN jsonb_typeof(payload->'content') = 'string'
-                 THEN payload->>'content'
-                 ELSE (payload->'content')::text END,
-            payload->>'message'
+          --
+          -- Asterisks and backticks are dropped (see stripEmphasis, which strips the query the
+          -- same way) because what is stored is markdown source and what the user is searching
+          -- for is what they read: "the merge button" has to find "the **merge** button", and
+          -- 9.5k assistant events here carry bold. Underscore is deliberately kept — it is a
+          -- character in half the identifiers anyone would search for, not decoration.
+          regexp_replace(
+            concat_ws(' ',
+              payload->>'text',
+              payload->>'name',
+              (payload->'input')::text,
+              CASE WHEN jsonb_typeof(payload->'content') = 'string'
+                   THEN payload->>'content'
+                   ELSE (payload->'content')::text END,
+              payload->>'message'
+            ), '[*\`]', '', 'g'
           ) AS text
         FROM run_event
         WHERE session_id = ${id}::uuid

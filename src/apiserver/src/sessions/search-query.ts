@@ -41,6 +41,17 @@ export interface NormalizedSearchQuery {
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /**
+ * Drop the markdown marks that sit between what's stored and what the user actually read: a reply
+ * persisted as "the **merge** button" renders as "the merge button", and searching the phrase they
+ * saw has to find it. Applied to the in-session search's corpus (in SQL) and to its query here, so
+ * the two always agree.
+ *
+ * `*` and backticks only. `_` is a character in half the identifiers anyone would search for
+ * (snake_case, `file_path`), not decoration, so stripping it would do more harm than good.
+ */
+export const stripEmphasis = (s: string): string => s.replace(/[*`]/g, '');
+
+/**
  * Normalize a raw `q`. Returns null for an empty/whitespace-only query — the caller answers that
  * with recents rather than running a search that would match every row.
  */

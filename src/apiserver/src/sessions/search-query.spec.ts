@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CONTENT_MIN_CHARS, normalizeSearchQuery } from './search-query';
+import { CONTENT_MIN_CHARS, normalizeSearchQuery, stripEmphasis } from './search-query';
 
 test('empty / whitespace-only -> null (caller answers with recents)', () => {
   assert.equal(normalizeSearchQuery(''), null);
@@ -44,4 +44,23 @@ test('the floor counts code points, not UTF-16 units', () => {
 test('an over-long query is capped', () => {
   const out = normalizeSearchQuery('x'.repeat(500));
   assert.equal(out?.raw.length, 200);
+});
+
+test('stripEmphasis drops markdown marks but keeps identifier characters', () => {
+  // What the user read is "the merge button"; what's stored is the markdown source.
+  assert.equal(stripEmphasis('the **merge** button'), 'the merge button');
+  assert.equal(stripEmphasis('run `npm run build`'), 'run npm run build');
+  // `_` is part of the identifier, not decoration around it.
+  assert.equal(stripEmphasis('file_path'), 'file_path');
+  assert.equal(stripEmphasis('snake_case_name'), 'snake_case_name');
+  assert.equal(stripEmphasis('plain text'), 'plain text');
+});
+
+test('a stripped query still escapes LIKE metacharacters', () => {
+  // Stripping happens before normalization, so the escaping has to survive it.
+  assert.equal(normalizeSearchQuery(stripEmphasis('**100%**'))?.pattern, '%100\\%%');
+  assert.equal(normalizeSearchQuery(stripEmphasis('`a_b`'))?.pattern, '%a\\_b%');
+  // A query of nothing but marks strips to empty, which normalizes to null rather than
+  // matching every row.
+  assert.equal(normalizeSearchQuery(stripEmphasis('***')), null);
 });
