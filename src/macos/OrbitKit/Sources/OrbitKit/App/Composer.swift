@@ -249,6 +249,13 @@ public enum ComposerSlash {
         items.filter { ($0.agentId ?? "").isEmpty || $0.agentId == agentID }
     }
 
+    /// Codex has no slash registry: its app-server takes the prompt verbatim (nothing in the
+    /// protocol expands a `/name`), so claude's commands and skills are meaningless in a codex
+    /// session — only the local ones survive. Web parity: `codexComposer`.
+    public static func forProvider(items: [SlashCommandInfo], provider: String?) -> [SlashCommandInfo] {
+        provider == "codex" ? items.filter { $0.type == "local" } : items
+    }
+
     /// Items matching the active token, optionally narrowed to one `type` ("command"/"skill"),
     /// sorted prefix-matches-first then alphabetically and capped at 50 — web parity.
     public static func matches(items: [SlashCommandInfo], token: String?,

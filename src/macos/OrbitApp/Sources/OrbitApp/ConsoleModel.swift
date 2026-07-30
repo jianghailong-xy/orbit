@@ -619,11 +619,16 @@ final class ConsoleModel {
 
     // MARK: `/` autocomplete
 
-    var hasCommands: Bool { slashItems.contains { $0.type == "command" } }
-    var hasSkills: Bool { slashItems.contains { $0.type == "skill" } }
+    /// The catalog this session's provider can actually invoke. Derived, not filtered at load
+    /// time, because the provider is known later than the runner catalog.
+    var composerSlashItems: [SlashCommandInfo] {
+        ComposerSlash.forProvider(items: slashItems, provider: provider)
+    }
+    var hasCommands: Bool { composerSlashItems.contains { $0.type == "command" } }
+    var hasSkills: Bool { composerSlashItems.contains { $0.type == "skill" } }
     var slashToken: String? { ComposerSlash.token(in: composerText) }
     var slashMatches: [SlashCommandInfo] {
-        ComposerSlash.matches(items: slashItems, token: slashToken, scope: slashScope)
+        ComposerSlash.matches(items: composerSlashItems, token: slashToken, scope: slashScope)
     }
 
     /// Fold every runner's reported commands + skills, scoped to host-level + this session's
@@ -671,8 +676,8 @@ final class ConsoleModel {
                 composerText = ""
                 return
             }
-            let knownRunnerCommand = slashItems.contains { $0.type != "local" && $0.name == command }
-            if !knownRunnerCommand, replyContext == nil {
+            let knownRunnerCommand = composerSlashItems.contains { $0.type != "local" && $0.name == command }
+            if !knownRunnerCommand, replyContext == nil, provider != "codex" {
                 statusMessage = command.isEmpty ? "Pick a slash command before sending"
                                                 : "Unsupported slash command /\(command)"
                 return

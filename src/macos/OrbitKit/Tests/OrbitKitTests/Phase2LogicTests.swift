@@ -293,6 +293,21 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
+    /// A codex session can't invoke claude's assets — its app-server takes the prompt verbatim
+    /// — so only the local commands survive there, while claude keeps the full catalog.
+    func testSlashForProvider() {
+        let items = ComposerHostCommand.slashItems + [
+            SlashCommandInfo(name: "commit", type: "command"),
+            SlashCommandInfo(name: "loop", type: "skill", builtin: true),
+        ]
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
+                       ["status"])
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
+                       ["status", "commit", "loop"])
+        // An unset provider is claude's (the default everywhere else in the composer).
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: nil).count, items.count)
+    }
+
     /// The CLI's own registry (built-in skills, plugin skills, namespaced commands) rides the
     /// same list, so it must rank below the user's assets — but a prefix match still wins.
     func testSlashBuiltinsRankLast() {

@@ -1330,6 +1330,21 @@ export function AgentView({ runner }: { runner: Runner }) {
     );
   }, [agentsForRunner, lockedAgentId]);
 
+  // The provider this composer talks to: a live session's own, else the picked agent's.
+  // Declared here (not next to its other consumers) because the `/` autocomplete memo below
+  // needs it.
+  const shownProvider: string = selected
+    ? (selected.provider ??
+        detailForSelected?.provider ??
+        detailForSelected?.agent?.provider ??
+        'claude')
+    : (pickedAgent?.provider ?? 'claude');
+  // Codex has no slash registry: its app-server takes the prompt verbatim (no expansion of
+  // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
+  // Claude's commands and skills are meaningless in that session — don't offer them, and
+  // don't gate sending on them. `/status` is ours and stays.
+  const codexComposer = shownProvider === 'codex';
+
   // Seed the Mode/Model/Effort pills from a non-live (resumable) session's stored
   // config, so they show that session's real settings and an edit before a resume
   // carries through (resume re-spawns claude with the new value). Keyed on the id +
@@ -2287,7 +2302,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         setHistIdx(-1);
         return;
       }
-      if (!replyTo) {
+      if (!replyTo && !codexComposer) {
         const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
         if (!knownRunnerCommand) {
           message.error(commandName ? `Unsupported slash command /${commandName}` : 'Pick a slash command before sending');
@@ -2478,7 +2493,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const slashItems = useMemo<ComposerSlashItem[]>(
     () => [
       ...LOCAL_SLASH_ITEMS,
-      ...[
+      ...(codexComposer ? [] : [
         ...(runner.commands ?? []).map((c) => ({
           name: c.name,
           description: c.description,
@@ -2493,9 +2508,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           agentId: s.agentId,
           builtin: s.builtin,
         })),
-      ].filter((it) => !it.agentId || it.agentId === composerAgentId),
+      ].filter((it) => !it.agentId || it.agentId === composerAgentId)),
     ],
-    [runner.commands, runner.skills, composerAgentId],
+    [runner.commands, runner.skills, composerAgentId, codexComposer],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -2580,12 +2595,6 @@ export function AgentView({ runner }: { runner: Runner }) {
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const shownModel: string = live ? (selected.model ?? DEFAULT_MODEL) : model;
-  const shownProvider: string = selected
-    ? (selected.provider ??
-        detailForSelected?.provider ??
-        detailForSelected?.agent?.provider ??
-        'claude')
-    : (pickedAgent?.provider ?? 'claude');
   const shownPlanUsage = usageSnapshotForProvider(runner.planUsage, shownProvider);
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
@@ -3539,14 +3548,14 @@ export function AgentView({ runner }: { runner: Runner }) {
                   key: 'command',
                   icon: <CodeOutlined />,
                   label: 'Command',
-                  disabled: !runner.online || (runner.commands?.length ?? 0) === 0,
+                  disabled: !runner.online || codexComposer || (runner.commands?.length ?? 0) === 0,
                   onClick: () => insertSlash('command'),
                 },
                 {
                   key: 'skill',
                   icon: <ThunderboltOutlined />,
                   label: 'Skill',
-                  disabled: !runner.online || (runner.skills?.length ?? 0) === 0,
+                  disabled: !runner.online || codexComposer || (runner.skills?.length ?? 0) === 0,
                   onClick: () => insertSlash('skill'),
                 },
                 {
