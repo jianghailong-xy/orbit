@@ -69,6 +69,14 @@ model User {
   preferences  Json     @default("{}")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
   role         String   @default("MEMBER")
+  // AES-256-GCM ciphertext ("iv:tag:ct") of a Claude subscription token from `claude
+  // setup-token`, injected as CLAUDE_CODE_OAUTH_TOKEN into this user's built-in-claude
+  // sessions on EVERY runner. NULL = not configured, and each runner falls back to whatever
+  // local `claude auth login` it has. Unlike a ModelProvider row this does not redirect the
+  // endpoint — it only supplies credentials — so it is account state, not a picker entry.
+  // Never selected into a browser-facing payload; the UI only ever learns whether it is set.
+  claudeOauthTokenEnc   String?   @map("claude_oauth_token_enc")
+  claudeOauthTokenSetAt DateTime? @map("claude_oauth_token_set_at")
 
   agents           Agent[]
   runners          Runner[]

@@ -49,3 +49,12 @@ export class UpdateModelProviderDto {
   @IsOptional() @IsBoolean() followsPreset?: boolean;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
+
+/**
+ * A Claude subscription token from `claude setup-token`, held per account and injected as
+ * CLAUDE_CODE_OAUTH_TOKEN on every runner. Deliberately not a ModelProvider: it supplies
+ * credentials without redirecting the endpoint, so it is account state, not a picker entry.
+ */
+export class SetClaudeOauthTokenDto {
+  @IsString() @MinLength(1) token!: string;
+}

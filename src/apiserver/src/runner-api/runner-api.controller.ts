@@ -66,6 +66,7 @@ import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
 import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { claudeOauthTokenFor } from '../providers/subscription-token';
 import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { isNoiseSystemEvent } from '../common/system-noise';
@@ -379,6 +380,7 @@ export class RunnerApiController {
         sessionModel: s.model,
         agentModel: agent?.model,
         agentEnv: agent?.env as Record<string, string> | null,
+        claudeOauthToken: await claudeOauthTokenFor(this.prisma, s.ownerId),
       });
       const provider = exec.provider;
       const runtime = reclaimRuntimeIds({

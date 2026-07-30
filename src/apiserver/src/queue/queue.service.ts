@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import { claudeOauthTokenFor } from '../providers/subscription-token';
 
 function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
   if (effort == null) return undefined;
@@ -156,6 +157,7 @@ export class QueueService {
       sessionModel: session.model,
       agentModel: agent?.model,
       agentEnv: agent?.env as Record<string, string> | null,
+      claudeOauthToken: await claudeOauthTokenFor(this.prisma, session.ownerId),
     });
     const provider = exec.provider;
     const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
