@@ -37,9 +37,10 @@ function LegacySessionRedirect() {
 // The default landing (bare root, and where login/setup bounce to): the first agent's session
 // list — the same destination as clicking that agent in the sidebar. Resolving "the first agent"
 // needs the agents list, so this is a component (not a static <Navigate>). With no agent to open
-// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide,
-// otherwise the runners list, where agents are created. BootGate pre-warms both queries, so on a
-// fresh load these read straight from cache and redirect in one shot.
+// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; a
+// single runner → that runner's page, where its first agent is created; several runners → the
+// list, since there's a machine to pick first. BootGate pre-warms both queries, so on a fresh
+// load these read straight from cache and redirect in one shot.
 function DefaultLanding() {
   const agents = useQuery(agentsQuery());
   const runners = useQuery(runnersQuery());
@@ -54,7 +55,12 @@ function DefaultLanding() {
       </main>
     );
   }
-  return <Navigate to={(runners.data ?? []).length === 0 ? '/runners/register' : '/runners'} replace />;
+  const runnerList = runners.data ?? [];
+  if (runnerList.length === 0) return <Navigate to="/runners/register" replace />;
+  if (runnerList.length === 1) {
+    return <Navigate to={`/runners/${encodeId(runnerList[0].id)}`} replace />;
+  }
+  return <Navigate to="/runners" replace />;
 }
 
 export function App() {

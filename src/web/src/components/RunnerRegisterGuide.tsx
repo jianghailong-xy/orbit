@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
+import { encodeId } from '../lib/idCodec';
 
 type OS = 'macOS' | 'Linux' | 'Windows';
 
@@ -76,7 +77,7 @@ export function RunnerRegisterGuide() {
   // for a runner that wasn't already online when this page opened.
   // TODO: switch to a push signal if the API ever exposes one.
   const baselineOnline = useRef<Set<string> | null>(null);
-  const [connectedName, setConnectedName] = useState<string | null>(null);
+  const [connected, setConnected] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
     if (!list) return;
     if (baselineOnline.current === null) {
@@ -84,12 +85,10 @@ export function RunnerRegisterGuide() {
       baselineOnline.current = new Set(list.filter((r) => r.online).map((r) => r.id));
       return;
     }
-    if (connectedName) return; // latch the first runner we see come online
+    if (connected) return; // latch the first runner we see come online
     const fresh = list.find((r) => r.online && !baselineOnline.current!.has(r.id));
-    if (fresh) setConnectedName(fresh.name);
-  }, [list, connectedName]);
-
-  const connected = connectedName !== null;
+    if (fresh) setConnected({ id: fresh.id, name: fresh.name });
+  }, [list, connected]);
 
   return (
     <div className="runner-guide">
@@ -114,13 +113,20 @@ export function RunnerRegisterGuide() {
           <div className="runner-status connected">
             <CheckCircleFilled className="runner-status-icon" />
             <div className="runner-status-text">
-              <div className="runner-status-title">Runner online — “{connectedName}” is ready</div>
+              <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
               <div className="runner-status-sub">
-                It's now in the sidebar under Runners. You can close this page.
+                It's now in the sidebar under Runners. Next, give it an agent — the repo and
+                working directory it runs tasks in.
               </div>
             </div>
-            <button className="runner-done-btn" onClick={() => navigate('/tasks')} type="button">
-              Done
+            {/* The machine alone can't do anything yet: sessions and tasks both hang off an
+                agent, so the real next step is this runner's page, where agents are created. */}
+            <button
+              className="runner-done-btn"
+              onClick={() => navigate(`/runners/${encodeId(connected.id)}`)}
+              type="button"
+            >
+              Create an agent
             </button>
           </div>
         ) : (
