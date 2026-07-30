@@ -271,16 +271,18 @@ export class SessionsService {
 
   // ── L3 orchestration: an in-session agent spawning/managing OTHER sessions ──
   // The runner-token session_* tools are the only callers. Depth caps recursion; the
-  // child-count + shared-batch caps bound fan-out so a rogue orchestrator can't storm the queue.
+  // shared-batch cap bounds fan-out so a rogue orchestrator can't storm the queue.
+  // There is deliberately NO cap on how many children one parent may spawn over its
+  // lifetime: a long-lived dispatcher session spawns one child per incoming message,
+  // so any lifetime quota is exhausted by normal use and wedges it permanently.
   private static readonly MAX_SPAWN_DEPTH = 2; // root may spawn; its children may not
-  private static readonly MAX_CHILDREN_PER_SESSION = 10;
   private static readonly CHILD_CONCURRENCY = 3;
 
   /**
    * Spawn a child session from a parent session's agent (orbit mcp `session_create`). The
    * parent's agent must have orchestration enabled; the child is attributed to the parent
    * (parentSessionId) and joins the parent's batch so fan-out stays concurrency-capped.
-   * Enforces the depth and child-count guards. Returns a compact handle to poll via get().
+   * Enforces the depth guard. Returns a compact handle to poll via get().
    */
   async spawnFromSession(
     ownerId: string,
@@ -298,10 +300,6 @@ export class SessionsService {
     }
     if ((await this.spawnDepth(parentSessionId)) >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
-    }
-    const siblings = await this.prisma.session.count({ where: { ownerId, parentSessionId } });
-    if (siblings >= SessionsService.MAX_CHILDREN_PER_SESSION) {
-      throw new ForbiddenException(`child-session limit (${SessionsService.MAX_CHILDREN_PER_SESSION}) reached`);
     }
     // Children share a batch (rooted at the parent's own id) so the claim queue caps how many
     // run concurrently, on top of the runner's own max_concurrent.

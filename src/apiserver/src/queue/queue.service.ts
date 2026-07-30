@@ -73,13 +73,17 @@ export class QueueService {
           ) < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
           -- Batch-run cap, independent of the runner cap above: a session tagged with a
           -- batch_id may only start while fewer than batch_max_concurrent of its batch
-          -- siblings are live (counted across all runners). Untagged sessions skip this.
+          -- siblings are mid-turn (counted across all runners). Untagged sessions skip this.
+          -- Unlike the runner cap, AWAITING_INPUT does NOT count: a batch sibling that
+          -- finished its turn and is waiting on a human burns no capacity, and counting it
+          -- would wedge the rest of the batch behind an idle chat until the reaper's 4h
+          -- idle recycle. The runner cap above still bounds what the host actually hosts.
           AND (
             s."batch_id" IS NULL
             OR (
               SELECT count(*) FROM "session" bl
               WHERE bl."batch_id" = s."batch_id"
-                AND bl."status" IN ('RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+                AND bl."status" IN ('RUNNING', 'INTERRUPTED')
             ) < s."batch_max_concurrent"
           )
         ORDER BY s."created_at" ASC

@@ -653,7 +653,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * that task instead of failing the batch, and per-task errors are collected.
    *
    * `maxConcurrent`, when given, is a cap *for this batch only*: all the dispatched
-   * sessions share one batchId and this limit, and the claim queue gates live sessions
+   * sessions share one batchId and this limit, and the claim queue gates mid-turn sessions
    * per batch on it — independently of, and on top of, each runner's own max_concurrent.
    * It is NOT written to any runner, so a batch run never disturbs a runner's persistent
    * slots. The rest queue and start as batch (and runner) slots free.
