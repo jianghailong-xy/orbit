@@ -13,14 +13,20 @@ public struct SlashCommandInfo: Codable, Equatable, Sendable, Identifiable {
     public let description: String?
     public let type: String?        // "command" | "skill"
     public let agentId: String?
+    /// True for a name the Claude CLI registers itself (built-in skill like `/loop`, a plugin
+    /// skill, a namespaced command), learned from its init handshake rather than found on
+    /// disk. Listed after the user's own assets. Nil on runners too old to report it.
+    public let builtin: Bool?
     /// Stable identity for SwiftUI lists (the same name can exist host-level and per-agent).
     public var id: String { "\(agentId ?? "host"):\(type ?? ""):\(name)" }
 
-    public init(name: String, description: String? = nil, type: String? = nil, agentId: String? = nil) {
+    public init(name: String, description: String? = nil, type: String? = nil,
+                agentId: String? = nil, builtin: Bool? = nil) {
         self.name = name
         self.description = description
         self.type = type
         self.agentId = agentId
+        self.builtin = builtin
     }
 }
 

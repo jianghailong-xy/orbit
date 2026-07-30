@@ -51,6 +51,23 @@ describe('slashCommands', () => {
     expect(isLocalSlashCommand('STATUS')).toBe(true);
   });
 
+  it("ranks the CLI's built-in registry below the user's own assets", () => {
+    const items = [
+      { name: 'loop', type: 'skill' as const, builtin: true },
+      { name: 'commit', type: 'command' as const },
+      { name: 'clear', type: 'command' as const, builtin: true },
+      { name: 'release', type: 'skill' as const },
+    ];
+    expect(slashMatches(items, '', null).map((it) => it.name)).toEqual([
+      'commit',
+      'release',
+      'clear',
+      'loop',
+    ]);
+    // A prefix match still wins over ownership — typing `/lo` must surface /loop.
+    expect(slashMatches(items, 'lo', null).map((it) => it.name)).toEqual(['loop']);
+  });
+
   it('edits slash tokens without clobbering surrounding text', () => {
     expect(pickSlash('/sta', 'status')).toBe('/status ');
     expect(pickSlash('hello /sta', 'status')).toBe('hello /status ');

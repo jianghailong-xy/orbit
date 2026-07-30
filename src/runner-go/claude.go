@@ -34,6 +34,12 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 	}
 	switch msg["type"] {
 	case "system":
+		// The init handshake carries the CLI's own slash registry — built-in skills, plugin
+		// skills and namespaced commands the .claude/ scan can't see. Learn it so the
+		// composer stops rejecting them (see slash_registry.go).
+		if msg["subtype"] == "init" {
+			slashReg.learn(stringsFromJSON(msg["slash_commands"]), stringsFromJSON(msg["skills"]))
+		}
 		emit(evSystem, map[string]interface{}{
 			"subtype":   msg["subtype"],
 			"model":     msg["model"],

@@ -123,7 +123,7 @@ func runLoop(cfg *RunnerConfig) {
 	}
 	var assetMu sync.Mutex
 	refreshRunnerAgents()
-	hbCommands, hbSkills := scanSlashAssets(assetRoots())
+	hbCommands, hbSkills := slashAssetsForHeartbeat(assetRoots())
 
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
@@ -212,7 +212,7 @@ func runLoop(cfg *RunnerConfig) {
 				cycles++
 				if cycles%10 == 0 { // re-scan assets every ~5 min
 					refreshRunnerAgents()
-					c, s := scanSlashAssets(assetRoots())
+					c, s := slashAssetsForHeartbeat(assetRoots())
 					assetMu.Lock()
 					hbCommands, hbSkills = c, s
 					assetMu.Unlock()

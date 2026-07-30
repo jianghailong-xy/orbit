@@ -96,6 +96,10 @@ type SlashCommandInfo struct {
 	// AgentID scopes a project-level asset to the agent whose workDir it was found in;
 	// empty means host-level (the runner's default dir or ~/.claude), shared by all agents.
 	AgentID string `json:"agentId,omitempty"`
+	// Builtin marks a name the Claude CLI registers itself (built-in skill, plugin skill,
+	// namespaced command), learned from its init handshake rather than found on disk.
+	// Composers list these after the user's own assets.
+	Builtin bool `json:"builtin,omitempty"`
 }
 
 type ModelCatalog struct {

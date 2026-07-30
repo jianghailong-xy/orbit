@@ -122,6 +122,10 @@ export interface SlashCommandInfo {
    *  means host-level (~/.claude or the runner's default dir), shared by all agents;
    *  the web composer scopes `/` autocomplete to host assets + the session's agent. */
   agentId?: string;
+  /** True for a name the Claude CLI registers itself — a built-in skill (`/loop`), a
+   *  plugin skill, a namespaced command — learned from the CLI's init handshake instead
+   *  of found on disk. Composers list these after the user's own commands and skills. */
+  builtin?: boolean;
 }
 
 /** One model option reported by a runner runtime. For Codex this is derived from

@@ -5,6 +5,9 @@ export interface ComposerSlashItem {
   description?: string | null;
   type?: ComposerSlashItemType;
   agentId?: string | null;
+  /** Registered by the Claude CLI itself (built-in skill, plugin skill, namespaced
+   *  command) rather than found on disk — sorted below the user's own assets. */
+  builtin?: boolean;
 }
 
 export interface LocalStatusSnapshot {
@@ -75,7 +78,11 @@ export function slashMatches(
     .sort((a, b) => {
       const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
       const pb = b.name.toLowerCase().startsWith(q) ? 0 : 1;
-      return pa - pb || a.name.localeCompare(b.name);
+      // The CLI's own registry is large (40+ built-ins); keep the user's commands and
+      // skills on top so a bare `/` still opens on what they wrote.
+      const ba = a.builtin ? 1 : 0;
+      const bb = b.builtin ? 1 : 0;
+      return pa - pb || ba - bb || a.name.localeCompare(b.name);
     })
     .slice(0, 50);
 }

@@ -293,6 +293,21 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
+    /// The CLI's own registry (built-in skills, plugin skills, namespaced commands) rides the
+    /// same list, so it must rank below the user's assets — but a prefix match still wins.
+    func testSlashBuiltinsRankLast() {
+        let items = [
+            SlashCommandInfo(name: "loop", type: "skill", builtin: true),
+            SlashCommandInfo(name: "commit", type: "command"),
+            SlashCommandInfo(name: "clear", type: "command", builtin: true),
+            SlashCommandInfo(name: "release", type: "skill"),
+        ]
+        XCTAssertEqual(ComposerSlash.matches(items: items, token: "", scope: nil).map(\.name),
+                       ["commit", "release", "clear", "loop"])
+        XCTAssertEqual(ComposerSlash.matches(items: items, token: "lo", scope: nil).map(\.name),
+                       ["loop"])
+    }
+
     func testHostSlashCommandParsingAndStatusSummary() {
         XCTAssertNil(ComposerHostCommand.commandName(in: "hello /status"))
         XCTAssertEqual(ComposerHostCommand.commandName(in: "/status"), "status")

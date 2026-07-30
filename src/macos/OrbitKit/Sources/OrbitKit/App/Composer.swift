@@ -263,6 +263,11 @@ public enum ComposerSlash {
                 let pa = a.name.lowercased().hasPrefix(q) ? 0 : 1
                 let pb = b.name.lowercased().hasPrefix(q) ? 0 : 1
                 if pa != pb { return pa < pb }
+                // The CLI's own registry is large (40+ built-ins); keep the user's commands
+                // and skills on top so a bare `/` still opens on what they wrote.
+                let ba = (a.builtin ?? false) ? 1 : 0
+                let bb = (b.builtin ?? false) ? 1 : 0
+                if ba != bb { return ba < bb }
                 return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
             }
             .prefix(50)
