@@ -392,7 +392,8 @@ export class RunnerApiController {
       }
       return undefined;
     }
-    if (r.loginStatus === 'pending') return { action: 'start' };
+    if (r.loginStatus === 'pending')
+      return { action: 'start', attempt: r.loginAt?.toISOString() ?? '' };
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
       await this.prisma.runner.update({ where: { id: runnerId }, data: { loginCode: null } });
       return { action: 'code', code: r.loginCode };

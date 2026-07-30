@@ -127,3 +127,29 @@ func TestRejectionMarkerMatchesRealCLIOutput(t *testing.T) {
 		t.Log("note: prompt appears twice here only because the fixture concatenates two renders")
 	}
 }
+
+// Cancel + retry must work immediately. The heartbeat redelivers `start` until the runner's
+// first report lands, so a repeat of the SAME attempt has to be a no-op — but a NEW attempt is
+// the user asking again, and must preempt. Getting this wrong locked the user out for the full
+// relay timeout: start() saw a relay running and returned, so the retry never reached the CLI.
+func TestStartIsIdempotentPerAttemptButPreemptsANewOne(t *testing.T) {
+	r := &loginRelay{running: true, attempt: "A"}
+
+	// Same attempt redelivered: no-op, and the running relay is left alone.
+	r.start("A", func(LoginResultRequest) { t.Error("redelivered start should not report") })
+	r.mu.Lock()
+	stillRunning, keptAttempt := r.running, r.attempt
+	r.mu.Unlock()
+	if !stillRunning || keptAttempt != "A" {
+		t.Fatalf("redelivered start disturbed the relay: running=%v attempt=%q", stillRunning, keptAttempt)
+	}
+
+	// An empty attempt (older control plane) keeps the old no-op behaviour rather than churning.
+	r.start("", func(LoginResultRequest) { t.Error("empty attempt should not restart") })
+	r.mu.Lock()
+	stillRunning = r.running
+	r.mu.Unlock()
+	if !stillRunning {
+		t.Error("an attempt-less start from an old control plane should not preempt")
+	}
+}

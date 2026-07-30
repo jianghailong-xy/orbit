@@ -368,7 +368,7 @@ func runLoop(cfg *RunnerConfig) {
 					}
 					switch lr.Action {
 					case "start":
-						login.start(report)
+						login.start(lr.Attempt, report)
 					case "code":
 						login.submitCode(lr.Code, report)
 					}

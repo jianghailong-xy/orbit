@@ -59,6 +59,10 @@ type loginRelay struct {
 	running bool
 	stdin   io.WriteCloser
 	cancel  context.CancelFunc
+	// Identifies the sign-in currently running, so a redelivered `start` for the SAME attempt is
+	// a no-op while a genuinely new one preempts it. Without this a user who cancelled was locked
+	// out until the old CLI timed out ten minutes later: start() saw a relay running and returned.
+	attempt string
 	// Everything the CLI has printed. Shared with submitCode so a rejected code — which the CLI
 	// signals only by re-prompting — can be spotted.
 	out *syncBuffer
@@ -80,16 +84,27 @@ func ptyCommand(ctx context.Context, argv ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, "script", "-qec", strings.Join(argv, " "), "/dev/null")
 }
 
-// start launches the sign-in and reports progress back through `report`. It returns immediately;
-// the flow continues in a goroutine until the CLI exits or loginRelayTimeout fires.
+// start launches the sign-in identified by `attempt` and reports progress through `report`. It
+// returns immediately; the flow continues in a goroutine until the CLI exits or the relay times
+// out.
 //
-// Calling it while a sign-in is already running is a no-op — the heartbeat delivers `start`
-// repeatedly until the server has seen our first status report.
-func (r *loginRelay) start(report func(LoginResultRequest)) {
+// `attempt` is the server's identifier for this sign-in (its login_at). The heartbeat redelivers
+// `start` until our first status report lands, so repeats of the SAME attempt must be ignored —
+// but a DIFFERENT attempt means the user asked again (typically after cancelling), and that has
+// to preempt whatever is still running, or they wait out the old CLI's timeout for nothing.
+func (r *loginRelay) start(attempt string, report func(LoginResultRequest)) {
 	r.mu.Lock()
 	if r.running {
-		r.mu.Unlock()
-		return
+		if attempt == "" || attempt == r.attempt {
+			r.mu.Unlock()
+			return // same sign-in, redelivered
+		}
+		// Newer attempt: tear the old one down. Its pump sees the killed process, but its report
+		// is for a sign-in the server has already moved past, so let it fall on the floor.
+		if r.cancel != nil {
+			r.cancel()
+		}
+		r.running = false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), loginRelayTimeout)
 	cmd := ptyCommand(ctx, providerClaude, "auth", "login")
@@ -112,15 +127,15 @@ func (r *loginRelay) start(report func(LoginResultRequest)) {
 		report(LoginResultRequest{Status: loginFailed, Message: signInStartError(err)})
 		return
 	}
-	r.running, r.stdin, r.cancel, r.out = true, stdin, cancel, out
+	r.running, r.stdin, r.cancel, r.out, r.attempt = true, stdin, cancel, out, attempt
 	r.mu.Unlock()
 
-	go r.pump(cmd, out, cancel, stdin, report)
+	go r.pump(attempt, cmd, out, cancel, stdin, report)
 }
 
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit
 // and report whether this machine ended up signed in.
-func (r *loginRelay) pump(cmd *exec.Cmd, out *syncBuffer, cancel context.CancelFunc, stdin io.WriteCloser, report func(LoginResultRequest)) {
+func (r *loginRelay) pump(attempt string, cmd *exec.Cmd, out *syncBuffer, cancel context.CancelFunc, stdin io.WriteCloser, report func(LoginResultRequest)) {
 	// Wait in its own goroutine so the URL poll below can tell "still running" from "already
 	// exited" — cmd.ProcessState stays nil until Wait returns, so it can't answer that itself.
 	waited := make(chan error, 1)
@@ -130,7 +145,10 @@ func (r *loginRelay) pump(cmd *exec.Cmd, out *syncBuffer, cancel context.CancelF
 		cancel()
 		_ = stdin.Close()
 		r.mu.Lock()
-		r.running, r.stdin, r.cancel, r.out = false, nil, nil, nil
+		// Only clear if we are still the current attempt — a newer start() may already own these.
+		if r.attempt == attempt {
+			r.running, r.stdin, r.cancel, r.out = false, nil, nil, nil
+		}
 		r.mu.Unlock()
 	}()
 

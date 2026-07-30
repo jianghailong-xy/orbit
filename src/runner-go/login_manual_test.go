@@ -21,7 +21,7 @@ func TestManualLoginRelayEndToEnd(t *testing.T) {
 
 	got := make(chan LoginResultRequest, 4)
 	r := &loginRelay{}
-	r.start(func(res LoginResultRequest) { got <- res })
+	r.start("attempt-1", func(res LoginResultRequest) { got <- res })
 
 	select {
 	case res := <-got:

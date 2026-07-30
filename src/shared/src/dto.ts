@@ -294,6 +294,9 @@ export interface LoginCommand {
   action: 'start' | 'code';
   /** The authorization code the user pasted, for `code`. */
   code?: string;
+  /** Identifies this sign-in, so the runner can tell a redelivered `start` from one the user
+   *  asked for again after cancelling — the latter must preempt whatever is still running. */
+  attempt?: string;
 }
 
 /** Runner → control plane: progress of a sign-in relay. */

@@ -141,6 +141,10 @@ type LoginCommand struct {
 	Action string `json:"action"` // "start" | "code"
 	// The authorization code the user pasted, for action "code".
 	Code string `json:"code,omitempty"`
+	// Identifies this sign-in (the server's login_at). Lets the runner tell a redelivered start
+	// from a new one the user asked for after cancelling. Empty from an older control plane,
+	// which the relay treats as "same attempt" — the pre-existing no-op behaviour.
+	Attempt string `json:"attempt,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card
