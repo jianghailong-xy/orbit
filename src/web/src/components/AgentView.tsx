@@ -1882,6 +1882,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       if (queuedItem) setQueued((q) => [...q, queuedItem]);
       else setIdle(false); // a turn is now starting
       qc.invalidateQueries({ queryKey: ['sessions'] });
+      // Reviving clears the row's Completed filing server-side (see SessionsService.resume),
+      // so refetch the detail too — otherwise the header ⋮ keeps offering Restore for a
+      // session that's already back in the active list.
+      qc.invalidateQueries({ queryKey: ['session', id] });
     },
     onError: (e: Error) => message.error(e.message),
   });
