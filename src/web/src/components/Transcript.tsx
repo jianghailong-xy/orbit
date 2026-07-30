@@ -31,7 +31,6 @@ import { isApiErrorText, isAuthErrorText } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
-import { splitLinks } from '../lib/linkify';
 import { RunnerSignIn } from './RunnerSignIn';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -569,31 +568,19 @@ function AuthErrorCard({ message }: { message: string }) {
   );
 }
 
-// Collapse a user bubble past this many characters: a pasted blob would otherwise lay out as
-// one giant pre-wrap node and stall the transcript. The composer caps input well above this;
+// Collapse a user bubble past this many characters: a pasted blob would otherwise parse and lay
+// out as one giant node and stall the transcript. The composer caps input well above this;
 // resumed/old sessions can still carry big messages.
 const USER_BUBBLE_TRUNCATE = 6000;
 
-// Render a verbatim user message with bare http(s) URLs turned into clickable links (new tab).
-// The text is otherwise untouched — splitLinks only carves out the URL runs — so pre-wrap keeps
-// every space/newline and a literal '#'/'*' still renders as itself.
-function linkifyUserText(text: string): ReactNode[] {
-  return splitLinks(text).map((seg, i) =>
-    seg.type === 'url' ? (
-      <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer">
-        {seg.value}
-      </a>
-    ) : (
-      seg.value
-    ),
-  );
-}
-
-// User message bubble. Input is kept verbatim (pre-wrap), not Markdown-parsed, so a
-// literal '#' or '*' the user typed isn't reinterpreted (only bare URLs are linkified,
-// see linkifyUserText). Any images sent with the turn render above the text (an image-only
-// turn has empty text) — prefer the local preview (instant), falling back to the durable
-// refs when there's none. Below the bubble a right-aligned meta row (copy button · relative
+// User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
+// turn: the messages sent here are mostly long structured prompts (headings, lists, fenced
+// commands), and reading them as raw '#'/'*' source is what this replaces. `breaks` keeps the
+// composer's single newlines as line breaks (see remarkHardBreaks) so a typed message still lays
+// out the way it was written, bare URLs stay clickable through remark-gfm's autolink, and the copy
+// button still hands back the original source. Any images sent with the turn render above the text
+// (an image-only turn has empty text) — prefer the local preview (instant), falling back to the
+// durable refs when there's none. Below the bubble a right-aligned meta row (copy button · relative
 // time) fades in on hover, like Claude; it's absolutely positioned so it never adds height,
 // and lives inside the hover wrap so the pointer can travel down onto it without dismissing
 // it (CSS :hover hits ancestors).
@@ -640,7 +627,7 @@ function UserBubble({ node }: { node: TextNode }) {
             ))}
           </div>
         )}
-        {linkifyUserText(shownText)}
+        {shownText && <MD breaks>{shownText}</MD>}
       </div>
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
@@ -1060,11 +1047,47 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   );
 }
 
-export const MD = memo(function MD({ children, highlight = true }: { children: string; highlight?: boolean }) {
+// A remark plugin turning every single newline into a hard break — what remark-breaks does, inlined
+// rather than pulling in a dependency for it. Used for user messages only (`MD breaks`): those are
+// typed in a composer where Enter means "new line", so CommonMark's soft break (which collapses to a
+// space) would silently reflow a message the sender laid out by hand. Assistant Markdown keeps the
+// standard semantics. `code`/`inlineCode`/`html` nodes hold no children and no 'text' node, so their
+// contents are never touched.
+function remarkHardBreaks() {
+  return (tree: any) => {
+    const walk = (node: any) => {
+      if (!Array.isArray(node.children)) return;
+      const out: any[] = [];
+      for (const child of node.children) {
+        if (child.type === 'text' && child.value.includes('\n')) {
+          child.value.split(/\r?\n/).forEach((part: string, i: number) => {
+            if (i) out.push({ type: 'break' });
+            if (part) out.push({ type: 'text', value: part });
+          });
+        } else {
+          walk(child);
+          out.push(child);
+        }
+      }
+      node.children = out;
+    };
+    walk(tree);
+  };
+}
+
+export const MD = memo(function MD({
+  children,
+  highlight = true,
+  breaks = false,
+}: {
+  children: string;
+  highlight?: boolean;
+  breaks?: boolean;
+}) {
   return (
     <div className="md">
       <Markdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={breaks ? [remarkGfm, remarkHardBreaks] : [remarkGfm]}
         rehypePlugins={highlight ? [rehypeHighlight] : []}
         urlTransform={transcriptUrlTransform}
         components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink }}

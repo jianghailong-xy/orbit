@@ -1,20 +1,20 @@
 import Foundation
 
-/// URL detection for verbatim prose — the user bubble. It renders literally on every platform (not
-/// Markdown-parsed, so a typed '#'/'*' survives), which also means bare links can't come from a
-/// Markdown `run.link`. We overlay `.link` attributes on the detected URLs instead, so a pasted link
-/// is tappable while the rest of the text stays untouched. The assistant turn already autolinks via
-/// its Markdown, so this is only used where the text is plain (iOS: `SelectableText`; macOS: `Text`).
+/// URL detection for prose the Markdown parse leaves plain. CommonMark only linkifies the explicit
+/// `[text](url)` / `<url>` forms, so a pasted bare link would render as dead text; web's remark-gfm
+/// autolinks those literals, and this is the iOS/macOS half of that parity. Applied to every
+/// inline-Markdown parse (see `inlineMarkdown` / `inlineMarkdownAttributed`), so it covers the user
+/// bubble — where pasted links are the common case — and the assistant reply alike.
 enum LinkDetection {
     // One shared detector: NSDataDetector is costly to build and safe to reuse for detection.
     private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
-    /// URL matches in `text` as UTF-16 (`NSString`) ranges, so they map straight onto an
-    /// `NSAttributedString`. Empty when there are none (or the detector failed to build).
+    /// URL matches in `text` as UTF-16 (`NSString`) ranges. Empty when there are none (or the
+    /// detector failed to build).
     ///
-    /// Restricted to explicit `http(s)://` links so all three platforms behave identically: the web
-    /// user bubble linkifies only `https?://…` (see `lib/linkify.ts`), whereas NSDataDetector also
-    /// resolves bare `www.` hosts and email addresses — we drop those here to match web.
+    /// Restricted to explicit `http(s)://` links: NSDataDetector also resolves bare `www.` hosts and
+    /// email addresses, and turning a typed address into a link nobody asked for is the kind of
+    /// over-reach the verbatim bubble never did.
     static func matches(in text: String) -> [(range: NSRange, url: URL)] {
         guard let detector, !text.isEmpty else { return [] }
         let ns = text as NSString
@@ -27,14 +27,26 @@ enum LinkDetection {
         }
     }
 
-    /// `text` as an `AttributedString` with `.link` overlaid on detected URLs — for the macOS user
-    /// bubble's `Text`, which then draws them tinted and opens them on click. A link-free message
-    /// yields a plain `AttributedString`, so it renders exactly as before.
-    static func attributed(_ text: String) -> AttributedString {
-        let mut = NSMutableAttributedString(string: text)
-        for (range, url) in matches(in: text) {
-            mut.addAttribute(.link, value: url, range: range)
+    /// `attributed` with `.link` overlaid on the bare URLs in its text, so they draw tinted and open
+    /// on tap/click. Runs that already carry a link are skipped — a real Markdown link whose *label*
+    /// is a URL (`[https://a](https://b)`) must keep pointing at its own href. Text without a bare URL
+    /// is returned untouched, so the common case costs one detector pass and no copy.
+    static func linkifying(_ attributed: AttributedString) -> AttributedString {
+        let plain = String(attributed.characters)
+        let hits = matches(in: plain)
+        guard !hits.isEmpty else { return attributed }
+        var out = attributed
+        for (nsRange, url) in hits {
+            guard let found = Range(nsRange, in: plain) else { continue }
+            // NSRange (UTF-16) → character offsets, which is what AttributedString indexes by. The
+            // offsets stay valid across the loop: overlaying an attribute never changes the text.
+            let lower = plain.distance(from: plain.startIndex, to: found.lowerBound)
+            let upper = plain.distance(from: plain.startIndex, to: found.upperBound)
+            let start = out.index(out.startIndex, offsetByCharacters: lower)
+            let end = out.index(out.startIndex, offsetByCharacters: upper)
+            guard out[start..<end].runs.allSatisfy({ $0.link == nil }) else { continue }
+            out[start..<end].link = url
         }
-        return AttributedString(mut)
+        return out
     }
 }

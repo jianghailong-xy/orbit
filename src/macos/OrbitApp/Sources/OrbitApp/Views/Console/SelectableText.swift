@@ -32,8 +32,8 @@ enum ProseInk: Hashable {
 }
 
 #if os(iOS)
-/// One laid-out paragraph inside a `SelectableText`. A leaf view (the user bubble, a fenced code
-/// block) is a single segment; a run of Markdown prose is several — headings, paragraphs and list
+/// One laid-out paragraph inside a `SelectableText`. A leaf view (a fenced code block, a table cell)
+/// is a single segment; a run of Markdown prose is several — headings, paragraphs and list
 /// items sharing ONE text view so a long-press can drag a selection straight across them. That
 /// sharing is the point: a `UITextView` is a single selection domain, so the old one-view-per-block
 /// layout capped a selection at a single block (you couldn't select two paragraphs, or a heading and
@@ -41,12 +41,9 @@ enum ProseInk: Hashable {
 struct ProseSegment: Hashable {
     var text: String
     var role: ProseRole = .body
-    /// Parse `text` as inline Markdown (bold/italic/code/links/strikethrough). Off for the user
-    /// bubble and fenced code, which are rendered verbatim.
+    /// Parse `text` as inline Markdown (bold/italic/code/links/strikethrough). Off for fenced code,
+    /// which is rendered verbatim.
     var markdown: Bool = false
-    /// Overlay tappable `.link` attributes on detected URLs. On for the plain user bubble (its text
-    /// is not Markdown, so links can't come from a `run.link`); off everywhere else.
-    var detectLinks: Bool = false
     /// Tint inline `code` runs, mirroring the web `.md code` chip. Off inside headings (a bar behind a
     /// filename in a big bold heading reads as clutter — matches `inlineMarkdown(codeBackground:)`).
     var codeBackground: Bool = true
@@ -69,13 +66,11 @@ struct SelectableText: UIViewRepresentable {
     let segments: [ProseSegment]
     var ink: ProseInk = .transcript
 
-    /// Leaf: a single run of text — the user bubble, a fenced code block, or one standalone block.
+    /// Leaf: a single run of text — a fenced code block, or one standalone block.
     init(text: String, role: ProseRole = .body, ink: ProseInk = .transcript,
-         markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil,
-         detectLinks: Bool = false) {
+         markdown: Bool = false, codeBackground: Bool = true, leadingMarker: String? = nil) {
         self.segments = [ProseSegment(text: text, role: role, markdown: markdown,
-                                      detectLinks: detectLinks, codeBackground: codeBackground,
-                                      leadingMarker: leadingMarker)]
+                                      codeBackground: codeBackground, leadingMarker: leadingMarker)]
         self.ink = ink
     }
 
@@ -185,10 +180,10 @@ struct SelectableText: UIViewRepresentable {
             ]))
         }
 
+        // A Markdown segment's bare URLs are already `.link` runs by here (see `inlineMarkdownAttributed`),
+        // so a pasted link is tappable: a selectable, non-editable UITextView opens `.link` runs on tap
+        // and `linkTextAttributes` tints them.
         let source = seg.markdown ? inlineMarkdownAttributed(seg.text) : AttributedString(seg.text)
-        // Where this segment's text lands in `result` — a plain segment's pieces reproduce `seg.text`
-        // 1:1 (only '\n' → U+2028, same UTF-16 length), so a match range on `seg.text` maps here.
-        let contentStart = result.length
         for run in source.runs {
             // Soft breaks inside a paragraph become LINE SEPARATORs so they wrap without picking up
             // paragraph spacing — only the real block break (the styled `\n` below) gets the gap.
@@ -213,15 +208,6 @@ struct SelectableText: UIViewRepresentable {
             }
             if let link = run.link { attrs[.link] = link }
             result.append(NSAttributedString(string: piece, attributes: attrs))
-        }
-
-        // Plain user bubble: overlay `.link` on any bare URLs so they're tappable (a selectable,
-        // non-editable UITextView opens `.link` runs on tap; `linkTextAttributes` tints them).
-        if seg.detectLinks {
-            for (range, url) in LinkDetection.matches(in: seg.text) {
-                result.addAttribute(.link, value: url,
-                                    range: NSRange(location: contentStart + range.location, length: range.length))
-            }
         }
 
         if trailingNewline {

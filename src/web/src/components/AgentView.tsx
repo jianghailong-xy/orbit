@@ -120,7 +120,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
@@ -3278,7 +3278,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                       ))}
                     </div>
                   ) : null}
-                  {q.content && <span className="chat-queued-text">{q.content}</span>}
+                  {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
+                      message doesn't change shape when the runner picks it up. */}
+                  {q.content && <MD breaks>{q.content}</MD>}
                   <span className="chat-queued-meta">
                     <span className="chat-queued-tag">Queued</span>
                     <a onClick={() => cancelQueued(q.turnId)}>Cancel</a>

@@ -3469,8 +3469,9 @@ body {
   margin: 0;
   max-width: 100%;
 }
-/* Bare URLs in a user message are linkified (see linkifyUserText); underline + brand colour so
-   they read as clickable against the tinted bubble. break-word already lets a long link wrap. */
+/* Links in a user message (Markdown links, plus bare URLs remark-gfm autolinks); underline + brand
+   colour so they read as clickable against the tinted bubble. break-word already lets a long link
+   wrap. Wins over `.md a` for the underline — that rule only sets a colour. */
 .chat-user a {
   color: var(--brand);
   text-decoration: underline;

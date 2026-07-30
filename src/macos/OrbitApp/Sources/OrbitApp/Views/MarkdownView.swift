@@ -17,6 +17,10 @@ struct MarkdownView: View, Equatable {
     // call site. Defaults are the assistant reply.
     var base: ProseRole = .body
     var ink: ProseInk = .transcript
+    /// Take the whole offered width (the assistant's full-width document) or hug the content. The user
+    /// bubble hugs: its tinted background sizes to the text, so a prose column pinned to
+    /// `maxWidth: .infinity` would stretch that background across the entire row.
+    var fillWidth: Bool = true
 
     var body: some View {
         // No length cap (capping only dropped formatting on long messages — the historic freezes
@@ -42,13 +46,13 @@ struct MarkdownView: View, Equatable {
                 switch groups[i] {
                 case .prose(let segments):
                     SelectableText(segments: segments, ink: ink)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
                 case .block(let block):
                     MarkdownBlockView(block: block, base: base, ink: ink)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         #else
         VStack(alignment: .leading, spacing: 8) {
             ForEach(blocks.indices, id: \.self) { i in
@@ -60,7 +64,7 @@ struct MarkdownView: View, Equatable {
         // leading than Latin, so it runs looser than macOS's 14pt. Propagates to all prose Text;
         // code blocks tighten it back down to stay dense.
         .lineSpacing(ProseLayout.lineSpacing)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: fillWidth ? .infinity : nil, alignment: .leading)
         #endif
     }
 }
@@ -473,7 +477,7 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
             attributed[range].backgroundColor = Color.secondary.opacity(0.08)
         }
     }
-    return Text(attributed)
+    return Text(LinkDetection.linkifying(attributed))
 }
 
 /// The same inline-Markdown parse as `inlineMarkdown`, but returning the raw `AttributedString` so the
@@ -481,10 +485,11 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
 /// concrete `UIFont`s + attributes there; the inline-code tint is applied per run at that point, not
 /// baked here). Falls back to the plain string on a parse failure.
 func inlineMarkdownAttributed(_ s: String) -> AttributedString {
-    (try? AttributedString(
+    let parsed = (try? AttributedString(
         markdown: s,
         options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
     )) ?? AttributedString(s)
+    return LinkDetection.linkifying(parsed)
 }
 
 extension Color {

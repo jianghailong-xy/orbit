@@ -45,21 +45,19 @@ struct UserBubbleView: View {
                     attachmentRow { ForEach(files) { ChatAttachmentFile(attachment: $0) } }
                 }
                 if !bubble.text.isEmpty {
-                    // Same prose token as the assistant turn — one reading size across the transcript
-                    // (pre-token, this inherited the platform default and mismatched the reply).
-                    #if os(iOS)
-                    // Read-only UITextView so a portion of the message can be selected + copied by
-                    // hand — the `meta` copy button is hover-revealed and never shows on iOS. Plain
-                    // text (the user turn isn't Markdown-rendered). macOS keeps the selectable `Text`.
-                    SelectableText(text: shown, role: .body, ink: .primary, detectLinks: true)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                    #else
-                    Text(LinkDetection.attributed(shown)).textSelection(.enabled)
+                    // Markdown-rendered by the same renderer as the assistant turn (web parity): the
+                    // messages sent here are mostly long structured prompts — headings, lists, fenced
+                    // commands — and reading them as raw '#'/'*' source is what this replaces. The copy
+                    // button still hands back the original source. `fillWidth: false` keeps the tinted
+                    // background hugging the text instead of stretching across the row; `.body`/`.primary`
+                    // are the bubble's own prose token and ink (the reply's reading size, system label).
+                    // Partial selection still works: iOS selects inside the renderer's own text views,
+                    // macOS through `.textSelection`.
+                    MarkdownView(source: shown, base: .body, ink: .primary, fillWidth: false)
                         .font(.orbitProse)
+                        .textSelection(.enabled)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                    #endif
                 }
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
