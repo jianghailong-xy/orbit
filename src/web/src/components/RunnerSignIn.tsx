@@ -85,8 +85,8 @@ export function RunnerSignIn({ runnerId, onDone }: { runnerId: string; onDone?: 
   if (status === 'awaiting_code' && s?.url) {
     return (
       <div className="rsi">
-        {/* A rejected code lands back here with a NEW url — the old challenge is spent — so the
-            message matters as much as the link. */}
+        {/* A rejected code lands back here with the SAME url still valid — the CLI keeps waiting
+            on that challenge — so the message is what tells the user anything changed. */}
         {s.message && <div className="rsi-warn">{s.message}</div>}
         <a className="rsi-open" href={s.url} target="_blank" rel="noopener noreferrer">
           <ExportOutlined /> Open the sign-in page

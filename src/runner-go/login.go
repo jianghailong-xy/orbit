@@ -30,13 +30,16 @@ const (
 // the oauth path keeps a stray docs link from matching.
 var loginURLRe = regexp.MustCompile(`https://claude\.com/[^\s\x07"']*oauth/authorize\?[^\s\x07"']+`)
 
-// The CLI's prompt for the pasted code. It reappears when a code is rejected, which is the only
-// signal that the paste failed — the process does not exit and prints no error.
-const loginPromptMarker = "Paste code here"
+// What the CLI prints when a pasted code is rejected: "Invalid code. Please make sure the full
+// code was copied." — written after the existing prompt, on the same line. This is the ONLY
+// signal a paste failed. The process does not exit, does not re-prompt, and does not start a
+// fresh OAuth exchange: it keeps waiting on the same challenge, so the URL already published
+// stays valid and the user just needs to fetch a code from it again.
+const loginInvalidCodeMarker = "Invalid code"
 
-// latestLoginURL returns the LAST authorize URL in the output, not the first. A rejected code
-// makes the CLI start a fresh OAuth exchange and print a new URL carrying a new PKCE challenge
-// and state; the earlier one is dead by then, so the user must be sent the newest.
+// latestLoginURL returns the LAST authorize URL in the output. Within one run the CLI prints the
+// same URL twice (the OSC 8 hyperlink target and its visible label), so first and last agree;
+// taking the last is simply the safe choice if a future CLI ever does re-issue one.
 func latestLoginURL(s string) string {
 	m := loginURLRe.FindAllString(s, -1)
 	if len(m) == 0 {
@@ -196,7 +199,7 @@ func (r *loginRelay) submitCode(code string, report func(LoginResultRequest)) {
 		report(LoginResultRequest{Status: loginFailed, Message: "the sign-in expired before the code arrived — start it again"})
 		return
 	}
-	seen := strings.Count(out.String(), loginPromptMarker)
+	seen := strings.Count(out.String(), loginInvalidCodeMarker)
 	if _, err := io.WriteString(stdin, strings.TrimSpace(code)+"\n"); err != nil {
 		report(LoginResultRequest{Status: loginFailed, Message: "could not hand the code to the CLI: " + err.Error()})
 		return
@@ -204,12 +207,15 @@ func (r *loginRelay) submitCode(code string, report func(LoginResultRequest)) {
 	go r.watchRejected(out, seen, report)
 }
 
-// watchRejected turns "the CLI asked for a code again" into a report the user can act on.
+// watchRejected turns the CLI's "Invalid code" line into a report the user can act on.
 //
-// A bad code is invisible otherwise: the CLI prints no error and does not exit, it simply starts
-// a fresh OAuth exchange and re-prompts. Without this the card would sit on "waiting" until the
-// relay timed out ten minutes later. The retry carries the NEW url, because the challenge and
-// state behind the old one are already spent.
+// A bad code is otherwise invisible: the CLI prints that one line and goes right back to waiting
+// on the same prompt — it does not exit, so the pump has nothing to report and the card would sit
+// on "waiting" until the relay timed out ten minutes later. Counting occurrences rather than
+// testing for presence means a second bad paste is caught too.
+//
+// The URL is republished unchanged: the challenge is still live, so the user re-approves at the
+// same link and copies the code more carefully.
 func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginResultRequest)) {
 	deadline := time.After(2 * time.Minute)
 	for {
@@ -225,11 +231,11 @@ func (r *loginRelay) watchRejected(out *syncBuffer, seen int, report func(LoginR
 			return // pump already reported the outcome
 		}
 		s := out.String()
-		if strings.Count(s, loginPromptMarker) > seen {
+		if strings.Count(s, loginInvalidCodeMarker) > seen {
 			report(LoginResultRequest{
 				Status:  loginAwaitingCode,
 				URL:     latestLoginURL(s),
-				Message: "that code wasn't accepted — open the link again and paste the new code",
+				Message: "That code wasn't accepted — make sure you copied all of it, then try again.",
 			})
 			return
 		}
