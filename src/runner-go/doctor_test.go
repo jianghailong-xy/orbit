@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -103,6 +104,100 @@ func TestCheckEngineMissing(t *testing.T) {
 	h := checkEngine(engineSpec{name: "Codex", bin: "codex-does-not-exist"}, "/nope")
 	if h.installed {
 		t.Fatal("expected not installed for a bogus binary")
+	}
+}
+
+func TestRemoteMachine(t *testing.T) {
+	for _, k := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("SSH_CONNECTION", "10.0.0.2 51000 10.0.0.9 22")
+	if !remoteMachine() {
+		t.Fatal("an SSH session must count as remote")
+	}
+	t.Setenv("SSH_CONNECTION", "")
+	t.Setenv("DISPLAY", ":0")
+	if runtime.GOOS == "linux" && remoteMachine() {
+		t.Fatal("a Linux desktop with DISPLAY set is local")
+	}
+	t.Setenv("DISPLAY", "")
+	if runtime.GOOS == "linux" && !remoteMachine() {
+		t.Fatal("a Linux box with no display server must count as remote")
+	}
+}
+
+// codexLoginHelp is the shape of `codex login --help`: the flag is advertised there,
+// which is how we tell a CLI that supports the device flow from one that doesn't.
+const codexLoginHelp = `Manage login
+
+Usage: codex login [OPTIONS] [COMMAND]
+
+Options:
+      --with-api-key  Read the API key from stdin
+      --device-auth
+`
+
+func TestSupportsLoginFlag(t *testing.T) {
+	spec := engineSpec{bin: "codex", loginArgs: []string{"login"}, loginRemoteFlag: "--device-auth"}
+	current := writeFakeBin(t, t.TempDir(), "codex", "cat <<'EOF'\n"+codexLoginHelp+"EOF")
+	if !supportsLoginFlag(current, spec) {
+		t.Fatal("help advertising --device-auth should count as supported")
+	}
+	old := writeFakeBin(t, t.TempDir(), "codex", `echo "Usage: codex login [OPTIONS]"`)
+	if supportsLoginFlag(old, spec) {
+		t.Fatal("a CLI that never mentions the flag must not be used with it")
+	}
+}
+
+// TestSignInEngineUsesDeviceAuthWhenRemote pins the actual regression: over SSH,
+// plain `codex login` waits on a localhost callback the user's browser can't reach.
+func TestSignInEngineUsesDeviceAuthWhenRemote(t *testing.T) {
+	dir := t.TempDir()
+	argvLog := filepath.Join(dir, "argv")
+	bin := writeFakeBin(t, dir, "codex", `if [ "$2" = "--help" ]; then cat <<'EOF'
+`+codexLoginHelp+`EOF
+  exit 0
+fi
+echo "$@" > `+argvLog)
+	spec := engineSpec{name: "Codex", bin: "codex", loginArgs: []string{"login"}, loginRemoteFlag: "--device-auth"}
+
+	t.Setenv("SSH_CONNECTION", "10.0.0.2 51000 10.0.0.9 22")
+	if !signInEngine(spec, bin) { // stdin isn't a tty under `go test`, so confirm() takes the default yes
+		t.Fatal("sign-in should report success when the CLI exits 0")
+	}
+	got, _ := os.ReadFile(argvLog)
+	if strings.TrimSpace(string(got)) != "login --device-auth" {
+		t.Fatalf("remote machine must get the device flow, ran: %q", strings.TrimSpace(string(got)))
+	}
+
+	for _, k := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("DISPLAY", ":0") // local desktop: keep the browser-opening flow
+	if runtime.GOOS == "linux" {
+		if !signInEngine(spec, bin) {
+			t.Fatal("sign-in should report success when the CLI exits 0")
+		}
+		got, _ = os.ReadFile(argvLog)
+		if strings.TrimSpace(string(got)) != "login" {
+			t.Fatalf("local machine should keep the default flow, ran: %q", strings.TrimSpace(string(got)))
+		}
+	}
+}
+
+func TestSignInEngineKeepsDefaultFlowWithoutRemoteFlag(t *testing.T) {
+	dir := t.TempDir()
+	argvLog := filepath.Join(dir, "argv")
+	bin := writeFakeBin(t, dir, "claude", `echo "$@" > `+argvLog)
+	spec := engineSpec{name: "Claude Code", bin: "claude", loginArgs: []string{"auth", "login"}}
+
+	t.Setenv("SSH_CONNECTION", "10.0.0.2 51000 10.0.0.9 22")
+	if !signInEngine(spec, bin) {
+		t.Fatal("sign-in should report success when the CLI exits 0")
+	}
+	// claude's sign-in finishes on a hosted callback + pasted code, so SSH changes nothing.
+	if got, _ := os.ReadFile(argvLog); strings.TrimSpace(string(got)) != "auth login" {
+		t.Fatalf("engine without a remote flag must run unchanged, ran: %q", strings.TrimSpace(string(got)))
 	}
 }
 

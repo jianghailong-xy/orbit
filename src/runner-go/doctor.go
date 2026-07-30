@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -16,17 +17,32 @@ import (
 // (claude/codex) match runtimeProvider's provider constants, so the runtime
 // pre-flight can look them up directly.
 type engineSpec struct {
-	name          string   // display name, e.g. "Claude Code"
-	bin           string   // executable on PATH, e.g. "claude"
-	installCmd    string   // recommended install, run via `sh -c` when the user consents
-	updateCmd     string   // in-place update run daily by engineUpdateLoop; empty => re-run installCmd (idempotent)
-	installAlt    string   // alternative shown if the default install is declined/fails
-	loginArgs     []string // interactive sign-in argv (prints a URL — works over SSH)
-	loginHeadless string   // headless/token alternative for an unattended service
+	name       string   // display name, e.g. "Claude Code"
+	bin        string   // executable on PATH, e.g. "claude"
+	installCmd string   // recommended install, run via `sh -c` when the user consents
+	updateCmd  string   // in-place update run daily by engineUpdateLoop; empty => re-run installCmd (idempotent)
+	installAlt string   // alternative shown if the default install is declined/fails
+	loginArgs  []string // interactive sign-in argv
+	// loginRemoteFlag switches that sign-in to a device-code flow for a machine whose
+	// browser the user can't reach. Empty when the default flow already works remotely.
+	loginRemoteFlag string
+	// loginHeadless is the sign-in for a machine with no browser at hand — printed in
+	// reports and after a failed interactive sign-in.
+	loginHeadless string
 }
 
 func (s engineSpec) loginCmd() string {
 	return strings.TrimSpace(s.bin + " " + strings.Join(s.loginArgs, " "))
+}
+
+// loginArgvFor picks the sign-in argv to run on this machine: the device-code
+// variant when we're somewhere the browser can't reach back (SSH / no desktop)
+// and the CLI advertises the flag, else the default flow.
+func (s engineSpec) loginArgvFor(binPath string) []string {
+	if s.loginRemoteFlag == "" || !remoteMachine() || !supportsLoginFlag(binPath, s) {
+		return s.loginArgs
+	}
+	return append(append([]string{}, s.loginArgs...), s.loginRemoteFlag)
 }
 
 // loginHint is the one-line sign-in guidance shown in reports: the interactive
@@ -54,10 +70,14 @@ var engineSpecs = []engineSpec{
 		// -g` regardless of what PATH actually resolves — silently upgrading a copy the runner
 		// never execs (root: standalone ~/.local/bin wins over the npm global), and failing
 		// with EACCES when the service user doesn't own that prefix.
-		updateCmd:     "codex update",
-		installAlt:    "brew install codex   (macOS)",
-		loginArgs:     []string{"login"},
-		loginHeadless: "set OPENAI_API_KEY in the service env",
+		updateCmd:  "codex update",
+		installAlt: "brew install codex   (macOS)",
+		loginArgs:  []string{"login"},
+		// Plain `codex login` finishes on http://localhost:1455/auth/callback — a port on
+		// *this* machine, so approving the URL from a laptop's browser leaves the CLI
+		// waiting forever. `--device-auth` prints a code instead and works anywhere.
+		loginRemoteFlag: "--device-auth",
+		loginHeadless:   "codex login --device-auth",
 	},
 }
 
@@ -217,21 +237,51 @@ func runInstallCmd(spec engineSpec, proxyVars []envVar) bool {
 	return true
 }
 
-// signInEngine asks for consent, then runs the CLI's interactive sign-in with the
-// terminal wired up so the user can complete the browser/device flow (the command
-// prints a URL, so it works when SSH'd into a headless runner). Returns true when
-// the sign-in command exits 0.
-func signInEngine(spec engineSpec) bool {
-	if !confirm(fmt.Sprintf("\nSign in to %s now? (opens a URL you approve in any browser)\n  %s\n  [Y/n] ", spec.name, spec.loginCmd()), true) {
+// remoteMachine reports whether the browser the user will approve the sign-in in
+// is likely on a *different* machine than this one: an SSH session, or a Linux box
+// with no desktop session. Sign-in flows that finish on a localhost callback can't
+// complete there, however correct the printed URL looks.
+func remoteMachine() bool {
+	for _, k := range []string{"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"} {
+		if os.Getenv(k) != "" {
+			return true
+		}
+	}
+	// sudo strips SSH_*; on Linux a missing display server is the other giveaway.
+	return runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == ""
+}
+
+// supportsLoginFlag asks the CLI's own sign-in help whether it knows the flag, so
+// a runner still on an older build falls back to the default flow instead of dying
+// on an unknown argument.
+func supportsLoginFlag(binPath string, spec engineSpec) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, _ := exec.CommandContext(ctx, binPath, append(append([]string{}, spec.loginArgs...), "--help")...).CombinedOutput()
+	return strings.Contains(string(out), spec.loginRemoteFlag)
+}
+
+// signInEngine asks for consent, then runs the CLI's sign-in with the terminal
+// wired up so the user can complete the browser/device flow — picking the
+// device-code variant when this machine's own browser isn't the one being used.
+// Returns true when the sign-in command exits 0.
+func signInEngine(spec engineSpec, binPath string) bool {
+	args := spec.loginArgvFor(binPath)
+	cmdLine := strings.TrimSpace(spec.bin + " " + strings.Join(args, " "))
+	note := "opens a URL you approve in any browser"
+	if len(args) > len(spec.loginArgs) {
+		note = "remote machine — approve the URL and enter the code in any browser"
+	}
+	if !confirm(fmt.Sprintf("\nSign in to %s now? (%s)\n  %s\n  [Y/n] ", spec.name, note, cmdLine), true) {
 		return false
 	}
-	fmt.Printf("  running: %s\n", spec.loginCmd())
-	cmd := exec.Command(spec.bin, spec.loginArgs...)
+	fmt.Printf("  running: %s\n", cmdLine)
+	cmd := exec.Command(binPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("  ✗ sign-in failed (%s)\n    for a headless runner use:  %s\n", firstLine(err.Error()), spec.loginHeadless)
+		fmt.Printf("  ✗ sign-in failed (%s)\n    try instead:  %s\n", firstLine(err.Error()), spec.loginHeadless)
 		return false
 	}
 	return true
@@ -273,7 +323,7 @@ func runDoctor(fix bool, proxyVars []envVar) []engineHealth {
 			if !healths[i].installed || healths[i].auth == authYes {
 				continue
 			}
-			if !signInEngine(healths[i].spec) {
+			if !signInEngine(healths[i].spec, healths[i].path) {
 				continue
 			}
 			healths[i].auth = probeAuth(healths[i].spec.bin, healths[i].path)
