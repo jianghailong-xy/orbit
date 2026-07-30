@@ -1970,6 +1970,11 @@ export class SessionsService {
         // and a stale 'pending'/'error' would otherwise wedge the bar's Commit button.
         commitStatus: null,
         commitError: null,
+        // Sending into a session filed as Completed un-files it: it's live work again, so it
+        // belongs in the active list instead of streaming its reply into a row the user can
+        // only find by switching tabs. Trash (deletedAt) is deliberately left alone — deleting
+        // is an explicit "get rid of this", which a stray message shouldn't undo.
+        archivedAt: null,
         // Re-apply any mode/model/effort changes made while the session was ended;
         // buildSession reads these when the runner re-claims and re-spawns the runtime.
         // Omitted fields keep their prior value (don't clobber to null).
@@ -1984,6 +1989,10 @@ export class SessionsService {
           : {}),
       },
     });
+    // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
+    // and signal the control plane, so every other client moves the row out of Completed and
+    // into the active list without polling.
+    if (session.archivedAt) this.realtime.publishSessionCreated(id);
     this.queue.notifySessionQueued();
     return { turnId: turn.id, seq: turn.seq };
   }
