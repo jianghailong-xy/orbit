@@ -285,7 +285,10 @@ export class SessionsService {
   // There is deliberately NO cap on how many children one parent may spawn over its
   // lifetime: a long-lived dispatcher session spawns one child per incoming message,
   // so any lifetime quota is exhausted by normal use and wedges it permanently.
-  private static readonly MAX_SPAWN_DEPTH = 2; // root may spawn; its children may not
+  // Depth counts spawn links, not sessions: a root is depth 0, its child is 1, and its
+  // grandchild is 2. This lets a dispatcher-created work session delegate one real sub-task
+  // while still preventing unbounded recursive orchestration.
+  private static readonly MAX_SPAWN_DEPTH = 2;
   private static readonly CHILD_CONCURRENCY = 3;
 
   /**
@@ -377,19 +380,19 @@ export class SessionsService {
     return matches[0].id;
   }
 
-  /** Length of the parent chain ending at `sessionId` — the depth a new child of it would sit
-   *  at. Bounded walk (stops at the cap) so a cyclic/corrupt chain can never loop forever. */
+  /** Number of parent links above `sessionId` (a root is depth 0). The bounded walk stops at
+   *  the cap, so a cyclic/corrupt chain can never loop forever. */
   private async spawnDepth(sessionId: string): Promise<number> {
     let depth = 0;
     let cur: string | null = sessionId;
-    while (cur && depth <= SessionsService.MAX_SPAWN_DEPTH) {
+    while (cur && depth < SessionsService.MAX_SPAWN_DEPTH) {
       const row: { parentSessionId: string | null } | null = await this.prisma.session.findUnique({
         where: { id: cur },
         select: { parentSessionId: true },
       });
       if (!row) break;
-      depth++;
       cur = row.parentSessionId;
+      if (cur) depth++;
     }
     return depth;
   }
