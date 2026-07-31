@@ -10,6 +10,7 @@ import {
   Max,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 
@@ -28,7 +29,7 @@ export class CreateTaskDto {
   @IsOptional() @IsDateString() dueDate?: string;
   // Prerequisite task ids this new task should wait on (each must be owned by the
   // caller). The task only runs once they're all DONE.
-  @IsOptional() @IsArray() @IsString({ each: true }) dependsOnTaskIds?: string[];
+  @IsOptional() @IsArray() @IsUUID('all', { each: true }) dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
 }
@@ -42,6 +43,12 @@ export class UpdateTaskDto {
   // null detaches from its list; a string (re)assigns to that list.
   @IsOptional() @IsUUID() listId?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  // Full replacement for this task's prerequisites. Omit to keep them unchanged;
+  // pass [] to clear them all.
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsArray()
+  @IsUUID('all', { each: true })
+  dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
 }
@@ -49,7 +56,7 @@ export class UpdateTaskDto {
 export class AddDependencyDto {
   // The prerequisite task this task should wait on. Must be owned by the caller, differ
   // from the task itself, and not introduce a dependency cycle.
-  @IsString() @MinLength(1) dependsOnTaskId!: string;
+  @IsUUID('all') dependsOnTaskId!: string;
 }
 
 export class BatchExecuteDto {

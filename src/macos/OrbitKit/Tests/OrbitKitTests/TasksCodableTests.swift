@@ -76,6 +76,19 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertEqual(status["status"] as? String, "DONE")    // enum → wire string
     }
 
+    /// Dependency PATCH uses replacement semantics: omitted keeps the graph, an empty array
+    /// clears every prerequisite, and a populated array becomes the complete new set.
+    func testUpdateDependencyReplacementEncoding() throws {
+        let keep = try jsonObject(UpdateTaskRequest(title: "x"))
+        XCTAssertFalse(keep.keys.contains("dependsOnTaskIds"))
+
+        let clear = try jsonObject(UpdateTaskRequest(dependsOnTaskIds: []))
+        XCTAssertEqual(clear["dependsOnTaskIds"] as? [String], [])
+
+        let replace = try jsonObject(UpdateTaskRequest(dependsOnTaskIds: ["t0", "t1"]))
+        XCTAssertEqual(replace["dependsOnTaskIds"] as? [String], ["t0", "t1"])
+    }
+
     func testBatchAssignAlwaysSendsKey() throws {
         let set = try jsonObject(BatchAssignRequest(taskIds: ["t1"], assigneeId: "a1"))
         XCTAssertEqual(set["assigneeId"] as? String, "a1")

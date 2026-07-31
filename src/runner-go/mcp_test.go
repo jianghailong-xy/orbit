@@ -82,6 +82,50 @@ func TestMCPTaskStartUsesCurrentTaskAndExecuteEndpoint(t *testing.T) {
 	}
 }
 
+func TestMCPTaskUpdateCarriesDependencyReplacement(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "task_update")
+	depSchema, ok := props["dependsOnTaskIds"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("task_update inputSchema missing dependsOnTaskIds: %#v", props["dependsOnTaskIds"])
+	}
+	if depSchema["type"] != "array" {
+		t.Fatalf("dependsOnTaskIds type = %#v, want array", depSchema["type"])
+	}
+	items, _ := depSchema["items"].(map[string]interface{})
+	if items["type"] != "string" {
+		t.Fatalf("dependsOnTaskIds items = %#v, want strings", depSchema["items"])
+	}
+	description, _ := depSchema["description"].(string)
+	if !strings.Contains(description, "Complete replacement") || !strings.Contains(description, "pass [] to clear") {
+		t.Fatalf("dependsOnTaskIds description does not explain replacement/clear semantics: %q", description)
+	}
+
+	var gotMethod, gotPath string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"id":"t1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_update", map[string]interface{}{
+		"taskId":           "t1",
+		"dependsOnTaskIds": []interface{}{},
+	})
+	if res["isError"] == true {
+		t.Fatalf("task_update returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/api/runner/tasks/t1" {
+		t.Fatalf("task_update hit %s %s", gotMethod, gotPath)
+	}
+	deps, ok := gotBody["dependsOnTaskIds"].([]interface{})
+	if !ok || len(deps) != 0 {
+		t.Fatalf("task_update body dependsOnTaskIds = %#v, want present empty array", gotBody["dependsOnTaskIds"])
+	}
+}
+
 func TestMCPOrchestrationEnv(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "")
 	if mcpOrchestrationEnabled() {

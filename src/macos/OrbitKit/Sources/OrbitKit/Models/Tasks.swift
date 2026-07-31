@@ -136,7 +136,8 @@ public struct CreateTaskRequest: Encodable, Sendable {
 }
 
 /// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate` are three-state (omit / null=clear / set),
-/// mirroring `UpdateTaskDto` where they're typed `string | null`.
+/// mirroring `UpdateTaskDto` where they're typed `string | null`. `dependsOnTaskIds` replaces
+/// the complete prerequisite set when present: nil omits the field, [] clears it.
 public struct UpdateTaskRequest: Encodable, Sendable {
     public var title: String?
     public var description: String?
@@ -144,22 +145,25 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     public var assigneeId: FieldUpdate<String>
     public var listId: FieldUpdate<String>
     public var dueDate: FieldUpdate<String>
+    public var dependsOnTaskIds: [String]?
     public var autoRunWhenReady: Bool?
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
-                dueDate: FieldUpdate<String> = .keep, autoRunWhenReady: Bool? = nil) {
+                dueDate: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
+                autoRunWhenReady: Bool? = nil) {
         self.title = title
         self.description = description
         self.status = status
         self.assigneeId = assigneeId
         self.listId = listId
         self.dueDate = dueDate
+        self.dependsOnTaskIds = dependsOnTaskIds
         self.autoRunWhenReady = autoRunWhenReady
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, description, status, assigneeId, listId, dueDate, autoRunWhenReady
+        case title, description, status, assigneeId, listId, dueDate, dependsOnTaskIds, autoRunWhenReady
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -170,6 +174,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try assigneeId.encode(into: &c, forKey: .assigneeId)
         try listId.encode(into: &c, forKey: .listId)
         try dueDate.encode(into: &c, forKey: .dueDate)
+        try c.encodeIfPresent(dependsOnTaskIds, forKey: .dependsOnTaskIds)
         try c.encodeIfPresent(autoRunWhenReady, forKey: .autoRunWhenReady)
     }
 }

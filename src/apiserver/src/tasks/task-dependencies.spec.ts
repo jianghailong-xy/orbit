@@ -5,6 +5,7 @@ import {
   canRun,
   computeDependencyState,
   wouldCreateCycle,
+  wouldReplacementCreateCycle,
   type DependencyEdge,
 } from './task-dependencies';
 
@@ -83,4 +84,21 @@ test('an unrelated new edge in a populated graph is fine', () => {
     { taskId: 'C', dependsOnTaskId: 'D' },
   ];
   assert.equal(wouldCreateCycle(edges, 'A', 'D'), false);
+});
+
+test('replacing prerequisites rejects a cycle through any proposed edge', () => {
+  const edges: DependencyEdge[] = [
+    { taskId: 'B', dependsOnTaskId: 'C' },
+    { taskId: 'C', dependsOnTaskId: 'A' },
+  ];
+  assert.equal(wouldReplacementCreateCycle(edges, 'A', ['D', 'B']), true);
+});
+
+test("replacing prerequisites ignores the task's outgoing edges being removed", () => {
+  const edges: DependencyEdge[] = [
+    { taskId: 'A', dependsOnTaskId: 'B' },
+    { taskId: 'C', dependsOnTaskId: 'D' },
+  ];
+  assert.equal(wouldReplacementCreateCycle(edges, 'A', ['C']), false);
+  assert.equal(wouldReplacementCreateCycle(edges, 'A', []), false);
 });

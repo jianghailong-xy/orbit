@@ -67,3 +67,18 @@ export function wouldCreateCycle(
   }
   return false;
 }
+
+/** Would atomically replacing one task's prerequisites with `dependsOnTaskIds` form a cycle? */
+export function wouldReplacementCreateCycle(
+  edges: DependencyEdge[],
+  taskId: string,
+  dependsOnTaskIds: string[],
+): boolean {
+  // The old outgoing edges disappear as part of the replacement, so validate against
+  // the graph that will remain. Every proposed edge starts at the same task; a cycle
+  // exists iff any proposed prerequisite can already reach that task.
+  const retainedEdges = edges.filter((edge) => edge.taskId !== taskId);
+  return dependsOnTaskIds.some((dependsOnTaskId) =>
+    wouldCreateCycle(retainedEdges, taskId, dependsOnTaskId),
+  );
+}

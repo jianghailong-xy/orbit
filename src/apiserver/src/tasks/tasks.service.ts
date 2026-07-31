@@ -20,6 +20,7 @@ import {
   canRun,
   computeDependencyState,
   wouldCreateCycle,
+  wouldReplacementCreateCycle,
   type DependencyState,
 } from './task-dependencies';
 
@@ -98,8 +99,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async assertOwnedTasks(ownerId: string, ids: string[]): Promise<void> {
     const unique = [...new Set(ids)];
     if (unique.length === 0) return;
+    if (unique.some((id) => !UUID_RE.test(id))) throw new NotFoundException('task not found');
     const count = await this.prisma.task.count({ where: { id: { in: unique }, ownerId } });
     if (count !== unique.length) throw new NotFoundException('task not found');
+  }
+
+  /**
+   * Serialize dependency-graph mutations for one owner. Locking the owner's stable row
+   * avoids the write-skew where concurrent A->B and B->A requests both inspect the old
+   * graph, pass cycle detection, and then commit a cycle. Every endpoint that mutates
+   * edges on existing tasks (replacement/add/remove) holds this lock through its write.
+   */
+  private async lockDependencyGraph(tx: Prisma.TransactionClient, ownerId: string): Promise<void> {
+    await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR UPDATE`;
   }
 
   /**
@@ -325,6 +337,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedAgent(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
+    const dependsOnTaskIds =
+      dto.dependsOnTaskIds === undefined ? undefined : [...new Set(dto.dependsOnTaskIds)];
+    if (dependsOnTaskIds?.includes(id)) {
+      throw new BadRequestException('A task cannot depend on itself');
+    }
+    if (dependsOnTaskIds?.length) {
+      await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
+    }
     const data: Prisma.TaskUpdateInput = {
       title: dto.title,
       description: dto.description,
@@ -340,7 +360,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.listId !== undefined) {
       data.list = dto.listId ? { connect: { id: dto.listId } } : { disconnect: true };
     }
-    const updated = await this.prisma.task.update({ where: { id }, data });
+    const updated =
+      dependsOnTaskIds === undefined
+        ? await this.prisma.task.update({ where: { id }, data })
+        : await this.prisma.$transaction(async (tx) => {
+            await this.lockDependencyGraph(tx, ownerId);
+            if (dependsOnTaskIds.length) {
+              const edges = await tx.taskDependency.findMany({
+                where: { task: { ownerId } },
+                select: { taskId: true, dependsOnTaskId: true },
+              });
+              if (wouldReplacementCreateCycle(edges, id, dependsOnTaskIds)) {
+                throw new BadRequestException('These dependencies would create a cycle');
+              }
+            }
+            // Delete before re-inserting so a retained prerequisite cannot collide with the
+            // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
+            // full dependency replacement atomic; [] intentionally stops after the delete.
+            const task = await tx.task.update({ where: { id }, data });
+            await tx.taskDependency.deleteMany({ where: { taskId: id } });
+            if (dependsOnTaskIds.length) {
+              await tx.taskDependency.createMany({
+                data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: id, dependsOnTaskId })),
+              });
+            }
+            return task;
+          });
     // Same live-refresh nudge as create(): an agent's task_update (e.g. marking a task DONE)
     // changes what the list shows, so route a task.changed via the task's creator session so
     // the owner's list reflects it without a manual refresh. Null for the rare web-created task
@@ -445,17 +490,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async addDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
     if (taskId === dependsOnTaskId) throw new BadRequestException('A task cannot depend on itself');
     await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
-    // Cycle check over this owner's whole dependency subgraph (both endpoints are
-    // same-owner by construction, so filtering edges by the dependent's owner is enough).
-    const edges = await this.prisma.taskDependency.findMany({
-      where: { task: { ownerId } },
-      select: { taskId: true, dependsOnTaskId: true },
-    });
-    if (wouldCreateCycle(edges, taskId, dependsOnTaskId)) {
-      throw new BadRequestException('This dependency would create a cycle');
-    }
     try {
-      await this.prisma.taskDependency.create({ data: { taskId, dependsOnTaskId } });
+      await this.prisma.$transaction(async (tx) => {
+        await this.lockDependencyGraph(tx, ownerId);
+        // Cycle check over this owner's whole dependency subgraph (both endpoints are
+        // same-owner by construction, so filtering by the dependent's owner is enough).
+        const edges = await tx.taskDependency.findMany({
+          where: { task: { ownerId } },
+          select: { taskId: true, dependsOnTaskId: true },
+        });
+        if (wouldCreateCycle(edges, taskId, dependsOnTaskId)) {
+          throw new BadRequestException('This dependency would create a cycle');
+        }
+        await tx.taskDependency.create({ data: { taskId, dependsOnTaskId } });
+      });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException('This dependency already exists');
@@ -468,7 +516,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /** Remove a prerequisite edge (no-op if it doesn't exist). */
   async removeDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
     await this.assertOwnedTasks(ownerId, [taskId]);
-    await this.prisma.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
+    if (!UUID_RE.test(dependsOnTaskId)) throw new NotFoundException('task not found');
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockDependencyGraph(tx, ownerId);
+      await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
+    });
     return this.get(ownerId, taskId);
   }
 

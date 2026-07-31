@@ -222,7 +222,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "autoRunWhenReady")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "dependsOnTaskIds", "autoRunWhenReady")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -641,6 +641,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
 				"dueDate":     map[string]interface{}{"type": []string{"string", "null"}},
+				"dependsOnTaskIds": map[string]interface{}{
+					"type":        "array",
+					"items":       str,
+					"description": "Complete replacement for this task's prerequisite ids. Omit to leave dependencies unchanged; pass [] to clear all prerequisites. Each id must be owned by the caller, and the replacement cannot form a cycle.",
+				},
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
