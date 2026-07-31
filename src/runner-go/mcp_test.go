@@ -58,6 +58,30 @@ func TestMCPOrchestrationToolsGated(t *testing.T) {
 	}
 }
 
+func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "task_start") {
+		t.Fatalf("task_start missing from the base task tools")
+	}
+}
+
+func TestMCPTaskStartUsesCurrentTaskAndExecuteEndpoint(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Write([]byte(`{"ok":true,"sessionId":"s1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_start", map[string]interface{}{})
+	if res["isError"] == true {
+		t.Fatalf("task_start returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/t1/execute" {
+		t.Fatalf("task_start hit %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestMCPOrchestrationEnv(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "")
 	if mcpOrchestrationEnabled() {

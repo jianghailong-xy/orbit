@@ -31,6 +31,32 @@ func TestNormalizeCodexReasoningEffort(t *testing.T) {
 	}
 }
 
+func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
+	t.Helper()
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
+	for i, arg := range args {
+		if arg == want {
+			if i == 0 || args[i-1] != "-c" {
+				t.Fatalf("Orbit MCP env_vars config is not a -c value: %v", args)
+			}
+			return
+		}
+	}
+	t.Fatalf("args do not forward the full Orbit MCP context: %v", args)
+}
+
+func TestCodexExecArgsForwardOrbitMCPContext(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
+	args := codexExecCommandArgs(job, "/repo", "/tmp/uploads", nil, "/usr/local/bin/orbit")
+	assertCodexOrbitMCPContextForwarded(t, args)
+}
+
+func TestCodexAppServerArgsForwardOrbitMCPContext(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
+	args := codexAppServerCommandArgs(job, "/tmp/codex-state", "/usr/local/bin/orbit")
+	assertCodexOrbitMCPContextForwarded(t, args)
+}
+
 func TestCodexAppServerThreadParams(t *testing.T) {
 	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5"}}
 	got := codexThreadParams(job, "/repo", "/tmp/uploads")

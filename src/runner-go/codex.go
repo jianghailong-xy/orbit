@@ -269,11 +269,23 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 	}
 }
 
-func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt string, imagePaths []string, emit emitFn) codexTurnResult {
-	result := codexTurnResult{Status: stSucceeded, Subtype: "success"}
-	upDir := uploadsDir(job.SessionID)
-	_ = os.MkdirAll(upDir, 0o755)
+// Codex launches stdio MCP servers with a filtered environment. The Orbit MCP server reads
+// these values to attribute work to the current session/agent/task, gate orchestration tools,
+// and disable the Claude-only permission bridge, so explicitly forward the full context.
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
 
+func appendCodexOrbitMCPConfig(args []string, exe string) []string {
+	if exe == "" {
+		return args
+	}
+	return append(args,
+		"-c", fmt.Sprintf("mcp_servers.orbit.command=%q", exe),
+		"-c", `mcp_servers.orbit.args=["mcp"]`,
+		"-c", codexOrbitMCPEnvVarsConfig,
+	)
+}
+
+func codexExecCommandArgs(job *ClaimedSession, execDir, upDir string, imagePaths []string, exe string) []string {
 	args := []string{"-C", execDir, "-s", "danger-full-access", "-a", "never", "--add-dir", upDir, "exec"}
 	if job.RuntimeSessionID != "" {
 		args = append(args, "resume")
@@ -285,12 +297,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	if effort := normalizeCodexReasoningEffort(job.Agent.Effort); effort != "" {
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", effort))
 	}
-	if exe, err := os.Executable(); err == nil {
-		args = append(args,
-			"-c", fmt.Sprintf("mcp_servers.orbit.command=%q", exe),
-			"-c", `mcp_servers.orbit.args=["mcp"]`,
-		)
-	}
+	args = appendCodexOrbitMCPConfig(args, exe)
 	args = append(args, codexProviderArgs(job.Agent.Env)...)
 	args = append(args, "--skip-git-repo-check")
 	for _, p := range imagePaths {
@@ -299,7 +306,19 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	if job.RuntimeSessionID != "" {
 		args = append(args, job.RuntimeSessionID)
 	}
-	args = append(args, "-")
+	return append(args, "-")
+}
+
+func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt string, imagePaths []string, emit emitFn) codexTurnResult {
+	result := codexTurnResult{Status: stSucceeded, Subtype: "success"}
+	upDir := uploadsDir(job.SessionID)
+	_ = os.MkdirAll(upDir, 0o755)
+
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
+	}
+	args := codexExecCommandArgs(job, execDir, upDir, imagePaths, exe)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
 	cmd.Dir = execDir

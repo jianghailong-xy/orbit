@@ -47,6 +47,11 @@ export class RunnerTasksController {
     return this.tasks.update(runner.ownerId, id, dto);
   }
 
+  @Post('tasks/:id/execute')
+  executeTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+    return this.tasks.execute(runner.ownerId, id);
+  }
+
   @Post('tasks/:id/comments')
   async addComment(
     @CurrentRunner() runner: Runner,

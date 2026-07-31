@@ -232,6 +232,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_start":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.startTask(id)
+		if err != nil {
+			return toolResult("start task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_comment":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -601,7 +612,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create a task (attributed to this agent). Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Create tasks in dependency order so each can reference the ids returned by earlier calls (e.g. S1 dependsOn [S0], S2 dependsOn [S1]).",
+			"description": "Create a task (attributed to this agent). This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Create tasks in dependency order so each can reference the ids returned by earlier calls (e.g. S1 dependsOn [S0], S2 dependsOn [S1]).",
 			"inputSchema": obj(map[string]interface{}{
 				"title":       str,
 				"description": promptDesc,
@@ -635,6 +646,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
 				},
 			}),
+		},
+		{
+			"name":        "task_start",
+			"description": "Start a task immediately on its assigned agent. Creates or resumes the task-linked session and queues it for the assignee's runner. The task must have an assignee bound to a runner and all prerequisites must be complete. Returns the session id; taskId defaults to the current task.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
 			"name":        "task_comment",

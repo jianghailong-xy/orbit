@@ -390,6 +390,12 @@ func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, er
 	return out, err
 }
 
+func (t *Transport) startTask(id string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/tasks/"+id+"/execute", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks/"+id+"/comments",

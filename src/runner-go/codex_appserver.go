@@ -469,17 +469,13 @@ func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
 
 func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scratchDir string, emit emitFn) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	args := []string{"app-server", "--stdio"}
 	stateDir := filepath.Join(scratchDir, "codex-state")
 	_ = os.MkdirAll(stateDir, 0o755)
-	args = append(args, "-c", fmt.Sprintf("sqlite_home=%q", stateDir))
-	if exe, err := os.Executable(); err == nil {
-		args = append(args,
-			"-c", fmt.Sprintf("mcp_servers.orbit.command=%q", exe),
-			"-c", `mcp_servers.orbit.args=["mcp"]`,
-		)
+	exe, err := os.Executable()
+	if err != nil {
+		exe = ""
 	}
-	args = append(args, codexProviderArgs(job.Agent.Env)...)
+	args := codexAppServerCommandArgs(job, stateDir, exe)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
@@ -526,6 +522,12 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 		}
 	}()
 	return app, nil
+}
+
+func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []string {
+	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
+	args = appendCodexOrbitMCPConfig(args, exe)
+	return append(args, codexProviderArgs(job.Agent.Env)...)
 }
 
 func (a *codexAppServer) initialize(ctx context.Context) error {
