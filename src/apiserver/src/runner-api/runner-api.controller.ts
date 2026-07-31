@@ -70,6 +70,7 @@ import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-co
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { claudeOauthTokenFor } from '../providers/subscription-token';
 import { runtimeInitSessionId } from './runtime-init';
+import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent } from '../common/system-noise';
@@ -998,17 +999,17 @@ export class RunnerApiController {
         })),
         skipDuplicates: true,
       });
-      // Any persisted agent activity is liveness — reset the idle clock so the reaper
-      // (reaper.service.ts) doesn't idle-reap a session that's actively working. Autonomous /
-      // scheduled turns stream events through here WITHOUT going through /turn-complete (the only
-      // other runner path that advances lastTurnAt), so without this a busy session whose last
-      // *queued* turn is older than IDLE_AFTER_MS gets torn down mid-turn. Guarded to live +
-      // not-cancelled so a late batch can't perturb a session already being torn down; server
-      // `now` keeps it monotonic (a retried/duplicate batch only ever advances it, never regresses).
-      await this.prisma.session.updateMany({
-        where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
-        data: { lastTurnAt: new Date() },
-      });
+      // Persisted conversation/background activity is liveness — reset the idle clock so the
+      // reaper doesn't tear down a session that's actively working. Session-level system events
+      // are different: every reclaimed idle session emits init/resumed when its runner restarts,
+      // and counting that handshake would move every waiting session to "now" and scramble the
+      // recency sort. A system event carrying a turnId still counts as real in-turn activity.
+      if (hasSessionActivity(durable)) {
+        await this.prisma.session.updateMany({
+          where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
+          data: { lastTurnAt: new Date() },
+        });
+      }
     }
 
     // Codex reports its runtime session id in the app-server `system` init/resumed
