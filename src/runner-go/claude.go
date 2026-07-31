@@ -129,6 +129,31 @@ func isAuthError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "Failed to authenticate")
 }
 
+// asAuthError puts a rejected-credentials error into the shape the clients recognise.
+//
+// Claude Code says "Failed to authenticate" itself; codex reports the same condition as a
+// bare transport failure from its own API call ("unexpected status 401 Unauthorized: Missing
+// bearer or basic authentication in header"), which renders as one red line about a network
+// hiccup and offers the user nothing. Prefixing it earns the sign-in card, and the original
+// text is kept — which credential was rejected is the useful part, and the card picks the
+// remedy from the session's provider (this machine's login, or an API key in Providers).
+//
+// Deliberately narrow: this runs only on the engine's own protocol errors, never on tool
+// output, so a 401 here is always the engine's credentials being refused.
+func asAuthError(msg string) string {
+	if isAuthError(msg) {
+		return msg
+	}
+	low := strings.ToLower(msg)
+	if !strings.Contains(low, "401") && !strings.Contains(low, "missing bearer") {
+		return msg
+	}
+	if !strings.Contains(low, "unauthorized") && !strings.Contains(low, "missing bearer") {
+		return msg
+	}
+	return "Failed to authenticate: " + msg
+}
+
 // contextTokensFromAssistant returns the context-window occupancy after a *top-level*
 // assistant message: the tokens sent to produce it (fresh input + cache reads + cache
 // writes) plus the tokens it generated — the same figure Claude Code's own context

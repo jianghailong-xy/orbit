@@ -421,7 +421,7 @@ func handleCodexEvent(msg map[string]interface{}, emit emitFn, result *codexTurn
 	case "turn.failed", "error":
 		result.Status = stFailed
 		result.Subtype = eventType
-		result.Error = firstString(msg, "message", "error", "details")
+		result.Error = asAuthError(firstString(msg, "message", "error", "details"))
 		if result.Error != "" {
 			emit(evError, map[string]interface{}{"message": result.Error})
 		}

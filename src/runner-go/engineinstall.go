@@ -103,6 +103,43 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	return ""
 }
 
+// engineAuthPreflight reports why a session can't run on this machine's engine login,
+// or "" when it can. Returns "" for anything ambiguous: refusing to spawn on a probe
+// that couldn't answer would be worse than letting the CLI try.
+//
+// Skipped when the session brings its own credentials — a configured provider injects an
+// API key, and the CLI's local login is then irrelevant, so its "signed out" answer would
+// fail a session that works perfectly.
+func engineAuthPreflight(bin string, agentEnv map[string]string) string {
+	if hasInjectedCredentials(bin, agentEnv) {
+		return ""
+	}
+	path, ok := lookEngine(bin)
+	if !ok {
+		return "" // ensureEngine already had its say about a missing binary
+	}
+	if probeAuth(bin, path) == authNo {
+		return engineSignedOutMessage(bin)
+	}
+	return ""
+}
+
+// hasInjectedCredentials reports whether this session carries provider credentials of its
+// own (a ModelProvider row's API key, or an account-level token), which the runner layers
+// onto the engine's environment — see envWithAgent / codexProviderArgs.
+func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
+	keys := []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN"}
+	if bin == providerCodex {
+		keys = []string{"OPENAI_API_KEY", "OPENAI_BASE_URL"}
+	}
+	for _, k := range keys {
+		if strings.TrimSpace(agentEnv[k]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // lookEngine resolves an engine binary the way the runner will actually exec it: the
 // service PATH first (which includes ~/.local/bin, where installers drop binaries this
 // process's own PATH may predate), then this process's PATH.

@@ -839,6 +839,7 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 		if errMsg == "" {
 			errMsg = "codex app-server error"
 		}
+		errMsg = asAuthError(errMsg)
 		emit(evError, map[string]interface{}{"message": errMsg})
 		activeMu.Lock()
 		if *active != nil {

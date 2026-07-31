@@ -98,3 +98,76 @@ func TestEngineSignedOutMessageTriggersTheWebCard(t *testing.T) {
 		t.Fatalf("message should name the engine and its sign-in: %q", msg)
 	}
 }
+
+// Verbatim from a session that failed on this (orbitd.io/sessions/33yiyd1Su3ZPLjIzJCuOz):
+// codex was installed and spawned fine, its credentials were simply refused. It reported
+// that as five reconnect attempts and a raw transport error, which the clients rendered as
+// a red line about a network problem — no sign-in card, no way forward.
+const realCodex401 = "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, " +
+	"url: https://api.openai.com/v1/responses, cf-ray: a23848f3ab42ce09-SIN, request id: req_9d8ff0d464f441fab058c9a4fa729244"
+
+func TestAsAuthErrorRescuesCodex401(t *testing.T) {
+	got := asAuthError(realCodex401)
+	if !isAuthError(got) {
+		t.Fatalf("a refused credential must read as an auth failure, got %q", got)
+	}
+	// The original text survives: which credential was rejected is the useful part.
+	if !strings.Contains(got, "Missing bearer") {
+		t.Errorf("original detail was dropped: %q", got)
+	}
+	// Already-shaped messages (claude says it itself) must not be double-prefixed.
+	claude := "Failed to authenticate: OAuth session expired and could not be refreshed"
+	if got := asAuthError(claude); got != claude {
+		t.Errorf("claude's own message was rewritten: %q", got)
+	}
+	// Narrow: ordinary failures stay ordinary, or every red line would offer a sign-in card.
+	for _, ordinary := range []string{
+		"stream disconnected before completion",
+		"unexpected status 500 Internal Server Error",
+		"HTTP error: 404 Not Found",
+		"tool exited with status 401 files changed", // a number, not a rejection
+	} {
+		if got := asAuthError(ordinary); got != ordinary {
+			t.Errorf("rewrote an unrelated error %q -> %q", ordinary, got)
+		}
+	}
+}
+
+func TestEngineAuthPreflightSkipsInjectedCredentials(t *testing.T) {
+	// A configured provider brings its own key; the CLI's local login is irrelevant then,
+	// and its "signed out" answer would fail a session that works perfectly.
+	if !hasInjectedCredentials(providerCodex, map[string]string{"OPENAI_BASE_URL": "https://x/v1"}) {
+		t.Error("codex: OPENAI_BASE_URL should count as injected credentials")
+	}
+	if !hasInjectedCredentials(providerClaude, map[string]string{"ANTHROPIC_AUTH_TOKEN": "sk-x"}) {
+		t.Error("claude: ANTHROPIC_AUTH_TOKEN should count as injected credentials")
+	}
+	if hasInjectedCredentials(providerCodex, map[string]string{"OPENAI_API_KEY": "  "}) {
+		t.Error("blank values are not credentials")
+	}
+	if hasInjectedCredentials(providerClaude, map[string]string{"OPENAI_API_KEY": "sk-x"}) {
+		t.Error("the other engine's key says nothing about claude's login")
+	}
+	// With a key present the probe never runs, so even a signed-out machine passes.
+	if msg := engineAuthPreflight(providerCodex, map[string]string{"OPENAI_API_KEY": "sk-x"}); msg != "" {
+		t.Errorf("preflight must not block an API-key session: %q", msg)
+	}
+}
+
+func TestEngineAuthPreflightOnASignedOutEngine(t *testing.T) {
+	// The signed-out path can't be staged through PATH: engineAuthPreflight resolves the
+	// binary the way the runner execs it, and serviceLoginPath puts ~/.local/bin first —
+	// where a dev machine's real, signed-in codex lives. So exercise the two halves it
+	// composes, and leave the resolution to lookEngine's own tests.
+	fake := writeFakeBin(t, t.TempDir(), providerCodex, "exit 1") // `login status` says signed out
+	if got := probeAuth(providerCodex, fake); got != authNo {
+		t.Fatalf("a non-zero `codex login status` means signed out, got %v", got)
+	}
+	if !strings.HasPrefix(engineSignedOutMessage(providerCodex), "Failed to authenticate") {
+		t.Fatal("the message that pairs with authNo must carry the card's prefix")
+	}
+	// And on this machine, where codex is installed and signed in, nothing is blocked.
+	if msg := engineAuthPreflight(providerCodex, nil); msg != "" {
+		t.Errorf("a signed-in (or unprobeable) engine must not be blocked: %q", msg)
+	}
+}

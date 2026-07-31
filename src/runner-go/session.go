@@ -312,6 +312,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
+	// Signed out is the other way a session can't run, and the engine's own report of it
+	// is no use: codex answers a missing login with five reconnect attempts and a raw
+	// "401 Unauthorized", which reads as a network problem. Ask before spawning instead.
+	// First spawn only — a re-spawn is seconds later, on credentials we just checked.
+	if firstSpawn {
+		if msg := engineAuthPreflight(provider, job.Agent.Env); msg != "" {
+			emit(evError, map[string]interface{}{"message": msg})
+			return stFailed, true, false
+		}
+	}
 	if provider == providerCodex {
 		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits)
 	}
