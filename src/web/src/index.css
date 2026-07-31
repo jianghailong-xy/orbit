@@ -4297,6 +4297,14 @@ body {
 .chat-queued-tag {
   color: var(--text-3);
 }
+/* A queued `!cmd`: shown verbatim as the shell command it will run, so it reads like
+   the Bash card its output eventually lands in rather than a chat message. */
+.chat-queued-cmd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 /* Assistant turns are long-form Markdown — render them as a document (no bubble,
    spanning the full session width) rather than a chat pill; only short
    user/streaming-raw turns keep a bubble. max-width:none overrides .chat-msg's

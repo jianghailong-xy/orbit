@@ -181,10 +181,12 @@ interface RunEvent {
 
 // A user message accepted while a turn is running: it sits in the inbox (PENDING)
 // until the current turn finishes. Tracked locally so the composer can show it and
-// offer to withdraw it before the runner picks it up.
+// offer to withdraw it before the runner picks it up. A `!cmd` shell turn queues the
+// same way, so it gets a bubble too — rendered as the command it will run.
 interface QueuedTurn {
   turnId: string;
   content: string;
+  shell?: boolean;
   // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
   // image-only follow-up turn — the local turnImages previews don't survive a reload.
   attachments?: { id: string; mimeType: string }[];
@@ -1880,7 +1882,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       // picks it up, so switching away and back (or a refresh/deep-link) would lose the
       // visible queue — restore it from the DB, the source of truth.
       listQueuedTurns(selectedId)
-        .then(setQueued)
+        .then((rows) => setQueued(rows.map((r) => ({ ...r, shell: r.kind === 'shell' }))))
         .catch(() => undefined);
       // The complete background-shell list (all launches, output recovered from Read polls) —
       // the loaded event window only holds the most recent launches, so without this the tray
@@ -2058,9 +2060,11 @@ export function AgentView({ runner }: { runner: Runner }) {
         const res = await sendTurn(selected.id, content, attachmentIds, shell ? 'shell' : undefined);
         // A turn already running ⇒ this message is queued (delivered once that turn
         // finishes); surface it as a pending bubble the user can withdraw. When idle
-        // it's delivered right away, so it'll arrive via its own `user` event instead.
-        // Shell turns never show a pending bubble — their output lands as a Bash card.
-        const queuedItem = idle || shell ? undefined : { turnId: res.turnId, content };
+        // it's delivered right away, so it'll arrive via its own `user` event instead —
+        // for a shell turn that's the Bash card its output lands in. A mid-turn `!cmd`
+        // waits behind the running turn exactly like a message, so it gets a bubble too:
+        // without one it sat in the queue invisibly and read as a dropped command.
+        const queuedItem = idle ? undefined : { turnId: res.turnId, content, shell };
         return { id: selected.id, turnId: res.turnId, queuedItem };
       }
       if (selected && !live) {
@@ -2208,7 +2212,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       // empty composer), so this never clobbers an in-progress draft. Queued images can't
       // be rehydrated (a ComposerImage needs its File), so flag any that were dropped.
       const restored = queued
-        .map((q) => q.content.trim())
+        .map((q) => {
+          const body = q.content.trim();
+          return body && q.shell ? `!${body}` : body; // a `!cmd` comes back as one
+        })
         .filter(Boolean)
         .join('\n\n');
       const droppedImages = queued.reduce(
@@ -2240,7 +2247,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       // empty composer), Cancel is reachable mid-draft, so an in-progress draft always wins —
       // read through textRef, since the awaited gap may have outdated this render's `text`.
       const body = withdrawn?.content.trim();
-      if (body && !textRef.current.trim()) setText(body);
+      if (body && !textRef.current.trim()) setText(withdrawn?.shell ? `!${body}` : body);
       const droppedImages = withdrawn?.attachments?.length ?? turnImages[turnId]?.length ?? 0;
       if (droppedImages)
         message.info(
@@ -2783,10 +2790,21 @@ export function AgentView({ runner }: { runner: Runner }) {
         return;
       }
       if (!replyTo && !codexComposer) {
-        const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
-        if (!knownRunnerCommand) {
-          message.error(commandName ? `Unsupported slash command /${commandName}` : 'Pick a slash command before sending');
+        if (!commandName) {
+          message.error('Pick a slash command before sending');
           return;
+        }
+        // The catalog is advisory, never a gate. It's empty on a runner that hasn't
+        // reported one (pre-0.1.77, freshly enrolled, or one whose CLI slash registry is
+        // still unlearned — it only fills in after a session boots), and even a populated
+        // one can't see a command living in a worktree the scan skips. Rejecting the send
+        // there dropped the command outright: it never reached the queue, and the user was
+        // left with a toast instead of a message. An unknown name costs a pass-through at
+        // most — the CLI answers "Unknown command: /x" in zero turns — so warn and send.
+        const catalogKnown = slashItems.some((it) => it.type !== 'local');
+        const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
+        if (catalogKnown && !knownRunnerCommand) {
+          message.warning(`/${commandName} isn't in this runner's catalog — sending anyway`);
         }
       }
     }
@@ -3939,8 +3957,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                     </div>
                   ) : null}
                   {/* Same Markdown render as the settled bubble it becomes (see UserBubble), so a
-                      message doesn't change shape when the runner picks it up. */}
-                  {q.content && <MD breaks>{q.content}</MD>}
+                      message doesn't change shape when the runner picks it up. A queued `!cmd`
+                      shows the command verbatim — markdown would mangle its shell syntax. */}
+                  {q.shell ? (
+                    <code className="chat-queued-cmd">!{q.content}</code>
+                  ) : (
+                    q.content && <MD breaks>{q.content}</MD>
+                  )}
                   <span className="chat-queued-meta">
                     <span className="chat-queued-tag">Queued</span>
                     <a onClick={() => cancelQueued(q.turnId)}>Cancel</a>

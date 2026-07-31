@@ -334,13 +334,18 @@ export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
 
-/** Still-queued (PENDING) messages for a session — restores the visible queue when a
+/** Still-queued (PENDING) turns for a session — restores the visible queue when a
  *  running session is reopened/deep-linked (queued turns aren't in the event stream
- *  until the runner delivers them). */
+ *  until the runner delivers them). `kind` is 'shell' for a queued `!cmd`. */
 export const listQueuedTurns = (sessionId: string) =>
-  api<{ turnId: string; content: string; attachments?: { id: string; mimeType: string }[] }[]>(
-    `/sessions/${sessionId}/turns`,
-  );
+  api<
+    {
+      turnId: string;
+      kind?: string;
+      content: string;
+      attachments?: { id: string; mimeType: string }[];
+    }[]
+  >(`/sessions/${sessionId}/turns`);
 
 /** Revive an ended session with a new message: the runner --resumes claude's
  *  existing context. Requires the session's runner to be online. `config` re-applies

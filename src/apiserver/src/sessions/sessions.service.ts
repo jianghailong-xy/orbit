@@ -1955,9 +1955,12 @@ export class SessionsService {
         throw new ConflictException('the session has ended');
       }
       // Drop queued-but-undelivered follow-ups: interrupting means "stop", so they
-      // should not fire after the current turn is aborted.
+      // should not fire after the current turn is aborted. Queued `!cmd` shell turns go
+      // too — they sit in the same "waiting behind the running turn" queue (as the
+      // executable count below already assumes), and leaving them behind ran a command
+      // the user had just told to stop.
       await tx.conversationTurn.deleteMany({
-        where: { sessionId: id, kind: 'message', status: 'PENDING' },
+        where: { sessionId: id, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
       });
       if (session.status === RunStatus.RUNNING) {
         const executable = await tx.conversationTurn.count({
@@ -1980,10 +1983,13 @@ export class SessionsService {
     return { ok: true };
   }
 
-  /** The session's still-queued user messages (PENDING — accepted but not yet picked
+  /** The session's still-queued user turns (PENDING — accepted but not yet picked
    *  up by the runner), oldest first. A queued turn emits no event until it's delivered,
    *  so it can't be recovered from the event stream; reopening or deep-linking a running
-   *  session fetches this to restore the visible queue (mirrors listApprovals). */
+   *  session fetches this to restore the visible queue (mirrors listApprovals). `!cmd`
+   *  shell turns queue behind the running turn exactly like messages do, so they're
+   *  listed too (tagged by `kind`) — omitting them made a mid-turn command invisible
+   *  until it eventually ran. */
   async listQueuedTurns(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -1995,25 +2001,31 @@ export class SessionsService {
       // it's the session's opening message, not a withdrawable queued follow-up.
       where: {
         sessionId: id,
-        kind: 'message',
+        kind: { in: ['message', 'shell'] },
         status: 'PENDING',
         clientTurnId: { not: SessionsService.initialTurnClientId(id) },
       },
       orderBy: { seq: 'asc' },
       // Carry each queued turn's image refs so the composer can still render them after a
       // reload (the local object-URL previews are gone by then) — e.g. an image-only turn.
-      select: { id: true, content: true, attachments: { select: { id: true, mimeType: true } } },
+      select: {
+        id: true,
+        kind: true,
+        content: true,
+        attachments: { select: { id: true, mimeType: true } },
+      },
     });
     return turns.map((t) => ({
       turnId: t.id,
+      kind: t.kind,
       content: t.content ?? '',
       attachments: t.attachments.map((a) => ({ id: a.id, mimeType: a.mimeType })),
     }));
   }
 
-  /** Withdraw a queued user message. Only a still-PENDING message can be cancelled;
-   *  once the runner has leased it (IN_FLIGHT) it's already feeding claude and will
-   *  appear in the transcript, so cancelling is rejected. */
+  /** Withdraw a queued user message or `!cmd` shell turn. Only a still-PENDING one can be
+   *  cancelled; once the runner has leased it (IN_FLIGHT) it's already feeding claude / already
+   *  running, and will appear in the transcript, so cancelling is rejected. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
     await this.prisma.$transaction(async (tx) => {
@@ -2031,7 +2043,7 @@ export class SessionsService {
         where: {
           id: turnId,
           sessionId: id,
-          kind: 'message',
+          kind: { in: ['message', 'shell'] },
           status: 'PENDING',
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
         },

@@ -809,11 +809,20 @@ final class ConsoleModel {
                 composerText = ""
                 return
             }
-            let knownRunnerCommand = composerSlashItems.contains { $0.type != "local" && $0.name == command }
-            if !knownRunnerCommand, replyContext == nil, provider != "codex" {
-                statusMessage = command.isEmpty ? "Pick a slash command before sending"
-                                                : "Unsupported slash command /\(command)"
-                return
+            if replyContext == nil, provider != "codex" {
+                if command.isEmpty {
+                    statusMessage = "Pick a slash command before sending"
+                    return
+                }
+                // The catalog is advisory, never a gate — a runner that hasn't reported one
+                // (or whose CLI registry is still unlearned) would otherwise have every
+                // command rejected, dropping it before it ever reached the queue. An unknown
+                // name costs a pass-through at most. Mirrors the web composer's onSend.
+                let catalogKnown = composerSlashItems.contains { $0.type != "local" }
+                let knownRunnerCommand = composerSlashItems.contains { $0.type != "local" && $0.name == command }
+                if catalogKnown, !knownRunnerCommand {
+                    showTransientStatus("/\(command) isn't in this runner's catalog — sending anyway")
+                }
             }
         }
         if isDraft { await createDraftSession(); return }
