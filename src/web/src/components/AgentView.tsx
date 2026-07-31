@@ -3385,7 +3385,13 @@ export function AgentView({ runner }: { runner: Runner }) {
               )}
             </div>
           ) : composing ? (
-            <div className="agent-sessions agent-draft" ref={scrollRef}>
+            // The empty-state note is centered as a hero only while it's alone: .agent-draft is a
+            // centering flex row, so once /status prints a card it would sit beside the note instead
+            // of under it. With cards the pane falls back to plain transcript flow.
+            <div
+              className={`agent-sessions${localStatusCards.length ? '' : ' agent-draft'}`}
+              ref={scrollRef}
+            >
               <div className="chat-note">Send this agent a task to start a new session.</div>
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
