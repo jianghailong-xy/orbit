@@ -2013,7 +2013,15 @@ export class SessionsService {
     if (!SessionsService.TERMINAL.includes(session.status)) {
       throw new ConflictException('the session has not started yet');
     }
-    if (!session.startedAt || !(session.runtimeSessionId ?? session.claudeSessionId)) {
+    // A claimed first run can fail before the runtime creates a conversation (notably Codex's
+    // signed-out preflight). It has startedAt but no runtime id and no completed turns. That state
+    // is safe to restart in place: QueueService derives `resume` from numTurns, so the next claim
+    // starts a fresh runtime and the turn inserted below becomes its first message. Once a turn
+    // completed, however, losing the runtime id means there is context we cannot safely recover.
+    if (
+      !session.startedAt ||
+      (session.numTurns > 0 && !(session.runtimeSessionId ?? session.claudeSessionId))
+    ) {
       throw new ConflictException('this session never ran and cannot be resumed');
     }
     // Idempotent: a retried send with the same clientTurnId returns the same turn.

@@ -548,6 +548,7 @@ export interface SessionDetail {
   id: string;
   status?: string;
   title?: string;
+  prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
   startedAt?: string | null;

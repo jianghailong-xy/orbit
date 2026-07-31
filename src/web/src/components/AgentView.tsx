@@ -49,6 +49,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
+import { authRetryText } from '../lib/authRetry';
 import {
   agentsQuery,
   type Me,
@@ -242,18 +243,6 @@ function lastContextTokens(events: RunEvent[]): number {
     if (typeof ct === 'number' && ct > 0) return ct;
   }
   return 0;
-}
-
-// The most recent message the user sent, for the sign-in card's Retry. A turn that died on an
-// expired login consumed its prompt without answering it, so re-sending that exact text is the
-// resume — there's nothing to salvage from the failed turn itself.
-function lastUserText(events: RunEvent[]): string {
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type !== 'user') continue;
-    const t = (events[i].payload as { text?: unknown } | undefined)?.text;
-    if (typeof t === 'string' && t.trim()) return t;
-  }
-  return '';
 }
 
 // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
@@ -2614,7 +2603,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a deleted/missing
   // session would just throw out of the send mutation.
-  const retryText = lastUserText(events);
+  const retryText = authRetryText(events, detailForSelected?.prompt, selected?.numTurns);
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
