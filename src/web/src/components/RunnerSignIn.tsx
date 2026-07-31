@@ -1,12 +1,17 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LoginEngine, RunnerLoginState } from '@orbit/shared';
 import { api } from '../api';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
 const ENGINE_NAME: Record<LoginEngine, string> = { claude: 'Claude Code', codex: 'Codex' };
+
+/** What the parked tab shows until the CLI prints its URL, so it doesn't read as a dead popup. */
+const WAITING_PAGE = `<!doctype html><meta charset="utf-8"><title>Signing in…</title>
+<body style="margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;color:#666">
+Waiting for the sign-in link…</body>`;
 
 /**
  * Sign a runner back in from the browser, without a terminal on that machine.
@@ -22,8 +27,10 @@ const ENGINE_NAME: Record<LoginEngine, string> = { claude: 'Claude Code', codex:
  *    then polls for the approval itself, so there is nothing to paste back — we just wait. (Plain
  *    `codex login` can't be relayed at all: it serves its callback on localhost on the runner.)
  *
- * The link is a real anchor the user clicks rather than a window.open() from the poll callback:
- * a popup opened outside a user gesture is blocked, and this flow can't afford to lose the URL.
+ * The URL only exists a second or two after the click that asked for it, by which point a
+ * window.open() is outside the user gesture and gets blocked as a popup. So the click parks a
+ * blank tab and the poll points it at the URL when it lands. The anchor stays either way: it is
+ * the fallback when the browser blocked the tab, or the user closed it.
  */
 export function RunnerSignIn({
   runnerId,
@@ -36,6 +43,14 @@ export function RunnerSignIn({
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
+  // Set once a pasted code is on its way to the runner — see `verifying` below.
+  const [sent, setSent] = useState(false);
+  // The tab parked by the click, waiting for a URL to point at. Cleared once it has one.
+  const tab = useRef<Window | null>(null);
+  const dropTab = () => {
+    tab.current?.close();
+    tab.current = null;
+  };
 
   const state = useQuery({
     queryKey: loginKey(runnerId),
@@ -46,6 +61,9 @@ export function RunnerSignIn({
       const s = q.state.data?.status;
       return s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval' ? 2000 : false;
     },
+    // The parked tab takes focus the moment it opens, which backgrounds this one — and a
+    // background tab stops polling by default, so the URL we opened it for would never arrive.
+    refetchIntervalInBackground: true,
   });
 
   const put = (next: RunnerLoginState) => qc.setQueryData(loginKey(runnerId), next);
@@ -54,19 +72,33 @@ export function RunnerSignIn({
     mutationFn: () =>
       api<RunnerLoginState>(`/runners/${runnerId}/login`, { method: 'POST', body: { engine } }),
     onSuccess: put,
+    onError: dropTab, // no sign-in is coming; don't strand a blank tab
   });
   const submit = useMutation({
     mutationFn: (c: string) =>
       api<RunnerLoginState>(`/runners/${runnerId}/login/code`, { method: 'POST', body: { code: c } }),
+    // A poll already in flight would land after this one and restore the message the submit
+    // just cleared, which would end the wait below the moment it started.
+    onMutate: () => qc.cancelQueries({ queryKey: loginKey(runnerId) }),
     onSuccess: (next) => {
       setCode('');
+      setSent(true);
       put(next);
     },
   });
   const cancel = useMutation({
     mutationFn: () => api<RunnerLoginState>(`/runners/${runnerId}/login`, { method: 'DELETE' }),
+    onMutate: dropTab, // giving up before the URL arrived leaves a blank tab behind
     onSuccess: put,
   });
+
+  // Park a tab now, while the click is still a user gesture, and hand it the URL when the poll
+  // brings one back. A browser that blocked it leaves null here and the anchor takes over.
+  const begin = () => {
+    tab.current = window.open('', '_blank');
+    tab.current?.document.write(WAITING_PAGE);
+    start.mutate();
+  };
 
   const s = state.data;
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
@@ -74,6 +106,34 @@ export function RunnerSignIn({
   const mine = !s?.engine || s.engine === engine;
   const status = mine ? (s?.status ?? null) : null;
   const err = (start.error ?? submit.error) as Error | undefined;
+
+  // Submitting a code only parks it for the runner's next heartbeat — thirty seconds away at
+  // worst — and the CLI still has to exchange it after that. So the POST resolving means nothing
+  // has happened yet, and stopping there drops the user back on an empty form for half a minute
+  // with no sign their code went anywhere. Hold the wait until the polled state actually moves:
+  // to done/failed, or back to awaiting_code carrying the CLI's rejection. Submitting clears the
+  // message server-side, so a message here can only be news about this paste.
+  const verifying = submit.isPending || (sent && status === 'awaiting_code' && !s?.message);
+
+  useEffect(() => {
+    // Anything but awaiting_code — cancelled, restarted, finished — settles the paste above.
+    if (status !== 'awaiting_code') setSent(false);
+  }, [status]);
+
+  useEffect(() => {
+    if (!tab.current || !mine) return;
+    if (status === 'failed') {
+      dropTab();
+      return;
+    }
+    if (!s?.url) return;
+    const w = tab.current;
+    tab.current = null;
+    if (!w.closed) w.location.replace(s.url);
+  }, [mine, status, s?.url]);
+
+  // A card that goes away mid-flow can never point its tab anywhere.
+  useEffect(() => dropTab, []);
 
   if (status === 'done') {
     return (
@@ -95,6 +155,22 @@ export function RunnerSignIn({
           <LoadingOutlined /> Starting sign-in on the runner…
         </div>
         <div className="rsi-hint">It'll show a link here as soon as the CLI prints one.</div>
+        <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  if (verifying) {
+    return (
+      <div className="rsi">
+        <div className="rsi-row">
+          <LoadingOutlined /> Signing in with your code…
+        </div>
+        <div className="rsi-hint">
+          The runner picks it up on its next check-in, so this can take up to a minute.
+        </div>
         <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
           Cancel
         </button>
@@ -148,11 +224,11 @@ export function RunnerSignIn({
           />
           <button
             className="rsi-btn"
-            disabled={!code.trim() || submit.isPending}
+            disabled={!code.trim()}
             onClick={() => submit.mutate(code)}
             type="button"
           >
-            {submit.isPending ? 'Sending…' : 'Submit'}
+            Submit
           </button>
         </div>
         {err && <div className="rsi-warn">{err.message}</div>}
@@ -168,7 +244,7 @@ export function RunnerSignIn({
     <div className="rsi">
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
-      <button className="rsi-btn" onClick={() => start.mutate()} disabled={start.isPending} type="button">
+      <button className="rsi-btn" onClick={begin} disabled={start.isPending} type="button">
         {start.isPending
           ? 'Starting…'
           : status === 'failed'
