@@ -15,6 +15,7 @@ private let searchDebounce = Duration.milliseconds(200)
 /// What the hit matched on, when it isn't the title (which the row already shows).
 private func matchLabel(_ field: SessionSearchMatchField) -> String? {
     switch field {
+    case .id:     return "ID"
     case .title, .recent: return nil
     case .prompt:  return "first message"
     case .reply:   return "last reply"
@@ -96,7 +97,7 @@ struct SessionSearchView: View {
                     .foregroundStyle(.orange)
             } else {
                 Text(shownQuery.isEmpty ? "Recent sessions"
-                                        : "Titles, messages, agents and tasks")
+                                        : "IDs, titles, messages, agents and tasks")
                     .foregroundStyle(.secondary)
             }
             Spacer()

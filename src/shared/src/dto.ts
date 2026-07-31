@@ -733,6 +733,7 @@ export interface ArtifactResultRequest {
  * palette doubles as a session switcher.
  */
 export type SessionSearchMatchField =
+  | 'id'
   | 'title'
   | 'prompt'
   | 'reply'

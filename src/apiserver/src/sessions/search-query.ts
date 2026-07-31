@@ -1,3 +1,5 @@
+import { toUuid } from '@orbit/shared';
+
 /**
  * Query normalization for session search (GET /sessions/search).
  *
@@ -32,6 +34,15 @@ export interface NormalizedSearchQuery {
   raw: string;
   /** `%…%`, with LIKE metacharacters escaped, for the ILIKE comparison. */
   pattern: string;
+  /** A possible full UUID or Base62 public id decoded to the session's database id. Because the
+   *  Base62 alphabet overlaps ordinary words, some text also produces a harmless candidate that
+   *  simply misses the owner-scoped primary-key lookup. This lets a short id copied from an Orbit
+   *  URL resolve without trying to make PostgreSQL reproduce the Base62 codec. */
+  sessionId: string | null;
+  /** A conventional 8–12 character hexadecimal UUID prefix. Agents and logs often abbreviate a
+   *  child id this way; the query returns every owner-scoped match rather than guessing if the
+   *  prefix is ambiguous. */
+  sessionIdPrefix: string | null;
   /** Whether this query clears the trigram floor, and so may search the long text bodies
    *  (prompts, replies, conversation messages) rather than just the short name columns. */
   searchContent: boolean;
@@ -39,6 +50,15 @@ export interface NormalizedSearchQuery {
 
 /** Escape the three characters LIKE treats specially (default escape char is `\`). */
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+/** Decode an exact raw/public id while treating every other query as normal search text. */
+const decodeSessionId = (s: string): string | null => {
+  try {
+    return toUuid(s);
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Drop the markdown marks that sit between what's stored and what the user actually read: a reply
@@ -61,6 +81,8 @@ export function normalizeSearchQuery(q: string | undefined | null): NormalizedSe
   return {
     raw,
     pattern: `%${escapeLike(raw)}%`,
+    sessionId: decodeSessionId(raw),
+    sessionIdPrefix: /^[0-9a-f]{8,12}$/i.test(raw) ? raw.toLowerCase() : null,
     // Count by code points, not UTF-16 units: an emoji is one character to the user and one
     // "character" to pg_trgm, but `.length` would count it as two and wrongly clear the floor.
     searchContent: [...raw].length >= CONTENT_MIN_CHARS,

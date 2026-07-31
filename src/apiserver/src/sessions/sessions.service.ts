@@ -484,9 +484,10 @@ export class SessionsService {
    * carries archivedAt/deletedAt so the row can say where it lives), and it reaches into
    * conversation text, which no list payload ever carries.
    *
-   * Two tiers, both trigram-indexed (migration 0068):
+   * Three tiers:
+   *  - id — a full UUID or Base62 public id matched exactly, or an 8–12 hex UUID prefix.
    *  - metadata — title / prompt / last reply / branch on the session row, plus the joined agent
-   *    and task names. Runs for any query length.
+   *    and task names. Trigram-indexed (migration 0068) and runs for any query length.
    *  - conversation text — the durable `user` + `assistant` events. Gated on CONTENT_MIN_CHARS;
    *    see search-query.ts for why that floor is the index's, not a product decision.
    *
@@ -565,30 +566,50 @@ export class SessionsService {
     // reach them through ANY branch (a session admitted by its agent's name would otherwise still
     // be labelled 'prompt' and hand back a snippet cut from a 7 KB body).
     const pattern = norm?.pattern ?? '';
-    const fields: { field: SessionSearchHit['matchField']; col: Prisma.Sql }[] = [
-      { field: 'title', col: Prisma.sql`s.title` },
+    const fields: { field: SessionSearchHit['matchField']; col: Prisma.Sql; test: Prisma.Sql }[] = [
+      // Base62 is decoded in normalizeSearchQuery; comparing the resulting UUID lets the primary
+      // key resolve the exact child session without adding a database-side Base62 implementation.
+      // Agents/logs also abbreviate UUIDs to their first 8–12 hex characters, handled by the
+      // second predicate. An abbreviation's match text is the full UUID so a collision is visible.
+      {
+        field: 'id',
+        col: Prisma.sql`CASE
+          WHEN s.id = ${norm?.sessionId ?? null}::uuid THEN ${norm?.raw ?? ''}
+          ELSE s.id::text
+        END`,
+        test: Prisma.sql`(
+          s.id = ${norm?.sessionId ?? null}::uuid
+          OR replace(s.id::text, '-', '') LIKE ${norm?.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null}
+        )`,
+      },
+      { field: 'title', col: Prisma.sql`s.title`, test: Prisma.sql`s.title ILIKE ${pattern}` },
       ...(norm?.searchContent
         ? [
-            { field: 'prompt' as const, col: Prisma.sql`s.prompt` },
-            { field: 'reply' as const, col: Prisma.sql`s.last_assistant_text` },
+            {
+              field: 'prompt' as const,
+              col: Prisma.sql`s.prompt`,
+              test: Prisma.sql`s.prompt ILIKE ${pattern}`,
+            },
+            {
+              field: 'reply' as const,
+              col: Prisma.sql`s.last_assistant_text`,
+              test: Prisma.sql`s.last_assistant_text ILIKE ${pattern}`,
+            },
           ]
         : []),
-      { field: 'branch', col: Prisma.sql`s.branch` },
-      { field: 'agent', col: Prisma.sql`a.name` },
-      { field: 'task', col: Prisma.sql`t.title` },
+      { field: 'branch', col: Prisma.sql`s.branch`, test: Prisma.sql`s.branch ILIKE ${pattern}` },
+      { field: 'agent', col: Prisma.sql`a.name`, test: Prisma.sql`a.name ILIKE ${pattern}` },
+      { field: 'task', col: Prisma.sql`t.title`, test: Prisma.sql`t.title ILIKE ${pattern}` },
     ];
     const matchFieldCase = Prisma.sql`CASE ${Prisma.join(
-      fields.map((f) => Prisma.sql`WHEN ${f.col} ILIKE ${pattern} THEN ${f.field}::text`),
+      fields.map((f) => Prisma.sql`WHEN ${f.test} THEN ${f.field}::text`),
       ' ',
     )} END`;
     const matchTextCase = Prisma.sql`CASE ${Prisma.join(
-      fields.map((f) => Prisma.sql`WHEN ${f.col} ILIKE ${pattern} THEN ${f.col}`),
+      fields.map((f) => Prisma.sql`WHEN ${f.test} THEN ${f.col}`),
       ' ',
     )} END`;
-    const retest = Prisma.join(
-      fields.map((f) => Prisma.sql`${f.col} ILIKE ${pattern}`),
-      ' OR ',
-    );
+    const retest = Prisma.join(fields.map((f) => f.test), ' OR ');
 
     // The session-side predicate, likewise chosen by the floor. Above it, the long bodies are in
     // play and the predicate is written against the exact expression session_search_trgm indexes.
@@ -612,6 +633,24 @@ export class SessionsService {
     const rows = norm
       ? await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           WITH meta_ids AS (
+            -- An Orbit URL's Base62 id was decoded before this query. Keep this as an independent
+            -- UNION branch so the exact match is a primary-key lookup and cannot disable the
+            -- trigram plan used by the normal text branch below.
+            SELECT s.id
+            FROM session s
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND s.id = ${norm.sessionId}::uuid
+            UNION
+            -- Agents and logs commonly shorten a UUID to its first 8–12 hex characters. At this
+            -- scale an owner-scoped scan is cheap; if a prefix ever collides, return both rows so
+            -- the caller can disambiguate instead of silently choosing the wrong child.
+            SELECT s.id
+            FROM session s
+            WHERE s.owner_id = ${ownerId}::uuid
+              AND replace(s.id::text, '-', '') LIKE ${
+                norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
+              }
+            UNION
             -- A UNION of independently index-usable branches, NOT one OR-chain. Written as
             -- "... OR a.name ILIKE ... OR t.title ILIKE ..." against the joined tables, the
             -- planner cannot use session_search_trgm at all and falls back to scanning every
@@ -689,13 +728,14 @@ export class SessionsService {
           LEFT JOIN task  t ON t.id = s.task_id
           ORDER BY
             CASE h.match_field
-              WHEN 'title'  THEN 0
-              WHEN 'prompt' THEN 1
-              WHEN 'reply'  THEN 2
-              WHEN 'message' THEN 3
-              WHEN 'branch' THEN 4
-              WHEN 'agent'  THEN 5
-              ELSE 6
+              WHEN 'id'      THEN 0
+              WHEN 'title'   THEN 1
+              WHEN 'prompt'  THEN 2
+              WHEN 'reply'   THEN 3
+              WHEN 'message' THEN 4
+              WHEN 'branch'  THEN 5
+              WHEN 'agent'   THEN 6
+              ELSE 7
             END,
             s.last_turn_at DESC NULLS LAST,
             s.created_at DESC

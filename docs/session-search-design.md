@@ -134,7 +134,7 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
     archivedAt: string | null,     // 结果行标注「在 Completed」
     deletedAt: string | null,      // 结果行标注「在 Trash」
     endReason: string | null,      // 让三端状态文案与会话列表一致
-    matchField: 'title'|'prompt'|'reply'|'message'|'branch'|'agent'|'task'|'recent',
+    matchField: 'id'|'title'|'prompt'|'reply'|'message'|'branch'|'agent'|'task'|'recent',
     snippet: string | null,        // 命中处 ±60 字符窗口,服务端截 + 折叠空白
   }>
 }
@@ -145,12 +145,14 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
 - **不回传 snippet 偏移量**:服务端折叠了 snippet 里的空白(否则一段 markdown 回复切出来是
   一堆空行),折叠会让任何偏移量失效。客户端改为在成品 snippet 里自己定位查询词 ——
   web `splitHighlight` / OrbitKit `SessionSearchHighlight`,两边配同一套测试。
+- **ID 直达**:完整 UUID、URL 中的 Base62 短 ID，以及 agent/log 常用的 8–12 位 UUID
+  前缀。完整 ID 走主键精确匹配；前缀若碰撞会返回全部候选，不擅自挑一个。
 - **Tier A**:`title`、`prompt`、`last_assistant_text`、`agent.name`、`branch`、`task.title`。
 - **Tier B**(`q.length >= 3`):`run_event.payload->>'text'` where `type in ('user','assistant')`,
   每个 session 只取最高优先的一条命中。
 - **范围**:默认含 Completed 和 Trash ——「我记得有个 session」十有八九就在 Completed,
   只是结果行打角标区分。
-- **排序**:`matchField` 分档(title > prompt/reply > message > agent/branch/task),
+- **排序**:`matchField` 分档(id > title > prompt/reply > message > agent/branch/task),
   同档按 `last_turn_at DESC NULLS LAST, created_at DESC`。
 - **实现**:`meta` + `content` 两个 CTE 做 `FULL OUTER JOIN` 后按 rank 取最优,沿用 `list()`
   已有的 `$queryRaw` 风格(该方法已因需要在 SQL 里 `left()` 截断而手写 raw)。

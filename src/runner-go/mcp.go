@@ -803,9 +803,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_search",
-				"description": "Find this owner's sessions by keyword when you don't know the id — matches session titles, opening prompts, last replies, branch names and the joined agent/task names, plus the conversation text itself for queries of 3+ characters (the response's `contentSearched` says whether message bodies were in scope). Spans every scope, including archived and trashed sessions; each hit carries `matchField` and a text snippet, plus archivedAt/deletedAt so you can tell where it lives. Use session_list instead to see what is running right now.",
+				"description": "Find this owner's sessions by keyword or id — a full UUID, the Base62 short id from an Orbit URL, or an 8–12 character UUID prefix resolves the corresponding session (all matches are returned if a prefix is ambiguous); text search matches session titles, opening prompts, last replies, branch names and the joined agent/task names, plus the conversation text itself for queries of 3+ characters (the response's `contentSearched` says whether message bodies were in scope). Spans every scope, including archived and trashed sessions; each hit carries `matchField` and a text snippet, plus archivedAt/deletedAt so you can tell where it lives. Use session_list instead to see what is running right now.",
 				"inputSchema": obj(map[string]interface{}{
-					"query": map[string]interface{}{"type": "string", "description": "Text to look for. Matched literally (case-insensitive), not as a regex or keyword set."},
+					"query": map[string]interface{}{"type": "string", "description": "Text to look for, or a session UUID/Base62 short id/8–12 character UUID prefix. Text is matched literally (case-insensitive), not as a regex or keyword set."},
 					"limit": map[string]interface{}{"type": "integer", "description": "Max hits to return. Default 20, capped at 50."},
 				}, "query"),
 			},

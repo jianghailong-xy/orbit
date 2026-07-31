@@ -40,6 +40,7 @@ const scopeBadge = (hit: SessionSearchHit): string | null =>
 
 /** What the hit matched on, when it isn't the title (which the row already shows). */
 const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
+  id: 'ID',
   prompt: 'first message',
   reply: 'last reply',
   message: 'message',
@@ -237,7 +238,7 @@ export function SessionSearch() {
             search message text.
           </span>
         ) : (
-          <span>{trimmed ? 'Searching titles, messages, agents and tasks' : 'Recent sessions'}</span>
+          <span>{trimmed ? 'Searching IDs, titles, messages, agents and tasks' : 'Recent sessions'}</span>
         )}
         <span className="ssearch-keys">
           <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close

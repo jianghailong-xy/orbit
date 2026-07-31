@@ -15,6 +15,23 @@ test('trims and wraps into a contains-pattern', () => {
   assert.equal(out?.pattern, '%merge%');
 });
 
+test('decodes exact UUID and Base62 public ids for direct session lookup', () => {
+  const uuid = '915d27d1-b92f-4cc6-819f-174ff5be13a9';
+  const publicId = '4QISUlGbd1LAaxJywzvT7x';
+
+  assert.equal(normalizeSearchQuery(uuid)?.sessionId, uuid);
+  assert.equal(normalizeSearchQuery(publicId)?.sessionId, uuid);
+  assert.equal(normalizeSearchQuery('not an id')?.sessionId, null);
+});
+
+test('recognizes the conventional abbreviated UUID used for child sessions', () => {
+  assert.equal(normalizeSearchQuery('915D27D1')?.sessionIdPrefix, '915d27d1');
+  assert.equal(normalizeSearchQuery('915d27d1b92f')?.sessionIdPrefix, '915d27d1b92f');
+  assert.equal(normalizeSearchQuery('915d27d')?.sessionIdPrefix, null);
+  assert.equal(normalizeSearchQuery('915d27d1b92f4')?.sessionIdPrefix, null);
+  assert.equal(normalizeSearchQuery('merge-id')?.sessionIdPrefix, null);
+});
+
 test('LIKE metacharacters are escaped so they match literally', () => {
   // Without escaping, '100%' would become '%100%%' — the trailing %% still matches everything
   // after "100", turning a literal search into a prefix search.

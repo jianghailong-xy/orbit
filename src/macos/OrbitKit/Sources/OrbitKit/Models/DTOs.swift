@@ -518,7 +518,7 @@ public struct MergeRequest: Codable, Sendable {
 /// Which field a search hit matched on. Mirrors the server's `SessionSearchMatchField`; decoded
 /// leniently (see `SessionSearchHit`) so a field added server-side can't break an older client.
 public enum SessionSearchMatchField: String, Codable, Sendable {
-    case title, prompt, reply, message, branch, agent, task
+    case id, title, prompt, reply, message, branch, agent, task
     /// Not a match: tags the rows returned for an empty query, where the palette lists recents.
     case recent
 }
