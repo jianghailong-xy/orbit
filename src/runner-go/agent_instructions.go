@@ -85,7 +85,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
 		}
 		if allowOrchestration {
-			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end"} {
+			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 		}

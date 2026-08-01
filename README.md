@@ -154,6 +154,7 @@ orbit task-list create --title "Release" --json
 orbit session create --prompt "Review the change" --agent-name reviewer --json
 orbit session get <session-id> --json
 orbit session send <session-id> --message "Please add a regression test" --json
+orbit session complete <session-id> --json
 ```
 
 Each Claude/Codex session receives a short discovery instruction pointing at the

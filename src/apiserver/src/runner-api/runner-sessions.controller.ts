@@ -132,4 +132,18 @@ export class RunnerSessionsController {
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.end(runner.ownerId, id);
   }
+
+  // The runner's own POST sessions/:id/complete route is reserved for reporting process
+  // teardown. Orchestrators use /archive for the user-facing "Complete" action instead:
+  // it ends a live session with reason=completed and files it out of the active list.
+  @Post('sessions/:id/archive')
+  async completeSession(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    return this.sessions.archive(runner.ownerId, id);
+  }
 }

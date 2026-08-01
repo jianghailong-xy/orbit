@@ -48,7 +48,7 @@ func TestMCPPermissionPromptDisabledFailsClosed(t *testing.T) {
 func TestMCPOrchestrationToolsGated(t *testing.T) {
 	on := toolDescriptors(false, true)
 	off := toolDescriptors(false, false)
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "agent_list", "agent_create", "agent_update"} {
 		if !hasMCPTool(on, name) {
 			t.Fatalf("%s missing when orchestration enabled", name)
 		}
@@ -257,7 +257,7 @@ func TestMCPOrchestrationEnv(t *testing.T) {
 
 func TestMCPSessionToolsDisabledAreError(t *testing.T) {
 	srv := &mcpServer{allowOrchestration: false}
-	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "agent_list", "agent_create", "agent_update"} {
+	for _, name := range []string{"session_create", "session_list", "session_search", "session_get", "session_send", "session_interrupt", "session_merge", "session_end", "session_complete", "agent_list", "agent_create", "agent_update"} {
 		res := srv.callTool(name, map[string]interface{}{})
 		if res["isError"] != true {
 			t.Fatalf("%s with orchestration off: isError = %#v", name, res["isError"])
@@ -302,6 +302,29 @@ func TestSessionSearchRequiresQuery(t *testing.T) {
 	res := srv.callTool("session_search", map[string]interface{}{})
 	if res["isError"] != true {
 		t.Fatalf("session_search with no query: isError = %#v", res["isError"])
+	}
+}
+
+func TestMCPSessionCompleteUsesArchiveEndpoint(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "runner-token"),
+		sessionID:          "caller-session",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("session_complete", map[string]interface{}{"sessionId": "child-session"})
+	if res["isError"] == true {
+		t.Fatalf("session_complete returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/sessions/child-session/archive" {
+		t.Fatalf("session_complete hit %s %s", gotMethod, gotPath)
 	}
 }
 

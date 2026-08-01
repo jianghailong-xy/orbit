@@ -48,6 +48,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"session_interrupt": true,
 		"session_merge":     true,
 		"session_end":       true,
+		"session_complete":  true,
 	}
 	requiredArguments := map[string][]string{
 		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--wait", "--json"},
@@ -58,8 +59,9 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"interrupt": {"[session-id]", "--json"},
 		"merge":     {"[session-id]", "--target-branch", "--json"},
 		"end":       {"[session-id]", "--json"},
+		"complete":  {"[session-id]", "--json"},
 	}
-	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end"} {
+	for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
 		id := "session_" + action
 		capability := sessionCLICapabilityByID(on.Capabilities, id)
 		if capability == nil {
@@ -94,6 +96,24 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		if action != "create" && sessionCLIContains(capability.Arguments, "defaults to ORBIT_SESSION_ID") {
 			t.Errorf("%s incorrectly advertises a current-session fallback: %#v", id, capability.Arguments)
 		}
+	}
+}
+
+func TestSessionCLIHelpDocumentsComplete(t *testing.T) {
+	var out bytes.Buffer
+	if err := cmdSessionCLI([]string{"--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "orbit session complete SESSION_ID [--json]") {
+		t.Fatalf("session help does not document complete: %q", out.String())
+	}
+
+	out.Reset()
+	if err := cmdSessionCLI([]string{"complete", "--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "complete and archive a session") {
+		t.Fatalf("complete help does not explain archive semantics: %q", out.String())
 	}
 }
 
@@ -163,6 +183,12 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			args:       []string{"end", "child-session", "--json"},
 			method:     http.MethodPost,
 			requestURI: "/api/runner/sessions/child-session/end",
+		},
+		{
+			name:       "complete",
+			args:       []string{"complete", "child-session", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions/child-session/archive",
 		},
 	}
 
@@ -373,6 +399,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 		{"interrupt", "child", "--json"},
 		{"merge", "child", "--json"},
 		{"end", "child", "--json"},
+		{"complete", "child", "--json"},
 	}
 	for _, args := range disabledCommands {
 		var out bytes.Buffer
@@ -391,10 +418,10 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	}
 
 	// A target operation never falls back to the caller's own session. Requiring an
-	// explicit id avoids accidentally interrupting, merging, or ending the caller.
+	// explicit id avoids accidentally interrupting, merging, ending, or completing the caller.
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete"} {
 		args := []string{action, "--json"}
 		if action == "send" {
 			args = append(args, "--message", "hello")
@@ -441,7 +468,7 @@ func TestSessionCLIPathIDsCannotEscapeSessionRoute(t *testing.T) {
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
 	t.Setenv(envOrchestrationToken, "session-token")
 
-	for _, action := range []string{"get", "send", "interrupt", "merge", "end"} {
+	for _, action := range []string{"get", "send", "interrupt", "merge", "end", "complete"} {
 		for _, id := range []string{"../tasks", "..%2Ftasks", "a/b", `a\b`, "a?query"} {
 			args := []string{action, id, "--json"}
 			if action == "send" {

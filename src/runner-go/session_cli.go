@@ -20,6 +20,7 @@ Usage:
   orbit session interrupt SESSION_ID [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
   orbit session end SESSION_ID [--json]
+  orbit session complete SESSION_ID [--json]
 
 Session orchestration is available only inside a live Orbit session whose agent
 has enableOrchestration enabled. Run 'orbit session <command> --help' for options.
@@ -78,6 +79,11 @@ Usage:
 Usage:
   orbit session end SESSION_ID [--json]
 `,
+	"complete": `orbit session complete — complete and archive a session
+
+Usage:
+  orbit session complete SESSION_ID [--json]
+`,
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
@@ -89,6 +95,7 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 }
 
 // cmdSessionCLI is the native adapter for the MCP session_* orchestration tools.
@@ -143,6 +150,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionMerge(args[1:], out, ctx)
 	case "end":
 		return cliSessionEnd(args[1:], out, ctx)
+	case "complete":
+		return cliSessionComplete(args[1:], out, ctx)
 	default:
 		panic("unreachable session command")
 	}
@@ -456,6 +465,22 @@ func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	raw, err := t.endSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("end session: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, jsonOut)
+}
+
+func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, jsonOut, err := parseSessionTargetArgs("orbit session complete", args)
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.completeSession(ctx.sessionID, ctx.token, id)
+	if err != nil {
+		return fmt.Errorf("complete session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, jsonOut)
 }

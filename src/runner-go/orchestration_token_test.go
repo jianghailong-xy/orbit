@@ -111,6 +111,15 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			},
 		},
 		{
+			name:   "session complete",
+			method: http.MethodPost,
+			path:   "/api/runner/sessions/child-session/archive",
+			call: func(transport *Transport) error {
+				_, err := transport.completeSession("caller-session", "session-token", "child-session")
+				return err
+			},
+		},
+		{
 			name:   "agent list",
 			method: http.MethodGet,
 			path:   "/api/runner/agents",

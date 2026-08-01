@@ -565,6 +565,15 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 	return out, err
 }
 
+func (t *Transport) completeSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/archive", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	return out, err
+}
+
 // ── Agent management ops for the `orbit mcp` server (L3 orchestration) ──────
 // Owner-scoped via the runner token; gated server-side on the CALLING session's agent
 // having orchestration enabled (proved by the session id plus its signed credential).

@@ -460,6 +460,20 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "session_complete":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		id := getString(args, "sessionId")
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.completeSession(s.sessionID, s.orchestrationToken, id)
+		if err != nil {
+			return toolResult("complete session failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "agent_list":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -832,6 +846,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			map[string]interface{}{
 				"name":        "session_end",
 				"description": "End a session (park it; it can be resumed later). Frees its runner slot.",
+				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+			},
+			map[string]interface{}{
+				"name":        "session_complete",
+				"description": "Complete and archive a session. Ends it if live and moves it out of the active list; it can still be restored later.",
 				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
 			},
 			map[string]interface{}{
