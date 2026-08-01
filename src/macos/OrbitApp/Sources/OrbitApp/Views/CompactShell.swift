@@ -466,7 +466,7 @@ private struct NavigationDrawer: View {
     // MARK: Recents
 
     /// The "Recents" header + rows: the most-recently-active sessions across every agent, tapping
-    /// straight into that session's console. Hidden until the cross-agent Active list has loaded.
+    /// straight into that session's console. Hidden until the cross-agent Open list has loaded.
     @ViewBuilder
     private var recentsRows: some View {
         let recents = model.recentSessions

@@ -1,4 +1,11 @@
-import { RunStatus, SessionEndReason, SessionState } from './enums';
+import {
+  RunStatus,
+  SessionEndReason,
+  SessionFilingState,
+  SessionRunState,
+  SessionState,
+} from './enums';
+import type { SessionCapabilities } from './dto';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -14,12 +21,12 @@ import { RunStatus, SessionEndReason, SessionState } from './enums';
 
 /** Control-plane event types — their own namespace, never mixed with `RunEventType`. */
 export enum ControlEventType {
-  /** A session entered the user's active list (created, or restored from archive/trash). */
+  /** A session entered the user's Open list (created, or restored from Archived/Trash). */
   SESSION_CREATED = 'session.created',
   /** status / title / lastTurnAt / pendingApprovals changed — `data` is a full
    *  `ControlSessionSummary` the client upserts wholesale (decision Q2: no field deltas). */
   SESSION_UPDATED = 'session.updated',
-  /** The session left the active list (archived → completed, or soft-deleted). */
+  /** Compatibility name for a filing change to Archived or Trash. */
   SESSION_ENDED = 'session.ended',
   /** A run error — its own event (decision Q3) so mid-turn recoverable errors, which status
    *  transitions can't express, still reach the client exactly once. */
@@ -71,8 +78,14 @@ export interface ControlSessionSummary {
   status: RunStatus;
   /** Raw runner/process status. */
   runStatus: RunStatus;
-  /** Authoritative product-level session lifecycle state. */
+  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
   sessionState: SessionState;
+  /** Execution state, independent of archive/trash filing. */
+  runState: SessionRunState;
+  /** Current list membership. */
+  filingState: SessionFilingState;
+  /** Server-derived actions; optional for rolling-version compatibility. */
+  capabilities?: SessionCapabilities;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null } | null;
   pendingApprovals: number;
@@ -83,11 +96,15 @@ export interface ControlSessionSummary {
 export interface ControlSessionEnded {
   /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */
   status: RunStatus;
-  /** Raw runner/process status at the time the session left Active. */
+  /** Raw runner/process status at the time the filing change was requested. */
   runStatus: RunStatus;
-  /** Authoritative product-level state after the archive/delete action. */
+  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
   sessionState: SessionState;
-  endReason: SessionEndReason;
+  /** Execution state at the time of filing. */
+  runState: SessionRunState;
+  /** Filing destination of this lifecycle event. */
+  filingState: SessionFilingState;
+  endReason: SessionEndReason | null;
 }
 
 /** `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error — e.g. a

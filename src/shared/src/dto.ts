@@ -1,5 +1,35 @@
-import { AgentProvider, PermissionMode, RunnerStatus, RunStatus, SessionState } from './enums';
+import {
+  AgentProvider,
+  PermissionMode,
+  RunnerStatus,
+  RunStatus,
+  SessionFilingState,
+  SessionRunState,
+  SessionState,
+} from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
+
+/** Why an ended session cannot currently be resumed on its original runner. */
+export type SessionResumeBlockedReason =
+  | 'TRASHED'
+  | 'ENDING'
+  | 'NOT_TERMINAL'
+  | 'NOT_STARTED'
+  | 'MISSING_CONTEXT'
+  | 'NO_RUNNER'
+  | 'RUNNER_OFFLINE';
+
+/**
+ * Server-derived actions currently available for a session. Optional on containing
+ * wire payloads so older/rolling servers and clients remain compatible.
+ */
+export interface SessionCapabilities {
+  canSend: boolean;
+  canResume: boolean;
+  resumeBlockedReason: SessionResumeBlockedReason | null;
+  canArchive: boolean;
+  canRestore: boolean;
+}
 
 /**
  * Everything a runner needs to drive Claude Code for one session. Mirrors the
@@ -757,16 +787,20 @@ export interface SessionSearchHit {
   status: string;
   /** Raw runner/process status. */
   runStatus: string;
-  /** Authoritative product-level session lifecycle state. */
+  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
   sessionState: SessionState;
+  /** Execution outcome, independent of where the session is filed. */
+  runState: SessionRunState;
+  /** List membership, independent of the execution outcome. */
+  filingState: SessionFilingState;
   agent: { id: string; name: string } | null;
   runnerId: string | null;
   taskId: string | null;
   taskTitle: string | null;
   lastTurnAt: string | Date | null;
   createdAt: string | Date;
-  /** Set when the session lives in Completed / Trash — the row badges where it is, because a
-   *  search that silently returned archived rows would look like it was showing active ones. */
+  /** Set when the session lives in Archived / Trash — the row badges where it is, because a
+   *  search that silently returned filed-away rows would look like it was showing Open ones. */
   archivedAt: string | Date | null;
   deletedAt: string | Date | null;
   /** Why the session ended — carried so the clients' shared status-label logic reports the same

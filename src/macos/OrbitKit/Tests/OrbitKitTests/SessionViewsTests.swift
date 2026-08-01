@@ -3,16 +3,25 @@ import XCTest
 
 final class SessionViewsTests: XCTestCase {
 
-    func testQueryValueMapsCompletedToArchived() {
-        XCTAssertEqual(SessionView.active.queryValue, "active")
-        XCTAssertEqual(SessionView.completed.queryValue, "archived")   // server calls it "archived"
-        XCTAssertEqual(SessionView.trash.queryValue, "deleted")        // server calls it "deleted"
-        XCTAssertEqual(SessionView.allCases.map(\.title), ["Active", "Completed", "Trash"])
+    func testFilingViewTitlesAndLegacyQueryValues() {
+        XCTAssertEqual(SessionView.open.queryValue, "active")
+        XCTAssertEqual(SessionView.archived.queryValue, "archived")
+        XCTAssertEqual(SessionView.trash.queryValue, "deleted")
+        XCTAssertEqual(SessionView.allCases.map(\.title), ["Open", "Archived", "Trash"])
     }
 
     /// The console switcher mirrors the web Agent console's views, in order.
     func testPickerCasesMatchWebTabs() {
-        XCTAssertEqual(SessionView.pickerCases, [.active, .completed, .trash])
+        XCTAssertEqual(SessionView.pickerCases, [.open, .archived, .trash])
+    }
+
+    func testQueuedArchiveRequiresEndConfirmationAndDisablesSafeFullSwipe() {
+        XCTAssertTrue(SessionArchivePresentation.requiresConfirmation(for: .queued))
+        XCTAssertEqual(SessionArchivePresentation.actionTitle(for: .queued), "End & Archive…")
+        XCTAssertTrue(SessionArchivePresentation.requiresConfirmation(for: .running))
+
+        XCTAssertFalse(SessionArchivePresentation.requiresConfirmation(for: .succeeded))
+        XCTAssertEqual(SessionArchivePresentation.actionTitle(for: .succeeded), "Archive")
     }
 
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.
@@ -43,11 +52,11 @@ final class SessionViewsTests: XCTestCase {
         """
         let sessions = try JSONDecoder().decode([Session].self, from: Data(json.utf8))
         XCTAssertEqual(
-            Set(SessionFilter.forAgent(sessions, agentID: "a1", view: .active).map(\.id)),
+            Set(SessionFilter.forAgent(sessions, agentID: "a1", view: .open).map(\.id)),
             Set(["s1", "s2", "s3"])
         )
-        // Completed preserves the server response order.
-        XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .completed).map(\.id), ["s1", "s2", "s3"])
+        // Archived preserves the server response order.
+        XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .archived).map(\.id), ["s1", "s2", "s3"])
     }
 
     /// The Agent console orders like web's `AgentView`: pinned first, then most-recent activity
@@ -69,18 +78,18 @@ final class SessionViewsTests: XCTestCase {
         // Pinned floats first despite being oldest; the queued session (ranked by createdAt 05:25)
         // sits above the running one (lastTurnAt 05:00); the older awaiting session sinks last.
         XCTAssertEqual(
-            SessionFilter.forAgent(sessions, agentID: "a1", view: .active).map(\.id),
+            SessionFilter.forAgent(sessions, agentID: "a1", view: .open).map(\.id),
             ["pinned", "queued", "run", "old"]
         )
     }
 
-    /// Completed (archived) preserves the server's order verbatim. The server sorts it by
+    /// Archived preserves the server's order verbatim. The server sorts it by
     /// `archived_at` (newest filed first) and deliberately ignores pinning — but `archived_at`
     /// isn't in the list payload, so the client can't reproduce it and must not re-sort (web does
     /// the same: `if view === 'archived' return rows`). This fixture is shaped so the old
     /// `consoleSorted` pass would visibly reorder it — floating the pinned row "b" to the top and
-    /// ranking "c" (newest `lastTurnAt`) above "a" — proving Completed now bypasses that sort.
-    func testForAgentCompletedPreservesServerOrder() throws {
+    /// ranking "c" (newest `lastTurnAt`) above "a" — proving Archived bypasses that sort.
+    func testForAgentArchivedPreservesServerOrder() throws {
         let json = """
         [{"id":"a","status":"SUCCEEDED","source":"user","agent":{"id":"a1","name":"dev"},
           "createdAt":"2026-07-04T00:30:00.000Z","lastTurnAt":"2026-07-04T01:00:00.000Z"},
@@ -92,13 +101,13 @@ final class SessionViewsTests: XCTestCase {
         """
         let sessions = try JSONDecoder().decode([Session].self, from: Data(json.utf8))
         XCTAssertEqual(
-            SessionFilter.forAgent(sessions, agentID: "a1", view: .completed).map(\.id),
+            SessionFilter.forAgent(sessions, agentID: "a1", view: .archived).map(\.id),
             ["a", "b", "c"]   // server order held: no pin-floating ("b"), no lastTurnAt re-sort ("c")
         )
     }
 
     /// Trash (deleted) is activity-ordered client-side like Active — web sorts every
-    /// non-archived view by pinned-first then most-recent activity. (Only Completed, above, is
+    /// non-archived view by pinned-first then most-recent activity. (Only Archived, above, is
     /// left in the server's order.) Fixture is in input order oldest-first to prove the re-sort.
     func testForAgentTrashSortsByActivity() throws {
         let json = """

@@ -2,7 +2,7 @@ import Foundation
 
 /// Pure logic for the drawer's **Recents** section: the sessions you'd jump back into, across every
 /// agent and runner, most-recent activity first. UI-free so it's unit-tested; the SwiftUI drawer
-/// renders `recent(...)` off the already-fresh cross-agent Active list (`AppModel.sessions`), so it
+/// renders `recent(...)` off the already-fresh cross-agent Open list (`AppModel.sessions`), so it
 /// needs no extra fetch.
 public enum RecentsLogic {
     /// The top `limit` sessions by last activity, newest first. Pins are ignored: Recents is

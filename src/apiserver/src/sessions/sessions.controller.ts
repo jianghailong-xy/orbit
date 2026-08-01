@@ -74,7 +74,7 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Query('runnerId') runnerId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
-    // answers it with an empty list rather than accidentally falling through to Active.
+    // answers it with an empty list rather than accidentally falling through to Open.
     @Query('view') view?: 'active' | 'archived' | 'deleted' | 'system',
   ) {
     return this.sessions.list(user.userId, { runnerId, view });

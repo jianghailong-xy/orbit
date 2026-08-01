@@ -14,6 +14,7 @@ import {
   DisconnectOutlined,
   DownOutlined,
   EyeOutlined,
+  InboxOutlined,
   InfoCircleOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -103,6 +104,7 @@ import {
   deleteSession,
   enableAgentIsolation,
   getBackgroundShells,
+  getSession,
   interruptSession,
   listApprovals,
   listQueuedTurns,
@@ -135,10 +137,21 @@ import {
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
+  sessionFilingLabel,
+  sessionFilingStateOf,
+  sessionRunStateOf,
   sessionRunStatusOf,
-  sessionStateOf,
 } from '../lib/sessionState';
 import { hasOutlivingSessionWork, isSessionTurnActive } from '../lib/sessionActivity';
+import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
+import {
+  scopedAttachmentCreateBlockedMessage,
+  sessionCapabilityOf,
+  sessionResumeBlockedMessage,
+  sessionResumeBlockedReasonOf,
+  sessionSendBlockedMessage,
+  sessionSendDispositionOf,
+} from '../lib/sessionCapabilities';
 import {
   PENDING_SLOT_LABEL,
   PENDING_SLOT_TITLE,
@@ -374,12 +387,12 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
   );
 }
 
-// The slices of the session list, in menu order. Active is the overwhelmingly common
+// The slices of the session list, in menu order. Open is the overwhelmingly common
 // one, so the other two live in the header's scope menu rather than a permanent tab row.
 type SessionView = 'active' | 'archived' | 'deleted';
 const SESSION_VIEWS: { value: SessionView; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Completed' },
+  { value: 'active', label: 'Open' },
+  { value: 'archived', label: 'Archived' },
   { value: 'deleted', label: 'Trash' },
 ];
 
@@ -512,7 +525,7 @@ const parkedWorkLabel = (s: any): string | null => {
 // blue = working, amber = needs you, grey = queued, default = reply content.
 type SessionLine = { text: string; tone: 'preview' | 'running' | 'approval' | 'queued' };
 const sessionLine = (s: any, live: boolean): SessionLine | null => {
-  const state = sessionStateOf(s);
+  const state = sessionRunStateOf(s);
   if (live && state === 'RUNNING') {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
@@ -542,10 +555,9 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
-export function statusLabel(session: any, legacyCompleted = false): string {
-  const state = sessionStateOf(session, { legacyCompleted });
-  if (state === 'DELETED') return 'Deleted';
-  if (state === 'COMPLETED') return 'Completed';
+export function statusLabel(session: any): string {
+  const state = sessionRunStateOf(session);
+  if (state === 'SUCCEEDED') return 'Succeeded';
   if (state === 'RUNNING')
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session) ?? 'Waiting for your reply';
@@ -564,20 +576,14 @@ export function statusLabel(session: any, legacyCompleted = false): string {
 // neutral terminal (dormant / cancelled / interrupted / disconnected). A runner that
 // went offline is reaped to FAILED with error 'runner offline'; that's a dropped
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
-// New payloads carry the authoritative user-facing sessionState. The resolver retains a
-// centralized fallback for old servers whose raw status collapses graceful ends to CANCELLED.
-export function StatusIcon({ session, completed }: { session: any; completed?: boolean }) {
-  const state = sessionStateOf(session, { legacyCompleted: completed });
+// New payloads carry the authoritative runState. The resolver retains a centralized fallback
+// for old servers whose raw status collapses graceful ends to CANCELLED.
+export function StatusIcon({ session }: { session: any }) {
+  const state = sessionRunStateOf(session);
   const fontSize = 16;
-  if (state === 'DELETED')
+  if (state === 'SUCCEEDED')
     return (
-      <Tooltip title="Deleted">
-        <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
-      </Tooltip>
-    );
-  if (state === 'COMPLETED')
-    return (
-      <Tooltip title="Completed">
+      <Tooltip title="Succeeded">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
@@ -1005,8 +1011,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   });
   const [resizing, setResizing] = useState(false);
 
-  // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
-  // open; every other open session resolves from Active, where live sessions and runner
+  // The list is scoped by `view`. Keep Archived loaded while one of its transcripts is
+  // open; every other open session resolves from Open, where live sessions and runner
   // slot accounting live.
   const effectiveView = selectedId ? (view === 'archived' ? 'archived' : 'active') : view;
   // One factory call drives both the list query and the optimistic-update key below, so
@@ -1017,13 +1023,23 @@ export function AgentView({ runner }: { runner: Runner }) {
   // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
   const controlLive = useControlPlaneLive();
   const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: controlLive ? false : 4000 });
+  // Capabilities include heartbeat-derived runner availability. Refresh both list and detail when
+  // this runner crosses online/offline so a cached RUNNER_OFFLINE denial cannot outlive recovery.
+  const previousRunnerAvailability = useRef({ id: runner.id, online: runner.online });
+  useEffect(() => {
+    const previous = previousRunnerAvailability.current;
+    previousRunnerAvailability.current = { id: runner.id, online: runner.online };
+    if (previous.id !== runner.id || previous.online === runner.online) return;
+    qc.invalidateQueries({ queryKey: ['sessions'] });
+    if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+  }, [runner.id, runner.online, selectedId, qc]);
   // The owner's tag library, for the filter menu and the "Group by Tag" headings.
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
-    // The Completed (archived) view is ordered by the server on archived_at (newest
-    // completed first) and intentionally ignores pinning. The optimistic cache edits
+    // The Archived view is ordered by the server on archived_at (newest first) and
+    // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
     // archive reconciles via refetch, so the server order holds. Trust it verbatim.
     if (effectiveView === 'archived') return rows;
@@ -1055,12 +1071,17 @@ export function AgentView({ runner }: { runner: Runner }) {
     // while the session is live, for the worktree status bar (isolation + uncommitted diff,
     // reported mid-turn) to appear without waiting for turn_end; and while a "merge to main"
     // or "commit" is pending, for the runner's outcome (≤1 heartbeat away) to land. Idle else.
-    refetchInterval: (q) =>
-      q.state.data?.mergeStatus === 'pending' || q.state.data?.commitStatus === 'pending'
-        ? 3000
-        : selectedFromList && isSessionLive(selectedFromList)
-          ? 5000
-          : false,
+    refetchInterval: (q) => {
+      const detail = q.state.data;
+      if (
+        detail?.id === selectedId &&
+        (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
+      )
+        return 3000;
+      // A deep-linked/Archived ENDING row may already be absent from the Open list. Keep polling
+      // its own current detail until terminal instead of relying solely on selectedFromList.
+      return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
+    },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
   const selectedFromDetail = useMemo(() => {
@@ -1070,7 +1091,8 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (
       !d ||
       typeof d.title !== 'string' ||
-      (typeof d.sessionState !== 'string' &&
+      (typeof d.runState !== 'string' &&
+        typeof d.sessionState !== 'string' &&
         typeof d.runStatus !== 'string' &&
         typeof d.status !== 'string')
     )
@@ -1086,11 +1108,26 @@ export function AgentView({ runner }: { runner: Runner }) {
   }, [detailForSelected]);
   const selected = selectedFromList ?? selectedFromDetail;
   const selectedMissing = !!selectedId && !selected && sessionDetailQ.isError;
-  const selectedDeleted = !!selected?.deletedAt;
-  // Filed as Completed (the Archived tab). List rows don't carry archived_at (see
-  // SessionsService.list), so the detail is the only source — it's fetched for whatever
-  // session is open, which is exactly when this is read (the header's ⋮ menu).
-  const selectedArchived = !!detailForSelected?.archivedAt;
+  // Detail is fresher and carries capabilities that compact list rows may omit. Merge nested
+  // capabilities field-by-field so a partial rolling-upgrade payload cannot erase a list value.
+  const selectedSession = selected
+    ? {
+        ...selected,
+        ...(detailForSelected ?? {}),
+        capabilities:
+          selected.capabilities || detailForSelected?.capabilities
+            ? { ...selected.capabilities, ...detailForSelected?.capabilities }
+            : undefined,
+      }
+    : null;
+  const selectedFilingState = selectedSession
+    ? sessionFilingStateOf(
+        selectedSession,
+        { legacyView: selectedFromList ? effectiveView : undefined },
+      )
+    : null;
+  const selectedDeleted = selectedFilingState === 'TRASH';
+  const selectedArchived = selectedFilingState === 'ARCHIVED';
   // A merge's outcome lands asynchronously (≤1 heartbeat after the click) — but the only place
   // it surfaces is the worktree status bar, and only if the user is still on this session with the
   // file panel expanded. Toast the landing (success or the failure reason) the moment it flips off
@@ -1115,10 +1152,39 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.error(`Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`);
     }
   }, [detailForSelected, message]);
-  const live = selected && !selectedDeleted ? isSessionLive(selected) : false;
-  // An ended session can be revived (--resume claude's context) only if it actually
-  // ran and its runner is online — the transcript lives on that machine's disk.
-  const resumable = !!selected && !selectedDeleted && !live && !!selected.startedAt && runner.online;
+  const live = !!selectedSession && !selectedDeleted && isSessionLive(selectedSession);
+  // On older servers, infer resumability exactly as before. Newer servers know whether runner
+  // context still exists and are authoritative — notably preventing a false-positive Resume.
+  const legacyResumable =
+    !!selectedSession &&
+    !selectedDeleted &&
+    !live &&
+    !!selectedSession.startedAt &&
+    !!runner.online;
+  const resumable = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable)
+    : false;
+  const selectedResumeBlockedReason = selectedSession
+    ? sessionResumeBlockedReasonOf(selectedSession)
+    : null;
+  const selectedResumeBlockedCopy = sessionResumeBlockedMessage(selectedResumeBlockedReason);
+  // A run can still look live/resumable in cached state while an archive/end transition has
+  // already denied its same-session endpoint. Never reinterpret that denial as a fresh run.
+  const sameSessionSendBlocked =
+    !!selectedSession &&
+    (live || resumable) &&
+    !sessionCapabilityOf(selectedSession, 'canSend', true);
+  const sameSessionSendBlockedCopy = sessionSendBlockedMessage(selectedResumeBlockedReason);
+  const selectedCanArchive = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canArchive', selectedFilingState === 'OPEN')
+    : false;
+  const selectedCanRestore = selectedSession
+    ? sessionCapabilityOf(
+        selectedSession,
+        'canRestore',
+        selectedFilingState === 'ARCHIVED' || selectedFilingState === 'TRASH',
+      )
+    : false;
   // The session list (always visible in the left column) is scoped to one agent so
   // it reads as a conversation with that agent. On /agents/<id> that's the locked
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
@@ -1134,9 +1200,9 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
   // tag when the user switches grouping — both from the pure groupers shared in shape with
-  // OrbitKit's, over the already console-sorted list. Pinning only applies on the Active tab, and
+  // OrbitKit's, over the already console-sorted list. Pinning only applies in Open, and
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
-  // Note the Completed tab is server-ordered by archived_at while bucketing reads last activity,
+  // Note the Archived tab is server-ordered by archived_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they were filed — same as iOS.
   const sections = useMemo(
     () =>
@@ -1156,7 +1222,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/agents/<id>/new),
   // while browsing the archived/trash tabs (nothing openable there), or implicitly
-  // when the active list is empty (the first-run empty state).
+  // when the Open list is empty (the first-run empty state).
   const composing =
     !selectedId &&
     (composingRoute || view !== 'active' || (sessionsQ.isSuccess && visibleSessions.length === 0));
@@ -1640,7 +1706,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // that share a status (both AWAITING_INPUT) wouldn't change `runStatus`, so without the
   // selectedId dep this effect wouldn't re-run and idle would stay wrongly false — flipping
   // turnActive on and hiding the worktree bar's "committed"/merge state until a refresh.
-  const runStatus = selected ? sessionRunStatusOf(selected) : undefined;
+  const runStatus = selectedSession ? sessionRunStatusOf(selectedSession) : undefined;
   useEffect(() => {
     if (runStatus === 'AWAITING_INPUT') setIdle(true);
     else if (runStatus === 'RUNNING') setIdle(false);
@@ -1737,16 +1803,19 @@ export function AgentView({ runner }: { runner: Runner }) {
       vars: { content: string; images: ComposerImage[]; shell?: boolean },
     ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn; created?: boolean }> => {
       const { content, images: imgs, shell } = vars;
-      if (selectedDeleted) throw new Error('Restore this session before sending a message');
+      if (selectedDeleted)
+        throw new Error('Restore this session to Open before sending a message');
       if (selectedMissing) throw new Error('Session not found');
+      if (selected && live && sameSessionSendBlocked)
+        throw new Error(sameSessionSendBlockedCopy);
       // Only fully-uploaded images carry an id to reference; onSend blocks while any is
       // still uploading, so this is the complete set.
       const attachmentIds = imgs.map((im) => im.id).filter((x): x is string => !!x);
       // Continue a live session; revive an ended-but-resumable one (same row, claude
-      // --resumes its context); otherwise (no selection, or unresumable) start a fresh
-      // session so the composer never dead-locks. All three carry the pasted images: the
-      // create path scopes them to the new session (server links them to the seeded first
-      // turn), so a brand-new session composed from scratch can include screenshots too.
+      // --resumes its context); otherwise (no selection, or unresumable) start fresh.
+      // New-draft uploads are unscoped and can follow CREATE. Uploads made while viewing an
+      // existing session belong to that session, so a terminal CREATE fallback blocks below
+      // and keeps the chips visible instead of passing invalid attachment ids or dropping them.
       if (selected && live) {
         const res = await sendTurn(selected.id, content, attachmentIds, shell ? 'shell' : undefined);
         // A turn already running ⇒ this message is queued (delivered once that turn
@@ -1756,21 +1825,56 @@ export function AgentView({ runner }: { runner: Runner }) {
         const queuedItem = idle || shell ? undefined : { turnId: res.turnId, content };
         return { id: selected.id, turnId: res.turnId, queuedItem };
       }
-      if (selected && resumable) {
-        // The pills were seeded from this session's stored config, so an untouched
-        // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
-        // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
-        // runner runs the command, buffering its output for the next message.
-        const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
-        const wireEffort = normalizeEffortForProvider(provider, effort);
-        const res = await resumeSession(
-          selected.id,
-          content,
-          { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort || undefined },
-          attachmentIds,
-          shell ? 'shell' : undefined,
-        );
-        return { id: selected.id, turnId: res.turnId };
+      if (selected && !live) {
+        // Capabilities can change with heartbeat/context cleanup, so never POST /resume from a
+        // cached terminal decision (positive or negative). Re-read detail immediately; if another
+        // client already made it live, honor fresh canSend, if its context is now available resume
+        // it, and only then fall back to a fresh run.
+        const fresh = await getSession(selected.id);
+        qc.setQueryData(sessionQuery(selected.id).queryKey, fresh);
+        const freshReason = sessionResumeBlockedReasonOf(fresh);
+        const freshLegacyResumable = !!fresh.startedAt && !!runner.online;
+        const disposition = sessionSendDispositionOf(fresh, freshLegacyResumable);
+        if (disposition === 'BLOCK')
+          throw new Error(
+            sessionSendBlockedMessage(
+              sessionFilingStateOf(fresh) === 'TRASH' ? 'TRASHED' : freshReason,
+            ),
+          );
+        if (disposition === 'SEND') {
+          const res = await sendTurn(
+            selected.id,
+            content,
+            attachmentIds,
+            shell ? 'shell' : undefined,
+          );
+          const queuedItem =
+            sessionRunStateOf(fresh) === 'AWAITING_INPUT' || shell
+              ? undefined
+              : { turnId: res.turnId, content };
+          return { id: selected.id, turnId: res.turnId, queuedItem };
+        }
+        if (disposition === 'RESUME') {
+          // The pills were seeded from this session's stored config, so an untouched
+          // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
+          // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
+          // runner runs the command, buffering its output for the next message.
+          const provider =
+            fresh.provider ?? selected.provider ?? detailForSelected?.provider ?? 'claude';
+          const wireEffort = normalizeEffortForProvider(provider, effort);
+          const res = await resumeSession(
+            selected.id,
+            content,
+            { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort || undefined },
+            attachmentIds,
+            shell ? 'shell' : undefined,
+          );
+          return { id: selected.id, turnId: res.turnId };
+        }
+        if (attachmentIds.length > 0)
+          throw new Error(scopedAttachmentCreateBlockedMessage(attachmentIds.length));
+        // Fall through to createInteractiveSession: terminal non-resumable sessions keep the
+        // established "start a new session" behavior instead of sending an invalid resume.
       }
       const provider = pickedAgent?.provider ?? 'claude';
       const wireEffort = normalizeEffortForProvider(provider, effort);
@@ -1821,13 +1925,13 @@ export function AgentView({ runner }: { runner: Runner }) {
         previews.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
       }
       setImages([]);
-      setView('active'); // a new/continued session lives in the active list
+      setView('active'); // a new/continued session lives in Open
       if (queuedItem) setQueued((q) => [...q, queuedItem]);
       else setIdle(false); // a turn is now starting
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      // Reviving clears the row's Completed filing server-side (see SessionsService.resume),
-      // so refetch the detail too — otherwise the header ⋮ keeps offering Restore for a
-      // session that's already back in the active list.
+      // Reviving clears the row's Archived filing server-side (see SessionsService.resume),
+      // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
+      // session that's already back in Open.
       qc.invalidateQueries({ queryKey: ['session', id] });
     },
     onError: (e: Error) => message.error(e.message),
@@ -1883,9 +1987,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.info('This message is already being processed and cannot be withdrawn');
     }
   };
-  // Soft visibility actions for ended sessions. All reversible, so no confirm dialog —
-  // archive/delete fire immediately and surface an Undo toast; restore (used by the
-  // toast and the Archived/Trash views) clears both flags back to active.
+  // Filing actions are reversible. Moving an ended session or sending one to Trash happens
+  // immediately with Undo; ending a live run first gets an explicit confirmation below.
   const restoreMut = useMutation({
     mutationFn: (id: string) => restoreSession(id),
     onSuccess: (_d, id) => {
@@ -1895,6 +1998,17 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  const requestRestore = useCallback(
+    (session: any): void => {
+      const source = selectedSession?.id === session.id ? selectedSession : session;
+      if (!sessionCapabilityOf(source, 'canRestore', true)) {
+        message.info('This session cannot be moved to Open right now.');
+        return;
+      }
+      restoreMut.mutate(session.id);
+    },
+    [message, restoreMut, selectedSession],
+  );
   const showUndo = (id: string, label: string): void => {
     const key = `undo-${id}`;
     message.open({
@@ -1918,9 +2032,9 @@ export function AgentView({ runner }: { runner: Runner }) {
       duration: 4,
     });
   };
-  // Archiving/deleting the OPEN session drops it from the active list. Keep the
+  // Archiving/deleting the OPEN session drops it from the Open list. Keep the
   // selection at the same row: step to the next session down (or the previous one
-  // when we just completed the last row) so the cursor stays put instead of jumping
+  // when we just archived the last row) so the cursor stays put instead of jumping
   // to the top of the list. With nothing left to land on, fall back to the agent's
   // list (same move as the tab switcher) — that re-scopes the left column (a null
   // `selected` would collapse `scopeAgentId` and leak every agent's sessions) and
@@ -1952,25 +2066,46 @@ export function AgentView({ runner }: { runner: Runner }) {
       leaveIfOpen(id);
       dropFromLists(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(id, 'Completed');
+      showUndo(id, 'Archived');
     },
     onError: (e: Error) => message.error(e.message),
   });
-  // ⌘/Ctrl+D completes the open session — the keyboard twin of the ✓ on its row. Fires
+  const requestArchive = useCallback(
+    (session: any): void => {
+      const source = selectedSession?.id === session.id ? selectedSession : session;
+      if (!sessionCapabilityOf(source, 'canArchive', true)) {
+        message.info('This session cannot be archived right now.');
+        return;
+      }
+      if (isSessionTerminal(source)) {
+        archiveMut.mutate(session.id);
+        return;
+      }
+      modal.confirm({
+        title: 'End & archive session?',
+        content:
+          'This ends the current run and moves the session to Archived. You can move it back to Open later.',
+        okText: 'End & Archive',
+        cancelText: 'Cancel',
+        onOk: () => archiveMut.mutate(session.id),
+      });
+    },
+    [archiveMut, message, modal, selectedSession],
+  );
+  // ⌘/Ctrl+D archives the open session — the keyboard twin of the archive action on its row. Fires
   // even while the composer is focused; preventDefault swallows the browser's bookmark
-  // shortcut. Only on the active tab (where Complete applies); for a live session this
-  // also ends it, same as the button. The archive toast offers undo.
+  // shortcut. Only on the Open view; for a live session this opens the same end confirmation.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
       if (!(e.metaKey || e.ctrlKey)) return;
-      if (view !== 'active' || !selected) return;
+      if (view !== 'active' || !selected || selectedFilingState !== 'OPEN') return;
       e.preventDefault();
-      archiveMut.mutate(selected.id);
+      requestArchive(selected);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [view, selected, archiveMut]);
+  }, [view, selected, selectedFilingState, requestArchive]);
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
@@ -2203,7 +2338,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Attach images to a live/resumable session (scoped to its id) or while composing a new
   // one (uploaded unscoped, then scoped to the session the send creates). Either way the
   // runner must be online to fetch the bytes; otherwise the picker is disabled.
-  const canAttach = runner.online && !selectedDeleted && (selected ? live || resumable : composing);
+  const canAttach =
+    runner.online &&
+    !selectedDeleted &&
+    !sameSessionSendBlocked &&
+    (selected ? live || resumable : composing);
   const imageUid = useRef(0);
   // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
   // the turn carries only the id and a slow upload doesn't block typing. When composing
@@ -2259,7 +2398,11 @@ export function AgentView({ runner }: { runner: Runner }) {
       activeSessions: runner.activeSessions,
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
-      sessionStatus: selected ? statusLabel(selected) : selectedMissing ? 'not found' : null,
+      sessionStatus: selectedSession
+        ? statusLabel(selectedSession)
+        : selectedMissing
+          ? 'not found'
+          : null,
       agentName: shownAgentName,
       provider: shownProvider,
       model: shownModel,
@@ -2296,6 +2439,10 @@ export function AgentView({ runner }: { runner: Runner }) {
         }
       }
     }
+    if (sameSessionSendBlocked) {
+      message.info(sameSessionSendBlockedCopy);
+      return;
+    }
     if (uploading) return;
     // Replying to a pending AskUserQuestion: resolve it with the text as a deny+message
     // (claude reads it as feedback and continues) instead of a fresh turn. The deny channel
@@ -2324,9 +2471,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     // ended-but-resumable session — the server seeds it as a shell turn and the runner runs
     // it once it claims the session (a resume --resumes claude first, so its context is back
     // before the command runs). Its output echoes to the transcript and feeds claude as
-    // context on the next message. A bare `!` is a no-op; images are ignored. Only an
-    // unresumable ended session falls through (no claude to wake — start fresh instead).
-    if (c.startsWith('!') && (live || resumable || !selected)) {
+    // context on the next message. A bare `!` is a no-op; images are ignored. A terminal
+    // session is capability-checked in the mutation; without resumable context it starts fresh.
+    if (c.startsWith('!')) {
       const cmd = c.slice(1).trim();
       if (cmd) send.mutate({ content: cmd, images: [], shell: true });
       else setText('');
@@ -2376,6 +2523,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       !uploading &&
       runner.online &&
       !selectedDeleted &&
+      !sameSessionSendBlocked &&
       !selectedMissing &&
       !loadingSession;
   // The single send button morphs into a Stop while a turn is generating AND the composer
@@ -2384,7 +2532,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // and the reaper recycles an idle/finished session's slot on its own.
   const showStop =
     !!selected &&
-    sessionRunStatusOf(selected) === 'RUNNING' &&
+    sessionRunStatusOf(selectedSession ?? selected) === 'RUNNING' &&
     !text.trim() &&
     readyImages.length === 0 &&
     !replyTo;
@@ -2768,18 +2916,21 @@ export function AgentView({ runner }: { runner: Runner }) {
         ]
       : []),
   ];
-  // Header subtitle: the two things the composer below doesn't already show — current
-  // state and when it was last active. (turns/cost dropped; model/agent live in the
-  // composer pills.)
+  // Header subtitle keeps run outcome and filing location visibly separate, followed by
+  // last activity. Task state remains on its own task affordance above the title.
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
   const headSub = composing
     ? `${headAgentName} · New session`
     : selected
-      ? headTime
-        ? `${statusLabel(selected, effectiveView === 'archived')} · ${headTime}`
-        : statusLabel(selected, effectiveView === 'archived')
+      ? [
+          statusLabel(selectedSession ?? selected),
+          selectedFilingState ? sessionFilingLabel(selectedFilingState) : null,
+          headTime,
+        ]
+          .filter(Boolean)
+          .join(' · ')
       : selectedMissing
         ? 'Session not found'
       : selectedId
@@ -2789,13 +2940,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     ? 'Restore this session to continue'
     : selectedMissing
       ? 'Session not found'
-      : !runner.online
-        ? 'Runner offline'
-        : replyTo
-          ? 'Reply to Claude’s question…'
-          : selectedId
-            ? 'Reply…'
-            : 'Send this agent a task…';
+      : sameSessionSendBlocked
+        ? sameSessionSendBlockedCopy
+        : !runner.online
+          ? 'Runner offline'
+          : replyTo
+            ? 'Reply to Claude’s question…'
+            : selectedId
+              ? 'Reply…'
+              : 'Send this agent a task…';
 
   return (
     <div className={`agent-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
@@ -2804,9 +2957,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
-              chip row — both read as clutter in a narrow column, and Active is nearly always
+              chip row — both read as clutter in a narrow column, and Open is nearly always
               the answer. The trigger names the current view so a list scoped to
-              Completed/Trash always explains itself. (The native clients still tab.) */}
+              Archived/Trash always explains itself. (The native clients still tab.) */}
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
             <span
               className={`session-scope-menu${shownView !== 'active' || tagFilter || groupByTag ? ' on' : ''}`}
@@ -2849,7 +3002,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 : view === 'active'
                   ? 'No sessions yet.'
                   : view === 'archived'
-                    ? 'No completed sessions.'
+                    ? 'No archived sessions.'
                     : 'Trash is empty.'}
             </div>
           )}
@@ -2862,14 +3015,18 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {sec.title}
               </div>
               {sec.sessions.map((s) => {
-                const ended = isSessionTerminal(s);
+                const actionSession = selectedSession?.id === s.id ? selectedSession : s;
+                const ended = isSessionTerminal(actionSession);
+                const canArchiveRow = sessionCapabilityOf(actionSession, 'canArchive', true);
+                const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 const restoreItem = {
                   key: 'restore',
                   icon: <UndoOutlined />,
-                  label: 'Restore',
+                  label: view === 'archived' ? 'Move to Open' : 'Restore to Open',
+                  disabled: !canRestoreRow,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
-                    restoreMut.mutate(s.id);
+                    requestRestore(s);
                   },
                 };
                 const deleteItem = {
@@ -2898,7 +3055,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     : view === 'deleted'
                       ? [restoreItem, { type: 'divider' }, purgeItem]
                       : [restoreItem];
-                // Active and Completed (archived) rows open their transcript; only
+                // Open and Archived rows open their transcript; only
                 // Trash (deleted) rows stay closed.
                 const openable = view !== 'deleted';
                 const line = sessionLine(s, openable);
@@ -2930,7 +3087,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={s} completed={view === 'archived'} />
+                        <StatusIcon session={s} />
                       </span>
                       <div className="session-main">
                         <div className="session-title-row">
@@ -2993,16 +3150,27 @@ export function AgentView({ runner }: { runner: Runner }) {
                                 {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
                               </span>
                             </Tooltip>
-                            <Tooltip title={ended ? 'Complete' : 'Complete & end session'} placement="top" open={hoverTipOpen}>
+                            <Tooltip
+                              title={
+                                canArchiveRow
+                                  ? ended
+                                    ? 'Archive'
+                                    : 'End & Archive…'
+                                  : 'Archive unavailable right now'
+                              }
+                              placement="top"
+                              open={hoverTipOpen}
+                            >
                               <span
-                                className="session-kebab session-complete"
+                                className={`session-kebab session-archive${canArchiveRow ? '' : ' disabled'}`}
+                                aria-disabled={!canArchiveRow}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  archiveMut.mutate(s.id);
+                                  requestArchive(s);
                                   setSwipeOpenId(null);
                                 }}
                               >
-                                <CheckOutlined />
+                                <InboxOutlined />
                               </span>
                             </Tooltip>
                           </>
@@ -3156,10 +3324,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                         {
                           key: 'restore',
                           icon: <UndoOutlined />,
-                          label: 'Restore',
+                          label: 'Restore to Open',
+                          disabled: !selectedCanRestore,
                           onClick: () => {
                             setHeaderMenuOpen(false);
-                            restoreMut.mutate(selected.id);
+                            requestRestore(selected);
                           },
                         },
                         { type: 'divider' },
@@ -3211,23 +3380,34 @@ export function AgentView({ runner }: { runner: Runner }) {
                             ]
                           : []),
                         { type: 'divider' as const },
-                        // A Completed session is filed away, not gone — offer the same Restore
-                        // its row has on the Completed tab, so one opened from there can be put
-                        // back on Active without going back to hunt for the row.
+                        // An Archived session is filed away, not gone — offer the same move
+                        // its row has in Archived, so it can return to Open in place.
                         ...(selectedArchived
                           ? [
                               {
                                 key: 'restore',
                                 icon: <UndoOutlined />,
-                                label: 'Restore',
+                                label: 'Move to Open',
+                                disabled: !selectedCanRestore,
                                 onClick: () => {
                                   setHeaderMenuOpen(false);
-                                  restoreMut.mutate(selected.id);
+                                  requestRestore(selected);
                                 },
                               },
                               { type: 'divider' as const },
                             ]
-                          : []),
+                          : selectedFilingState === 'OPEN'
+                            ? [
+                                {
+                                  key: 'archive',
+                                  icon: <InboxOutlined />,
+                                  label: live ? 'End & Archive…' : 'Archive',
+                                  disabled: !selectedCanArchive,
+                                  onClick: () => requestArchive(selected),
+                                },
+                                { type: 'divider' as const },
+                              ]
+                            : []),
                         {
                           key: 'share',
                           icon: <ShareAltOutlined />,
@@ -3295,7 +3475,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
               {selected &&
                 !selectedDeleted &&
-                sessionStateOf(selected) === 'QUEUED' &&
+                sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
                 events.length === 0 && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
@@ -3316,7 +3496,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               </SessionNavCtx.Provider>
               {selected &&
                 !selectedDeleted &&
-                sessionStateOf(selected) === 'QUEUED' &&
+                sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
                 events.length > 0 && (
                 <div className="chat-note chat-slot-wait">
                   <span>{PENDING_SLOT_TITLE}</span>
@@ -3368,8 +3548,8 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
               {selected &&
                 !selectedDeleted &&
-                isSessionLive(selected) &&
-                sessionStateOf(selected) !== 'QUEUED' &&
+                isSessionLive(selectedSession ?? selected) &&
+                sessionRunStateOf(selectedSession ?? selected) !== 'QUEUED' &&
                 events.length === 0 &&
                 !streamingText &&
                 !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
@@ -3398,15 +3578,30 @@ export function AgentView({ runner }: { runner: Runner }) {
                         : ` · auto-deletes in ${left} day${left === 1 ? '' : 's'}`;
                   return (
                     <div className="chat-note">
-                      In Trash{when}. <a onClick={() => restoreMut.mutate(selected.id)}>Restore</a>
+                      In Trash{when}.{' '}
+                      {selectedCanRestore ? (
+                        <a onClick={() => requestRestore(selected)}>Restore to Open</a>
+                      ) : (
+                        <span title="Restore unavailable right now">Restore unavailable</span>
+                      )}
                       {' · '}
                       <a onClick={() => confirmPurge(selected.id)}>Delete permanently</a>
                     </div>
                   );
                 })()}
-              {selected && !selectedDeleted && isSessionTerminal(selected) && (
+              {selected && sameSessionSendBlocked && (
+                <div className="chat-note">{sameSessionSendBlockedCopy}</div>
+              )}
+              {selected &&
+                !selectedDeleted &&
+                isSessionTerminal(selectedSession ?? selected) && (
                 <div className="chat-note">
-                  {sessionEndedBanner(selected, !!resumable, !!runner.online)}
+                  {sessionEndedBanner(
+                    selectedSession ?? selected,
+                    !!resumable,
+                    !!runner.online,
+                    !resumable ? selectedResumeBlockedCopy : null,
+                  )}
                 </div>
               )}
             </div>
@@ -3664,8 +3859,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                   // --resumes claude, runs the command, and buffers its output for the next
                   // message). Only an unresumable ended session blocks it (never started, or
                   // its runner is offline) — there's no claude context to wake.
-                  label: !!selected && !live && !resumable ? 'Shell (resume the session first)' : 'Shell',
-                  disabled: !!selected && !live && !resumable,
+                  label:
+                    sameSessionSendBlocked || (!!selected && !live && !resumable)
+                      ? 'Shell (session unavailable)'
+                      : 'Shell',
+                  disabled: sameSessionSendBlocked || (!!selected && !live && !resumable),
                   onClick: insertShell,
                 },
                 {
@@ -3839,14 +4037,16 @@ export function AgentView({ runner }: { runner: Runner }) {
               />
             </Tooltip>
           ) : (
-            <Button
-              type="primary"
-              icon={<ArrowUpOutlined />}
-              disabled={!canSend}
-              loading={send.isPending}
-              onClick={onSend}
-              aria-label="Send"
-            />
+            <Tooltip title={sameSessionSendBlocked ? sameSessionSendBlockedCopy : ''}>
+              <Button
+                type="primary"
+                icon={<ArrowUpOutlined />}
+                disabled={!canSend}
+                loading={send.isPending}
+                onClick={onSend}
+                aria-label="Send"
+              />
+            </Tooltip>
           )}
         </div>
         <div className="composer-pills">

@@ -79,12 +79,23 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let runStatus: RunStatus?
     /// Server-normalized state, omitted by older control planes.
     public let sessionState: SessionState?
+    /// Orthogonal execution state and filing location, omitted by older control planes.
+    public let runState: SessionRunState?
+    public let filingState: SessionFilingState?
+    public let capabilities: SessionCapabilities?
     public let agentId: String?
     public let agent: AgentRef?
     public let pendingApprovals: Int
     public let lastTurnAt: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunState: SessionRunState {
+        SessionRunState.resolve(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+    public var effectiveFilingState: SessionFilingState? {
+        guard let filingState, filingState != .unknown else { return nil }
+        return filingState
+    }
 }
 
 /// `data` for `session.ended`.
@@ -92,9 +103,19 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
     public let status: RunStatus
     public let runStatus: RunStatus?
     public let sessionState: SessionState?
-    public let endReason: String
+    public let runState: SessionRunState?
+    public let filingState: SessionFilingState?
+    public let endReason: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunState: SessionRunState {
+        SessionRunState.resolve(runState, legacy: sessionState,
+                                status: effectiveRunStatus, endReason: endReason)
+    }
+    public var effectiveFilingState: SessionFilingState? {
+        guard let filingState, filingState != .unknown else { return nil }
+        return filingState
+    }
 }
 
 /// `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error; `false`

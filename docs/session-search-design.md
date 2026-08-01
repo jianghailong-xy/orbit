@@ -7,7 +7,7 @@ iOS 用同一个面板(抽屉放大镜进入)。三端共用一个服务端 endp
 
 web 的 session 列表是 `GET /sessions?runnerId=&view=`,缓存键 `['sessions', runnerId, view]`
 按 runner + view 分片(`src/web/src/lib/queries.ts:81`)。⌘K 要跨 agent、跨 runner、跨
-Active/Completed/Trash 定位,客户端缓存里从来没有全量数据。原生端同理
+Open/Archived/Trash 定位,客户端缓存里从来没有全量数据。原生端同理
 (`APIClient.listSessions(view:runnerId:)`)。
 
 ## 2. 线上数据现状(2026-07-26 实测)
@@ -126,16 +126,18 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
     title: string,
     status: RunStatus,             // 兼容字段；等于 runStatus
     runStatus: RunStatus,          // runner/进程的原始执行态
-    sessionState: SessionState,    // 服务端统一派生的权威用户态
+    sessionState: SessionState,    // 旧客户端兼容字段;新客户端不用它推断列表位置
+    runState: SessionRunState,     // 执行态/结果,与归档位置正交
+    filingState: SessionFilingState, // OPEN | ARCHIVED | TRASH
     agent: { id: string, name: string } | null,
     runnerId: string | null,
     taskId: string | null,
     taskTitle: string | null,
     lastTurnAt: string | null,
     createdAt: string,
-    archivedAt: string | null,     // 结果行标注「在 Completed」
+    archivedAt: string | null,     // 兼容时间戳;filingState=ARCHIVED 时结果行标注 Archived
     deletedAt: string | null,      // 结果行标注「在 Trash」
-    endReason: string | null,      // 诊断/兼容；状态文案以 sessionState 为准
+    endReason: string | null,      // 诊断/兼容；运行状态文案以 runState 为准
     matchField: 'id'|'title'|'prompt'|'reply'|'message'|'branch'|'agent'|'task'|'recent',
     snippet: string | null,        // 命中处 ±60 字符窗口,服务端截 + 折叠空白
   }>
@@ -152,7 +154,7 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
 - **Tier A**:`title`、`prompt`、`last_assistant_text`、`agent.name`、`branch`、`task.title`。
 - **Tier B**(`q.length >= 3`):`run_event.payload->>'text'` where `type in ('user','assistant')`,
   每个 session 只取最高优先的一条命中。
-- **范围**:默认含 Completed 和 Trash ——「我记得有个 session」十有八九就在 Completed,
+- **范围**:默认含 Archived 和 Trash ——「我记得有个 session」十有八九就在 Archived,
   只是结果行打角标区分。
 - **排序**:`matchField` 分档(id > title > prompt/reply > message > agent/branch/task),
   同档按 `last_turn_at DESC NULLS LAST, created_at DESC`。

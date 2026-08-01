@@ -119,6 +119,61 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertFalse(ComposerLogic.shouldResume(status: .awaitingInput))
     }
 
+    func testCapabilitiesAuthoritativelyGateSendAndResume() {
+        let resumable = SessionCapabilities(canSend: true, canResume: true,
+                                            canArchive: true, canRestore: false)
+        XCTAssertEqual(ComposerLogic.availability(status: .succeeded,
+                                                  capabilities: resumable), .sendNow)
+        XCTAssertTrue(ComposerLogic.shouldResume(status: .succeeded, capabilities: resumable))
+        XCTAssertNil(ComposerLogic.blockedMessage(status: .succeeded, capabilities: resumable))
+
+        // Status alone used to produce a false-positive /resume. The server knows the persisted
+        // context is gone, so the send is blocked with useful copy instead of changing endpoints.
+        let missing = SessionCapabilities(canSend: false, canResume: false,
+                                          resumeBlockedReason: .missingContext,
+                                          canArchive: true, canRestore: false)
+        XCTAssertEqual(ComposerLogic.availability(status: .succeeded,
+                                                  capabilities: missing), .blocked)
+        XCTAssertFalse(ComposerLogic.shouldResume(status: .succeeded, capabilities: missing))
+        XCTAssertEqual(ComposerLogic.blockedMessage(status: .succeeded, capabilities: missing),
+                       "The previous session context is no longer available.")
+
+        // A cached live state must not POST /turns while the server is already ending the run.
+        let ending = SessionCapabilities(canSend: false, canResume: false,
+                                         resumeBlockedReason: .ending,
+                                         canArchive: false, canRestore: false)
+        XCTAssertEqual(ComposerLogic.availability(status: .running,
+                                                  capabilities: ending), .blocked)
+        XCTAssertFalse(ComposerLogic.shouldResume(status: .running, capabilities: ending))
+        XCTAssertEqual(ComposerLogic.blockedMessage(status: .running, capabilities: ending),
+                       "This session is ending and cannot accept messages right now.")
+
+        // If only the local terminal bit is stale, do not silently reinterpret a denied resume as
+        // a normal turn; surface the server's NOT_TERMINAL explanation and wait for reconciliation.
+        let stillLive = SessionCapabilities(canSend: true, canResume: false,
+                                            resumeBlockedReason: .notTerminal,
+                                            canArchive: true, canRestore: false)
+        XCTAssertEqual(ComposerLogic.availability(status: .failed,
+                                                  capabilities: stillLive), .blocked)
+        XCTAssertFalse(ComposerLogic.shouldResume(status: .failed, capabilities: stillLive))
+        XCTAssertEqual(ComposerLogic.blockedMessage(status: .failed, capabilities: stillLive),
+                       "This session is still active and does not need to be resumed.")
+    }
+
+    func testCapabilitiesKeepLegacyFallbackAndForwardCompatibleCopy() {
+        XCTAssertEqual(ComposerLogic.availability(status: .cancelled, capabilities: nil), .sendNow)
+        XCTAssertTrue(ComposerLogic.shouldResume(status: .cancelled, capabilities: nil))
+        XCTAssertNil(ComposerLogic.blockedMessage(status: .cancelled, capabilities: nil))
+
+        let future = SessionCapabilities(canSend: false, canResume: false,
+                                         resumeBlockedReason: .unknown,
+                                         canArchive: false, canRestore: false)
+        XCTAssertEqual(ComposerLogic.blockedMessage(status: .cancelled, capabilities: future),
+                       "This session cannot be resumed right now.")
+        XCTAssertEqual(ComposerLogic.sendBlockedMessage(reason: .runnerOffline),
+                       "The assigned runner is offline, so this session cannot accept messages.")
+    }
+
     func testReconcileStatus() {
         // The bug: the stream missed the (un-replayable) terminal broadcast and still looks
         // live, but the server says the session ended — trust the server so the composer resumes

@@ -25,12 +25,76 @@ public enum ComposerLogic {
         }
     }
 
+    /// Capability-aware send availability. A new server is authoritative about whether this
+    /// exact session can accept another message; nil preserves the old status-only behavior.
+    /// Terminal sessions additionally need resume permission — never reinterpret a denied resume
+    /// as permission to POST a normal turn against a stale lifecycle snapshot.
+    public static func availability(status: RunStatus,
+                                    capabilities: SessionCapabilities?) -> SendAvailability {
+        guard let capabilities else { return availability(status: status) }
+        guard capabilities.canSend else { return .blocked }
+        if shouldResume(status: status), !capabilities.canResume { return .blocked }
+        return availability(status: status)
+    }
+
     /// True when a terminal-but-resumable session should be revived via POST /resume rather
     /// than POST /turns.
     public static func shouldResume(status: RunStatus) -> Bool {
         switch status {
         case .succeeded, .failed, .cancelled: return true
         default: return false
+        }
+    }
+
+    /// Server capability wins when present, but execution state still chooses the endpoint:
+    /// terminal + resumable uses `/resume`; a live send always uses `/turns`.
+    public static func shouldResume(status: RunStatus,
+                                    capabilities: SessionCapabilities?) -> Bool {
+        guard shouldResume(status: status) else { return false }
+        guard let capabilities else { return true }
+        return capabilities.canSend && capabilities.canResume
+    }
+
+    /// User-facing explanation for a send that capabilities prohibit. nil means it is safe to
+    /// proceed (or no capability object was supplied, so the legacy status inference applies).
+    public static func blockedMessage(status: RunStatus,
+                                      capabilities: SessionCapabilities?) -> String? {
+        guard let capabilities else { return nil }
+        if shouldResume(status: status) {
+            guard capabilities.canSend && capabilities.canResume else {
+                return resumeBlockedMessage(reason: capabilities.resumeBlockedReason)
+                    ?? "This session cannot be resumed right now."
+            }
+            return nil
+        }
+        guard capabilities.canSend else {
+            return sendBlockedMessage(reason: capabilities.resumeBlockedReason)
+        }
+        return nil
+    }
+
+    /// Detailed explanation for why an existing runner context cannot be resumed.
+    public static func resumeBlockedMessage(reason: SessionResumeBlockedReason?) -> String? {
+        switch reason {
+        case .trashed:        return "Move this session to Open before resuming."
+        case .ending:         return "This session is ending. Try again when it finishes."
+        case .notTerminal:    return "This session is still active and does not need to be resumed."
+        case .notStarted:     return "This session never started, so there is no context to resume."
+        case .missingContext: return "The previous session context is no longer available."
+        case .noRunner:       return "No runner is assigned to this session."
+        case .runnerOffline:  return "The assigned runner is offline."
+        case .unknown, .none: return nil
+        }
+    }
+
+    /// Send-specific copy for a live row whose authoritative capability temporarily says no.
+    public static func sendBlockedMessage(reason: SessionResumeBlockedReason?) -> String {
+        switch reason {
+        case .trashed:       return "Move this session to Open before sending a message."
+        case .ending:        return "This session is ending and cannot accept messages right now."
+        case .noRunner:      return "This session has no assigned runner and cannot accept messages."
+        case .runnerOffline: return "The assigned runner is offline, so this session cannot accept messages."
+        default:             return "This session cannot accept messages right now."
         }
     }
 

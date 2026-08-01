@@ -125,6 +125,7 @@ private struct ConsoleNavTitle: View {
 #endif
 
 struct TranscriptView: View {
+    @Environment(AppModel.self) private var app
     let console: ConsoleModel
     private let bottomID = "transcript-bottom"
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
@@ -496,7 +497,7 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+            Text(headerStatus)
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
             if !console.state.pendingApprovals.isEmpty {
@@ -510,6 +511,13 @@ struct TranscriptView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
+    }
+
+    private var headerStatus: String {
+        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID)) {
+            return subtitle
+        }
+        return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
     }
     #endif
 }

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ControlEvent, RunEventType, RunStatus, SessionEndReason } from '@orbit/shared';
+import {
+  ControlEvent,
+  RunEventType,
+  RunStatus,
+  SessionEndReason,
+  SessionFilingState,
+} from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
@@ -13,6 +19,20 @@ type Row = {
   agentId: string | null;
   title: string | null;
   status: string;
+  endReason?: string | null;
+  archivedAt?: Date | null;
+  deletedAt?: Date | null;
+  cancelRequestedAt: Date | null;
+  startedAt: Date | null;
+  numTurns: number;
+  runtimeSessionId: string | null;
+  claudeSessionId: string | null;
+  assignedRunnerId: string | null;
+  assignedRunner: {
+    id: string;
+    status: string;
+    lastHeartbeatAt: Date | null;
+  } | null;
   lastTurnAt: Date | null;
   agent: { id: string; name: string | null; model: string | null } | null;
 };
@@ -34,6 +54,17 @@ const rowA: Row = {
   agentId: 'agentA',
   title: 'Fix bug',
   status: RunStatus.RUNNING,
+  cancelRequestedAt: null,
+  startedAt: new Date('2026-06-26T00:00:00.000Z'),
+  numTurns: 1,
+  runtimeSessionId: 'runtime-1',
+  claudeSessionId: null,
+  assignedRunnerId: 'runnerA',
+  assignedRunner: {
+    id: 'runnerA',
+    status: 'ONLINE',
+    lastHeartbeatAt: new Date(),
+  },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
   agent: { id: 'agentA', name: 'builder', model: 'opus' },
 };
@@ -71,6 +102,15 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   assert.equal(data.status, 'RUNNING');
   assert.equal(data.runStatus, 'RUNNING');
   assert.equal(data.sessionState, 'RUNNING');
+  assert.equal(data.runState, 'RUNNING');
+  assert.equal(data.filingState, 'OPEN');
+  assert.deepEqual(data.capabilities, {
+    canSend: true,
+    canResume: false,
+    resumeBlockedReason: 'NOT_TERMINAL',
+    canArchive: true,
+    canRestore: false,
+  });
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
   assert.deepEqual(data.agent, { id: 'agentA', name: 'builder', model: 'opus' });
@@ -153,7 +193,12 @@ test('publishSessionEnded preserves raw CANCELLED while surfacing completed sess
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
-  svc.publishSessionEnded('sessA', RunStatus.CANCELLED, SessionEndReason.COMPLETED);
+  svc.publishSessionEnded(
+    'sessA',
+    RunStatus.CANCELLED,
+    SessionEndReason.COMPLETED,
+    SessionFilingState.ARCHIVED,
+  );
   await delay(30);
   sub.unsubscribe();
 
@@ -163,7 +208,62 @@ test('publishSessionEnded preserves raw CANCELLED while surfacing completed sess
     status: 'CANCELLED',
     runStatus: 'CANCELLED',
     sessionState: 'COMPLETED',
+    runState: 'CANCELLED',
+    filingState: 'ARCHIVED',
     endReason: 'completed',
+  });
+});
+
+test('filing a dormant terminal session preserves its actual runState', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionEnded(
+    'sessA',
+    RunStatus.CANCELLED,
+    SessionEndReason.ENDED,
+    SessionFilingState.ARCHIVED,
+  );
+  await delay(30);
+  sub.unsubscribe();
+
+  assert.deepEqual(got[0].data, {
+    status: 'CANCELLED',
+    runStatus: 'CANCELLED',
+    sessionState: 'COMPLETED',
+    runState: 'DORMANT',
+    filingState: 'ARCHIVED',
+    endReason: 'ended',
+  });
+});
+
+test('an archived successful summary keeps SUCCEEDED execution state', async () => {
+  const archived = {
+    ...rowA,
+    status: RunStatus.SUCCEEDED,
+    endReason: SessionEndReason.TASK_DONE,
+    archivedAt: new Date('2026-06-27T00:00:00.000Z'),
+    deletedAt: null,
+  };
+  const svc = svcWith({ sessA: archived }, 0);
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessA');
+  await delay(30);
+  sub.unsubscribe();
+
+  const data = got[0].data as Record<string, unknown>;
+  assert.equal(data.sessionState, 'COMPLETED');
+  assert.equal(data.runState, 'SUCCEEDED');
+  assert.equal(data.filingState, 'ARCHIVED');
+  assert.deepEqual(data.capabilities, {
+    canSend: true,
+    canResume: true,
+    resumeBlockedReason: null,
+    canArchive: false,
+    canRestore: true,
   });
 });
 
@@ -275,7 +375,12 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
   const sub = svc.streamForRun('sessA').subscribe((e) => transcript.push(e));
 
   svc.publishSessionCreated('sessA');
-  svc.publishSessionEnded('sessA', RunStatus.SUCCEEDED, SessionEndReason.COMPLETED);
+  svc.publishSessionEnded(
+    'sessA',
+    RunStatus.SUCCEEDED,
+    SessionEndReason.COMPLETED,
+    SessionFilingState.ARCHIVED,
+  );
   svc.publishTaskChanged('sessA', 'task123');
   svc.publishAgentChanged('sessA', 'agentNew');
   svc.publishSessionUpdated('sessA');

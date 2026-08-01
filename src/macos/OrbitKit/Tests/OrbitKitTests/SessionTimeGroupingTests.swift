@@ -54,7 +54,7 @@ final class SessionTimeGroupingTests: XCTestCase {
     }
 
     func testPinnedFirstDisabledBucketsPinnedByTime() {
-        // Completed/Trash views (pinnedFirst: false): a stale pinnedAt must NOT spawn a "Pinned"
+        // Archived/Trash views (pinnedFirst: false): a stale pinnedAt must NOT spawn a "Pinned"
         // section — the session just buckets by its time like any other.
         let s = [session("pin", lastTurnAt: "2026-07-08T09:00:00Z", pinnedAt: "2026-01-01T00:00:00Z")]
         let out = SessionTimeGrouping.sections(s, pinnedFirst: false, now: date(now), calendar: utc)

@@ -7,11 +7,14 @@ final class SessionHeaderTests: XCTestCase {
     private func session(_ status: RunStatus, title: String? = "t",
                          runStatus: RunStatus? = nil,
                          sessionState: SessionState? = nil,
+                         runState: SessionRunState? = nil,
+                         filingState: SessionFilingState? = nil,
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          error: String? = nil, endReason: String? = nil,
                          createdAt: String? = nil, lastTurnAt: String? = nil) -> Session {
         Session(id: "s", title: title, status: status, runStatus: runStatus,
                 sessionState: sessionState,
+                runState: runState, filingState: filingState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason,
@@ -41,7 +44,7 @@ final class SessionHeaderTests: XCTestCase {
     }
 
     func testStatusWordSucceeded() {
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.succeeded)), "Completed")
+        XCTAssertEqual(SessionHeader.statusWord(for: session(.succeeded)), "Succeeded")
     }
 
     func testStatusWordFailed() {
@@ -70,64 +73,78 @@ final class SessionHeaderTests: XCTestCase {
         XCTAssertEqual(SessionHeader.statusWord(for: session(.pending)), "Queued")
     }
 
-    func testServerSessionStateOverridesContradictoryLegacyFields() {
-        let cases: [(SessionState, String)] = [
+    func testExplicitRunStateOverridesContradictoryLegacyFields() {
+        let cases: [(SessionRunState, String)] = [
             (.queued, "Queued"),
             (.running, "Running"),
             (.awaitingInput, "Waiting for your reply"),
             (.dormant, "Dormant"),
-            (.completed, "Completed"),
+            (.succeeded, "Succeeded"),
             (.failed, "Failed"),
             (.cancelled, "Cancelled"),
             (.interrupted, "Interrupted"),
             (.ended, "Ended"),
-            (.deleted, "Deleted"),
         ]
         for (state, expected) in cases {
-            let s = session(.cancelled, sessionState: state, endReason: "completed")
+            let s = session(.cancelled, sessionState: .completed, runState: state,
+                            filingState: .archived, endReason: "completed")
             XCTAssertEqual(SessionHeader.statusWord(for: s), expected, state.rawValue)
         }
     }
 
     func testServerLiveStatesRetainUsefulDetail() {
         XCTAssertEqual(SessionHeader.statusWord(for: session(
-            .cancelled, sessionState: .running, pendingApprovals: 1)), "Waiting for approval")
+            .cancelled, runState: .running, pendingApprovals: 1)), "Waiting for approval")
         XCTAssertEqual(SessionHeader.statusWord(for: session(
-            .cancelled, sessionState: .awaitingInput, runningBgCount: 2)),
+            .cancelled, runState: .awaitingInput, runningBgCount: 2)),
             "2 background processes running")
         XCTAssertEqual(SessionHeader.statusWord(for: session(
-            .cancelled, sessionState: .failed, error: "runner offline")), "Disconnected")
+            .cancelled, runState: .failed, error: "runner offline")), "Disconnected")
     }
 
-    func testRunStatusAliasWinsInLegacyFallback() {
-        let s = session(.succeeded, runStatus: .cancelled, endReason: "idle")
-        XCTAssertEqual(SessionHeader.statusWord(for: s), "Dormant")
+    func testRawRunStatusWinsOverLegacyMixedCompletedState() {
+        let s = session(.succeeded, runStatus: .cancelled, sessionState: .completed,
+                        endReason: "completed")
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Cancelled")
     }
 
     func testUnknownServerSessionStateUsesLegacyFallback() {
         let s = session(.succeeded, sessionState: .unknown)
-        XCTAssertEqual(SessionHeader.statusWord(for: s), "Completed")
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Succeeded")
     }
 
-    // MARK: subtitle — "state · when"
+    func testFilingStateDoesNotChangeHeaderRunState() {
+        for filing: SessionFilingState in [.open, .archived, .trash] {
+            let s = session(.cancelled, runState: .succeeded, filingState: filing)
+            XCTAssertEqual(SessionHeader.statusWord(for: s), "Succeeded", filing.rawValue)
+        }
+    }
 
-    /// 3.5 min elapsed → "3m ago" (RelativeTime floors), joined to the state with " · ".
+    // MARK: subtitle — "run state · filing · when"
+
+    /// 3.5 min elapsed → "3m ago" (RelativeTime floors), after run state and filing location.
     func testSubtitleJoinsStateAndRelativeTime() {
         let now = ISO8601DateFormatter().date(from: "2026-07-05T10:03:30Z")!
         let s = session(.running, lastTurnAt: "2026-07-05T10:00:00Z")
-        XCTAssertEqual(SessionHeader.subtitle(for: s, now: now), "Running · 3m ago")
+        XCTAssertEqual(SessionHeader.subtitle(for: s, now: now), "Running · Open · 3m ago")
     }
 
     /// Web's `lastTurnAt ?? createdAt`: with no last turn, fall back to when it was created.
     func testSubtitleFallsBackToCreatedAt() {
         let now = ISO8601DateFormatter().date(from: "2026-07-05T12:00:00Z")!
         let s = session(.awaitingInput, createdAt: "2026-07-05T10:00:00Z")
-        XCTAssertEqual(SessionHeader.subtitle(for: s, now: now), "Waiting for your reply · 2h ago")
+        XCTAssertEqual(SessionHeader.subtitle(for: s, now: now),
+                       "Waiting for your reply · Open · 2h ago")
     }
 
-    /// No timestamps at all → the state word alone (no dangling separator).
+    /// No timestamps at all still keeps run state and filing location separate.
     func testSubtitleWordOnlyWhenNoTimestamps() {
-        XCTAssertEqual(SessionHeader.subtitle(for: session(.running)), "Running")
+        XCTAssertEqual(SessionHeader.subtitle(for: session(.running)), "Running · Open")
+    }
+
+    func testSubtitleShowsArchivedIndependentlyFromSucceeded() {
+        let s = session(.succeeded, runState: .succeeded, filingState: .archived)
+        XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Archived")
     }
 
     func testSubtitleNilWhenNoSession() {

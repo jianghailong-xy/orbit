@@ -24,9 +24,8 @@ import {
 } from '../lib/taskDependencyGraph';
 import {
   isSessionBusy,
-  sessionRunStatusOf,
-  sessionStateOf,
-  type SessionStateValue,
+  sessionRunStateOf,
+  type SessionRunState,
 } from '../lib/sessionState';
 import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
 import { TaskDependencyList } from './TaskDependencyList';
@@ -54,22 +53,20 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   FAILED: { label: 'Failed', tone: 'red' },
 };
 
-// Authoritative user-facing SessionState -> a single run's badge. Raw runStatus remains
-// available for execution-only decisions such as detecting a genuinely successful run.
-const SESSION_STATE_META: Record<SessionStateValue, { label: string; tone: string }> = {
+// A run's outcome badge is independent of whether its session is Open, Archived or in Trash.
+const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
   QUEUED: { label: PENDING_SLOT_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
-  COMPLETED: { label: 'Completed', tone: 'green' },
+  SUCCEEDED: { label: 'Succeeded', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },
   DORMANT: { label: 'Dormant', tone: 'muted' },
   ENDED: { label: 'Ended', tone: 'muted' },
-  DELETED: { label: 'Deleted', tone: 'muted' },
 };
 
-const sessionStatusMeta = (session: any) => SESSION_STATE_META[sessionStateOf(session)];
+const sessionStatusMeta = (session: any) => SESSION_STATE_META[sessionRunStateOf(session)];
 
 const fmt = (d?: string | null): string =>
   d
@@ -584,7 +581,7 @@ export function TaskDetailPanel({
   // §6.3 safety net: a run finished successfully but the task still isn't DONE while
   // dependents wait — surface a one-click "标记完成" so the pipeline doesn't stall.
   const hasSucceededSession = sessions.some(
-    (s: any) => sessionRunStatusOf(s) === 'SUCCEEDED',
+    (s: any) => sessionRunStateOf(s) === 'SUCCEEDED',
   );
   const needsDoneConfirm =
     dependedOnBy.length > 0 && task?.status !== 'DONE' && hasSucceededSession;
@@ -898,7 +895,7 @@ export function TaskDetailPanel({
               <div className="tdp-muted">No runs yet</div>
             ) : (
               sessions.map((s: any) => {
-                const state = sessionStateOf(s);
+                const state = sessionRunStateOf(s);
                 const meta = sessionStatusMeta(s);
                 return (
                   <Link

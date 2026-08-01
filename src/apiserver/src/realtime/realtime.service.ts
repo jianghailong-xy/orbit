@@ -8,6 +8,8 @@ import {
   ControlEvent,
   ControlEventType,
   ControlSessionSummary,
+  deriveSessionFilingState,
+  deriveSessionRunState,
   deriveSessionState,
   isLifecycleType,
   MergeCommand,
@@ -15,11 +17,14 @@ import {
   RunEventType,
   RunStatus,
   SessionEndReason,
+  SessionFilingState,
+  SessionRunState,
   SessionState,
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { deriveSessionCapabilities } from '../sessions/session-state';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -33,15 +38,35 @@ const INBOX_CHANNEL = 'orbit_inbox';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
 
-/** session.ended is emitted only for archive/delete. Reconstruct those filing fields so
+/** session.ended is emitted only for moves to Archived/Trash. Reconstruct filing fields so
  * rolling replicas that receive only the synthetic event still derive the same state. */
-function endedSessionState(status: RunStatus | string, endReason: SessionEndReason | string): SessionState {
-  return deriveSessionState({
+function endedSessionStates(
+  status: RunStatus | string,
+  endReason: SessionEndReason | string | null,
+  explicitFilingState?: SessionFilingState,
+): {
+  sessionState: SessionState;
+  runState: SessionRunState;
+  filingState: SessionFilingState;
+} {
+  const filingState =
+    explicitFilingState ??
+    (endReason === SessionEndReason.COMPLETED
+      ? SessionFilingState.ARCHIVED
+      : endReason === SessionEndReason.DELETED
+        ? SessionFilingState.TRASH
+        : SessionFilingState.OPEN);
+  const input = {
     status,
     endReason,
-    archivedAt: endReason === SessionEndReason.COMPLETED ? 'archived' : null,
-    deletedAt: endReason === SessionEndReason.DELETED ? 'deleted' : null,
-  });
+    archivedAt: filingState === SessionFilingState.ARCHIVED ? 'archived' : null,
+    deletedAt: filingState === SessionFilingState.TRASH ? 'deleted' : null,
+  };
+  return {
+    sessionState: deriveSessionState(input),
+    runState: deriveSessionRunState(input),
+    filingState,
+  };
 }
 
 /**
@@ -260,7 +285,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   // hub (seq 0, never persisted; ingest owns durable seq assignment). streamForRun filters them
   // out above; streamForUser maps them to ControlEventType.SESSION_CREATED / SESSION_ENDED.
 
-  /** A session entered the owner's active list (created, or restored from archive/trash). */
+  /** A session entered the owner's Open list (created, restored, or resumed from Archived). */
   publishSessionCreated(sessionId: string): void {
     this.publish(sessionId, {
       seq: 0,
@@ -270,17 +295,29 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** A session left the owner's active list (archived → completed, or soft-deleted). Terminal
+  /** A session left Open (moved to Archived or Trash). Terminal
    *  RUN statuses are NOT signalled here — they already flow as STATUS → session.updated; and
-   *  a gracefully recycled session stays in the active list, so recycling isn't an "ended"
+   *  a gracefully recycled session stays in Open, so recycling isn't an "ended"
    *  either (see the design doc). */
-  publishSessionEnded(sessionId: string, status: RunStatus | string, endReason: SessionEndReason): void {
-    const sessionState = endedSessionState(status, endReason);
+  publishSessionEnded(
+    sessionId: string,
+    status: RunStatus | string,
+    endReason: SessionEndReason | null,
+    filingState: SessionFilingState,
+  ): void {
+    const states = endedSessionStates(status, endReason, filingState);
     this.publish(sessionId, {
       seq: 0,
       type: RunEventType.SESSION_ENDED,
       ts: new Date().toISOString(),
-      payload: { status, runStatus: status, sessionState, endReason },
+      payload: {
+        status,
+        runStatus: status,
+        sessionState: states.sessionState,
+        runState: states.runState,
+        filingState: states.filingState,
+        endReason,
+      },
     });
   }
 
@@ -426,15 +463,23 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         break;
       }
       case ControlEventType.SESSION_ENDED:
-        // Decision Q4: the session left the active list — no more events will follow, so drop
+        // Decision Q4: the session left Open — no more events will follow, so drop
         // its owner mapping now instead of waiting for LRU pressure.
         this.ownerCache.delete(sessionId);
         {
           const runStatus = String(ev.payload.runStatus ?? ev.payload.status) as RunStatus;
-          const endReason = String(ev.payload.endReason) as SessionEndReason;
+          const endReason =
+            ev.payload.endReason == null
+              ? null
+              : (String(ev.payload.endReason) as SessionEndReason);
+          const payloadFilingState = ev.payload.filingState as SessionFilingState | undefined;
+          const derived = endedSessionStates(runStatus, endReason, payloadFilingState);
           const sessionState =
-            (ev.payload.sessionState as SessionState | undefined) ?? endedSessionState(runStatus, endReason);
-          data = { status: runStatus, runStatus, sessionState, endReason };
+            (ev.payload.sessionState as SessionState | undefined) ?? derived.sessionState;
+          const runState = (ev.payload.runState as SessionRunState | undefined) ?? derived.runState;
+          const filingState =
+            (ev.payload.filingState as SessionFilingState | undefined) ?? derived.filingState;
+          data = { status: runStatus, runStatus, sessionState, runState, filingState, endReason };
         }
         break;
       case ControlEventType.SESSION_ERROR:
@@ -502,6 +547,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         endReason: true,
         archivedAt: true,
         deletedAt: true,
+        cancelRequestedAt: true,
+        startedAt: true,
+        numTurns: true,
+        runtimeSessionId: true,
+        claudeSessionId: true,
+        assignedRunnerId: true,
+        assignedRunner: {
+          select: { id: true, status: true, lastHeartbeatAt: true },
+        },
         agentId: true,
         lastTurnAt: true,
         agent: { select: { id: true, name: true, model: true } },
@@ -509,6 +563,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
     if (!s) return null;
     const sessionState = deriveSessionState(s);
+    const runState = deriveSessionRunState(s);
+    const filingState = deriveSessionFilingState(s);
+    const capabilities = deriveSessionCapabilities(s);
     // A blocked permission keeps a session RUNNING, so only RUNNING sessions can hold a live
     // approval — skip the count otherwise (mirrors the list endpoint).
     const pendingApprovals =
@@ -519,6 +576,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       status: s.status as RunStatus,
       runStatus: s.status as RunStatus,
       sessionState,
+      runState,
+      filingState,
+      capabilities,
       agentId: s.agentId ?? null,
       agent: s.agent
         ? { id: s.agent.id, name: s.agent.name ?? null, model: s.agent.model ?? null }

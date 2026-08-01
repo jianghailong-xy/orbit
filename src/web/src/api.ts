@@ -1,4 +1,4 @@
-import type { BgShell } from '@orbit/shared';
+import type { BgShell, SessionCapabilities } from '@orbit/shared';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -480,6 +480,8 @@ export interface SharedEvent {
 export interface SharedSession {
   title: string;
   agentName: string | null;
+  runState?: string;
+  filingState?: string;
   sessionState?: string;
   runStatus?: string;
   status: string;
@@ -548,7 +550,11 @@ export interface SessionChangedFile {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
-  /** Authoritative product lifecycle; prefer this for every user-facing state decision. */
+  /** Latest run outcome and sidebar filing location are independent product dimensions. */
+  runState?: string;
+  filingState?: string;
+  capabilities?: SessionCapabilities;
+  /** Legacy mixed product lifecycle retained during migration. */
   sessionState?: string;
   /** Explicit runner/process state. `status` is its legacy alias. */
   runStatus?: string;

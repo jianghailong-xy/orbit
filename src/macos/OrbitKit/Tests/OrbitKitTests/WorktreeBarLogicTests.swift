@@ -166,6 +166,9 @@ final class WorktreeBarLogicTests: XCTestCase {
         {
           "id": "s1", "title": "ignored", "status": "AWAITING_INPUT",
           "runStatus": "AWAITING_INPUT", "sessionState": "AWAITING_INPUT",
+          "runState": "AWAITING_INPUT", "filingState": "OPEN",
+          "capabilities": {"canSend": true, "canResume": false,
+            "resumeBlockedReason": "NOT_TERMINAL", "canArchive": true, "canRestore": false},
           "branch": "orbit/fix-a1b2c3", "isolationStatus": "worktree",
           "worktreeDirty": false, "mergeStatus": "pending", "mergeTarget": "main",
           "mergeTargets": ["main", "develop"], "branchMerged": false,
@@ -181,6 +184,13 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertEqual(d.runStatus, .awaitingInput)
         XCTAssertEqual(d.effectiveRunStatus, .awaitingInput)
         XCTAssertEqual(d.sessionState, .awaitingInput)
+        XCTAssertEqual(d.runState, .awaitingInput)
+        XCTAssertEqual(d.effectiveRunState, .awaitingInput)
+        XCTAssertEqual(d.filingState, .open)
+        XCTAssertEqual(d.effectiveFilingState, .open)
+        XCTAssertTrue(try XCTUnwrap(d.capabilities).canSend)
+        XCTAssertFalse(try XCTUnwrap(d.capabilities).canResume)
+        XCTAssertEqual(d.capabilities?.resumeBlockedReason, .notTerminal)
         XCTAssertEqual(d.branch, "orbit/fix-a1b2c3")
         XCTAssertEqual(d.isolationStatus, "worktree")
         XCTAssertEqual(d.worktreeDirty, false)
@@ -195,6 +205,10 @@ final class WorktreeBarLogicTests: XCTestCase {
         // A slim payload (older runner / pre-isolation) decodes with everything optional as nil.
         let d = try JSONDecoder().decode(SessionDetail.self, from: Data(#"{"id":"s2"}"#.utf8))
         XCTAssertNil(d.sessionState)
+        XCTAssertNil(d.runState)
+        XCTAssertNil(d.effectiveRunState)
+        XCTAssertNil(d.filingState)
+        XCTAssertNil(d.capabilities)
         XCTAssertNil(d.status)
         XCTAssertNil(d.runStatus)
         XCTAssertNil(d.effectiveRunStatus)
@@ -203,5 +217,16 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertNil(d.changedFiles)
         XCTAssertNil(d.mergeStatus)
         XCTAssertNil(d.agent)
+    }
+
+    func testSlimOldDetailUsesMixedSessionStateOnlyWhenRawStatusIsMissing() throws {
+        let legacy = try JSONDecoder().decode(
+            SessionDetail.self, from: Data(#"{"id":"s3","sessionState":"FAILED"}"#.utf8))
+        XCTAssertEqual(legacy.effectiveRunState, .failed)
+
+        let rawWins = try JSONDecoder().decode(
+            SessionDetail.self,
+            from: Data(#"{"id":"s4","status":"CANCELLED","sessionState":"COMPLETED"}"#.utf8))
+        XCTAssertEqual(rawWins.effectiveRunState, .dormant)
     }
 }

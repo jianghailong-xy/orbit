@@ -19,11 +19,10 @@ public struct SessionLine: Equatable, Sendable {
         self.tone = tone
     }
 
-    /// Build the line for a session. `live` mirrors the web's `openable` (true for every non-trash
-    /// tab); macOS has no trash view, so callers pass `true`. Returns nil when there's nothing to
+    /// Build the line for a session. `live` is false in Trash. Returns nil when there's nothing to
     /// show (an idle session with no last reply) — the row then shows only its title.
     public static func make(for s: Session, live: Bool) -> SessionLine? {
-        if live && s.effectiveRunStatus == .running {
+        if live && s.effectiveRunState == .running {
             if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A turn just started and the agent hasn't replied yet: show the message you just sent
@@ -34,7 +33,7 @@ public struct SessionLine: Equatable, Sendable {
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
-        if live && s.effectiveRunStatus == .pending {
+        if live && s.effectiveRunState == .queued {
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle.

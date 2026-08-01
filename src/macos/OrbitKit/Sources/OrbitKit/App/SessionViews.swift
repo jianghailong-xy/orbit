@@ -1,30 +1,40 @@
 import Foundation
 
-/// The lifecycle views a session list filters to (the `?view=` query param), mirroring the web
-/// Agent console's switcher. "Completed" is the server's `archived` view.
+/// The filing views a session list filters to (the `?view=` query param). Filing is independent
+/// from execution state: Open may contain succeeded sessions and Archived may contain failures.
 public enum SessionView: String, CaseIterable, Sendable, Identifiable {
-    case active, completed, trash
+    case open, archived, trash
     public var id: String { rawValue }
     public var title: String {
         switch self {
-        case .active:    return "Active"
-        case .completed: return "Completed"
-        case .trash:     return "Trash"
+        case .open:     return "Open"
+        case .archived: return "Archived"
+        case .trash:    return "Trash"
         }
     }
-    /// The value sent to `GET /sessions?view=` (completed maps to the server's "archived", trash to
-    /// "deleted").
+    /// The value sent to `GET /sessions?view=`. The server retains its legacy `active` / `deleted`
+    /// query vocabulary for compatibility.
     public var queryValue: String {
         switch self {
-        case .active:    return "active"
-        case .completed: return "archived"
-        case .trash:     return "deleted"
+        case .open:     return "active"
+        case .archived: return "archived"
+        case .trash:    return "deleted"
         }
     }
 
-    /// The cases offered in the console's switcher, in the web Agent console's order: Active,
-    /// Completed (archived), and Trash (soft-deleted, restorable until the server purges them).
-    public static let pickerCases: [SessionView] = [.active, .completed, .trash]
+    /// The cases offered in the console's switcher, in filing order.
+    public static let pickerCases: [SessionView] = [.open, .archived, .trash]
+}
+
+/// Shared archive affordance wording/safety for macOS and iOS rows.
+public enum SessionArchivePresentation {
+    public static func requiresConfirmation(for runState: SessionRunState) -> Bool {
+        runState.isLive
+    }
+
+    public static func actionTitle(for runState: SessionRunState) -> String {
+        requiresConfirmation(for: runState) ? "End & Archive…" : "Archive"
+    }
 }
 
 public enum SessionFilter {
@@ -44,17 +54,17 @@ public enum SessionFilter {
     /// Agent console. Every non-archived session returned by the active query stays visible there;
     /// there is no separate System list.
     ///
-    /// The activity-ordered views (Active/Trash) are re-sorted client-side to match web's Agent
+    /// The activity-ordered views (Open/Trash) are re-sorted client-side to match web's Agent
     /// console exactly — the server orders never-run (queued) sessions last (`last_turn_at DESC
     /// NULLS LAST`), but web ranks them by `createdAt` instead, so a freshly queued session sits
-    /// among recent activity rather than pinned to the bottom. Completed (archived) is the one
+    /// among recent activity rather than pinned to the bottom. Archived is the one
     /// exception: the server orders it by `archived_at` (newest filed first) and deliberately
     /// ignores pinning, and that timestamp isn't in the list payload, so the client can't reproduce
     /// it — the server order is preserved verbatim, exactly as web's AgentView does
     /// (`if view === 'archived' return rows`). Without these two rules the clients disagree on order.
     public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView) -> [Session] {
         let scoped = forAgent(sessions, agentID: agentID)
-        return view == .completed ? scoped : consoleSorted(scoped)
+        return view == .archived ? scoped : consoleSorted(scoped)
     }
 
     /// Order a per-agent console list as web's `AgentView` does: pinned sessions first, then

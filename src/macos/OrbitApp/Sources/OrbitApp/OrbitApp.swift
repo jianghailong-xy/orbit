@@ -42,12 +42,11 @@ struct OrbitApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!model.signedIn || model.orderedAgents.isEmpty)
             }
-            // ⌘D → complete (archive) the open session, the keyboard twin of the web's ✓ on a
-            // session row. Disabled unless a session's console is actually showing.
+            // ⌘D → archive the open session. Disabled unless a session's console is showing.
             CommandGroup(after: .newItem) {
-                Button("Complete Session") { model.completeCurrentSession() }
+                Button("Archive Session") { model.archiveCurrentSession() }
                     .keyboardShortcut("d", modifiers: .command)
-                    .disabled(!model.signedIn || model.currentSessionID == nil)
+                    .disabled(!model.signedIn || !model.canArchiveCurrentSession)
             }
             // Standard "Check for Updates…" in the app menu (right after "About Orbit").
             CommandGroup(after: .appInfo) {
@@ -116,11 +115,22 @@ struct OrbitApp: App {
 struct RootView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        if model.signedIn {
-            MainView()
-                .sessionSearchSheet(model)
-        } else {
-            LoginView()
+        @Bindable var model = model
+        Group {
+            if model.signedIn {
+                MainView()
+                    .sessionSearchSheet(model)
+            } else {
+                LoginView()
+            }
+        }
+        .confirmationDialog("End and archive this session?",
+                            isPresented: $model.confirmingCurrentSessionArchive,
+                            titleVisibility: .visible) {
+            Button("End & Archive", role: .destructive) { model.confirmCurrentSessionArchive() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This ends the current run and moves the session to Archived.")
         }
     }
 }

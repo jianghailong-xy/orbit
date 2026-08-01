@@ -6,7 +6,10 @@ import { SessionsService } from './sessions.service';
 
 const now = new Date();
 
-function makeService(overrides: Record<string, unknown> = {}) {
+function makeService(
+  overrides: Record<string, unknown> = {},
+  existingTurn: { id: string; seq: number } | null = null,
+) {
   const session = {
     id: 'session-1',
     status: RunStatus.FAILED,
@@ -17,6 +20,8 @@ function makeService(overrides: Record<string, unknown> = {}) {
     assignedRunnerId: 'runner-1',
     cancelRequestedAt: null,
     archivedAt: null,
+    deletedAt: null,
+    assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now },
     provider: 'codex',
     mergeStatus: null,
     commitStatus: null,
@@ -26,21 +31,19 @@ function makeService(overrides: Record<string, unknown> = {}) {
   let notified = 0;
   const sessionDelegate = {
     findFirst: async () => session,
+    findUniqueOrThrow: async () => session,
     update: async (args: unknown) => {
       updates.push(args);
       return session;
     },
   };
   const conversationTurnDelegate = {
-    findUnique: async () => null,
+    findUnique: async () => existingTurn,
     findFirst: async () => ({ seq: 1 }),
     create: async ({ data }: { data: { seq: number } }) => ({ id: 'retry-turn', ...data }),
   };
   const prisma = {
     session: sessionDelegate,
-    runner: {
-      findUnique: async () => ({ status: 'ONLINE', lastHeartbeatAt: now }),
-    },
     conversationTurn: conversationTurnDelegate,
     $transaction: async (fn: (tx: unknown) => unknown) =>
       fn({
@@ -89,4 +92,42 @@ test('completed context without a runtime id still cannot restart', async () => 
     (error: unknown) =>
       error instanceof ConflictException && error.message === 'this session never ran and cannot be resumed',
   );
+});
+
+test('resume rejects Trash before taking the live-session path', async () => {
+  const { service, updates, notified } = makeService({
+    status: RunStatus.AWAITING_INPUT,
+    deletedAt: now,
+  });
+
+  await assert.rejects(
+    () => service.resume('owner-1', 'session-1', retry),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'the session is in Trash; restore it before sending a message',
+  );
+  assert.equal(updates.length, 0);
+  assert.equal(notified(), 0);
+});
+
+test('a graceful terminal cancel remains resumable despite historical cancelRequestedAt', async () => {
+  const { service } = makeService({ cancelRequestedAt: now });
+
+  const accepted = await service.resume('owner-1', 'session-1', retry);
+
+  assert.equal(accepted.turnId, 'retry-turn');
+});
+
+test('a lost resume response can retry its clientTurnId after the session became PENDING', async () => {
+  const existingTurn = { id: 'already-queued-turn', seq: 7 };
+  const { service, updates, notified } = makeService(
+    { status: RunStatus.PENDING },
+    existingTurn,
+  );
+
+  const accepted = await service.resume('owner-1', 'session-1', retry);
+
+  assert.deepEqual(accepted, { turnId: existingTurn.id, seq: existingTurn.seq });
+  assert.equal(updates.length, 0);
+  assert.equal(notified(), 1);
 });

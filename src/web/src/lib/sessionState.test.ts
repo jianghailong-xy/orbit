@@ -1,134 +1,145 @@
 import { describe, expect, it } from 'vitest';
 import {
-  hasAuthoritativeSessionState,
+  hasAuthoritativeFilingState,
+  hasAuthoritativeRunState,
   isSessionBusy,
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
+  sessionFilingLabel,
+  sessionFilingStateOf,
   sessionHoldsRunnerSlot,
+  sessionRunStateOf,
   sessionRunStatusOf,
   sessionStateOf,
 } from './sessionState';
 
-describe('sessionStateOf', () => {
-  it('treats a valid sessionState as authoritative over contradictory legacy fields', () => {
-    const completed = {
-      sessionState: 'COMPLETED',
+describe('sessionRunStateOf', () => {
+  it('treats runState as authoritative without letting filing change the outcome', () => {
+    const session = {
+      runState: 'SUCCEEDED',
+      filingState: 'OPEN',
+      sessionState: 'FAILED',
       runStatus: 'CANCELLED',
-      status: 'FAILED',
-      endReason: 'cancelled',
+      archivedAt: '2026-08-01T00:00:00Z',
     };
-    expect(hasAuthoritativeSessionState(completed)).toBe(true);
-    expect(sessionStateOf(completed)).toBe('COMPLETED');
 
+    expect(hasAuthoritativeRunState(session)).toBe(true);
+    expect(sessionRunStateOf(session)).toBe('SUCCEEDED');
+    expect(sessionFilingStateOf(session)).toBe('OPEN');
+  });
+
+  it('uses the legacy mixed sessionState only when both runState and raw status are absent', () => {
     expect(
-      sessionStateOf({
-        sessionState: 'CANCELLED',
-        status: 'SUCCEEDED',
-        archivedAt: '2026-08-01T00:00:00Z',
+      sessionRunStateOf({ sessionState: 'COMPLETED' }),
+    ).toBe('SUCCEEDED');
+    expect(
+      sessionRunStateOf({
+        sessionState: 'COMPLETED',
+        runStatus: 'CANCELLED',
+        endReason: 'completed',
       }),
     ).toBe('CANCELLED');
+    expect(
+      sessionRunStateOf({
+        runState: 'CANCELLED',
+        sessionState: 'COMPLETED',
+        runStatus: 'SUCCEEDED',
+      }),
+    ).toBe('CANCELLED');
+    expect(sessionStateOf({ runState: 'SUCCEEDED' })).toBe('COMPLETED');
   });
 
-  it('prefers runStatus to the legacy status alias and normalizes legacy casing', () => {
+  it('prefers runStatus to the legacy status alias and normalizes casing', () => {
     const session = { runStatus: 'running', status: 'FAILED' };
     expect(sessionRunStatusOf(session)).toBe('RUNNING');
-    expect(sessionStateOf(session)).toBe('RUNNING');
+    expect(sessionRunStateOf(session)).toBe('RUNNING');
   });
 
-  it('matches the server derivation for ordinary legacy run statuses', () => {
-    expect(sessionStateOf({ status: 'PENDING' })).toBe('QUEUED');
-    expect(sessionStateOf({ status: 'RUNNING' })).toBe('RUNNING');
-    expect(sessionStateOf({ status: 'AWAITING_INPUT' })).toBe('AWAITING_INPUT');
-    expect(sessionStateOf({ status: 'SUCCEEDED' })).toBe('COMPLETED');
-    expect(sessionStateOf({ status: 'FAILED' })).toBe('FAILED');
-    expect(sessionStateOf({ status: 'future_state' })).toBe('ENDED');
+  it('derives ordinary legacy runner statuses without consulting filing timestamps', () => {
+    expect(sessionRunStateOf({ status: 'PENDING' })).toBe('QUEUED');
+    expect(sessionRunStateOf({ status: 'RUNNING' })).toBe('RUNNING');
+    expect(sessionRunStateOf({ status: 'AWAITING_INPUT' })).toBe('AWAITING_INPUT');
+    expect(sessionRunStateOf({ status: 'SUCCEEDED', archivedAt: null })).toBe('SUCCEEDED');
+    expect(sessionRunStateOf({ status: 'FAILED', archivedAt: new Date() })).toBe('FAILED');
+    expect(sessionRunStateOf({ status: 'future_state' })).toBe('ENDED');
   });
 
-  it('keeps all overloaded cancelled/interrupted inference inside the legacy fallback', () => {
+  it('keeps overloaded cancelled/interrupted inference inside the legacy fallback', () => {
     for (const endReason of [undefined, 'idle', 'task_done', 'ended', 'future_reason']) {
-      expect(sessionStateOf({ status: 'CANCELLED', endReason })).toBe('DORMANT');
+      expect(sessionRunStateOf({ status: 'CANCELLED', endReason })).toBe('DORMANT');
     }
-    expect(sessionStateOf({ status: 'CANCELLED', endReason: 'orphaned' })).toBe('ENDED');
-    for (const endReason of ['completed', 'deleted', 'cancelled']) {
-      expect(sessionStateOf({ status: 'CANCELLED', endReason })).toBe('CANCELLED');
+    expect(sessionRunStateOf({ status: 'CANCELLED', endReason: 'orphaned' })).toBe('ENDED');
+    for (const endReason of ['completed', 'deleted', 'cancelled', 'task_cancelled']) {
+      expect(sessionRunStateOf({ status: 'CANCELLED', endReason })).toBe('CANCELLED');
     }
-    expect(sessionStateOf({ status: 'INTERRUPTED' })).toBe('INTERRUPTED');
-    expect(sessionStateOf({ status: 'INTERRUPTED', endReason: 'orphaned' })).toBe('ENDED');
-    expect(sessionStateOf({ status: 'INTERRUPTED', endReason: 'idle' })).toBe('DORMANT');
+    expect(sessionRunStateOf({ status: 'INTERRUPTED' })).toBe('INTERRUPTED');
+    expect(sessionRunStateOf({ status: 'INTERRUPTED', endReason: 'idle' })).toBe('DORMANT');
+  });
+});
+
+describe('sessionFilingStateOf', () => {
+  it('prefers filingState and falls back to timestamps or the legacy list view', () => {
+    const authoritative = {
+      filingState: 'OPEN',
+      archivedAt: '2026-08-01T00:00:00Z',
+      deletedAt: '2026-08-02T00:00:00Z',
+    };
+    expect(hasAuthoritativeFilingState(authoritative)).toBe(true);
+    expect(sessionFilingStateOf(authoritative)).toBe('OPEN');
+    expect(sessionFilingStateOf({ deletedAt: new Date() })).toBe('TRASH');
+    expect(sessionFilingStateOf({ archivedAt: new Date() })).toBe('ARCHIVED');
+    expect(sessionFilingStateOf({}, { legacyView: 'archived' })).toBe('ARCHIVED');
+    expect(sessionFilingStateOf({}, { legacyView: 'deleted' })).toBe('TRASH');
+    expect(sessionFilingStateOf({})).toBe('OPEN');
   });
 
-  it('retains filing-field compatibility for old detail/search/list payloads', () => {
-    expect(sessionStateOf({ status: 'RUNNING', deletedAt: new Date() })).toBe('DELETED');
+  it('labels locations independently from the run outcome', () => {
+    expect(sessionFilingLabel('OPEN')).toBe('Open');
+    expect(sessionFilingLabel('ARCHIVED')).toBe('Archived');
+    expect(sessionFilingLabel('TRASH')).toBe('Trash');
     expect(
-      sessionStateOf({ status: 'CANCELLED', endReason: 'completed', archivedAt: new Date() }),
-    ).toBe('COMPLETED');
-    expect(sessionStateOf({ status: 'CANCELLED', endReason: 'completed' })).toBe('CANCELLED');
-    expect(sessionStateOf({ status: 'FAILED', archivedAt: new Date() })).toBe('FAILED');
-    expect(sessionStateOf({ status: 'CANCELLED' }, { legacyCompleted: true })).toBe('COMPLETED');
-    expect(
-      sessionStateOf(
-        { sessionState: 'FAILED', status: 'CANCELLED' },
-        { legacyCompleted: true },
-      ),
-    ).toBe('FAILED');
+      [
+        sessionRunStateOf({ runState: 'FAILED', filingState: 'ARCHIVED' }),
+        sessionFilingStateOf({ runState: 'FAILED', filingState: 'ARCHIVED' }),
+      ],
+    ).toEqual(['FAILED', 'ARCHIVED']);
   });
 });
 
 describe('session state predicates', () => {
-  it('uses product state for liveness and task busy state', () => {
-    expect(isSessionLive({ sessionState: 'INTERRUPTED', status: 'INTERRUPTED' })).toBe(true);
-    expect(isSessionLive({ sessionState: 'DORMANT', status: 'CANCELLED' })).toBe(false);
-    expect(isSessionTerminal({ sessionState: 'COMPLETED', status: 'CANCELLED' })).toBe(true);
-    expect(isSessionBusy({ sessionState: 'QUEUED', status: 'PENDING' })).toBe(true);
-    expect(isSessionBusy({ sessionState: 'RUNNING', status: 'CANCELLED' })).toBe(true);
-    expect(isSessionBusy({ sessionState: 'AWAITING_INPUT', status: 'RUNNING' })).toBe(false);
+  it('uses runState for liveness and busy state', () => {
+    expect(isSessionLive({ runState: 'INTERRUPTED', filingState: 'ARCHIVED' })).toBe(true);
+    expect(isSessionLive({ runState: 'DORMANT', filingState: 'OPEN' })).toBe(false);
+    expect(isSessionTerminal({ runState: 'SUCCEEDED', filingState: 'OPEN' })).toBe(true);
+    expect(isSessionBusy({ runState: 'QUEUED', status: 'CANCELLED' })).toBe(true);
+    expect(isSessionBusy({ runState: 'RUNNING', status: 'CANCELLED' })).toBe(true);
+    expect(isSessionBusy({ runState: 'AWAITING_INPUT', status: 'RUNNING' })).toBe(false);
   });
 
   it('uses raw runStatus for runner slot accounting', () => {
     expect(
-      sessionHoldsRunnerSlot({
-        sessionState: 'COMPLETED',
-        runStatus: 'RUNNING',
-        status: 'CANCELLED',
-      }),
+      sessionHoldsRunnerSlot({ runState: 'SUCCEEDED', runStatus: 'RUNNING' }),
     ).toBe(true);
     expect(
-      sessionHoldsRunnerSlot({
-        sessionState: 'RUNNING',
-        runStatus: 'CANCELLED',
-        status: 'RUNNING',
-      }),
-    ).toBe(false);
-
-    expect(
-      sessionHoldsRunnerSlot({
-        sessionState: 'AWAITING_INPUT',
-        runStatus: 'AWAITING_INPUT',
-      }),
-    ).toBe(false);
-    expect(
-      sessionHoldsRunnerSlot({
-        sessionState: 'INTERRUPTED',
-        runStatus: 'INTERRUPTED',
-      }),
+      sessionHoldsRunnerSlot({ runState: 'RUNNING', runStatus: 'CANCELLED' }),
     ).toBe(false);
     expect(sessionHoldsRunnerSlot({ status: 'running' })).toBe(true);
   });
 });
 
 describe('sessionEndedBanner', () => {
-  it('takes the outcome from sessionState, not an overloaded cancelled run', () => {
+  it('uses the run outcome while separately explaining an Archived resume', () => {
     expect(
       sessionEndedBanner(
-        { sessionState: 'COMPLETED', runStatus: 'CANCELLED', endReason: 'cancelled' },
+        { runState: 'SUCCEEDED', filingState: 'ARCHIVED' },
         true,
         true,
       ),
-    ).toBe('Session completed. Send a message to resume this session.');
+    ).toBe('Session succeeded. Sending a message will resume this session in Open.');
     expect(
       sessionEndedBanner(
-        { sessionState: 'CANCELLED', runStatus: 'CANCELLED', endReason: 'completed' },
+        { runState: 'CANCELLED', filingState: 'OPEN', endReason: 'task_cancelled' },
         false,
         true,
       ),
@@ -137,12 +148,25 @@ describe('sessionEndedBanner', () => {
 
   it('uses the reason only to enrich dormant/ended copy', () => {
     expect(
-      sessionEndedBanner({ sessionState: 'DORMANT', endReason: 'idle' }, false, false),
+      sessionEndedBanner({ runState: 'DORMANT', endReason: 'idle' }, false, false),
     ).toBe(
       'Session ended automatically after a long idle period. Runner offline — bring it online to resume.',
     );
     expect(
-      sessionEndedBanner({ sessionState: 'ENDED', endReason: 'orphaned' }, false, true),
+      sessionEndedBanner({ runState: 'ENDED', endReason: 'orphaned' }, false, true),
     ).toBe('Session ended (the linked task is done). Sending a message starts a new session.');
+  });
+
+  it('includes a server-provided resume blocker before explaining the fresh-session fallback', () => {
+    expect(
+      sessionEndedBanner(
+        { runState: 'SUCCEEDED', filingState: 'OPEN' },
+        false,
+        true,
+        'The previous session context is no longer available.',
+      ),
+    ).toBe(
+      'Session succeeded. The previous session context is no longer available. Sending a message starts a new session.',
+    );
   });
 });

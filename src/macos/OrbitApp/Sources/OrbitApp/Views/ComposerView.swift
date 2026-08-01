@@ -65,6 +65,10 @@ struct ComposerView: View {
         console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
     }
 
+    private var isArchivedSession: Bool {
+        app.session(id: console.sessionID)?.effectiveFilingState == .archived
+    }
+
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
     // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `iosEditing`).
     private var boxFocused: Bool {
@@ -87,6 +91,30 @@ struct ComposerView: View {
 
     var body: some View {
         VStack(spacing: 6) {
+            if isArchivedSession {
+                HStack(spacing: 6) {
+                    Image(systemName: "archivebox").foregroundStyle(.secondary)
+                    Text("Archived · Sending a message will resume this session in Open.")
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+            }
+
+            if let blocked = console.sendBlockedMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.circle").foregroundStyle(.secondary)
+                    Text(blocked).font(.orbitLabel).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    if console.canRefreshBlockedSend {
+                        Button("Check Again") { Task { await console.refreshCapabilities() } }
+                            .buttonStyle(.plain)
+                            .font(.orbitLabel.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+            }
+
             if let reply = console.replyContext {
                 HStack(spacing: 6) {
                     Image(systemName: "bubble.left.and.bubble.right.fill").foregroundStyle(.blue)
@@ -289,6 +317,12 @@ struct ComposerView: View {
                 return nil
             }
             #endif
+        }
+        // The app-level session list refreshes from control-plane activity and carries capability
+        // changes (including runner heartbeat recovery). Feed that newer snapshot into the open
+        // console; a direct send still re-fetches immediately before a terminal /resume.
+        .onChange(of: app.session(id: console.sessionID), initial: true) { _, session in
+            console.adoptServerSnapshot(session)
         }
         #if os(macOS)
         .onDisappear {

@@ -185,9 +185,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         }
         // A task-bound runtime has no more work once its task is terminal. This is a
         // business completion, not idle expiry; ordinary AWAITING_INPUT sessions stay open.
-        const taskDone = !!s.task && TASK_TERMINAL.includes(s.task.status);
-        if (s.status === RunStatus.AWAITING_INPUT && !s.cancelRequestedAt && taskDone) {
-          await this.endParked(s.id, s.assignedRunnerId, SessionEndReason.TASK_DONE);
+        const taskTerminal = !!s.task && TASK_TERMINAL.includes(s.task.status);
+        if (s.status === RunStatus.AWAITING_INPUT && !s.cancelRequestedAt && taskTerminal) {
+          const reason =
+            s.task?.status === TaskStatus.DONE
+              ? SessionEndReason.TASK_DONE
+              : SessionEndReason.TASK_CANCELLED;
+          await this.endParked(s.id, s.assignedRunnerId, reason);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
@@ -281,6 +285,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     runnerId: string | null,
     reason: SessionEndReason,
   ): Promise<void> {
+    const taskStatus =
+      reason === SessionEndReason.TASK_DONE ? TaskStatus.DONE : TaskStatus.CANCELLED;
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
     // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
@@ -292,7 +298,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           id: sessionId,
           status: RunStatus.AWAITING_INPUT,
           cancelRequestedAt: null,
-          task: { status: { in: TASK_TERMINAL } },
+          // Re-check the exact terminal outcome, not merely "some terminal state": a
+          // stale sweep must never turn a cancelled task into task_done/SUCCEEDED.
+          task: { status: taskStatus },
         },
         data: { cancelRequestedAt: new Date(), endReason: reason },
       });

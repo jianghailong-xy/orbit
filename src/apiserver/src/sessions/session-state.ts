@@ -1,4 +1,16 @@
-import { SessionState, deriveSessionState } from '@orbit/shared';
+import {
+  type SessionCapabilities,
+  SessionFilingState,
+  type SessionResumeBlockedReason,
+  SessionRunState,
+  SessionState,
+  deriveSessionFilingState,
+  deriveSessionRunState,
+  deriveSessionState,
+} from '@orbit/shared';
+
+/** Runners heartbeat every 30s; three missed heartbeats makes resume unavailable. */
+export const SESSION_RUNNER_OFFLINE_AFTER_MS = 90_000;
 
 /** The raw fields required to augment a Prisma/API session row. */
 export interface RawSessionStateFields {
@@ -8,17 +20,105 @@ export interface RawSessionStateFields {
   deletedAt?: Date | string | null;
 }
 
+/** Complete server-side input needed to derive action capabilities. */
+export interface SessionCapabilityFields extends RawSessionStateFields {
+  cancelRequestedAt: Date | string | null;
+  startedAt: Date | string | null;
+  numTurns: number;
+  runtimeSessionId: string | null;
+  claudeSessionId: string | null;
+  assignedRunnerId?: string | null;
+  assignedRunner:
+    | {
+        id?: string;
+        status: string;
+        lastHeartbeatAt: Date | string | null;
+      }
+    | null;
+}
+
+const TERMINAL_RUN_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED']);
+
 /**
- * Preserve the legacy `status` field while exposing its explicit `runStatus` alias and
- * the authoritative product-level `sessionState`. Kept server-side so every Session
- * payload is augmented in the same shape without changing the persisted Prisma model.
+ * Single source of truth for both resume authorization and action affordances sent to
+ * clients. Keep this pure so list/detail/realtime and the mutation guard cannot drift.
+ */
+export function deriveSessionCapabilities(
+  session: SessionCapabilityFields,
+  nowMs: number = Date.now(),
+): SessionCapabilities {
+  const filingState = deriveSessionFilingState(session);
+  const terminal = TERMINAL_RUN_STATUSES.has(String(session.status).toUpperCase());
+  let resumeBlockedReason: SessionResumeBlockedReason | null = null;
+
+  if (filingState === SessionFilingState.TRASH) {
+    resumeBlockedReason = 'TRASHED';
+  } else if (!terminal && session.cancelRequestedAt != null) {
+    resumeBlockedReason = 'ENDING';
+  } else if (!terminal) {
+    resumeBlockedReason = 'NOT_TERMINAL';
+  } else if (session.startedAt == null) {
+    resumeBlockedReason = 'NOT_STARTED';
+  } else if (
+    session.numTurns > 0 &&
+    !(session.runtimeSessionId ?? session.claudeSessionId)
+  ) {
+    resumeBlockedReason = 'MISSING_CONTEXT';
+  } else if (!(session.assignedRunnerId ?? session.assignedRunner?.id)) {
+    resumeBlockedReason = 'NO_RUNNER';
+  } else {
+    const heartbeat = session.assignedRunner?.lastHeartbeatAt;
+    const heartbeatMs =
+      heartbeat instanceof Date ? heartbeat.getTime() : heartbeat ? Date.parse(heartbeat) : NaN;
+    const runnerOnline =
+      session.assignedRunner != null &&
+      session.assignedRunner.status !== 'OFFLINE' &&
+      Number.isFinite(heartbeatMs) &&
+      heartbeatMs >= nowMs - SESSION_RUNNER_OFFLINE_AFTER_MS;
+    if (!runnerOnline) resumeBlockedReason = 'RUNNER_OFFLINE';
+  }
+
+  const canResume = resumeBlockedReason == null;
+  const ending = !terminal && session.cancelRequestedAt != null;
+  const trashed = filingState === SessionFilingState.TRASH;
+  return {
+    canSend: !trashed && !ending && (!terminal || canResume),
+    canResume,
+    resumeBlockedReason,
+    canArchive: filingState === SessionFilingState.OPEN,
+    canRestore: filingState !== SessionFilingState.OPEN,
+  };
+}
+
+/**
+ * Preserve the legacy fields while adding orthogonal execution + filing state. Kept
+ * server-side so every Session payload is augmented consistently without changing the
+ * persisted Prisma model.
  */
 export function withSessionState<T extends RawSessionStateFields>(
   session: T,
-): T & { runStatus: T['status']; sessionState: SessionState } {
+): T & {
+  runStatus: T['status'];
+  sessionState: SessionState;
+  runState: SessionRunState;
+  filingState: SessionFilingState;
+} {
   return {
     ...session,
     runStatus: session.status,
     sessionState: deriveSessionState(session),
+    runState: deriveSessionRunState(session),
+    filingState: deriveSessionFilingState(session),
+  };
+}
+
+/** Add lifecycle state and server-derived capabilities to a complete session row. */
+export function withSessionCapabilities<T extends SessionCapabilityFields>(
+  session: T,
+  nowMs: number = Date.now(),
+): ReturnType<typeof withSessionState<T>> & { capabilities: SessionCapabilities } {
+  return {
+    ...withSessionState(session),
+    capabilities: deriveSessionCapabilities(session, nowMs),
   };
 }

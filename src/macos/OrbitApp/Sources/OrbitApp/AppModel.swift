@@ -9,7 +9,7 @@ import AppKit
 import UIKit
 #endif
 
-/// Top-level app state: instance + auth + the Active session list. All UI-driving state lives
+/// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
 /// here; the heavy protocol logic stays in OrbitKit (APIClient, SessionGrouping, ServerURL).
 @MainActor
 @Observable
@@ -78,22 +78,25 @@ final class AppModel {
     var composedConsoleSessionID: String?
     var selectedUserID: String?
     var menuSummary: MenuBarSummary = .empty
-    /// Bumped to ask the visible session list (the Active sidebar or an agent's session list) to
+    /// Bumped to ask the visible session list (Open or an agent's scoped list) to
     /// take keyboard focus so ↑/↓ resume switching sessions. The composer raises this on Escape,
     /// handing arrow-key control back to the list without the user having to click it first.
     var sessionListFocusRequest = 0
     func focusSessionList() { sessionListFocusRequest &+= 1 }
 
-    /// The cached `Session` for an open console — searched across the Active list and the selected
-    /// agent's sessions, mirroring how web's console header reads `selected` from the session list.
-    /// Nil when the session isn't in a loaded list yet (e.g. a fresh deep link), in which case the
-    /// header falls back to the live stream's agent + status.
+    /// Exact records fetched to resolve cold deep links / global-search hits. Those routes can point
+    /// at Archived or Trash, which are absent from the cross-agent Open list. Keeping the response
+    /// lets the header, composer and filing/capability guards share the same authoritative context.
+    private var sessionDetails = SessionDetailCache()
+
+    /// The cached `Session` for an open console. Fresh list snapshots win; a cold-routed detail is
+    /// the fallback when the record lives outside the currently loaded Open / agent list scopes.
     func session(id: String) -> Session? {
-        sessions.first { $0.id == id } ?? agents?.agentSessions.first { $0.id == id }
+        sessionDetails.resolve(id, preferring: sessions, agents?.agentSessions ?? [])
     }
 
     /// The drawer's **Recents** feed: every jump-back session across all agents, newest first, derived
-    /// from the already-fresh cross-agent Active list (`sessions`) — which the server returns in full,
+    /// from the already-fresh cross-agent Open list (`sessions`) — which the server returns in full,
     /// unpaginated. Uncapped on purpose: the drawer's Recents List is lazy, so it renders rows as you
     /// scroll rather than stopping at a fixed count. Empty until the first `loadSessions` lands; kept
     /// live by the same control-plane stream that drives the list.
@@ -163,6 +166,7 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        sessionDetails.removeAll()
         baseURL = url
         api = APIClient(baseURL: url, tokenStore: tokenStore)
         tasks = TasksModel(baseURL: url, tokenStore: tokenStore)
@@ -281,6 +285,7 @@ final class AppModel {
         }
         signedIn = false
         sessions = []
+        sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
         menuSummary = .empty
@@ -313,7 +318,7 @@ final class AppModel {
         #endif
     }
 
-    /// Keep the Active list fresh. The control-plane stream (below) is the primary source: while
+    /// Keep Open fresh. The control-plane stream (below) is the primary source: while
     /// it's live, its events drive coalesced refreshes and the 4s tick here skips its fetch. The
     /// tick remains as the universal fallback — an older server without `/api/events`, or any
     /// reconnect gap, degrades back to exactly the old polling behavior with no user action.
@@ -495,6 +500,10 @@ final class AppModel {
                 }
             }
             lastSnapshot = list
+            // Only cached cold-route records are reconciled; the Open list itself remains the
+            // primary store. If that row later leaves a loaded scope, its fallback is still the
+            // newest lifecycle/capability snapshot we observed rather than the original fetch.
+            sessionDetails.reconcile(with: list)
             sessions = list
             menuSummary = MenuBar.summary(from: list)
             updateDockBadge(menuSummary.badge)
@@ -512,10 +521,10 @@ final class AppModel {
         }
     }
 
-    /// The agent a session runs as, for scoping the composer's `/` autocomplete. The active list
-    /// nests `agent`; fall back to the flat `agentId` if present.
+    /// The agent a session runs as, for scoping the composer's `/` autocomplete. Cold Archived /
+    /// Trash routes resolve through the exact-detail cache as well as the loaded lists.
     func agentID(for sessionID: String) -> String? {
-        guard let s = sessions.first(where: { $0.id == sessionID }) else { return nil }
+        guard let s = session(id: sessionID) else { return nil }
         return s.agent?.id ?? s.agentId
     }
 
@@ -564,6 +573,7 @@ final class AppModel {
     /// arming the selection is what keeps the iPhone push from bouncing back to the "Select a session"
     /// empty state — see `AgentsModel.registerCreatedSession`.
     func openCreatedAgentSession(_ session: Session) {
+        sessionDetails.store(session)
         agents?.registerCreatedSession(session)
         composingAgentSession = false
         selectedAgentSessionID = session.id
@@ -610,7 +620,7 @@ final class AppModel {
     }
 
     /// Open a **Recents** row from the drawer: jump into the session's owning agent and select it so
-    /// the Agents pane pushes its console. The Active list nests the agent, so there's no fetch (unlike
+    /// the Agents pane pushes its console. The Open list nests the agent, so there's no fetch (unlike
     /// a cold deep link — see `openSession`). A no-op agent switch keeps an already-pushed console; a
     /// real switch clears the prior agent's session/compose state before selecting this session.
     func openRecentSession(_ s: Session) {
@@ -635,7 +645,7 @@ final class AppModel {
         openAgent(all[index].id)
     }
 
-    /// The session whose console fills the detail pane right now — the ⌘D ("Complete Session")
+    /// The session whose console fills the detail pane right now — the ⌘D ("Archive Session")
     /// target. In Agents it's the selected agent session (nil while drafting a new one). nil in
     /// every other section, which disables the command.
     var currentSessionID: String? {
@@ -643,6 +653,19 @@ final class AppModel {
         case .agents: return composingAgentSession ? nil : selectedAgentSessionID
         default:      return nil
         }
+    }
+
+    /// Prefer the server's filing guard when available; a missing capability is an old server and
+    /// retains the pre-capability behavior.
+    var canArchiveCurrentSession: Bool {
+        guard let id = currentSessionID else { return false }
+        return session(id: id)?.capabilities?.canArchive ?? true
+    }
+
+    private(set) var pendingCurrentArchiveSessionID: String?
+    var confirmingCurrentSessionArchive: Bool {
+        get { pendingCurrentArchiveSessionID != nil }
+        set { if !newValue { pendingCurrentArchiveSessionID = nil } }
     }
 
     /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
@@ -674,34 +697,58 @@ final class AppModel {
         }
     }
 
-    /// ⌘D: complete (archive) the open session — the keyboard twin of the web's ✓ on a session row.
-    /// The server's archive ends a live session first (reason COMPLETED), so this works whether the
-    /// session is running or already idle. Clears the selection so the console pane drops the
-    /// archived session, then refreshes the Active list.
-    func completeCurrentSession() {
-        guard let api, let id = currentSessionID else { return }
+    /// ⌘D: archive the open session. Clears the selection so the console pane drops the archived
+    /// session, then refreshes Open.
+    func archiveCurrentSession() {
+        guard let id = currentSessionID else { return }
+        guard canArchiveCurrentSession else {
+            errorText = "This session can't be archived right now."
+            return
+        }
+        // A fresh deep link may not have its row yet; fail safe and confirm when liveness is unknown.
+        guard let runState = session(id: id)?.effectiveRunState,
+              !SessionArchivePresentation.requiresConfirmation(for: runState) else {
+            pendingCurrentArchiveSessionID = id
+            return
+        }
+        performCurrentSessionArchive(id)
+    }
+
+    func confirmCurrentSessionArchive() {
+        guard let id = pendingCurrentArchiveSessionID else { return }
+        pendingCurrentArchiveSessionID = nil
+        performCurrentSessionArchive(id)
+    }
+
+    private func performCurrentSessionArchive(_ id: String) {
+        guard let api else { return }
+        guard session(id: id)?.capabilities?.canArchive != false else {
+            errorText = "This session can't be archived right now."
+            return
+        }
         Task { @MainActor in
             do {
                 try await api.archiveSession(id)
             } catch {
-                errorText = "Couldn't complete the session."
+                errorText = "Couldn't archive the session."
                 return
             }
+            sessionDetails.remove(id)
             dropIfOpen(id)
             await loadSessions()
         }
     }
 
     /// Clear a session out of the pane that has it open (the agent console selection), so a
-    /// completed/deleted session can't linger in the detail view. Used by ⌘D and the row actions.
+    /// archived/deleted session can't linger in the detail view. Used by ⌘D and row actions.
     private func dropIfOpen(_ id: String) {
         if selectedAgentSessionID == id { selectedAgentSessionID = nil }
     }
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
-    /// A just-performed reversible action, surfaced as an Undo toast for a few seconds. Restore is
-    /// the universal undo — the server's `restore` clears both archive and trash state.
+    /// A just-performed reversible action, surfaced as an Undo toast for a few seconds. Moving to
+    /// Open is the universal undo — the server's `restore` clears both archive and trash state.
     struct SessionUndo: Identifiable, Equatable {
         let id = UUID()
         let message: String
@@ -710,11 +757,12 @@ final class AppModel {
     var sessionUndo: SessionUndo?
     private var undoDismiss: Task<Void, Never>?
 
-    /// Refresh whichever session lists are on screen (the Active sidebar always; the agent list if
+    /// Refresh whichever session lists are on screen (Open always; the agent list if
     /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
     private func reloadSessionLists() async {
         await loadSessions()
         await agents?.reloadCurrentSessions()
+        sessionDetails.reconcile(with: agents?.agentSessions ?? [])
     }
 
     private func offerUndo(_ message: String, sessionID: String) {
@@ -729,24 +777,34 @@ final class AppModel {
 
     func dismissUndo() { undoDismiss?.cancel(); sessionUndo = nil }
 
-    /// Complete (archive) a session — the server ends a live one first (reason COMPLETED). Drops it
-    /// from any open pane and offers Undo.
-    func completeSession(_ id: String) {
+    /// Archive a session, drop it from any open pane and offer Undo.
+    func archiveSession(_ id: String) {
         guard let api else { return }
+        guard session(id: id)?.capabilities?.canArchive != false else {
+            errorText = "This session can't be archived right now."
+            return
+        }
         Task { @MainActor in
             do { try await api.archiveSession(id) }
-            catch { errorText = "Couldn't complete the session."; return }
+            catch { errorText = "Couldn't archive the session."; return }
+            sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            offerUndo("Completed", sessionID: id)
+            offerUndo("Archived", sessionID: id)
         }
     }
 
-    /// Restore an archived/trashed session back to Active (also the Undo target).
-    func restoreSession(_ id: String) {
+    /// Move an archived/trashed session back to Open (also the Undo target).
+    func moveSessionToOpen(_ id: String) {
         guard let api else { return }
+        guard session(id: id)?.capabilities?.canRestore != false else {
+            errorText = "This session can't be moved to Open right now."
+            return
+        }
         Task { @MainActor in
-            try? await api.restoreSession(id)
+            do { try await api.restoreSession(id) }
+            catch { errorText = "Couldn't move the session to Open."; return }
+            sessionDetails.remove(id)
             await reloadSessionLists()
         }
     }
@@ -755,7 +813,9 @@ final class AppModel {
     func deleteSession(_ id: String) {
         guard let api else { return }
         Task { @MainActor in
-            try? await api.deleteSession(id)
+            do { try await api.deleteSession(id) }
+            catch { errorText = "Couldn't delete the session."; return }
+            sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
             offerUndo("Deleted", sessionID: id)
@@ -769,6 +829,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.purgeSession(id) }
             catch { errorText = "Couldn't delete the session permanently."; return }
+            sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
         }
@@ -842,7 +903,7 @@ final class AppModel {
 
     func undoSessionAction() {
         guard let undo = sessionUndo else { return }
-        restoreSession(undo.sessionID)
+        moveSessionToOpen(undo.sessionID)
         dismissUndo()
     }
 
@@ -860,19 +921,29 @@ final class AppModel {
 
     /// Open a session's console. There's no standalone session view anymore, so route into its
     /// owning agent's console (the section is already `.agents`, set by `route`). Resolve the agent
-    /// from the loaded Active list, else fetch the session to learn it; showing the session id right
-    /// away lets the console paint while the agent resolves in the background.
+    /// from loaded state, then refresh an out-of-Open route with the exact session record. Showing
+    /// the id right away lets the console paint while the agent + filing context resolve in the
+    /// background; retaining that response is what lets Archived / Trash headers and composers
+    /// render correctly on a cold launch.
     private func openSession(_ id: String) {
         composingAgentSession = false
         selectedAgentSessionID = id
         if let aid = agentID(for: id) {
             selectedAgentID = aid
-        } else {
-            Task { @MainActor [weak self] in
-                guard let self, let session = try? await self.api?.session(id),
-                      self.selectedAgentSessionID == id else { return }   // ignore a stale resolve
-                self.selectedAgentID = session.agent?.id ?? session.agentId
-            }
+        }
+        // The Open snapshot is already control-plane refreshed. Everything else (including an old
+        // detail-cache hit) gets an exact refresh so repeated search/deep-link navigation cannot
+        // resurrect stale filing or capability state.
+        guard !sessions.contains(where: { $0.id == id }) else { return }
+        Task { @MainActor [weak self] in
+            guard let self, let resolved = try? await self.api?.session(id) else { return }
+            self.sessionDetails.store(resolved)
+            // Feed an already-hydrated console immediately too; ComposerView observes the same
+            // cache, while this closes the small race where its initial observation ran first.
+            self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
+            guard self.selectedSection == .agents,
+                  self.selectedAgentSessionID == id else { return }   // stale navigation resolve
+            self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
         }
     }
 

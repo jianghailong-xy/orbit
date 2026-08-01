@@ -7,9 +7,8 @@ import Foundation
 /// Kept in OrbitKit (not the SwiftUI view) so the exact web mapping is shared by macOS + iOS and
 /// unit-tested. The view turns `shape`/`tone` into an SF Symbol (or spinner) and a colour.
 ///
-/// New servers provide `sessionState`, the authoritative user-facing lifecycle. The tab-derived
-/// `completed` / `deleted` flags and low-level `status` / `endReason` mapping remain for older
-/// servers that omit it.
+/// New servers provide `runState`, which is deliberately independent from Open / Archived / Trash.
+/// Older servers fall back through the mixed `sessionState` and raw runner status in the DTO.
 public struct SessionStatusGlyph: Equatable, Sendable {
     /// How the view should draw the glyph. `.spinner` is the animated "working" indicator (web's
     /// `LoadingOutlined spin`); `.symbol` names an SF Symbol.
@@ -37,44 +36,38 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         self.label = label
     }
 
-    /// The glyph for a session, mirroring web `StatusIcon({ session, completed })`.
-    /// `completed` = the Completed (archived) tab is showing this row; `deleted` = the Trash tab.
-    public static func make(for s: Session, completed: Bool = false, deleted: Bool = false) -> SessionStatusGlyph {
-        make(status: s.effectiveRunStatus, sessionState: s.sessionState,
-             completed: completed, deleted: deleted,
-             pendingApprovals: s.pendingApprovals, runningBgCount: s.runningBgCount,
-             error: s.error, endReason: s.endReason)
+    /// The glyph for a session. Filing location never overrides the run's actual state.
+    public static func make(for s: Session) -> SessionStatusGlyph {
+        make(runState: s.effectiveRunState,
+             pendingApprovals: s.pendingApprovals,
+             runningBgCount: s.runningBgCount,
+             error: s.error)
     }
 
-    /// The same mapping over plain fields, for callers that hold something other than a list-shaped
-    /// `Session` — the ⌘K search hit, whose payload is deliberately thinner. Faking a `Session` to
-    /// call the overload above would mean getting a long memberwise init exactly right for no gain.
+    /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
     public static func make(status: RunStatus,
+                            runState: SessionRunState? = nil,
                             sessionState: SessionState? = nil,
-                            completed: Bool = false,
-                            deleted: Bool = false,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
                             error: String? = nil,
                             endReason: String? = nil) -> SessionStatusGlyph {
-        if let sessionState, sessionState != .unknown {
-            return make(sessionState: sessionState,
-                        pendingApprovals: pendingApprovals,
-                        runningBgCount: runningBgCount,
-                        error: error)
-        }
+        make(runState: SessionRunState.resolve(runState, legacy: sessionState,
+                                               status: status, endReason: endReason),
+             pendingApprovals: pendingApprovals,
+             runningBgCount: runningBgCount,
+             error: error)
+    }
 
-        // Trash tab: a soft-deleted session reads as deleted regardless of its settled status —
-        // web branches on `deletedAt` first with the same neutral ⊖ + "Deleted" tooltip.
-        if deleted {
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")
-        }
-        // Completed tab: the user deliberately filed this session, so it reads as done even though
-        // its status settles to CANCELLED async. A genuine FAILED still falls through to its glyph.
-        if completed && status != .failed {
-            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed")
-        }
-        switch status {
+    /// The shared presentation mapping for the orthogonal execution state.
+    public static func make(runState: SessionRunState,
+                            pendingApprovals: Int? = nil,
+                            runningBgCount: Int? = nil,
+                            error: String? = nil) -> SessionStatusGlyph {
+        switch runState {
+        case .queued:
+            return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
+
         case .running:
             if (pendingApprovals ?? 0) > 0 {
                 return .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval")
@@ -88,7 +81,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             return .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply")
 
         case .succeeded:
-            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed")
+            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Succeeded")
 
         case .failed:
             let err = (error ?? "").lowercased()
@@ -98,68 +91,10 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             }
             let detail = (error?.isEmpty == false) ? error! : "Failed"
             return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
-
-        case .cancelled, .interrupted:
-            // Default to dormant (resumable); ⊖ only for a positively-terminal end. A legacy row
-            // with an unknown reason fails to the neutral, resumable read.
-            let reason = endReason ?? ""
-            let terminalCancel =
-                reason == "orphaned" || reason == "deleted" || reason == "completed" ||
-                reason == "cancelled" || (status == .interrupted && reason.isEmpty)
-            if !terminalCancel {
-                return .init(shape: .symbol("pause.circle"), tone: .neutral,
-                             label: "Dormant — send a message to resume")
-            }
-            let label = reason == "orphaned" ? "Ended — task already finished"
-                      : status == .interrupted ? "Interrupted"
-                      : "Cancelled"
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: label)
-
-        case .pending:
-            return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
-        }
-    }
-
-    /// Authoritative mapping for the control plane's normalized, user-facing lifecycle.
-    private static func make(sessionState: SessionState,
-                             pendingApprovals: Int?,
-                             runningBgCount: Int?,
-                             error: String?) -> SessionStatusGlyph {
-        switch sessionState {
-        case .queued:
-            return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
-
-        case .running:
-            if (pendingApprovals ?? 0) > 0 {
-                return .init(shape: .symbol("pause.circle"), tone: .warning,
-                             label: "Waiting for approval")
-            }
-            return .init(shape: .spinner, tone: .brand, label: "Running")
-
-        case .awaitingInput:
-            if (runningBgCount ?? 0) > 0 {
-                return .init(shape: .spinner, tone: .brand,
-                             label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
-            }
-            return .init(shape: .symbol("message"), tone: .neutral,
-                         label: "Waiting for your reply")
 
         case .dormant:
             return .init(shape: .symbol("pause.circle"), tone: .neutral,
                          label: "Dormant — send a message to resume")
-
-        case .completed:
-            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
-                         label: "Completed")
-
-        case .failed:
-            let err = (error ?? "").lowercased()
-            if err.contains("offline") {
-                return .init(shape: .symbol("wifi.slash"), tone: .neutral,
-                             label: "Disconnected — runner went offline")
-            }
-            let detail = (error?.isEmpty == false) ? error! : "Failed"
-            return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
 
         case .cancelled:
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled")
@@ -168,15 +103,10 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Interrupted")
 
         case .ended:
-            return .init(shape: .symbol("minus.circle"), tone: .neutral,
-                         label: "Ended — task already finished")
-
-        case .deleted:
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")
 
         case .unknown:
-            // Filtered by the caller so an unknown future state uses the legacy mapping.
-            assertionFailure("Unknown session state must use the legacy status fallback")
+            // DTO resolution filters this case. A direct caller still gets a safe terminal glyph.
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")
         }
     }

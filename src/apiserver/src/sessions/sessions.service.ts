@@ -16,11 +16,15 @@ import {
   AgentProvider,
   type BgShell,
   deriveBackgroundShells,
+  deriveSessionFilingState,
   type EventSearchResponse,
   FilePatch,
   MAX_PROMPT_CHARS,
   RunEventType,
   SessionEndReason,
+  SessionFilingState,
+  type SessionResumeBlockedReason,
+  SessionRunState,
   SessionState,
   type SessionSearchHit,
 } from '@orbit/shared';
@@ -34,7 +38,11 @@ import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from 
 import { notNoiseSql } from '../common/system-noise';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
 import { truncatePayload } from './truncate-payload';
-import { withSessionState } from './session-state';
+import {
+  deriveSessionCapabilities,
+  withSessionCapabilities,
+  withSessionState,
+} from './session-state';
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -125,7 +133,7 @@ export class SessionsService {
 
   // `source` is retained as internal provenance for backwards compatibility. Current clients
   // no longer split out a System list, and task-linked runs are always "user" so older clients
-  // also place them in Active. `source` is not on CreateSessionDto, so HTTP clients can't spoof it.
+  // also place them in Open. `source` is not on CreateSessionDto, so HTTP clients can't spoof it.
   async create(
     ownerId: string,
     dto: CreateSessionDto,
@@ -222,7 +230,7 @@ export class SessionsService {
         agentId: dto.agentId,
         assignedRunnerId,
         taskId: dto.taskId,
-        // A task session must remain discoverable in Active even if an internal caller
+        // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
         source: dto.taskId ? 'user' : (opts?.source ?? 'user'),
         batchId: opts?.batch?.id ?? null,
@@ -311,6 +319,8 @@ export class SessionsService {
     status: RunStatus;
     runStatus: RunStatus;
     sessionState: SessionState;
+    runState: SessionRunState;
+    filingState: SessionFilingState;
     title: string;
     agentName: string | null;
     provider: string;
@@ -342,7 +352,7 @@ export class SessionsService {
       ownerId,
       { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, effort },
       {
-        // Orchestrated children appear in Active like any other session; the
+        // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
         batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
@@ -358,6 +368,8 @@ export class SessionsService {
       status: created.status,
       runStatus: created.runStatus,
       sessionState: created.sessionState,
+      runState: created.runState,
+      filingState: created.filingState,
       title: created.title,
       agentName: targetAgent?.name ?? null,
       provider: created.provider,
@@ -498,8 +510,8 @@ export class SessionsService {
   /**
    * Cross-scope session search backing the clients' ⌘K palette.
    *
-   * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (active,
-   * completed and trash — "the one I'm thinking of" is usually filed away, and the hit
+   * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (Open,
+   * Archived and Trash — "the one I'm thinking of" is usually filed away, and the hit
    * carries archivedAt/deletedAt so the row can say where it lives), and it reaches into
    * conversation text, which no list payload ever carries.
    *
@@ -815,7 +827,7 @@ export class SessionsService {
     // active = neither archived nor deleted; archived = archived but not deleted;
     // deleted (trash) = deleted, regardless of archive state. Default to active.
     // `system` is a removed scope retained only for installed older clients; explicitly
-    // return no rows so it can never fall through and duplicate Active.
+    // return no rows so it can never fall through and duplicate Open.
     const visibility: Prisma.Sql =
       filters.view === 'deleted'
         ? Prisma.sql`s.deleted_at IS NOT NULL`
@@ -827,9 +839,9 @@ export class SessionsService {
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
-    // The Completed (archived) tab orders by when the session was filed as done
+    // Archived orders by when the session was filed away
     // (archived_at, newest first) — not by last activity — and deliberately ignores
-    // pinning, which is an Active-list affordance. Every other view floats pinned
+    // pinning, which is an Open-list affordance. Every other view floats pinned
     // sessions to the top and orders by last turn activity.
     const orderBy: Prisma.Sql =
       filters.view === 'archived'
@@ -870,8 +882,13 @@ export class SessionsService {
       agentModel: string | null;
       runnerId: string | null;
       runnerName: string | null;
+      runnerStatus: string | null;
+      runnerLastHeartbeatAt: Date | null;
       taskId: string | null;
       taskTitle: string | null;
+      cancelRequestedAt: Date | null;
+      runtimeSessionId: string | null;
+      claudeSessionId: string | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
@@ -883,6 +900,9 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
+        s.cancel_requested_at AS "cancelRequestedAt",
+        s.runtime_session_id AS "runtimeSessionId",
+        s.claude_session_id AS "claudeSessionId",
         s.archived_at     AS "archivedAt",
         s.deleted_at      AS "deletedAt",
         s.source, s.provider, s.model,
@@ -907,8 +927,10 @@ export class SessionsService {
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
-        r.id    AS "runnerId",
+        s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
+        r.status AS "runnerStatus",
+        r.last_heartbeat_at AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle"
       FROM session s
@@ -922,7 +944,7 @@ export class SessionsService {
     `);
     // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
     const sessions = rows.map((r) =>
-      withSessionState({
+      withSessionCapabilities({
         id: r.id,
         status: r.status,
         title: r.title,
@@ -933,6 +955,9 @@ export class SessionsService {
         costUsd: r.costUsd,
         error: r.error,
         endReason: r.endReason,
+        cancelRequestedAt: r.cancelRequestedAt,
+        runtimeSessionId: r.runtimeSessionId,
+        claudeSessionId: r.claudeSessionId,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
         source: r.source,
@@ -949,7 +974,15 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningSubagentCount: r.runningSubagentCount,
         agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
-        assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
+        assignedRunnerId: r.runnerId,
+        assignedRunner: r.runnerId
+          ? {
+              id: r.runnerId,
+              name: r.runnerName,
+              status: r.runnerStatus ?? 'OFFLINE',
+              lastHeartbeatAt: r.runnerLastHeartbeatAt,
+            }
+          : null,
         taskId: r.taskId,
         taskTitle: r.taskTitle,
       }),
@@ -973,7 +1006,9 @@ export class SessionsService {
       where: { id, ownerId },
       include: {
         agent: true,
-        assignedRunner: { select: { id: true, name: true } },
+        assignedRunner: {
+          select: { id: true, name: true, status: true, lastHeartbeatAt: true },
+        },
         tagLinks: {
           include: {
             tag: { select: { id: true, name: true, color: true, isSystem: true, position: true } },
@@ -987,7 +1022,7 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
-    return withSessionState({ ...rest, tags });
+    return withSessionCapabilities({ ...rest, tags });
   }
 
   /**
@@ -1052,6 +1087,8 @@ export class SessionsService {
       status: stateful.status,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
+      runState: stateful.runState,
+      filingState: stateful.filingState,
       createdAt: session.createdAt,
       events: events.map((e) => ({
         seq: e.seq,
@@ -1558,9 +1595,23 @@ export class SessionsService {
     RunStatus.CANCELLED,
   ];
 
-  // A runner heartbeats every 30s; a missed window reads as offline. Resuming needs
-  // the original runner online — claude's transcript lives on that machine's disk.
-  private static readonly RUNNER_OFFLINE_AFTER_MS = 90_000;
+  private static resumeBlocked(reason: SessionResumeBlockedReason): ConflictException {
+    switch (reason) {
+      case 'TRASHED':
+        return new ConflictException('the session is in Trash; restore it before sending a message');
+      case 'ENDING':
+        return new ConflictException('the session is ending');
+      case 'NOT_TERMINAL':
+        return new ConflictException('the session has not started yet');
+      case 'NOT_STARTED':
+      case 'MISSING_CONTEXT':
+        return new ConflictException('this session never ran and cannot be resumed');
+      case 'NO_RUNNER':
+        return new ConflictException('the session has no runner to resume on');
+      case 'RUNNER_OFFLINE':
+        return new ConflictException('the runner is offline; it must be online to resume this session');
+    }
+  }
 
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
@@ -1582,6 +1633,9 @@ export class SessionsService {
   private async getSendable(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    if (session.deletedAt) {
+      throw new ConflictException('the session is in Trash; restore it before sending a message');
+    }
     if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
       throw new ConflictException('the session has ended');
     }
@@ -1733,6 +1787,9 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before sending a message');
+      }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
@@ -2093,34 +2150,90 @@ export class SessionsService {
     sessionId: string,
     reason: SessionEndReason,
   ): Promise<boolean> {
-    const ended = await this.prisma.$transaction(async (tx) => {
+    const ended = await this.transitionEnd(ownerId, sessionId, reason);
+    if (!ended.changed) return false;
+    if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
+    this.realtime.notifyInbox(sessionId);
+    return true;
+  }
+
+  /**
+   * Persist an end intent and, optionally, its filing destination under one Session
+   * row lock. This method deliberately has no realtime/runner side effects: callers
+   * emit those only after the transaction commits.
+   */
+  private async transitionEnd(
+    ownerId: string,
+    sessionId: string,
+    reason: SessionEndReason,
+    filing?: 'archivedAt' | 'deletedAt',
+  ): Promise<{
+    changed: boolean;
+    runnerId: string | null;
+    status: RunStatus;
+    filingState: SessionFilingState;
+    endReason: SessionEndReason | null;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      if (filing === 'archivedAt' && session.deletedAt != null) {
+        throw new ConflictException('a session in Trash must be restored before it can be archived');
+      }
+      const now = new Date();
+      // Keep the first filing timestamp stable across retries. This matters especially
+      // for deletedAt, which starts the Trash retention clock.
+      const filingData: { archivedAt?: Date; deletedAt?: Date } = {};
+      let finalArchivedAt = session.archivedAt;
+      let finalDeletedAt = session.deletedAt;
+      if (filing === 'archivedAt' && session.archivedAt == null) {
+        filingData.archivedAt = now;
+        finalArchivedAt = now;
+      }
+      if (filing === 'deletedAt' && session.deletedAt == null) {
+        filingData.deletedAt = now;
+        finalDeletedAt = now;
+      }
+      const filingState = deriveSessionFilingState({
+        archivedAt: finalArchivedAt,
+        deletedAt: finalDeletedAt,
+      });
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        return { changed: false, runnerId: session.assignedRunnerId };
+        if (Object.keys(filingData).length > 0) {
+          await tx.session.update({ where: { id: sessionId }, data: filingData });
+        }
+        return {
+          changed: false,
+          runnerId: session.assignedRunnerId,
+          status: session.status,
+          filingState,
+          endReason:
+            session.endReason == null ? null : (session.endReason as SessionEndReason),
+        };
       }
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
+            ...filingData,
             status: RunStatus.CANCELLED,
             endReason: reason,
-            cancelRequestedAt: new Date(),
-            finishedAt: new Date(),
+            cancelRequestedAt: now,
+            finishedAt: now,
           },
         });
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: new Date() },
+          data: { status: 'ANSWERED', answeredAt: now },
         });
       } else {
         await tx.session.update({
           where: { id: sessionId },
-          data: { cancelRequestedAt: new Date(), endReason: reason },
+          data: { ...filingData, cancelRequestedAt: now, endReason: reason },
         });
         // Drop queued messages so they cannot replay if the session is later revived.
         await tx.conversationTurn.deleteMany({
@@ -2131,20 +2244,26 @@ export class SessionsService {
           clientTurnId: randomUUID(),
         });
       }
-      return { changed: true, runnerId: session.assignedRunnerId };
+      return {
+        changed: true,
+        runnerId: session.assignedRunnerId,
+        status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+        filingState,
+        endReason: reason,
+      };
     });
-    if (!ended.changed) return false;
-    if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
-    this.realtime.notifyInbox(sessionId);
-    return true;
   }
 
-  /**
-   * Revive an ended session with a new user message. The same Session row goes back
-   * to PENDING so its assigned runner re-claims it and --resumes claude's existing
-   * session (full prior context) rather than starting fresh. Requires that runner to
-   * be online: claude's transcript lives on its disk, so no other machine can resume.
-   */
+  /** Emit runner/control-plane effects for a newly persisted end intent. */
+  private publishEndIntent(
+    sessionId: string,
+    ended: { changed: boolean; runnerId: string | null },
+  ): void {
+    if (!ended.changed) return;
+    if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
+    this.realtime.notifyInbox(sessionId);
+  }
+
   /** Pending (or all) tool-permission approvals for a session the caller owns. */
   async listApprovals(ownerId: string, id: string, status?: string): Promise<ApprovalInfo[]> {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
@@ -2225,6 +2344,12 @@ export class SessionsService {
     };
   }
 
+  /**
+   * Revive an ended session with a new user message. The same Session row goes back
+   * to PENDING so its assigned runner re-claims it and resumes the existing runtime
+   * context rather than starting fresh. Requires that runner to be online because the
+   * transcript lives on its disk.
+   */
   async resume(
     ownerId: string,
     id: string,
@@ -2232,8 +2357,20 @@ export class SessionsService {
     opts?: { batch?: { id: string; maxConcurrent: number } | null },
   ) {
     assertPromptSize(dto.content, 'message');
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      include: {
+        assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+      },
+    });
     if (!session) throw new NotFoundException('session not found');
+    const initialCapabilities = deriveSessionCapabilities(session);
+    if (initialCapabilities.resumeBlockedReason === 'TRASHED') {
+      throw SessionsService.resumeBlocked('TRASHED');
+    }
+    if (initialCapabilities.resumeBlockedReason === 'ENDING') {
+      throw SessionsService.resumeBlocked('ENDING');
+    }
     // Still live — a normal turn belongs on the running process, not a revive. But a
     // "Resolve in session" rebase reaches resume() on a live session too: the bar offers it
     // while the session is still AWAITING_INPUT, and its whole point is to clear the failed
@@ -2262,122 +2399,139 @@ export class SessionsService {
       }
       return this.createTurn(ownerId, id, dto);
     }
-    if (!SessionsService.TERMINAL.includes(session.status)) {
-      throw new ConflictException('the session has not started yet');
-    }
-    // A claimed first run can fail before the runtime creates a conversation (notably Codex's
-    // signed-out preflight). It has startedAt but no runtime id and no completed turns. That state
-    // is safe to restart in place: QueueService derives `resume` from numTurns, so the next claim
-    // starts a fresh runtime and the turn inserted below becomes its first message. Once a turn
-    // completed, however, losing the runtime id means there is context we cannot safely recover.
     if (
-      !session.startedAt ||
-      (session.numTurns > 0 && !(session.runtimeSessionId ?? session.claudeSessionId))
+      initialCapabilities.resumeBlockedReason &&
+      initialCapabilities.resumeBlockedReason !== 'NOT_TERMINAL' &&
+      initialCapabilities.resumeBlockedReason !== 'NO_RUNNER' &&
+      initialCapabilities.resumeBlockedReason !== 'RUNNER_OFFLINE'
     ) {
-      throw new ConflictException('this session never ran and cannot be resumed');
+      throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason);
     }
-    // Idempotent: a retried send with the same clientTurnId returns the same turn.
-    const existing = await this.prisma.conversationTurn.findUnique({
-      where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
-    });
-    if (existing) return { turnId: existing.id, seq: existing.seq };
-    if (!session.assignedRunnerId) {
-      throw new ConflictException('the session has no runner to resume on');
-    }
-    const runner = await this.prisma.runner.findUnique({
-      where: { id: session.assignedRunnerId },
-      select: { status: true, lastHeartbeatAt: true },
-    });
-    const online =
-      !!runner &&
-      runner.status !== 'OFFLINE' &&
-      !!runner.lastHeartbeatAt &&
-      runner.lastHeartbeatAt.getTime() >= Date.now() - SessionsService.RUNNER_OFFLINE_AFTER_MS;
-    if (!online) {
-      throw new ConflictException('the runner is offline; it must be online to resume this session');
-    }
-    // Validate image refs before reviving, mirroring createTurn.
-    const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
-    // Append the message, then flip the row back to PENDING so the runner re-claims
-    // it; buildSession sees the existing turns and resumes the runtime conversation.
-    // A `!cmd` revive seeds a 'shell' turn instead: the runner resumes the runtime (context
-    // restored) AND runs the command, buffering its output for the next message — exactly
-    // like a shell turn on a live session. Whitelist kind, mirroring createTurn; a shell
-    // turn never advances numTurns (turn-complete), so --resume keeps working on respawn.
-    const turn = await this.insertTurn(id, {
-      kind: dto.kind === 'shell' ? 'shell' : 'message',
-      content: dto.content,
-      clientTurnId: dto.clientTurnId,
-    });
-    await this.linkAttachments(turn.id, attachmentIds);
-    const provider = agentProvider(session.provider);
-    const normalizedEffort =
-      dto.effort !== undefined ? normalizeEffortForProvider(provider, dto.effort) : undefined;
-    await this.prisma.session.update({
-      where: { id },
-      data: {
-        status: RunStatus.PENDING,
-        cancelRequestedAt: null,
-        endReason: null,
-        finishedAt: null,
-        error: null,
-        result: null,
-        lastTurnAt: new Date(),
-        // Reviving will change the branch (more work / a conflict-resolution merge), so any
-        // prior "merge to main" outcome is stale — clear it so the bar offers Merge afresh.
-        mergeStatus: null,
-        mergeError: null,
-        mergedAt: null,
-        // Likewise the runner's pre-park "already in main" verdict: the revived run adds new
-        // work, so a stale true must not show "✓ In main" until the first fresh report lands.
-        branchMerged: null,
-        // Likewise the live-worktree commit state: the revived run re-reports worktreeDirty,
-        // and a stale 'pending'/'error' would otherwise wedge the bar's Commit button.
-        commitStatus: null,
-        commitError: null,
-        // Sending into a session filed as Completed un-files it: it's live work again, so it
-        // belongs in the active list instead of streaming its reply into a row the user can
-        // only find by switching tabs. Trash (deletedAt) is deliberately left alone — deleting
-        // is an explicit "get rid of this", which a stray message shouldn't undo.
-        archivedAt: null,
-        // Re-apply any mode/model/effort changes made while the session was ended;
-        // buildSession reads these when the runner re-claims and re-spawns the runtime.
-        // Omitted fields keep their prior value (don't clobber to null).
-        ...(dto.model !== undefined ? { model: dto.model } : {}),
-        ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
-        ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
-        // Batch membership for this revival: a batch run re-stamps it (object), a
-        // single re-run clears it (null) so it escapes any prior batch's cap; a plain
-        // user resume passes nothing and leaves it as-is.
-        ...(opts?.batch !== undefined
-          ? { batchId: opts.batch?.id ?? null, batchMaxConcurrent: opts.batch?.maxConcurrent ?? null }
-          : {}),
-      },
+
+    // Re-check capability and revive under the same Session row lock used by archive/delete.
+    // This closes the race where Trash could win after the fast read but before the turn insert.
+    const revived = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const current = await tx.session.findUniqueOrThrow({
+        where: { id },
+        include: {
+          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+        },
+      });
+      const capabilities = deriveSessionCapabilities(current);
+      if (capabilities.resumeBlockedReason === 'TRASHED') {
+        throw SessionsService.resumeBlocked('TRASHED');
+      }
+      if (capabilities.resumeBlockedReason === 'ENDING') {
+        throw SessionsService.resumeBlocked('ENDING');
+      }
+
+      // Idempotent retry: once another request queued this clientTurnId, return it even
+      // if the runner went offline in the meantime. Trash/ending still win above.
+      const existing = await tx.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+      });
+      if (!SessionsService.TERMINAL.includes(current.status)) {
+        if (existing) return { turn: existing, wasArchived: false };
+        throw SessionsService.resumeBlocked('NOT_TERMINAL');
+      }
+      if (
+        capabilities.resumeBlockedReason &&
+        capabilities.resumeBlockedReason !== 'NO_RUNNER' &&
+        capabilities.resumeBlockedReason !== 'RUNNER_OFFLINE'
+      ) {
+        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
+      }
+      if (existing) return { turn: existing, wasArchived: false };
+      if (capabilities.resumeBlockedReason) {
+        throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
+      }
+
+      // Validate image refs only for a new turn. On retry, attachments are already linked
+      // to the existing turn and must not invalidate the idempotent response.
+      const attachmentIds = await this.assertLinkableAttachments(
+        ownerId,
+        id,
+        dto.attachmentIds,
+        tx,
+      );
+      const turn = await this.insertTurnLocked(tx, id, {
+        kind: dto.kind === 'shell' ? 'shell' : 'message',
+        content: dto.content,
+        clientTurnId: dto.clientTurnId,
+      });
+      await this.linkAttachments(turn.id, attachmentIds, tx);
+      const normalizedEffort =
+        dto.effort !== undefined
+          ? normalizeEffortForProvider(agentProvider(current.provider), dto.effort)
+          : undefined;
+      await tx.session.update({
+        where: { id },
+        data: {
+          status: RunStatus.PENDING,
+          cancelRequestedAt: null,
+          endReason: null,
+          finishedAt: null,
+          error: null,
+          result: null,
+          lastTurnAt: new Date(),
+          mergeStatus: null,
+          mergeError: null,
+          mergedAt: null,
+          branchMerged: null,
+          commitStatus: null,
+          commitError: null,
+          // A resumable Archived session moves back to Open. Trash was rejected above.
+          archivedAt: null,
+          ...(dto.model !== undefined ? { model: dto.model } : {}),
+          ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
+          ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
+          ...(opts?.batch !== undefined
+            ? {
+                batchId: opts.batch?.id ?? null,
+                batchMaxConcurrent: opts.batch?.maxConcurrent ?? null,
+              }
+            : {}),
+        },
+      });
+      return { turn, wasArchived: current.archivedAt != null };
     });
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
-    // and signal the control plane, so every other client moves the row out of Completed and
-    // into the active list without polling.
-    if (session.archivedAt) this.realtime.publishSessionCreated(id);
+    // and signal the control plane, so every other client moves the row out of Archived and
+    // into Open without polling.
+    if (revived.wasArchived) this.realtime.publishSessionCreated(id);
     this.queue.notifySessionQueued();
-    return { turnId: turn.id, seq: turn.seq };
+    return { turnId: revived.turn.id, seq: revived.turn.seq };
   }
 
   /**
-   * Hide a session from the active list (Archived view). Reversible. A session that
+   * Move a session from Open to Archived. Reversible. A session that
    * hasn't ended is archived too: we recycle its runner process first (enqueue an
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
    * The status settles to CANCELLED async while the row already sits in Archived.
    */
   async archive(ownerId: string, id: string) {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endOpen(ownerId, id, SessionEndReason.COMPLETED);
-    }
-    await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
+    const ended = await this.transitionEnd(
+      ownerId,
+      id,
+      SessionEndReason.COMPLETED,
+      'archivedAt',
+    );
+    // Everything below is deliberately post-commit. A failed end-turn insert rolls back
+    // both the intent and archivedAt, and therefore produces no runner/realtime signal.
+    this.publishEndIntent(id, ended);
     // Archive is a list-membership change with no STATUS event — signal the control plane so
     // other clients drop the row without polling.
-    this.realtime.publishSessionEnded(session.id, session.status, SessionEndReason.COMPLETED);
+    this.realtime.publishSessionEnded(
+      id,
+      ended.status,
+      ended.endReason,
+      ended.filingState,
+    );
     return { ok: true };
   }
 
@@ -2459,25 +2613,26 @@ export class SessionsService {
    * CANCELLED async while the row already sits in Trash.
    */
   async remove(ownerId: string, id: string) {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endOpen(ownerId, id, SessionEndReason.DELETED);
-    }
-    await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
+    const ended = await this.transitionEnd(ownerId, id, SessionEndReason.DELETED, 'deletedAt');
+    this.publishEndIntent(id, ended);
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
-    this.realtime.publishSessionEnded(session.id, session.status, SessionEndReason.DELETED);
+    this.realtime.publishSessionEnded(
+      id,
+      ended.status,
+      ended.endReason,
+      ended.filingState,
+    );
     return { ok: true };
   }
 
-  /** Bring an archived or soft-deleted session back to the active list. */
+  /** Bring an Archived or soft-deleted session back to Open. */
   async restore(ownerId: string, id: string) {
     await this.get(ownerId, id); // ownership check (404s otherwise)
     await this.prisma.session.update({
       where: { id },
       data: { archivedAt: null, deletedAt: null },
     });
-    // Back in the active list — same signal as a brand-new session (the control plane's
+    // Back in Open — same signal as a brand-new session (the control plane's
     // session.created carries a full summary either way).
     this.realtime.publishSessionCreated(id);
     return { ok: true };

@@ -3,9 +3,9 @@ import OrbitKit
 
 // Batch D + Agents-in-sidebar refinement: the agent *list* (grouped by runner) now lives in the
 // sidebar source list (see `SectionSidebar`), folding away the old middle column. What remains
-// here is the selected agent's detail, split across the two right panes to mirror Active:
+// here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
-//                       Active/Completed/Trash scope switcher (principal), a New-session button
+//                       Open/Archived/Trash scope switcher (principal), a New-session button
 //                       (leading), and a gear that opens the agent's Settings sheet (trailing)
 //   • detail column  → the live console for the session picked in the content column
 // Grouping + effective-model logic come from the verified OrbitKit `AgentListLogic`; pickers reuse
@@ -68,7 +68,7 @@ struct AgentPanes: View {
     let agents: AgentsModel
     let agent: Agent
     @Binding var selectedSessionID: String?
-    @State private var view: SessionView = .active
+    @State private var view: SessionView = .open
     @State private var showSettings = false
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
     /// the row's context menu) so the sheet presents reliably.
@@ -103,7 +103,7 @@ struct AgentPanes: View {
                     }
                 }
             } else {
-                ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .active && tagFilter == nil)) { section in
+                ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)) { section in
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
                     } header: {
@@ -113,8 +113,8 @@ struct AgentPanes: View {
             }
             #else
             ForEach(agents.agentSessions) { s in
-                AgentSessionRow(session: s, completed: view == .completed, deleted: view == .trash,
-                                showsPin: view == .active).tag(s.id)
+                AgentSessionRow(session: s, deleted: view == .trash,
+                                showsPin: view == .open).tag(s.id)
                     .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
             }
             #endif
@@ -140,12 +140,12 @@ struct AgentPanes: View {
         }
         #if os(iOS)
         // Pull-to-refresh reloads the current agent + scope's sessions on demand (matching the
-        // Active/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
+        // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
         .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces),
-        // then poll every 4s — the same cadence as the Active sidebar — so external changes (new
+        // then poll every 4s — the same cadence as Open — so external changes (new
         // sessions, status transitions made from the web) show up without reopening the agent.
         // The task is bound to this pane's lifetime: switching agent/view cancels and restarts it,
         // and leaving the Sessions pane stops the poll.
@@ -160,7 +160,7 @@ struct AgentPanes: View {
         .toolbar {
             #if os(iOS)
             // Compact: both actions sit at the trailing edge. The scope switcher collapses to a
-            // pure filter-icon menu (no text) — Active/Completed/Trash as checkmarked options plus
+            // pure filter-icon menu (no text) — Open/Archived/Trash as checkmarked options plus
             // the agent-settings gear folded in — and New Session is the rightmost primary action.
             // Declared scope-first so New Session lands at the trailing edge (SwiftUI lays trailing
             // items out in declaration order, leading→trailing; verify the order on device).
@@ -259,7 +259,7 @@ struct AgentPanes: View {
     }
 
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
-        AgentSessionRow(session: s, completed: view == .completed, showsPin: view == .active).tag(s.id)
+        AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open).tag(s.id)
             .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
     }
 
@@ -296,7 +296,7 @@ struct AgentSettingsSheet: View {
 }
 
 /// Detail (right) column for the Agents section: the live console for the session selected in the
-/// content column — mirroring how Active renders ConsoleView in its detail pane.
+/// content column — mirroring how Open renders ConsoleView in its detail pane.
 struct AgentConsoleDetail: View {
     @Environment(AppModel.self) private var app
     var body: some View {
@@ -312,7 +312,7 @@ struct AgentConsoleDetail: View {
             .id(agent.id)
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
-            // A just-created session isn't in the Active list yet, so fall back to the agent
+            // A just-created session isn't in the Open list yet, so fall back to the agent
             // we're viewing for `/` autocomplete scoping.
             ConsoleView(sessionID: sid, agentID: app.agentID(for: sid) ?? app.selectedAgentID, registry: registry)
         } else {
@@ -435,14 +435,10 @@ struct NewSessionView: View {
 
 struct AgentSessionRow: View {
     let session: Session
-    /// True when the Completed (archived) tab is showing this row — mirrors web's
-    /// `completed={view === 'archived'}`, so a filed session reads as done, not "Cancelled".
-    var completed: Bool = false
-    /// True when the Trash tab is showing this row — mirrors web's `deletedAt` branch, so the glyph
-    /// reads as a neutral ⊖ "Deleted" and the preview goes static (nothing is live in the trash).
+    /// True when the Trash tab is showing this row; the preview goes static because nothing in
+    /// Trash is directly resumable. The status glyph remains the run's actual outcome.
     var deleted: Bool = false
-    /// True in the Active view, where pinning applies — mirrors web's `view === 'active'` gate on the
-    /// pinned marker. Completed/Trash rows never show the bar (they can't be pinned).
+    /// True in Open, where pinning applies. Archived/Trash rows never show the bar.
     var showsPin: Bool = false
     private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
@@ -464,7 +460,7 @@ struct AgentSessionRow: View {
                 .fill(isPinned ? Color.accentColor : .clear)
                 .frame(width: 3)
             HStack(spacing: 8) {
-                StatusGlyphView(glyph: .make(for: session, completed: completed, deleted: deleted))
+                StatusGlyphView(glyph: .make(for: session))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(session.title ?? "Untitled session").lineLimit(1)
@@ -527,7 +523,7 @@ struct AgentSessionRow: View {
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
     /// while working / amber dot when it needs you / red dot on failure; calm states stay quiet).
     private var liveIndicator: some View {
-        SessionLiveIndicator(session: session, completed: completed)
+        SessionLiveIndicator(session: session)
     }
 
     /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8") — the parity with web's
@@ -588,10 +584,8 @@ struct StatusGlyphView: View {
 /// both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
-    /// Mirrors the row's tab context (the Completed tab) so a filed session reads as done, not working.
-    var completed: Bool = false
     @ViewBuilder var body: some View {
-        let glyph = SessionStatusGlyph.make(for: session, completed: completed)
+        let glyph = SessionStatusGlyph.make(for: session)
         switch (glyph.shape, glyph.tone) {
         case (.spinner, _): SpinnerGlyph(color: .blue)
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)

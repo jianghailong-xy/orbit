@@ -8,7 +8,7 @@ public struct QuickItem: Equatable, Sendable, Identifiable {
     public let route: Route
 }
 
-/// Everything the menu-bar item and the Dock badge render, derived purely from the Active
+/// Everything the menu-bar item and the Dock badge render, derived purely from the Open
 /// session list. The macOS `MenuBarExtra` / `NSApp.dockTile` are thin shells over this.
 public struct MenuBarSummary: Equatable, Sendable {
     public let needsYou: Int

@@ -7,9 +7,12 @@ final class SessionStatusGlyphTests: XCTestCase {
     private func session(_ status: RunStatus, pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          error: String? = nil, endReason: String? = nil,
                          runStatus: RunStatus? = nil,
-                         sessionState: SessionState? = nil) -> Session {
+                         sessionState: SessionState? = nil,
+                         runState: SessionRunState? = nil,
+                         filingState: SessionFilingState? = nil) -> Session {
         Session(id: "s", title: "t", status: status, runStatus: runStatus,
                 sessionState: sessionState,
+                runState: runState, filingState: filingState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason)
@@ -37,7 +40,7 @@ final class SessionStatusGlyphTests: XCTestCase {
 
     func testSucceeded() {
         let g = SessionStatusGlyph.make(for: session(.succeeded))
-        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed"))
+        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Succeeded"))
     }
 
     func testFailed() {
@@ -67,8 +70,11 @@ final class SessionStatusGlyphTests: XCTestCase {
     }
 
     func testCancelledWithHardReasonIsTerminal() {
-        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "cancelled"))
-        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
+        for reason in ["cancelled", "task_cancelled"] {
+            let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: reason))
+            XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral,
+                                    label: "Cancelled"), reason)
+        }
     }
 
     func testInterruptedWithoutReasonIsTerminal() {
@@ -78,7 +84,7 @@ final class SessionStatusGlyphTests: XCTestCase {
 
     func testOrphanedReadsAsEnded() {
         let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "orphaned"))
-        XCTAssertEqual(g.label, "Ended — task already finished")
+        XCTAssertEqual(g.label, "Ended")
     }
 
     /// A legacy CANCELLED with an unknown (nil) reason must not read as the accusatory "Cancelled".
@@ -88,80 +94,74 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g.label, "Dormant — send a message to resume")
     }
 
-    func testCompletedTabOverridesToDone() {
-        // A session filed into the Completed tab settles to CANCELLED but must read as done…
-        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "cancelled"), completed: true)
-        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Completed"))
+    func testArchivedFilingDoesNotOverrideCancelledRun() {
+        let s = session(.cancelled, endReason: "cancelled",
+                        runState: .cancelled, filingState: .archived)
+        XCTAssertEqual(SessionStatusGlyph.make(for: s),
+                       .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
     }
 
-    func testCompletedTabStillSurfacesFailure() {
-        // …but a genuine FAILED still surfaces in the Completed tab.
-        let g = SessionStatusGlyph.make(for: session(.failed, error: "boom"), completed: true)
+    func testArchivedFilingStillSurfacesFailure() {
+        let g = SessionStatusGlyph.make(for: session(.failed, error: "boom",
+                                                     runState: .failed, filingState: .archived))
         XCTAssertEqual(g.shape, .symbol("xmark.circle.fill"))
         XCTAssertEqual(g.tone, .error)
     }
 
-    func testDeletedTabShowsDeletedGlyph() {
-        // The Trash tab reads as deleted regardless of the settled status — web's deletedAt branch.
-        let g = SessionStatusGlyph.make(for: session(.succeeded), deleted: true)
-        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted"))
+    func testTrashFilingDoesNotOverrideSucceededRun() {
+        let g = SessionStatusGlyph.make(for: session(.succeeded,
+                                                     runState: .succeeded, filingState: .trash))
+        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle.fill"),
+                                tone: .success, label: "Succeeded"))
     }
 
-    func testDeletedTakesPrecedenceOverCompletedAndFailure() {
-        // deletedAt is checked first (a session can be filed, then trashed), so Trash wins over both
-        // the Completed override and a genuine FAILED — the row reads "Deleted".
-        let g = SessionStatusGlyph.make(for: session(.failed, error: "boom"), completed: true, deleted: true)
-        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted"))
-    }
-
-    func testServerSessionStateOverridesLegacyStatusAndTabFallbacks() {
-        let cases: [(SessionState, SessionStatusGlyph)] = [
+    func testExplicitRunStateOverridesContradictoryLegacyFields() {
+        let cases: [(SessionRunState, SessionStatusGlyph)] = [
             (.queued, .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")),
             (.running, .init(shape: .spinner, tone: .brand, label: "Running")),
             (.awaitingInput, .init(shape: .symbol("message"), tone: .neutral,
                                   label: "Waiting for your reply")),
             (.dormant, .init(shape: .symbol("pause.circle"), tone: .neutral,
                              label: "Dormant — send a message to resume")),
-            (.completed, .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
-                               label: "Completed")),
+            (.succeeded, .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
+                               label: "Succeeded")),
             (.failed, .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: "Failed")),
             (.cancelled, .init(shape: .symbol("minus.circle"), tone: .neutral,
                                label: "Cancelled")),
             (.interrupted, .init(shape: .symbol("minus.circle"), tone: .neutral,
                                  label: "Interrupted")),
-            (.ended, .init(shape: .symbol("minus.circle"), tone: .neutral,
-                           label: "Ended — task already finished")),
-            (.deleted, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")),
+            (.ended, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")),
         ]
         for (state, expected) in cases {
-            let s = session(.cancelled, endReason: "cancelled", sessionState: state)
-            XCTAssertEqual(SessionStatusGlyph.make(for: s, completed: true, deleted: true),
-                           expected, state.rawValue)
+            let s = session(.cancelled, endReason: "cancelled",
+                            sessionState: .completed, runState: state, filingState: .trash)
+            XCTAssertEqual(SessionStatusGlyph.make(for: s), expected, state.rawValue)
         }
     }
 
     func testServerLiveStatesRetainUsefulDetail() {
-        let approval = session(.cancelled, pendingApprovals: 2, sessionState: .running)
+        let approval = session(.cancelled, pendingApprovals: 2, runState: .running)
         XCTAssertEqual(SessionStatusGlyph.make(for: approval),
                        .init(shape: .symbol("pause.circle"), tone: .warning,
                              label: "Waiting for approval"))
 
-        let background = session(.cancelled, runningBgCount: 3, sessionState: .awaitingInput)
+        let background = session(.cancelled, runningBgCount: 3, runState: .awaitingInput)
         XCTAssertEqual(SessionStatusGlyph.make(for: background),
                        .init(shape: .spinner, tone: .brand,
                              label: "3 background processes running"))
 
-        let offline = session(.cancelled, error: "runner offline", sessionState: .failed)
+        let offline = session(.cancelled, error: "runner offline", runState: .failed)
         XCTAssertEqual(SessionStatusGlyph.make(for: offline),
                        .init(shape: .symbol("wifi.slash"), tone: .neutral,
                              label: "Disconnected — runner went offline"))
     }
 
-    func testRunStatusAliasWinsInLegacyFallback() {
-        let s = session(.succeeded, endReason: "idle", runStatus: .cancelled)
+    func testRawRunStatusWinsOverLegacyMixedCompletedState() {
+        let s = session(.succeeded, endReason: "completed", runStatus: .cancelled,
+                        sessionState: .completed)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
-                       .init(shape: .symbol("pause.circle"), tone: .neutral,
-                             label: "Dormant — send a message to resume"))
+                       .init(shape: .symbol("minus.circle"), tone: .neutral,
+                             label: "Cancelled"))
     }
 
     func testUnknownServerSessionStateDecodesAndUsesLegacyFallback() throws {
@@ -170,16 +170,20 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(s.sessionState, .unknown)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
                        .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
-                             label: "Completed"))
+                             label: "Succeeded"))
     }
 
     /// The list payload's terminal-state fields decode (server keys: error / endReason).
     func testSessionDecodesTerminalFields() throws {
-        let json = #"{"id":"s1","status":"RUNNING","runStatus":"CANCELLED","sessionState":"ENDED","error":null,"endReason":"orphaned"}"#
+        let json = #"{"id":"s1","status":"RUNNING","runStatus":"CANCELLED","sessionState":"ENDED","runState":"ENDED","filingState":"ARCHIVED","error":null,"endReason":"orphaned"}"#
         let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertEqual(s.runStatus, .cancelled)
         XCTAssertEqual(s.effectiveRunStatus, .cancelled)
         XCTAssertEqual(s.sessionState, .ended)
+        XCTAssertEqual(s.runState, .ended)
+        XCTAssertEqual(s.effectiveRunState, .ended)
+        XCTAssertEqual(s.filingState, .archived)
+        XCTAssertEqual(s.effectiveFilingState, .archived)
         XCTAssertEqual(s.endReason, "orphaned")
         XCTAssertNil(s.error)
     }

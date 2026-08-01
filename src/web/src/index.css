@@ -2955,17 +2955,23 @@ body {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Completion button: a bare check with no chip — the row's own hover/selected
+/* Archive button: a bare glyph with no chip — the row's own hover/selected
    highlight already frames it, so the action stays light and never clashes with
    the selected-row tint. Darkens slightly on direct hover for feedback. */
-.session-kebab.session-complete {
+.session-kebab.session-archive {
   background: transparent;
   color: var(--text-3);
   font-size: 16px;
 }
-.session-kebab.session-complete:hover {
+.session-kebab.session-archive:hover {
   background: transparent;
   color: var(--text-2);
+}
+.session-kebab.session-archive.disabled,
+.session-kebab.session-archive.disabled:hover {
+  color: var(--text-3);
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 /* Pin toggle: a bare pushpin like the ✓, chip-highlighted on direct hover. It only ever shows
    together with the row's other actions (on hover) — a pinned row is marked at rest by the
@@ -6959,7 +6965,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* "Completed" / "Trash": this hit is real but isn't in the Active list the sidebar is showing. */
+/* "Archived" / "Trash": this hit is real but isn't in the Open list the sidebar is showing. */
 .ssearch-badge {
   flex: none;
   padding: 0 6px;

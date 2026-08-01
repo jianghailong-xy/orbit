@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Active view's three ordered buckets (mirrors the web grouping): sessions that need a
+/// The Open view's three live-work buckets: sessions that need a
 /// human (pending approvals) float first, then live/running, then still-queued.
 public struct SessionGroups: Equatable, Sendable {
     public var needsYou: [Session]
@@ -16,9 +16,9 @@ public struct SessionGroups: Equatable, Sendable {
 }
 
 public enum SessionGrouping {
-    /// Bucket sessions for the Active sidebar, preserving input order within each bucket.
+    /// Bucket the Open snapshot's actionable sessions, preserving input order within each bucket.
     /// `needsYou` = has pending approvals; `running` = otherwise live (running / awaiting /
-    /// interrupted); `queued` = PENDING. Terminal/dormant sessions are excluded from Active.
+    /// interrupted); `queued` = QUEUED. Terminal/dormant sessions are excluded from these buckets.
     /// All live sessions are grouped here because the separate System list has been removed.
     public static func group(_ sessions: [Session]) -> SessionGroups {
         var needsYou: [Session] = []
@@ -27,10 +27,10 @@ public enum SessionGrouping {
         for s in sessions {
             if (s.pendingApprovals ?? 0) > 0 {
                 needsYou.append(s)
-            } else if s.effectiveRunStatus.isLive {
-                running.append(s)
-            } else if s.effectiveRunStatus == .pending {
+            } else if s.effectiveRunState == .queued {
                 queued.append(s)
+            } else if s.effectiveRunState.isLive {
+                running.append(s)
             }
         }
         return SessionGroups(needsYou: needsYou, running: running, queued: queued)

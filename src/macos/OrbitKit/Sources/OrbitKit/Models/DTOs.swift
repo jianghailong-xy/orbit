@@ -91,6 +91,44 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let modelCatalog: RunnerModelCatalog?
 }
 
+/// Why an ended session cannot currently be resumed on its original runner. Unknown values stay
+/// decodable so a newer server can add a reason without blanking the whole session payload.
+public enum SessionResumeBlockedReason: String, Codable, Equatable, Sendable {
+    case trashed = "TRASHED"
+    case ending = "ENDING"
+    case notTerminal = "NOT_TERMINAL"
+    case notStarted = "NOT_STARTED"
+    case missingContext = "MISSING_CONTEXT"
+    case noRunner = "NO_RUNNER"
+    case runnerOffline = "RUNNER_OFFLINE"
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionResumeBlockedReason(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Server-derived actions currently available for a session. The containing `capabilities` field
+/// is optional on every wire model so clients retain their status-based behavior with old servers.
+public struct SessionCapabilities: Codable, Equatable, Sendable {
+    public let canSend: Bool
+    public let canResume: Bool
+    public let resumeBlockedReason: SessionResumeBlockedReason?
+    public let canArchive: Bool
+    public let canRestore: Bool
+
+    public init(canSend: Bool, canResume: Bool,
+                resumeBlockedReason: SessionResumeBlockedReason? = nil,
+                canArchive: Bool, canRestore: Bool) {
+        self.canSend = canSend
+        self.canResume = canResume
+        self.resumeBlockedReason = resumeBlockedReason
+        self.canArchive = canArchive
+        self.canRestore = canRestore
+    }
+}
+
 /// A session row (list + detail share this; detail carries the extra worktree/stat fields).
 public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let id: String
@@ -102,6 +140,18 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Server-normalized, user-facing lifecycle. Optional for compatibility with older servers;
     /// presentation falls back to `status` / `endReason` when absent.
     public let sessionState: SessionState?
+    /// Execution outcome/state, independent from where the session is filed. Optional while
+    /// rolling out against older control planes; use `effectiveRunState` for presentation.
+    public let runState: SessionRunState?
+    /// OPEN / ARCHIVED / TRASH, independent from execution state.
+    public let filingState: SessionFilingState?
+    /// Legacy filing timestamps. Older control planes omit `filingState` but already return
+    /// these fields, so they remain the compatibility fallback without reusing the mixed
+    /// `sessionState=COMPLETED` value (which can also mean a succeeded run still in Open).
+    public let archivedAt: String?
+    public let deletedAt: String?
+    /// Authoritative action availability from newer servers. nil retains legacy local inference.
+    public let capabilities: SessionCapabilities?
     public let agentId: String?
     public let assignedRunnerId: String?
     public let provider: String?
@@ -122,7 +172,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
-    /// Legacy internal provenance. Current clients keep every session in Active and no longer
+    /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
@@ -148,9 +198,23 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let tags: [SessionTag]?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunState: SessionRunState {
+        SessionRunState.resolve(runState, legacy: sessionState,
+                                status: effectiveRunStatus, endReason: endReason)
+    }
+    /// Prefer the explicit field, then the filing timestamps older servers already returned.
+    public var effectiveFilingState: SessionFilingState {
+        if let filingState, filingState != .unknown { return filingState }
+        if deletedAt != nil { return .trash }
+        if archivedAt != nil { return .archived }
+        return .open
+    }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
                 sessionState: SessionState? = nil,
+                runState: SessionRunState? = nil, filingState: SessionFilingState? = nil,
+                archivedAt: String? = nil, deletedAt: String? = nil,
+                capabilities: SessionCapabilities? = nil,
                 agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
                 pendingApprovals: Int?, branch: String?,
@@ -165,6 +229,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.status = status
         self.runStatus = runStatus
         self.sessionState = sessionState
+        self.runState = runState
+        self.filingState = filingState
+        self.archivedAt = archivedAt
+        self.deletedAt = deletedAt
+        self.capabilities = capabilities
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
         self.provider = provider
@@ -416,6 +485,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let runStatus: RunStatus?
     /// Server-normalized, user-facing lifecycle; absent when talking to an older control plane.
     public let sessionState: SessionState?
+    /// Product-facing execution state and filing location, both optional for older servers.
+    public let runState: SessionRunState?
+    public let filingState: SessionFilingState?
+    /// Authoritative action availability from newer servers. nil retains legacy local inference.
+    public let capabilities: SessionCapabilities?
     /// The isolated branch this session's work lives on (`orbit/<slug>-<hash>`), or nil pre-isolation.
     public let branch: String?
     /// What the runner did: "worktree" (isolated) | "shared-nogit" (no git → the shared workDir).
@@ -449,9 +523,18 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let shareToken: String?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    public var effectiveRunState: SessionRunState? {
+        SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+    public var effectiveFilingState: SessionFilingState? {
+        guard let filingState, filingState != .unknown else { return nil }
+        return filingState
+    }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
                 sessionState: SessionState? = nil,
+                runState: SessionRunState? = nil, filingState: SessionFilingState? = nil,
+                capabilities: SessionCapabilities? = nil,
                 branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
@@ -462,6 +545,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.status = status
         self.runStatus = runStatus
         self.sessionState = sessionState
+        self.runState = runState
+        self.filingState = filingState
+        self.capabilities = capabilities
         self.branch = branch
         self.isolationStatus = isolationStatus
         self.changedFiles = changedFiles
@@ -558,14 +644,17 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     public let runStatus: RunStatus?
     /// Server-normalized state, optional for older search endpoints.
     public let sessionState: SessionState?
+    /// New orthogonal execution and filing dimensions. Optional for old search endpoints.
+    public let runState: SessionRunState?
+    public let filingState: SessionFilingState?
     public let agent: SessionAgentRef?
     public let runnerId: String?
     public let taskId: String?
     public let taskTitle: String?
     public let lastTurnAt: String?
     public let createdAt: String?
-    /// Set when the session lives in Completed / Trash — the row badges where it is, so a hit the
-    /// user can't find in the sidebar explains itself instead of looking like a ghost.
+    /// Legacy timestamps used when `filingState` is absent. Archived / Trash badges explain why a
+    /// hit isn't in Open instead of leaving it looking like a ghost.
     public let archivedAt: String?
     public let deletedAt: String?
     /// Carried so `SessionStatusGlyph` reports the same wording here as in the session list.
@@ -576,6 +665,16 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     public let snippet: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunState: SessionRunState {
+        SessionRunState.resolve(runState, legacy: sessionState,
+                                status: effectiveRunStatus, endReason: endReason)
+    }
+    public var effectiveFilingState: SessionFilingState {
+        if let filingState, filingState != .unknown { return filingState }
+        if deletedAt != nil { return .trash }
+        if archivedAt != nil { return .archived }
+        return .open
+    }
 
     /// Unknown `matchField` values decode to `.message` rather than failing the whole response: a
     /// newer server adding a field must not blank the palette on an older client.
@@ -586,6 +685,8 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
         status = try c.decode(RunStatus.self, forKey: .status)
         runStatus = try c.decodeIfPresent(RunStatus.self, forKey: .runStatus)
         sessionState = try c.decodeIfPresent(SessionState.self, forKey: .sessionState)
+        runState = try c.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        filingState = try c.decodeIfPresent(SessionFilingState.self, forKey: .filingState)
         agent = try c.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
         taskId = try c.decodeIfPresent(String.self, forKey: .taskId)

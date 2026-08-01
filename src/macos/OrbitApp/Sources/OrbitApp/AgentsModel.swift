@@ -22,7 +22,7 @@ final class AgentsModel {
     private(set) var loading = false
     var errorText: String?
 
-    // The selected agent's sessions for the current Active/Completed/Trash view.
+    // The selected agent's sessions for the current Open/Archived/Trash view.
     private(set) var agentSessions: [Session] = []
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
@@ -101,7 +101,7 @@ final class AgentsModel {
     /// the collapsed-split detail-push driver on iPhone; a selection whose id isn't a row can be reset
     /// back to nil by the List, dropping the freshly-pushed console to the "Select a session" empty
     /// state until the next poll. Deduped; the 4s poll reconciles ordering/fields (the session is
-    /// Active, so it re-appears there naturally).
+    /// Open, so it re-appears there naturally).
     func registerCreatedSession(_ session: Session) {
         guard !agentSessions.contains(where: { $0.id == session.id }) else { return }
         agentSessions.insert(session, at: 0)

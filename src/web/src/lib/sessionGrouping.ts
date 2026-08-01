@@ -14,7 +14,7 @@ export interface SessionTagRef {
 
 export interface GroupableSession {
   id: string;
-  // Set while the session is pinned to the top of the Active list.
+  // Set while the session is pinned to the top of the Open list.
   pinnedAt?: string | null;
   createdAt?: string | null;
   lastTurnAt?: string | null;
@@ -53,7 +53,7 @@ const bucketIndex = (s: GroupableSession, today: number): number => {
 };
 
 /**
- * Bucket a console-sorted list into the recency sections. When `pinnedFirst` (the Active view,
+ * Bucket a console-sorted list into the recency sections. When `pinnedFirst` (the Open view,
  * where pinning applies), pinned sessions are lifted into a leading "Pinned" section in their given
  * order; every other session buckets by calendar day. Order within each bucket is preserved (so
  * recency still holds) and empty buckets are dropped. `now` is injectable for deterministic tests.
@@ -68,8 +68,8 @@ export function sessionTimeSections<T extends GroupableSession>(
   const today = startOfDay(now);
 
   for (const s of sessions) {
-    // Only the Active view honours pins; elsewhere a (possibly stale) pinnedAt just buckets by
-    // time like any other session, so no "Pinned" section appears in Completed/Trash.
+    // Only the Open view honours pins; elsewhere a (possibly stale) pinnedAt just buckets by
+    // time like any other session, so no "Pinned" section appears in Archived/Trash.
     if (pinnedFirst && s.pinnedAt) pinned.push(s);
     else buckets[bucketIndex(s, today)].push(s);
   }

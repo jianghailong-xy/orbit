@@ -26,12 +26,14 @@ private func matchLabel(_ field: SessionSearchMatchField) -> String? {
     }
 }
 
-/// Where a hit lives, when that isn't the normal Active list — so a result the user can't find in
+/// Where a hit lives, when that isn't the normal Open list — so a result the user can't find in
 /// their session list explains itself instead of looking like a ghost.
 private func scopeBadge(_ hit: SessionSearchHit) -> String? {
-    if hit.deletedAt != nil { return "Trash" }
-    if hit.archivedAt != nil { return "Completed" }
-    return nil
+    switch hit.effectiveFilingState {
+    case .open, .unknown: return nil
+    case .archived: return "Archived"
+    case .trash: return "Trash"
+    }
 }
 
 struct SessionSearchView: View {
@@ -138,11 +140,7 @@ struct SessionSearchRow: View {
     let query: String
 
     var body: some View {
-        let glyph = SessionStatusGlyph.make(status: hit.effectiveRunStatus,
-                                            sessionState: hit.sessionState,
-                                            completed: hit.archivedAt != nil,
-                                            deleted: hit.deletedAt != nil,
-                                            endReason: hit.endReason)
+        let glyph = SessionStatusGlyph.make(runState: hit.effectiveRunState)
         HStack(alignment: .top, spacing: 10) {
             StatusGlyphView(glyph: glyph)
             VStack(alignment: .leading, spacing: 2) {

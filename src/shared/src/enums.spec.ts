@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   RunStatus,
   SessionEndReason,
+  SessionFilingState,
+  SessionRunState,
   SessionState,
+  deriveSessionFilingState,
+  deriveSessionRunState,
   deriveSessionState,
   gracefulEndStatus,
 } from './enums';
@@ -55,6 +59,40 @@ describe('deriveSessionState', () => {
   });
 });
 
+describe('orthogonal session states', () => {
+  it('keeps a successful run successful across every filing state', () => {
+    for (const filing of [
+      {},
+      { archivedAt: '2026-08-01T00:00:00Z' },
+      { archivedAt: '2026-08-01T00:00:00Z', deletedAt: '2026-08-02T00:00:00Z' },
+    ]) {
+      expect(deriveSessionRunState({ status: RunStatus.SUCCEEDED, ...filing })).toBe(
+        SessionRunState.SUCCEEDED,
+      );
+    }
+  });
+
+  it('derives filing state only from archive/trash timestamps', () => {
+    expect(deriveSessionFilingState({})).toBe(SessionFilingState.OPEN);
+    expect(deriveSessionFilingState({ archivedAt: new Date() })).toBe(SessionFilingState.ARCHIVED);
+    expect(deriveSessionFilingState({ archivedAt: new Date(), deletedAt: new Date() })).toBe(
+      SessionFilingState.TRASH,
+    );
+  });
+
+  it('distinguishes a cancelled task from a completed task', () => {
+    expect(
+      deriveSessionRunState({
+        status: RunStatus.CANCELLED,
+        endReason: SessionEndReason.TASK_CANCELLED,
+      }),
+    ).toBe(SessionRunState.CANCELLED);
+    expect(
+      deriveSessionRunState({ status: RunStatus.SUCCEEDED, endReason: SessionEndReason.TASK_DONE }),
+    ).toBe(SessionRunState.SUCCEEDED);
+  });
+});
+
 describe('gracefulEndStatus', () => {
   it('settles an idle recycle / user end at CANCELLED, never FAILED', () => {
     // The reported bug: a healthy session the reaper recycled after 4h idle came back
@@ -67,6 +105,10 @@ describe('gracefulEndStatus', () => {
 
   it('settles a finished task at SUCCEEDED — a completed run must not read as cancelled', () => {
     expect(gracefulEndStatus(SessionEndReason.TASK_DONE)).toBe(RunStatus.SUCCEEDED);
+  });
+
+  it('settles a cancelled task at CANCELLED, never SUCCEEDED', () => {
+    expect(gracefulEndStatus(SessionEndReason.TASK_CANCELLED)).toBe(RunStatus.CANCELLED);
   });
 
   it('returns null for a hard end or an unrecorded reason, so callers keep their own', () => {

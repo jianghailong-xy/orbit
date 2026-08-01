@@ -41,7 +41,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         return order.filter { !$0.adminOnly || isAdmin }
     }
 
-    /// The section a deep-link / notification `Route` lands in. There's no aggregate Active view
+    /// The section a deep-link / notification `Route` lands in. There's no aggregate Open view
     /// anymore, so "home" (`.active`) and an individual `.session` both land in Agents — the
     /// session's owning agent is resolved when routing (see `AppModel.route`).
     public static func forRoute(_ route: Route) -> AppSection {

@@ -4,7 +4,7 @@ import Foundation
 /// ("Pinned", "Today", "Yesterday", …) over the sessions that fall in it. Kept in OrbitKit so the
 /// bucketing is pure and unit-tested; the SwiftUI list renders one `Section` per section here.
 ///
-/// Distinct from `SessionGrouping` / `SessionGroups`, which bucket the *Active sidebar* by live
+/// Distinct from `SessionGrouping` / `SessionGroups`, which bucket the *Open snapshot* by live
 /// status (needs-you / running / queued) — this groups a *per-agent* list by time.
 public struct SessionTimeSection: Identifiable, Equatable, Sendable {
     public let title: String
@@ -21,7 +21,7 @@ public struct SessionTimeSection: Identifiable, Equatable, Sendable {
 /// leading "Pinned" section, and the rest are grouped by the calendar day of their last activity.
 public enum SessionTimeGrouping {
     /// Group a **console-sorted** list (pinned-first, then most-recent activity — see `SessionFilter`)
-    /// into ordered sections. When `pinnedFirst` (the Active view, where pinning applies — mirrors the
+    /// into ordered sections. When `pinnedFirst` (Open, where pinning applies — mirrors the
     /// row's `showsPin`), pinned sessions become a leading "Pinned" section in their given order;
     /// every other session buckets by the calendar day of `lastTurnAt ?? createdAt` into Today /
     /// Yesterday / Previous 7 Days / Previous 30 Days / Older. Order within each bucket is preserved
@@ -36,8 +36,8 @@ public enum SessionTimeGrouping {
         let today = calendar.startOfDay(for: now)
 
         for s in sessions {
-            // Only the Active view honours pins; elsewhere a (possibly stale) pinnedAt just buckets
-            // by time like any other session, so no "Pinned" section appears in Completed/Trash.
+            // Only Open honours pins; elsewhere a (possibly stale) pinnedAt just buckets
+            // by time like any other session, so no "Pinned" section appears in Archived/Trash.
             if pinnedFirst, s.pinnedAt != nil { pinned.append(s); continue }
             buckets[bucketIndex(for: s, today: today, calendar: calendar)].append(s)
         }

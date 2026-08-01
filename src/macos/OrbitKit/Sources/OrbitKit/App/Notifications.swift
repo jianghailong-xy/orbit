@@ -4,17 +4,17 @@ import Foundation
 // tapped action. All pure + tested. The macOS delivery (UNUserNotificationCenter: requesting
 // auth, registering categories, scheduling, handling responses) is the app's glue layer.
 
-/// A notification-worthy transition derived from polling the Active list.
+/// A notification-worthy transition derived from polling the Open list.
 public enum NotificationEvent: Equatable, Sendable {
     /// A session's pending-approval count went 0 → >0 — the agent is blocked on you.
     case needsApproval(sessionID: String, title: String, count: Int)
     /// A previously-live session reached a terminal state (status nil = it simply left the
-    /// Active list, so the exact terminal status is unknown).
+    /// Open list, so the exact terminal status is unknown).
     case finished(sessionID: String, title: String, status: RunStatus?)
 }
 
 public enum SessionDelta {
-    /// Diff two Active-list snapshots into notification events. Skips the `focusedSessionID`
+    /// Diff two Open-list snapshots into notification events. Skips the `focusedSessionID`
     /// (the user is already looking at it). The caller should prime the first snapshot WITHOUT
     /// notifying (otherwise every pre-existing pending session would ping on launch).
     public static func diff(previous: [Session], current: [Session],
@@ -35,7 +35,7 @@ public enum SessionDelta {
                                         status: s.effectiveRunStatus))
             }
         }
-        // Sessions that were live and dropped out of the Active list → finished (status unknown).
+        // Sessions that were live and dropped out of Open → finished (status unknown).
         for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && p.id != focusedSessionID {
             events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
         }

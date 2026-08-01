@@ -28,9 +28,60 @@ final class ModelsCodableTests: XCTestCase {
 
     func testEnumRawValuesMatchWireStrings() {
         XCTAssertEqual(RunStatus.awaitingInput.rawValue, "AWAITING_INPUT")
+        XCTAssertEqual(SessionRunState.succeeded.rawValue, "SUCCEEDED")
+        XCTAssertEqual(SessionRunState.dormant.rawValue, "DORMANT")
+        XCTAssertEqual(SessionFilingState.archived.rawValue, "ARCHIVED")
         XCTAssertEqual(PermissionMode.bypass.rawValue, "bypassPermissions")
         XCTAssertEqual(RunEventType.toolResult.rawValue, "tool_result")
         XCTAssertEqual(TaskStatus.inProgress.rawValue, "IN_PROGRESS")
+    }
+
+    func testNewSessionStateEnumsDecodeUnknownValuesLeniently() throws {
+        XCTAssertEqual(try JSONDecoder().decode(SessionRunState.self,
+                                                from: Data(#""FUTURE_RUN_STATE""#.utf8)), .unknown)
+        XCTAssertEqual(try JSONDecoder().decode(SessionFilingState.self,
+                                                from: Data(#""FUTURE_FILING_STATE""#.utf8)), .unknown)
+        XCTAssertEqual(try JSONDecoder().decode(SessionResumeBlockedReason.self,
+                                                from: Data(#""FUTURE_REASON""#.utf8)), .unknown)
+    }
+
+    func testSessionDecodesCapabilitiesAndOldPayloadStillWorks() throws {
+        let json = #"""
+        {"id":"s1","title":"Done","status":"SUCCEEDED",
+         "capabilities":{"canSend":false,"canResume":false,
+           "resumeBlockedReason":"MISSING_CONTEXT","canArchive":true,"canRestore":false}}
+        """#
+        let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertFalse(try XCTUnwrap(session.capabilities).canSend)
+        XCTAssertFalse(try XCTUnwrap(session.capabilities).canResume)
+        XCTAssertEqual(session.capabilities?.resumeBlockedReason, .missingContext)
+        XCTAssertTrue(try XCTUnwrap(session.capabilities).canArchive)
+        XCTAssertFalse(try XCTUnwrap(session.capabilities).canRestore)
+
+        let old = try JSONDecoder().decode(
+            Session.self, from: Data(#"{"id":"s2","title":null,"status":"RUNNING"}"#.utf8))
+        XCTAssertNil(old.capabilities)
+        XCTAssertEqual(old.effectiveFilingState, .open)
+
+        // Old control planes omit filingState but already expose these timestamps. They are a
+        // safer compatibility source than sessionState=COMPLETED, which can also mean Succeeded + Open.
+        let oldArchived = try JSONDecoder().decode(
+            Session.self,
+            from: Data(#"{"id":"s3","title":"Filed","status":"SUCCEEDED","sessionState":"COMPLETED","archivedAt":"2026-08-01T00:00:00Z","deletedAt":null}"#.utf8))
+        XCTAssertEqual(oldArchived.effectiveFilingState, .archived)
+        let oldTrash = try JSONDecoder().decode(
+            Session.self,
+            from: Data(#"{"id":"s4","title":"Trash","status":"FAILED","archivedAt":"2026-07-01T00:00:00Z","deletedAt":"2026-08-01T00:00:00Z"}"#.utf8))
+        XCTAssertEqual(oldTrash.effectiveFilingState, .trash)
+    }
+
+    func testSessionRunStateLiveIncludesQueuedWork() {
+        for state: SessionRunState in [.queued, .running, .awaitingInput, .interrupted] {
+            XCTAssertTrue(state.isLive, state.rawValue)
+        }
+        for state: SessionRunState in [.succeeded, .failed, .cancelled, .dormant, .ended] {
+            XCTAssertFalse(state.isLive, state.rawValue)
+        }
     }
 
     func testJSONValueScalarCoercions() {

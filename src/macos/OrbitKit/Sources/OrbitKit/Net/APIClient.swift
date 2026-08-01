@@ -96,7 +96,7 @@ public final class APIClient: @unchecked Sendable {
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
     /// Cross-scope session search for the ⌘K palette — spans every agent, runner and lifecycle
-    /// scope (Active, Completed, Trash) and reaches into conversation text, none of which
+    /// scope (Open, Archived, Trash) and reaches into conversation text, none of which
     /// `listSessions` can do. An empty `q` is a real request, answered with recents.
     public func searchSessions(q: String, limit: Int = 20) async throws -> SessionSearchResponse {
         try await get("sessions/search", query: [
@@ -153,8 +153,8 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
     }
 
-    // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), archive/restore
-    // (hide/unhide), hard delete. After any of these the caller refetches the list
+    // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), move between
+    // Open/Archived/Trash, and permanently purge. After any of these the caller refetches the list
     // (`view=active|archived|deleted`).
     public func endSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/end", body: Optional<Empty>.none) }
     public func archiveSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none) }

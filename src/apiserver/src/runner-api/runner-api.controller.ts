@@ -1278,34 +1278,42 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: SessionCompleteRequest,
   ): Promise<SessionCompleteResponse> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
-    // Keep the isolated worktree checkout for any resumable end — idle-park, user-end,
-    // task-done, or a plain cancel all leave the session reopenable, so its checkout (and
-    // whatever untracked scratch lives in it) must survive. Drop it only when the user
-    // archived (completed) or deleted the session — the two genuinely terminal actions.
-    const keepCheckout =
-      session.endReason !== SessionEndReason.COMPLETED &&
-      session.endReason !== SessionEndReason.DELETED;
+    await this.assertSessionOwnership(sessionId, runner.id);
     const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
     if (!TERMINAL.includes(dto.status as RunStatus)) {
       throw new BadRequestException('completion status must be terminal');
     }
-    // If the user requested cancel/end, finalize on the server regardless of what the
-    // runner reports — the graceful-end 'end' turn often wins the race over the
-    // heartbeat cancel and would otherwise land the session SUCCEEDED. The end reason
-    // decides the terminal state: TASK_DONE means the agent finished its task, so settle
-    // SUCCEEDED (a completed run must never read as cancelled). Every other graceful end
-    // — IDLE/ENDED (idle-recycle or a user end with work still possible) as much as a hard
-    // archive=completed / delete=deleted — settles CANCELLED; `endReason` rides along and is
-    // what makes the first two read as dormant rather than cancelled in the clients.
-    const effectiveStatus: RunStatus = session.cancelRequestedAt
-      ? ((gracefulEndStatus(session.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
-      : (dto.status as RunStatus);
 
-    // Finalize in ONE transaction. Only a LIVE session is finalized (updateMany
-    // count): a duplicate/late completion is a safe no-op. Billing is accrued
-    // per-turn by /turn-complete, so /complete doesn't touch the sums.
-    const finalized = await this.prisma.$transaction(async (tx) => {
+    // Finalize in ONE row-locked transaction. Archive/remove/reaper also write this row,
+    // so the locked re-read is the only snapshot allowed to decide the final status and
+    // checkout lifetime. A stale ownership fast-read above must never overwrite a newer
+    // cancel/end intent. Billing is accrued per-turn by /turn-complete.
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      const current = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+
+      // If cancel/end won the row lock, its reason is authoritative regardless of what
+      // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and
+      // hard archive/delete/cancel settle CANCELLED through the fallback.
+      const effectiveStatus: RunStatus = current.cancelRequestedAt
+        ? ((gracefulEndStatus(current.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
+        : (dto.status as RunStatus);
+      // Filing timestamps are canonical for new rows; endReason checks keep legacy rows
+      // safe. Only Open sessions retain their checkout for a future resume.
+      const keepCheckout =
+        current.archivedAt == null &&
+        current.deletedAt == null &&
+        current.endReason !== SessionEndReason.COMPLETED &&
+        current.endReason !== SessionEndReason.DELETED;
+
+      // Only a LIVE session is finalized (updateMany count); duplicate/late completion
+      // is a safe no-op but still returns the result derived from this locked snapshot.
       const res = await tx.session.updateMany({
         where: { id: sessionId, status: { in: LIVE } },
         data: {
@@ -1341,7 +1349,7 @@ export class RunnerApiController {
           runningSubagents: [],
         },
       });
-      if (res.count === 0) return false;
+      if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout };
       // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
       // off the session payload, fetched on demand when a file's diff is opened.
       if (dto.changedDiff !== undefined) {
@@ -1361,28 +1369,28 @@ export class RunnerApiController {
       // still running. A genuine FAILED run lands the task at FAILED (needs a human);
       // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
       // the agent owns DONE.
-      if (session.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
+      if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
         await reclaimStalledTask(
           tx,
-          session.taskId,
+          current.taskId,
           effectiveStatus === RunStatus.FAILED ? TaskStatus.FAILED : TaskStatus.OPEN,
         );
         // Genuine failure (not a user cancel): leave a note on the task explaining it.
         if (effectiveStatus === RunStatus.FAILED) {
-          await postRunFailureComment(tx, session.taskId, dto.error || dto.result || 'run failed');
+          await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
         }
       }
-      return true;
+      return { finalized: true, effectiveStatus, keepCheckout };
     });
-    if (!finalized) return { ok: true, keepCheckout };
+    if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
 
     this.realtime.publish(sessionId, {
       seq: Number.MAX_SAFE_INTEGER,
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
-      payload: { status: effectiveStatus, final: true },
+      payload: { status: outcome.effectiveStatus, final: true },
     });
-    return { ok: true, keepCheckout };
+    return { ok: true, keepCheckout: outcome.keepCheckout };
   }
 
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,

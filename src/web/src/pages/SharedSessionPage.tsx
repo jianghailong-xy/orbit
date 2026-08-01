@@ -8,7 +8,7 @@ import {
   getSharedSession,
 } from '../api';
 import { ArtifactResolverContext, AttachmentResolverContext, Transcript } from '../components/Transcript';
-import { sessionStateOf } from '../lib/sessionState';
+import { sessionRunStateOf } from '../lib/sessionState';
 import { titleFirstLine } from '../lib/title';
 
 /**
@@ -52,7 +52,7 @@ export function SharedSessionPage() {
         {
           id: token,
           title: data.title,
-          status: sessionStateOf(data),
+          status: sessionRunStateOf(data),
           createdAt: data.createdAt,
           agent: { name: data.agentName },
         },

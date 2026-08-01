@@ -24,9 +24,111 @@ public enum RunStatus: String, Codable, Sendable {
     }
 }
 
-/// User-facing lifecycle of a session, normalized by the control plane independently of the
-/// runner's low-level `RunStatus`. For example, completing a live session can stop its runner with
-/// `RunStatus.cancelled` while this state remains `.completed`.
+/// Product-facing execution state. Unlike ``SessionState``, this dimension says only what the
+/// run is doing or how it ended; moving a session between Open, Archived and Trash never changes
+/// it. New control planes send this as `runState`; older ones use raw ``RunStatus`` plus end reason,
+/// with ``SessionState`` used only by slim payloads that omit raw status entirely.
+public enum SessionRunState: String, Codable, Sendable {
+    case queued = "QUEUED"
+    case running = "RUNNING"
+    case awaitingInput = "AWAITING_INPUT"
+    case succeeded = "SUCCEEDED"
+    case failed = "FAILED"
+    case cancelled = "CANCELLED"
+    case dormant = "DORMANT"
+    case interrupted = "INTERRUPTED"
+    case ended = "ENDED"
+    /// Forward compatibility: an unknown future value falls through to the legacy fields.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionRunState(rawValue: raw) ?? .unknown
+    }
+
+    /// Whether work is currently in flight or waiting inside a live runner process.
+    public var isLive: Bool {
+        switch self {
+        case .queued, .running, .awaitingInput, .interrupted: return true
+        default: return false
+        }
+    }
+
+    /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
+    /// `sessionState` is intentionally not allowed to override a raw state: an old archived row
+    /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.
+    public static func resolve(_ runState: SessionRunState?,
+                               legacy _: SessionState?,
+                               status: RunStatus,
+                               endReason: String? = nil) -> SessionRunState {
+        if let runState, runState != .unknown { return runState }
+        switch status {
+        case .pending:       return .queued
+        case .running:       return .running
+        case .awaitingInput: return .awaitingInput
+        case .succeeded:     return .succeeded
+        case .failed:        return .failed
+        case .interrupted:
+            let reason = (endReason ?? "").lowercased()
+            if reason == "orphaned" { return .ended }
+            if reason.isEmpty { return .interrupted }
+            if ["completed", "deleted", "cancelled", "task_cancelled"].contains(reason) {
+                return .cancelled
+            }
+            return .dormant
+        case .cancelled:
+            let reason = (endReason ?? "").lowercased()
+            if reason == "orphaned" { return .ended }
+            if ["completed", "deleted", "cancelled", "task_cancelled"].contains(reason) {
+                return .cancelled
+            }
+            return .dormant
+        }
+    }
+
+    /// Optional-status variant for deliberately slim detail payloads. Only when both new and raw
+    /// execution fields are absent may the old mixed state stand in for an execution state.
+    public static func resolveOptional(_ runState: SessionRunState?,
+                                       legacy sessionState: SessionState?,
+                                       status: RunStatus?,
+                                       endReason: String? = nil) -> SessionRunState? {
+        if let runState, runState != .unknown { return runState }
+        if let status {
+            return resolve(nil, legacy: nil, status: status, endReason: endReason)
+        }
+        guard let sessionState else { return nil }
+        switch sessionState {
+        case .queued:        return .queued
+        case .running:       return .running
+        case .awaitingInput: return .awaitingInput
+        case .dormant:       return .dormant
+        case .completed:     return .succeeded
+        case .failed:        return .failed
+        case .cancelled:     return .cancelled
+        case .interrupted:   return .interrupted
+        case .ended:         return .ended
+        case .deleted, .unknown: return nil
+        }
+    }
+}
+
+/// Where the session is filed. This dimension is independent from ``SessionRunState``: a failed
+/// run may be Archived and a succeeded run may remain Open.
+public enum SessionFilingState: String, Codable, Sendable {
+    case open = "OPEN"
+    case archived = "ARCHIVED"
+    case trash = "TRASH"
+    /// Forward compatibility: callers should use their endpoint/scope fallback for this value.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionFilingState(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Legacy mixed lifecycle/filing state. Kept only as a compatibility fallback while old control
+/// planes are still in use; new presentation reads ``SessionRunState`` and ``SessionFilingState``.
 public enum SessionState: String, Codable, Sendable, CaseIterable {
     case queued = "QUEUED"
     case running = "RUNNING"

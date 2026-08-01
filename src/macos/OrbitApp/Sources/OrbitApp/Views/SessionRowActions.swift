@@ -1,12 +1,12 @@
 import SwiftUI
 import OrbitKit
 
-// Row-level session actions for the session lists (the Active sidebar and each agent's
-// Active/Completed/Trash list). Two surfaces, deliberately paired:
+// Row-level session actions for each agent's Open/Archived/Trash lists. Two surfaces,
+// deliberately paired:
 //   • swipeActions — the iOS accelerator, mapped to the platform convention (NOT the first-draft
 //     request, which had them reversed):
-//       – leading  (swipe right) → the positive actions: Complete/Pin (Restore on the Completed and
-//         Trash tabs)
+//       – leading  (swipe right) → the positive actions: Archive/Pin (Move to Open in Archived and
+//         Trash)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
 //         stray full swipe can't fire it — the user must tap the revealed button.
 //   • contextMenu — the cross-platform "source of truth": the same actions on a long-press (iOS) or
@@ -19,25 +19,36 @@ import OrbitKit
 private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let session: Session
-    /// The tab this row is shown under; `nil` for the Active sidebar (always active sessions).
-    /// `.completed` and `.trash` swap the positive action from Complete to Restore; `.trash` also
+    /// The tab this row is shown under; `nil` means an Open-list surface.
+    /// `.archived` and `.trash` swap the positive action from Archive to Move to Open; `.trash` also
     /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
     /// confirmation) and drops Pin — a trashed session isn't orderable.
     let scope: SessionView?
     /// Opens the tag picker for this row (set by the list, which owns the sheet). `nil` on surfaces
-    /// without a tag library on hand (e.g. the Active sidebar), where the "Tags…" item is hidden.
+    /// without a tag library on hand, where the "Tags…" item is hidden.
     let onTag: (() -> Void)?
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
+    /// Archiving an in-flight run also ends it, so require an explicit second step.
+    @State private var confirmArchive = false
 
-    private var isCompleted: Bool { scope == .completed }
+    private var isArchived: Bool { scope == .archived }
     private var isTrash: Bool { scope == .trash }
+    private var isOpen: Bool { scope == nil || scope == .open }
+    private var isLive: Bool {
+        isOpen && SessionArchivePresentation.requiresConfirmation(for: session.effectiveRunState)
+    }
+    private var canArchive: Bool { session.capabilities?.canArchive ?? true }
+    private var canRestore: Bool { session.capabilities?.canRestore ?? true }
+    private var canPerformPositiveAction: Bool {
+        isArchived || isTrash ? canRestore : canArchive
+    }
     private var isPinned: Bool { session.pinnedAt != nil }
 
     func body(content: Content) -> some View {
         content
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction && !isLive) {
                 positiveButton
                 if !isTrash { pinButton }
             }
@@ -59,20 +70,36 @@ private struct SessionRowActions: ViewModifier {
             } message: {
                 Text("This session and its full transcript will be permanently deleted. This can't be undone.")
             }
+            .confirmationDialog("End and archive this session?", isPresented: $confirmArchive,
+                                titleVisibility: .visible) {
+                Button("End & Archive", role: .destructive) { model.archiveSession(session.id) }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This ends the current run and moves the session to Archived.")
+            }
     }
 
     @ViewBuilder private var positiveButton: some View {
-        if isCompleted || isTrash {
-            Button { model.restoreSession(session.id) } label: {
-                Label("Restore", systemImage: "tray.and.arrow.up")
+        if isArchived || isTrash {
+            Button { model.moveSessionToOpen(session.id) } label: {
+                Label("Move to Open", systemImage: "tray.and.arrow.up")
             }
             .tint(.blue)
+            .disabled(!canRestore)
         } else {
-            Button { model.completeSession(session.id) } label: {
-                Label("Complete", systemImage: "checkmark")
+            Button { requestArchive() } label: {
+                Label(SessionArchivePresentation.actionTitle(for: session.effectiveRunState),
+                      systemImage: "archivebox")
             }
             .tint(.green)
+            .disabled(!canArchive)
         }
+    }
+
+    private func requestArchive() {
+        guard canArchive else { return }
+        if isLive { confirmArchive = true }
+        else { model.archiveSession(session.id) }
     }
 
     private var pinButton: some View {
@@ -96,7 +123,7 @@ private struct SessionRowActions: ViewModifier {
 }
 
 extension View {
-    /// Attach the pin / complete-or-restore / delete actions to a session row (swipe + context menu).
+    /// Attach the pin / archive-or-move-to-open / delete actions to a session row.
     /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
     func sessionRowActions(_ session: Session, scope: SessionView? = nil,
                            onTag: (() -> Void)? = nil) -> some View {
@@ -133,6 +160,6 @@ private struct SessionUndoToast: ViewModifier {
 }
 
 extension View {
-    /// Floats the "Completed / Deleted … Undo" toast above the shell. Attach once at a root shell.
+    /// Floats the "Archived / Deleted … Undo" toast above the shell. Attach once at a root shell.
     func sessionUndoToast() -> some View { modifier(SessionUndoToast()) }
 }

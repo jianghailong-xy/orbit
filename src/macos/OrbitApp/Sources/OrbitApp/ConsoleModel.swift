@@ -96,12 +96,12 @@ final class ConsoleModel {
     private var kickRequested = false
     private var netWasSatisfied = true
 
-    // The session's lifecycle status per the server (REST). The SSE stream can't redeliver the
-    // terminal transition (its event is broadcast live-only, never in the replayed log), so the
-    // stream alone leaves an opened/reconnected ended session looking live. This is seeded on
-    // open and refreshed on each reconnect; the composer reconciles it with the stream status so
-    // a send to a dormant/finished session resumes instead of 409-ing on POST /turns.
+    // The session's lifecycle + action capabilities per the server (REST). The SSE stream can't
+    // redeliver every terminal transition, while resume eligibility also depends on runner context
+    // and heartbeat freshness. These snapshots let the composer choose /turns vs /resume — or
+    // block both — without relying on status alone. nil capabilities preserve old-server behavior.
     private var serverStatus: RunStatus?
+    private var serverCapabilities: SessionCapabilities?
 
     // composer
     var composerText = ""
@@ -508,7 +508,28 @@ final class ConsoleModel {
     /// terminal status when the stream missed the (un-replayable) terminal transition.
     var sessionStatus: RunStatus { ComposerLogic.reconcileStatus(stream: state.status, server: serverStatus) }
 
-    var availability: SendAvailability { isDraft ? .sendNow : ComposerLogic.availability(status: sessionStatus) }
+    var availability: SendAvailability {
+        isDraft ? .sendNow
+                : ComposerLogic.availability(status: sessionStatus, capabilities: serverCapabilities)
+    }
+
+    /// Explanation shown at the composer when a newer server says this session cannot accept a
+    /// message. Question replies use the approval channel rather than POST /turns, so they remain
+    /// available while a run is ending.
+    var sendBlockedMessage: String? {
+        guard !isDraft, replyContext == nil else { return nil }
+        return ComposerLogic.blockedMessage(status: sessionStatus, capabilities: serverCapabilities)
+    }
+
+    /// Heartbeat-derived denials can change without the transcript changing. The composer exposes
+    /// a small retry affordance for these reasons; send() also refreshes before every terminal
+    /// resume attempt so a stale RUNNER_OFFLINE snapshot can never authorize or deny the POST.
+    var canRefreshBlockedSend: Bool {
+        switch serverCapabilities?.resumeBlockedReason {
+        case .ending, .noRunner, .runnerOffline: return true
+        default: return false
+        }
+    }
 
     /// Non-terminal session → composer config edits apply immediately (see `applyConfig`). A draft
     /// has no session to PATCH, so it's never "live": the picked pills ride along in createSession.
@@ -554,7 +575,7 @@ final class ConsoleModel {
     /// at the hardcoded `.default` instead of the mode the session actually uses.
     private func loadContext() async {
         guard let s = try? await api.session(sessionID) else { return }
-        serverStatus = s.effectiveRunStatus
+        adoptServerSnapshot(s)
         agentName = s.agent?.name
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so a model pick here can be written back to the agent as its new default.
@@ -587,13 +608,27 @@ final class ConsoleModel {
         if let providers = try? await api.providers() { configuredProviders = providers }
     }
 
-    /// Re-read just the authoritative lifecycle status from REST (lighter than loadContext).
+    /// Adopt a fresh list/detail snapshot too. The app's control-plane-driven list refresh carries
+    /// heartbeat-derived capability changes, so an open console needn't keep an older denial.
+    func adoptServerSnapshot(_ session: Session?) {
+        guard let session, session.id == sessionID else { return }
+        serverStatus = session.effectiveRunStatus
+        serverCapabilities = session.capabilities
+    }
+
+    /// Re-read the authoritative lifecycle + capabilities from REST (lighter than loadContext).
     /// The terminal transition is a live-only SSE broadcast absent from the replayed log, so
     /// the stream alone can leave an ended session looking live; this lets the composer pick
-    /// resume over a doomed POST /turns. No-op on a transient fetch failure (keeps the last value).
-    private func refreshServerStatus() async {
-        if let s = try? await api.session(sessionID) { serverStatus = s.effectiveRunStatus }
+    /// resume over a doomed POST /turns. Capabilities include heartbeat-derived runner availability,
+    /// so this is also the retry path after RUNNER_OFFLINE. A transient failure keeps the last value.
+    @discardableResult
+    private func refreshServerStatus() async -> Bool {
+        guard let s = try? await api.session(sessionID) else { return false }
+        adoptServerSnapshot(s)
+        return true
     }
+
+    func refreshCapabilities() async { _ = await refreshServerStatus() }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
     /// like web's configMut); on a terminal/draft session the local value is kept and carried
@@ -693,6 +728,25 @@ final class ConsoleModel {
             await replyToQuestion(approvalID: reply.approvalID, text: text)
             return
         }
+
+        // Resume eligibility depends on context presence and a fresh runner heartbeat. Re-read it
+        // immediately before any terminal resume attempt (and when retrying a cached offline denial),
+        // then let the server capability — not the old status heuristic — authorize the endpoint.
+        let terminalAttempt = ComposerLogic.shouldResume(status: sessionStatus)
+        if terminalAttempt || serverCapabilities?.resumeBlockedReason == .runnerOffline {
+            let refreshed = await refreshServerStatus()
+            // Once a server has supplied capabilities, do not authorize a heartbeat-sensitive
+            // resume from an older cached `true` when the required preflight refresh failed.
+            if terminalAttempt, !refreshed, serverCapabilities != nil {
+                statusMessage = "Couldn't verify whether this session can resume. Check your connection and try again."
+                return
+            }
+        }
+        if let message = ComposerLogic.blockedMessage(status: sessionStatus,
+                                                      capabilities: serverCapabilities) {
+            statusMessage = message
+            return
+        }
         let clientTurnId = UUID().uuidString
         // Every staged attachment is uploaded by now (send is gated on `isUploading`), so each
         // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
@@ -725,7 +779,7 @@ final class ConsoleModel {
         defer { sending = false }
         do {
             let accepted: TurnAccepted
-            if ComposerLogic.shouldResume(status: sessionStatus) {
+            if ComposerLogic.shouldResume(status: sessionStatus, capabilities: serverCapabilities) {
                 accepted = try await api.resume(sessionID: sessionID,
                                          ResumeRequest(clientTurnId: clientTurnId, content: text,
                                                        kind: shell ? "shell" : "message",
@@ -736,6 +790,7 @@ final class ConsoleModel {
                 // snapshot so the stream drives status again and a quick follow-up doesn't
                 // re-resume a session that hasn't re-claimed yet.
                 serverStatus = nil
+                serverCapabilities = nil
             } else {
                 accepted = try await api.sendTurn(sessionID: sessionID,
                                            ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,

@@ -25,6 +25,7 @@ export enum RunStatus {
 export enum SessionEndReason {
   IDLE = 'idle', // reaper recycled it after inactivity — resumable
   TASK_DONE = 'task_done', // reaper recycled it because its task finished — resumable
+  TASK_CANCELLED = 'task_cancelled', // reaper recycled it because its task was cancelled
   ENDED = 'ended', // user ended the session — resumable
   COMPLETED = 'completed', // user marked it complete (archived)
   DELETED = 'deleted', // user deleted it (trash)
@@ -33,10 +34,8 @@ export enum SessionEndReason {
 }
 
 /**
- * Authoritative, user-facing lifecycle state of a session. `RunStatus` remains the
- * runner/process state persisted in Postgres; this enum combines that raw outcome with
- * the session's filing state (`archivedAt` / `deletedAt`) and terminal reason so every
- * API consumer sees the same product semantics.
+ * Legacy combined lifecycle state. Retained for wire compatibility; new consumers
+ * should use {@link SessionRunState} and {@link SessionFilingState} instead.
  */
 export enum SessionState {
   QUEUED = 'QUEUED',
@@ -49,6 +48,30 @@ export enum SessionState {
   INTERRUPTED = 'INTERRUPTED',
   ENDED = 'ENDED',
   DELETED = 'DELETED',
+}
+
+/**
+ * User-facing execution state. Unlike the legacy {@link SessionState}, this describes
+ * only what happened to the run and never changes when the session is archived,
+ * restored, or moved to Trash.
+ */
+export enum SessionRunState {
+  QUEUED = 'QUEUED',
+  RUNNING = 'RUNNING',
+  AWAITING_INPUT = 'AWAITING_INPUT',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+  DORMANT = 'DORMANT',
+  INTERRUPTED = 'INTERRUPTED',
+  ENDED = 'ENDED',
+}
+
+/** Where a session is filed. Orthogonal to {@link SessionRunState}. */
+export enum SessionFilingState {
+  OPEN = 'OPEN',
+  ARCHIVED = 'ARCHIVED',
+  TRASH = 'TRASH',
 }
 
 type SessionStateSource = {
@@ -64,6 +87,51 @@ export type SessionStateInput = SessionStateSource &
     | { runStatus: RunStatus | string; status?: RunStatus | string | null }
     | { status: RunStatus | string; runStatus?: RunStatus | string | null }
   );
+
+/** Derive execution state without consulting archivedAt/deletedAt. */
+export function deriveSessionRunState(input: SessionStateInput): SessionRunState {
+  const rawStatus = String(input.runStatus ?? input.status ?? '').toUpperCase();
+  const reason = String(input.endReason ?? '').toLowerCase();
+
+  switch (rawStatus) {
+    case RunStatus.PENDING:
+      return SessionRunState.QUEUED;
+    case RunStatus.RUNNING:
+      return SessionRunState.RUNNING;
+    case RunStatus.AWAITING_INPUT:
+      return SessionRunState.AWAITING_INPUT;
+    case RunStatus.SUCCEEDED:
+      return SessionRunState.SUCCEEDED;
+    case RunStatus.FAILED:
+      return SessionRunState.FAILED;
+    case RunStatus.CANCELLED:
+    case RunStatus.INTERRUPTED:
+      if (reason === SessionEndReason.ORPHANED) return SessionRunState.ENDED;
+      if (
+        reason === SessionEndReason.COMPLETED ||
+        reason === SessionEndReason.DELETED ||
+        reason === SessionEndReason.CANCELLED ||
+        reason === SessionEndReason.TASK_CANCELLED
+      ) {
+        return SessionRunState.CANCELLED;
+      }
+      if (rawStatus === RunStatus.INTERRUPTED && reason === '') {
+        return SessionRunState.INTERRUPTED;
+      }
+      // Pre-endReason rows and unknown graceful recycle reasons are safest presented as
+      // resumable/dormant, preserving the legacy fail-to-dormant behaviour.
+      return SessionRunState.DORMANT;
+    default:
+      return SessionRunState.ENDED;
+  }
+}
+
+/** Derive list membership without consulting the runner status or terminal reason. */
+export function deriveSessionFilingState(input: SessionStateSource): SessionFilingState {
+  if (input.deletedAt != null) return SessionFilingState.TRASH;
+  if (input.archivedAt != null) return SessionFilingState.ARCHIVED;
+  return SessionFilingState.OPEN;
+}
 
 /**
  * Derive the stable, user-facing state without changing the stored runner status.
@@ -95,7 +163,8 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
       if (
         reason === SessionEndReason.COMPLETED ||
         reason === SessionEndReason.DELETED ||
-        reason === SessionEndReason.CANCELLED
+        reason === SessionEndReason.CANCELLED ||
+        reason === SessionEndReason.TASK_CANCELLED
       ) {
         return SessionState.CANCELLED;
       }
@@ -110,19 +179,17 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
 /**
  * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
  * wasn't one (a hard archive/delete/batch-stop, or no reason recorded). TASK_DONE settles
- * SUCCEEDED — the agent finished its work, and a completed run must never read as
- * cancelled. IDLE/ENDED (idle recycle, or a user end with work still possible) settle
- * CANCELLED; the *status* is deliberately coarse and `endReason` is what makes those two
- * read as dormant rather than cancelled (see SessionEndReason). Returning CANCELLED here
- * rather than null is load-bearing for the reaper: its forceFinalize defaults to FAILED,
- * so null would resurface an unacknowledged idle recycle as a run failure. Shared so the
- * two places that finalize such an end — the runner's /complete and the reaper's backstop
- * for an end the runner never acknowledged — can't drift apart.
+ * SUCCEEDED; TASK_CANCELLED settles CANCELLED. IDLE/ENDED also settle CANCELLED, with
+ * `endReason` distinguishing their dormant/resumable meaning. Returning an explicit
+ * status is load-bearing for the reaper: its forceFinalize defaults to FAILED, so null
+ * would resurface an unacknowledged graceful recycle as a run failure. Shared so the
+ * runner's /complete and the reaper's backstop cannot drift apart.
  */
 export function gracefulEndStatus(endReason: string | null | undefined): RunStatus | null {
   switch (endReason) {
     case SessionEndReason.TASK_DONE:
       return RunStatus.SUCCEEDED;
+    case SessionEndReason.TASK_CANCELLED:
     case SessionEndReason.IDLE:
     case SessionEndReason.ENDED:
       return RunStatus.CANCELLED;
@@ -179,7 +246,7 @@ export enum RunEventType {
   // the process's output file (broadcast-only animation, like *_DELTA — not persisted).
   BACKGROUND_TASK = 'background_task',
   BACKGROUND_OUTPUT = 'background_output',
-  // Control-plane-internal lifecycle signals (a session was created / left the active list).
+  // Control-plane-internal lifecycle signals (a session entered / left the Open list).
   // They ride the same realtime hub as run events — buying the cross-replica NOTIFY bridge for
   // free — but are NEVER persisted to run_events (the `type` column is a plain String, so no
   // migration) and NEVER enter a per-session transcript stream (streamForRun filters them via

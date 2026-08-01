@@ -7,6 +7,7 @@ import type { SessionSearchHit } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { sessionSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
+import { sessionFilingStateOf } from '../lib/sessionState';
 import { StatusIcon, statusLabel } from './AgentView';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
@@ -33,10 +34,12 @@ export const openSessionSearch = (): void => {
   window.dispatchEvent(new Event(OPEN_EVENT));
 };
 
-/** Where a hit lives, when that isn't the normal Active list — so a result the user can't find in
+/** Where a hit lives, when that isn't the normal Open list — so a result the user can't find in
  *  the sidebar explains itself instead of looking like a ghost. */
-const scopeBadge = (hit: SessionSearchHit): string | null =>
-  hit.deletedAt ? 'Trash' : hit.archivedAt ? 'Completed' : null;
+export const scopeBadge = (hit: SessionSearchHit): string | null => {
+  const filing = sessionFilingStateOf(hit);
+  return filing === 'TRASH' ? 'Trash' : filing === 'ARCHIVED' ? 'Archived' : null;
+};
 
 /** What the hit matched on, when it isn't the title (which the row already shows). */
 const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
@@ -54,7 +57,7 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
  * The ⌘K session palette. Mounted once by the app shell, so it works from every route.
  *
  * It searches across everything the sidebar can't reach in one place: every agent, every runner,
- * and the Completed / Trash scopes as well as Active. With an empty query it lists
+ * and the Archived / Trash scopes as well as Open. With an empty query it lists
  * recents, which makes the same keystroke a fast session switcher.
  */
 export function SessionSearch() {
