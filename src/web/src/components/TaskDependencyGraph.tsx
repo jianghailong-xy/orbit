@@ -36,6 +36,12 @@ import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
 
 const NODE_WIDTH = 204;
 const NODE_HEIGHT = 76;
+// React Flow disables pointer events on wrappers for nodes that are neither selectable nor
+// draggable and have no node-level click handler. These nodes deliberately meet all three
+// conditions, but their custom contents contain buttons, so opt the wrappers back into hit
+// testing. Without this, task links, dependency removal, and progressive expansion only work
+// when invoked programmatically, not from a real pointer click.
+const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
 
 interface DependencyNodeData extends Record<string, unknown> {
   task: TaskDependencyGraphNode;
@@ -258,7 +264,7 @@ function layoutPositions(
   );
 }
 
-function flowElements(
+export function buildDependencyFlowElements(
   graph: NormalizedTaskDependencyGraph,
   aggregates: readonly TaskDependencyBranchAggregate[],
   positions: ReadonlyMap<string, { x: number; y: number }>,
@@ -283,6 +289,7 @@ function flowElements(
       draggable: false,
       selectable: false,
       focusable: false,
+      style: INTERACTIVE_NODE_STYLE,
       data: {
         task,
         isFocus,
@@ -308,6 +315,7 @@ function flowElements(
     draggable: false,
     selectable: false,
     focusable: false,
+    style: INTERACTIVE_NODE_STYLE,
     data: {
       aggregate,
       vertical,
@@ -450,7 +458,7 @@ function DependencyFlow({
   );
   const elements = useMemo(
     () =>
-      flowElements(
+      buildDependencyFlowElements(
         visibleGraph,
         projection.aggregates,
         positions,
