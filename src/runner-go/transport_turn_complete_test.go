@@ -87,11 +87,15 @@ func TestTurnCompleteRetriesLostCommittedResponse(t *testing.T) {
 
 func TestTurnCompleteStopsRetryingWhenContextIsCancelled(t *testing.T) {
 	requestStarted := make(chan struct{}, 1)
+	releaseHandler := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestStarted <- struct{}{}
-		<-r.Context().Done()
+		<-releaseHandler
 	}))
-	defer srv.Close()
+	t.Cleanup(func() {
+		close(releaseHandler)
+		srv.Close()
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
