@@ -60,7 +60,8 @@ function graphFixture(edges: StoredEdge[] = diamondEdges, ownsFocus = true) {
     taskDependency: {
       findMany: async (args: any) => {
         const ids = args.where.taskId.in as string[];
-        // Traversal selects full task metadata; dependency-state hydration only selects status.
+        // Traversal selects full task metadata. Keep the fallback branch to fail loudly if a
+        // future change starts materializing status rows again instead of using groupBy counts.
         if (args.select.dependsOnTask.select.id) {
           traversalBatches.push([...ids]);
           traversalWheres.push(args.where);
@@ -79,6 +80,27 @@ function graphFixture(edges: StoredEdge[] = diamondEdges, ownsFocus = true) {
             taskId: edge.taskId,
             dependsOnTask: { status: tasks.get(edge.dependsOnTaskId)?.status },
           }));
+      },
+      groupBy: async (args: any) => {
+        const ids = args.where.taskId.in as string[];
+        stateBatches.push([...ids]);
+        const status = args.where.dependsOnTask?.status;
+        const allowedStatuses =
+          typeof status === 'string'
+            ? new Set([status])
+            : status?.in
+              ? new Set(status.in as string[])
+              : null;
+        const counts = new Map<string, number>();
+        for (const edge of edges) {
+          if (!ids.includes(edge.taskId)) continue;
+          const prerequisiteStatus = tasks.get(edge.dependsOnTaskId)?.status;
+          if (allowedStatuses && (!prerequisiteStatus || !allowedStatuses.has(prerequisiteStatus))) {
+            continue;
+          }
+          counts.set(edge.taskId, (counts.get(edge.taskId) ?? 0) + 1);
+        }
+        return [...counts].map(([taskId, count]) => ({ taskId, _count: { _all: count } }));
       },
       count: async (args: any) => {
         const ids = args.where.taskId.in as string[];
@@ -176,14 +198,25 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
   // One traversal query per breadth-first layer, not one per task.
   assert.deepEqual(fixture.traversalBatches, [[FOCUS], [TASK_B, TASK_C], [TASK_D, TASK_E]]);
   assert.deepEqual(fixture.traversalTakes, [401, 399, 396]);
-  assert.equal(fixture.stateBatches.length, 1);
-  assert.deepEqual(new Set(fixture.stateBatches[0]), new Set([FOCUS, TASK_B, TASK_C, TASK_D, TASK_E]));
+  assert.equal(fixture.stateBatches.length, 3);
+  assert.ok(
+    fixture.stateBatches.every(
+      (batch) =>
+        batch.length === 5 &&
+        new Set(batch).size === 5 &&
+        [FOCUS, TASK_B, TASK_C, TASK_D, TASK_E].every((id) => batch.includes(id)),
+    ),
+  );
   assert.ok(
     fixture.traversalWheres.every(
       (where) => where.task.ownerId === OWNER_ID && where.dependsOnTask.ownerId === OWNER_ID,
     ),
   );
   assert.equal(fixture.busyWhere().ownerId, OWNER_ID);
+  assert.deepEqual(
+    new Set(fixture.busyWhere().taskId.in),
+    new Set([FOCUS, TASK_B, TASK_C, TASK_D, TASK_E]),
+  );
 });
 
 test('depth and node limits report only genuinely hidden upstream work as truncated', async () => {

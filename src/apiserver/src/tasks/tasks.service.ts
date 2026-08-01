@@ -218,6 +218,62 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Derive graph-node state without hydrating every prerequisite row. A dense task can have
+   * far more stored edges than the display budget; these grouped counts each return at most
+   * one row per bounded graph node, keeping application memory O(nodes).
+   */
+  private async dependencyStatesForGraph(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, DependencyState>> {
+    if (taskIds.length === 0) return new Map();
+    const scoped = {
+      taskId: { in: taskIds },
+      task: { ownerId },
+      dependsOnTask: { ownerId },
+    } satisfies Prisma.TaskDependencyWhereInput;
+    const [totals, completed, failed] = await Promise.all([
+      this.prisma.taskDependency.groupBy({
+        by: ['taskId'],
+        where: scoped,
+        _count: { _all: true },
+      }),
+      this.prisma.taskDependency.groupBy({
+        by: ['taskId'],
+        where: { ...scoped, dependsOnTask: { ownerId, status: TaskStatus.DONE } },
+        _count: { _all: true },
+      }),
+      this.prisma.taskDependency.groupBy({
+        by: ['taskId'],
+        where: {
+          ...scoped,
+          dependsOnTask: {
+            ownerId,
+            status: { in: [TaskStatus.FAILED, TaskStatus.CANCELLED] },
+          },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+    const completedByTask = new Map(completed.map((row) => [row.taskId, row._count._all]));
+    const failedByTask = new Map(failed.map((row) => [row.taskId, row._count._all]));
+    const states = new Map<string, DependencyState>();
+    for (const row of totals) {
+      const failedCount = failedByTask.get(row.taskId) ?? 0;
+      const completedCount = completedByTask.get(row.taskId) ?? 0;
+      states.set(
+        row.taskId,
+        failedCount > 0
+          ? 'BLOCKED_FAILED'
+          : completedCount === row._count._all
+            ? 'READY'
+            : 'BLOCKED',
+      );
+    }
+    return states;
+  }
+
+  /**
    * Validate an agent belongs to the owner and return it as a task/comment creator.
    * Used by the runner MCP path to attribute work to the acting agent. Returns
    * undefined when no agent id is supplied so callers fall back to USER attribution.
@@ -450,13 +506,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async withRunning<T extends { id: string }>(
     ownerId: string,
     tasks: T[],
+    restrictToTaskIds = false,
   ): Promise<(T & { running: boolean; queued: boolean })[]> {
     if (tasks.length === 0) return [];
     const busy = await this.prisma.session.groupBy({
       by: ['taskId', 'status'],
       where: {
         ownerId,
-        taskId: { not: null },
+        taskId: restrictToTaskIds ? { in: tasks.map((task) => task.id) } : { not: null },
         status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
       },
       _count: { _all: true },
@@ -605,8 +662,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const baseNodes = [...nodes.values()];
     const [withRun, dependencyStates] = await Promise.all([
-      this.withRunning(ownerId, baseNodes),
-      this.dependencyStatesFor(baseNodes.map((node) => node.id)),
+      this.withRunning(ownerId, baseNodes, true),
+      this.dependencyStatesForGraph(ownerId, baseNodes.map((node) => node.id)),
     ]);
     const graphNodes = withRun.map((node) => ({
       ...node,
