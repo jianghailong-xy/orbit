@@ -1,8 +1,10 @@
-import { CloseOutlined, FullscreenOutlined } from '@ant-design/icons';
+import { AimOutlined, CloseOutlined, FullscreenOutlined } from '@ant-design/icons';
 import dagre from '@dagrejs/dagre';
 import {
   Background,
+  ControlButton,
   Controls,
+  getViewportForBounds,
   Handle,
   MarkerType,
   MiniMap,
@@ -11,13 +13,22 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
   type Edge,
   type Node,
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Modal, Popconfirm, Tooltip } from 'antd';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+} from 'react';
 import {
   getFocusPathSets,
   getTaskDependencyEdgeState,
@@ -36,12 +47,73 @@ import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
 
 const NODE_WIDTH = 204;
 const NODE_HEIGHT = 76;
+const MIN_ZOOM = 0.25;
+const MAX_FIT_ZOOM = 1;
+const MIN_READABLE_ZOOM = 0.75;
 // React Flow disables pointer events on wrappers for nodes that are neither selectable nor
 // draggable and have no node-level click handler. These nodes deliberately meet all three
 // conditions, but their custom contents contain buttons, so opt the wrappers back into hit
 // testing. Without this, task links, dependency removal, and progressive expansion only work
 // when invoked programmatically, not from a real pointer click.
 const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
+
+interface DependencyGraphRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface DependencyGraphViewportPlan {
+  viewport: { x: number; y: number; zoom: number };
+  requiresPanning: boolean;
+}
+
+export function dependencyGraphNodeIsVisible(
+  viewport: { x: number; y: number; zoom: number },
+  nodePosition: { x: number; y: number },
+  canvasSize: { width: number; height: number },
+  inset = 16,
+): boolean {
+  const left = viewport.x + nodePosition.x * viewport.zoom;
+  const top = viewport.y + nodePosition.y * viewport.zoom;
+  return (
+    left >= inset &&
+    top >= inset &&
+    left + NODE_WIDTH * viewport.zoom <= canvasSize.width - inset &&
+    top + NODE_HEIGHT * viewport.zoom <= canvasSize.height - inset
+  );
+}
+
+/** Fit a readable graph in full; otherwise keep the current task readable and centered. */
+export function viewportForFocusedDependencyGraph(
+  graphBounds: DependencyGraphRect,
+  focusPosition: { x: number; y: number },
+  canvasSize: { width: number; height: number },
+  padding: number,
+): DependencyGraphViewportPlan | null {
+  if (canvasSize.width <= 0 || canvasSize.height <= 0) return null;
+  const fittedViewport = getViewportForBounds(
+    graphBounds,
+    canvasSize.width,
+    canvasSize.height,
+    MIN_ZOOM,
+    MAX_FIT_ZOOM,
+    padding,
+  );
+  if (fittedViewport.zoom >= MIN_READABLE_ZOOM) {
+    return { viewport: fittedViewport, requiresPanning: false };
+  }
+
+  return {
+    viewport: {
+      x: canvasSize.width / 2 - (focusPosition.x + NODE_WIDTH / 2) * MIN_READABLE_ZOOM,
+      y: canvasSize.height / 2 - (focusPosition.y + NODE_HEIGHT / 2) * MIN_READABLE_ZOOM,
+      zoom: MIN_READABLE_ZOOM,
+    },
+    requiresPanning: true,
+  };
+}
 
 interface DependencyNodeData extends Record<string, unknown> {
   task: TaskDependencyGraphNode;
@@ -91,7 +163,7 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
       )}
       <button
         type="button"
-        className="tdg-node-main nodrag"
+        className="tdg-node-main nodrag nopan"
         onClick={() => data.onOpenTask(data.task.id)}
         onFocus={() => data.onHighlight(data.task.id)}
         onBlur={() => data.onHighlight(null)}
@@ -406,7 +478,10 @@ function DependencyFlow({
   );
   const visibleGraph = projection.graph;
   const direct = useMemo(() => getFocusPathSets(normalized).directPrerequisiteIds, [normalized]);
-  const { fitBounds, getViewport, setViewport } = useReactFlow();
+  const { getViewport, setCenter, setViewport } = useReactFlow();
+  const flowWidth = useStore((state) => state.width);
+  const flowHeight = useStore((state) => state.height);
+  const canPan = !vertical || fullScreen;
   const reduceMotion =
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const structureKey = useMemo(
@@ -433,24 +508,26 @@ function DependencyFlow({
     const maxY = Math.max(...points.map((point) => point.y + NODE_HEIGHT));
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }, [positions]);
-  const pendingAnchorRef = useRef<{
+  const focusPosition = positions.get(visibleGraph.focusTaskId);
+  const viewportPlan = useMemo(
+    () =>
+      focusPosition
+        ? viewportForFocusedDependencyGraph(
+            graphBounds,
+            focusPosition,
+            { width: flowWidth, height: flowHeight },
+            fullScreen ? 0.2 : 0.12,
+          )
+        : null,
+    [flowHeight, flowWidth, focusPosition, fullScreen, graphBounds],
+  );
+  const previousFocusPositionRef = useRef<{
     id: string;
     position: { x: number; y: number };
   } | null>(null);
-  const expandKeepingAnchor = useCallback(
-    (aggregate: TaskDependencyBranchAggregate) => {
-      const position = positions.get(aggregate.parentTaskId);
-      if (position) {
-        pendingAnchorRef.current = {
-          id: aggregate.parentTaskId,
-          position,
-        };
-      }
-      onExpand(aggregate);
-    },
-    [onExpand, positions],
-  );
   const fitContextKey = `${graph.focusTaskId}|${vertical ? 'TB' : 'LR'}|${fullScreen ? 'full' : 'inline'}`;
+  const positionedModeRef = useRef<string | null>(null);
+  const [panHintDismissed, setPanHintDismissed] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlighted = useMemo(
     () => pathBetweenNodeAndFocus(visibleGraph, highlightedId),
@@ -469,7 +546,7 @@ function DependencyFlow({
         onRemoveDependency,
         removingTaskId,
         setHighlightedId,
-        expandKeepingAnchor,
+        onExpand,
         expandingBranchKey,
       ),
     [
@@ -482,49 +559,80 @@ function DependencyFlow({
       onOpenTask,
       onRemoveDependency,
       removingTaskId,
-      expandKeepingAnchor,
+      onExpand,
       expandingBranchKey,
     ],
   );
   useLayoutEffect(() => {
-    const pendingAnchor = pendingAnchorRef.current;
-    if (!pendingAnchor) return;
-    const nextPosition = positions.get(pendingAnchor.id);
-    if (!nextPosition) {
-      pendingAnchorRef.current = null;
-      return;
+    const previousFocusPosition = previousFocusPositionRef.current;
+    const nextFocusPosition = positions.get(visibleGraph.focusTaskId);
+    const anchor = previousFocusPosition?.id === visibleGraph.focusTaskId
+      ? previousFocusPosition
+      : null;
+    if (anchor) {
+      const nextPosition = positions.get(anchor.id);
+      if (nextPosition) {
+        const viewport = getViewport();
+        void setViewport(
+          viewportAfterDependencyGraphLayout(viewport, anchor.position, nextPosition),
+          { duration: 0 },
+        );
+      }
     }
-    const viewport = getViewport();
-    void setViewport(
-      viewportAfterDependencyGraphLayout(viewport, pendingAnchor.position, nextPosition),
-      { duration: 0 },
+    previousFocusPositionRef.current = nextFocusPosition
+      ? { id: visibleGraph.focusTaskId, position: nextFocusPosition }
+      : null;
+  }, [getViewport, positions, setViewport, structureKey, visibleGraph.focusTaskId]);
+  useEffect(() => setPanHintDismissed(false), [fitContextKey]);
+  useLayoutEffect(() => {
+    if (!viewportPlan) return;
+    const modeKey = `${fitContextKey}|${viewportPlan.requiresPanning ? 'focus' : 'fit'}`;
+    if (positionedModeRef.current === modeKey) return;
+    positionedModeRef.current = modeKey;
+    void setViewport(viewportPlan.viewport, { duration: 0 });
+  }, [fitContextKey, setViewport, viewportPlan]);
+
+  const centerCurrentTask = useCallback(() => {
+    const focusPosition = positions.get(visibleGraph.focusTaskId);
+    if (!focusPosition) return;
+    void setCenter(
+      focusPosition.x + NODE_WIDTH / 2,
+      focusPosition.y + NODE_HEIGHT / 2,
+      {
+        zoom: Math.max(getViewport().zoom, MIN_READABLE_ZOOM),
+        duration: reduceMotion ? 0 : 180,
+      },
     );
-    pendingAnchorRef.current = null;
-  }, [getViewport, positions, setViewport, structureKey]);
-  useEffect(() => {
-    // Fit when this canvas/focus/orientation first appears. Progressive branch expansion keeps
-    // the user's viewport intact instead of zooming the whole canvas after every batch.
-    let fitFrame = 0;
-    const layoutFrame = requestAnimationFrame(() => {
-      // React Flow commits controlled node positions to its internal store after this effect.
-      // A second frame ensures the viewport exists after a responsive LR/TB layout flip.
-      fitFrame = requestAnimationFrame(() => {
-        // Use our known dagre bounds rather than measured visible nodes: after a responsive
-        // direction flip React Flow may not have measured the newly off-screen final rank yet.
-        void fitBounds(graphBounds, {
-          padding: fullScreen ? 0.2 : 0.12,
+  }, [getViewport, positions, reduceMotion, setCenter, visibleGraph.focusTaskId]);
+
+  const ensureFocusedNodeVisible = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      const nodeElement = (event.target as HTMLElement).closest<HTMLElement>('.react-flow__node');
+      const nodeId = nodeElement?.dataset.id;
+      const position = nodeId ? positions.get(nodeId) : undefined;
+      if (!position) return;
+      const viewport = getViewport();
+      if (
+        dependencyGraphNodeIsVisible(
+          viewport,
+          position,
+          { width: flowWidth, height: flowHeight },
+          24,
+        )
+      ) {
+        return;
+      }
+      void setCenter(
+        position.x + NODE_WIDTH / 2,
+        position.y + NODE_HEIGHT / 2,
+        {
+          zoom: Math.max(viewport.zoom, MIN_READABLE_ZOOM),
           duration: reduceMotion ? 0 : 180,
-        });
-      });
-    });
-    return () => {
-      cancelAnimationFrame(layoutFrame);
-      cancelAnimationFrame(fitFrame);
-    };
-    // graphBounds intentionally belongs to the context's first layout only. Expansion changes
-    // it without changing fitContextKey, which must not trigger another automatic fit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitBounds, fitContextKey, fullScreen, reduceMotion]);
+        },
+      );
+    },
+    [flowHeight, flowWidth, getViewport, positions, reduceMotion, setCenter],
+  );
 
   if (!normalized.focusNode || normalized.hasCycle) {
     return (
@@ -539,9 +647,7 @@ function DependencyFlow({
       nodes={elements.nodes}
       edges={elements.edges}
       nodeTypes={NODE_TYPES}
-      fitView
-      fitViewOptions={{ padding: fullScreen ? 0.2 : 0.12, maxZoom: 1 }}
-      minZoom={0.25}
+      minZoom={MIN_ZOOM}
       maxZoom={1.5}
       nodesDraggable={false}
       nodesConnectable={false}
@@ -552,8 +658,18 @@ function DependencyFlow({
       panOnScroll={false}
       // Inline narrow graphs prioritize scrolling the detail panel. Full-screen and wide
       // layouts retain canvas panning; zoom/fit controls remain available in every mode.
-      panOnDrag={!vertical || fullScreen}
+      panOnDrag={canPan}
       preventScrolling={false}
+      onMove={(event) => {
+        if (event) setPanHintDismissed(true);
+      }}
+      onPointerDownCapture={(event) => {
+        if ((event.target as Element).closest('.react-flow__minimap')) setPanHintDismissed(true);
+      }}
+      onWheelCapture={(event) => {
+        if ((event.target as Element).closest('.react-flow__minimap')) setPanHintDismissed(true);
+      }}
+      onFocusCapture={ensureFocusedNodeVisible}
       proOptions={{ hideAttribution: true }}
       ariaLabelConfig={{
         'controls.ariaLabel': 'Dependency graph controls',
@@ -569,7 +685,26 @@ function DependencyFlow({
           {projection.aggregates.reduce((sum, aggregate) => sum + aggregate.remainingCount, 0)} connections collapsed
         </Panel>
       )}
-      <Controls showInteractive={false} orientation="horizontal" position="bottom-left" />
+      <Controls
+        showInteractive={false}
+        orientation="horizontal"
+        position="bottom-left"
+        fitViewOptions={{ padding: fullScreen ? 0.2 : 0.12, maxZoom: MAX_FIT_ZOOM }}
+        onFitView={() => setPanHintDismissed(true)}
+      >
+        <ControlButton
+          onClick={centerCurrentTask}
+          title="Center current task"
+          aria-label="Center current task"
+        >
+          <AimOutlined />
+        </ControlButton>
+      </Controls>
+      {canPan && viewportPlan?.requiresPanning && !panHintDismissed && (
+        <Panel position="bottom-center" className="tdg-pan-hint">
+          Drag empty space to move
+        </Panel>
+      )}
       {fullScreen && visibleGraph.nodes.length > 20 && (
         <MiniMap
           pannable
