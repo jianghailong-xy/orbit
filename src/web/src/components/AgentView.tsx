@@ -140,6 +140,7 @@ import {
   sessionRunStatusOf,
   sessionStateOf,
 } from '../lib/sessionState';
+import { hasOutlivingSessionWork, isSessionTurnActive } from '../lib/sessionActivity';
 
 interface RunEvent {
   seq: number;
@@ -493,12 +494,12 @@ const subagentRunningLabel = (n: number): string =>
 // (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins), or
 // null when the session is genuinely idle. Shared by the list line, status glyph and header
 // so all three agree a parked-but-still-working session isn't "waiting for your reply".
-const parkedWorkLabel = (s: any): string | null =>
-  (s.runningSubagentCount ?? 0) > 0
+const parkedWorkLabel = (s: any): string | null => {
+  if (!hasOutlivingSessionWork(s)) return null;
+  return (s.runningSubagentCount ?? 0) > 0
     ? subagentRunningLabel(s.runningSubagentCount)
-    : (s.runningBgCount ?? 0) > 0
-      ? bgRunningLabel(s.runningBgCount)
-      : null;
+    : bgRunningLabel(s.runningBgCount);
+};
 
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
@@ -3464,7 +3465,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           committed={!live}
           // A turn in flight (live but not awaiting input) leaves the branch in a transient
           // state — hold "Merge to main" until it finishes so we never merge half-done work.
-          turnActive={live && !idle}
+          turnActive={isSessionTurnActive(selected, !!live, idle)}
           enabling={enableIsoMut.isPending}
           onEnableIsolation={
             detailForSelected?.agent?.id

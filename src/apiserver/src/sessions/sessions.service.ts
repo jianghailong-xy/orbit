@@ -1869,13 +1869,16 @@ export class SessionsService {
   }
 
   /**
-   * Queue a "commit this live session's uncommitted worktree changes onto its branch" for the
-   * runner that's running it. Worktree-isolated, still-live sessions only: the checkout exists
-   * on the runner and `assignedRunnerId` points at that machine. The runner picks the request
-   * up on its next heartbeat (≤30s), commits, and reports the outcome back into
-   * `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the bar flips to
-   * Merge). Idempotent while a commit is already pending. A finished session already committed
-   * its work at completion, so it has nothing to commit here (the bar shows Merge instead).
+   * Queue a "commit this idle session's uncommitted worktree changes onto its branch" for the
+   * runner that's hosting it. The checkout is only stable between turns: committing while the
+   * top-level turn, a sub-agent, or a background shell is still running can capture a half-built
+   * snapshot. `AWAITING_INPUT` plus empty background-work sets is therefore the authoritative
+   * server-side gate; the UI's disabled button is only a convenience, not the safety boundary.
+   *
+   * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
+   * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
+   * bar flips to Merge). Idempotent while a commit is already pending. A finished session
+   * already committed its work at completion, so it has nothing to commit here.
    */
   async commitWorktree(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -1886,14 +1889,48 @@ export class SessionsService {
     if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
       throw new ConflictException('the session has ended — its work is already committed');
     }
+    if (session.status !== RunStatus.AWAITING_INPUT) {
+      throw new ConflictException('wait for the current turn to finish before committing');
+    }
+    if (session.runningSubagents.length > 0 || session.runningBgShells.length > 0) {
+      throw new ConflictException('wait for background work to finish before committing');
+    }
     if (!session.assignedRunnerId) {
       throw new ConflictException('no runner is associated with this session');
     }
     if (session.commitStatus === 'pending') return { ok: true };
-    await this.prisma.session.update({
-      where: { id },
+
+    // Close the read→write race with a turn starting (or background work being recorded)
+    // after the checks above. A plain update would still queue a commit against the now-active
+    // checkout. updateMany turns the same idle predicates into an atomic compare-and-set.
+    const queued = await this.prisma.session.updateMany({
+      where: {
+        id,
+        ownerId,
+        status: RunStatus.AWAITING_INPUT,
+        cancelRequestedAt: null,
+        runningSubagents: { isEmpty: true },
+        runningBgShells: { isEmpty: true },
+      },
       data: { commitStatus: 'pending', commitRequestedAt: new Date(), commitError: null },
     });
+    if (queued.count === 0) {
+      // A concurrent identical request may have won the compare-and-set. Keep the endpoint
+      // idempotent in that case; every other transition means the checkout is no longer safe.
+      const current = await this.prisma.session.findFirst({ where: { id, ownerId } });
+      if (
+        current?.commitStatus === 'pending' &&
+        current.status === RunStatus.AWAITING_INPUT &&
+        !current.cancelRequestedAt &&
+        current.runningSubagents.length === 0 &&
+        current.runningBgShells.length === 0
+      ) {
+        return { ok: true };
+      }
+      throw new ConflictException(
+        'the session is no longer idle — wait for its current work to finish',
+      );
+    }
     return { ok: true };
   }
 

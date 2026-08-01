@@ -386,7 +386,7 @@ func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
 		},
 	})
 
-	handleCodexAppNotification(codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
+	handleCodexAppNotification("thread-1", codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
 
 	if active.result.ContextTokens != 91_000 {
 		t.Fatalf("ContextTokens = %d, want 91000", active.result.ContextTokens)
@@ -396,6 +396,61 @@ func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
 	}
 	if active.result.Usage.InputTokens != 1_000 || active.result.Usage.CacheReadInputTokens != 200 || active.result.Usage.OutputTokens != 300 {
 		t.Fatalf("Usage = %#v", active.result.Usage)
+	}
+}
+
+func TestCodexAppServerIgnoresSubagentTurnCompletion(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{
+		orbitTurnID: "orbit-turn-1",
+		codexTurnID: "root-turn-1",
+		result:      codexTurnResult{Status: stSucceeded},
+	}
+	finalized := 0
+	finalize := func(codexTurnResult) { finalized++ }
+	notify := func(threadID, turnID, status string) {
+		raw, _ := json.Marshal(map[string]interface{}{
+			"threadId": threadID,
+			"turn": map[string]interface{}{
+				"id":     turnID,
+				"status": status,
+			},
+		})
+		handleCodexAppNotification(
+			"root-thread", codexRPCMessage{Method: "turn/completed", Params: raw}, nil,
+			&mu, &active, finalize, nil, nil, nil,
+		)
+	}
+
+	// App-server multiplexes spawned-agent notifications onto the root connection. A child
+	// completion (including an interrupted audit agent) must not park the still-running root.
+	notify("child-thread", "child-turn-1", "interrupted")
+	if finalized != 0 {
+		t.Fatalf("child turn finalized root %d times, want 0", finalized)
+	}
+	if active.result.Status != stSucceeded {
+		t.Fatalf("child turn changed active result to %q", active.result.Status)
+	}
+
+	// A stale completion on the right thread is equally unsafe after a resumed turn starts.
+	notify("root-thread", "older-root-turn", "completed")
+	if finalized != 0 {
+		t.Fatalf("stale root turn finalized current turn %d times, want 0", finalized)
+	}
+
+	notify("root-thread", "root-turn-1", "completed")
+	if finalized != 1 {
+		t.Fatalf("current root completion finalized %d times, want 1", finalized)
+	}
+}
+
+func TestCodexNotificationThreadIDReadsThreadStartedShape(t *testing.T) {
+	raw, _ := json.Marshal(map[string]interface{}{
+		"thread": map[string]interface{}{"id": "child-thread", "parentThreadId": "root-thread"},
+	})
+	got := codexNotificationThreadID(codexRPCMessage{Method: "thread/started", Params: raw})
+	if got != "child-thread" {
+		t.Fatalf("thread id = %q, want child-thread", got)
 	}
 }
 
@@ -561,7 +616,7 @@ func TestCodexAppServerReasoningFlushesOnceOnComplete(t *testing.T) {
 	}
 	notify := func(method string, params interface{}) {
 		raw, _ := json.Marshal(params)
-		handleCodexAppNotification(codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
+		handleCodexAppNotification("thread-1", codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
 	}
 
 	notify("item/reasoning/summaryTextDelta", map[string]interface{}{"delta": "Think"})
@@ -604,6 +659,7 @@ func TestCodexAppServerForwardsRateLimitUpdates(t *testing.T) {
 		},
 	})
 	handleCodexAppNotification(
+		"thread-1",
 		codexRPCMessage{Method: "account/rateLimits/updated", Params: raw},
 		func(string, map[string]interface{}) {},
 		&mu,

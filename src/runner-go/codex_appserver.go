@@ -221,7 +221,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
-				handleCodexAppNotification(msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
+				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(ctx, t, job.SessionID, text, []string{execDir, upDir})
@@ -1012,7 +1012,29 @@ func (a *codexAppServer) close() {
 	a.closeDone()
 }
 
-func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{})) {
+// codexNotificationThreadID returns the thread a notification belongs to. App-server uses one
+// connection for the root thread and every Codex sub-agent it spawns, so treating the stream as a
+// single thread lets a child's item/turn events leak into the parent transcript. In particular, a
+// child turn/completed used to finalize the active Orbit turn while the root Codex turn was still
+// working, exposing AWAITING_INPUT and Commit over a live worktree.
+func codexNotificationThreadID(msg codexRPCMessage) string {
+	params := rawObject(msg.Params)
+	if id := firstString(params, "threadId", "thread_id"); id != "" {
+		return id
+	}
+	if msg.Method == "thread/started" {
+		return nestedString(params, "thread", "id")
+	}
+	return ""
+}
+
+func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{})) {
+	// Empty is accepted for compatibility with older app-server notifications that were not
+	// thread-scoped. Current turn/item notifications always carry threadId; when present it is
+	// authoritative and child-thread activity must stay out of the Orbit root session.
+	if notificationThreadID := codexNotificationThreadID(msg); threadID != "" && notificationThreadID != "" && notificationThreadID != threadID {
+		return
+	}
 	params := rawObject(msg.Params)
 	switch msg.Method {
 	case "account/rateLimits/updated":
@@ -1112,6 +1134,16 @@ func handleCodexAppNotification(msg codexRPCMessage, emit emitFn, activeMu *sync
 		activeMu.Unlock()
 	case "turn/completed":
 		turn := mapValue(params["turn"])
+		// A delayed completion from an older turn on the same resumed thread must not finish the
+		// current Orbit turn. Normally app-server serializes turns, but this guard also makes retry
+		// and reconnect ordering harmless. An empty id remains accepted for older protocol builds.
+		completedTurnID := firstString(turn, "id")
+		activeMu.Lock()
+		matchesActive := *active != nil && (completedTurnID == "" || (*active).codexTurnID == "" || (*active).codexTurnID == completedTurnID)
+		activeMu.Unlock()
+		if !matchesActive {
+			return
+		}
 		status := strings.ToLower(firstString(turn, "status"))
 		errMsg := nestedString(turn, "error", "message")
 		result := codexTurnResult{RuntimeSessionID: firstString(params, "threadId")}
