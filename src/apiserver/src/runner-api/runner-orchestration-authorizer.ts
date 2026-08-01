@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Runner, RunStatus } from '@prisma/client';
@@ -7,6 +7,14 @@ import { PrismaService } from '../prisma/prisma.service';
 const ORCHESTRATION_AUDIENCE = 'orbit-runner-orchestration';
 const ORCHESTRATION_PURPOSE = 'runner-orchestration';
 const LEGACY_ORCHESTRATION_RUNNER_VERSION = /^v?0\.1\.79(?:[-+].*)?$/;
+export const RUNNER_ORCHESTRATION_JWT = Symbol('RUNNER_ORCHESTRATION_JWT');
+
+/** Dedicated JWT instance: access-token defaults (notably ACCESS_TOKEN_TTL) must not bleed in. */
+export function createRunnerOrchestrationJwt(config: ConfigService): JwtService {
+  const secret = config.get<string>('JWT_SECRET');
+  if (!secret) throw new Error('JWT_SECRET is required');
+  return new JwtService({ secret });
+}
 
 type OrchestrationClaims = {
   sub?: string;
@@ -39,6 +47,7 @@ const LIVE_ORCHESTRATOR_STATUSES: RunStatus[] = [
 export class RunnerOrchestrationAuthorizer {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(RUNNER_ORCHESTRATION_JWT)
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}

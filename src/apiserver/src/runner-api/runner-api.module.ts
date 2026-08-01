@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SessionsModule } from '../sessions/sessions.module';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import { TasksService } from '../tasks/tasks.service';
@@ -7,7 +8,11 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
-import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import {
+  createRunnerOrchestrationJwt,
+  RUNNER_ORCHESTRATION_JWT,
+  RunnerOrchestrationAuthorizer,
+} from './runner-orchestration-authorizer';
 import { AgentsService } from '../agents/agents.service';
 import { PushModule } from '../push/push.module';
 
@@ -20,6 +25,17 @@ import { PushModule } from '../push/push.module';
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [RunnerApiController, RunnerTasksController, RunnerSessionsController, RunnerAgentsController],
-  providers: [RunnerAuthGuard, RunnerOrchestrationAuthorizer, TasksService, TaskListsService, AgentsService],
+  providers: [
+    RunnerAuthGuard,
+    {
+      provide: RUNNER_ORCHESTRATION_JWT,
+      inject: [ConfigService],
+      useFactory: createRunnerOrchestrationJwt,
+    },
+    RunnerOrchestrationAuthorizer,
+    TasksService,
+    TaskListsService,
+    AgentsService,
+  ],
 })
 export class RunnerApiModule {}

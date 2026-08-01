@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
+import {
+  createRunnerOrchestrationJwt,
+  RunnerOrchestrationAuthorizer,
+} from './runner-orchestration-authorizer';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1', version: '0.1.80' } as never;
 const SESSION_ID = 'caller-session';
@@ -69,6 +72,20 @@ test('issue signs a runner/session-bound orchestration credential', async () => 
       },
     },
   ]);
+});
+
+test('the dedicated orchestration signer does not inherit the access-token expiry', async () => {
+  const jwt = createRunnerOrchestrationJwt({
+    get: (key: string) => (key === 'JWT_SECRET' ? 'test-secret-at-least-32-bytes-long' : undefined),
+  } as never);
+  const token = await jwt.signAsync(
+    { runnerId: 'runner-1', purpose: 'runner-orchestration' },
+    { audience: 'orbit-runner-orchestration', subject: SESSION_ID },
+  );
+  const claims = jwt.decode(token) as Record<string, unknown>;
+  assert.equal(claims.sub, SESSION_ID);
+  assert.equal(claims.aud, 'orbit-runner-orchestration');
+  assert.equal(claims.exp, undefined);
 });
 
 test('orchestration authorization requires both session context and its credential', async () => {
