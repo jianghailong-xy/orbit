@@ -5675,6 +5675,10 @@ body {
 .tdg-list-row:hover {
   background: var(--bg-hover);
 }
+.tdg-list-row.is-focus {
+  background: var(--brand-tint);
+  box-shadow: inset 2px 0 0 var(--brand);
+}
 .tdg-list-open {
   display: flex;
   flex: 1;
@@ -5703,6 +5707,12 @@ body {
   flex-direction: column;
   gap: 1px;
 }
+.tdg-list-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
 .tdg-list-title,
 .tdg-list-relation {
   overflow: hidden;
@@ -5710,6 +5720,8 @@ body {
   white-space: nowrap;
 }
 .tdg-list-title {
+  flex: 1;
+  min-width: 0;
   font-size: 12.5px;
 }
 .tdg-list-relation {

@@ -91,6 +91,8 @@ export interface DependencyGraphQuery {
   maxNodes?: string | number;
 }
 
+export type DependencyGraphDirection = 'upstream' | 'both';
+
 export interface DependencyGraphNode {
   id: string;
   title: string;
@@ -556,11 +558,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Return the focus task and its transitive prerequisites as a bounded DAG. Each
-   * breadth-first layer is fetched in one query, so query count grows with graph depth,
-   * never with node count. Edges are exposed in execution order (prerequisite ->
-   * dependent), the inverse of TaskDependency's stored `taskId depends on
-   * dependsOnTaskId` representation.
+   * Return a bounded dependency DAG around the focus task. The backwards-compatible
+   * default follows transitive prerequisites (`upstream`); `both` treats dependency
+   * rows as undirected while discovering nodes, so any task in the bounded weakly
+   * connected component can be used as the focus. Returned edges always retain their
+   * execution direction (prerequisite -> dependent), the inverse of TaskDependency's
+   * stored `taskId depends on dependsOnTaskId` representation.
+   *
+   * Each breadth-first layer is fetched in one bounded query, so query count grows with
+   * graph depth, never with node count. A final bounded induced-edge query restores
+   * cross-edges between already discovered nodes without repeatedly loading parent
+   * edges during bidirectional traversal.
    */
   async dependencyGraph(
     ownerId: string,
@@ -569,8 +577,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ) {
     if (!UUID_RE.test(focusTaskId)) throw new NotFoundException('task not found');
     const direction = query.direction ?? 'upstream';
-    if (direction !== 'upstream') {
-      throw new BadRequestException('direction must be upstream');
+    if (direction !== 'upstream' && direction !== 'both') {
+      throw new BadRequestException('direction must be upstream or both');
     }
     const maxDepth = dependencyGraphLimit(
       query.maxDepth,
@@ -605,7 +613,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         },
       ],
     ]);
-    const edges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    // One discovery edge per newly admitted node is retained so a dense graph truncated
+    // by maxEdges never returns orphan nodes. The final induced-edge query below fills in
+    // all other relationships up to the response budget.
+    const discoveryEdges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
     let frontier = [focus.id];
     let traversedDepth = 0;
     let deepestDepth = 0;
@@ -613,52 +624,76 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     while (frontier.length > 0 && traversedDepth < maxDepth) {
       const nextDepth = traversedDepth + 1;
-      const remainingEdgeCapacity = maxEdges - edges.size;
-      if (remainingEdgeCapacity <= 0) {
-        truncated = true;
-        break;
-      }
+      const frontierIds = new Set(frontier);
+      const visitedIds = [...nodes.keys()];
+      const ownerScope = {
+        task: { ownerId },
+        dependsOnTask: { ownerId },
+      } satisfies Prisma.TaskDependencyWhereInput;
+      // Excluding the already visited opposite endpoint makes every traversal query a
+      // discovery query. In `both` mode this avoids re-reading the parent edge at every
+      // layer and makes the maxEdges sentinel meaningful even for dense diamonds.
+      const traversalWhere =
+        direction === 'upstream'
+          ? ({
+              ...ownerScope,
+              taskId: { in: frontier },
+              dependsOnTaskId: { notIn: visitedIds },
+            } satisfies Prisma.TaskDependencyWhereInput)
+          : ({
+              ...ownerScope,
+              OR: [
+                { taskId: { in: frontier }, dependsOnTaskId: { notIn: visitedIds } },
+                { dependsOnTaskId: { in: frontier }, taskId: { notIn: visitedIds } },
+              ],
+            } satisfies Prisma.TaskDependencyWhereInput);
       const fetchedRows = await this.prisma.taskDependency.findMany({
-        where: {
-          taskId: { in: frontier },
-          task: { ownerId },
-          dependsOnTask: { ownerId },
-        },
+        where: traversalWhere,
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        // Fetch one sentinel row so a dense layer is reported as truncated without ever
-        // materializing its unbounded remainder in the API server.
-        take: remainingEdgeCapacity + 1,
+        // Fetch one sentinel row so a dense layer is reported as truncated without
+        // materializing an unbounded adjacency list in the API server.
+        take: maxEdges + 1,
         select: {
           taskId: true,
           dependsOnTaskId: true,
+          task: {
+            select: { id: true, title: true, status: true, autoRunWhenReady: true },
+          },
           dependsOnTask: {
             select: { id: true, title: true, status: true, autoRunWhenReady: true },
           },
         },
       });
-      const edgeLimitReached = fetchedRows.length > remainingEdgeCapacity;
-      const rows = fetchedRows.slice(0, remainingEdgeCapacity);
+      const edgeLimitReached = fetchedRows.length > maxEdges;
+      const rows = fetchedRows.slice(0, maxEdges);
       const next = new Set<string>();
       for (const row of rows) {
-        if (!nodes.has(row.dependsOnTaskId)) {
+        const candidate =
+          direction === 'upstream' || frontierIds.has(row.taskId)
+            ? row.dependsOnTask
+            : row.task;
+        if (!nodes.has(candidate.id)) {
           if (nodes.size >= maxNodes) {
             truncated = true;
             continue;
           }
-          const prerequisite: DependencyGraphNode = {
-            ...row.dependsOnTask,
-            status: row.dependsOnTask.status as unknown as TaskStatus,
+          const discovered: DependencyGraphNode = {
+            ...candidate,
+            status: candidate.status as unknown as TaskStatus,
             depth: nextDepth,
           };
-          nodes.set(prerequisite.id, prerequisite);
-          next.add(prerequisite.id);
+          nodes.set(discovered.id, discovered);
+          next.add(discovered.id);
           deepestDepth = nextDepth;
+          const discoveryEdge = {
+            sourceTaskId: row.dependsOnTaskId,
+            targetTaskId: row.taskId,
+          };
+          discoveryEdges.set(
+            `${discoveryEdge.sourceTaskId}:${discoveryEdge.targetTaskId}`,
+            discoveryEdge,
+          );
         }
-        const edge = {
-          sourceTaskId: row.dependsOnTaskId,
-          targetTaskId: row.taskId,
-        };
-        edges.set(`${edge.sourceTaskId}:${edge.targetTaskId}`, edge);
       }
       frontier = [...next];
       traversedDepth = nextDepth;
@@ -668,18 +703,66 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Reaching the requested depth is only truncation when those boundary nodes really
-    // have further prerequisites. Leaf nodes exactly on the boundary still form a
-    // complete response.
+    // Reaching the requested depth is only truncation when a boundary node has a
+    // relationship to a task outside the visited set. In `both` mode simply counting
+    // all incident rows would always see the edge back to the previous layer and falsely
+    // report truncation, so the opposite endpoint explicitly excludes visited nodes.
     if (!truncated && frontier.length > 0 && traversedDepth === maxDepth) {
+      const visitedIds = [...nodes.keys()];
+      const ownerScope = {
+        task: { ownerId },
+        dependsOnTask: { ownerId },
+      } satisfies Prisma.TaskDependencyWhereInput;
+      const hiddenWhere =
+        direction === 'upstream'
+          ? ({
+              ...ownerScope,
+              taskId: { in: frontier },
+              dependsOnTaskId: { notIn: visitedIds },
+            } satisfies Prisma.TaskDependencyWhereInput)
+          : ({
+              ...ownerScope,
+              OR: [
+                { taskId: { in: frontier }, dependsOnTaskId: { notIn: visitedIds } },
+                { dependsOnTaskId: { in: frontier }, taskId: { notIn: visitedIds } },
+              ],
+            } satisfies Prisma.TaskDependencyWhereInput);
       const hiddenEdgeCount = await this.prisma.taskDependency.count({
-        where: {
-          taskId: { in: frontier },
-          task: { ownerId },
-          dependsOnTask: { ownerId },
-        },
+        where: hiddenWhere,
       });
       truncated = hiddenEdgeCount > 0;
+    }
+
+    // Materialize the bounded induced DAG once node discovery is complete. Discovery
+    // edges are guaranteed to survive truncation so every returned node remains linked
+    // to the focus in the weakly connected response.
+    const nodeIds = [...nodes.keys()];
+    const fetchedEdgeRows = await this.prisma.taskDependency.findMany({
+      where: {
+        taskId: { in: nodeIds },
+        dependsOnTaskId: { in: nodeIds },
+        task: { ownerId },
+        dependsOnTask: { ownerId },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: maxEdges + 1,
+      select: { taskId: true, dependsOnTaskId: true },
+    });
+    if (fetchedEdgeRows.length > maxEdges) truncated = true;
+    const edges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    for (const row of fetchedEdgeRows.slice(0, maxEdges)) {
+      const edge = { sourceTaskId: row.dependsOnTaskId, targetTaskId: row.taskId };
+      edges.set(`${edge.sourceTaskId}:${edge.targetTaskId}`, edge);
+    }
+    for (const [key, edge] of discoveryEdges) edges.set(key, edge);
+    // A discovery edge can fall beyond the database-order prefix in a dense graph. Make
+    // room for it by dropping non-discovery cross-edges from the end of the prefix.
+    if (edges.size > maxEdges) {
+      const removable = [...edges.keys()].reverse();
+      for (const key of removable) {
+        if (edges.size <= maxEdges) break;
+        if (!discoveryEdges.has(key)) edges.delete(key);
+      }
     }
 
     const baseNodes = [...nodes.values()];
@@ -691,7 +774,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ...node,
       dependencyState: dependencyStates.get(node.id) ?? 'NONE',
     }));
-    const upstreamNodes = graphNodes.filter((node) => node.id !== focusTaskId);
+    const incoming = new Map<string, string[]>();
+    const outgoing = new Map<string, string[]>();
+    for (const edge of edges.values()) {
+      const incomingSources = incoming.get(edge.targetTaskId);
+      if (incomingSources) incomingSources.push(edge.sourceTaskId);
+      else incoming.set(edge.targetTaskId, [edge.sourceTaskId]);
+      const outgoingTargets = outgoing.get(edge.sourceTaskId);
+      if (outgoingTargets) outgoingTargets.push(edge.targetTaskId);
+      else outgoing.set(edge.sourceTaskId, [edge.targetTaskId]);
+    }
+    const reachable = (adjacency: ReadonlyMap<string, string[]>): Set<string> => {
+      const reached = new Set<string>();
+      const pending = [...(adjacency.get(focusTaskId) ?? [])];
+      while (pending.length > 0) {
+        const id = pending.pop()!;
+        if (id === focusTaskId || reached.has(id)) continue;
+        reached.add(id);
+        pending.push(...(adjacency.get(id) ?? []));
+      }
+      return reached;
+    };
+    const upstreamIds = reachable(incoming);
+    const downstreamIds = reachable(outgoing);
+    const upstreamNodes = graphNodes.filter((node) => upstreamIds.has(node.id));
     const done = upstreamNodes.filter((node) => node.status === TaskStatus.DONE).length;
     const failed = upstreamNodes.filter(
       (node) => node.status === TaskStatus.FAILED || node.status === TaskStatus.CANCELLED,
@@ -704,6 +810,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       edges: [...edges.values()],
       counts: {
         upstream: upstreamNodes.length,
+        downstream: downstreamIds.size,
+        connected: graphNodes.length - 1,
+        lateral: graphNodes.length - 1 - upstreamNodes.length - downstreamIds.size,
         total: graphNodes.length,
         done,
         remaining: upstreamNodes.length - done - failed,

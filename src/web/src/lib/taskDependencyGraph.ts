@@ -1,9 +1,8 @@
 /**
  * A node returned by the task dependency-graph endpoint.
  *
- * `depth` is measured upstream from the focused task: the focus is 0, its direct
- * prerequisites are 1, and so on. It is a display hint only; graph relationships
- * always come from `edges`.
+ * `depth` is measured from the focused task. It is a display hint only; graph
+ * relationships and their direction always come from `edges`.
  */
 export interface TaskDependencyGraphNode {
   id: string;
@@ -32,9 +31,14 @@ export interface TaskDependencyGraphResponse {
   edges: TaskDependencyGraphEdge[];
   maxDepth?: number;
   truncated?: boolean;
-  direction?: 'upstream';
+  direction?: 'upstream' | 'both';
   counts?: {
     upstream: number;
+    downstream?: number;
+    /** Every related node in the returned weakly connected component, excluding focus. */
+    connected?: number;
+    /** Connected nodes that are neither ancestors nor descendants of focus. */
+    lateral?: number;
     total: number;
     done: number;
     remaining: number;
@@ -44,6 +48,54 @@ export interface TaskDependencyGraphResponse {
     maxDepth: number;
     maxNodes: number;
     maxEdges?: number;
+  };
+}
+
+/**
+ * Build the useful one-hop fallback available in task detail responses. The graph API
+ * normally replaces this with the complete connected DAG, but keeping both directions
+ * here means a temporary graph request failure never hides that other tasks depend on a
+ * root task.
+ */
+export function buildDirectTaskDependencyGraph(
+  focusTaskId: string,
+  focus: TaskDependencyGraphNode,
+  prerequisites: readonly TaskDependencyGraphNode[],
+  dependents: readonly TaskDependencyGraphNode[],
+): TaskDependencyGraphResponse {
+  const nodes = new Map<string, TaskDependencyGraphNode>([[focusTaskId, focus]]);
+  for (const prerequisite of prerequisites) {
+    if (!nodes.has(prerequisite.id)) nodes.set(prerequisite.id, prerequisite);
+  }
+  for (const dependent of dependents) {
+    if (!nodes.has(dependent.id)) nodes.set(dependent.id, dependent);
+  }
+
+  const edges = [
+    ...prerequisites.map((task) => ({ sourceTaskId: task.id, targetTaskId: focusTaskId })),
+    ...dependents.map((task) => ({ sourceTaskId: focusTaskId, targetTaskId: task.id })),
+  ];
+  const uniqueEdges = new Map(edges.map((edge) => [taskDependencyEdgeKey(edge), edge]));
+  const done = prerequisites.filter((task) => task.status === 'DONE').length;
+  const failed = prerequisites.filter(
+    (task) => task.status === 'FAILED' || task.status === 'CANCELLED',
+  ).length;
+
+  return {
+    focusTaskId,
+    direction: 'both',
+    nodes: [...nodes.values()],
+    edges: [...uniqueEdges.values()],
+    maxDepth: uniqueEdges.size > 0 ? 1 : 0,
+    counts: {
+      upstream: prerequisites.length,
+      downstream: dependents.length,
+      connected: Math.max(nodes.size - 1, 0),
+      total: nodes.size,
+      done,
+      remaining: prerequisites.length - done - failed,
+      failed,
+    },
   };
 }
 

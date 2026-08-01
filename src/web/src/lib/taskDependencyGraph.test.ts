@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDirectTaskDependencyGraph,
   getFocusPathSets,
   getTaskDependencyEdgeState,
   getTaskDependencyVisualState,
@@ -90,6 +91,56 @@ describe('normalizeTaskDependencyGraph', () => {
     expect(graph.hasCycle).toBe(true);
     expect(graph.unresolvedNodeIds).toEqual(['A', 'B']);
     expect(graph.nodes.map((item) => item.id)).toEqual(['A', 'B']);
+  });
+
+  it('keeps downstream nodes while limiting removable prerequisites to incoming focus edges', () => {
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'middle',
+      nodes: [node('root'), node('middle'), node('leaf')],
+      edges: [edge('root', 'middle'), edge('middle', 'leaf')],
+    });
+
+    expect(graph.topologicalNodeIds).toEqual(['root', 'middle', 'leaf']);
+    expect(graph.outgoingByTaskId.get('middle')).toEqual(['leaf']);
+    expect(getFocusPathSets(graph).directPrerequisiteIds).toEqual(new Set(['root']));
+    expect(getFocusPathSets(graph).directPrerequisiteIds.has('leaf')).toBe(false);
+  });
+});
+
+describe('buildDirectTaskDependencyGraph', () => {
+  it('shows a root task and its direct dependents when there are no prerequisites', () => {
+    const graph = buildDirectTaskDependencyGraph(
+      'root',
+      node('root'),
+      [],
+      [node('branch-a'), node('branch-b')],
+    );
+
+    expect(graph.direction).toBe('both');
+    expect(graph.nodes.map((item) => item.id)).toEqual(['root', 'branch-a', 'branch-b']);
+    expect(graph.edges).toEqual([edge('root', 'branch-a'), edge('root', 'branch-b')]);
+    expect(graph.counts).toMatchObject({ upstream: 0, downstream: 2, connected: 2, total: 3 });
+    expect(graph.maxDepth).toBe(1);
+  });
+
+  it('shows both direct directions around a middle task', () => {
+    const graph = buildDirectTaskDependencyGraph(
+      'middle',
+      node('middle'),
+      [node('root', 'DONE')],
+      [node('leaf')],
+    );
+
+    expect(graph.edges).toEqual([edge('root', 'middle'), edge('middle', 'leaf')]);
+    expect(graph.counts).toEqual({
+      upstream: 1,
+      downstream: 1,
+      connected: 2,
+      total: 3,
+      done: 1,
+      remaining: 0,
+      failed: 0,
+    });
   });
 });
 

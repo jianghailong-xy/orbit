@@ -10,7 +10,10 @@ import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
-import type { TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
+import {
+  buildDirectTaskDependencyGraph,
+  type TaskDependencyGraphResponse,
+} from '../lib/taskDependencyGraph';
 import { TaskDependencyList } from './TaskDependencyList';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
@@ -179,13 +182,15 @@ export function TaskDetailPanel({
   const task = q.data ?? summary;
 
   // A task detail only carries adjacent dependency edges. The dedicated graph snapshot follows
-  // all upstream prerequisites so a multi-level pipeline can be rendered without N+1 detail
-  // requests. Keeping the key under ['task', taskId] lets existing realtime invalidation refresh
-  // both the detail and graph together.
+  // the DAG in both directions so opening a root prerequisite or a middle task still shows the
+  // complete pipeline. Keeping the key under ['task', taskId] lets existing realtime
+  // invalidation refresh both the detail and graph together.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
-    queryFn: () => api<TaskDependencyGraphResponse>(`/tasks/${taskId}/dependency-graph`),
-    enabled: !!q.data && (q.data.dependsOn?.length ?? 0) > 0,
+    queryFn: () => api<TaskDependencyGraphResponse>(`/tasks/${taskId}/dependency-graph?direction=both`),
+    enabled:
+      !!q.data &&
+      ((q.data.dependsOn?.length ?? 0) > 0 || (q.data.dependedOnBy?.length ?? 0) > 0),
   });
   const [dependencyViewOverride, setDependencyViewOverride] = useState<'graph' | 'list' | null>(null);
   useEffect(() => setDependencyViewOverride(null), [taskId]);
@@ -403,39 +408,36 @@ export function TaskDetailPanel({
   const failedDirectPrerequisites = dependsOn.filter((d: any) =>
     ['FAILED', 'CANCELLED'].includes(d.dependsOnTask.status),
   ).length;
-  const fallbackDependencyGraph: TaskDependencyGraphResponse = {
-    focusTaskId: taskId,
-    nodes: [
-      {
-        id: taskId,
-        title: task?.title ?? 'Current task',
-        status: task?.status ?? 'OPEN',
-        depth: 0,
-      },
-      ...dependsOn.map((d: any) => ({
-        id: d.dependsOnTask.id,
-        title: d.dependsOnTask.title,
-        status: d.dependsOnTask.status,
-        depth: 1,
-        isDirect: true,
-      })),
-    ],
-    edges: dependsOn.map((d: any) => ({
-      sourceTaskId: d.dependsOnTask.id,
-      targetTaskId: taskId,
-    })),
-    maxDepth: dependsOn.length ? 1 : 0,
-    counts: {
-      upstream: dependsOn.length,
-      total: dependsOn.length + 1,
-      done: completedDirectPrerequisites,
-      remaining: dependsOn.length - completedDirectPrerequisites - failedDirectPrerequisites,
-      failed: failedDirectPrerequisites,
+  const hasDependencyRelations = dependsOn.length > 0 || dependedOnBy.length > 0;
+  const fallbackDependencyGraph = buildDirectTaskDependencyGraph(
+    taskId,
+    {
+      id: taskId,
+      title: task?.title ?? 'Current task',
+      status: task?.status ?? 'OPEN',
+      depth: 0,
     },
-  };
+    dependsOn.map((d: any) => ({
+      id: d.dependsOnTask.id,
+      title: d.dependsOnTask.title,
+      status: d.dependsOnTask.status,
+      depth: 1,
+      isDirect: true,
+    })),
+    dependedOnBy.map((d: any) => ({
+      id: d.task.id,
+      title: d.task.title,
+      status: d.task.status,
+      depth: 1,
+    })),
+  );
   const dependencyGraph = dependencyGraphQ.data ?? fallbackDependencyGraph;
-  const dependencyHasMultipleLevels = (dependencyGraphQ.data?.maxDepth ?? 0) > 1;
-  const dependencyView = dependencyViewOverride ?? (dependencyHasMultipleLevels ? 'graph' : 'list');
+  const dependencyView = dependencyViewOverride ?? (dependencyGraph.edges.length > 0 ? 'graph' : 'list');
+  const connectedCount =
+    dependencyGraph.counts?.connected ??
+    Math.max((dependencyGraph.counts?.total ?? dependencyGraph.nodes.length) - 1, 0);
+  const upstreamCount = dependencyGraph.counts?.upstream ?? dependsOn.length;
+  const downstreamCount = dependencyGraph.counts?.downstream ?? dependedOnBy.length;
   // Candidate prerequisites: every other task not already a prerequisite of this one.
   const dependencyOptions = (dependencyTasksQ.data?.items ?? [])
     .filter((t: any) => t.id !== taskId && !prereqIds.has(t.id))
@@ -635,13 +637,12 @@ export function TaskDetailPanel({
           <section className="tdp-section">
             <div className="tdp-dependency-head">
               <div className="tdp-section-title">Dependencies</div>
-              {dependsOn.length > 0 && (
+              {hasDependencyRelations && (
                 <span className="tdp-dependency-summary">
-                  {dependencyGraph.counts?.upstream ?? dependsOn.length} upstream ·{' '}
-                  {dependencyGraph.maxDepth ?? 1} {dependencyGraph.maxDepth === 1 ? 'level' : 'levels'}
+                  {connectedCount} connected · {upstreamCount} upstream · {downstreamCount} downstream
                 </span>
               )}
-              {dependsOn.length > 0 && (
+              {hasDependencyRelations && (
                 <Segmented
                   className="tdp-dependency-view"
                   size="small"
@@ -664,12 +665,12 @@ export function TaskDetailPanel({
                   : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
               </div>
             )}
-            {dependencyGraphQ.isError && dependsOn.length > 0 && (
+            {dependencyGraphQ.isError && hasDependencyRelations && (
               <div className="tdp-dependency-graph-error" role="alert">
-                Multi-level dependencies could not be loaded. Showing direct prerequisites.
+                The complete dependency graph could not be loaded. Showing direct relationships.
               </div>
             )}
-            {dependsOn.length === 0 ? (
+            {!hasDependencyRelations ? (
               <div className="tdp-muted">No dependencies</div>
             ) : dependencyView === 'graph' ? (
               dependencyGraphQ.isLoading ? (
@@ -695,7 +696,7 @@ export function TaskDetailPanel({
             )}
             {dependencyGraph.truncated && (
               <div className="tdp-dependency-truncated">
-                The graph is truncated at {dependencyGraph.limits?.maxDepth ?? 8} levels or{' '}
+                The graph is truncated at {dependencyGraph.limits?.maxDepth ?? 8} hops or{' '}
                 {dependencyGraph.limits?.maxNodes ?? 100} tasks
                 {dependencyGraph.limits?.maxEdges
                   ? ` or ${dependencyGraph.limits.maxEdges} relationships`
