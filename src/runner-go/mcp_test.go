@@ -84,11 +84,12 @@ func TestMCPTaskDependencyToolsUseBoundedGraphAndGranularEdgeEndpoints(t *testin
 	type request struct {
 		method string
 		path   string
+		query  string
 		body   map[string]interface{}
 	}
 	var requests []request
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := request{method: r.Method, path: r.URL.Path}
+		req := request{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery}
 		if r.Body != nil && r.ContentLength != 0 {
 			_ = json.NewDecoder(r.Body).Decode(&req.body)
 		}
@@ -102,7 +103,7 @@ func TestMCPTaskDependencyToolsUseBoundedGraphAndGranularEdgeEndpoints(t *testin
 		name string
 		args map[string]interface{}
 	}{
-		{name: "task_dependency_graph", args: map[string]interface{}{}},
+		{name: "task_dependency_graph", args: map[string]interface{}{"maxDepth": float64(12), "maxNodes": float64(300)}},
 		{name: "task_dependency_add", args: map[string]interface{}{"dependsOnTaskId": "prereq"}},
 		{name: "task_dependency_remove", args: map[string]interface{}{"taskId": "dependent", "dependsOnTaskId": "prereq"}},
 	}
@@ -113,7 +114,7 @@ func TestMCPTaskDependencyToolsUseBoundedGraphAndGranularEdgeEndpoints(t *testin
 	}
 
 	want := []request{
-		{method: http.MethodGet, path: "/api/runner/tasks/focus/dependency-graph"},
+		{method: http.MethodGet, path: "/api/runner/tasks/focus/dependency-graph", query: "maxDepth=12&maxNodes=300"},
 		{method: http.MethodPost, path: "/api/runner/tasks/focus/dependencies", body: map[string]interface{}{"dependsOnTaskId": "prereq"}},
 		{method: http.MethodDelete, path: "/api/runner/tasks/dependent/dependencies/prereq"},
 	}
@@ -121,7 +122,7 @@ func TestMCPTaskDependencyToolsUseBoundedGraphAndGranularEdgeEndpoints(t *testin
 		t.Fatalf("requests = %#v", requests)
 	}
 	for i := range want {
-		if requests[i].method != want[i].method || requests[i].path != want[i].path {
+		if requests[i].method != want[i].method || requests[i].path != want[i].path || requests[i].query != want[i].query {
 			t.Fatalf("request %d = %#v, want %#v", i, requests[i], want[i])
 		}
 		if want[i].body != nil && requests[i].body["dependsOnTaskId"] != want[i].body["dependsOnTaskId"] {
@@ -216,6 +217,25 @@ func TestMCPTaskDependencyIDsCannotEscapeTaskRoute(t *testing.T) {
 		content, _ := res["content"].([]map[string]interface{})
 		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
 			t.Fatalf("%s unsafe prerequisite result = %#v", tool, res)
+		}
+	}
+}
+
+func TestMCPTaskDependencyGraphRejectsInvalidBounds(t *testing.T) {
+	mcp := &mcpServer{taskID: "task-1", t: NewTransport("http://127.0.0.1:1", "tok")}
+	for _, args := range []map[string]interface{}{
+		{"maxDepth": float64(0)},
+		{"maxDepth": float64(33)},
+		{"maxDepth": 1.5},
+		{"maxNodes": float64(501)},
+	} {
+		res := mcp.callTool("task_dependency_graph", args)
+		if res["isError"] != true {
+			t.Fatalf("task_dependency_graph(%#v) isError = %#v", args, res["isError"])
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "must be an integer") {
+			t.Fatalf("task_dependency_graph(%#v) result = %#v", args, res)
 		}
 	}
 }

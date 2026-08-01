@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { CreateTaskListDto } from '../task-lists/dto';
 import { TaskListsService } from '../task-lists/task-lists.service';
@@ -43,8 +43,13 @@ export class RunnerTasksController {
   }
 
   @Get('tasks/:id/dependency-graph')
-  getTaskDependencyGraph(@CurrentRunner() runner: Runner, @Param('id') id: string) {
-    return this.tasks.dependencyGraph(runner.ownerId, id);
+  getTaskDependencyGraph(
+    @CurrentRunner() runner: Runner,
+    @Param('id') id: string,
+    @Query('maxDepth') maxDepth?: string,
+    @Query('maxNodes') maxNodes?: string,
+  ) {
+    return this.tasks.dependencyGraph(runner.ownerId, id, { maxDepth, maxNodes });
   }
 
   @Patch('tasks/:id')

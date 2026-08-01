@@ -1,6 +1,6 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Avatar, Button, Input, Select, Spin, Switch, Tooltip } from 'antd';
+import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
 import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
@@ -10,6 +10,8 @@ import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
+import type { TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
+import { TaskDependencyGraph, TaskDependencyList } from './TaskDependencyGraph';
 
 // The detail panel's width is drag-resizable; persist the choice so it sticks across reloads.
 // Until the user resizes, width stays null and the CSS clamp (responsive default) wins.
@@ -168,6 +170,18 @@ export function TaskDetailPanel({
       (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s.status)) ? 4000 : false,
   });
   const task = q.data ?? summary;
+
+  // A task detail only carries adjacent dependency edges. The dedicated graph snapshot follows
+  // all upstream prerequisites so a multi-level pipeline can be rendered without N+1 detail
+  // requests. Keeping the key under ['task', taskId] lets existing realtime invalidation refresh
+  // both the detail and graph together.
+  const dependencyGraphQ = useQuery({
+    queryKey: ['task', taskId, 'dependency-graph'],
+    queryFn: () => api<TaskDependencyGraphResponse>(`/tasks/${taskId}/dependency-graph`),
+    enabled: !!q.data && (q.data.dependsOn?.length ?? 0) > 0,
+  });
+  const [dependencyViewOverride, setDependencyViewOverride] = useState<'graph' | 'list' | null>(null);
+  useEffect(() => setDependencyViewOverride(null), [taskId]);
 
   // Owner's agents, for @-mention autocomplete and to label/trigger mentions.
   const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<AgentRow[]>('/agents') });
@@ -374,6 +388,45 @@ export function TaskDetailPanel({
   const dependencyState: string = q.data?.dependencyState ?? 'NONE';
   const blocked = dependencyState === 'BLOCKED' || dependencyState === 'BLOCKED_FAILED';
   const prereqIds = new Set(dependsOn.map((d: any) => d.dependsOnTask.id));
+  const completedDirectPrerequisites = dependsOn.filter(
+    (d: any) => d.dependsOnTask.status === 'DONE',
+  ).length;
+  const failedDirectPrerequisites = dependsOn.filter((d: any) =>
+    ['FAILED', 'CANCELLED'].includes(d.dependsOnTask.status),
+  ).length;
+  const fallbackDependencyGraph: TaskDependencyGraphResponse = {
+    focusTaskId: taskId,
+    nodes: [
+      {
+        id: taskId,
+        title: task?.title ?? 'Current task',
+        status: task?.status ?? 'OPEN',
+        depth: 0,
+      },
+      ...dependsOn.map((d: any) => ({
+        id: d.dependsOnTask.id,
+        title: d.dependsOnTask.title,
+        status: d.dependsOnTask.status,
+        depth: 1,
+        isDirect: true,
+      })),
+    ],
+    edges: dependsOn.map((d: any) => ({
+      sourceTaskId: d.dependsOnTask.id,
+      targetTaskId: taskId,
+    })),
+    maxDepth: dependsOn.length ? 1 : 0,
+    counts: {
+      upstream: dependsOn.length,
+      total: dependsOn.length + 1,
+      done: completedDirectPrerequisites,
+      remaining: dependsOn.length - completedDirectPrerequisites - failedDirectPrerequisites,
+      failed: failedDirectPrerequisites,
+    },
+  };
+  const dependencyGraph = dependencyGraphQ.data ?? fallbackDependencyGraph;
+  const dependencyHasMultipleLevels = (dependencyGraphQ.data?.maxDepth ?? 0) > 1;
+  const dependencyView = dependencyViewOverride ?? (dependencyHasMultipleLevels ? 'graph' : 'list');
   // Candidate prerequisites: every other task not already a prerequisite of this one.
   const dependencyOptions = (dependencyTasksQ.data?.items ?? [])
     .filter((t: any) => t.id !== taskId && !prereqIds.has(t.id))
@@ -571,54 +624,81 @@ export function TaskDetailPanel({
           </section>
 
           <section className="tdp-section">
-            <div className="tdp-section-title">Dependencies</div>
+            <div className="tdp-dependency-head">
+              <div className="tdp-section-title">Dependencies</div>
+              {dependsOn.length > 0 && (
+                <span className="tdp-dependency-summary">
+                  {dependencyGraph.counts?.upstream ?? dependsOn.length} upstream ·{' '}
+                  {dependencyGraph.maxDepth ?? 1} {dependencyGraph.maxDepth === 1 ? 'level' : 'levels'}
+                </span>
+              )}
+              {dependsOn.length > 0 && (
+                <Segmented
+                  className="tdp-dependency-view"
+                  size="small"
+                  value={dependencyView}
+                  options={[
+                    { label: 'Graph', value: 'graph' },
+                    { label: 'List', value: 'list' },
+                  ]}
+                  onChange={(value) => setDependencyViewOverride(value as 'graph' | 'list')}
+                  aria-label="Dependency view"
+                />
+              )}
+            </div>
             {blocked && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 10px',
-                  marginBottom: 8,
-                  borderRadius: 6,
-                  fontSize: 12,
-                  background: dependencyState === 'BLOCKED_FAILED' ? 'var(--error-bg)' : 'var(--brand-tint)',
-                  border: `1px solid ${dependencyState === 'BLOCKED_FAILED' ? 'var(--error-border)' : 'var(--brand-border)'}`,
-                  color: dependencyState === 'BLOCKED_FAILED' ? 'var(--error)' : 'var(--brand-strong)',
-                }}
-              >
+              <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
                 {dependencyState === 'BLOCKED_FAILED'
-                  ? 'A prerequisite was cancelled — resolve it before running.'
-                  : 'Waiting for all prerequisites to finish before running.'}
+                  ? `${failedDirectPrerequisites || 'A'} direct prerequisite${failedDirectPrerequisites === 1 ? '' : 's'} failed or was cancelled — resolve before running.`
+                  : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
               </div>
             )}
             {dependsOn.length === 0 ? (
               <div className="tdp-muted">No dependencies</div>
-            ) : (
+            ) : dependencyView === 'graph' ? (
+              dependencyGraphQ.isLoading ? (
+                <div className="tdp-dependency-graph-loading"><Spin size="small" /></div>
+              ) : (
+                <>
+                  {dependencyGraphQ.isError && (
+                    <div className="tdp-dependency-graph-error" role="alert">
+                      Multi-level dependencies could not be loaded. Showing direct prerequisites.
+                    </div>
+                  )}
+                  <TaskDependencyGraph
+                    graph={dependencyGraph}
+                    title={task?.title ?? 'Current task'}
+                    onOpenTask={onOpenTask}
+                    onRemoveDependency={(id) => removeDependency.mutate(id)}
+                    removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+                  />
+                </>
+              )
+            ) : dependencyGraphQ.isLoading ? (
               dependsOn.map((d: any) => {
                 const meta = STATUS_META[d.dependsOnTask.status] ?? { label: d.dependsOnTask.status, tone: 'muted' };
                 return (
                   <div key={d.dependsOnTask.id} className="tdp-dependency-row">
-                    <button
-                      type="button"
-                      className="tdp-dependency-trigger"
-                      title={`Open task: ${d.dependsOnTask.title}`}
-                      onClick={() => onOpenTask(d.dependsOnTask.id)}
-                    >
+                    <button type="button" className="tdp-dependency-trigger" onClick={() => onOpenTask(d.dependsOnTask.id)}>
                       <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
                       <span className="tdp-dependency-title">{d.dependsOnTask.title}</span>
                     </button>
-                    <Button
-                      type="text"
-                      size="small"
-                      icon={<CloseOutlined />}
-                      loading={removeDependency.isPending}
-                      onClick={() => removeDependency.mutate(d.dependsOnTask.id)}
-                      aria-label="Remove dependency"
-                    />
+                    <Button type="text" size="small" icon={<CloseOutlined />} loading={removeDependency.isPending} onClick={() => removeDependency.mutate(d.dependsOnTask.id)} aria-label="Remove dependency" />
                   </div>
                 );
               })
+            ) : (
+              <TaskDependencyList
+                graph={dependencyGraph}
+                onOpenTask={onOpenTask}
+                onRemoveDependency={(id) => removeDependency.mutate(id)}
+                removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
+              />
+            )}
+            {dependencyGraph.truncated && (
+              <div className="tdp-dependency-truncated">
+                The graph reached its {dependencyGraph.limits?.maxNodes ?? 100}-task display limit.
+              </div>
             )}
             <Select
               style={{ width: '100%', marginTop: 8 }}

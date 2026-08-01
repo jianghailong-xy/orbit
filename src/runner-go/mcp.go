@@ -214,7 +214,15 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if !ok {
 			return toolResult(noTaskMsg, true)
 		}
-		raw, err := s.t.taskDependencyGraph(id)
+		maxDepth, err := getBoundedOptionalNumber(args, "maxDepth", 32)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		maxNodes, err := getBoundedOptionalNumber(args, "maxNodes", 500)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		raw, err := s.t.taskDependencyGraph(id, maxDepth, maxNodes)
 		if err != nil {
 			return toolResult("get task dependency graph failed: "+err.Error(), true)
 		}
@@ -665,7 +673,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		{
 			"name":        "task_dependency_graph",
 			"description": "Read the multi-level upstream dependency DAG for a task before changing its ordering. Returns the focus task, its transitive prerequisites, and directed prerequisite-to-dependent edges; taskId defaults to the current task. The server bounds traversal and reports when the result is truncated.",
-			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+			"inputSchema": obj(map[string]interface{}{
+				"taskId":   taskIDProp,
+				"maxDepth": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 32, "description": "Maximum prerequisite levels to traverse (default 8, server cap 32)."},
+				"maxNodes": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 500, "description": "Maximum task nodes to return (default 100, server cap 500)."},
+			}),
 		},
 		{
 			"name":        "task_dependency_add",
@@ -966,6 +978,36 @@ func getNumber(args map[string]interface{}, key string) int {
 		return n
 	}
 	return 0
+}
+
+// getBoundedOptionalNumber validates a numeric MCP argument before it becomes an HTTP
+// query parameter. Zero means absent; an explicitly invalid value is never silently
+// replaced by the backend default.
+func getBoundedOptionalNumber(args map[string]interface{}, key string, maximum int) (int, error) {
+	raw, present := args[key]
+	if !present {
+		return 0, nil
+	}
+	var n int
+	switch value := raw.(type) {
+	case float64:
+		if value < 1 || value > float64(maximum) || value != float64(int(value)) {
+			return 0, fmt.Errorf("%s must be an integer from 1 to %d", key, maximum)
+		}
+		n = int(value)
+	case string:
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return 0, fmt.Errorf("%s must be an integer from 1 to %d", key, maximum)
+		}
+		n = parsed
+	default:
+		return 0, fmt.Errorf("%s must be an integer from 1 to %d", key, maximum)
+	}
+	if n < 1 || n > maximum {
+		return 0, fmt.Errorf("%s must be an integer from 1 to %d", key, maximum)
+	}
+	return n, nil
 }
 
 func getString(args map[string]interface{}, key string) string {

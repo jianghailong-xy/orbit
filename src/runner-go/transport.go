@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -406,12 +407,23 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-func (t *Transport) taskDependencyGraph(id string) (json.RawMessage, error) {
+func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
+	q := url.Values{}
+	if maxDepth > 0 {
+		q.Set("maxDepth", strconv.Itoa(maxDepth))
+	}
+	if maxNodes > 0 {
+		q.Set("maxNodes", strconv.Itoa(maxNodes))
+	}
+	path := "/runner/tasks/" + url.PathEscape(id) + "/dependency-graph"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id)+"/dependency-graph", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 
