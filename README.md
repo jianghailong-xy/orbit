@@ -142,7 +142,8 @@ self-updates from there at startup. Create a task in the UI, queue it, and watch
 stream — or start an interactive session and chat with the agent directly.
 
 The registered binary also exposes the agent-safe Task/TaskList surface for shell
-automation. Results are pretty-printed by default; pass `--json` for compact JSON:
+automation and, for orchestration-enabled agents, the MCP-equivalent Session surface.
+Results are pretty-printed by default; pass `--json` for compact JSON:
 
 ```bash
 orbit capabilities --json
@@ -150,21 +151,25 @@ orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
 orbit task update <task-id> --status DONE --json
 orbit task-list create --title "Release" --json
+orbit session create --prompt "Review the change" --agent-name reviewer --json
+orbit session get <session-id> --json
+orbit session send <session-id> --message "Please add a regression test" --json
 ```
 
 Each Claude/Codex session receives a short discovery instruction pointing at the
 resolved absolute binary path and `capabilities --json`. Claude receives approval-free
-rules only for the listed Task/TaskList action prefixes; Codex receives the same context
-without replacing project-level developer instructions. Native Orbit MCP tools remain
-the preferred path when available.
+rules for Task/TaskList and, only when enabled for that agent, Session action prefixes;
+Codex receives the same context without replacing project-level developer instructions.
+Native Orbit MCP tools remain the preferred path when available.
 
 Inside an Orbit task session, task commands may omit the task id and use
-`ORBIT_TASK_ID`. Session and Agent orchestration remain MCP-only until they have a
-session-scoped CLI authorization path. Existing runners migrate their credential
-storage to private permissions on the next runner restart; the task CLI refuses to
-use a legacy world-readable config until that migration has happened. CLI mutations
-are attributed to the runner owner; agents should prefer the native Orbit MCP tools
-when agent/session attribution matters.
+`ORBIT_TASK_ID`. Session commands require an explicit target id and a live caller
+session whose current agent has `enableOrchestration`; every request is re-authorized
+by the control plane. Agent management remains MCP-only. Existing runners migrate
+their credential storage to private permissions on the next runner restart; the CLI
+refuses to use a legacy world-readable config until that migration has happened.
+Task CLI mutations are attributed to the runner owner, so agents should prefer native
+Orbit MCP tools when agent/session attribution matters.
 
 ## Cost & tokens
 
