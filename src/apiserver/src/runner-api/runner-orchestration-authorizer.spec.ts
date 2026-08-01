@@ -66,7 +66,6 @@ test('issue signs a runner/session-bound orchestration credential', async () => 
       options: {
         audience: 'orbit-runner-orchestration',
         subject: SESSION_ID,
-        expiresIn: '30d',
       },
     },
   ]);
@@ -110,6 +109,18 @@ test('the rollout bridge is off by default and never applies to credential-capab
 
   await assert.rejects(
     () => makeAuthorizer({ allowLegacy: true }).authorizer.assert(RUNNER, SESSION_ID, undefined),
+    (error: unknown) =>
+      error instanceof ForbiddenException && error.message === 'missing orchestration credential',
+  );
+
+  const olderRunner = { id: 'runner-1', ownerId: 'owner-1', version: '0.1.78' } as never;
+  await assert.rejects(
+    () =>
+      makeAuthorizer({ allowLegacy: true }).authorizer.assert(
+        olderRunner,
+        SESSION_ID,
+        undefined,
+      ),
     (error: unknown) =>
       error instanceof ForbiddenException && error.message === 'missing orchestration credential',
   );

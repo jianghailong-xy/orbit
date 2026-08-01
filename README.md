@@ -166,9 +166,10 @@ Inside an Orbit task session, task commands may omit the task id and use
 `ORBIT_TASK_ID`. Session commands require an explicit target id and a live caller
 session whose current agent has `enableOrchestration`; the runner injects a signed,
 session-bound credential and every request is re-authorized by the control plane.
-The credential is never included in `orbit capabilities` output. Agent management
-remains MCP-only. Existing runners migrate
-their credential storage to private permissions on the next runner restart; the CLI
+The credential is never included in `orbit capabilities` output. The runner machine's
+OS account remains the local trust boundary; sibling processes running as that account
+are not isolated from each other. Agent management remains MCP-only. Existing runners
+migrate their credential storage to private permissions on the next runner restart; the CLI
 refuses to use a legacy world-readable config until that migration has happened.
 Task CLI mutations are attributed to the runner owner, so agents should prefer native
 Orbit MCP tools when agent/session attribution matters.

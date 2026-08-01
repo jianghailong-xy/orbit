@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const ORCHESTRATION_AUDIENCE = 'orbit-runner-orchestration';
 const ORCHESTRATION_PURPOSE = 'runner-orchestration';
-const ORCHESTRATION_CREDENTIAL_MIN_VERSION = [0, 1, 80] as const;
+const LEGACY_ORCHESTRATION_RUNNER_VERSION = /^v?0\.1\.79(?:[-+].*)?$/;
 
 type OrchestrationClaims = {
   sub?: string;
@@ -14,18 +14,8 @@ type OrchestrationClaims = {
   purpose?: string;
 };
 
-function runnerRequiresCredential(version: string | null | undefined): boolean {
-  // Fail closed for unknown/non-release builds. The sole compatibility case is a
-  // reported, older semver runner that predates the signed credential protocol.
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version ?? '');
-  if (!match) return true;
-  const parts = match.slice(1, 4).map(Number);
-  for (let i = 0; i < ORCHESTRATION_CREDENTIAL_MIN_VERSION.length; i += 1) {
-    if (parts[i] !== ORCHESTRATION_CREDENTIAL_MIN_VERSION[i]) {
-      return parts[i] > ORCHESTRATION_CREDENTIAL_MIN_VERSION[i];
-    }
-  }
-  return true;
+function isLegacyOrchestrationRunner(version: string | null | undefined): boolean {
+  return LEGACY_ORCHESTRATION_RUNNER_VERSION.test(version ?? '');
 }
 
 const LIVE_ORCHESTRATOR_STATUSES: RunStatus[] = [
@@ -41,8 +31,9 @@ const LIVE_ORCHESTRATOR_STATUSES: RunStatus[] = [
  * boundary: an agent can alter its child-process environment. The control plane
  * therefore verifies a signed credential bound to the calling session and runner,
  * then re-checks the session and its current agent configuration for every request.
- * This also prevents another process on the same runner from authorizing itself with
- * a discovered session id.
+ * A discovered session id alone is therefore insufficient. The runner's OS account is
+ * still the trust boundary: sibling processes that can inspect each other's environments
+ * or runner config are not isolated from one another.
  */
 @Injectable()
 export class RunnerOrchestrationAuthorizer {
@@ -56,7 +47,10 @@ export class RunnerOrchestrationAuthorizer {
   issue(runnerId: string, sessionId: string): Promise<string> {
     return this.jwt.signAsync(
       { runnerId, purpose: ORCHESTRATION_PURPOSE },
-      { audience: ORCHESTRATION_AUDIENCE, subject: sessionId, expiresIn: '30d' },
+      // The live-session DB predicate below is the revocation/lifetime boundary. Orbit
+      // sessions can remain awaiting input indefinitely, so a fixed JWT expiry would
+      // strand an otherwise-live session without any in-process refresh path.
+      { audience: ORCHESTRATION_AUDIENCE, subject: sessionId },
     );
   }
 
@@ -68,13 +62,13 @@ export class RunnerOrchestrationAuthorizer {
     if (!sessionId) throw new BadRequestException('missing session context');
     // Optional, server-controlled rollout bridge for 0.1.79: web/apiserver deployment
     // publishes the new runner binary, but external daemons update only when restarted.
-    // It is fail-closed by default and cannot be enabled by a runner heartbeat/version lie.
-    // Remove this bridge after 0.1.79 runners have been retired.
+    // It is fail-closed by default and only an operator can enable this explicitly
+    // insecure legacy path. Remove the bridge after 0.1.79 runners have been retired.
     if (!credential) {
       const legacyRolloutEnabled = ['1', 'true', 'yes', 'on'].includes(
         (this.config.get<string>('ORBIT_ALLOW_LEGACY_ORCHESTRATION') ?? '').trim().toLowerCase(),
       );
-      if (!legacyRolloutEnabled || runnerRequiresCredential(runner.version)) {
+      if (!legacyRolloutEnabled || !isLegacyOrchestrationRunner(runner.version)) {
         throw new ForbiddenException('missing orchestration credential');
       }
     } else {

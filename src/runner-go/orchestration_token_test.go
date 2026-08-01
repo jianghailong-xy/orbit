@@ -197,6 +197,28 @@ func TestOrchestrationTransportRejectsCrossOriginRedirectWithoutLeakingCredentia
 	}
 }
 
+func TestTransportKeepsCrossOriginRedirectsForCallsWithoutSessionCredential(t *testing.T) {
+	destinationRequests := 0
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		destinationRequests++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer destination.Close()
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destination.URL+"/canonical", http.StatusTemporaryRedirect)
+	}))
+	defer origin.Close()
+
+	transport := NewTransport(origin.URL, "runner-token")
+	if err := transport.do(nil, http.MethodGet, "/plain", nil, nil, time.Second); err != nil {
+		t.Fatalf("non-orchestration redirect: %v", err)
+	}
+	if destinationRequests != 1 {
+		t.Fatalf("cross-origin destination received %d requests, want 1", destinationRequests)
+	}
+}
+
 func TestSessionCLICredentialGateControlsCapabilitiesAndRequests(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envMCPOrchestration, "true")

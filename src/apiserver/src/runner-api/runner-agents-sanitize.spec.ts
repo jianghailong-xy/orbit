@@ -18,13 +18,43 @@ function makeController() {
     published?: [string, string];
     authorizations: Array<[unknown, string | undefined, string | undefined]>;
   } = { authorizations: [] };
+  const rawAgent = {
+    id: 'a1',
+    name: 'agent',
+    description: 'safe description',
+    provider: 'codex',
+    model: 'gpt-safe',
+    workDir: '/work/repo',
+    runnerId: 'r1',
+    enableWorktree: true,
+    permissionMode: 'plan',
+    defaultMergeTarget: 'main',
+    runner: { id: 'r1', name: 'runner', displayName: 'Build host', tokenHash: 'runner-secret' },
+    env: { API_KEY: 'agent-secret' },
+    mcpConfig: { authorization: 'mcp-secret' },
+    systemPrompt: 'private system prompt',
+    appendSystemPrompt: 'private appended prompt',
+    agentKey: 'private-agent-key',
+    allowedTools: ['private-tool-policy'],
+    disallowedTools: [],
+  };
+  const mergeDefined = (dto: Record<string, unknown>) => ({
+    ...rawAgent,
+    ...Object.fromEntries(Object.entries(dto).filter(([, value]) => value !== undefined)),
+  });
   const agents = {
     list: async (ownerId: string) => {
       seen.listOwner = ownerId;
-      return ['agent'];
+      return [rawAgent];
     },
-    create: async (_ownerId: string, dto: Record<string, unknown>) => (seen.create = dto),
-    update: async (_ownerId: string, _id: string, dto: Record<string, unknown>) => (seen.update = dto),
+    create: async (_ownerId: string, dto: Record<string, unknown>) => {
+      seen.create = dto;
+      return mergeDefined(dto);
+    },
+    update: async (_ownerId: string, _id: string, dto: Record<string, unknown>) => {
+      seen.update = dto;
+      return mergeDefined(dto);
+    },
   } as never;
   const orchestration = {
     assert: async (
@@ -46,16 +76,33 @@ function makeController() {
 
 test('list forwards the session credential to the orchestration authorizer', async () => {
   const { controller, seen } = makeController();
-  assert.deepEqual(await controller.listAgents(RUNNER, 's1', ORCHESTRATION_TOKEN), ['agent']);
+  const result = await controller.listAgents(RUNNER, 's1', ORCHESTRATION_TOKEN);
+  assert.deepEqual(result, [
+    {
+      id: 'a1',
+      name: 'agent',
+      description: 'safe description',
+      provider: 'codex',
+      model: 'gpt-safe',
+      workDir: '/work/repo',
+      runnerId: 'r1',
+      enableWorktree: true,
+      permissionMode: 'plan',
+      defaultMergeTarget: 'main',
+      runner: { id: 'r1', name: 'runner', displayName: 'Build host' },
+    },
+  ]);
+  assertSensitiveAgentFieldsRedacted(result[0]);
   assert.equal(seen.listOwner, 'o1');
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
 test('create forwards the agent config fields an orchestrator may set', async () => {
   const { controller, seen } = makeController();
-  await controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
+  const result = await controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
     name: 'child',
     env: { FOO: 'bar' },
+    systemPrompt: 'new private prompt',
     permissionMode: 'acceptEdits',
     defaultMergeTarget: 'develop',
   });
@@ -66,13 +113,16 @@ test('create forwards the agent config fields an orchestrator may set', async ()
   assert.equal(seen.create?.workDir, undefined);
   // Bound to the calling runner by default.
   assert.equal(seen.create?.runnerId, 'r1');
+  assert.equal(result.name, 'child');
+  assertSensitiveAgentFieldsRedacted(result);
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
 test('update forwards them too', async () => {
   const { controller, seen } = makeController();
-  await controller.updateAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
+  const result = await controller.updateAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
     env: { A: '1' },
+    appendSystemPrompt: 'updated private prompt',
     permissionMode: 'plan',
     defaultMergeTarget: 'main',
   });
@@ -83,6 +133,7 @@ test('update forwards them too', async () => {
   assert.equal(seen.update?.runnerId, undefined);
   // The agent list refresh is scoped to the CALLING session, and names the updated agent.
   assert.deepEqual(seen.published, ['s1', 'a1']);
+  assertSensitiveAgentFieldsRedacted(result);
   assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
@@ -136,3 +187,38 @@ test('an omitted env leaves the stored map untouched', async () => {
   });
   assert.equal(seen.update?.env, undefined);
 });
+
+test('rejects malformed bodies and typed fields before the AgentsService', async () => {
+  const invalidBodies: unknown[] = [
+    null,
+    [],
+    { name: 7 },
+    { provider: false },
+    { enableWorktree: 'yes' },
+    { defaultMergeTarget: 42 },
+  ];
+  for (const body of invalidBodies) {
+    const { controller, seen } = makeController();
+    await assert.rejects(
+      () => controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, body),
+      BadRequestException,
+    );
+    assert.equal(seen.create, undefined);
+  }
+});
+
+function assertSensitiveAgentFieldsRedacted(agent: Record<string, unknown>) {
+  for (const field of [
+    'env',
+    'mcpConfig',
+    'systemPrompt',
+    'appendSystemPrompt',
+    'agentKey',
+    'allowedTools',
+    'disallowedTools',
+  ]) {
+    assert.equal(field in agent, false, `${field} leaked in orchestration response`);
+  }
+  const runner = agent.runner as Record<string, unknown> | undefined;
+  assert.equal(runner ? 'tokenHash' in runner : false, false, 'runner token hash leaked');
+}

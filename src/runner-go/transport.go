@@ -30,10 +30,12 @@ func NewTransport(baseURL, token string) *Transport {
 				return nil
 			}
 			first := via[0].URL
-			if req.URL.Scheme != first.Scheme || !strings.EqualFold(req.URL.Host, first.Host) {
+			if via[0].Header.Get("X-Orbit-Session-Token") != "" &&
+				(req.URL.Scheme != first.Scheme || !strings.EqualFold(req.URL.Host, first.Host)) {
 				// Go's default redirect policy protects Authorization across hosts, but it
 				// copies unknown headers. Refuse the redirect before a session credential
-				// in X-Orbit-Session-Token can reach another origin.
+				// in X-Orbit-Session-Token can reach another origin. Calls without that
+				// credential retain the transport's historical redirect behavior.
 				return fmt.Errorf("refusing cross-origin redirect to %s", req.URL.Redacted())
 			}
 			return nil
