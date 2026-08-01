@@ -900,7 +900,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     return {
       ...task,
-      sessions: task.sessions.map((session) => withSessionState(session)),
+      sessions: (task.sessions ?? []).map((session) => withSessionState(session)),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
