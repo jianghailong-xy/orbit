@@ -1,0 +1,4 @@
+interface:
+  display_name: "Upgrade Orbit"
+  short_description: "Safely upgrade the Orbit Docker Compose stack"
+  default_prompt: "Use $upgrade to deploy the latest Orbit code safely."

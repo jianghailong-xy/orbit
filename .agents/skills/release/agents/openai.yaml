@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Orbit"
+  short_description: "Cut a unified macOS and iOS Orbit release"
+  default_prompt: "Use $release to cut the next Orbit client release safely."
