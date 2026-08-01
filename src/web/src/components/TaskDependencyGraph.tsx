@@ -6,6 +6,7 @@ import {
   Handle,
   MarkerType,
   MiniMap,
+  Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -16,13 +17,15 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Modal, Popconfirm, Tooltip } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   getFocusPathSets,
   getTaskDependencyEdgeState,
   getTaskDependencyVisualState,
   normalizeTaskDependencyGraph,
+  projectTaskDependencyGraph,
   taskDependencyEdgeKey,
+  type TaskDependencyBranchAggregate,
   type NormalizedTaskDependencyGraph,
   type TaskDependencyGraphNode,
   type TaskDependencyGraphResponse,
@@ -48,6 +51,16 @@ interface DependencyNodeData extends Record<string, unknown> {
 }
 
 type DependencyFlowNode = Node<DependencyNodeData, 'taskDependency'>;
+
+interface DependencyAggregateNodeData extends Record<string, unknown> {
+  aggregate: TaskDependencyBranchAggregate;
+  vertical: boolean;
+  expanding: boolean;
+  busy: boolean;
+  onExpand: (aggregate: TaskDependencyBranchAggregate) => void;
+}
+
+type DependencyAggregateFlowNode = Node<DependencyAggregateNodeData, 'taskDependencyAggregate'>;
 
 const EDGE_COLORS: Record<TaskDependencyVisualState, string> = {
   complete: 'var(--success-solid)',
@@ -114,7 +127,48 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
   );
 }
 
-const NODE_TYPES = { taskDependency: DependencyNode };
+function DependencyAggregateNode({ data }: NodeProps<DependencyAggregateFlowNode>) {
+  const { aggregate } = data;
+  const noun = aggregate.direction === 'prerequisites' ? 'prerequisites' : 'dependents';
+  const isPrerequisiteGroup = aggregate.direction === 'prerequisites';
+  const atServerLimit = aggregate.remote && aggregate.loadedRemainingCount === 0 && !aggregate.cursor;
+  const actionLabel = data.expanding
+    ? 'Loading…'
+    : data.busy
+      ? 'Wait for current batch…'
+      : atServerLimit
+        ? 'Graph limit reached'
+        : `Show next ${aggregate.nextBatchCount}`;
+  return (
+    <div className="tdg-aggregate-node">
+      {!isPrerequisiteGroup && (
+        <Handle type="target" position={data.vertical ? Position.Top : Position.Left} isConnectable={false} />
+      )}
+      <button
+        type="button"
+        className="tdg-aggregate-main nodrag nopan"
+        onClick={() => data.onExpand(aggregate)}
+        disabled={data.busy || atServerLimit}
+        aria-label={
+          atServerLimit
+            ? `${aggregate.remainingCount} hidden ${noun}; graph limit reached`
+            : `Show next ${aggregate.nextBatchCount} of ${aggregate.remainingCount} hidden ${noun}`
+        }
+      >
+        <span className="tdg-aggregate-count">+{aggregate.remainingCount} {noun}</span>
+        <span className="tdg-aggregate-action">{actionLabel}</span>
+      </button>
+      {isPrerequisiteGroup && (
+        <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} isConnectable={false} />
+      )}
+    </div>
+  );
+}
+
+const NODE_TYPES = {
+  taskDependency: DependencyNode,
+  taskDependencyAggregate: DependencyAggregateNode,
+};
 
 /** Highlight the shortest weak (direction-agnostic) path to the focused task. In a `both`
  * snapshot a hovered node may be downstream or lateral, so walking only outgoing edges would
@@ -169,6 +223,7 @@ function pathBetweenNodeAndFocus(
 
 function layoutPositions(
   graph: NormalizedTaskDependencyGraph,
+  aggregates: readonly TaskDependencyBranchAggregate[],
   vertical: boolean,
 ): ReadonlyMap<string, { x: number; y: number }> {
   const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -180,18 +235,31 @@ function layoutPositions(
     marginy: 24,
   });
   for (const task of graph.nodes) layout.setNode(task.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  for (const aggregate of aggregates) {
+    layout.setNode(aggregate.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  }
   for (const edge of graph.edges) layout.setEdge(edge.sourceTaskId, edge.targetTaskId);
+  for (const aggregate of aggregates) {
+    if (aggregate.direction === 'prerequisites') {
+      layout.setEdge(aggregate.id, aggregate.parentTaskId);
+    } else {
+      layout.setEdge(aggregate.parentTaskId, aggregate.id);
+    }
+  }
   dagre.layout(layout);
   return new Map(
-    graph.nodes.map((task) => {
-      const position = layout.node(task.id) as { x: number; y: number };
-      return [task.id, { x: position.x - NODE_WIDTH / 2, y: position.y - NODE_HEIGHT / 2 }];
-    }),
+    [...graph.nodes.map((task) => task.id), ...aggregates.map((aggregate) => aggregate.id)].map(
+      (id) => {
+        const position = layout.node(id) as { x: number; y: number };
+        return [id, { x: position.x - NODE_WIDTH / 2, y: position.y - NODE_HEIGHT / 2 }];
+      },
+    ),
   );
 }
 
 function flowElements(
   graph: NormalizedTaskDependencyGraph,
+  aggregates: readonly TaskDependencyBranchAggregate[],
   positions: ReadonlyMap<string, { x: number; y: number }>,
   vertical: boolean,
   directPrerequisiteIds: ReadonlySet<string>,
@@ -200,8 +268,10 @@ function flowElements(
   onRemoveDependency: ((taskId: string) => void) | undefined,
   removingTaskId: string | null,
   onHighlight: (taskId: string | null) => void,
-): { nodes: DependencyFlowNode[]; edges: Edge[] } {
-  const nodes: DependencyFlowNode[] = graph.nodes.map((task) => {
+  onExpand: (aggregate: TaskDependencyBranchAggregate) => void,
+  expandingBranchKey: string | null,
+): { nodes: Array<DependencyFlowNode | DependencyAggregateFlowNode>; edges: Edge[] } {
+  const taskNodes: DependencyFlowNode[] = graph.nodes.map((task) => {
     const isFocus = task.id === graph.focusTaskId;
     return {
       id: task.id,
@@ -228,7 +298,25 @@ function flowElements(
     };
   });
 
-  const edges: Edge[] = graph.edges.map((edge) => {
+  const aggregateNodes: DependencyAggregateFlowNode[] = aggregates.map((aggregate) => ({
+    id: aggregate.id,
+    type: 'taskDependencyAggregate',
+    position: positions.get(aggregate.id) ?? { x: 0, y: 0 },
+    sourcePosition: vertical ? Position.Bottom : Position.Right,
+    targetPosition: vertical ? Position.Top : Position.Left,
+    draggable: false,
+    selectable: false,
+    focusable: false,
+    data: {
+      aggregate,
+      vertical,
+      expanding: expandingBranchKey === aggregate.branchKey,
+      busy: expandingBranchKey !== null,
+      onExpand,
+    },
+  }));
+
+  const taskEdges: Edge[] = graph.edges.map((edge) => {
     const key = taskDependencyEdgeKey(edge);
     const state = getTaskDependencyEdgeState(graph, edge);
     const highlightedEdge = !!highlighted?.edgeKeys.has(key);
@@ -255,13 +343,39 @@ function flowElements(
       },
     };
   });
-  return { nodes, edges };
+  const aggregateEdges: Edge[] = aggregates.map((aggregate) => {
+    const prerequisiteGroup = aggregate.direction === 'prerequisites';
+    return {
+      id: `aggregate-edge:${aggregate.id}`,
+      source: prerequisiteGroup ? aggregate.id : aggregate.parentTaskId,
+      target: prerequisiteGroup ? aggregate.parentTaskId : aggregate.id,
+      type: 'smoothstep',
+      focusable: false,
+      selectable: false,
+      style: {
+        stroke: 'var(--text-4)',
+        strokeWidth: 1.5,
+        strokeDasharray: '5 4',
+        opacity: 0.75,
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 16,
+        height: 16,
+        color: 'var(--text-4)',
+      },
+    };
+  });
+  return { nodes: [...taskNodes, ...aggregateNodes], edges: [...taskEdges, ...aggregateEdges] };
 }
 
 function DependencyFlow({
   graph,
   fullScreen,
   vertical,
+  expandedByBranch,
+  onExpand,
+  expandingBranchKey,
   onOpenTask,
   onRemoveDependency,
   removingTaskId,
@@ -269,26 +383,38 @@ function DependencyFlow({
   graph: TaskDependencyGraphResponse;
   fullScreen: boolean;
   vertical: boolean;
+  expandedByBranch: ReadonlyMap<string, number>;
+  onExpand: (aggregate: TaskDependencyBranchAggregate) => void;
+  expandingBranchKey: string | null;
   onOpenTask: (taskId: string) => void;
   onRemoveDependency?: (taskId: string) => void;
   removingTaskId: string | null;
 }) {
   const normalized = useMemo(() => normalizeTaskDependencyGraph(graph), [graph]);
+  const projection = useMemo(
+    () => projectTaskDependencyGraph(normalized, expandedByBranch, { collapsedGroups: graph.collapsedGroups }),
+    [normalized, expandedByBranch, graph.collapsedGroups],
+  );
+  const visibleGraph = projection.graph;
   const direct = useMemo(() => getFocusPathSets(normalized).directPrerequisiteIds, [normalized]);
-  const { fitBounds } = useReactFlow();
+  const { fitBounds, getViewport, setViewport } = useReactFlow();
   const reduceMotion =
     typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const structureKey = useMemo(
     () =>
-      `${vertical ? 'TB' : 'LR'}|${normalized.topologicalNodeIds.join(',')}|${normalized.edges
+      `${vertical ? 'TB' : 'LR'}|${visibleGraph.topologicalNodeIds.join(',')}|${visibleGraph.edges
         .map(taskDependencyEdgeKey)
-        .join(',')}`,
-    [normalized, vertical],
+        .join(',')}|${projection.aggregates.map((aggregate) => aggregate.id).join(',')}`,
+    [projection.aggregates, visibleGraph, vertical],
   );
   // Dagre is the expensive part. Status/path hover only changes presentation, so keep positions
   // stable and avoid recomputing the layout as the pointer moves between nodes.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- structureKey captures every layout input
-  const positions = useMemo(() => layoutPositions(normalized, vertical), [structureKey]);
+  const positions = useMemo(
+    () => layoutPositions(visibleGraph, projection.aggregates, vertical),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- structureKey captures every layout input
+    [structureKey],
+  );
   const graphBounds = useMemo(() => {
     const points = [...positions.values()];
     if (points.length === 0) return { x: 0, y: 0, width: NODE_WIDTH, height: NODE_HEIGHT };
@@ -298,15 +424,36 @@ function DependencyFlow({
     const maxY = Math.max(...points.map((point) => point.y + NODE_HEIGHT));
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }, [positions]);
+  const pendingAnchorRef = useRef<{
+    id: string;
+    position: { x: number; y: number };
+    viewport: { x: number; y: number; zoom: number };
+  } | null>(null);
+  const expandKeepingAnchor = useCallback(
+    (aggregate: TaskDependencyBranchAggregate) => {
+      const position = positions.get(aggregate.parentTaskId);
+      if (position) {
+        pendingAnchorRef.current = {
+          id: aggregate.parentTaskId,
+          position,
+          viewport: getViewport(),
+        };
+      }
+      onExpand(aggregate);
+    },
+    [getViewport, onExpand, positions],
+  );
+  const fitContextKey = `${graph.focusTaskId}|${vertical ? 'TB' : 'LR'}|${fullScreen ? 'full' : 'inline'}`;
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlighted = useMemo(
-    () => pathBetweenNodeAndFocus(normalized, highlightedId),
-    [normalized, highlightedId],
+    () => pathBetweenNodeAndFocus(visibleGraph, highlightedId),
+    [visibleGraph, highlightedId],
   );
   const elements = useMemo(
     () =>
       flowElements(
-        normalized,
+        visibleGraph,
+        projection.aggregates,
         positions,
         vertical,
         direct,
@@ -315,12 +462,45 @@ function DependencyFlow({
         onRemoveDependency,
         removingTaskId,
         setHighlightedId,
+        expandKeepingAnchor,
+        expandingBranchKey,
       ),
-    [normalized, positions, vertical, direct, highlighted, onOpenTask, onRemoveDependency, removingTaskId],
+    [
+      visibleGraph,
+      projection.aggregates,
+      positions,
+      vertical,
+      direct,
+      highlighted,
+      onOpenTask,
+      onRemoveDependency,
+      removingTaskId,
+      expandKeepingAnchor,
+      expandingBranchKey,
+    ],
   );
+  useLayoutEffect(() => {
+    const pendingAnchor = pendingAnchorRef.current;
+    if (!pendingAnchor) return;
+    const nextPosition = positions.get(pendingAnchor.id);
+    if (!nextPosition) {
+      pendingAnchorRef.current = null;
+      return;
+    }
+    const { viewport } = pendingAnchor;
+    void setViewport(
+      {
+        ...viewport,
+        x: viewport.x + (pendingAnchor.position.x - nextPosition.x) * viewport.zoom,
+        y: viewport.y + (pendingAnchor.position.y - nextPosition.y) * viewport.zoom,
+      },
+      { duration: 0 },
+    );
+    pendingAnchorRef.current = null;
+  }, [positions, setViewport, structureKey]);
   useEffect(() => {
-    // Fit once after a structural add/remove. Status-only realtime refreshes keep the same key,
-    // so the user's pan/zoom position does not jump while tasks progress.
+    // Fit when this canvas/focus/orientation first appears. Progressive branch expansion keeps
+    // the user's viewport intact instead of zooming the whole canvas after every batch.
     let fitFrame = 0;
     const layoutFrame = requestAnimationFrame(() => {
       // React Flow commits controlled node positions to its internal store after this effect.
@@ -338,7 +518,10 @@ function DependencyFlow({
       cancelAnimationFrame(layoutFrame);
       cancelAnimationFrame(fitFrame);
     };
-  }, [fitBounds, fullScreen, graphBounds, reduceMotion, structureKey]);
+    // graphBounds intentionally belongs to the context's first layout only. Expansion changes
+    // it without changing fitContextKey, which must not trigger another automatic fit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitBounds, fitContextKey, fullScreen, reduceMotion]);
 
   if (!normalized.focusNode || normalized.hasCycle) {
     return (
@@ -377,8 +560,14 @@ function DependencyFlow({
       }}
     >
       <Background gap={18} size={1} color="var(--border-subtle)" />
+      {projection.collapsed && (
+        <Panel position="top-left" className="tdg-visible-count">
+          Showing {projection.visibleNodeCount} tasks ·{' '}
+          {projection.aggregates.reduce((sum, aggregate) => sum + aggregate.remainingCount, 0)} connections collapsed
+        </Panel>
+      )}
       <Controls showInteractive={false} orientation="horizontal" position="bottom-left" />
-      {fullScreen && normalized.nodes.length > 20 && (
+      {fullScreen && visibleGraph.nodes.length > 20 && (
         <MiniMap
           pannable
           zoomable
@@ -386,7 +575,7 @@ function DependencyFlow({
           ariaLabel="Dependency graph mini map"
           nodeColor={(node) => {
             const task = (node.data as DependencyNodeData).task;
-            return EDGE_COLORS[getTaskDependencyVisualState(task)];
+            return task ? EDGE_COLORS[getTaskDependencyVisualState(task)] : 'var(--brand-border)';
           }}
         />
       )}
@@ -399,15 +588,45 @@ export function TaskDependencyGraph({
   title,
   onOpenTask,
   onRemoveDependency,
+  onExpandBranch,
+  expandingBranchKey = null,
   removingTaskId = null,
 }: {
   graph: TaskDependencyGraphResponse;
   title: string;
   onOpenTask: (taskId: string) => void;
   onRemoveDependency?: (taskId: string) => void;
+  onExpandBranch?: (aggregate: TaskDependencyBranchAggregate) => void | Promise<void>;
+  expandingBranchKey?: string | null;
   removingTaskId?: string | null;
 }) {
   const [fullScreen, setFullScreen] = useState(false);
+  const [expansionState, setExpansionState] = useState<{
+    focusTaskId: string;
+    counts: ReadonlyMap<string, number>;
+  }>(() => ({ focusTaskId: graph.focusTaskId, counts: new Map() }));
+  const expandedByBranch =
+    expansionState.focusTaskId === graph.focusTaskId ? expansionState.counts : new Map<string, number>();
+  const handleExpand = useCallback(
+    (aggregate: TaskDependencyBranchAggregate) => {
+      const revealNextBatch = () => {
+        setExpansionState((previous) => {
+          const counts = new Map(
+            previous.focusTaskId === graph.focusTaskId ? previous.counts : undefined,
+          );
+          const revealed = Math.max(aggregate.revealedCount, counts.get(aggregate.branchKey) ?? 0);
+          counts.set(aggregate.branchKey, revealed + aggregate.nextBatchCount);
+          return { focusTaskId: graph.focusTaskId, counts };
+        });
+      };
+      if (aggregate.remote && aggregate.loadedRemainingCount === 0 && onExpandBranch) {
+        void Promise.resolve(onExpandBranch(aggregate)).then(revealNextBatch).catch(() => undefined);
+        return;
+      }
+      revealNextBatch();
+    },
+    [graph.focusTaskId, onExpandBranch],
+  );
   const inlineCanvasRef = useRef<HTMLDivElement>(null);
   // The default detail width is 600px, so start in the narrow TB layout and avoid a visible
   // first-paint LR→TB flip for the common case. ResizeObserver corrects wider saved panels.
@@ -444,6 +663,9 @@ export function TaskDependencyGraph({
               graph={graph}
               fullScreen={false}
               vertical={inlineVertical}
+              expandedByBranch={expandedByBranch}
+              onExpand={handleExpand}
+              expandingBranchKey={expandingBranchKey}
               onOpenTask={onOpenTask}
               onRemoveDependency={onRemoveDependency}
               removingTaskId={removingTaskId}
@@ -467,6 +689,9 @@ export function TaskDependencyGraph({
               graph={graph}
               fullScreen
               vertical={false}
+              expandedByBranch={expandedByBranch}
+              onExpand={handleExpand}
+              expandingBranchKey={expandingBranchKey}
               onOpenTask={onOpenTask}
               onRemoveDependency={onRemoveDependency}
               removingTaskId={removingTaskId}

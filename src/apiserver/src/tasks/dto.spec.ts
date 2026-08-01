@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validate } from 'class-validator';
-import { AddDependencyDto, BatchDeleteDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import {
+  AddDependencyDto,
+  BatchDeleteDto,
+  CreateTaskDto,
+  ExpandDependencyGraphDto,
+  UpdateTaskDto,
+} from './dto';
 
 const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
@@ -43,4 +49,34 @@ test('batch delete accepts UUID arrays and rejects malformed task ids', async ()
   assert.equal((await validate(valid)).length, 0);
   assert.equal((await validate(empty)).length, 0);
   assert.notEqual((await validate(invalid)).length, 0);
+});
+
+test('dependency expansion DTO accepts 501-node snapshots and rejects unsafe bounds', async () => {
+  const ids = Array.from(
+    { length: 501 },
+    (_, index) => `00000000-0000-7000-8000-${index.toString(16).padStart(12, '0')}`,
+  );
+  const valid = Object.assign(new ExpandDependencyGraphDto(), {
+    anchorTaskId: ids[0],
+    direction: 'prerequisites',
+    knownTaskIds: ids,
+    loadedNeighborTaskIds: [],
+    limit: 100,
+    cursor: 'opaque',
+  });
+  const tooMany = Object.assign(new ExpandDependencyGraphDto(), {
+    ...valid,
+    knownTaskIds: [TASK_A, ...Array.from({ length: 1_000 }, (_, index) =>
+      `00000000-0000-7000-8001-${index.toString(16).padStart(12, '0')}`)],
+  });
+  const invalidDirection = Object.assign(new ExpandDependencyGraphDto(), {
+    ...valid,
+    direction: 'both',
+  });
+  const invalidLimit = Object.assign(new ExpandDependencyGraphDto(), { ...valid, limit: 101 });
+
+  assert.equal((await validate(valid)).length, 0);
+  assert.notEqual((await validate(tooMany)).length, 0);
+  assert.notEqual((await validate(invalidDirection)).length, 0);
+  assert.notEqual((await validate(invalidLimit)).length, 0);
 });

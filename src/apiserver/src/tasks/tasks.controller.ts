@@ -19,6 +19,7 @@ import {
   BatchStopDto,
   CreateTaskCommentDto,
   CreateTaskDto,
+  ExpandDependencyGraphDto,
   UpdateTaskDto,
 } from './dto';
 import { TasksService } from './tasks.service';
@@ -61,6 +62,15 @@ export class TasksController {
     @Query('maxNodes') maxNodes?: string,
   ) {
     return this.tasks.dependencyGraph(user.userId, id, { direction, maxDepth, maxNodes });
+  }
+
+  @Post(':id/dependency-graph/expand')
+  expandDependencyGraph(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ExpandDependencyGraphDto,
+  ) {
+    return this.tasks.expandDependencyGraph(user.userId, id, dto);
   }
 
   @Get(':id')

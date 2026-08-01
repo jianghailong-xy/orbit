@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDirectTaskDependencyGraph,
   getFocusPathSets,
+  getTaskDependencyMainPathNodeIds,
   getTaskDependencyEdgeState,
   getTaskDependencyVisualState,
+  mergeTaskDependencyGraphExpansion,
   normalizeTaskDependencyGraph,
+  projectTaskDependencyGraph,
+  taskDependencyBranchKey,
   taskDependencyEdgeKey,
   type TaskDependencyGraphEdge,
   type TaskDependencyGraphNode,
@@ -141,6 +145,212 @@ describe('buildDirectTaskDependencyGraph', () => {
       remaining: 0,
       failed: 0,
     });
+  });
+});
+
+describe('progressive dependency graph projection', () => {
+  it('keeps a deterministic longest path through a middle focus task', () => {
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'focus',
+      nodes: ['root', 'middle', 'side-up', 'focus', 'child', 'leaf', 'side-down'].map((id) => node(id)),
+      edges: [
+        edge('root', 'middle'),
+        edge('middle', 'focus'),
+        edge('side-up', 'focus'),
+        edge('focus', 'child'),
+        edge('child', 'leaf'),
+        edge('focus', 'side-down'),
+      ],
+    });
+
+    expect(getTaskDependencyMainPathNodeIds(graph)).toEqual([
+      'root',
+      'middle',
+      'focus',
+      'child',
+      'leaf',
+    ]);
+  });
+
+  it('collapses a wide loaded branch and reveals it in stable batches', () => {
+    const dependentIds = Array.from({ length: 20 }, (_, index) => `dependent-${String(index).padStart(2, '0')}`);
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'root',
+      nodes: [node('root'), ...dependentIds.map((id) => node(id))],
+      edges: dependentIds.map((id) => edge('root', id)),
+    });
+    const branchKey = taskDependencyBranchKey('root', 'dependents');
+
+    const initial = projectTaskDependencyGraph(graph, new Map(), {
+      batchSize: 3,
+      collapseThreshold: 5,
+    });
+    expect(initial.visibleNodeCount).toBe(5); // focus + main-path child + one batch
+    expect(initial.mainPathNodeIds).toEqual(new Set(['root', 'dependent-00']));
+    expect(initial.aggregates).toEqual([
+      expect.objectContaining({
+        branchKey,
+        parentTaskId: 'root',
+        direction: 'dependents',
+        remainingCount: 16,
+        loadedRemainingCount: 16,
+        nextBatchCount: 3,
+      }),
+    ]);
+
+    const expanded = projectTaskDependencyGraph(graph, new Map([[branchKey, 6]]), {
+      batchSize: 3,
+      collapseThreshold: 5,
+    });
+    expect(expanded.visibleNodeCount).toBe(8);
+    expect(expanded.aggregates[0]).toMatchObject({ remainingCount: 13, nextBatchCount: 3 });
+  });
+
+  it('combines loaded and remote hidden neighbors at the same anchored side', () => {
+    const dependentIds = Array.from({ length: 20 }, (_, index) => `dependent-${String(index).padStart(2, '0')}`);
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'root',
+      nodes: [node('root'), ...dependentIds.map((id) => node(id))],
+      edges: dependentIds.map((id) => edge('root', id)),
+    });
+    const branchKey = taskDependencyBranchKey('root', 'dependents');
+    const projection = projectTaskDependencyGraph(graph, new Map(), {
+      batchSize: 3,
+      collapseThreshold: 5,
+      collapsedGroups: [
+        { anchorTaskId: 'root', direction: 'dependents', hiddenCount: 230, cursor: 'next-page' },
+      ],
+    });
+
+    expect(projection.aggregates).toEqual([
+      expect.objectContaining({
+        branchKey,
+        remainingCount: 246,
+        loadedRemainingCount: 16,
+        remote: true,
+        cursor: 'next-page',
+      }),
+    ]);
+  });
+
+  it('reveals each selected wide-branch root with its unambiguous continuation', () => {
+    const branchIds = Array.from({ length: 5 }, (_, index) => String(index + 1));
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'P0',
+      nodes: [
+        node('P0'),
+        node('W0'),
+        node('CHECK'),
+        ...branchIds.flatMap((id) => [node(`P${id}`), node(`W${id}`)]),
+      ],
+      edges: [
+        edge('P0', 'W0'),
+        edge('W0', 'CHECK'),
+        ...branchIds.flatMap((id) => [edge(`P${id}`, `W${id}`), edge(`W${id}`, 'CHECK')]),
+      ],
+    });
+    const branchKey = taskDependencyBranchKey('CHECK', 'prerequisites');
+
+    const initial = projectTaskDependencyGraph(graph, new Map(), {
+      batchSize: 2,
+      collapseThreshold: 3,
+    });
+    expect(initial.graph.nodes.map((item) => item.id)).toEqual(['P0', 'W0', 'CHECK']);
+    expect(initial.aggregates[0]).toMatchObject({ branchKey, remainingCount: 5 });
+
+    const expanded = projectTaskDependencyGraph(graph, new Map([[branchKey, 2]]), {
+      batchSize: 2,
+      collapseThreshold: 3,
+    });
+    expect(new Set(expanded.graph.nodes.map((item) => item.id))).toEqual(
+      new Set(['P0', 'W0', 'CHECK', 'P1', 'W1', 'P2', 'W2']),
+    );
+    expect(expanded.aggregates).toEqual([
+      expect.objectContaining({ branchKey, remainingCount: 3, nextBatchCount: 2 }),
+    ]);
+  });
+
+  it('renders a server-only group on the prerequisite side of its anchor', () => {
+    const graph = normalizeTaskDependencyGraph({
+      focusTaskId: 'P250',
+      nodes: [node('P250'), node('W250'), node('CHECK')],
+      edges: [edge('P250', 'W250'), edge('W250', 'CHECK')],
+    });
+    const projection = projectTaskDependencyGraph(graph, new Map(), {
+      collapsedGroups: [
+        { anchorTaskId: 'CHECK', direction: 'prerequisites', hiddenCount: 249 },
+      ],
+    });
+
+    expect(projection.visibleNodeCount).toBe(3);
+    expect(projection.aggregates).toEqual([
+      expect.objectContaining({
+        parentTaskId: 'CHECK',
+        direction: 'prerequisites',
+        remainingCount: 249,
+        loadedRemainingCount: 0,
+        remote: true,
+      }),
+    ]);
+  });
+
+  it('merges an expansion delta without duplicating shared nodes or edges', () => {
+    const current = {
+      focusTaskId: 'A',
+      nodes: [node('A'), node('B')],
+      edges: [edge('A', 'B')],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'dependents' as const, hiddenCount: 2, cursor: 'one' },
+      ],
+    };
+    const merged = mergeTaskDependencyGraphExpansion(
+      current,
+      {
+        nodes: [node('B', 'DONE'), node('C')],
+        edges: [edge('A', 'B'), edge('B', 'C')],
+        remainingCount: 1,
+        nextCursor: 'two',
+      },
+      { anchorTaskId: 'B', direction: 'dependents' },
+    );
+
+    expect(merged.nodes.map((item) => item.id)).toEqual(['A', 'B', 'C']);
+    expect(merged.nodes.find((item) => item.id === 'B')?.status).toBe('DONE');
+    expect(merged.edges).toEqual([edge('A', 'B'), edge('B', 'C')]);
+    expect(merged.collapsedGroups).toEqual([
+      { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 1, cursor: 'two' },
+    ]);
+  });
+
+  it('removes stale sibling aggregates when a diamond expansion supplies their shared edge', () => {
+    const current = {
+      focusTaskId: 'focus',
+      nodes: [
+        node('focus'),
+        node('B', 'OPEN', { prerequisiteCount: 1 }),
+        node('C', 'OPEN', { prerequisiteCount: 1 }),
+      ],
+      edges: [edge('B', 'focus'), edge('C', 'focus')],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'prerequisites' as const, hiddenCount: 1 },
+        { anchorTaskId: 'C', direction: 'prerequisites' as const, hiddenCount: 1 },
+      ],
+    };
+    const merged = mergeTaskDependencyGraphExpansion(
+      current,
+      {
+        nodes: [node('D')],
+        edges: [edge('D', 'B'), edge('D', 'C')],
+        remainingCount: 0,
+        collapsedGroups: [
+          { anchorTaskId: 'B', direction: 'prerequisites', hiddenCount: 0 },
+        ],
+      },
+      { anchorTaskId: 'B', direction: 'prerequisites' },
+    );
+
+    expect(merged.edges).toContainEqual(edge('D', 'C'));
+    expect(merged.collapsedGroups).toEqual([]);
   });
 });
 

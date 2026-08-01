@@ -12,6 +12,9 @@ import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
   buildDirectTaskDependencyGraph,
+  mergeTaskDependencyGraphExpansion,
+  type TaskDependencyBranchAggregate,
+  type TaskDependencyGraphExpansionResponse,
   type TaskDependencyGraphResponse,
 } from '../lib/taskDependencyGraph';
 import {
@@ -288,6 +291,46 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
+  const expandDependencyBranch = useMutation({
+    mutationFn: (aggregate: TaskDependencyBranchAggregate) => {
+      const current = dependencyGraphQ.data;
+      if (!current) throw new Error('The dependency graph is still loading.');
+      const loadedNeighborTaskIds = current.edges.flatMap((edge) => {
+        if (aggregate.direction === 'prerequisites' && edge.targetTaskId === aggregate.parentTaskId) {
+          return [edge.sourceTaskId];
+        }
+        if (aggregate.direction === 'dependents' && edge.sourceTaskId === aggregate.parentTaskId) {
+          return [edge.targetTaskId];
+        }
+        return [];
+      });
+      return api<TaskDependencyGraphExpansionResponse>(`/tasks/${taskId}/dependency-graph/expand`, {
+        method: 'POST',
+        body: {
+          anchorTaskId: aggregate.parentTaskId,
+          direction: aggregate.direction,
+          knownTaskIds: current.nodes.map((node) => node.id),
+          loadedNeighborTaskIds,
+          limit: aggregate.nextBatchCount,
+          cursor: aggregate.cursor,
+        },
+      });
+    },
+    onSuccess: (expansion, aggregate) => {
+      qc.setQueryData<TaskDependencyGraphResponse>(
+        ['task', taskId, 'dependency-graph'],
+        (current) =>
+          current
+            ? mergeTaskDependencyGraphExpansion(current, expansion, {
+                anchorTaskId: aggregate.parentTaskId,
+                direction: aggregate.direction,
+              })
+            : current,
+      );
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
   const setAutoRun = useMutation({
     mutationFn: (autoRunWhenReady: boolean) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body: { autoRunWhenReady } }),
@@ -423,9 +466,9 @@ export function TaskDetailPanel({
   );
   const dependencyGraph = dependencyGraphQ.data ?? fallbackDependencyGraph;
   const dependencyView = dependencyViewOverride ?? (dependencyGraph.edges.length > 0 ? 'graph' : 'list');
-  const connectedCount =
-    dependencyGraph.counts?.connected ??
-    Math.max((dependencyGraph.counts?.total ?? dependencyGraph.nodes.length) - 1, 0);
+  // Expansion deltas add real nodes without replacing the initial aggregate counts.
+  // Derive this display count from the merged snapshot so it advances after every batch.
+  const connectedCount = Math.max(dependencyGraph.nodes.length - 1, 0);
   const upstreamCount = dependencyGraph.counts?.upstream ?? dependsOn.length;
   const downstreamCount = dependencyGraph.counts?.downstream ?? dependedOnBy.length;
   // Candidate prerequisites: every other task not already a prerequisite of this one.
@@ -631,7 +674,7 @@ export function TaskDetailPanel({
               <div className="tdp-section-title">Dependencies</div>
               {hasDependencyRelations && (
                 <span className="tdp-dependency-summary">
-                  {connectedCount} connected{dependencyGraph.truncated ? ' shown' : ''} · {upstreamCount} upstream ·{' '}
+                  {connectedCount} connected{dependencyGraph.truncated ? ' loaded' : ''} · {upstreamCount} upstream ·{' '}
                   {downstreamCount} downstream
                 </span>
               )}
@@ -675,6 +718,14 @@ export function TaskDetailPanel({
                     title={task?.title ?? 'Current task'}
                     onOpenTask={onOpenTask}
                     onRemoveDependency={(id) => removeDependency.mutate(id)}
+                    onExpandBranch={async (aggregate) => {
+                      await expandDependencyBranch.mutateAsync(aggregate);
+                    }}
+                    expandingBranchKey={
+                      expandDependencyBranch.isPending
+                        ? expandDependencyBranch.variables?.branchKey ?? null
+                        : null
+                    }
                     removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
                   />
                 </Suspense>
@@ -689,11 +740,11 @@ export function TaskDetailPanel({
             )}
             {dependencyGraph.truncated && (
               <div className="tdp-dependency-truncated">
-                The graph is truncated at {dependencyGraph.limits?.maxDepth ?? 8} hops or{' '}
+                The initial snapshot is limited to {dependencyGraph.limits?.maxDepth ?? 8} hops or{' '}
                 {dependencyGraph.limits?.maxNodes ?? 100} tasks
                 {dependencyGraph.limits?.maxEdges
                   ? ` or ${dependencyGraph.limits.maxEdges} relationships`
-                  : ''}.
+                  : ''}. Expand a collapsed branch to load the next batch.
               </div>
             )}
             <Select

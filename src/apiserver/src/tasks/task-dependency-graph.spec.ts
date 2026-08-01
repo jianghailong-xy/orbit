@@ -63,11 +63,16 @@ function graphFixture(
           ? taskRows.get(args.where.id) ?? null
           : null;
       },
+      count: async (args: any) => {
+        if (args.where.ownerId !== OWNER_ID) return 0;
+        return (args.where.id.in as string[]).filter((id) => taskRows.has(id)).length;
+      },
     },
     taskDependency: {
       findMany: async (args: any) => {
         const matchesScalar = (value: string, filter: any): boolean => {
           if (!filter) return true;
+          if (typeof filter === 'string') return value === filter;
           if (filter.in && !(filter.in as string[]).includes(value)) return false;
           if (filter.notIn && (filter.notIn as string[]).includes(value)) return false;
           return true;
@@ -85,8 +90,16 @@ function graphFixture(
         if (args.select.task?.select?.id && args.select.dependsOnTask?.select?.id) {
           const ids = args.where.OR
             ? ((args.where.OR[0].taskId?.in ?? args.where.OR[0].dependsOnTaskId?.in) as string[])
-            : ((args.where.taskId?.in ?? args.where.dependsOnTaskId?.in) as string[]);
-          traversalBatches.push([...ids]);
+            : ((args.where.taskId?.in ?? args.where.dependsOnTaskId?.in) as
+                | string[]
+                | undefined);
+          const directAnchor =
+            typeof args.where.taskId === 'string'
+              ? args.where.taskId
+              : typeof args.where.dependsOnTaskId === 'string'
+                ? args.where.dependsOnTaskId
+                : undefined;
+          traversalBatches.push(ids ? [...ids] : directAnchor ? [directAnchor] : []);
           traversalWheres.push(args.where);
           traversalTakes.push(args.take);
           return matchingEdges.map((edge) => ({
@@ -99,8 +112,11 @@ function graphFixture(
         return matchingEdges;
       },
       groupBy: async (args: any) => {
-        const ids = args.where.taskId.in as string[];
-        stateBatches.push([...ids]);
+        const groupedByDependent = args.by[0] === 'dependsOnTaskId';
+        const ids = (groupedByDependent
+          ? args.where.dependsOnTaskId.in
+          : args.where.taskId.in) as string[];
+        if (!groupedByDependent) stateBatches.push([...ids]);
         const status = args.where.dependsOnTask?.status;
         const allowedStatuses =
           typeof status === 'string'
@@ -110,22 +126,28 @@ function graphFixture(
               : null;
         const counts = new Map<string, number>();
         for (const edge of edges) {
-          if (!ids.includes(edge.taskId)) continue;
+          const groupedId = groupedByDependent ? edge.dependsOnTaskId : edge.taskId;
+          if (!ids.includes(groupedId)) continue;
           const prerequisiteStatus = taskRows.get(edge.dependsOnTaskId)?.status;
           if (allowedStatuses && (!prerequisiteStatus || !allowedStatuses.has(prerequisiteStatus))) {
             continue;
           }
-          counts.set(edge.taskId, (counts.get(edge.taskId) ?? 0) + 1);
+          counts.set(groupedId, (counts.get(groupedId) ?? 0) + 1);
         }
-        return [...counts].map(([taskId, count]) => ({ taskId, _count: { _all: count } }));
+        return [...counts].map(([id, count]) =>
+          groupedByDependent
+            ? { dependsOnTaskId: id, _count: { _all: count } }
+            : { taskId: id, _count: { _all: count } },
+        );
       },
       count: async (args: any) => {
         const ids = args.where.OR
           ? ((args.where.OR[0].taskId?.in ?? args.where.OR[0].dependsOnTaskId?.in) as string[])
-          : (args.where.taskId.in as string[]);
-        boundaryChecks.push([...ids]);
+          : (args.where.taskId?.in as string[] | undefined);
+        if (Array.isArray(ids)) boundaryChecks.push([...ids]);
         const matchesScalar = (value: string, filter: any): boolean => {
           if (!filter) return true;
+          if (typeof filter === 'string') return value === filter;
           if (filter.in && !(filter.in as string[]).includes(value)) return false;
           if (filter.notIn && (filter.notIn as string[]).includes(value)) return false;
           return true;
@@ -189,6 +211,37 @@ test('dependency graph is exposed as an owner-scoped GET route and forwards its 
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
 });
 
+test('dependency graph expansion is exposed as an owner-scoped POST delta route', async () => {
+  const seen: any[] = [];
+  const expected = { nodes: [], edges: [], remainingCount: 0 };
+  const controller = new TasksController({
+    expandDependencyGraph: async (...args: any[]) => {
+      seen.push(...args);
+      return expected;
+    },
+  } as never);
+  const dto = {
+    anchorTaskId: FOCUS,
+    direction: 'prerequisites' as const,
+    knownTaskIds: [FOCUS],
+    loadedNeighborTaskIds: [],
+    limit: 25,
+    cursor: 'opaque',
+  };
+
+  const result = await controller.expandDependencyGraph(
+    { userId: OWNER_ID, email: 'owner@example.com' },
+    FOCUS,
+    dto,
+  );
+
+  assert.equal(result, expected);
+  assert.deepEqual(seen, [OWNER_ID, FOCUS, dto]);
+  const handler = TasksController.prototype.expandDependencyGraph;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), ':id/dependency-graph/expand');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
 test('multi-level graph deduplicates diamond nodes and orients every edge prerequisite-first', async () => {
   const fixture = graphFixture();
 
@@ -234,7 +287,7 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
   // One traversal query per breadth-first layer, not one per task.
   assert.deepEqual(fixture.traversalBatches, [[FOCUS], [TASK_B, TASK_C], [TASK_D, TASK_E]]);
   assert.deepEqual(fixture.traversalTakes, [401, 401, 401]);
-  assert.equal(fixture.stateBatches.length, 3);
+  assert.equal(fixture.stateBatches.length, 4);
   assert.ok(
     fixture.stateBatches.every(
       (batch) =>
@@ -442,6 +495,32 @@ test('both direction fairly admits direct tasks from each side under a fan-out b
     { sourceTaskId: focus, targetTaskId: dependent },
   ]);
   assert.equal(result.truncated, true);
+  assert.deepEqual(result.truncationReasons, ['maxNodes', 'maxEdges']);
+  assert.deepEqual(
+    result.nodes.map(({ id, prerequisiteCount, dependentCount }) => ({
+      id,
+      prerequisiteCount,
+      dependentCount,
+    })),
+    [
+      { id: focus, prerequisiteCount: 13, dependentCount: 1 },
+      { id: prerequisites[0], prerequisiteCount: 0, dependentCount: 1 },
+      { id: dependent, prerequisiteCount: 1, dependentCount: 0 },
+    ],
+  );
+  assert.equal(result.collapsedGroups.length, 1);
+  assert.deepEqual(
+    {
+      ...result.collapsedGroups[0],
+      cursor: typeof result.collapsedGroups[0].cursor,
+    },
+    {
+      anchorTaskId: focus,
+      direction: 'prerequisites',
+      hiddenCount: 12,
+      cursor: 'string',
+    },
+  );
 });
 
 test('dense both-direction snapshots enforce maxEdges while retaining a discovery path', async () => {
@@ -485,6 +564,7 @@ test('dense both-direction snapshots enforce maxEdges while retaining a discover
   assert.equal(result.edges.length, 40);
   assert.equal(result.limits.maxEdges, 40);
   assert.equal(result.truncated, true);
+  assert.deepEqual(result.truncationReasons, ['maxEdges']);
   assert.deepEqual(result.counts, {
     upstream: 0,
     downstream: 9,
@@ -503,6 +583,316 @@ test('dense both-direction snapshots enforce maxEdges while retaining a discover
       `missing discovery edge to ${dependent}`,
     );
   }
+});
+
+test('high-fan-out branches expand in deterministic batches with exact remaining counts', async () => {
+  const focus = '550e8400-e29b-41d4-a716-446655448000';
+  const prerequisites = Array.from(
+    { length: 6 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554481${String(index).padStart(2, '0')}`,
+  );
+  const fanTasks = new Map<string, TaskRow>(
+    [focus, ...prerequisites].map((id, index) => [
+      id,
+      { id, title: `Paged ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const fixture = graphFixture(
+    prerequisites.map((dependsOnTaskId) => ({ taskId: focus, dependsOnTaskId })),
+    true,
+    fanTasks,
+  );
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, focus, {
+    direction: 'both',
+    maxNodes: 3,
+  });
+  const group = initial.collapsedGroups[0];
+  const initialKnown = initial.nodes.map((node) => node.id);
+  const initialLoaded = initial.edges
+    .filter((edge) => edge.targetTaskId === focus)
+    .map((edge) => edge.sourceTaskId);
+
+  assert.deepEqual(initialKnown, [focus, prerequisites[0], prerequisites[1]]);
+  assert.deepEqual(initialLoaded, [prerequisites[0], prerequisites[1]]);
+  assert.equal(group.hiddenCount, 4);
+
+  const first = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds: initialKnown,
+    loadedNeighborTaskIds: initialLoaded,
+    limit: 2,
+    cursor: group.cursor!,
+  });
+
+  assert.deepEqual(first.nodes.map((node) => node.id), prerequisites.slice(2, 4));
+  assert.deepEqual(first.edges, [
+    { sourceTaskId: prerequisites[2], targetTaskId: focus },
+    { sourceTaskId: prerequisites[3], targetTaskId: focus },
+  ]);
+  assert.ok(first.nodes.every((node) => node.prerequisiteCount === 0));
+  assert.ok(first.nodes.every((node) => node.dependentCount === 1));
+  assert.equal(first.remainingCount, 2);
+  assert.equal(typeof first.nextCursor, 'string');
+  assert.equal(first.capacityReached, false);
+  assert.equal(first.limits.maxNodes, 1_000);
+  assert.deepEqual(first.collapsedGroups, [
+    {
+      anchorTaskId: focus,
+      direction: 'prerequisites',
+      hiddenCount: 2,
+      cursor: first.nextCursor,
+    },
+  ]);
+
+  const secondKnown = [...initialKnown, ...first.nodes.map((node) => node.id)];
+  const secondLoaded = [...initialLoaded, ...first.edges.map((edge) => edge.sourceTaskId)];
+  const second = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds: secondKnown,
+    loadedNeighborTaskIds: secondLoaded,
+    limit: 2,
+    cursor: first.nextCursor!,
+  });
+
+  assert.deepEqual(second.nodes.map((node) => node.id), prerequisites.slice(4));
+  assert.equal(second.edges.length, 2);
+  assert.equal(second.remainingCount, 0);
+  assert.equal(second.nextCursor, null);
+  assert.deepEqual(second.collapsedGroups, []);
+  assert.ok(
+    fixture.traversalWheres
+      .slice(-2)
+      .every(
+        (where) => where.task.ownerId === OWNER_ID && where.dependsOnTask.ownerId === OWNER_ID,
+      ),
+  );
+  assert.ok(
+    fixture.inducedWheres
+      .slice(-2)
+      .every(
+        (where) => where.task.ownerId === OWNER_ID && where.dependsOnTask.ownerId === OWNER_ID,
+      ),
+  );
+});
+
+test('expansion batches hydrate one unary continuation for every new direct neighbor', async () => {
+  const check = '550e8400-e29b-41d4-a716-446655445000';
+  const workA = '550e8400-e29b-41d4-a716-446655445001';
+  const workB = '550e8400-e29b-41d4-a716-446655445002';
+  const parquetA = '550e8400-e29b-41d4-a716-446655445003';
+  const parquetB = '550e8400-e29b-41d4-a716-446655445004';
+  const rows = new Map<string, TaskRow>(
+    [check, workA, workB, parquetA, parquetB].map((id, index) => [
+      id,
+      { id, title: `Unary ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const fixture = graphFixture(
+    [
+      { taskId: check, dependsOnTaskId: workA },
+      { taskId: check, dependsOnTaskId: workB },
+      { taskId: workA, dependsOnTaskId: parquetA },
+      { taskId: workB, dependsOnTaskId: parquetB },
+    ],
+    true,
+    rows,
+  );
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, check, {
+    direction: 'both',
+    maxNodes: 1,
+  });
+  const group = initial.collapsedGroups[0];
+
+  const result = await fixture.service.expandDependencyGraph(OWNER_ID, check, {
+    anchorTaskId: check,
+    direction: 'prerequisites',
+    knownTaskIds: [check],
+    loadedNeighborTaskIds: [],
+    limit: 2,
+    cursor: group.cursor!,
+  });
+
+  assert.deepEqual(result.nodes.map((node) => node.id), [workA, workB, parquetA, parquetB]);
+  assert.deepEqual(result.edges, [
+    { sourceTaskId: workA, targetTaskId: check },
+    { sourceTaskId: workB, targetTaskId: check },
+    { sourceTaskId: parquetA, targetTaskId: workA },
+    { sourceTaskId: parquetB, targetTaskId: workB },
+  ]);
+  assert.equal(result.autoExpandedNodeCount, 2);
+  assert.equal(result.remainingCount, 0);
+  assert.deepEqual(result.collapsedGroups, []);
+});
+
+test('expansion returns a missing diamond edge without duplicating an already-known node', async () => {
+  const focus = '550e8400-e29b-41d4-a716-446655447000';
+  const prerequisites = Array.from(
+    { length: 4 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554471${String(index).padStart(2, '0')}`,
+  );
+  const fanTasks = new Map<string, TaskRow>(
+    [focus, ...prerequisites].map((id, index) => [
+      id,
+      { id, title: `Diamond ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const fixture = graphFixture(
+    prerequisites.map((dependsOnTaskId) => ({ taskId: focus, dependsOnTaskId })),
+    true,
+    fanTasks,
+  );
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, focus, {
+    direction: 'both',
+    maxNodes: 3,
+  });
+  const group = initial.collapsedGroups[0];
+  const loaded = initial.edges.map((edge) => edge.sourceTaskId);
+  // Simulate prerequisite[2] becoming visible via another parent before this branch
+  // expands. It is known, but its edge into focus is not loaded yet.
+  const result = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds: [...initial.nodes.map((node) => node.id), prerequisites[2]],
+    loadedNeighborTaskIds: loaded,
+    limit: 1,
+    cursor: group.cursor!,
+  });
+
+  assert.deepEqual(result.nodes, []);
+  assert.deepEqual(result.edges, [{ sourceTaskId: prerequisites[2], targetTaskId: focus }]);
+  assert.equal(result.remainingCount, 1);
+});
+
+test('expansion cursors are bound to owner, focus, anchor, and branch direction', async () => {
+  const fixture = graphFixture();
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, FOCUS, {
+    direction: 'both',
+    maxNodes: 2,
+  });
+  const group = initial.collapsedGroups[0];
+  const base = {
+    anchorTaskId: group.anchorTaskId,
+    direction: group.direction,
+    knownTaskIds: initial.nodes.map((node) => node.id),
+    loadedNeighborTaskIds: initial.edges
+      .filter((edge) => edge.targetTaskId === group.anchorTaskId)
+      .map((edge) => edge.sourceTaskId),
+    cursor: group.cursor!,
+  };
+
+  await assert.rejects(
+    () =>
+      fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, {
+        ...base,
+        direction: base.direction === 'prerequisites' ? 'dependents' : 'prerequisites',
+      }),
+    /cursor does not match/,
+  );
+  await assert.rejects(
+    () => fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, { ...base, cursor: 'broken' }),
+    /invalid dependency graph expansion cursor/,
+  );
+  await assert.rejects(
+    () =>
+      fixture.service.expandDependencyGraph('00000000-0000-7000-8000-000000000099', FOCUS, base),
+    /cursor does not match/,
+  );
+});
+
+test('expansion validates limits and snapshot-set invariants before querying adjacency', async () => {
+  const fixture = graphFixture();
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, FOCUS, {
+    direction: 'both',
+    maxNodes: 2,
+  });
+  const group = initial.collapsedGroups[0];
+  const base = {
+    anchorTaskId: group.anchorTaskId,
+    direction: group.direction,
+    knownTaskIds: initial.nodes.map((node) => node.id),
+    loadedNeighborTaskIds: initial.edges
+      .filter((edge) => edge.targetTaskId === group.anchorTaskId)
+      .map((edge) => edge.sourceTaskId),
+    cursor: group.cursor!,
+  };
+
+  await assert.rejects(
+    () => fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, { ...base, limit: 0 }),
+    /limit must be/,
+  );
+  await assert.rejects(
+    () => fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, { ...base, limit: 101 }),
+    /limit must be/,
+  );
+  await assert.rejects(
+    () =>
+      fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, {
+        ...base,
+        knownTaskIds: [...base.knownTaskIds, base.knownTaskIds[0]],
+      }),
+    /must not contain duplicates/,
+  );
+  await assert.rejects(
+    () =>
+      fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, {
+        ...base,
+        loadedNeighborTaskIds: [TASK_E],
+      }),
+    /must be present in knownTaskIds/,
+  );
+  const tooMany = Array.from(
+    { length: 1_001 },
+    (_, index) => `00000000-0000-7000-8000-${index.toString(16).padStart(12, '0')}`,
+  );
+  await assert.rejects(
+    () =>
+      fixture.service.expandDependencyGraph(OWNER_ID, FOCUS, {
+        ...base,
+        knownTaskIds: tooMany,
+      }),
+    /at most 1000 tasks/,
+  );
+});
+
+test('paged expansion has a 1000-node hard cap without inheriting the 500-node GET cap', async () => {
+  const focus = '550e8400-e29b-41d4-a716-446655446000';
+  const otherIds = Array.from(
+    { length: 1_000 },
+    (_, index) => `00000000-0000-7000-8001-${index.toString(16).padStart(12, '0')}`,
+  );
+  const allIds = [focus, ...otherIds];
+  const largeTasks = new Map<string, TaskRow>(
+    allIds.map((id, index) => [
+      id,
+      { id, title: `Large ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const hidden = otherIds[otherIds.length - 1];
+  const fixture = graphFixture([{ taskId: focus, dependsOnTaskId: hidden }], true, largeTasks);
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, focus, {
+    direction: 'both',
+    maxNodes: 1,
+  });
+  const group = initial.collapsedGroups[0];
+  const knownTaskIds = allIds.filter((id) => id !== hidden);
+  assert.equal(knownTaskIds.length, 1_000);
+
+  const result = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds,
+    loadedNeighborTaskIds: [],
+    cursor: group.cursor!,
+  });
+
+  assert.deepEqual(result.nodes, []);
+  assert.deepEqual(result.edges, []);
+  assert.equal(result.remainingCount, 1);
+  assert.equal(result.capacityReached, true);
+  assert.equal(result.nextCursor, null);
+  assert.equal(result.limits.maxNodes, 1_000);
 });
 
 test('graph rejects invalid input and never exposes a non-owned focus task', async () => {

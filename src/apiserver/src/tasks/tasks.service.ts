@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import { RunEventType, TaskStatus } from '@orbit/shared';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -76,6 +76,12 @@ const MAX_DEPENDENCY_GRAPH_MAX_NODES = 500;
 // normal workflow graphs, while `truncated` makes unusually dense snapshots explicit.
 const DEPENDENCY_GRAPH_EDGES_PER_NODE = 4;
 const MAX_DEPENDENCY_GRAPH_EDGES = 2_000;
+const DEFAULT_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE = 25;
+const MAX_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE = 100;
+// A paged client can safely grow beyond one GET snapshot while remaining bounded. The
+// real P250 -> W250 -> CHECK component has 501 nodes, so reusing the 500-node snapshot
+// cap here would leave its final node permanently unreachable.
+const MAX_DEPENDENCY_GRAPH_EXPANDED_NODES = 1_000;
 
 export interface ListTasksPageQuery {
   cursor?: string;
@@ -93,6 +99,16 @@ export interface DependencyGraphQuery {
 }
 
 export type DependencyGraphDirection = 'upstream' | 'both';
+export type DependencyGraphBranchDirection = 'prerequisites' | 'dependents';
+
+export interface ExpandDependencyGraphQuery {
+  anchorTaskId: string;
+  direction: DependencyGraphBranchDirection | string;
+  knownTaskIds: string[];
+  loadedNeighborTaskIds: string[];
+  limit?: string | number;
+  cursor: string;
+}
 
 export interface DependencyGraphNode {
   id: string;
@@ -100,6 +116,25 @@ export interface DependencyGraphNode {
   status: TaskStatus;
   autoRunWhenReady: boolean;
   depth: number;
+  prerequisiteCount?: number;
+  dependentCount?: number;
+}
+
+export interface DependencyGraphCollapsedGroup {
+  anchorTaskId: string;
+  direction: DependencyGraphBranchDirection;
+  /** Direct anchor-side relationships whose edge is not present in this snapshot. */
+  hiddenCount: number;
+  /** Null only when the bounded client snapshot has reached its absolute node cap. */
+  cursor: string | null;
+}
+
+interface DependencyGraphBranchCursor {
+  version: 1;
+  ownerScope: string;
+  focusTaskId: string;
+  anchorTaskId: string;
+  direction: DependencyGraphBranchDirection;
 }
 
 interface DependencyGraphTraversalRow {
@@ -107,6 +142,11 @@ interface DependencyGraphTraversalRow {
   dependsOnTaskId: string;
   task: { id: string; title: string; status: unknown; autoRunWhenReady: boolean };
   dependsOnTask: { id: string; title: string; status: unknown; autoRunWhenReady: boolean };
+}
+
+interface DependencyGraphConnectionCounts {
+  prerequisiteCount: number;
+  dependentCount: number;
 }
 
 interface TaskPageCursor {
@@ -131,6 +171,46 @@ function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
   }
 }
 
+function dependencyGraphOwnerScope(ownerId: string): string {
+  return createHash('sha256').update(`dependency-graph-owner:${ownerId}`).digest('base64url');
+}
+
+function encodeDependencyGraphBranchCursor(
+  ownerId: string,
+  focusTaskId: string,
+  anchorTaskId: string,
+  direction: DependencyGraphBranchDirection,
+): string {
+  const cursor: DependencyGraphBranchCursor = {
+    version: 1,
+    ownerScope: dependencyGraphOwnerScope(ownerId),
+    focusTaskId,
+    anchorTaskId,
+    direction,
+  };
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+function decodeDependencyGraphBranchCursor(cursor: string): DependencyGraphBranchCursor {
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(cursor, 'base64url').toString('utf8'),
+    ) as Partial<DependencyGraphBranchCursor>;
+    if (
+      parsed.version !== 1 ||
+      typeof parsed.ownerScope !== 'string' ||
+      !UUID_RE.test(parsed.focusTaskId ?? '') ||
+      !UUID_RE.test(parsed.anchorTaskId ?? '') ||
+      (parsed.direction !== 'prerequisites' && parsed.direction !== 'dependents')
+    ) {
+      throw new Error('invalid');
+    }
+    return parsed as DependencyGraphBranchCursor;
+  } catch {
+    throw new BadRequestException('invalid dependency graph expansion cursor');
+  }
+}
+
 function dependencyGraphLimit(
   value: string | number | undefined,
   fallback: number,
@@ -141,6 +221,17 @@ function dependencyGraphLimit(
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
     throw new BadRequestException(`${name} must be an integer from 1 to ${maximum}`);
+  }
+  return parsed;
+}
+
+function dependencyGraphExpansionLimit(value: string | number | undefined): number {
+  if (value === undefined) return DEFAULT_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE) {
+    throw new BadRequestException(
+      `limit must be an integer from 1 to ${MAX_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE}`,
+    );
   }
   return parsed;
 }
@@ -298,6 +389,95 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     return states;
+  }
+
+  /**
+   * Count both sides of every requested node without hydrating its incident edges. These
+   * exact counts let the client render a compact "+N" boundary even when the loaded
+   * induced-edge snapshot is capped.
+   */
+  private async dependencyConnectionCounts(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, DependencyGraphConnectionCounts>> {
+    if (taskIds.length === 0) return new Map();
+    const ownerScope = {
+      task: { ownerId },
+      dependsOnTask: { ownerId },
+    } satisfies Prisma.TaskDependencyWhereInput;
+    const [prerequisites, dependents] = await Promise.all([
+      this.prisma.taskDependency.groupBy({
+        by: ['taskId'],
+        where: { ...ownerScope, taskId: { in: taskIds } },
+        _count: { _all: true },
+      }),
+      this.prisma.taskDependency.groupBy({
+        by: ['dependsOnTaskId'],
+        where: { ...ownerScope, dependsOnTaskId: { in: taskIds } },
+        _count: { _all: true },
+      }),
+    ]);
+    const counts = new Map<string, DependencyGraphConnectionCounts>(
+      taskIds.map((id) => [id, { prerequisiteCount: 0, dependentCount: 0 }]),
+    );
+    for (const row of prerequisites) counts.get(row.taskId)!.prerequisiteCount = row._count._all;
+    for (const row of dependents) {
+      counts.get(row.dependsOnTaskId)!.dependentCount = row._count._all;
+    }
+    return counts;
+  }
+
+  /** Build exact per-anchor boundary groups from full degree counts minus loaded edges. */
+  private dependencyGraphCollapsedGroups(
+    ownerId: string,
+    focusTaskId: string,
+    graphDirection: DependencyGraphDirection,
+    nodeIds: string[],
+    edges: Iterable<{ sourceTaskId: string; targetTaskId: string }>,
+    connectionCounts: ReadonlyMap<string, DependencyGraphConnectionCounts>,
+  ): DependencyGraphCollapsedGroup[] {
+    const known = new Set(nodeIds);
+    const loadedPrerequisites = new Map<string, Set<string>>();
+    const loadedDependents = new Map<string, Set<string>>();
+    for (const edge of edges) {
+      if (!known.has(edge.sourceTaskId) || !known.has(edge.targetTaskId)) continue;
+      const prerequisites = loadedPrerequisites.get(edge.targetTaskId) ?? new Set<string>();
+      prerequisites.add(edge.sourceTaskId);
+      loadedPrerequisites.set(edge.targetTaskId, prerequisites);
+      const dependents = loadedDependents.get(edge.sourceTaskId) ?? new Set<string>();
+      dependents.add(edge.targetTaskId);
+      loadedDependents.set(edge.sourceTaskId, dependents);
+    }
+
+    const directions: DependencyGraphBranchDirection[] =
+      graphDirection === 'both' ? ['prerequisites', 'dependents'] : ['prerequisites'];
+    const hasCapacity = nodeIds.length < MAX_DEPENDENCY_GRAPH_EXPANDED_NODES;
+    const groups: DependencyGraphCollapsedGroup[] = [];
+    for (const anchorTaskId of nodeIds) {
+      const counts = connectionCounts.get(anchorTaskId) ?? {
+        prerequisiteCount: 0,
+        dependentCount: 0,
+      };
+      for (const direction of directions) {
+        const total =
+          direction === 'prerequisites' ? counts.prerequisiteCount : counts.dependentCount;
+        const loaded =
+          direction === 'prerequisites'
+            ? (loadedPrerequisites.get(anchorTaskId)?.size ?? 0)
+            : (loadedDependents.get(anchorTaskId)?.size ?? 0);
+        const hiddenCount = Math.max(0, total - loaded);
+        if (hiddenCount === 0) continue;
+        groups.push({
+          anchorTaskId,
+          direction,
+          hiddenCount,
+          cursor: hasCapacity
+            ? encodeDependencyGraphBranchCursor(ownerId, focusTaskId, anchorTaskId, direction)
+            : null,
+        });
+      }
+    }
+    return groups;
   }
 
   /**
@@ -629,7 +809,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let frontier = [focus.id];
     let traversedDepth = 0;
     let deepestDepth = 0;
-    let truncated = false;
+    const truncationReasons = new Set<'maxDepth' | 'maxNodes' | 'maxEdges'>();
 
     while (frontier.length > 0 && traversedDepth < maxDepth) {
       const nextDepth = traversedDepth + 1;
@@ -702,7 +882,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             : row.task;
         if (!nodes.has(candidate.id)) {
           if (nodes.size >= maxNodes) {
-            truncated = true;
+            truncationReasons.add('maxNodes');
             continue;
           }
           const discovered: DependencyGraphNode = {
@@ -726,7 +906,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       frontier = [...next];
       traversedDepth = nextDepth;
       if (edgeLimitReached) {
-        truncated = true;
+        truncationReasons.add('maxEdges');
         break;
       }
     }
@@ -735,7 +915,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // relationship to a task outside the visited set. In `both` mode simply counting
     // all incident rows would always see the edge back to the previous layer and falsely
     // report truncation, so the opposite endpoint explicitly excludes visited nodes.
-    if (!truncated && frontier.length > 0 && traversedDepth === maxDepth) {
+    if (truncationReasons.size === 0 && frontier.length > 0 && traversedDepth === maxDepth) {
       const visitedIds = [...nodes.keys()];
       const ownerScope = {
         task: { ownerId },
@@ -758,7 +938,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const hiddenEdgeCount = await this.prisma.taskDependency.count({
         where: hiddenWhere,
       });
-      truncated = hiddenEdgeCount > 0;
+      if (hiddenEdgeCount > 0) truncationReasons.add('maxDepth');
     }
 
     // Materialize the bounded induced DAG once node discovery is complete. Discovery
@@ -776,7 +956,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       take: maxEdges + 1,
       select: { taskId: true, dependsOnTaskId: true },
     });
-    if (fetchedEdgeRows.length > maxEdges) truncated = true;
+    if (fetchedEdgeRows.length > maxEdges) truncationReasons.add('maxEdges');
     const edges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
     for (const row of fetchedEdgeRows.slice(0, maxEdges)) {
       const edge = { sourceTaskId: row.dependsOnTaskId, targetTaskId: row.taskId };
@@ -794,14 +974,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
 
     const baseNodes = [...nodes.values()];
-    const [withRun, dependencyStates] = await Promise.all([
+    const [withRun, dependencyStates, connectionCounts] = await Promise.all([
       this.withRunning(ownerId, baseNodes, true),
       this.dependencyStatesForGraph(ownerId, baseNodes.map((node) => node.id)),
+      this.dependencyConnectionCounts(ownerId, baseNodes.map((node) => node.id)),
     ]);
-    const graphNodes = withRun.map((node) => ({
-      ...node,
-      dependencyState: dependencyStates.get(node.id) ?? 'NONE',
-    }));
+    const graphNodes = withRun.map((node) => {
+      const nodeCounts = connectionCounts.get(node.id) ?? {
+        prerequisiteCount: 0,
+        dependentCount: 0,
+      };
+      return {
+        ...node,
+        ...nodeCounts,
+        dependencyState: dependencyStates.get(node.id) ?? 'NONE',
+      };
+    });
     const incoming = new Map<string, string[]>();
     const outgoing = new Map<string, string[]>();
     for (const edge of edges.values()) {
@@ -830,6 +1018,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const failed = upstreamNodes.filter(
       (node) => node.status === TaskStatus.FAILED || node.status === TaskStatus.CANCELLED,
     ).length;
+    const collapsedGroups = this.dependencyGraphCollapsedGroups(
+      ownerId,
+      focusTaskId,
+      direction,
+      nodeIds,
+      edges.values(),
+      connectionCounts,
+    );
 
     return {
       focusTaskId,
@@ -847,8 +1043,341 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         failed,
       },
       maxDepth: deepestDepth,
-      truncated,
+      truncated: truncationReasons.size > 0,
+      truncationReasons: [...truncationReasons],
+      collapsedGroups,
       limits: { maxDepth, maxNodes, maxEdges },
+    };
+  }
+
+  /**
+   * Load one deterministic page of direct relationships for a collapsed branch.
+   *
+   * `knownTaskIds` controls which task payloads are returned, while
+   * `loadedNeighborTaskIds` controls which direct edges are still missing. Keeping the
+   * two sets separate is essential for diamonds: a neighbor can already be visible via
+   * another parent while this anchor -> neighbor edge is still absent.
+   */
+  async expandDependencyGraph(
+    ownerId: string,
+    focusTaskId: string,
+    query: ExpandDependencyGraphQuery,
+  ) {
+    if (!UUID_RE.test(focusTaskId) || !UUID_RE.test(query.anchorTaskId)) {
+      throw new NotFoundException('task not found');
+    }
+    if (query.direction !== 'prerequisites' && query.direction !== 'dependents') {
+      throw new BadRequestException('direction must be prerequisites or dependents');
+    }
+    const direction: DependencyGraphBranchDirection = query.direction;
+    const limit = dependencyGraphExpansionLimit(query.limit);
+    if (!Array.isArray(query.knownTaskIds) || query.knownTaskIds.length < 1) {
+      throw new BadRequestException('knownTaskIds must contain at least one task');
+    }
+    if (query.knownTaskIds.length > MAX_DEPENDENCY_GRAPH_EXPANDED_NODES) {
+      throw new BadRequestException(
+        `knownTaskIds must contain at most ${MAX_DEPENDENCY_GRAPH_EXPANDED_NODES} tasks`,
+      );
+    }
+    if (!Array.isArray(query.loadedNeighborTaskIds)) {
+      throw new BadRequestException('loadedNeighborTaskIds must be an array');
+    }
+    const knownTaskIds = [...new Set(query.knownTaskIds)];
+    const loadedNeighborTaskIds = [...new Set(query.loadedNeighborTaskIds)];
+    if (knownTaskIds.length !== query.knownTaskIds.length) {
+      throw new BadRequestException('knownTaskIds must not contain duplicates');
+    }
+    if (loadedNeighborTaskIds.length !== query.loadedNeighborTaskIds.length) {
+      throw new BadRequestException('loadedNeighborTaskIds must not contain duplicates');
+    }
+    if (
+      knownTaskIds.some((id) => !UUID_RE.test(id)) ||
+      loadedNeighborTaskIds.some((id) => !UUID_RE.test(id))
+    ) {
+      throw new BadRequestException('dependency graph task ids must be UUIDs');
+    }
+    const knownTaskIdSet = new Set(knownTaskIds);
+    if (!knownTaskIdSet.has(focusTaskId) || !knownTaskIdSet.has(query.anchorTaskId)) {
+      throw new BadRequestException('knownTaskIds must include the focus and anchor tasks');
+    }
+    if (loadedNeighborTaskIds.some((id) => !knownTaskIdSet.has(id))) {
+      throw new BadRequestException('loadedNeighborTaskIds must be present in knownTaskIds');
+    }
+
+    const cursor = decodeDependencyGraphBranchCursor(query.cursor);
+    if (
+      cursor.ownerScope !== dependencyGraphOwnerScope(ownerId) ||
+      cursor.focusTaskId !== focusTaskId ||
+      cursor.anchorTaskId !== query.anchorTaskId ||
+      cursor.direction !== direction
+    ) {
+      throw new BadRequestException('dependency graph expansion cursor does not match request');
+    }
+    // Validate the entire client snapshot, not just the branch anchor. Besides preserving
+    // tenant isolation, this prevents foreign ids from being used to distort pagination.
+    await this.assertOwnedTasks(ownerId, knownTaskIds);
+
+    const ownerScope = {
+      task: { ownerId },
+      dependsOnTask: { ownerId },
+    } satisfies Prisma.TaskDependencyWhereInput;
+    const adjacencyWhere =
+      direction === 'prerequisites'
+        ? ({
+            ...ownerScope,
+            taskId: query.anchorTaskId,
+            dependsOnTaskId: { notIn: loadedNeighborTaskIds },
+          } satisfies Prisma.TaskDependencyWhereInput)
+        : ({
+            ...ownerScope,
+            dependsOnTaskId: query.anchorTaskId,
+            taskId: { notIn: loadedNeighborTaskIds },
+          } satisfies Prisma.TaskDependencyWhereInput);
+    const candidateRows: DependencyGraphTraversalRow[] =
+      await this.prisma.taskDependency.findMany({
+        where: adjacencyWhere,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: limit,
+        select: {
+          taskId: true,
+          dependsOnTaskId: true,
+          task: {
+            select: { id: true, title: true, status: true, autoRunWhenReady: true },
+          },
+          dependsOnTask: {
+            select: { id: true, title: true, status: true, autoRunWhenReady: true },
+          },
+        },
+      });
+
+    // Preserve deterministic prefix pagination while enforcing the absolute node cap.
+    // Existing-node edges cost no node capacity and are still returned.
+    const availableNodeCapacity = MAX_DEPENDENCY_GRAPH_EXPANDED_NODES - knownTaskIds.length;
+    const pageRows: DependencyGraphTraversalRow[] = [];
+    const newNodesById = new Map<
+      string,
+      { id: string; title: string; status: unknown; autoRunWhenReady: boolean }
+    >();
+    for (const row of candidateRows) {
+      const neighbor = direction === 'prerequisites' ? row.dependsOnTask : row.task;
+      if (
+        !knownTaskIdSet.has(neighbor.id) &&
+        !newNodesById.has(neighbor.id) &&
+        newNodesById.size >= availableNodeCapacity
+      ) {
+        break;
+      }
+      pageRows.push(row);
+      if (!knownTaskIdSet.has(neighbor.id)) newNodesById.set(neighbor.id, neighbor);
+    }
+
+    const pageNeighborIds = pageRows.map((row) =>
+      direction === 'prerequisites' ? row.dependsOnTaskId : row.taskId,
+    );
+    const updatedLoadedNeighborIds = [...loadedNeighborTaskIds, ...pageNeighborIds];
+    const remainingWhere =
+      direction === 'prerequisites'
+        ? ({
+            ...ownerScope,
+            taskId: query.anchorTaskId,
+            dependsOnTaskId: { notIn: updatedLoadedNeighborIds },
+          } satisfies Prisma.TaskDependencyWhereInput)
+        : ({
+            ...ownerScope,
+            dependsOnTaskId: query.anchorTaskId,
+            taskId: { notIn: updatedLoadedNeighborIds },
+          } satisfies Prisma.TaskDependencyWhereInput);
+    const remainingCount = await this.prisma.taskDependency.count({ where: remainingWhere });
+
+    // A very common wide-DAG shape is CHECK <- W <- P: the expanded CHECK branch
+    // contains many W nodes and every W has exactly one prerequisite P. Batch-hydrate
+    // that one unambiguous continuation so the UI gets a complete P -> W branch instead
+    // of creating one "+1" placeholder per W. This follows only one extra hop and stays
+    // under the same absolute node cap.
+    const directNewTaskIds = [...newNodesById.keys()];
+    const directConnectionCounts = await this.dependencyConnectionCounts(
+      ownerId,
+      directNewTaskIds,
+    );
+    const unaryAnchorIds = directNewTaskIds.filter((id) => {
+      const counts = directConnectionCounts.get(id);
+      return direction === 'prerequisites'
+        ? counts?.prerequisiteCount === 1
+        : counts?.dependentCount === 1;
+    });
+    const unaryCandidates: DependencyGraphTraversalRow[] =
+      unaryAnchorIds.length === 0
+        ? []
+        : await this.prisma.taskDependency.findMany({
+            where:
+              direction === 'prerequisites'
+                ? ({ ...ownerScope, taskId: { in: unaryAnchorIds } } satisfies Prisma.TaskDependencyWhereInput)
+                : ({
+                    ...ownerScope,
+                    dependsOnTaskId: { in: unaryAnchorIds },
+                  } satisfies Prisma.TaskDependencyWhereInput),
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: unaryAnchorIds.length,
+            select: {
+              taskId: true,
+              dependsOnTaskId: true,
+              task: {
+                select: { id: true, title: true, status: true, autoRunWhenReady: true },
+              },
+              dependsOnTask: {
+                select: { id: true, title: true, status: true, autoRunWhenReady: true },
+              },
+            },
+          });
+    const unaryRows: DependencyGraphTraversalRow[] = [];
+    let autoExpandedNodeCount = 0;
+    for (const row of unaryCandidates) {
+      const neighbor = direction === 'prerequisites' ? row.dependsOnTask : row.task;
+      if (
+        !knownTaskIdSet.has(neighbor.id) &&
+        !newNodesById.has(neighbor.id) &&
+        newNodesById.size >= availableNodeCapacity
+      ) {
+        continue;
+      }
+      unaryRows.push(row);
+      if (!knownTaskIdSet.has(neighbor.id) && !newNodesById.has(neighbor.id)) {
+        newNodesById.set(neighbor.id, neighbor);
+        autoExpandedNodeCount += 1;
+      }
+    }
+
+    const newTaskIds = [...newNodesById.keys()];
+    const augmentedKnownTaskIds = [...knownTaskIds, ...newTaskIds];
+    const requiredEdges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    for (const row of [...pageRows, ...unaryRows]) {
+      const edge = { sourceTaskId: row.dependsOnTaskId, targetTaskId: row.taskId };
+      requiredEdges.set(`${edge.sourceTaskId}:${edge.targetTaskId}`, edge);
+    }
+
+    // Return every induced relationship between a newly admitted node and the current
+    // snapshot, not just the requested anchor edge. This fills diamonds immediately and
+    // avoids visually duplicating a node under multiple parents.
+    const inducedRows =
+      newTaskIds.length === 0
+        ? []
+        : await this.prisma.taskDependency.findMany({
+            where: {
+              ...ownerScope,
+              taskId: { in: augmentedKnownTaskIds },
+              dependsOnTaskId: { in: augmentedKnownTaskIds },
+              OR: [{ taskId: { in: newTaskIds } }, { dependsOnTaskId: { in: newTaskIds } }],
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            take: MAX_DEPENDENCY_GRAPH_EDGES + 1,
+            select: { taskId: true, dependsOnTaskId: true },
+          });
+    const inducedEdgesTruncated = inducedRows.length > MAX_DEPENDENCY_GRAPH_EDGES;
+    const edges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    for (const row of inducedRows.slice(0, MAX_DEPENDENCY_GRAPH_EDGES)) {
+      const edge = { sourceTaskId: row.dependsOnTaskId, targetTaskId: row.taskId };
+      edges.set(`${edge.sourceTaskId}:${edge.targetTaskId}`, edge);
+    }
+    // Requested direct edges always survive a dense induced-edge cap.
+    for (const [key, edge] of requiredEdges) edges.set(key, edge);
+    if (edges.size > MAX_DEPENDENCY_GRAPH_EDGES) {
+      for (const key of [...edges.keys()].reverse()) {
+        if (edges.size <= MAX_DEPENDENCY_GRAPH_EDGES) break;
+        if (!requiredEdges.has(key)) edges.delete(key);
+      }
+    }
+
+    const baseNewNodes = [...newNodesById.values()].map((node) => ({
+      ...node,
+      status: node.status as unknown as TaskStatus,
+    }));
+    const [withRun, dependencyStates, connectionCounts] = await Promise.all([
+      this.withRunning(ownerId, baseNewNodes, true),
+      this.dependencyStatesForGraph(ownerId, newTaskIds),
+      this.dependencyConnectionCounts(ownerId, newTaskIds),
+    ]);
+    const responseNodes = withRun.map((node) => ({
+      ...node,
+      ...(connectionCounts.get(node.id) ?? { prerequisiteCount: 0, dependentCount: 0 }),
+      dependencyState: dependencyStates.get(node.id) ?? 'NONE',
+    }));
+
+    const capacityReached =
+      augmentedKnownTaskIds.length >= MAX_DEPENDENCY_GRAPH_EXPANDED_NODES && remainingCount > 0;
+    const nextCursor =
+      remainingCount > 0 && !capacityReached
+        ? encodeDependencyGraphBranchCursor(
+            ownerId,
+            focusTaskId,
+            query.anchorTaskId,
+            direction,
+          )
+        : null;
+    const collapsedGroups: DependencyGraphCollapsedGroup[] = [];
+    if (remainingCount > 0) {
+      collapsedGroups.push({
+        anchorTaskId: query.anchorTaskId,
+        direction,
+        hiddenCount: remainingCount,
+        cursor: nextCursor,
+      });
+    }
+    // Exact degree metadata plus induced edges identifies the immediately expandable
+    // boundaries on newly returned nodes. Existing groups remain client-owned; this list
+    // is a delta, with the requested group replacing its previous value.
+    const responseEdges = [...edges.values()];
+    for (const node of responseNodes) {
+      const loadedPrerequisites = new Set(
+        responseEdges
+          .filter((edge) => edge.targetTaskId === node.id)
+          .map((edge) => edge.sourceTaskId),
+      ).size;
+      const loadedDependents = new Set(
+        responseEdges
+          .filter((edge) => edge.sourceTaskId === node.id)
+          .map((edge) => edge.targetTaskId),
+      ).size;
+      const hiddenByDirection: Array<[DependencyGraphBranchDirection, number]> = [
+        ['prerequisites', Math.max(0, node.prerequisiteCount - loadedPrerequisites)],
+        ['dependents', Math.max(0, node.dependentCount - loadedDependents)],
+      ];
+      for (const [nodeDirection, hiddenCount] of hiddenByDirection) {
+        if (hiddenCount === 0) continue;
+        collapsedGroups.push({
+          anchorTaskId: node.id,
+          direction: nodeDirection,
+          hiddenCount,
+          cursor:
+            augmentedKnownTaskIds.length < MAX_DEPENDENCY_GRAPH_EXPANDED_NODES
+              ? encodeDependencyGraphBranchCursor(
+                  ownerId,
+                  focusTaskId,
+                  node.id,
+                  nodeDirection,
+                )
+              : null,
+        });
+      }
+    }
+
+    return {
+      focusTaskId,
+      anchorTaskId: query.anchorTaskId,
+      direction,
+      nodes: responseNodes,
+      edges: responseEdges,
+      remainingCount,
+      nextCursor,
+      collapsedGroups,
+      autoExpandedNodeCount,
+      capacityReached,
+      truncatedEdges: inducedEdgesTruncated,
+      limits: {
+        batchSize: limit,
+        maxBatchSize: MAX_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE,
+        maxNodes: MAX_DEPENDENCY_GRAPH_EXPANDED_NODES,
+        maxEdges: MAX_DEPENDENCY_GRAPH_EDGES,
+      },
     };
   }
 

@@ -5528,6 +5528,15 @@ body {
   font-size: 10.5px;
   pointer-events: none;
 }
+.tdg-visible-count {
+  padding: 3px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  color: var(--text-3);
+  font-size: 10.5px;
+  box-shadow: 0 1px 4px rgba(31, 35, 41, 0.05);
+}
 .tdg-node {
   position: relative;
   width: 204px;
@@ -5653,6 +5662,56 @@ body {
   height: 7px;
   border: 1px solid var(--bg-raised);
   background: var(--text-4);
+  pointer-events: none;
+}
+.tdg-aggregate-node {
+  position: relative;
+  width: 204px;
+  height: 76px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-tint) 38%, var(--bg-raised));
+  box-shadow: 0 2px 7px rgba(31, 35, 41, 0.04);
+}
+.tdg-aggregate-main {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--brand-strong);
+  cursor: pointer;
+}
+.tdg-aggregate-main:hover,
+.tdg-aggregate-main:focus-visible {
+  background: color-mix(in srgb, var(--brand-tint) 65%, transparent);
+}
+.tdg-aggregate-main:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.tdg-aggregate-main:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.tdg-aggregate-count {
+  font-size: 13px;
+  font-weight: 650;
+}
+.tdg-aggregate-action {
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+.tdg-aggregate-node .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg-raised);
+  background: var(--brand-border);
   pointer-events: none;
 }
 .tdg-error {

@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -57,6 +59,36 @@ export class AddDependencyDto {
   // The prerequisite task this task should wait on. Must be owned by the caller, differ
   // from the task itself, and not introduce a dependency cycle.
   @IsUUID('all') dependsOnTaskId!: string;
+}
+
+export class ExpandDependencyGraphDto {
+  /** The visible task whose prerequisite or dependent branch should be expanded. */
+  @IsUUID('all') anchorTaskId!: string;
+
+  @IsIn(['prerequisites', 'dependents'])
+  direction!: 'prerequisites' | 'dependents';
+
+  /** Every task node currently present in the client snapshot. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  knownTaskIds!: string[];
+
+  /**
+   * Direct neighbors whose anchor-side edge is already present. This is deliberately
+   * separate from knownTaskIds: a diamond can make a node visible through another
+   * branch before this anchor's edge has been loaded.
+   */
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  loadedNeighborTaskIds!: string[];
+
+  @IsOptional() @IsInt() @Min(1) @Max(100) limit?: number;
+
+  /** Opaque branch token returned by dependency-graph or the previous expansion. */
+  @IsString() @MinLength(1) cursor!: string;
 }
 
 export class BatchExecuteDto {
