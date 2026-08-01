@@ -2,23 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { SessionEndReason, SessionFilingState } from '@orbit/shared';
+import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 const RUNNER_ID = '33333333-3333-4333-8333-333333333333';
 
-test('archive atomically persists live end intent and archivedAt before side effects', async () => {
+test('complete atomically persists live end intent and completedAt before side effects', async () => {
   let committed = false;
   let updateData: Record<string, unknown> | undefined;
-  let publishedFilingState: SessionFilingState | undefined;
+  let publishedLifecycleState: SessionLifecycleState | undefined;
   const effects: string[] = [];
   const session = {
     id: SESSION_ID,
     status: RunStatus.AWAITING_INPUT,
     cancelRequestedAt: null,
     assignedRunnerId: RUNNER_ID,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
   };
@@ -54,24 +55,26 @@ test('archive atomically persists live end intent and archivedAt before side eff
       assert.equal(committed, true);
       effects.push('inbox');
     },
-    publishSessionEnded: (
+    publishSessionLifecycleChanged: (
       _id: string,
       _status: RunStatus,
       _reason: SessionEndReason,
-      filingState: SessionFilingState,
+      lifecycleState: SessionLifecycleState,
     ) => {
       assert.equal(committed, true);
-      publishedFilingState = filingState;
+      publishedLifecycleState = lifecycleState;
       effects.push('ended');
     },
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 
-  assert.deepEqual(await service.archive(OWNER_ID, SESSION_ID), { ok: true });
+  assert.deepEqual(await service.complete(OWNER_ID, SESSION_ID), { ok: true });
+  assert.ok(updateData?.completedAt instanceof Date);
+  // The old field remains a rolling-deploy compatibility mirror.
   assert.ok(updateData?.archivedAt instanceof Date);
   assert.ok(updateData?.cancelRequestedAt instanceof Date);
   assert.equal(updateData?.endReason, SessionEndReason.COMPLETED);
-  assert.equal(publishedFilingState, SessionFilingState.ARCHIVED);
+  assert.equal(publishedLifecycleState, SessionLifecycleState.COMPLETED);
   assert.deepEqual(effects, ['cancel', 'inbox', 'ended']);
 });
 
@@ -79,12 +82,13 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   let updateData: Record<string, unknown> | undefined;
   let drained = 0;
   let publishedStatus: RunStatus | undefined;
-  let publishedFilingState: SessionFilingState | undefined;
+  let publishedLifecycleState: SessionLifecycleState | undefined;
   const session = {
     id: SESSION_ID,
     status: RunStatus.PENDING,
     cancelRequestedAt: null,
     assignedRunnerId: RUNNER_ID,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
   };
@@ -110,14 +114,14 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   const realtime = {
     requestCancel: () => undefined,
     notifyInbox: () => undefined,
-    publishSessionEnded: (
+    publishSessionLifecycleChanged: (
       _id: string,
       status: RunStatus,
       _reason: SessionEndReason,
-      filingState: SessionFilingState,
+      lifecycleState: SessionLifecycleState,
     ) => {
       publishedStatus = status;
-      publishedFilingState = filingState;
+      publishedLifecycleState = lifecycleState;
     },
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
@@ -128,12 +132,12 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   assert.ok(updateData?.deletedAt instanceof Date);
   assert.equal(drained, 1);
   assert.equal(publishedStatus, RunStatus.CANCELLED);
-  assert.equal(publishedFilingState, SessionFilingState.TRASH);
+  assert.equal(publishedLifecycleState, SessionLifecycleState.TRASH);
 });
 
-test('archiving a dormant terminal session publishes its actual end reason', async () => {
+test('completing a dormant terminal session publishes its actual end reason', async () => {
   let published:
-    | { reason: SessionEndReason | null; filingState: SessionFilingState }
+    | { reason: SessionEndReason | null; lifecycleState: SessionLifecycleState }
     | undefined;
   const session = {
     id: SESSION_ID,
@@ -141,6 +145,7 @@ test('archiving a dormant terminal session publishes its actual end reason', asy
     endReason: SessionEndReason.ENDED,
     cancelRequestedAt: new Date('2026-08-01T00:00:00.000Z'),
     assignedRunnerId: RUNNER_ID,
+    completedAt: null as Date | null,
     archivedAt: null,
     deletedAt: null,
   };
@@ -156,26 +161,26 @@ test('archiving a dormant terminal session publishes its actual end reason', asy
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
-    publishSessionEnded: (
+    publishSessionLifecycleChanged: (
       _id: string,
       _status: RunStatus,
       reason: SessionEndReason | null,
-      filingState: SessionFilingState,
+      lifecycleState: SessionLifecycleState,
     ) => {
-      published = { reason, filingState };
+      published = { reason, lifecycleState };
     },
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 
-  await service.archive(OWNER_ID, SESSION_ID);
+  await service.complete(OWNER_ID, SESSION_ID);
 
   assert.deepEqual(published, {
     reason: SessionEndReason.ENDED,
-    filingState: SessionFilingState.ARCHIVED,
+    lifecycleState: SessionLifecycleState.COMPLETED,
   });
 });
 
-test('archive rejects Trash under the Session row lock without side effects', async () => {
+test('complete rejects Trash under the Session row lock without side effects', async () => {
   let updates = 0;
   let effects = 0;
   const tx = {
@@ -187,6 +192,7 @@ test('archive rejects Trash under the Session row lock without side effects', as
         endReason: SessionEndReason.DELETED,
         cancelRequestedAt: new Date(),
         assignedRunnerId: RUNNER_ID,
+        completedAt: null,
         archivedAt: null,
         deletedAt: new Date(),
       }),
@@ -199,34 +205,36 @@ test('archive rejects Trash under the Session row lock without side effects', as
   const realtime = {
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
-    publishSessionEnded: () => effects++,
+    publishSessionLifecycleChanged: () => effects++,
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 
   await assert.rejects(
-    service.archive(OWNER_ID, SESSION_ID),
+    service.complete(OWNER_ID, SESSION_ID),
     (error: unknown) => error instanceof ConflictException,
   );
   assert.equal(updates, 0);
   assert.equal(effects, 0);
 });
 
-test('when remove wins the filing lock, a racing archive cannot overwrite Trash', async () => {
+test('when remove wins the lifecycle lock, a racing complete cannot overwrite Trash', async () => {
   const session = {
     id: SESSION_ID,
     status: RunStatus.CANCELLED,
     endReason: SessionEndReason.ENDED,
     cancelRequestedAt: new Date(),
     assignedRunnerId: RUNNER_ID,
+    completedAt: null as Date | null,
     archivedAt: null as Date | null,
     deletedAt: null as Date | null,
   };
-  const filings: SessionFilingState[] = [];
+  const lifecycleChanges: SessionLifecycleState[] = [];
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID }],
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
-      update: async ({ data }: { data: { archivedAt?: Date; deletedAt?: Date } }) => {
+      update: async ({ data }: { data: { completedAt?: Date; archivedAt?: Date; deletedAt?: Date } }) => {
+        if (data.completedAt) session.completedAt = data.completedAt;
         if (data.archivedAt) session.archivedAt = data.archivedAt;
         if (data.deletedAt) session.deletedAt = data.deletedAt;
         return { ...session };
@@ -250,34 +258,35 @@ test('when remove wins the filing lock, a racing archive cannot overwrite Trash'
     },
   } as never;
   const realtime = {
-    publishSessionEnded: (
+    publishSessionLifecycleChanged: (
       _id: string,
       _status: RunStatus,
       _reason: SessionEndReason | null,
-      filingState: SessionFilingState,
-    ) => filings.push(filingState),
+      lifecycleState: SessionLifecycleState,
+    ) => lifecycleChanges.push(lifecycleState),
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 
-  const [removed, archived] = await Promise.allSettled([
+  const [removed, completed] = await Promise.allSettled([
     service.remove(OWNER_ID, SESSION_ID),
-    service.archive(OWNER_ID, SESSION_ID),
+    service.complete(OWNER_ID, SESSION_ID),
   ]);
 
   assert.equal(removed.status, 'fulfilled');
-  assert.equal(archived.status, 'rejected');
+  assert.equal(completed.status, 'rejected');
   assert.ok(session.deletedAt);
   assert.equal(session.archivedAt, null);
-  assert.deepEqual(filings, [SessionFilingState.TRASH]);
+  assert.deepEqual(lifecycleChanges, [SessionLifecycleState.TRASH]);
 });
 
-test('archive emits no side effects when the atomic end transaction fails', async () => {
+test('complete emits no side effects when the atomic end transaction fails', async () => {
   let effects = 0;
   const session = {
     id: SESSION_ID,
     status: RunStatus.AWAITING_INPUT,
     cancelRequestedAt: null,
     assignedRunnerId: RUNNER_ID,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
   };
@@ -302,11 +311,11 @@ test('archive emits no side effects when the atomic end transaction fails', asyn
   const realtime = {
     requestCancel: () => effects++,
     notifyInbox: () => effects++,
-    publishSessionEnded: () => effects++,
+    publishSessionLifecycleChanged: () => effects++,
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 
-  await assert.rejects(service.archive(OWNER_ID, SESSION_ID), /turn insert failed/);
+  await assert.rejects(service.complete(OWNER_ID, SESSION_ID), /turn insert failed/);
   assert.equal(effects, 0);
 });
 
@@ -321,6 +330,7 @@ test('repeated remove keeps the original Trash retention timestamp', async () =>
         status: RunStatus.CANCELLED,
         cancelRequestedAt: original,
         assignedRunnerId: RUNNER_ID,
+        completedAt: null,
         archivedAt: null,
         deletedAt: original,
       }),
@@ -331,7 +341,7 @@ test('repeated remove keeps the original Trash retention timestamp', async () =>
   };
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = {
-    publishSessionEnded: () => undefined,
+    publishSessionLifecycleChanged: () => undefined,
   } as never;
   const service = new SessionsService(prisma, {} as never, realtime);
 

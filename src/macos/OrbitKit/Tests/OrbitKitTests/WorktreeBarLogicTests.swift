@@ -166,9 +166,9 @@ final class WorktreeBarLogicTests: XCTestCase {
         {
           "id": "s1", "title": "ignored", "status": "AWAITING_INPUT",
           "runStatus": "AWAITING_INPUT", "sessionState": "AWAITING_INPUT",
-          "runState": "AWAITING_INPUT", "filingState": "OPEN",
+          "runState": "AWAITING_INPUT", "lifecycleState": "OPEN",
           "capabilities": {"canSend": true, "canResume": false,
-            "resumeBlockedReason": "NOT_TERMINAL", "canArchive": true, "canRestore": false},
+            "resumeBlockedReason": "NOT_TERMINAL", "canComplete": true, "canRestore": false},
           "branch": "orbit/fix-a1b2c3", "isolationStatus": "worktree",
           "worktreeDirty": false, "mergeStatus": "pending", "mergeTarget": "main",
           "mergeTargets": ["main", "develop"], "branchMerged": false,
@@ -186,8 +186,8 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertEqual(d.sessionState, .awaitingInput)
         XCTAssertEqual(d.runState, .awaitingInput)
         XCTAssertEqual(d.effectiveRunState, .awaitingInput)
-        XCTAssertEqual(d.filingState, .open)
-        XCTAssertEqual(d.effectiveFilingState, .open)
+        XCTAssertEqual(d.lifecycleState, .open)
+        XCTAssertEqual(d.effectiveLifecycleState, .open)
         XCTAssertTrue(try XCTUnwrap(d.capabilities).canSend)
         XCTAssertFalse(try XCTUnwrap(d.capabilities).canResume)
         XCTAssertEqual(d.capabilities?.resumeBlockedReason, .notTerminal)
@@ -207,7 +207,7 @@ final class WorktreeBarLogicTests: XCTestCase {
         XCTAssertNil(d.sessionState)
         XCTAssertNil(d.runState)
         XCTAssertNil(d.effectiveRunState)
-        XCTAssertNil(d.filingState)
+        XCTAssertNil(d.lifecycleState)
         XCTAssertNil(d.capabilities)
         XCTAssertNil(d.status)
         XCTAssertNil(d.runStatus)

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   RunStatus,
   SessionFilingState,
+  SessionLifecycleState,
   SessionRunState,
   SessionState,
 } from '@orbit/shared';
@@ -18,6 +19,7 @@ function resumable(overrides: Record<string, unknown> = {}) {
   return {
     status: RunStatus.CANCELLED,
     endReason: 'ended',
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
     cancelRequestedAt: NOW,
@@ -48,6 +50,7 @@ test('withSessionState preserves the legacy raw status and adds both explicit fi
   assert.equal(row.runStatus, RunStatus.CANCELLED);
   assert.equal(row.sessionState, SessionState.COMPLETED);
   assert.equal(row.runState, SessionRunState.CANCELLED);
+  assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
   assert.equal(row.filingState, SessionFilingState.ARCHIVED);
   assert.equal(row.id, 'session-1');
 });
@@ -57,6 +60,7 @@ test('withSessionState keeps a failed archived run visibly failed', () => {
   assert.equal(row.runStatus, RunStatus.FAILED);
   assert.equal(row.sessionState, SessionState.FAILED);
   assert.equal(row.runState, SessionRunState.FAILED);
+  assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
   assert.equal(row.filingState, SessionFilingState.ARCHIVED);
 });
 
@@ -64,7 +68,21 @@ test('withSessionState preserves SUCCEEDED after archiving', () => {
   const row = withSessionState({ status: RunStatus.SUCCEEDED, archivedAt: new Date() });
   assert.equal(row.sessionState, SessionState.COMPLETED);
   assert.equal(row.runState, SessionRunState.SUCCEEDED);
+  assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
   assert.equal(row.filingState, SessionFilingState.ARCHIVED);
+});
+
+test('withSessionState derives a mismatched legacy timestamp from canonical completedAt', () => {
+  const completedAt = new Date('2026-08-01T00:00:00.000Z');
+  const row = withSessionState({
+    status: RunStatus.SUCCEEDED,
+    completedAt,
+    archivedAt: new Date('2025-01-01T00:00:00.000Z'),
+  });
+
+  assert.equal(row.completedAt, completedAt);
+  assert.equal(row.archivedAt, completedAt);
+  assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
 });
 
 test('terminal cancelRequestedAt is historical, not an ENDING resume blocker', () => {
@@ -73,6 +91,7 @@ test('terminal cancelRequestedAt is historical, not an ENDING resume blocker', (
     canSend: true,
     canResume: true,
     resumeBlockedReason: null,
+    canComplete: true,
     canArchive: true,
     canRestore: false,
   });
@@ -104,14 +123,15 @@ test('capability blockers follow the mutation guard ordering', () => {
   }
 });
 
-test('filing capabilities are orthogonal to execution state', () => {
-  const archived = withSessionCapabilities(
-    resumable({ archivedAt: NOW, cancelRequestedAt: null }),
+test('lifecycle capabilities are orthogonal to execution state', () => {
+  const completed = withSessionCapabilities(
+    resumable({ completedAt: NOW, cancelRequestedAt: null }),
     NOW.getTime(),
   );
-  assert.equal(archived.capabilities.canSend, true);
-  assert.equal(archived.capabilities.canArchive, false);
-  assert.equal(archived.capabilities.canRestore, true);
+  assert.equal(completed.capabilities.canSend, true);
+  assert.equal(completed.capabilities.canComplete, false);
+  assert.equal(completed.capabilities.canArchive, false);
+  assert.equal(completed.capabilities.canRestore, true);
 
   const trashed = deriveSessionCapabilities(
     resumable({ deletedAt: NOW, cancelRequestedAt: null }),

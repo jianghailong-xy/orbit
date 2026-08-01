@@ -79,7 +79,7 @@ Usage:
 Usage:
   orbit session end SESSION_ID [--json]
 `,
-	"complete": `orbit session complete — complete and archive a session
+	"complete": `orbit session complete — move a session to Completed
 
 Usage:
   orbit session complete SESSION_ID [--json]

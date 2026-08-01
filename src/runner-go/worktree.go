@@ -729,7 +729,7 @@ func buildFilePatches(files []ChangedFile, byPath map[string]string) []FilePatch
 }
 
 // removeWorktree tears down the session's checkout (the branch is kept) and drops the base
-// ref. Called only when the server reports the session as non-resumable (archived/deleted);
+// ref. Called only when the server reports the session as non-resumable (Completed/in Trash);
 // a resumable end keeps its checkout, and any stale one is later reaped by gcWorktrees.
 func removeWorktree(wt *Worktree) {
 	if _, err := git(wt.RepoDir, "worktree", "remove", "--force", wt.Path); err != nil {
@@ -1180,7 +1180,7 @@ func clip(s string, n int) string {
 }
 
 // gcWorktrees removes leftover session checkouts that the control plane confirms are gone —
-// a session the user archived or deleted, or one that no longer exists. `live` is the set of
+// a session the user completed or moved to Trash, or one that no longer exists. `live` is the set of
 // session ids the runner is currently driving (never candidates). A checkout for a session
 // that is merely parked/failed but still resumable is KEPT, so an idle-parked session's
 // worktree survives a runner restart. Branches are always preserved. On any query failure the

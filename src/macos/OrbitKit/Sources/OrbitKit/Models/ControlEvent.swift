@@ -79,9 +79,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let runStatus: RunStatus?
     /// Server-normalized state, omitted by older control planes.
     public let sessionState: SessionState?
-    /// Orthogonal execution state and filing location, omitted by older control planes.
+    /// Orthogonal execution state and lifecycle location, omitted by older control planes.
     public let runState: SessionRunState?
-    public let filingState: SessionFilingState?
+    public let lifecycleState: SessionLifecycleState?
     public let capabilities: SessionCapabilities?
     public let agentId: String?
     public let agent: AgentRef?
@@ -92,9 +92,29 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState, status: effectiveRunStatus)
     }
-    public var effectiveFilingState: SessionFilingState? {
-        guard let filingState, filingState != .unknown else { return nil }
-        return filingState
+    public var effectiveLifecycleState: SessionLifecycleState? {
+        guard let lifecycleState, lifecycleState != .unknown else { return nil }
+        return lifecycleState
+    }
+
+    private enum LegacyCodingKeys: String, CodingKey { case filingState }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        title = try values.decodeIfPresent(String.self, forKey: .title)
+        status = try values.decode(RunStatus.self, forKey: .status)
+        runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
+        runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
+            ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
+        capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
+        agentId = try values.decodeIfPresent(String.self, forKey: .agentId)
+        agent = try values.decodeIfPresent(AgentRef.self, forKey: .agent)
+        pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
+        lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
     }
 }
 
@@ -104,7 +124,7 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
     public let runStatus: RunStatus?
     public let sessionState: SessionState?
     public let runState: SessionRunState?
-    public let filingState: SessionFilingState?
+    public let lifecycleState: SessionLifecycleState?
     public let endReason: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
@@ -112,9 +132,23 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
     }
-    public var effectiveFilingState: SessionFilingState? {
-        guard let filingState, filingState != .unknown else { return nil }
-        return filingState
+    public var effectiveLifecycleState: SessionLifecycleState? {
+        guard let lifecycleState, lifecycleState != .unknown else { return nil }
+        return lifecycleState
+    }
+
+    private enum LegacyCodingKeys: String, CodingKey { case filingState }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+        status = try values.decode(RunStatus.self, forKey: .status)
+        runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
+        runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
+            ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
+        endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
     }
 }
 

@@ -159,13 +159,26 @@ func (t *Transport) postEvents(sessionID string, batch RunEventBatch) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
 }
 
-// complete finalizes the session server-side and reports back whether the isolated worktree
-// checkout should be kept (resumable end) or removed (the session was archived/deleted).
+// finalizeRun finalizes the current run server-side and reports back whether the isolated worktree
+// checkout should be kept (resumable end) or removed (the session is Completed/in Trash).
+// This runner lifecycle endpoint is intentionally distinct from completeSession below, which is
+// the user-facing action that moves a Session to Completed.
 // Defaults to keep on any transport error, so an unreachable server never destroys a checkout.
-func (t *Transport) complete(sessionID string, b CompleteRequest) (bool, error) {
-	var r CompleteResponse
-	if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/complete", b, &r, 35*time.Second); err != nil {
-		return true, err
+func (t *Transport) finalizeRun(sessionID string, b RunFinalizeRequest) (bool, error) {
+	var r RunFinalizeResponse
+	path := "/runner/sessions/" + sessionID + "/finalize"
+	if err := t.do(nil, "POST", path, b, &r, 35*time.Second); err != nil {
+		// A newly upgraded runner can overlap an older control-plane replica during a
+		// rolling deploy. Only a missing canonical route falls back; every other error
+		// remains authoritative and keeps the checkout for safety.
+		if !strings.Contains(err.Error(), "POST "+path+" -> 404 ") {
+			return true, err
+		}
+		r = RunFinalizeResponse{}
+		legacyPath := "/runner/sessions/" + sessionID + "/complete"
+		if legacyErr := t.do(nil, "POST", legacyPath, b, &r, 35*time.Second); legacyErr != nil {
+			return true, legacyErr
+		}
 	}
 	return r.KeepCheckout, nil
 }
@@ -645,7 +658,18 @@ func (t *Transport) completeSession(callerSessionID, orchestrationToken, id stri
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/archive", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	// /runner/sessions/:id/finalize is reserved for a runner reporting process teardown.
+	// The explicit suffix keeps the user-facing Complete action unambiguous.
+	path := "/runner/sessions/" + url.PathEscape(id) + "/complete-session"
+	headers := orchestratorHeaders(callerSessionID, orchestrationToken)
+	err := t.doHeaders(nil, "POST", path, nil, &out, taskOpTimeout, headers)
+	if err == nil || !strings.Contains(err.Error(), "POST "+path+" -> 404 ") {
+		return out, err
+	}
+	// New runners can overlap an older API replica that still exposes only /archive.
+	out = nil
+	legacyPath := "/runner/sessions/" + url.PathEscape(id) + "/archive"
+	err = t.doHeaders(nil, "POST", legacyPath, nil, &out, taskOpTimeout, headers)
 	return out, err
 }
 

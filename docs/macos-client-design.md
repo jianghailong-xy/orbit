@@ -52,11 +52,13 @@ server changes.
 - **Real-time:** **SSE only** — `GET /sessions/:id/events?sinceSeq=N`. No WebSocket (gateway
   strips `Upgrade`). Browser EventSource needs `?access_token=`; **native `URLSession` should
   use the `Authorization` header instead** (cleaner, keeps the token out of URLs/logs).
-- **Sessions:** `POST /sessions` (create+first prompt), `GET /sessions?view=active|archived|deleted`,
+- **Sessions:** `POST /sessions` (create+first prompt), `GET /sessions?view=open|completed|trash`,
   `GET /sessions/:id`, `POST /sessions/:id/turns`, `DELETE /sessions/:id/turns/:turnId`
-  (withdraw queued), `POST .../resume|interrupt|end|archive|restore`, `DELETE /sessions/:id`,
+  (withdraw queued), `POST .../resume|interrupt|end|complete|restore`, `DELETE /sessions/:id`,
   `PATCH /sessions/:id/config` (model/permission/effort mid-session),
   `GET/POST /sessions/:id/diff[/refresh]`, `POST /sessions/:id/merge|commit`.
+  Older deployments may expose `view=active|archived|deleted` and `POST .../archive`; OrbitKit
+  treats these only as compatibility aliases for Completed semantics.
 - **Approvals:** `GET /sessions/:id/approvals?status=PENDING`,
   `POST /sessions/:id/approvals/:approvalId/decision {behavior, message?, answers?, rememberRule?}`.
 - **Tasks:** `GET/POST /tasks`, `GET/PATCH/DELETE /tasks/:id`, `POST /tasks/:id/execute`,

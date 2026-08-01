@@ -127,15 +127,15 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
     status: RunStatus,             // 兼容字段；等于 runStatus
     runStatus: RunStatus,          // runner/进程的原始执行态
     sessionState: SessionState,    // 旧客户端兼容字段;新客户端不用它推断列表位置
-    runState: SessionRunState,     // 执行态/结果,与归档位置正交
-    filingState: SessionFilingState, // OPEN | ARCHIVED | TRASH
+    runState: SessionRunState,     // 执行态/结果,与生命周期位置正交
+    lifecycleState: SessionLifecycleState, // OPEN | COMPLETED | TRASH
     agent: { id: string, name: string } | null,
     runnerId: string | null,
     taskId: string | null,
     taskTitle: string | null,
     lastTurnAt: string | null,
     createdAt: string,
-    archivedAt: string | null,     // 兼容时间戳;filingState=ARCHIVED 时结果行标注 Completed
+    completedAt: string | null,    // lifecycleState=COMPLETED 时结果行标注 Completed
     deletedAt: string | null,      // 结果行标注「在 Trash」
     endReason: string | null,      // 诊断/兼容；运行状态文案以 runState 为准
     matchField: 'id'|'title'|'prompt'|'reply'|'message'|'branch'|'agent'|'task'|'recent',
@@ -143,6 +143,10 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
   }>
 }
 ```
+
+滚动升级期间响应还可携带 `filingState` 与 `archivedAt`,分别映射
+`COMPLETED → ARCHIVED` 和 `completedAt → archivedAt`;它们是只读兼容别名,新客户端只以
+`lifecycleState` 判断结果属于 Open、Completed 还是 Trash。
 
 ### 检索与排序
 
@@ -211,7 +215,7 @@ rank 排序和 snippet 窗口都在 SQL 里(见上),留给纯函数的是最容�
 
 ## 7. macOS
 
-- `⌘K` 目前**空闲**(已占用:⌘N 新建、⌘D 归档、⌘⇧F 全屏、⌘1–9 跳 agent)。
+- `⌘K` 目前**空闲**(已占用:⌘N 新建、⌘D Complete、⌘⇧F 全屏、⌘1–9 跳 agent)。
 - 注册进 `OrbitApp.swift:37` 的 `.commands`,放在 `CommandMenu("Go")` 里 —— 与 ⌘1–9
   的「跳转」语义同族,且菜单栏可发现。
 - 弹窗:`.sheet` + `SessionSearchView`(内含 `NavigationStack` + `.searchable`;没有

@@ -5,7 +5,7 @@ import OrbitKit
 // sidebar source list (see `SectionSidebar`), folding away the old middle column. What remains
 // here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
-//                       Open/Archived/Trash scope switcher (principal), a New-session button
+//                       Open/Completed/Trash scope switcher (principal), a New-session button
 //                       (leading), and a gear that opens the agent's Settings sheet (trailing)
 //   • detail column  → the live console for the session picked in the content column
 // Grouping + effective-model logic come from the verified OrbitKit `AgentListLogic`; pickers reuse
@@ -160,7 +160,7 @@ struct AgentPanes: View {
         .toolbar {
             #if os(iOS)
             // Compact: both actions sit at the trailing edge. The scope switcher collapses to a
-            // pure filter-icon menu (no text) — Open/Archived/Trash as checkmarked options plus
+            // pure filter-icon menu (no text) — Open/Completed/Trash as checkmarked options plus
             // the agent-settings gear folded in — and New Session is the rightmost primary action.
             // Declared scope-first so New Session lands at the trailing edge (SwiftUI lays trailing
             // items out in declaration order, leading→trailing; verify the order on device).
@@ -438,7 +438,7 @@ struct AgentSessionRow: View {
     /// True when the Trash tab is showing this row; the preview goes static because nothing in
     /// Trash is directly resumable. The status glyph remains the run's actual outcome.
     var deleted: Bool = false
-    /// True in Open, where pinning applies. Archived/Trash rows never show the bar.
+    /// True in Open, where pinning applies. Completed/Trash rows never show the bar.
     var showsPin: Bool = false
     private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors

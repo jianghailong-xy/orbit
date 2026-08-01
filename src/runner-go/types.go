@@ -448,7 +448,9 @@ type FilePatch struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
-type CompleteRequest struct {
+// RunFinalizeRequest reports the terminal outcome of the runner process. It is not the
+// user-facing Complete action, which changes a Session's lifecycleState to COMPLETED.
+type RunFinalizeRequest struct {
 	Status           string                 `json:"status"`
 	Result           string                 `json:"result,omitempty"`
 	Subtype          string                 `json:"subtype,omitempty"`
@@ -476,16 +478,17 @@ type CompleteRequest struct {
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
 }
 
-// CompleteResponse is the control plane's reply to /complete. KeepCheckout is false only
-// when the user archived or deleted the session; for any resumable end it is true, so the
+// RunFinalizeResponse is the control plane's reply when the runner finalizes a run through
+// /runner/sessions/:id/finalize. KeepCheckout is false only when the Session is Completed or
+// in Trash; for any resumable end it is true, so the
 // runner preserves the isolated worktree checkout.
-type CompleteResponse struct {
+type RunFinalizeResponse struct {
 	Ok           bool `json:"ok"`
 	KeepCheckout bool `json:"keepCheckout"`
 }
 
 // WorktreesRemovableResponse lists which of the queried session ids have a removable
-// checkout (archived / deleted / no longer a session); any id absent must be kept.
+// checkout (Completed / in Trash / no longer a session); any id absent must be kept.
 type WorktreesRemovableResponse struct {
 	Removable []string `json:"removable"`
 }

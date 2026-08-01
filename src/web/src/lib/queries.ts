@@ -1,6 +1,10 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { EventSearchResponse, SessionSearchResponse } from '@orbit/shared';
 import { api, getSession, getSessionDiff } from '../api';
+import {
+  sessionLifecycleStateOf,
+  type SessionLifecycleView,
+} from './sessionState';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './agentDefaults';
 
@@ -79,20 +83,42 @@ export const meQuery = () =>
  * the query string one-to-one — `['sessions', runnerId, view]` — so every scope is its
  * own cache entry while the broad `['sessions']` prefix still invalidates them all.
  */
-export type SessionListView = 'active' | 'archived' | 'deleted';
+export type SessionListView = SessionLifecycleView;
+
+const LEGACY_SESSION_VIEW: Record<SessionLifecycleView, 'active' | 'archived' | 'deleted'> = {
+  open: 'active',
+  completed: 'archived',
+  trash: 'deleted',
+};
+
+async function fetchSessions(runnerId: string | null, view: SessionListView | null): Promise<any[]> {
+  const path = (requestedView: string | null): string => {
+    const qs = new URLSearchParams();
+    if (runnerId) qs.set('runnerId', runnerId);
+    if (requestedView) qs.set('view', requestedView);
+    const suffix = qs.toString();
+    return `/sessions${suffix ? `?${suffix}` : ''}`;
+  };
+  const rows = await api<any[]>(path(view));
+  if (!view || view === 'open') return rows;
+  const expected = view === 'completed' ? 'COMPLETED' : 'TRASH';
+  // Older APIs silently interpret unknown view values as Open rather than returning 4xx.
+  // A non-empty correctly scoped response proves canonical support; otherwise retry the
+  // legacy alias. New APIs accept both aliases, so an actually empty list stays correct.
+  if (rows.length > 0 && rows.every((row) => sessionLifecycleStateOf(row) === expected)) {
+    return rows;
+  }
+  return api<any[]>(path(LEGACY_SESSION_VIEW[view]));
+}
 
 export const sessionsQuery = (
   opts: { runnerId?: string | null; view?: SessionListView | null } = {},
 ) => {
   const runnerId = opts.runnerId ?? null;
   const view = opts.view ?? null;
-  const qs = new URLSearchParams();
-  if (runnerId) qs.set('runnerId', runnerId);
-  if (view) qs.set('view', view);
-  const suffix = qs.toString();
   return queryOptions({
     queryKey: ['sessions', runnerId, view] as const,
-    queryFn: () => api<any[]>(`/sessions${suffix ? `?${suffix}` : ''}`),
+    queryFn: () => fetchSessions(runnerId, view),
   });
 };
 

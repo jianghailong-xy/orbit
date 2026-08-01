@@ -8,13 +8,13 @@ final class SessionHeaderTests: XCTestCase {
                          runStatus: RunStatus? = nil,
                          sessionState: SessionState? = nil,
                          runState: SessionRunState? = nil,
-                         filingState: SessionFilingState? = nil,
+                         lifecycleState: SessionLifecycleState? = nil,
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          error: String? = nil, endReason: String? = nil,
                          createdAt: String? = nil, lastTurnAt: String? = nil) -> Session {
         Session(id: "s", title: title, status: status, runStatus: runStatus,
                 sessionState: sessionState,
-                runState: runState, filingState: filingState,
+                runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason,
@@ -87,7 +87,7 @@ final class SessionHeaderTests: XCTestCase {
         ]
         for (state, expected) in cases {
             let s = session(.cancelled, sessionState: .completed, runState: state,
-                            filingState: .archived, endReason: "completed")
+                            lifecycleState: .completed, endReason: "completed")
             XCTAssertEqual(SessionHeader.statusWord(for: s), expected, state.rawValue)
         }
     }
@@ -113,16 +113,16 @@ final class SessionHeaderTests: XCTestCase {
         XCTAssertEqual(SessionHeader.statusWord(for: s), "Succeeded")
     }
 
-    func testFilingStateDoesNotChangeHeaderRunState() {
-        for filing: SessionFilingState in [.open, .archived, .trash] {
-            let s = session(.cancelled, runState: .succeeded, filingState: filing)
-            XCTAssertEqual(SessionHeader.statusWord(for: s), "Succeeded", filing.rawValue)
+    func testLifecycleStateDoesNotChangeHeaderRunState() {
+        for lifecycle: SessionLifecycleState in [.open, .completed, .trash] {
+            let s = session(.cancelled, runState: .succeeded, lifecycleState: lifecycle)
+            XCTAssertEqual(SessionHeader.statusWord(for: s), "Succeeded", lifecycle.rawValue)
         }
     }
 
-    // MARK: subtitle — "run state · filing · when"
+    // MARK: subtitle — "run state · lifecycle · when"
 
-    /// 3.5 min elapsed → "3m ago" (RelativeTime floors), after run state and filing location.
+    /// 3.5 min elapsed → "3m ago" (RelativeTime floors), after run state and lifecycle location.
     func testSubtitleJoinsStateAndRelativeTime() {
         let now = ISO8601DateFormatter().date(from: "2026-07-05T10:03:30Z")!
         let s = session(.running, lastTurnAt: "2026-07-05T10:00:00Z")
@@ -137,13 +137,13 @@ final class SessionHeaderTests: XCTestCase {
                        "Waiting for your reply · Open · 2h ago")
     }
 
-    /// No timestamps at all still keeps run state and filing location separate.
+    /// No timestamps at all still keeps run state and lifecycle location separate.
     func testSubtitleWordOnlyWhenNoTimestamps() {
         XCTAssertEqual(SessionHeader.subtitle(for: session(.running)), "Running · Open")
     }
 
     func testSubtitleShowsCompletedIndependentlyFromSucceeded() {
-        let s = session(.succeeded, runState: .succeeded, filingState: .archived)
+        let s = session(.succeeded, runState: .succeeded, lifecycleState: .completed)
         XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Completed")
     }
 

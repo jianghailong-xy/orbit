@@ -2,9 +2,9 @@ import Foundation
 
 /// Exact session records fetched outside the currently loaded list scopes.
 ///
-/// A cold deep link or global-search hit may target an Archived / Trash session, so it cannot be
+/// A cold deep link or global-search hit may target a Completed / Trash session, so it cannot be
 /// recovered from the cross-agent Open snapshot. The app keeps that detail response here for the
-/// console header, composer filing banner and server-derived capabilities. Loaded list snapshots
+/// console header, composer lifecycle banner and server-derived capabilities. Loaded list snapshots
 /// remain preferred because they are refreshed by the control plane; `reconcile(with:)` also writes
 /// their newer copy through to an existing detail entry so the fallback cannot regress if the row
 /// later leaves the visible list.
@@ -36,7 +36,7 @@ public struct SessionDetailCache: Sendable {
 
     /// Whether an exact detail fetch is needed to keep a cached fallback authoritative.
     /// A row present in any loaded list is refreshed by that list; a cached row absent from every
-    /// list (the normal Archived / Trash cold-route case) needs its own bounded detail refresh.
+    /// list (the normal Completed / Trash cold-route case) needs its own bounded detail refresh.
     public func needsExactRefresh(_ id: String, preferring snapshots: [Session]...) -> Bool {
         guard records[id] != nil else { return false }
         return !snapshots.contains { snapshot in snapshot.contains { $0.id == id } }
@@ -46,7 +46,7 @@ public struct SessionDetailCache: Sendable {
         records[id] = nil
     }
 
-    /// Apply an authoritative 404 from `GET /sessions/:id`. Kept distinct from a local filing
+    /// Apply an authoritative 404 from `GET /sessions/:id`. Kept distinct from a local lifecycle
     /// mutation so callers and tests cannot accidentally treat a transient request failure as a
     /// deletion. Returns whether a cold-detail fallback actually existed.
     @discardableResult

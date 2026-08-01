@@ -385,26 +385,27 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// compute the diff, so the branch is usable for a manual merge even after the checkout
 	// is removed. Whether to drop the checkout is the SERVER's call (keepCheckout): any
 	// resumable end — idle-park, user-end, task-done, or cancel — keeps it so the session
-	// (and its untracked scratch) can be reopened; only an archive (completed) or delete
+	// (and its untracked scratch) can be reopened; only Complete or Move to Trash
 	// removes it. The finalize commit doubles as a *park checkpoint* for a resumable end —
 	// tagged for undo-on-resume rather than permanent.
-	cr := CompleteRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
+	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	if runtimeProvider(job) == providerClaude {
-		cr.ClaudeSessionID = job.SessionUUID
+		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
 	if job.WT != nil {
-		cr.Branch = job.WT.Branch
-		cr.BaseSha = job.WT.BaseSha
-		// The worktree's ACTUAL HEAD branch (before finalize/removal): differs from cr.Branch when
-		// the agent ran `git checkout -b` inside the checkout, so the server can flag it / offer Adopt.
-		cr.WorktreeBranch = currentBranch(job.WT)
-		cr.ChangedFiles, cr.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
+		finalizeRequest.Branch = job.WT.Branch
+		finalizeRequest.BaseSha = job.WT.BaseSha
+		// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
+		// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
+		// it / offer Adopt.
+		finalizeRequest.WorktreeBranch = currentBranch(job.WT)
+		finalizeRequest.ChangedFiles, finalizeRequest.ChangedDiff = finalizeWorktree(job.WT, status == stCancelled)
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
-		cr.MergeTargets = mergeTargetsForWT(job.WT)
+		finalizeRequest.MergeTargets = mergeTargetsForWT(job.WT)
 	}
-	keepCheckout, err := t.complete(job.SessionID, cr)
+	keepCheckout, err := t.finalizeRun(job.SessionID, finalizeRequest)
 	if err != nil {
-		logln("complete failed for", job.SessionID+":", err)
+		logln("run finalization failed for", job.SessionID+":", err)
 	} else {
 		logln(fmt.Sprintf("■ interactive run %s → %s", job.SessionID, status))
 	}

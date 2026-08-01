@@ -75,7 +75,7 @@ const ROUTES: RouteCase[] = [
     name: 'complete',
     invoke: (c, caller, credential) =>
       c.completeSession(RUNNER, caller, credential, TARGET_SESSION_ID),
-    serviceMethod: 'archive',
+    serviceMethod: 'complete',
   },
 ];
 

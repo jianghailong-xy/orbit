@@ -9,10 +9,10 @@ final class SessionStatusGlyphTests: XCTestCase {
                          runStatus: RunStatus? = nil,
                          sessionState: SessionState? = nil,
                          runState: SessionRunState? = nil,
-                         filingState: SessionFilingState? = nil) -> Session {
+                         lifecycleState: SessionLifecycleState? = nil) -> Session {
         Session(id: "s", title: "t", status: status, runStatus: runStatus,
                 sessionState: sessionState,
-                runState: runState, filingState: filingState,
+                runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason)
@@ -94,23 +94,23 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g.label, "Dormant — send a message to resume")
     }
 
-    func testArchivedFilingDoesNotOverrideCancelledRun() {
+    func testCompletedLifecycleDoesNotOverrideCancelledRun() {
         let s = session(.cancelled, endReason: "cancelled",
-                        runState: .cancelled, filingState: .archived)
+                        runState: .cancelled, lifecycleState: .completed)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
                        .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
     }
 
-    func testArchivedFilingStillSurfacesFailure() {
+    func testCompletedLifecycleStillSurfacesFailure() {
         let g = SessionStatusGlyph.make(for: session(.failed, error: "boom",
-                                                     runState: .failed, filingState: .archived))
+                                                     runState: .failed, lifecycleState: .completed))
         XCTAssertEqual(g.shape, .symbol("xmark.circle.fill"))
         XCTAssertEqual(g.tone, .error)
     }
 
-    func testTrashFilingDoesNotOverrideSucceededRun() {
+    func testTrashLifecycleDoesNotOverrideSucceededRun() {
         let g = SessionStatusGlyph.make(for: session(.succeeded,
-                                                     runState: .succeeded, filingState: .trash))
+                                                     runState: .succeeded, lifecycleState: .trash))
         XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle.fill"),
                                 tone: .success, label: "Succeeded"))
     }
@@ -134,7 +134,7 @@ final class SessionStatusGlyphTests: XCTestCase {
         ]
         for (state, expected) in cases {
             let s = session(.cancelled, endReason: "cancelled",
-                            sessionState: .completed, runState: state, filingState: .trash)
+                            sessionState: .completed, runState: state, lifecycleState: .trash)
             XCTAssertEqual(SessionStatusGlyph.make(for: s), expected, state.rawValue)
         }
     }
@@ -173,8 +173,8 @@ final class SessionStatusGlyphTests: XCTestCase {
                              label: "Succeeded"))
     }
 
-    /// The list payload's terminal-state fields decode (server keys: error / endReason).
-    func testSessionDecodesTerminalFields() throws {
+    /// A legacy lifecycle value normalizes while terminal execution fields remain independent.
+    func testSessionDecodesLegacyLifecycleAndTerminalFields() throws {
         let json = #"{"id":"s1","status":"RUNNING","runStatus":"CANCELLED","sessionState":"ENDED","runState":"ENDED","filingState":"ARCHIVED","error":null,"endReason":"orphaned"}"#
         let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertEqual(s.runStatus, .cancelled)
@@ -182,8 +182,8 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(s.sessionState, .ended)
         XCTAssertEqual(s.runState, .ended)
         XCTAssertEqual(s.effectiveRunState, .ended)
-        XCTAssertEqual(s.filingState, .archived)
-        XCTAssertEqual(s.effectiveFilingState, .archived)
+        XCTAssertEqual(s.lifecycleState, .completed)
+        XCTAssertEqual(s.effectiveLifecycleState, .completed)
         XCTAssertEqual(s.endReason, "orphaned")
         XCTAssertNil(s.error)
     }

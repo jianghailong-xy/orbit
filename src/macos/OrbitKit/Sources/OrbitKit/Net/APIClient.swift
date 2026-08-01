@@ -87,8 +87,26 @@ public final class APIClient: @unchecked Sendable {
 
     // MARK: sessions
 
-    public func listSessions(view: String = "active", runnerId: String? = nil) async throws -> [Session] {
-        var q = [URLQueryItem(name: "view", value: view)]
+    /// List one canonical lifecycle scope. During a rolling upgrade, retry the legacy query spelling
+    /// if the new one is rejected. Older servers silently treat unknown Completed/Trash values as
+    /// Open, so a mismatched (or empty, for those two scopes) response also triggers the fallback.
+    public func listSessions(view: SessionView = .open,
+                             runnerId: String? = nil) async throws -> [Session] {
+        do {
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId)
+            if view == .open || (!sessions.isEmpty && sessions.allSatisfy({
+                $0.effectiveLifecycleState == view.lifecycleState
+            })) {
+                return sessions
+            }
+        } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
+            // Fall through to the compatibility request.
+        }
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId)
+    }
+
+    private func listSessions(queryValue: String, runnerId: String?) async throws -> [Session] {
+        var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
         return try await get("sessions", query: q)
     }
@@ -96,7 +114,7 @@ public final class APIClient: @unchecked Sendable {
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
     /// Cross-scope session search for the ⌘K palette — spans every agent, runner and lifecycle
-    /// scope (Open, Archived, Trash) and reaches into conversation text, none of which
+    /// scope (Open, Completed, Trash) and reaches into conversation text, none of which
     /// `listSessions` can do. An empty `q` is a real request, answered with recents.
     public func searchSessions(q: String, limit: Int = 20) async throws -> SessionSearchResponse {
         try await get("sessions/search", query: [
@@ -154,10 +172,16 @@ public final class APIClient: @unchecked Sendable {
     }
 
     // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), move between
-    // Open/Archived/Trash, and permanently purge. After any of these the caller refetches the list
-    // (`view=active|archived|deleted`).
+    // Open/Completed/Trash, and permanently purge. Canonical transport names are attempted first;
+    // the pre-Completed aliases remain a narrow compatibility fallback.
     public func endSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/end", body: Optional<Empty>.none) }
-    public func archiveSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none) }
+    public func completeSession(_ id: String) async throws {
+        do {
+            _ = try await postRaw("sessions/\(id)/complete", body: Optional<Empty>.none)
+        } catch APIError.http(let status, _) where status == 404 || status == 405 {
+            _ = try await postRaw("sessions/\(id)/archive", body: Optional<Empty>.none)
+        }
+    }
     public func restoreSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/restore", body: Optional<Empty>.none) }
     public func deleteSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)") }
     /// Hard-delete a trashed session and all its data — irreversible (the Trash tab's "Delete

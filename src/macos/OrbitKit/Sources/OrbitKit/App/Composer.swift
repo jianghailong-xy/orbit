@@ -18,9 +18,9 @@ public enum ComposerLogic {
     /// Whether a Completed-session composer should explain that sending will return it to Open.
     /// A missing capability keeps the legacy optimistic presentation, but an explicit server
     /// denial is authoritative and must leave only the more useful blocked-reason copy visible.
-    public static func showsCompletedResumeNotice(filingState: SessionFilingState,
-                                                  capabilities: SessionCapabilities?) -> Bool {
-        filingState == .archived && capabilities?.canResume != false
+    public static func showsCompletedResumeNotice(lifecycleState: SessionLifecycleState,
+                                                   capabilities: SessionCapabilities?) -> Bool {
+        lifecycleState == .completed && capabilities?.canResume != false
     }
 
     /// Map session status → send availability. Terminal statuses are `sendNow` because a send

@@ -29,9 +29,9 @@ private func matchLabel(_ field: SessionSearchMatchField) -> String? {
 /// Where a hit lives, when that isn't the normal Open list — so a result the user can't find in
 /// their session list explains itself instead of looking like a ghost.
 private func scopeBadge(_ hit: SessionSearchHit) -> String? {
-    switch hit.effectiveFilingState {
+    switch hit.effectiveLifecycleState {
     case .open, .unknown: return nil
-    case .archived: return "Completed"
+    case .completed: return "Completed"
     case .trash: return "Trash"
     }
 }

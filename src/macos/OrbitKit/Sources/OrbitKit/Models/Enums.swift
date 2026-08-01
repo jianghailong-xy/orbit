@@ -25,7 +25,7 @@ public enum RunStatus: String, Codable, Sendable {
 }
 
 /// Product-facing execution state. Unlike ``SessionState``, this dimension says only what the
-/// run is doing or how it ended; moving a session between Open, Archived and Trash never changes
+/// run is doing or how it ended; moving a session between Open, Completed and Trash never changes
 /// it. New control planes send this as `runState`; older ones use raw ``RunStatus`` plus end reason,
 /// with ``SessionState`` used only by slim payloads that omit raw status entirely.
 public enum SessionRunState: String, Codable, Sendable {
@@ -55,7 +55,7 @@ public enum SessionRunState: String, Codable, Sendable {
     }
 
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
-    /// `sessionState` is intentionally not allowed to override a raw state: an old archived row
+    /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.
     public static func resolve(_ runState: SessionRunState?,
                                legacy _: SessionState?,
@@ -112,23 +112,25 @@ public enum SessionRunState: String, Codable, Sendable {
     }
 }
 
-/// Where the session is filed. This dimension is independent from ``SessionRunState``: a failed
-/// run may be Archived and a succeeded run may remain Open.
-public enum SessionFilingState: String, Codable, Sendable {
+/// The session's lifecycle membership. This dimension is independent from ``SessionRunState``: a failed
+/// run may be Completed and a succeeded run may remain Open.
+public enum SessionLifecycleState: String, Codable, Sendable {
     case open = "OPEN"
-    case archived = "ARCHIVED"
+    case completed = "COMPLETED"
     case trash = "TRASH"
     /// Forward compatibility: callers should use their endpoint/scope fallback for this value.
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
         let raw = try decoder.singleValueContainer().decode(String.self)
-        self = SessionFilingState(rawValue: raw) ?? .unknown
+        // `ARCHIVED` is the pre-Completed transport spelling. Keep accepting it throughout the
+        // rolling migration, but normalize immediately so no archive semantics escape decoding.
+        self = raw == "ARCHIVED" ? .completed : (SessionLifecycleState(rawValue: raw) ?? .unknown)
     }
 }
 
 /// Legacy mixed lifecycle/filing state. Kept only as a compatibility fallback while old control
-/// planes are still in use; new presentation reads ``SessionRunState`` and ``SessionFilingState``.
+/// planes are still in use; new presentation reads ``SessionRunState`` and ``SessionLifecycleState``.
 public enum SessionState: String, Codable, Sendable, CaseIterable {
     case queued = "QUEUED"
     case running = "RUNNING"

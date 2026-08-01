@@ -74,9 +74,9 @@ final class SessionSearchCodableTests: XCTestCase {
     func testDecodesResponse() throws {
         let json = """
         {"q":"4QISUlGbd1LAaxJywzvT7x","contentSearched":true,"hits":[
-          {"id":"a","title":"Fix merge","status":"PENDING","runStatus":"CANCELLED","sessionState":"COMPLETED","runState":"CANCELLED","filingState":"ARCHIVED","agent":{"id":"ag","name":"orbit"},
+          {"id":"a","title":"Fix merge","status":"PENDING","runStatus":"CANCELLED","sessionState":"COMPLETED","runState":"CANCELLED","lifecycleState":"COMPLETED","agent":{"id":"ag","name":"orbit"},
            "runnerId":"r","taskId":null,"taskTitle":null,"lastTurnAt":"2026-07-26T10:00:00.000Z",
-           "createdAt":"2026-07-26T09:00:00.000Z","archivedAt":null,"deletedAt":null,
+           "createdAt":"2026-07-26T09:00:00.000Z","completedAt":"2026-07-26T10:01:00.000Z","deletedAt":null,
            "endReason":null,"matchField":"id","snippet":"4QISUlGbd1LAaxJywzvT7x"}
         ]}
         """.data(using: .utf8)!
@@ -89,8 +89,9 @@ final class SessionSearchCodableTests: XCTestCase {
         XCTAssertEqual(res.hits[0].sessionState, .completed)
         XCTAssertEqual(res.hits[0].runState, .cancelled)
         XCTAssertEqual(res.hits[0].effectiveRunState, .cancelled)
-        XCTAssertEqual(res.hits[0].filingState, .archived)
-        XCTAssertEqual(res.hits[0].effectiveFilingState, .archived)
+        XCTAssertEqual(res.hits[0].lifecycleState, .completed)
+        XCTAssertEqual(res.hits[0].effectiveLifecycleState, .completed)
+        XCTAssertEqual(res.hits[0].completedAt, "2026-07-26T10:01:00.000Z")
         XCTAssertEqual(res.hits[0].agent?.name, "orbit")
     }
 
@@ -98,7 +99,7 @@ final class SessionSearchCodableTests: XCTestCase {
         let json = """
         {"q":"x","contentSearched":false,"hits":[
           {"id":"a","title":"t","status":"PENDING","agent":null,"runnerId":null,"taskId":null,
-           "taskTitle":null,"lastTurnAt":null,"createdAt":null,"archivedAt":null,"deletedAt":null,
+           "taskTitle":null,"lastTurnAt":null,"createdAt":null,"completedAt":null,"deletedAt":null,
            "endReason":null,"matchField":"something_new","snippet":null}
         ]}
         """.data(using: .utf8)!
@@ -109,11 +110,11 @@ final class SessionSearchCodableTests: XCTestCase {
         XCTAssertEqual(res.hits[0].effectiveRunState, .queued)
         XCTAssertNil(res.hits[0].sessionState)
         XCTAssertNil(res.hits[0].runState)
-        XCTAssertNil(res.hits[0].filingState)
-        XCTAssertEqual(res.hits[0].effectiveFilingState, .open)
+        XCTAssertNil(res.hits[0].lifecycleState)
+        XCTAssertEqual(res.hits[0].effectiveLifecycleState, .open)
     }
 
-    func testOldSearchPayloadDerivesFilingStateFromTimestamps() throws {
+    func testOldSearchPayloadDerivesLifecycleStateFromTimestamps() throws {
         let json = """
         {"q":"x","contentSearched":true,"hits":[
           {"id":"a","title":"t","status":"SUCCEEDED","archivedAt":"2026-08-01T00:00:00Z",
@@ -123,7 +124,8 @@ final class SessionSearchCodableTests: XCTestCase {
         ]}
         """.data(using: .utf8)!
         let hits = try JSONDecoder().decode(SessionSearchResponse.self, from: json).hits
-        XCTAssertEqual(hits[0].effectiveFilingState, .archived)
-        XCTAssertEqual(hits[1].effectiveFilingState, .trash)
+        XCTAssertEqual(hits[0].effectiveLifecycleState, .completed)
+        XCTAssertEqual(hits[0].completedAt, "2026-08-01T00:00:00Z")
+        XCTAssertEqual(hits[1].effectiveLifecycleState, .trash)
     }
 }

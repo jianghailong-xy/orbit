@@ -2,6 +2,7 @@ import {
   RunStatus,
   SessionEndReason,
   SessionFilingState,
+  SessionLifecycleState,
   SessionRunState,
   SessionState,
 } from './enums';
@@ -21,12 +22,12 @@ import type { SessionCapabilities } from './dto';
 
 /** Control-plane event types — their own namespace, never mixed with `RunEventType`. */
 export enum ControlEventType {
-  /** A session entered the user's Open list (created, or restored from Archived/Trash). */
+  /** A session entered the user's Open list (created, or restored from Completed/Trash). */
   SESSION_CREATED = 'session.created',
   /** status / title / lastTurnAt / pendingApprovals changed — `data` is a full
    *  `ControlSessionSummary` the client upserts wholesale (decision Q2: no field deltas). */
   SESSION_UPDATED = 'session.updated',
-  /** Compatibility name for a filing change to Archived or Trash. */
+  /** Compatibility event name for a lifecycle change to Completed or Trash. */
   SESSION_ENDED = 'session.ended',
   /** A run error — its own event (decision Q3) so mid-turn recoverable errors, which status
    *  transitions can't express, still reach the client exactly once. */
@@ -78,11 +79,13 @@ export interface ControlSessionSummary {
   status: RunStatus;
   /** Raw runner/process status. */
   runStatus: RunStatus;
-  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
+  /** @deprecated Combined lifecycle state; use `runState` + `lifecycleState`. */
   sessionState: SessionState;
-  /** Execution state, independent of archive/trash filing. */
+  /** Execution state, independent of Completed/Trash membership. */
   runState: SessionRunState;
-  /** Current list membership. */
+  /** Canonical current list membership. */
+  lifecycleState: SessionLifecycleState;
+  /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
@@ -98,11 +101,13 @@ export interface ControlSessionEnded {
   status: RunStatus;
   /** Raw runner/process status at the time the filing change was requested. */
   runStatus: RunStatus;
-  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
+  /** @deprecated Combined lifecycle state; use `runState` + `lifecycleState`. */
   sessionState: SessionState;
   /** Execution state at the time of filing. */
   runState: SessionRunState;
-  /** Filing destination of this lifecycle event. */
+  /** Canonical destination of this lifecycle event. */
+  lifecycleState: SessionLifecycleState;
+  /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   endReason: SessionEndReason | null;
 }

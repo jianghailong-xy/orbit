@@ -2,10 +2,10 @@
  * A session has two independent product dimensions:
  *
  * - runState says what happened to the latest run;
- * - filingState says where the conversation is filed in the sidebar.
+ * - lifecycleState says where the conversation lives in the sidebar.
  *
- * Keep every compatibility inference in this module so UI code never has to guess that an
- * archived session succeeded (or that a successful session must already be archived).
+ * Keep every compatibility inference in this module so UI code never has to guess that a
+ * Completed session succeeded (or that a successful session must already be Completed).
  */
 export const SESSION_RUN_STATES = [
   'QUEUED',
@@ -21,8 +21,8 @@ export const SESSION_RUN_STATES = [
 
 export type SessionRunState = (typeof SESSION_RUN_STATES)[number];
 
-export const SESSION_FILING_STATES = ['OPEN', 'ARCHIVED', 'TRASH'] as const;
-export type SessionFilingState = (typeof SESSION_FILING_STATES)[number];
+export const SESSION_LIFECYCLE_STATES = ['OPEN', 'COMPLETED', 'TRASH'] as const;
+export type SessionLifecycleState = (typeof SESSION_LIFECYCLE_STATES)[number];
 
 /** Legacy mixed lifecycle values retained while older payloads remain in caches/deployments. */
 export const SESSION_STATES = [
@@ -41,6 +41,8 @@ export type SessionStateValue = (typeof SESSION_STATES)[number];
 
 export interface SessionStateSource {
   runState?: string | null;
+  lifecycleState?: string | null;
+  /** Legacy API name retained for rolling upgrades. ARCHIVED normalizes to COMPLETED. */
   filingState?: string | null;
   /** Legacy mixed product lifecycle. */
   sessionState?: string | null;
@@ -48,13 +50,15 @@ export interface SessionStateSource {
   /** Legacy name for runStatus, retained by the API during migration. */
   status?: string | null;
   endReason?: string | null;
+  completedAt?: unknown;
+  /** Legacy API timestamp retained for rolling upgrades. */
   archivedAt?: unknown;
   deletedAt?: unknown;
   error?: string | null;
 }
 
 const SESSION_RUN_STATE_SET = new Set<string>(SESSION_RUN_STATES);
-const SESSION_FILING_STATE_SET = new Set<string>(SESSION_FILING_STATES);
+const SESSION_LIFECYCLE_STATE_SET = new Set<string>(SESSION_LIFECYCLE_STATES);
 const SESSION_STATE_SET = new Set<string>(SESSION_STATES);
 
 const normalizedValue = <T extends string>(value: unknown, allowed: ReadonlySet<string>): T | null => {
@@ -68,10 +72,15 @@ export const hasAuthoritativeRunState = (
 ): session is SessionStateSource & { runState: SessionRunState } =>
   normalizedValue<SessionRunState>(session.runState, SESSION_RUN_STATE_SET) !== null;
 
-export const hasAuthoritativeFilingState = (
+export const hasAuthoritativeLifecycleState = (
   session: SessionStateSource,
-): session is SessionStateSource & { filingState: SessionFilingState } =>
-  normalizedValue<SessionFilingState>(session.filingState, SESSION_FILING_STATE_SET) !== null;
+): boolean => {
+  const raw = session.lifecycleState ?? session.filingState;
+  return (
+    normalizedValue<SessionLifecycleState>(raw, SESSION_LIFECYCLE_STATE_SET) !== null ||
+    (typeof raw === 'string' && raw.toUpperCase() === 'ARCHIVED')
+  );
+};
 
 /** Kept for compatibility with callers/tests during the API migration. */
 export const hasAuthoritativeSessionState = (
@@ -90,9 +99,9 @@ const legacySessionRunState = (session: SessionStateSource): SessionRunState | n
 };
 
 /**
- * Resolve the run outcome without consulting filing timestamps. `runState` is authoritative;
+ * Resolve the run outcome without consulting lifecycle timestamps. `runState` is authoritative;
  * raw runner fields come next, and the old mixed `sessionState` is used only when no raw status
- * exists. That ordering prevents a stale COMPLETED filing value from overriding CANCELLED.
+ * exists. That ordering prevents a stale legacy COMPLETED value from overriding CANCELLED.
  */
 export function sessionRunStateOf(session: SessionStateSource): SessionRunState {
   const explicit = normalizedValue<SessionRunState>(session.runState, SESSION_RUN_STATE_SET);
@@ -132,28 +141,35 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
   }
 }
 
-/** Resolve where the session is filed, independently of how its latest run ended. */
-export function sessionFilingStateOf(
+export type SessionLifecycleView = 'open' | 'completed' | 'trash';
+type LegacySessionListView = 'active' | 'archived' | 'deleted';
+
+/** Resolve the product lifecycle location, independently of how its latest run ended. */
+export function sessionLifecycleStateOf(
   session: SessionStateSource,
-  options: { legacyView?: 'active' | 'archived' | 'deleted' } = {},
-): SessionFilingState {
-  const explicit = normalizedValue<SessionFilingState>(
-    session.filingState,
-    SESSION_FILING_STATE_SET,
+  options: { listView?: SessionLifecycleView; legacyView?: LegacySessionListView } = {},
+): SessionLifecycleState {
+  const raw = session.lifecycleState ?? session.filingState;
+  const explicit = normalizedValue<SessionLifecycleState>(
+    raw,
+    SESSION_LIFECYCLE_STATE_SET,
   );
   if (explicit) return explicit;
+  // Older API payloads called Completed ARCHIVED. Keep that translation at the boundary so
+  // the rest of the Web app has one lifecycle vocabulary.
+  if (typeof raw === 'string' && raw.toUpperCase() === 'ARCHIVED') return 'COMPLETED';
   if (session.deletedAt != null) return 'TRASH';
-  if (session.archivedAt != null) return 'ARCHIVED';
-  if (options.legacyView === 'deleted') return 'TRASH';
-  if (options.legacyView === 'archived') return 'ARCHIVED';
+  if (session.completedAt != null || session.archivedAt != null) return 'COMPLETED';
+  if (options.listView === 'trash' || options.legacyView === 'deleted') return 'TRASH';
+  if (options.listView === 'completed' || options.legacyView === 'archived') return 'COMPLETED';
   return 'OPEN';
 }
 
-export const sessionFilingLabel = (state: SessionFilingState): string =>
-  state === 'ARCHIVED' ? 'Completed' : state === 'TRASH' ? 'Trash' : 'Open';
+export const sessionLifecycleLabel = (state: SessionLifecycleState): string =>
+  state === 'COMPLETED' ? 'Completed' : state === 'TRASH' ? 'Trash' : 'Open';
 
 /**
- * @deprecated New UI should use sessionRunStateOf and sessionFilingStateOf separately.
+ * @deprecated New UI should use sessionRunStateOf and sessionLifecycleStateOf separately.
  * This compatibility helper now reflects only the run dimension.
  */
 export function sessionStateOf(session: SessionStateSource): SessionStateValue {
@@ -175,7 +191,7 @@ export const isSessionBusy = (session: SessionStateSource): boolean =>
 export const sessionHoldsRunnerSlot = (session: SessionStateSource): boolean =>
   sessionRunStatusOf(session) === 'RUNNING';
 
-/** Human-facing copy for an ended session. The run outcome and filing location stay separate. */
+/** Human-facing copy for an ended session. The run outcome and lifecycle location stay separate. */
 export function sessionEndedBanner(
   session: SessionStateSource,
   resumable: boolean,
@@ -183,9 +199,9 @@ export function sessionEndedBanner(
   resumeBlockedMessage?: string | null,
 ): string {
   const state = sessionRunStateOf(session);
-  const filing = sessionFilingStateOf(session);
+  const lifecycle = sessionLifecycleStateOf(session);
   const suffix =
-    filing === 'ARCHIVED' && resumable
+    lifecycle === 'COMPLETED' && resumable
       ? ' Sending a message will resume this session in Open.'
       : resumable
         ? ' Send a message to resume this session.'

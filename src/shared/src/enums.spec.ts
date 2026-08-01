@@ -3,9 +3,11 @@ import {
   RunStatus,
   SessionEndReason,
   SessionFilingState,
+  SessionLifecycleState,
   SessionRunState,
   SessionState,
   deriveSessionFilingState,
+  deriveSessionLifecycleState,
   deriveSessionRunState,
   deriveSessionState,
   gracefulEndStatus,
@@ -77,6 +79,19 @@ describe('orthogonal session states', () => {
     expect(deriveSessionFilingState({ archivedAt: new Date() })).toBe(SessionFilingState.ARCHIVED);
     expect(deriveSessionFilingState({ archivedAt: new Date(), deletedAt: new Date() })).toBe(
       SessionFilingState.TRASH,
+    );
+  });
+
+  it('uses Completed as the canonical lifecycle while accepting archivedAt compatibility', () => {
+    expect(deriveSessionLifecycleState({})).toBe(SessionLifecycleState.OPEN);
+    expect(deriveSessionLifecycleState({ completedAt: new Date() })).toBe(
+      SessionLifecycleState.COMPLETED,
+    );
+    expect(deriveSessionLifecycleState({ archivedAt: new Date() })).toBe(
+      SessionLifecycleState.COMPLETED,
+    );
+    expect(deriveSessionLifecycleState({ completedAt: new Date(), deletedAt: new Date() })).toBe(
+      SessionLifecycleState.TRASH,
     );
   });
 

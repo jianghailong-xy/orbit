@@ -75,7 +75,8 @@ export class SessionsController {
     @Query('runnerId') runnerId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
     // answers it with an empty list rather than accidentally falling through to Open.
-    @Query('view') view?: 'active' | 'archived' | 'deleted' | 'system',
+    @Query('view')
+    view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system',
   ) {
     return this.sessions.list(user.userId, { runnerId, view });
   }
@@ -224,9 +225,15 @@ export class SessionsController {
     return this.sessions.disableShare(user.userId, id);
   }
 
+  @Post(':id/complete')
+  complete(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.complete(user.userId, id);
+  }
+
+  /** @deprecated Compatibility route for clients deployed before Complete was canonical. */
   @Post(':id/archive')
-  archive(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
-    return this.sessions.archive(user.userId, id);
+  archiveCompatibility(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.complete(user.userId, id);
   }
 
   @Post(':id/restore')

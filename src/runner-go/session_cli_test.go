@@ -112,8 +112,8 @@ func TestSessionCLIHelpDocumentsComplete(t *testing.T) {
 	if err := cmdSessionCLI([]string{"complete", "--help"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "complete and archive a session") {
-		t.Fatalf("complete help does not explain archive semantics: %q", out.String())
+	if !strings.Contains(out.String(), "move a session to Completed") {
+		t.Fatalf("complete help does not explain Completed semantics: %q", out.String())
 	}
 }
 
@@ -188,7 +188,7 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			name:       "complete",
 			args:       []string{"complete", "child-session", "--json"},
 			method:     http.MethodPost,
-			requestURI: "/api/runner/sessions/child-session/archive",
+			requestURI: "/api/runner/sessions/child-session/complete-session",
 		},
 	}
 

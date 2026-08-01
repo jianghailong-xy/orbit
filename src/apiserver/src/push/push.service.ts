@@ -56,18 +56,28 @@ export class PushService {
   async notifyApprovalRequest(sessionId: string, toolName: string): Promise<void> {
     if (!this.enabled) return;
     try {
-      const session = await this.prisma.session.findUnique({
-        where: { id: sessionId },
+      const session = await this.prisma.session.findFirst({
+        where: {
+          id: sessionId,
+          status: RunStatus.RUNNING,
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+        },
         select: { title: true, ownerId: true },
       });
       if (!session) return;
-      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
-      if (tokens.length === 0) return;
 
       // App-icon badge = the owner's sessions that need a reply (the authoritative count, shared
       // with the in-app "needs you" list and the silent sync below). Record it so a follow-up
       // reconcile won't re-push this same value. See docs/cross-platform-badge-sync.md.
       const ids = await this.needsYouSessions(session.ownerId);
+      // Completion can race this fire-and-forget path after the approval is created. Requiring the
+      // target to remain in the authoritative set prevents a stale alert from being delivered.
+      if (!ids.includes(sessionId)) return;
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
+      if (tokens.length === 0) return;
       this.badgeState.set(session.ownerId, { badge: ids.length, sessions: new Set(ids) });
       const badge = ids.length;
 
@@ -92,14 +102,18 @@ export class PushService {
   }
 
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
-   *  Mirrors the client's SessionGrouping.needsYou exactly: a RUNNING session with at least one
-   *  PENDING approval. Counting sessions (not approval rows) and gating on RUNNING keeps the badge
-   *  equal to what the app shows, and excludes orphaned approvals on dead sessions. */
+   *  Mirrors the client's SessionGrouping.needsYou exactly: an Open, non-ending RUNNING session
+   *  with at least one PENDING approval. Counting sessions (not approval rows) keeps the badge equal
+   *  to what the app shows, and excludes approvals on completed, trashed, or ending sessions. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
     const rows = await this.prisma.session.findMany({
       where: {
         ownerId,
         status: RunStatus.RUNNING,
+        completedAt: null,
+        archivedAt: null,
+        deletedAt: null,
+        cancelRequestedAt: null,
         approvals: { some: { status: 'PENDING' } },
       },
       select: { id: true },

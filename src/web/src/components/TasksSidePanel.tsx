@@ -106,7 +106,7 @@ async function logout() {
 export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const loc = useLocation();
   const navigate = useNavigate();
-  // While the control-plane stream is live it pushes list changes, so the active-sessions poll
+  // While the control-plane stream is live it pushes list changes, so the Open-session poll
   // below stands down; it resumes automatically on any stream gap.
   const controlLive = useControlPlaneLive();
   // The signed-in user, for the footer avatar + name. Shares its key with the account
@@ -304,11 +304,11 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   });
   const unlistedCount = unlistedTasks.data?.counts.total ?? 0;
 
-  // Live sessions (RUNNING/PENDING), used below to decorate each agent row with its own
-  // "needs you" count. Polls faster while anything is live. Shares the ['sessions', null,
-  // 'active'] cache the sidebar/console already fill, so it adds no extra request.
-  const activeSessions = useQuery({
-    ...sessionsQuery({ view: 'active' }),
+  // Open sessions, used below to decorate each agent row with its own "needs you" count.
+  // Polls faster while anything is live. Shares the ['sessions', null,
+  // 'open'] cache the sidebar/console already fill, so it adds no extra request.
+  const openSessions = useQuery({
+    ...sessionsQuery({ view: 'open' }),
     refetchInterval: controlLive
       ? false
       : (q) =>
@@ -318,21 +318,21 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             ? 5_000
             : 15_000,
   });
-  // The "needs you" signal decomposed per agent: how many of each agent's active
+  // The "needs you" signal decomposed per agent: how many of each agent's Open
   // sessions are blocked on an approval. Lets an agent row show its own attention count
   // (and hide its ⌘ shortcut) so you can jump straight to the agent that needs you.
-  // Same active-sessions cache, no extra request; keyed by nested agent.id (flat
+  // Same Open-session cache, no extra request; keyed by nested agent.id (flat
   // agentId as fallback). Host sessions carry no agent and roll up only into Active.
   const agentNeedsYou = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of (activeSessions.data ?? []) as any[]) {
+    for (const s of (openSessions.data ?? []) as any[]) {
       if ((s.pendingApprovals ?? 0) <= 0) continue;
       const id = s.agent?.id ?? s.agentId;
       if (!id) continue;
       m.set(id, (m.get(id) ?? 0) + 1);
     }
     return m;
-  }, [activeSessions.data]);
+  }, [openSessions.data]);
 
   // Open an agent's console — the same destination the runner detail page uses.
   // Config-only agents (no runner) have no console to open.

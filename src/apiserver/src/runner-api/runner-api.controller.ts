@@ -45,8 +45,8 @@ import {
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   SessionCommitResultRequest,
-  SessionCompleteRequest,
-  SessionCompleteResponse,
+  RunFinalizeRequest,
+  RunFinalizeResponse,
   SessionDiffResultRequest,
   SessionEndReason,
   SessionMergeResultRequest,
@@ -1272,19 +1272,19 @@ export class RunnerApiController {
   }
 
   @UseGuards(RunnerAuthGuard)
-  @Post('sessions/:id/complete')
-  async complete(
+  @Post('sessions/:id/finalize')
+  async finalize(
     @CurrentRunner() runner: { id: string },
     @Param('id') sessionId: string,
-    @Body() dto: SessionCompleteRequest,
-  ): Promise<SessionCompleteResponse> {
+    @Body() dto: RunFinalizeRequest,
+  ): Promise<RunFinalizeResponse> {
     await this.assertSessionOwnership(sessionId, runner.id);
     const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
     if (!TERMINAL.includes(dto.status as RunStatus)) {
-      throw new BadRequestException('completion status must be terminal');
+      throw new BadRequestException('finalization status must be terminal');
     }
 
-    // Finalize in ONE row-locked transaction. Archive/remove/reaper also write this row,
+    // Finalize in ONE row-locked transaction. Complete/remove/reaper also write this row,
     // so the locked re-read is the only snapshot allowed to decide the final status and
     // checkout lifetime. A stale ownership fast-read above must never overwrite a newer
     // cancel/end intent. Billing is accrued per-turn by /turn-complete.
@@ -1300,14 +1300,14 @@ export class RunnerApiController {
 
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and
-      // hard archive/delete/cancel settle CANCELLED through the fallback.
+      // hard complete/delete/cancel settle CANCELLED through the fallback.
       const effectiveStatus: RunStatus = current.cancelRequestedAt
         ? ((gracefulEndStatus(current.endReason) as RunStatus | null) ?? RunStatus.CANCELLED)
         : (dto.status as RunStatus);
       // Filing timestamps are canonical for new rows; endReason checks keep legacy rows
       // safe. Only Open sessions retain their checkout for a future resume.
       const keepCheckout =
-        current.archivedAt == null &&
+        (current.completedAt ?? current.archivedAt) == null &&
         current.deletedAt == null &&
         current.endReason !== SessionEndReason.COMPLETED &&
         current.endReason !== SessionEndReason.DELETED;
@@ -1337,7 +1337,7 @@ export class RunnerApiController {
             : {}),
           // Candidate branches for the ended session's "Merge to…" dropdown (older runners omit it).
           ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
-          // finalizeWorktree committed everything onto the branch before /complete, so the
+          // finalizeWorktree committed everything onto the branch before /finalize, so the
           // checkout is clean — the bar shows Merge (not Commit) for the ended session.
           worktreeDirty: false,
           // The session is ending — Claude (and its background children) are gone, so neither
@@ -1393,10 +1393,21 @@ export class RunnerApiController {
     return { ok: true, keepCheckout: outcome.keepCheckout };
   }
 
+  /** @deprecated Runner protocol alias retained for binaries predating `/finalize`. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/complete')
+  complete(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: RunFinalizeRequest,
+  ): Promise<RunFinalizeResponse> {
+    return this.finalize(runner, sessionId, dto);
+  }
+
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,
    *  return which are safe to remove. A checkout is kept while its session still exists and is
-   *  neither archived (completed) nor deleted — it stays resumable, so idle-parked sessions
-   *  survive a runner restart. Everything else (archived, deleted, or no longer a session) is
+   *  neither Completed nor deleted — it stays resumable, so idle-parked sessions
+   *  survive a runner restart. Everything else (Completed, deleted, or missing) is
    *  removable leftover. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
@@ -1409,7 +1420,7 @@ export class RunnerApiController {
     const valid = ids.filter((id) => UUID.test(id));
     const keepRows = valid.length
       ? await this.prisma.session.findMany({
-          where: { id: { in: valid }, archivedAt: null, deletedAt: null },
+          where: { id: { in: valid }, completedAt: null, archivedAt: null, deletedAt: null },
           select: { id: true },
         })
       : [];

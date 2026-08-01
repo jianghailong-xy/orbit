@@ -121,26 +121,26 @@ final class Phase2LogicTests: XCTestCase {
 
     func testCompletedResumeNoticeHonorsAuthoritativeCapability() {
         let allowed = SessionCapabilities(canSend: true, canResume: true,
-                                          canArchive: false, canRestore: true)
+                                          canComplete: false, canRestore: true)
         let blocked = SessionCapabilities(canSend: false, canResume: false,
                                           resumeBlockedReason: .missingContext,
-                                          canArchive: false, canRestore: true)
+                                          canComplete: false, canRestore: true)
 
         XCTAssertTrue(ComposerLogic.showsCompletedResumeNotice(
-            filingState: .archived, capabilities: allowed))
+            lifecycleState: .completed, capabilities: allowed))
         XCTAssertTrue(ComposerLogic.showsCompletedResumeNotice(
-            filingState: .archived, capabilities: nil))
+            lifecycleState: .completed, capabilities: nil))
         XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
-            filingState: .archived, capabilities: blocked))
+            lifecycleState: .completed, capabilities: blocked))
         XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
-            filingState: .open, capabilities: allowed))
+            lifecycleState: .open, capabilities: allowed))
         XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
-            filingState: .trash, capabilities: allowed))
+            lifecycleState: .trash, capabilities: allowed))
     }
 
     func testCapabilitiesAuthoritativelyGateSendAndResume() {
         let resumable = SessionCapabilities(canSend: true, canResume: true,
-                                            canArchive: true, canRestore: false)
+                                            canComplete: true, canRestore: false)
         XCTAssertEqual(ComposerLogic.availability(status: .succeeded,
                                                   capabilities: resumable), .sendNow)
         XCTAssertTrue(ComposerLogic.shouldResume(status: .succeeded, capabilities: resumable))
@@ -150,7 +150,7 @@ final class Phase2LogicTests: XCTestCase {
         // context is gone, so the send is blocked with useful copy instead of changing endpoints.
         let missing = SessionCapabilities(canSend: false, canResume: false,
                                           resumeBlockedReason: .missingContext,
-                                          canArchive: true, canRestore: false)
+                                          canComplete: true, canRestore: false)
         XCTAssertEqual(ComposerLogic.availability(status: .succeeded,
                                                   capabilities: missing), .blocked)
         XCTAssertFalse(ComposerLogic.shouldResume(status: .succeeded, capabilities: missing))
@@ -160,7 +160,7 @@ final class Phase2LogicTests: XCTestCase {
         // A cached live state must not POST /turns while the server is already ending the run.
         let ending = SessionCapabilities(canSend: false, canResume: false,
                                          resumeBlockedReason: .ending,
-                                         canArchive: false, canRestore: false)
+                                         canComplete: false, canRestore: false)
         XCTAssertEqual(ComposerLogic.availability(status: .running,
                                                   capabilities: ending), .blocked)
         XCTAssertFalse(ComposerLogic.shouldResume(status: .running, capabilities: ending))
@@ -171,7 +171,7 @@ final class Phase2LogicTests: XCTestCase {
         // a normal turn; surface the server's NOT_TERMINAL explanation and wait for reconciliation.
         let stillLive = SessionCapabilities(canSend: true, canResume: false,
                                             resumeBlockedReason: .notTerminal,
-                                            canArchive: true, canRestore: false)
+                                            canComplete: true, canRestore: false)
         XCTAssertEqual(ComposerLogic.availability(status: .failed,
                                                   capabilities: stillLive), .blocked)
         XCTAssertFalse(ComposerLogic.shouldResume(status: .failed, capabilities: stillLive))
@@ -186,7 +186,7 @@ final class Phase2LogicTests: XCTestCase {
 
         let future = SessionCapabilities(canSend: false, canResume: false,
                                          resumeBlockedReason: .unknown,
-                                         canArchive: false, canRestore: false)
+                                         canComplete: false, canRestore: false)
         XCTAssertEqual(ComposerLogic.blockedMessage(status: .cancelled, capabilities: future),
                        "This session cannot be resumed right now.")
         XCTAssertEqual(ComposerLogic.sendBlockedMessage(reason: .runnerOffline),

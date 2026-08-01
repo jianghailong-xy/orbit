@@ -134,7 +134,7 @@ export interface ControlEvent {
 export enum ControlEventType {
   SESSION_CREATED  = 'session.created',   // 用户新建/系统创建了会话
   SESSION_UPDATED  = 'session.updated',   // status / title / lastTurnAt / pendingApprovals 变化
-  SESSION_ENDED    = 'session.ended',     // 进入终态 / 归档 / 删除
+  SESSION_ENDED    = 'session.ended',     // 生命周期移出 Open(兼容事件名,不等同运行终态)
   SESSION_ERROR    = 'session.error',     // 运行错误(含非终态的中途错误)—— 决议 Q3:独立事件
   APPROVAL_REQUESTED = 'approval.requested',
   APPROVAL_RESOLVED  = 'approval.resolved',
@@ -146,8 +146,8 @@ export enum ControlEventType {
 
 `data` 载荷约定(够驱动列表/通知即可,**不塞 transcript 正文**):
 - `SESSION_CREATED` / `SESSION_UPDATED`(决议 Q2:**推完整精简摘要**,客户端无脑 upsert):
-  `{ id, title, status, runStatus, sessionState, runState, filingState, capabilities?, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。`runStatus` 是 runner/进程原始态；`runState` 是用户可见的执行态/结果；`filingState` 是 `OPEN|ARCHIVED|TRASH`,唯一决定列表归属；`capabilities` 是服务端统一派生的发送/恢复/归档/还原权限(滚动升级期间可缺失)。`sessionState` 只为旧客户端兼容保留；`status` 仍是 `runStatus` 的兼容别名。**不做字段级 delta**(避免客户端做易错的字段合并)。
-- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, filingState, endReason }`。例如运行中的会话被用户 Complete 后，可以是 `runState=CANCELLED`、`filingState=ARCHIVED`（产品文案为 Completed）；新客户端分别展示执行结果与所在位置。
+  `{ id, title, status, runStatus, sessionState, runState, lifecycleState, capabilities?, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。`runStatus` 是 runner/进程原始态；`runState` 是用户可见的执行态/结果；`lifecycleState` 是 `OPEN|COMPLETED|TRASH`,唯一决定列表归属；`capabilities` 是服务端统一派生的发送/恢复/Complete/还原权限(滚动升级期间可缺失)。`sessionState`、`filingState` 和 `status` 只为旧客户端兼容保留,其中 `filingState=ARCHIVED` 对应 `lifecycleState=COMPLETED`,`status` 是 `runStatus` 的兼容别名。**不做字段级 delta**(避免客户端做易错的字段合并)。
+- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,可以是 `runState=CANCELLED`、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置。兼容 payload 可额外携带 `filingState=ARCHIVED`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
 - `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
@@ -214,8 +214,8 @@ streamForUser(userId: string): Observable<ControlEvent> {
 
 发的位置:
 
-- **created**:`SessionsService.create`(新建)+ `restore`(从归档/回收站恢复,重回 Open)→ `publishSessionCreated`。`streamForUser` 补全完整 summary。
-- **ended**:`SessionsService.archive` + `remove`(软删)→ `publishSessionEnded(id, status, actualEndReason, actualFilingState)`。`actualEndReason` 可为空，并保留数据库中已经形成的运行结束原因；`actualFilingState` 来自行锁事务提交后的真实位置，不能根据本次请求猜测。`session.ended` 是为旧客户端保留的事件名，新语义是 **filing changed**，不表示执行结果。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 `runState` 展示执行结果,按 `filingState` 判断列表位置),而**优雅回收**(endReason `idle`/`ended`,原始运行态同样落 CANCELLED)仍留在 Open(`runState=DORMANT`,`filingState=OPEN`)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
+- **created**:`SessionsService.create`(新建)+ `restore`(从 Completed/Trash 移回 Open)→ `publishSessionCreated`。`streamForUser` 补全完整 summary。
+- **ended**:`SessionsService.complete` + `remove`(移入 Trash)→ `publishSessionEnded(id, status, actualEndReason, actualLifecycleState)`。`actualEndReason` 可为空,并保留数据库中已经形成的运行结束原因；`actualLifecycleState` 来自行锁事务提交后的真实位置,不能根据本次请求猜测。`session.ended` 是为旧客户端保留的事件名,新语义是 **lifecycle changed**,不表示执行结果。**这俩是“列表成员变化但不带 STATUS 事件”的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 `runState` 展示执行结果,按 `lifecycleState` 判断列表位置),而**优雅回收**(endReason `idle`/`ended`,原始运行态同样落 CANCELLED)仍留在 Open(`runState=DORMANT`,`lifecycleState=OPEN`)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
 - **evict-on-ended(Q4)**:`session.ended` 映射时顺手 `ownerCache.delete(sessionId)`。
 
 后续按同一机制补的合成信号(都进 `isLifecycleType`,都不持久化):`session_updated`(改名/打标签这类"列表行变了但没有 turn"的场景,复用 `session.updated` 的完整 summary)、`task_changed`(MCP `task_create/update/comment`)、`agent_changed`(MCP `agent_create/update`)。
@@ -290,7 +290,7 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
 |---|---|---|
 | **P1 协议层(✅ 2026-06-26 已落地)** | shared `realtime.ts`(`ControlEventType` + `ControlEvent` + 5 个 typed payload)+ OrbitKit `Models/ControlEvent.swift` 镜像(`.unknown` 兜底 + `payload(_:)` 解码) | **已验证**:shared `tsc --noEmit` 0 错 + vitest 2 passed(`realtime.spec.ts`);OrbitKit `swift test` 123 passed(+9 `ControlEventCodableTests`) |
 | **P2 服务端流(✅ 2026-06-26 已落地)** | `RealtimeService.streamForUser` + ownerCache(有界 LRU)+ `buildSessionSummary`/`countPendingApprovals` + 纯映射 `realtime/control-events.ts` + `GET /api/events`(`EventsController`/`EventsModule` 入 AppModule) | **已验证**:apiserver 全量 `tsc` 0 错;`node --test` 9 passed(`control-events.spec` 纯映射 5 + `stream-for-user.spec` 集成 4:owner 过滤、session.updated 全摘要、approval 计数、transcript 丢弃)。**手测 curl SSE 待部署后在运行栈上做**(端点是 `/sessions/:id/events` 的同构镜像,已编译+单测) |
-| **P3 合成生命周期(✅ 07-05)** | created/ended 于 create/restore(created)与 archive/remove(ended)发信号;终态运行状态走 session.updated 不重复发 | node --test 46 passed(realtime 13:含 created/ended 映射 + transcript 隔离) |
+| **P3 合成生命周期(✅ 07-05)** | created/ended 于 create/restore(created)与 complete/remove(ended)发信号;终态运行状态走 session.updated 不重复发 | node --test 46 passed(realtime 13:含 created/ended 映射 + transcript 隔离) |
 | **P4 心跳 + 看门狗(✅ 07-05)** | 服务端 20s keepalive(Nest @Sse 发不了 `:` 注释帧 → 改发 `{type:"ping"}` data 帧,客户端按类型丢弃、字节喂看门狗——效果等同) + OrbitKit 传输层字节看门狗(2× 间隔无字节 → 断开重连) | ControlStreamTests |
 | **P5 客户端接入(✅ 07-05,macOS+iOS 共享层)** | OrbitKit `ControlEvent.swift`+`URLSessionControlStream`;`AppModel` 常驻流:连上→快照重建+停轮询tick,断→回退 4s 轮询(老服务器兼容);通知复用 SessionDelta(upsert 前后快照 diff) | swift test;真机后台保活待验 |
 | P6 web 复用(可选) | EventSource 接入 + 放宽 refetch | 列表实时、轮询流量下降 |

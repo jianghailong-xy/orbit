@@ -17,12 +17,14 @@ import {
   type BgShell,
   deriveBackgroundShells,
   deriveSessionFilingState,
+  deriveSessionLifecycleState,
   type EventSearchResponse,
   FilePatch,
   MAX_PROMPT_CHARS,
   RunEventType,
   SessionEndReason,
   SessionFilingState,
+  SessionLifecycleState,
   type SessionResumeBlockedReason,
   SessionRunState,
   SessionState,
@@ -320,6 +322,8 @@ export class SessionsService {
     runStatus: RunStatus;
     sessionState: SessionState;
     runState: SessionRunState;
+    lifecycleState: SessionLifecycleState;
+    /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
     title: string;
     agentName: string | null;
@@ -369,6 +373,7 @@ export class SessionsService {
       runStatus: created.runStatus,
       sessionState: created.sessionState,
       runState: created.runState,
+      lifecycleState: created.lifecycleState,
       filingState: created.filingState,
       title: created.title,
       agentName: targetAgent?.name ?? null,
@@ -442,6 +447,7 @@ export class SessionsService {
         title: true,
         status: true,
         endReason: true,
+        completedAt: true,
         archivedAt: true,
         deletedAt: true,
         agentId: true,
@@ -469,6 +475,7 @@ export class SessionsService {
         title: true,
         prompt: true,
         status: true,
+        completedAt: true,
         archivedAt: true,
         deletedAt: true,
         provider: true,
@@ -511,8 +518,8 @@ export class SessionsService {
    * Cross-scope session search backing the clients' ⌘K palette.
    *
    * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (Open,
-   * Archived and Trash — "the one I'm thinking of" is usually filed away, and the hit
-   * carries archivedAt/deletedAt so the row can say where it lives), and it reaches into
+   * Completed and Trash — "the one I'm thinking of" is usually filed away, and the hit
+   * carries completedAt/deletedAt so the row can say where it lives), and it reaches into
    * conversation text, which no list payload ever carries.
    *
    * Three tiers:
@@ -558,6 +565,7 @@ export class SessionsService {
       taskTitle: string | null;
       lastTurnAt: Date | null;
       createdAt: Date;
+      completedAt: Date | null;
       archivedAt: Date | null;
       deletedAt: Date | null;
       endReason: string | null;
@@ -740,7 +748,8 @@ export class SessionsService {
             t.title   AS "taskTitle",
             s.last_turn_at AS "lastTurnAt",
             s.created_at   AS "createdAt",
-            s.archived_at  AS "archivedAt",
+            COALESCE(s.completed_at, s.archived_at) AS "completedAt",
+            COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
             s.deleted_at   AS "deletedAt",
             s.end_reason   AS "endReason",
             h.match_field  AS "matchField",
@@ -782,7 +791,8 @@ export class SessionsService {
             t.title   AS "taskTitle",
             s.last_turn_at AS "lastTurnAt",
             s.created_at   AS "createdAt",
-            s.archived_at  AS "archivedAt",
+            COALESCE(s.completed_at, s.archived_at) AS "completedAt",
+            COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
             s.deleted_at   AS "deletedAt",
             s.end_reason   AS "endReason",
             'recent'::text AS "matchField",
@@ -807,6 +817,7 @@ export class SessionsService {
         taskTitle: r.taskTitle,
         lastTurnAt: r.lastTurnAt,
         createdAt: r.createdAt,
+        completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
         endReason: r.endReason,
@@ -822,30 +833,41 @@ export class SessionsService {
 
   async list(
     ownerId: string,
-    filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' | 'system' },
+    filters: {
+      runnerId?: string;
+      view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
+    },
   ) {
-    // active = neither archived nor deleted; archived = archived but not deleted;
-    // deleted (trash) = deleted, regardless of archive state. Default to active.
+    // Open = neither completed nor deleted; Completed = completed but not deleted;
+    // Trash = deleted, regardless of completion state. Legacy view names remain aliases.
     // `system` is a removed scope retained only for installed older clients; explicitly
     // return no rows so it can never fall through and duplicate Open.
+    const view =
+      filters.view === 'active'
+        ? 'open'
+        : filters.view === 'archived'
+          ? 'completed'
+          : filters.view === 'deleted'
+            ? 'trash'
+            : (filters.view ?? 'open');
     const visibility: Prisma.Sql =
-      filters.view === 'deleted'
+      view === 'trash'
         ? Prisma.sql`s.deleted_at IS NOT NULL`
-        : filters.view === 'system'
+        : view === 'system'
           ? Prisma.sql`FALSE`
-          : filters.view === 'archived'
-            ? Prisma.sql`s.archived_at IS NOT NULL AND s.deleted_at IS NULL`
-            : Prisma.sql`s.archived_at IS NULL AND s.deleted_at IS NULL`;
+          : view === 'completed'
+            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL`
+            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL`;
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
-    // Archived orders by when the session was filed away
-    // (archived_at, newest first) — not by last activity — and deliberately ignores
+    // Completed orders by when the session was completed
+    // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
     // sessions to the top and orders by last turn activity.
     const orderBy: Prisma.Sql =
-      filters.view === 'archived'
-        ? Prisma.sql`s.archived_at DESC NULLS LAST, s.created_at DESC`
+      view === 'completed'
+        ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, s.last_turn_at DESC NULLS LAST, s.created_at DESC`;
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
@@ -862,6 +884,7 @@ export class SessionsService {
       costUsd: number;
       error: string | null;
       endReason: string | null;
+      completedAt: Date | null;
       archivedAt: Date | null;
       deletedAt: Date | null;
       source: string;
@@ -903,7 +926,8 @@ export class SessionsService {
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
         s.claude_session_id AS "claudeSessionId",
-        s.archived_at     AS "archivedAt",
+        COALESCE(s.completed_at, s.archived_at) AS "completedAt",
+        COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
         s.deleted_at      AS "deletedAt",
         s.source, s.provider, s.model,
         s.permission_mode AS "permissionMode",
@@ -958,6 +982,7 @@ export class SessionsService {
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
         claudeSessionId: r.claudeSessionId,
+        completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
         source: r.source,
@@ -1068,6 +1093,7 @@ export class SessionsService {
         title: true,
         status: true,
         endReason: true,
+        completedAt: true,
         archivedAt: true,
         deletedAt: true,
         createdAt: true,
@@ -1088,6 +1114,7 @@ export class SessionsService {
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
       runState: stateful.runState,
+      lifecycleState: stateful.lifecycleState,
       filingState: stateful.filingState,
       createdAt: session.createdAt,
       events: events.map((e) => ({
@@ -1586,7 +1613,7 @@ export class SessionsService {
     RunStatus.INTERRUPTED,
   ];
 
-  // Not live: resume() revives these (and archive/delete/config treat them as
+  // Not live: resume() revives these (and complete/delete/config treat them as
   // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
   // (idle recycle / user end) — `endReason` is what tells those apart for display.
   private static readonly TERMINAL: RunStatus[] = [
@@ -2166,11 +2193,13 @@ export class SessionsService {
     ownerId: string,
     sessionId: string,
     reason: SessionEndReason,
-    filing?: 'archivedAt' | 'deletedAt',
+    lifecycle?: 'completedAt' | 'deletedAt',
   ): Promise<{
     changed: boolean;
     runnerId: string | null;
     status: RunStatus;
+    lifecycleState: SessionLifecycleState;
+    /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
   }> {
@@ -2181,7 +2210,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
-      if (filing === 'archivedAt' && session.deletedAt != null) {
+      if (lifecycle === 'completedAt' && session.deletedAt != null) {
         throw new ConflictException(
           'a session in Trash must be moved to Open before it can be completed',
         );
@@ -2189,29 +2218,41 @@ export class SessionsService {
       const now = new Date();
       // Keep the first filing timestamp stable across retries. This matters especially
       // for deletedAt, which starts the Trash retention clock.
-      const filingData: { archivedAt?: Date; deletedAt?: Date } = {};
-      let finalArchivedAt = session.archivedAt;
+      const lifecycleData: {
+        completedAt?: Date;
+        /** @deprecated Rolling-version compatibility mirror. */
+        archivedAt?: Date;
+        deletedAt?: Date;
+      } = {};
+      let finalCompletedAt = session.completedAt ?? session.archivedAt;
       let finalDeletedAt = session.deletedAt;
-      if (filing === 'archivedAt' && session.archivedAt == null) {
-        filingData.archivedAt = now;
-        finalArchivedAt = now;
+      if (lifecycle === 'completedAt' && finalCompletedAt == null) {
+        lifecycleData.completedAt = now;
+        // Keep old replicas and clients coherent during the compatibility window.
+        lifecycleData.archivedAt = now;
+        finalCompletedAt = now;
       }
-      if (filing === 'deletedAt' && session.deletedAt == null) {
-        filingData.deletedAt = now;
+      if (lifecycle === 'deletedAt' && session.deletedAt == null) {
+        lifecycleData.deletedAt = now;
         finalDeletedAt = now;
       }
+      const lifecycleState = deriveSessionLifecycleState({
+        completedAt: finalCompletedAt,
+        deletedAt: finalDeletedAt,
+      });
       const filingState = deriveSessionFilingState({
-        archivedAt: finalArchivedAt,
+        completedAt: finalCompletedAt,
         deletedAt: finalDeletedAt,
       });
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        if (Object.keys(filingData).length > 0) {
-          await tx.session.update({ where: { id: sessionId }, data: filingData });
+        if (Object.keys(lifecycleData).length > 0) {
+          await tx.session.update({ where: { id: sessionId }, data: lifecycleData });
         }
         return {
           changed: false,
           runnerId: session.assignedRunnerId,
           status: session.status,
+          lifecycleState,
           filingState,
           endReason:
             session.endReason == null ? null : (session.endReason as SessionEndReason),
@@ -2221,7 +2262,7 @@ export class SessionsService {
         await tx.session.update({
           where: { id: sessionId },
           data: {
-            ...filingData,
+            ...lifecycleData,
             status: RunStatus.CANCELLED,
             endReason: reason,
             cancelRequestedAt: now,
@@ -2235,7 +2276,7 @@ export class SessionsService {
       } else {
         await tx.session.update({
           where: { id: sessionId },
-          data: { ...filingData, cancelRequestedAt: now, endReason: reason },
+          data: { ...lifecycleData, cancelRequestedAt: now, endReason: reason },
         });
         // Drop queued messages so they cannot replay if the session is later revived.
         await tx.conversationTurn.deleteMany({
@@ -2250,6 +2291,7 @@ export class SessionsService {
         changed: true,
         runnerId: session.assignedRunnerId,
         status: session.status === RunStatus.PENDING ? RunStatus.CANCELLED : session.status,
+        lifecycleState,
         filingState,
         endReason: reason,
       };
@@ -2410,7 +2452,7 @@ export class SessionsService {
       throw SessionsService.resumeBlocked(initialCapabilities.resumeBlockedReason);
     }
 
-    // Re-check capability and revive under the same Session row lock used by archive/delete.
+    // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.
     const revived = await this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -2438,7 +2480,7 @@ export class SessionsService {
         where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
       });
       if (!SessionsService.TERMINAL.includes(current.status)) {
-        if (existing) return { turn: existing, wasArchived: false };
+        if (existing) return { turn: existing, wasCompleted: false };
         throw SessionsService.resumeBlocked('NOT_TERMINAL');
       }
       if (
@@ -2448,7 +2490,7 @@ export class SessionsService {
       ) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
-      if (existing) return { turn: existing, wasArchived: false };
+      if (existing) return { turn: existing, wasCompleted: false };
       if (capabilities.resumeBlockedReason) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
@@ -2487,7 +2529,8 @@ export class SessionsService {
           branchMerged: null,
           commitStatus: null,
           commitError: null,
-          // A resumable Archived session moves back to Open. Trash was rejected above.
+          // A resumable Completed session moves back to Open. Trash was rejected above.
+          completedAt: null,
           archivedAt: null,
           ...(dto.model !== undefined ? { model: dto.model } : {}),
           ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
@@ -2500,39 +2543,39 @@ export class SessionsService {
             : {}),
         },
       });
-      return { turn, wasArchived: current.archivedAt != null };
+      return { turn, wasCompleted: (current.completedAt ?? current.archivedAt) != null };
     });
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
-    // and signal the control plane, so every other client moves the row out of Archived and
+    // and signal the control plane, so every other client moves the row out of Completed and
     // into Open without polling.
-    if (revived.wasArchived) this.realtime.publishSessionCreated(id);
+    if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
     this.queue.notifySessionQueued();
     return { turnId: revived.turn.id, seq: revived.turn.seq };
   }
 
   /**
-   * Move a session from Open to Archived. Reversible. A session that
-   * hasn't ended is archived too: we recycle its runner process first (enqueue an
+   * Move a session from Open to Completed. Reversible. A session that
+   * hasn't ended is completed too: we recycle its runner process first (enqueue an
    * `end` control turn + signal the runner to cancel) so a live claude isn't orphaned.
-   * The status settles to CANCELLED async while the row already sits in Archived.
+   * The status settles to CANCELLED async while the row already sits in Completed.
    */
-  async archive(ownerId: string, id: string) {
+  async complete(ownerId: string, id: string) {
     const ended = await this.transitionEnd(
       ownerId,
       id,
       SessionEndReason.COMPLETED,
-      'archivedAt',
+      'completedAt',
     );
     // Everything below is deliberately post-commit. A failed end-turn insert rolls back
-    // both the intent and archivedAt, and therefore produces no runner/realtime signal.
+    // both the intent and completedAt, and therefore produces no runner/realtime signal.
     this.publishEndIntent(id, ended);
-    // Archive is a list-membership change with no STATUS event — signal the control plane so
+    // Complete is a lifecycle change with no STATUS event — signal the control plane so
     // other clients drop the row without polling.
-    this.realtime.publishSessionEnded(
+    this.realtime.publishSessionLifecycleChanged(
       id,
       ended.status,
       ended.endReason,
-      ended.filingState,
+      ended.lifecycleState,
     );
     return { ok: true };
   }
@@ -2610,7 +2653,7 @@ export class SessionsService {
   /**
    * Soft-delete a session (moves it to the trash view). No data is removed — the
    * transcript and billing stay; restore brings it back. There is no hard delete.
-   * A session that hasn't ended is deleted too: like `archive`, we recycle its runner
+   * A session that hasn't ended is deleted too: like `complete`, we recycle its runner
    * process first so a live runtime isn't orphaned. Status settles to
    * CANCELLED async while the row already sits in Trash.
    */
@@ -2618,16 +2661,16 @@ export class SessionsService {
     const ended = await this.transitionEnd(ownerId, id, SessionEndReason.DELETED, 'deletedAt');
     this.publishEndIntent(id, ended);
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.
-    this.realtime.publishSessionEnded(
+    this.realtime.publishSessionLifecycleChanged(
       id,
       ended.status,
       ended.endReason,
-      ended.filingState,
+      ended.lifecycleState,
     );
     return { ok: true };
   }
 
-  /** Bring an Archived or soft-deleted session back to Open. */
+  /** Bring a Completed or soft-deleted session back to Open. */
   async restore(ownerId: string, id: string) {
     await this.prisma.$transaction(async (tx) => {
       // Serialize with purge: if restore wins, purge re-reads an Open row and refuses;
@@ -2639,7 +2682,7 @@ export class SessionsService {
       if (locked.length === 0) throw new NotFoundException('session not found');
       await tx.session.update({
         where: { id },
-        data: { archivedAt: null, deletedAt: null },
+        data: { completedAt: null, archivedAt: null, deletedAt: null },
       });
     });
     // Back in Open — same signal as a brand-new session (the control plane's
@@ -2666,7 +2709,7 @@ export class SessionsService {
    * Permanently delete a trashed session and everything hanging off it — events, turns,
    * tool calls, usage, approvals, diff, and session-scoped attachments all cascade away at
    * the DB level (ON DELETE CASCADE). Irreversible. Guarded to sessions already in Trash
-   * (deletedAt set), so an active/archived session can never be hard-deleted in one step —
+   * (deletedAt set), so an Open/Completed session can never be hard-deleted in one step —
    * the user must soft-delete first (matching an "empty trash" flow). Tasks the session
    * created are detached (Task.creatorSessionId → null), not deleted.
    */

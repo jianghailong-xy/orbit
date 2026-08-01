@@ -7,7 +7,7 @@ import Foundation
 /// Kept in OrbitKit (not the SwiftUI view) so the exact web mapping is shared by macOS + iOS and
 /// unit-tested. The view turns `shape`/`tone` into an SF Symbol (or spinner) and a colour.
 ///
-/// New servers provide `runState`, which is deliberately independent from Open / Archived / Trash.
+/// New servers provide `runState`, which is deliberately independent from Open / Completed / Trash.
 /// Older servers fall back through the mixed `sessionState` and raw runner status in the DTO.
 public struct SessionStatusGlyph: Equatable, Sendable {
     /// How the view should draw the glyph. `.spinner` is the animated "working" indicator (web's
@@ -36,7 +36,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         self.label = label
     }
 
-    /// The glyph for a session. Filing location never overrides the run's actual state.
+    /// The glyph for a session. Lifecycle location never overrides the run's actual state.
     public static func make(for s: Session) -> SessionStatusGlyph {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,

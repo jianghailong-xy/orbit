@@ -22,7 +22,7 @@ final class AgentsModel {
     private(set) var loading = false
     var errorText: String?
 
-    // The selected agent's sessions for the current Open/Archived/Trash view.
+    // The selected agent's sessions for the current Open/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
@@ -133,7 +133,7 @@ final class AgentsModel {
         }
         defer { sessionsLoading = false }
         do {
-            let all = try await api.listSessions(view: view.queryValue)
+            let all = try await api.listSessions(view: view)
             agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
         } catch { errorText = friendly(error) }
     }

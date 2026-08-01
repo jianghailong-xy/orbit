@@ -1,107 +1,156 @@
-# Session lifecycle 与归档模型
+# Session 运行结果与 Completed 生命周期模型
 
 ## 1. 问题
 
-旧模型用一个 `sessionState` 同时表达两件事:
+旧模型把运行结果、列表位置和 Archive 术语混在一起:
 
-- 这次运行发生了什么;
-- 用户把会话放在哪个列表。
+- `SUCCEEDED` 容易被理解成“已经进入 Completed”;
+- 产品展示 Completed,协议和代码却仍以 `ARCHIVED / archivedAt / canArchive` 为主;
+- runner 的旧 `POST /runner/sessions/:id/complete` 又表示“上报进程已经结束”,与用户点击
+  Complete 的含义不同。
 
-因此 `SUCCEEDED` 会被误解为“已进入 Completed”,Archive 也会被误解为
-“运行成功”。新模型将它们拆成两个正交维度,Task 状态则继续独立。
+新模型把运行结果与 Session 生命周期拆成两个正交维度,并让 Completed 成为代码、API
+和产品的主语义。Archive 只在滚动升级兼容层中出现。
 
 ## 2. 三个独立维度
 
 ### 2.1 `runState`
 
-只描述运行态/结果:
+`runState` 只描述运行态或运行结果:
 
 | 值 | 含义 |
 |---|---|
 | `QUEUED` | 等待 runner slot |
 | `RUNNING` | 正在执行 |
 | `AWAITING_INPUT` | 进程存活,等待人类输入 |
-| `INTERRUPTED` | 当前 turn 被中断,会话仍存活 |
+| `INTERRUPTED` | 当前 turn 被中断,Session 仍存活 |
 | `SUCCEEDED` | 运行成功 |
 | `FAILED` | 运行失败 |
 | `CANCELLED` | 运行被取消 |
 | `DORMANT` | 优雅结束,仍可能恢复 |
 | `ENDED` | 其他非活跃终态 |
 
-Complete、Move to Open 或 Move to Trash 都不应重写已经形成的运行结果。
+Complete、Move to Open 或 Move to Trash 都不得重写已经形成的运行结果。尤其不能把
+`SUCCEEDED` 改名为 `COMPLETED`:前者是运行结果,后者是用户选择的列表位置。
 
-### 2.2 `filingState`
+### 2.2 `lifecycleState`
 
-只决定会话的列表位置:
+`lifecycleState` 是列表归属的唯一真值:
 
-| 值 | 列表 | 存储来源 |
+| 值 | 列表 | Canonical 存储来源 |
 |---|---|---|
-| `OPEN` | Open | `archivedAt == null && deletedAt == null` |
-| `ARCHIVED` | Completed | `archivedAt != null && deletedAt == null` |
+| `OPEN` | Open | `completedAt == null && deletedAt == null` |
+| `COMPLETED` | Completed | `completedAt != null && deletedAt == null` |
 | `TRASH` | Trash | `deletedAt != null` |
 
-`deletedAt` 优先级高于 `archivedAt`,因此一条曾经 Completed 的记录移入 Trash 后
-仍只属于 Trash。
+`deletedAt` 优先级高于 `completedAt`,因此一条曾经 Completed 的记录移入 Trash 后仍只
+属于 Trash。`filingState=ARCHIVED` 是旧客户端兼容别名,不能再作为新代码的内部模型。
 
 ### 2.3 Task state
 
-Task 的 `OPEN / IN_PROGRESS / DONE / CANCELLED / FAILED` 不是 Session 的列表位置,
-也不应在客户端覆盖 Session 的运行结果。两者仅在 reaper 收口处有明确映射:
+Task 的 `OPEN / IN_PROGRESS / DONE / CANCELLED / FAILED` 既不是 Session 的
+`lifecycleState`,也不应在客户端覆盖 Session 的运行结果。两者只在 reaper 收口处有明确
+映射:
 
-- Task `DONE` → `endReason=task_done` → Session `SUCCEEDED`;
-- Task `CANCELLED` → `endReason=task_cancelled` → Session `CANCELLED`。
+- Task `DONE` → `endReason=task_done` → Session `runState=SUCCEEDED`;
+- Task `CANCELLED` → `endReason=task_cancelled` → Session `runState=CANCELLED`。
 
 ## 3. 产品规则
 
-1. 运行成功不会自动归档。`Succeeded · Open` 是正常状态。
-2. `Complete` 只改变 `filingState`;若运行仍活跃,服务端同时结束当前运行。
+1. 运行成功不会自动 Complete。`Succeeded · Open` 是正常状态。
+2. `Complete` 将 `lifecycleState` 改为 `COMPLETED`;若运行仍活跃,服务端同时结束当前运行。
 3. `Complete` 不弹二次确认,活跃、排队和终态 Session 使用同一个直接动作。
 4. Completed 中发送新消息会恢复原 Session,并自动移回 Open;客户端必须事先说明。
-5. Trash 中禁止直接发送/恢复运行,必须先 `Restore to Open`。
-6. `Move to Open` 只清除归档/删除时间,不伪造新的运行结果。
+5. Trash 中禁止直接发送或恢复运行,必须先 `Move to Open`。
+6. `Move to Open` 只清除 `completedAt / deletedAt`,不伪造新的运行结果。
 7. Header 同时显示两个维度,例如 `Succeeded · Open · 3m ago`。
 
-## 4. 服务端 capability
+## 4. Canonical API 与 capability
 
-`runState` 不能单独回答“现在能否继续”。例如 Archive 请求已提交但 runner
-尚未回执时,底层 status 仍可能是 `RUNNING`,但新 turn 已应被拒绝。因此 Session
-payload 可带服务端统一派生的:
+Session payload 的主字段是:
 
 ```ts
+interface SessionSummary {
+  runState: SessionRunState;
+  lifecycleState: 'OPEN' | 'COMPLETED' | 'TRASH';
+  completedAt: string | null;
+  deletedAt: string | null;
+  capabilities: SessionCapabilities;
+}
+
 interface SessionCapabilities {
-  canSend: boolean;      // 当前能否向这一条 Session 发送/排队/恢复
-  canResume: boolean;    // 终态 Session 能否原地恢复上下文
+  canSend: boolean;
+  canResume: boolean;
   resumeBlockedReason:
     | 'TRASHED' | 'ENDING' | 'NOT_TERMINAL' | 'NOT_STARTED'
     | 'MISSING_CONTEXT' | 'NO_RUNNER' | 'RUNNER_OFFLINE' | null;
-  canArchive: boolean;
+  canComplete: boolean;
   canRestore: boolean;
 }
 ```
 
-`canResume` 与 `POST /resume` 必须使用同一个判定函数:终态、非 Trash、没有正在
-结束、已建立可恢复上下文、有 assigned runner,且 runner 心跳在在线窗口内。
-新客户端优先消费 capability;字段缺失时才使用旧的本地推断。
+`runState` 不能单独回答“现在能否继续”。例如 Complete 请求已经提交但 runner 尚未回执
+时,底层运行状态仍可能是 `RUNNING`,但新 turn 已经应被拒绝。`canResume` 与
+`POST /resume` 必须复用同一个服务端判定函数:终态、非 Trash、没有正在结束、已建立可
+恢复上下文、有 assigned runner,且 runner 心跳在在线窗口内。
+
+Canonical 客户端接口:
+
+- `GET /sessions?view=open|completed|trash`;
+- `POST /sessions/:id/complete`;
+- `POST /sessions/:id/restore`(Move to Open);
+- `DELETE /sessions/:id`(Move to Trash)。
+
+Runner 有两个刻意不同的接口:
+
+- `POST /runner/sessions/:id/complete-session`:编排器执行用户语义的 Complete,把目标
+  Session 移入 Completed;
+- `POST /runner/sessions/:id/finalize`:runner 数据面上报当前进程的终态和统计数据。
+  旧 `/complete` 仅作为 runner 滚动升级兼容路由,不表示生命周期迁移。
+
+明确使用 `complete-session` 后缀是为了避免 Nest 控制器路由冲突,也避免 SDK/日志把
+“finalize run”和“move Session to Completed”混为一谈。runner-go 内部相应使用
+`completeSession` 表达用户动作,使用 `finalizeRun` 表达进程终结。
 
 ## 5. 原子性与竞态
 
-Archive/Delete 对活跃 Session 同时包含“记录结束意图”和“改变列表位置”。
-这些写入必须在同一个 Session row lock 事务内完成;只有 commit 后才可通知 runner
-或发 realtime 事件。
+Complete/Move to Trash 对活跃 Session 同时包含“记录结束意图”和“改变列表位置”。这些
+写入必须在同一个 Session row lock 事务内完成;只有 commit 后才可通知 runner 或发布
+realtime 事件。
 
-- Delete 先获锁后,Archive 必须因已在 Trash 而拒绝;
-- Complete 先获锁后,Delete 可继续将 Completed 移入 Trash;
-- realtime 中的 `filingState` 从事务后真实状态产生,不能只根据请求动作猜测。
+- Move to Trash 先获锁后,Complete 必须因已在 Trash 而拒绝;
+- Complete 先获锁后,Move to Trash 可继续将 Completed 移入 Trash;
+- realtime 中的 `lifecycleState` 必须来自事务提交后的真实状态,不能根据本次请求猜测;
+- Restore 和永久删除也必须使用同一个行锁规则,避免删除后的 Session 被并发恢复。
 
-## 6. 线上兼容
+## 6. Expand/contract 迁移
 
-存储层继续使用 `status / endReason / archivedAt / deletedAt`;`runState` 和
-`filingState` 在 API 边界统一派生,不需要新数据列。`status`、`runStatus`、
-`sessionState` 在滚动升级期间保留,但新 UI 不得再用 `sessionState=COMPLETED`
-推断归档位置。查询参数中的 `active / archived / deleted` 也作为兼容协议保留,
-客户端展示名称则为 Open / Completed / Trash。`ARCHIVED` 和 `archive` 只保留为内部/
-兼容协议名,不作为产品文案展示。
+数据库不能在滚动部署中直接把 `archived_at` 原地重命名为 `completed_at`,否则旧服务实例
+会立刻失效。迁移分三阶段:
 
-历史上已经写错的 `task_done + SUCCEEDED` 记录不自动批量回填。Task 可能在
-Session 真实成功后又被取消,仅根据当前 Task 状态回写会误伤历史;需要结合时间线
-单独审计或定点修复。
+1. **Expand:**新增 nullable `completed_at`;服务端对 Complete/Restore/Trash 双写
+   `completed_at` 与 `archived_at`,读取时优先 `completed_at`、回退 `archived_at`。
+2. **Backfill:**令历史行 `completed_at = archived_at`,验证新旧字段没有漂移;所有新 payload
+   同时返回 canonical 字段和兼容别名。
+3. **Contract:**在所有已发布客户端和服务实例都不再依赖旧协议后,单独版本删除
+   `archived_at` 与兼容分支。
+
+滚动升级期间仅保留下列单向兼容映射:
+
+| Canonical | Compatibility alias |
+|---|---|
+| `lifecycleState=OPEN|COMPLETED|TRASH` | `filingState=OPEN|ARCHIVED|TRASH` |
+| `completedAt` | `archivedAt` |
+| `capabilities.canComplete` | `capabilities.canArchive` |
+| `view=open|completed|trash` | `view=active|archived|deleted` |
+| `POST /sessions/:id/complete` | `POST /sessions/:id/archive` |
+| `POST /runner/sessions/:id/complete-session` | `POST /runner/sessions/:id/archive` |
+| `POST /runner/sessions/:id/finalize` | `POST /runner/sessions/:id/complete` |
+
+兼容字段只能由 canonical 状态派生,业务逻辑不得反向以 `ARCHIVED` 为内部主语义。
+`status / runStatus / sessionState` 同样暂时保留给旧客户端,但新客户端不得用
+`sessionState=COMPLETED` 推断列表归属。
+
+历史上已经写错的 `task_done + SUCCEEDED` 记录不自动批量移动到 Completed。Task 可能在
+Session 真实成功后又被取消,仅根据当前 Task 状态回写会误伤历史;需要结合时间线单独审计
+或定点修复。

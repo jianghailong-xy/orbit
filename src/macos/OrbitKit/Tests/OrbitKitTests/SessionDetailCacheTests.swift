@@ -2,26 +2,26 @@ import XCTest
 @testable import OrbitKit
 
 final class SessionDetailCacheTests: XCTestCase {
-    private func session(_ id: String, filing: SessionFilingState,
+    private func session(_ id: String, lifecycle: SessionLifecycleState,
                          capabilities: SessionCapabilities) -> Session {
         Session(id: id, title: "Cold route", status: .succeeded,
-                runState: .succeeded, filingState: filing, capabilities: capabilities,
+                runState: .succeeded, lifecycleState: lifecycle, capabilities: capabilities,
                 agentId: "agent-1", assignedRunnerId: "runner-1",
                 pendingApprovals: 0, branch: nil, updatedAt: nil)
     }
 
-    func testColdArchivedDetailSuppliesHeaderFilingAndComposerCapabilities() {
-        let archived = session(
-            "archived", filing: .archived,
+    func testColdCompletedDetailSuppliesHeaderLifecycleAndComposerCapabilities() {
+        let completed = session(
+            "completed", lifecycle: .completed,
             capabilities: SessionCapabilities(canSend: true, canResume: true,
-                                              canArchive: false, canRestore: true))
+                                              canComplete: false, canRestore: true))
         var cache = SessionDetailCache()
 
-        XCTAssertNil(cache.resolve(archived.id, preferring: [], []))
-        cache.store(archived)
+        XCTAssertNil(cache.resolve(completed.id, preferring: [], []))
+        cache.store(completed)
 
-        let resolved = cache.resolve(archived.id, preferring: [], [])
-        XCTAssertEqual(resolved?.effectiveFilingState, .archived)
+        let resolved = cache.resolve(completed.id, preferring: [], [])
+        XCTAssertEqual(resolved?.effectiveLifecycleState, .completed)
         XCTAssertEqual(SessionHeader.subtitle(for: resolved), "Succeeded · Completed")
         XCTAssertEqual(resolved?.capabilities?.canResume, true)
         XCTAssertEqual(resolved?.capabilities?.canRestore, true)
@@ -29,15 +29,15 @@ final class SessionDetailCacheTests: XCTestCase {
 
     func testColdTrashDetailSuppliesBlockedComposerCapabilities() {
         let trash = session(
-            "trash", filing: .trash,
+            "trash", lifecycle: .trash,
             capabilities: SessionCapabilities(canSend: false, canResume: false,
                                               resumeBlockedReason: .trashed,
-                                              canArchive: false, canRestore: true))
+                                              canComplete: false, canRestore: true))
         var cache = SessionDetailCache()
         cache.store(trash)
 
         let resolved = cache.resolve(trash.id, preferring: [], [])
-        XCTAssertEqual(resolved?.effectiveFilingState, .trash)
+        XCTAssertEqual(resolved?.effectiveLifecycleState, .trash)
         XCTAssertEqual(SessionHeader.subtitle(for: resolved), "Succeeded · Trash")
         XCTAssertEqual(resolved?.capabilities?.canSend, false)
         XCTAssertEqual(resolved?.capabilities?.resumeBlockedReason, .trashed)
@@ -45,58 +45,58 @@ final class SessionDetailCacheTests: XCTestCase {
 
     func testRefreshedListWinsAndUpdatesCachedFallback() {
         let old = session(
-            "session", filing: .archived,
+            "session", lifecycle: .completed,
             capabilities: SessionCapabilities(canSend: true, canResume: true,
-                                              canArchive: false, canRestore: true))
+                                              canComplete: false, canRestore: true))
         let refreshed = session(
-            "session", filing: .open,
+            "session", lifecycle: .open,
             capabilities: SessionCapabilities(canSend: false, canResume: false,
                                               resumeBlockedReason: .runnerOffline,
-                                              canArchive: true, canRestore: false))
+                                              canComplete: true, canRestore: false))
         var cache = SessionDetailCache()
         cache.store(old)
 
-        XCTAssertEqual(cache.resolve(old.id, preferring: [refreshed])?.effectiveFilingState, .open)
+        XCTAssertEqual(cache.resolve(old.id, preferring: [refreshed])?.effectiveLifecycleState, .open)
         cache.reconcile(with: [refreshed])
 
         let fallback = cache.resolve(old.id, preferring: [])
-        XCTAssertEqual(fallback?.effectiveFilingState, .open)
+        XCTAssertEqual(fallback?.effectiveLifecycleState, .open)
         XCTAssertEqual(fallback?.capabilities?.resumeBlockedReason, .runnerOffline)
     }
 
     func testExactRefreshIsNeededOnlyForCachedRowsMissingFromLoadedLists() {
-        let archived = session(
-            "archived", filing: .archived,
+        let completed = session(
+            "completed", lifecycle: .completed,
             capabilities: SessionCapabilities(canSend: true, canResume: true,
-                                              canArchive: false, canRestore: true))
+                                              canComplete: false, canRestore: true))
         var cache = SessionDetailCache()
 
-        XCTAssertFalse(cache.needsExactRefresh(archived.id, preferring: [], []))
-        cache.store(archived)
-        XCTAssertTrue(cache.needsExactRefresh(archived.id, preferring: [], []))
-        XCTAssertFalse(cache.needsExactRefresh(archived.id, preferring: [archived], []))
+        XCTAssertFalse(cache.needsExactRefresh(completed.id, preferring: [], []))
+        cache.store(completed)
+        XCTAssertTrue(cache.needsExactRefresh(completed.id, preferring: [], []))
+        XCTAssertFalse(cache.needsExactRefresh(completed.id, preferring: [completed], []))
     }
 
     func testFocusedOpenSnapshotBecomesFallbackAndRefreshCandidateAfterListRemoval() {
         let focused = session(
-            "focused-open", filing: .open,
+            "focused-open", lifecycle: .open,
             capabilities: SessionCapabilities(canSend: true, canResume: false,
-                                              canArchive: true, canRestore: false))
+                                              canComplete: true, canRestore: false))
         var cache = SessionDetailCache()
 
         cache.store(focused) // AppModel.syncConsoleFocus seeds the loaded snapshot.
         XCTAssertFalse(cache.needsExactRefresh(focused.id, preferring: [focused], []))
         XCTAssertTrue(cache.needsExactRefresh(focused.id, preferring: [], []))
-        XCTAssertEqual(cache.resolve(focused.id, preferring: [])?.effectiveFilingState, .open)
+        XCTAssertEqual(cache.resolve(focused.id, preferring: [])?.effectiveLifecycleState, .open)
     }
 
     func testRemoveAndRemoveAllDropOnlyDetailFallbacks() {
         let capabilities = SessionCapabilities(canSend: false, canResume: false,
                                                resumeBlockedReason: .trashed,
-                                               canArchive: false, canRestore: true)
+                                               canComplete: false, canRestore: true)
         var cache = SessionDetailCache()
-        cache.store(session("one", filing: .trash, capabilities: capabilities))
-        cache.store(session("two", filing: .trash, capabilities: capabilities))
+        cache.store(session("one", lifecycle: .trash, capabilities: capabilities))
+        cache.store(session("two", lifecycle: .trash, capabilities: capabilities))
 
         cache.remove("one")
         XCTAssertNil(cache.resolve("one", preferring: []))
@@ -109,10 +109,10 @@ final class SessionDetailCacheTests: XCTestCase {
     func testNotFoundInvalidationDropsOnlyTheAuthoritativeGhost() {
         let capabilities = SessionCapabilities(canSend: false, canResume: false,
                                                resumeBlockedReason: .trashed,
-                                               canArchive: false, canRestore: true)
+                                               canComplete: false, canRestore: true)
         var cache = SessionDetailCache()
-        cache.store(session("purged", filing: .trash, capabilities: capabilities))
-        cache.store(session("still-there", filing: .trash, capabilities: capabilities))
+        cache.store(session("purged", lifecycle: .trash, capabilities: capabilities))
+        cache.store(session("still-there", lifecycle: .trash, capabilities: capabilities))
 
         XCTAssertTrue(cache.invalidateNotFound("purged"))
         XCTAssertNil(cache.resolve("purged", preferring: []))

@@ -7,7 +7,7 @@ import type { SessionSearchHit } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { sessionSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
-import { sessionFilingStateOf } from '../lib/sessionState';
+import { sessionLifecycleStateOf } from '../lib/sessionState';
 import { StatusIcon, statusLabel } from './AgentView';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
@@ -37,8 +37,8 @@ export const openSessionSearch = (): void => {
 /** Where a hit lives, when that isn't the normal Open list — so a result the user can't find in
  *  the sidebar explains itself instead of looking like a ghost. */
 export const scopeBadge = (hit: SessionSearchHit): string | null => {
-  const filing = sessionFilingStateOf(hit);
-  return filing === 'TRASH' ? 'Trash' : filing === 'ARCHIVED' ? 'Completed' : null;
+  const lifecycle = sessionLifecycleStateOf(hit);
+  return lifecycle === 'TRASH' ? 'Trash' : lifecycle === 'COMPLETED' ? 'Completed' : null;
 };
 
 /** What the hit matched on, when it isn't the title (which the row already shows). */

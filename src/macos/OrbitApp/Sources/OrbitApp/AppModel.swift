@@ -85,8 +85,8 @@ final class AppModel {
     func focusSessionList() { sessionListFocusRequest &+= 1 }
 
     /// Exact records fetched to resolve cold deep links / global-search hits. Those routes can point
-    /// at Archived or Trash, which are absent from the cross-agent Open list. Keeping the response
-    /// lets the header, composer and filing/capability guards share the same authoritative context.
+    /// at Completed or Trash, which are absent from the cross-agent Open list. Keeping the response
+    /// lets the header, composer and lifecycle/capability guards share the same authoritative context.
     private var sessionDetails = SessionDetailCache()
 
     /// The cached `Session` for an open console. Fresh list snapshots win; a cold-routed detail is
@@ -341,9 +341,9 @@ final class AppModel {
             while !Task.isCancelled {
                 if let self, !self.controlPlaneLive { await self.loadSessions() }
                 if let self {
-                    // The control stream has no purge event, and an Archived / Trash cold route is
+                    // The control stream has no purge event, and a Completed / Trash cold route is
                     // absent from Open by definition. Refresh only that one focused fallback so a
-                    // remote filing change or permanent deletion cannot leave a ghost console.
+                    // remote lifecycle change or permanent deletion cannot leave a ghost console.
                     await self.refreshFocusedSessionDetailIfNeeded()
                     self.consoleRegistry?.flush(self.focusedConsoleSessionID)
                 }
@@ -471,15 +471,15 @@ final class AppModel {
             guard let self else { return }
             self.controlRefreshScheduled = false
             await self.loadSessions()
-            // A missing Open row is ambiguous: it may be the same stable Archived detail, or a
-            // cross-client Archive / Trash / purge transition. Resolve the focused cached row
+            // A missing Open row is ambiguous: it may be the same stable Completed detail, or a
+            // cross-client Complete / Trash / purge transition. Resolve the focused cached row
             // exactly after the control-driven snapshot rather than trusting absence as state.
             await self.refreshFocusedSessionDetailIfNeeded()
         }
     }
 
     /// Refresh the one exact-detail fallback currently driving a console. Loaded list rows remain
-    /// the primary snapshot and need no extra request. Stable cold Archived / Trash consoles cost
+    /// the primary snapshot and need no extra request. Stable cold Completed / Trash consoles cost
     /// at most one bounded GET per poll tick; control events refresh them immediately. A 404 is an
     /// authoritative remote purge, so remove the fallback and close its now-nonexistent console.
     private func refreshFocusedSessionDetailIfNeeded() async {
@@ -539,7 +539,7 @@ final class AppModel {
         // Every focused console needs an exact-detail fallback, not only cold deep links. If an
         // Open row is filed or purged on another client, the next list refresh removes it; retaining
         // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new
-        // filing state (or authoritative 404) instead of silently losing all session context.
+        // lifecycle state (or authoritative 404) instead of silently losing all session context.
         if let id,
            let loaded = sessions.first(where: { $0.id == id })
                 ?? agents?.agentSessions.first(where: { $0.id == id }) {
@@ -551,7 +551,7 @@ final class AppModel {
     func loadSessions() async {
         guard let api else { return }
         do {
-            let list = try await api.listSessions(view: "active")
+            let list = try await api.listSessions(view: .open)
             // Notify on poll-to-poll transitions (skip the first load, which only primes). Skip the
             // session whose console is on screen — its own stream already shows the change.
             if let prev = lastSnapshot {
@@ -581,7 +581,7 @@ final class AppModel {
         }
     }
 
-    /// The agent a session runs as, for scoping the composer's `/` autocomplete. Cold Archived /
+    /// The agent a session runs as, for scoping the composer's `/` autocomplete. Cold Completed /
     /// Trash routes resolve through the exact-detail cache as well as the loaded lists.
     func agentID(for sessionID: String) -> String? {
         guard let s = session(id: sessionID) else { return nil }
@@ -640,7 +640,7 @@ final class AppModel {
 
     /// Seed both Native session stores for a freshly created record. The compact compose page keeps
     /// its console in place instead of selecting it, but still needs the detail fallback so a later
-    /// cross-client filing change / purge can be refreshed and evicted authoritatively.
+    /// cross-client lifecycle change / purge can be refreshed and evicted authoritatively.
     func registerCreatedAgentSession(_ session: Session) {
         sessionDetails.store(session)
         agents?.registerCreatedSession(session)
@@ -722,11 +722,11 @@ final class AppModel {
         }
     }
 
-    /// Prefer the server's filing guard when available; a missing capability is an old server and
+    /// Prefer the server's lifecycle guard when available; a missing capability is an old server and
     /// retains the pre-capability behavior.
-    var canArchiveCurrentSession: Bool {
+    var canCompleteCurrentSession: Bool {
         guard let id = currentSessionID else { return false }
-        return session(id: id)?.capabilities?.canArchive ?? true
+        return session(id: id)?.capabilities?.canComplete ?? true
     }
 
     /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
@@ -758,12 +758,12 @@ final class AppModel {
         }
     }
 
-    /// ⌘D: complete the open session. The server ends a live run as part of the same archive
+    /// ⌘D: complete the open session. The server ends a live run as part of the same completion
     /// operation, so this is one immediate action for every run state. Clears the selection, then
     /// refreshes Open.
-    func archiveCurrentSession() {
+    func completeCurrentSession() {
         guard let id = currentSessionID else { return }
-        guard canArchiveCurrentSession else {
+        guard canCompleteCurrentSession else {
             errorText = "This session can't be completed right now."
             return
         }
@@ -772,13 +772,13 @@ final class AppModel {
 
     private func performCurrentSessionCompletion(_ id: String) {
         guard let api else { return }
-        guard session(id: id)?.capabilities?.canArchive != false else {
+        guard session(id: id)?.capabilities?.canComplete != false else {
             errorText = "This session can't be completed right now."
             return
         }
         Task { @MainActor in
             do {
-                try await api.archiveSession(id)
+                try await api.completeSession(id)
             } catch {
                 errorText = "Couldn't complete the session."
                 return
@@ -790,7 +790,7 @@ final class AppModel {
     }
 
     /// Clear a session out of the pane that has it open (the agent console selection), so a
-    /// archived/deleted session can't linger in the detail view. Used by ⌘D and row actions.
+    /// completed/trashed session can't linger in the detail view. Used by ⌘D and row actions.
     private func dropIfOpen(_ id: String) {
         if selectedAgentSessionID == id { selectedAgentSessionID = nil }
         if recentsConsoleSessionID == id { recentsConsoleSessionID = nil }
@@ -817,7 +817,7 @@ final class AppModel {
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
     /// A just-performed reversible action, surfaced as an Undo toast for a few seconds. Moving to
-    /// Open is the universal undo — the server's `restore` clears both archive and trash state.
+    /// Open is the universal undo — the server's `restore` clears both completion and trash state.
     struct SessionUndo: Identifiable, Equatable {
         let id = UUID()
         let message: String
@@ -847,14 +847,14 @@ final class AppModel {
     func dismissUndo() { undoDismiss?.cancel(); sessionUndo = nil }
 
     /// Complete a session, drop it from any open pane and offer Undo.
-    func archiveSession(_ id: String) {
+    func completeSession(_ id: String) {
         guard let api else { return }
-        guard session(id: id)?.capabilities?.canArchive != false else {
+        guard session(id: id)?.capabilities?.canComplete != false else {
             errorText = "This session can't be completed right now."
             return
         }
         Task { @MainActor in
-            do { try await api.archiveSession(id) }
+            do { try await api.completeSession(id) }
             catch { errorText = "Couldn't complete the session."; return }
             sessionDetails.remove(id)
             dropIfOpen(id)
@@ -863,7 +863,7 @@ final class AppModel {
         }
     }
 
-    /// Move an archived/trashed session back to Open (also the Undo target).
+    /// Move a completed/trashed session back to Open (also the Undo target).
     func moveSessionToOpen(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canRestore != false else {
@@ -990,8 +990,8 @@ final class AppModel {
     /// Open a session's console. There's no standalone session view anymore, so route into its
     /// owning agent's console (the section is already `.agents`, set by `route`). Resolve the agent
     /// from loaded state, then refresh an out-of-Open route with the exact session record. Showing
-    /// the id right away lets the console paint while the agent + filing context resolve in the
-    /// background; retaining that response is what lets Archived / Trash headers and composers
+    /// the id right away lets the console paint while the agent + lifecycle context resolve in the
+    /// background; retaining that response is what lets Completed / Trash headers and composers
     /// render correctly on a cold launch.
     private func openSession(_ id: String) {
         composingAgentSession = false
@@ -1001,7 +1001,7 @@ final class AppModel {
         }
         // The Open snapshot is already control-plane refreshed. Everything else (including an old
         // detail-cache hit) gets an exact refresh so repeated search/deep-link navigation cannot
-        // resurrect stale filing or capability state.
+        // resurrect stale lifecycle or capability state.
         guard !sessions.contains(where: { $0.id == id }), let api else { return }
         // Capture this instance synchronously. Reading `self.api` only after the Task starts could
         // send an old route's id to a newly configured instance before the identity guard exists.

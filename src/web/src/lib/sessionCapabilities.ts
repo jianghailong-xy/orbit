@@ -1,13 +1,19 @@
 import type { SessionCapabilities, SessionResumeBlockedReason } from '@orbit/shared';
 import {
   isSessionLive,
-  sessionFilingStateOf,
-  type SessionFilingState,
+  sessionLifecycleStateOf,
+  type SessionLifecycleState,
   type SessionStateSource,
 } from './sessionState';
 
+type CompatibleSessionCapabilities = Partial<SessionCapabilities> & {
+  /** Legacy API capability retained during rolling upgrades. */
+  canArchive?: boolean;
+  canComplete?: boolean;
+};
+
 export interface SessionCapabilitySource {
-  capabilities?: Partial<SessionCapabilities> | null;
+  capabilities?: CompatibleSessionCapabilities | null;
 }
 
 export type SessionSendDisposition = 'SEND' | 'RESUME' | 'CREATE' | 'BLOCK';
@@ -25,9 +31,15 @@ const RESUME_BLOCKED_REASONS = new Set<SessionResumeBlockedReason>([
 /** Prefer a server capability when present; otherwise retain the old client's local decision. */
 export function sessionCapabilityOf(
   session: SessionCapabilitySource,
-  capability: 'canSend' | 'canResume' | 'canArchive' | 'canRestore',
+  capability: 'canSend' | 'canResume' | 'canComplete' | 'canRestore',
   fallback: boolean,
 ): boolean {
+  if (capability === 'canComplete') {
+    const canonical = session.capabilities?.canComplete;
+    if (typeof canonical === 'boolean') return canonical;
+    const legacy = session.capabilities?.canArchive;
+    return typeof legacy === 'boolean' ? legacy : fallback;
+  }
   const value = session.capabilities?.[capability];
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -35,12 +47,12 @@ export function sessionCapabilityOf(
 /** The selection itself owns Complete eligibility; its surrounding list scope does not. */
 export function isCompleteShortcutEligible(
   session: SessionCapabilitySource | null | undefined,
-  filingState: SessionFilingState | null | undefined,
+  lifecycleState: SessionLifecycleState | null | undefined,
 ): boolean {
   return (
     !!session &&
-    filingState === 'OPEN' &&
-    sessionCapabilityOf(session, 'canArchive', true)
+    lifecycleState === 'OPEN' &&
+    sessionCapabilityOf(session, 'canComplete', true)
   );
 }
 
@@ -59,7 +71,7 @@ export function sessionSendDispositionOf(
   session: SessionCapabilitySource & SessionStateSource,
   legacyCanResume: boolean,
 ): SessionSendDisposition {
-  if (sessionFilingStateOf(session) === 'TRASH') return 'BLOCK';
+  if (sessionLifecycleStateOf(session) === 'TRASH') return 'BLOCK';
   if (isSessionLive(session))
     return sessionCapabilityOf(session, 'canSend', true) ? 'SEND' : 'BLOCK';
   if (!sessionCapabilityOf(session, 'canResume', legacyCanResume)) return 'CREATE';

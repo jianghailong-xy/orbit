@@ -56,6 +56,7 @@ import {
   meQuery,
   providersQuery,
   sessionQuery,
+  type SessionListView,
   sessionsQuery,
   sessionTagsQuery,
 } from '../lib/queries';
@@ -94,7 +95,7 @@ import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
   type ApprovalInfo,
-  archiveSession,
+  completeSession,
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
@@ -136,8 +137,8 @@ import {
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
-  sessionFilingLabel,
-  sessionFilingStateOf,
+  sessionLifecycleLabel,
+  sessionLifecycleStateOf,
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
@@ -389,11 +390,11 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
 
 // The slices of the session list, in menu order. Open is the overwhelmingly common
 // one, so the other two live in the header's scope menu rather than a permanent tab row.
-type SessionView = 'active' | 'archived' | 'deleted';
+type SessionView = SessionListView;
 const SESSION_VIEWS: { value: SessionView; label: string }[] = [
-  { value: 'active', label: 'Open' },
-  { value: 'archived', label: 'Completed' },
-  { value: 'deleted', label: 'Trash' },
+  { value: 'open', label: 'Open' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'trash', label: 'Trash' },
 ];
 
 // Drag-resizable width of the left session column, persisted across reloads.
@@ -749,8 +750,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Seeded from the account default by the effect below once `me` loads (mirrors how Model/Mode
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
-  // Which slice of the session list to show: active, archived, or trash.
-  const [view, setView] = useState<SessionView>('active');
+  // Which product lifecycle slice of the session list to show.
+  const [view, setView] = useState<SessionView>('open');
   // Optional narrowing/sectioning of the list by tag, mirroring the iOS drawer's filter menu.
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -830,9 +831,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null); // the left session-list column, for arrow-key scrolling
 
-  // How far a row slides to expose its actions. The active tab shows two chips (pin + ✓),
+  // How far a row slides to expose its actions. Open shows two chips (pin + ✓),
   // every other tab a single ⋯, so it needs less room.
-  const swipeReveal = view === 'active' ? 72 : 44;
+  const swipeReveal = view === 'open' ? 72 : 44;
   const onRowTouchStart = (e: ReactTouchEvent, id: string): void => {
     if (!isMobile) return;
     const t = e.touches[0];
@@ -1014,7 +1015,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions and runner
   // slot accounting live.
-  const effectiveView = selectedId ? (view === 'archived' ? 'archived' : 'active') : view;
+  const effectiveView = selectedId ? (view === 'completed' ? 'completed' : 'open') : view;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
@@ -1038,11 +1039,11 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
-    // The Completed view is ordered by the server on archived_at (newest first) and
+    // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
-    // archive reconciles via refetch, so the server order holds. Trust it verbatim.
-    if (effectiveView === 'archived') return rows;
+    // Complete reconciles via refetch, so the server order holds. Trust it verbatim.
+    if (effectiveView === 'completed') return rows;
     return rows.sort((a, b) => {
       // Pinned sessions float to the top; among themselves they keep time order.
       if (!!a.pinnedAt !== !!b.pinnedAt) return a.pinnedAt ? -1 : 1;
@@ -1120,14 +1121,14 @@ export function AgentView({ runner }: { runner: Runner }) {
             : undefined,
       }
     : null;
-  const selectedFilingState = selectedSession
-    ? sessionFilingStateOf(
+  const selectedLifecycleState = selectedSession
+    ? sessionLifecycleStateOf(
         selectedSession,
-        { legacyView: selectedFromList ? effectiveView : undefined },
+        { listView: selectedFromList ? effectiveView : undefined },
       )
     : null;
-  const selectedDeleted = selectedFilingState === 'TRASH';
-  const selectedArchived = selectedFilingState === 'ARCHIVED';
+  const selectedTrashed = selectedLifecycleState === 'TRASH';
+  const selectedCompleted = selectedLifecycleState === 'COMPLETED';
   // A merge's outcome lands asynchronously (≤1 heartbeat after the click) — but the only place
   // it surfaces is the worktree status bar, and only if the user is still on this session with the
   // file panel expanded. Toast the landing (success or the failure reason) the moment it flips off
@@ -1152,12 +1153,12 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.error(`Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`);
     }
   }, [detailForSelected, message]);
-  const live = !!selectedSession && !selectedDeleted && isSessionLive(selectedSession);
+  const live = !!selectedSession && !selectedTrashed && isSessionLive(selectedSession);
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
     !!selectedSession &&
-    !selectedDeleted &&
+    !selectedTrashed &&
     !live &&
     !!selectedSession.startedAt &&
     !!runner.online;
@@ -1168,21 +1169,21 @@ export function AgentView({ runner }: { runner: Runner }) {
     ? sessionResumeBlockedReasonOf(selectedSession)
     : null;
   const selectedResumeBlockedCopy = sessionResumeBlockedMessage(selectedResumeBlockedReason);
-  // A run can still look live/resumable in cached state while an archive/end transition has
+  // A run can still look live/resumable in cached state while a Complete/end transition has
   // already denied its same-session endpoint. Never reinterpret that denial as a fresh run.
   const sameSessionSendBlocked =
     !!selectedSession &&
     (live || resumable) &&
     !sessionCapabilityOf(selectedSession, 'canSend', true);
   const sameSessionSendBlockedCopy = sessionSendBlockedMessage(selectedResumeBlockedReason);
-  const selectedCanArchive = selectedSession
-    ? sessionCapabilityOf(selectedSession, 'canArchive', selectedFilingState === 'OPEN')
+  const selectedCanComplete = selectedSession
+    ? sessionCapabilityOf(selectedSession, 'canComplete', selectedLifecycleState === 'OPEN')
     : false;
   const selectedCanRestore = selectedSession
     ? sessionCapabilityOf(
         selectedSession,
         'canRestore',
-        selectedFilingState === 'ARCHIVED' || selectedFilingState === 'TRASH',
+        selectedLifecycleState === 'COMPLETED' || selectedLifecycleState === 'TRASH',
       )
     : false;
   // The session list (always visible in the left column) is scoped to one agent so
@@ -1193,7 +1194,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const visibleSessions = useMemo(() => {
     let list = scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions;
     // The tag filter narrows here rather than at render so arrow-nav, auto-select and
-    // "open the next session after archiving" all step through what's actually on screen.
+    // "open the next session after completing" all step through what's actually on screen.
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
   }, [sessions, scopeAgentId, tagFilter]);
@@ -1202,8 +1203,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // tag when the user switches grouping — both from the pure groupers shared in shape with
   // OrbitKit's, over the already console-sorted list. Pinning only applies in Open, and
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
-  // Note the Completed tab is server-ordered by archived_at while bucketing reads last activity,
-  // so its rows are grouped by when they last ran, not by when they were filed — same as iOS.
+  // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
+  // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
   const sections = useMemo(
     () =>
       groupByTag
@@ -1214,18 +1215,18 @@ export function AgentView({ runner }: { runner: Runner }) {
             sessions: s.sessions,
           }))
         : sessionTimeSections(visibleSessions, {
-            pinnedFirst: view === 'active' && !tagFilter,
+            pinnedFirst: view === 'open' && !tagFilter,
           }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
     [visibleSessions, groupByTag, view, tagFilter],
   );
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/agents/<id>/new),
-  // while browsing the archived/trash tabs (nothing openable there), or implicitly
+  // while browsing Completed/Trash (nothing openable there), or implicitly
   // when the Open list is empty (the first-run empty state).
   const composing =
     !selectedId &&
-    (composingRoute || view !== 'active' || (sessionsQ.isSuccess && visibleSessions.length === 0));
+    (composingRoute || view !== 'open' || (sessionsQ.isSuccess && visibleSessions.length === 0));
 
   // Remember the open session as this agent's last-viewed one, so returning to the agent
   // (an agent-switch away and back, or clicking it in the sidebar) restores it below.
@@ -1234,15 +1235,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (selectedId && agentId) lastSessionByAgent.set(agentId, selectedId);
   }, [selectedId, selected?.agent?.id]);
 
-  // Default landing: opening /agents/<id> on the active tab (no session, not the /new draft)
+  // Default landing: opening /agents/<id> in Open (no session, not the /new draft)
   // opens a session so the right pane is never blank. Prefer the one the user last had open
   // for this agent (remembered above) — reopening where they left off — and fall back to the
-  // most recent when there's no memory (or it's since been archived/deleted out of view).
-  // replace() keeps it out of history; archived/trash tabs never auto-open.
+  // most recent when there's no memory (or it's since been completed/trashed out of view).
+  // replace() keeps it out of history; Completed/Trash never auto-open.
   useEffect(() => {
     // On mobile the list is its own full screen — auto-opening would trap the back
     // button (it returns here, which would immediately redirect into a session again).
-    if (isMobile || selectedId || composingRoute || view !== 'active' || !sessionsQ.isSuccess)
+    if (isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
     const remembered = scopeAgentId ? lastSessionByAgent.get(scopeAgentId) : undefined;
     const target = visibleSessions.find((s) => s.id === remembered) ?? visibleSessions[0];
@@ -1264,7 +1265,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view === 'deleted') return false;
+      if (!selectedId && view === 'trash') return false;
       if (visibleSessions.length === 0) return false;
       const cur = visibleSessions.findIndex((s) => s.id === selectedId);
       let next: number;
@@ -1803,7 +1804,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       vars: { content: string; images: ComposerImage[]; shell?: boolean },
     ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn; created?: boolean }> => {
       const { content, images: imgs, shell } = vars;
-      if (selectedDeleted)
+      if (selectedTrashed)
         throw new Error('Restore this session to Open before sending a message');
       if (selectedMissing) throw new Error('Session not found');
       if (selected && live && sameSessionSendBlocked)
@@ -1838,7 +1839,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         if (disposition === 'BLOCK')
           throw new Error(
             sessionSendBlockedMessage(
-              sessionFilingStateOf(fresh) === 'TRASH' ? 'TRASHED' : freshReason,
+              sessionLifecycleStateOf(fresh) === 'TRASH' ? 'TRASHED' : freshReason,
             ),
           );
         if (disposition === 'SEND') {
@@ -1925,11 +1926,11 @@ export function AgentView({ runner }: { runner: Runner }) {
         previews.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
       }
       setImages([]);
-      setView('active'); // a new/continued session lives in Open
+      setView('open'); // a new/continued session lives in Open
       if (queuedItem) setQueued((q) => [...q, queuedItem]);
       else setIdle(false); // a turn is now starting
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      // Reviving clears the row's Completed filing server-side (see SessionsService.resume),
+      // Reviving moves the row from Completed to Open server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
       // session that's already back in Open.
       qc.invalidateQueries({ queryKey: ['session', id] });
@@ -1987,11 +1988,11 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.info('This message is already being processed and cannot be withdrawn');
     }
   };
-  // Filing actions happen immediately and offer Undo; Complete also ends a live run.
+  // Lifecycle actions happen immediately and offer Undo; Complete also ends a live run.
   const restoreMut = useMutation({
     mutationFn: (id: string) => restoreSession(id),
     onSuccess: (_d, id) => {
-      setView('active');
+      setView('open');
       qc.invalidateQueries({ queryKey: ['sessions'] });
       qc.invalidateQueries({ queryKey: ['session', id] });
     },
@@ -2031,9 +2032,9 @@ export function AgentView({ runner }: { runner: Runner }) {
       duration: 4,
     });
   };
-  // Archiving/deleting the OPEN session drops it from the Open list. Keep the
+  // Completing/trashing the Open session drops it from the Open list. Keep the
   // selection at the same row: step to the next session down (or the previous one
-  // when we just archived the last row) so the cursor stays put instead of jumping
+  // when we just completed the last row) so the cursor stays put instead of jumping
   // to the top of the list. With nothing left to land on, fall back to the agent's
   // list (same move as the tab switcher) — that re-scopes the left column (a null
   // `selected` would collapse `scopeAgentId` and leak every agent's sessions) and
@@ -2051,7 +2052,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // After leaveIfOpen re-scopes to the agent, the auto-open effect picks that agent's
   // next session — but it reads the cached list, which still holds the row we just
-  // archived/deleted until the refetch lands. Drop it now so auto-open can't re-select
+  // completed/trashed until the refetch lands. Drop it now so auto-open can't re-select
   // the removed session (which would null out `selected`, collapse the agent scope, and
   // leak every agent's sessions into the list). The invalidate below still reconciles.
   const dropFromLists = (id: string): void => {
@@ -2059,8 +2060,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
     );
   };
-  const archiveMut = useMutation({
-    mutationFn: (id: string) => archiveSession(id),
+  const completeMut = useMutation({
+    mutationFn: (id: string) => completeSession(id),
     onSuccess: (_d, id) => {
       leaveIfOpen(id);
       dropFromLists(id);
@@ -2072,24 +2073,24 @@ export function AgentView({ runner }: { runner: Runner }) {
   const requestComplete = useCallback(
     (session: any): void => {
       const source = selectedSession?.id === session.id ? selectedSession : session;
-      if (!sessionCapabilityOf(source, 'canArchive', true)) {
+      if (!sessionCapabilityOf(source, 'canComplete', true)) {
         message.info('This session cannot be completed right now.');
         return;
       }
-      archiveMut.mutate(session.id);
+      completeMut.mutate(session.id);
     },
-    [archiveMut, message, selectedSession],
+    [completeMut, message, selectedSession],
   );
   // ⌘/Ctrl+D completes the open session — the keyboard twin of the action on its row. Fires
   // even while the composer is focused; preventDefault swallows the browser's bookmark
-  // shortcut. The endpoint handles ending a live run and filing it as Completed.
+  // shortcut. The endpoint handles ending a live run and moving it to Completed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
       if (!(e.metaKey || e.ctrlKey)) return;
       if (
         !selected ||
-        !isCompleteShortcutEligible(selectedSession, selectedFilingState)
+        !isCompleteShortcutEligible(selectedSession, selectedLifecycleState)
       )
         return;
       e.preventDefault();
@@ -2098,7 +2099,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected, selectedSession, selectedFilingState, requestComplete]);
+  }, [selected, selectedSession, selectedLifecycleState, requestComplete]);
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
@@ -2333,7 +2334,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // runner must be online to fetch the bytes; otherwise the picker is disabled.
   const canAttach =
     runner.online &&
-    !selectedDeleted &&
+    !selectedTrashed &&
     !sameSessionSendBlocked &&
     (selected ? live || resumable : composing);
   const imageUid = useRef(0);
@@ -2515,7 +2516,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       !send.isPending &&
       !uploading &&
       runner.online &&
-      !selectedDeleted &&
+      !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
       !loadingSession;
@@ -2654,7 +2655,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const showSlash =
     slashToken !== null &&
     slashToken !== slashDismissed &&
-    !selectedDeleted &&
+    !selectedTrashed &&
     !selectedMissing &&
     slashMatches.length > 0;
   const slashIdx = slashMatches.length ? Math.min(slashIndex, slashMatches.length - 1) : 0;
@@ -2692,7 +2693,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const showMention =
     mentionToken !== null &&
     mentionToken !== mentionDismissed &&
-    !selectedDeleted &&
+    !selectedTrashed &&
     !selectedMissing &&
     mentionMatches.length > 0;
   const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
@@ -2729,7 +2730,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const shownPlanUsage = usageSnapshotForProvider(runner.planUsage, shownProvider);
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
-  // there's actually a message to re-send and the session can take one — a deleted/missing
+  // there's actually a message to re-send and the session can take one — a trashed/missing
   // session would just throw out of the send mutation.
   const retryText = authRetryText(events, detailForSelected?.prompt, selected?.numTurns);
   const sendMutate = send.mutate;
@@ -2739,13 +2740,13 @@ export function AgentView({ runner }: { runner: Runner }) {
       runnerName: runner.name,
       runnerId: runner.id,
       onRetry:
-        retryText && !selectedDeleted && !selectedMissing
+        retryText && !selectedTrashed && !selectedMissing
           ? () => sendMutate({ content: retryText, images: [] })
           : undefined,
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
-    [shownProvider, runner.name, runner.id, retryText, selectedDeleted, selectedMissing, sendMutate],
+    [shownProvider, runner.name, runner.id, retryText, selectedTrashed, selectedMissing, sendMutate],
   );
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default')
@@ -2763,7 +2764,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
   // same as a queued message. When not live they're freely editable (pre-session config).
   // Agent stays fixed once the session exists (it's never re-assigned on resume).
-  const configEditable = selectedDeleted || selectedMissing ? false : live ? runner.online : true;
+  const configEditable = selectedTrashed || selectedMissing ? false : live ? runner.online : true;
   // An existing session's agent is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
   const shownAgentId: string | undefined = selected ? (selected.agent?.id ?? undefined) : agentId;
@@ -2779,8 +2780,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Per-control hints derived from the same state that drives enable/disable, so the help
   // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
   // Empty string = no tooltip, which keeps idle controls free of hover noise.
-  const composerDisabled = selectedDeleted || selectedMissing;
-  const configHint = selectedDeleted
+  const composerDisabled = selectedTrashed || selectedMissing;
+  const configHint = selectedTrashed
     ? 'Restore this session before changing settings'
     : selectedMissing
       ? 'Session not found'
@@ -2909,7 +2910,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         ]
       : []),
   ];
-  // Header subtitle keeps run outcome and filing location visibly separate, followed by
+  // Header subtitle keeps run outcome and lifecycle location visibly separate, followed by
   // last activity. Task state remains on its own task affordance above the title.
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
@@ -2919,7 +2920,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     : selected
       ? [
           statusLabel(selectedSession ?? selected),
-          selectedFilingState ? sessionFilingLabel(selectedFilingState) : null,
+          selectedLifecycleState ? sessionLifecycleLabel(selectedLifecycleState) : null,
           headTime,
         ]
           .filter(Boolean)
@@ -2929,7 +2930,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       : selectedId
         ? 'Starting…'
         : '';
-  const composerPlaceholder = selectedDeleted
+  const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
     : selectedMissing
       ? 'Session not found'
@@ -2955,7 +2956,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               Completed/Trash always explains itself. (The native clients still tab.) */}
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
             <span
-              className={`session-scope-menu${shownView !== 'active' || tagFilter || groupByTag ? ' on' : ''}`}
+              className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
               title="Switch view, filter and group"
             >
               {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
@@ -2992,9 +2993,9 @@ export function AgentView({ runner }: { runner: Runner }) {
             <div className="chat-note">
               {tagFilter
                 ? 'No sessions with this tag.'
-                : view === 'active'
+                : view === 'open'
                   ? 'No sessions yet.'
-                  : view === 'archived'
+                  : view === 'completed'
                     ? 'No completed sessions.'
                     : 'Trash is empty.'}
             </div>
@@ -3009,12 +3010,12 @@ export function AgentView({ runner }: { runner: Runner }) {
               </div>
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
-                const canArchiveRow = sessionCapabilityOf(actionSession, 'canArchive', true);
+                const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 const restoreItem = {
                   key: 'restore',
                   icon: <UndoOutlined />,
-                  label: view === 'archived' ? 'Move to Open' : 'Restore to Open',
+                  label: view === 'completed' ? 'Move to Open' : 'Restore to Open',
                   disabled: !canRestoreRow,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
@@ -3042,21 +3043,21 @@ export function AgentView({ runner }: { runner: Runner }) {
                   },
                 };
                 const menuItems: MenuProps['items'] =
-                  view === 'archived'
+                  view === 'completed'
                     ? [restoreItem, { type: 'divider' }, deleteItem]
-                    : view === 'deleted'
+                    : view === 'trash'
                       ? [restoreItem, { type: 'divider' }, purgeItem]
                       : [restoreItem];
                 // Open and Completed rows open their transcript; only
-                // Trash (deleted) rows stay closed.
-                const openable = view !== 'deleted';
+                // Trash rows stay closed.
+                const openable = view !== 'trash';
                 const line = sessionLine(s, openable);
                 const swiped = swipeOpenId === s.id;
                 const dragging = swipeDragId === s.id;
                 const swipeTx = dragging ? swipeDx : swiped ? -swipeReveal : 0;
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'active' && s.pinnedAt ? ' pinned' : ''}${swiped ? ' swipe-open' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'open' && s.pinnedAt ? ' pinned' : ''}${swiped ? ' swipe-open' : ''}`}
                     key={s.id}
                     onClick={() => {
                       if (swipeClickGuard.current) {
@@ -3128,7 +3129,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     </div>
                     <div className="session-right">
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        {view === 'active' ? (
+                        {view === 'open' ? (
                           <>
                             <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
                               <span
@@ -3143,16 +3144,16 @@ export function AgentView({ runner }: { runner: Runner }) {
                               </span>
                             </Tooltip>
                             <Tooltip
-                              title={canArchiveRow ? 'Complete' : 'Complete unavailable right now'}
+                              title={canCompleteRow ? 'Complete' : 'Complete unavailable right now'}
                               placement="top"
                               open={hoverTipOpen}
                             >
                               <span
-                                className={`session-kebab session-complete${canArchiveRow ? '' : ' disabled'}`}
+                                className={`session-kebab session-complete${canCompleteRow ? '' : ' disabled'}`}
                                 role="button"
                                 aria-label="Complete"
-                                aria-disabled={!canArchiveRow}
-                                tabIndex={canArchiveRow ? 0 : -1}
+                                aria-disabled={!canCompleteRow}
+                                tabIndex={canCompleteRow ? 0 : -1}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   requestComplete(s);
@@ -3285,7 +3286,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             ) : (
               <div
                 className="agent-name"
-                {...(selected && !selectedDeleted && !composing
+                {...(selected && !selectedTrashed && !composing
                   ? {
                       onDoubleClick: () => {
                         setTitleDraft(selected.title);
@@ -3310,12 +3311,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                 open={headerMenuOpen}
                 onOpenChange={setHeaderMenuOpen}
                 menu={{
-                  selectable: !selectedDeleted,
-                  multiple: !selectedDeleted,
-                  selectedKeys: selectedDeleted ? [] : selectedSessionTagIds,
-                  onSelect: selectedDeleted ? undefined : setTagsFromMenu,
-                  onDeselect: selectedDeleted ? undefined : setTagsFromMenu,
-                  items: selectedDeleted
+                  selectable: !selectedTrashed,
+                  multiple: !selectedTrashed,
+                  selectedKeys: selectedTrashed ? [] : selectedSessionTagIds,
+                  onSelect: selectedTrashed ? undefined : setTagsFromMenu,
+                  onDeselect: selectedTrashed ? undefined : setTagsFromMenu,
+                  items: selectedTrashed
                     ? [
                         {
                           key: 'restore',
@@ -3376,9 +3377,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                             ]
                           : []),
                         { type: 'divider' as const },
-                        // A Completed session is filed away, not gone — offer the same move
+                        // A Completed session is retained, not gone — offer the same move
                         // its row has in Completed, so it can return to Open in place.
-                        ...(selectedArchived
+                        ...(selectedCompleted
                           ? [
                               {
                                 key: 'restore',
@@ -3392,13 +3393,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                               },
                               { type: 'divider' as const },
                             ]
-                          : selectedFilingState === 'OPEN'
+                          : selectedLifecycleState === 'OPEN'
                             ? [
                                 {
-                                  key: 'archive',
+                                  key: 'complete',
                                   icon: <CheckOutlined />,
                                   label: 'Complete',
-                                  disabled: !selectedCanArchive,
+                                  disabled: !selectedCanComplete,
                                   onClick: () => {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
@@ -3436,7 +3437,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           )}
         </div>
 
-        {selected && !selectedDeleted && !composing && (
+        {selected && !selectedTrashed && !composing && (
           <ShareModal
             open={shareOpen}
             onClose={() => setShareOpen(false)}
@@ -3473,7 +3474,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             <div className="agent-sessions" ref={scrollRef}>
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
               {selected &&
-                !selectedDeleted &&
+                !selectedTrashed &&
                 sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
                 events.length === 0 && (
                 <div className="chat-queued-state">
@@ -3494,7 +3495,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
               {selected &&
-                !selectedDeleted &&
+                !selectedTrashed &&
                 sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
                 events.length > 0 && (
                 <div className="chat-note chat-slot-wait">
@@ -3507,7 +3508,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
               {streamingThink && <div className="chat-think-stream chat-streaming">💭 {streamingThink}</div>}
               {streamingText && <StreamingMessage text={streamingText} />}
-              {!selectedDeleted && approvals.map((a, i) => (
+              {!selectedTrashed && approvals.map((a, i) => (
                 // Only the first (oldest) pending card owns the ⌘/Ctrl+Enter shortcut; once
                 // it's decided the next card becomes first, so the key walks the queue in order.
                 <ApprovalPanel
@@ -3518,7 +3519,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onChatAbout={startChatReply}
                 />
               ))}
-              {!selectedDeleted && queued.map((q) => (
+              {!selectedTrashed && queued.map((q) => (
                 <div className="chat-msg chat-user chat-queued" key={q.turnId}>
                   {turnImages[q.turnId]?.length ? (
                     // Fresh local previews (object URLs) — instant, before a reload drops them.
@@ -3546,14 +3547,14 @@ export function AgentView({ runner }: { runner: Runner }) {
                 </div>
               ))}
               {selected &&
-                !selectedDeleted &&
+                !selectedTrashed &&
                 isSessionLive(selectedSession ?? selected) &&
                 sessionRunStateOf(selectedSession ?? selected) !== 'QUEUED' &&
                 events.length === 0 &&
                 !streamingText &&
                 !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
               {selected &&
-                selectedDeleted &&
+                selectedTrashed &&
                 (() => {
                   // Days until the reaper permanently purges this trashed session. Reframes
                   // the retained transcript as an honest, time-boxed Trash rather than a
@@ -3592,7 +3593,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 <div className="chat-note">{sameSessionSendBlockedCopy}</div>
               )}
               {selected &&
-                !selectedDeleted &&
+                !selectedTrashed &&
                 isSessionTerminal(selectedSession ?? selected) && (
                 <div className="chat-note">
                   {sessionEndedBanner(
@@ -3693,7 +3694,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           // draft, empty list) `keepPreviousData` still holds the previously-open session's
           // detail, which would render its stale branch/diff bar over a fresh draft — so gate
           // on selectedId rather than the placeholder-backed query data.
-          detail={selectedId && !selectedDeleted && !selectedMissing ? detailForSelected : null}
+          detail={selectedId && !selectedTrashed && !selectedMissing ? detailForSelected : null}
           committed={!live}
           // A turn in flight (live but not awaiting input) leaves the branch in a transient
           // state — hold "Merge to main" until it finishes so we never merge half-done work.
@@ -3728,7 +3729,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         />
         {/* Background processes the agent launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
-        {selectedId && !selectedDeleted && (
+        {selectedId && !selectedTrashed && (
           <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
         )}
         {replyTo && (

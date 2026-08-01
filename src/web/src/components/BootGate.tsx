@@ -44,7 +44,7 @@ type DeepLink = { kind: 'session' | 'agent'; id: string };
  * Which queries are critical depends on the landed route. The home route redirects to the first
  * agent's console, and a reload on /sessions/<id> or /agents/<id> lands in AgentView directly:
  * either way, resolve the runner (session detail, or the agents list), then warm the runner-scoped
- * active-session list AgentView reads on open — otherwise the splash dismisses too early and the
+ * Open-session list AgentView reads on load — otherwise the splash dismisses too early and the
  * console flashes a spinner / "Starting…" while that lands.
  *
  * Only the authenticated app pre-warms. A signed-out visitor on a real route instead
@@ -109,10 +109,10 @@ export function BootGate({ children }: { children: React.ReactNode }) {
       : deep?.kind === 'agent'
         ? ((agents.data ?? []).find((a) => a.id === deep.id)?.runnerId ?? null)
         : (homeFirst ? agentRunnerId(homeFirst) : null);
-  // The runner-scoped active list AgentView reads on open — same factory, so it lands in
+  // The runner-scoped Open list AgentView reads on load — same factory, so it lands in
   // cache under the same key and the console paints in one shot instead of flashing "Starting…".
   const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, view: 'active' }),
+    ...sessionsQuery({ runnerId, view: 'open' }),
     enabled: warm && !!runnerId,
   });
 
@@ -128,7 +128,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
     checks = [runners.isFetched, resolved, runnerId ? scopedSessions.isFetched : resolved];
   } else {
     // Agent deep link OR home: the agents list resolves the (first) agent, then its scoped
-    // active-session list. With no openable agent to wait on, the agents fetch itself is the
+    // Open-session list. With no openable agent to wait on, the agents fetch itself is the
     // final milestone, so the splash can never hang.
     const resolved = agents.isFetched;
     checks = [runners.isFetched, resolved, runnerId ? scopedSessions.isFetched : resolved];

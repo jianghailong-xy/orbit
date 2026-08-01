@@ -20,6 +20,7 @@ function sessionRow() {
     cancelRequestedAt: NOW,
     runtimeSessionId: 'runtime-1',
     claudeSessionId: null,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
     source: 'user',
@@ -71,6 +72,7 @@ test('UI list and detail payloads include the same derived capabilities', async 
     canSend: true,
     canResume: true,
     resumeBlockedReason: null,
+    canComplete: true,
     canArchive: true,
     canRestore: false,
   };

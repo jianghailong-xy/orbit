@@ -30,7 +30,7 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(RunStatus.awaitingInput.rawValue, "AWAITING_INPUT")
         XCTAssertEqual(SessionRunState.succeeded.rawValue, "SUCCEEDED")
         XCTAssertEqual(SessionRunState.dormant.rawValue, "DORMANT")
-        XCTAssertEqual(SessionFilingState.archived.rawValue, "ARCHIVED")
+        XCTAssertEqual(SessionLifecycleState.completed.rawValue, "COMPLETED")
         XCTAssertEqual(PermissionMode.bypass.rawValue, "bypassPermissions")
         XCTAssertEqual(RunEventType.toolResult.rawValue, "tool_result")
         XCTAssertEqual(TaskStatus.inProgress.rawValue, "IN_PROGRESS")
@@ -39,40 +39,79 @@ final class ModelsCodableTests: XCTestCase {
     func testNewSessionStateEnumsDecodeUnknownValuesLeniently() throws {
         XCTAssertEqual(try JSONDecoder().decode(SessionRunState.self,
                                                 from: Data(#""FUTURE_RUN_STATE""#.utf8)), .unknown)
-        XCTAssertEqual(try JSONDecoder().decode(SessionFilingState.self,
+        XCTAssertEqual(try JSONDecoder().decode(SessionLifecycleState.self,
                                                 from: Data(#""FUTURE_FILING_STATE""#.utf8)), .unknown)
         XCTAssertEqual(try JSONDecoder().decode(SessionResumeBlockedReason.self,
                                                 from: Data(#""FUTURE_REASON""#.utf8)), .unknown)
+    }
+
+    func testLegacyArchivedValueNormalizesToCompletedLifecycle() throws {
+        XCTAssertEqual(try JSONDecoder().decode(SessionLifecycleState.self,
+                                                from: Data(#""ARCHIVED""#.utf8)), .completed)
+        XCTAssertEqual(try JSONDecoder().decode(SessionLifecycleState.self,
+                                                from: Data(#""COMPLETED""#.utf8)), .completed)
     }
 
     func testSessionDecodesCapabilitiesAndOldPayloadStillWorks() throws {
         let json = #"""
         {"id":"s1","title":"Done","status":"SUCCEEDED",
          "capabilities":{"canSend":false,"canResume":false,
-           "resumeBlockedReason":"MISSING_CONTEXT","canArchive":true,"canRestore":false}}
+           "resumeBlockedReason":"MISSING_CONTEXT","canComplete":true,"canRestore":false}}
         """#
         let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
         XCTAssertFalse(try XCTUnwrap(session.capabilities).canSend)
         XCTAssertFalse(try XCTUnwrap(session.capabilities).canResume)
         XCTAssertEqual(session.capabilities?.resumeBlockedReason, .missingContext)
-        XCTAssertTrue(try XCTUnwrap(session.capabilities).canArchive)
+        XCTAssertTrue(try XCTUnwrap(session.capabilities).canComplete)
         XCTAssertFalse(try XCTUnwrap(session.capabilities).canRestore)
 
         let old = try JSONDecoder().decode(
             Session.self, from: Data(#"{"id":"s2","title":null,"status":"RUNNING"}"#.utf8))
         XCTAssertNil(old.capabilities)
-        XCTAssertEqual(old.effectiveFilingState, .open)
+        XCTAssertEqual(old.effectiveLifecycleState, .open)
 
-        // Old control planes omit filingState but already expose these timestamps. They are a
+        // Old control planes omit lifecycleState but already expose the legacy completion timestamp. It is a
         // safer compatibility source than sessionState=COMPLETED, which can also mean Succeeded + Open.
-        let oldArchived = try JSONDecoder().decode(
+        let legacyCompleted = try JSONDecoder().decode(
             Session.self,
             from: Data(#"{"id":"s3","title":"Filed","status":"SUCCEEDED","sessionState":"COMPLETED","archivedAt":"2026-08-01T00:00:00Z","deletedAt":null}"#.utf8))
-        XCTAssertEqual(oldArchived.effectiveFilingState, .archived)
+        XCTAssertEqual(legacyCompleted.effectiveLifecycleState, .completed)
+        XCTAssertEqual(legacyCompleted.completedAt, "2026-08-01T00:00:00Z")
         let oldTrash = try JSONDecoder().decode(
             Session.self,
             from: Data(#"{"id":"s4","title":"Trash","status":"FAILED","archivedAt":"2026-07-01T00:00:00Z","deletedAt":"2026-08-01T00:00:00Z"}"#.utf8))
-        XCTAssertEqual(oldTrash.effectiveFilingState, .trash)
+        XCTAssertEqual(oldTrash.effectiveLifecycleState, .trash)
+    }
+
+
+    func testLegacyCanArchiveCapabilityNormalizesToCanComplete() throws {
+        let capabilities = try JSONDecoder().decode(
+            SessionCapabilities.self,
+            from: Data(#"{"canSend":false,"canResume":false,"canArchive":true,"canRestore":false}"#.utf8))
+        XCTAssertTrue(capabilities.canComplete)
+    }
+
+    func testCompletedModelsEncodeOnlyCanonicalNames() throws {
+        XCTAssertEqual(String(decoding: try JSONEncoder().encode(SessionLifecycleState.completed),
+                              as: UTF8.self), #""COMPLETED""#)
+
+        let capabilities = SessionCapabilities(canSend: false, canResume: false,
+                                               canComplete: true, canRestore: false)
+        let capabilityObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(capabilities)) as? [String: Any])
+        XCTAssertEqual(capabilityObject["canComplete"] as? Bool, true)
+        XCTAssertNil(capabilityObject["canArchive"])
+
+        let session = Session(id: "s5", title: "Done", status: .succeeded,
+                              lifecycleState: .completed, completedAt: "2026-08-01T00:00:00Z",
+                              agentId: nil, assignedRunnerId: nil,
+                              pendingApprovals: nil, branch: nil, updatedAt: nil)
+        let sessionObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as? [String: Any])
+        XCTAssertEqual(sessionObject["lifecycleState"] as? String, "COMPLETED")
+        XCTAssertNil(sessionObject["filingState"])
+        XCTAssertEqual(sessionObject["completedAt"] as? String, "2026-08-01T00:00:00Z")
+        XCTAssertNil(sessionObject["archivedAt"])
     }
 
     func testSessionRunStateLiveIncludesQueuedWork() {

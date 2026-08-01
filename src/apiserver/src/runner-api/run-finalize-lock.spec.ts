@@ -17,6 +17,7 @@ type LockedSnapshot = {
   taskId: string | null;
   cancelRequestedAt: Date | null;
   endReason: SessionEndReason | null;
+  completedAt: Date | null;
   archivedAt: Date | null;
   deletedAt: Date | null;
 };
@@ -28,6 +29,7 @@ function makeController(current: LockedSnapshot) {
     taskId: 'stale-task',
     cancelRequestedAt: null,
     endReason: null,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
   };
@@ -91,33 +93,36 @@ function makeController(current: LockedSnapshot) {
   };
 }
 
-for (const filing of [
+for (const lifecycleChange of [
   {
-    name: 'archive',
+    name: 'complete',
     reason: SessionEndReason.COMPLETED,
-    archivedAt: new Date('2026-08-01T10:00:00.000Z'),
+    completedAt: new Date('2026-08-01T10:00:00.000Z'),
+    archivedAt: null,
     deletedAt: null,
   },
   {
     name: 'remove',
     reason: SessionEndReason.DELETED,
+    completedAt: null,
     archivedAt: null,
     deletedAt: new Date('2026-08-01T10:00:00.000Z'),
   },
 ] as const) {
-  test(`complete honors a concurrent ${filing.name} from the locked snapshot`, async () => {
+  test(`finalize honors a concurrent ${lifecycleChange.name} from the locked snapshot`, async () => {
     const h = makeController({
       id: SESSION_ID,
       assignedRunnerId: RUNNER_ID,
       status: RunStatus.AWAITING_INPUT,
       taskId: null,
       cancelRequestedAt: new Date('2026-08-01T10:00:00.000Z'),
-      endReason: filing.reason,
-      archivedAt: filing.archivedAt,
-      deletedAt: filing.deletedAt,
+      endReason: lifecycleChange.reason,
+      completedAt: lifecycleChange.completedAt,
+      archivedAt: lifecycleChange.archivedAt,
+      deletedAt: lifecycleChange.deletedAt,
     });
 
-    const response = await h.controller.complete(
+    const response = await h.controller.finalize(
       { id: RUNNER_ID },
       SESSION_ID,
       { status: SharedRunStatus.SUCCEEDED },
@@ -130,7 +135,7 @@ for (const filing of [
   });
 }
 
-test('complete honors task_cancelled and reclaims the task from the locked snapshot', async () => {
+test('finalize honors task_cancelled and reclaims the task from the locked snapshot', async () => {
   const h = makeController({
     id: SESSION_ID,
     assignedRunnerId: RUNNER_ID,
@@ -138,11 +143,12 @@ test('complete honors task_cancelled and reclaims the task from the locked snaps
     taskId: 'current-task',
     cancelRequestedAt: new Date('2026-08-01T10:00:00.000Z'),
     endReason: SessionEndReason.TASK_CANCELLED,
+    completedAt: null,
     archivedAt: null,
     deletedAt: null,
   });
 
-  const response = await h.controller.complete(
+  const response = await h.controller.finalize(
     { id: RUNNER_ID },
     SESSION_ID,
     { status: SharedRunStatus.SUCCEEDED },

@@ -12,8 +12,8 @@ final class ControlEventCodableTests: XCTestCase {
     func testDecodesSessionUpdatedWithFullSummary() throws {
         let ev = try decode("""
         {"type":"session.updated","sessionId":"s1","agentId":"a1","ts":"2026-07-05T00:00:00.000Z",
-         "data":{"id":"s1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","filingState":"OPEN",
-                 "capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"ENDING","canArchive":true,"canRestore":false},"agentId":"a1",
+         "data":{"id":"s1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
+                 "capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"ENDING","canComplete":true,"canRestore":false},"agentId":"a1",
                  "agent":{"id":"a1","name":"builder","model":"opus"},
                  "pendingApprovals":2,"lastTurnAt":"2026-07-05T00:00:00.000Z"}}
         """)
@@ -29,11 +29,11 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(s.sessionState, .running)
         XCTAssertEqual(s.runState, .running)
         XCTAssertEqual(s.effectiveRunState, .running)
-        XCTAssertEqual(s.filingState, .open)
-        XCTAssertEqual(s.effectiveFilingState, .open)
+        XCTAssertEqual(s.lifecycleState, .open)
+        XCTAssertEqual(s.effectiveLifecycleState, .open)
         XCTAssertFalse(try XCTUnwrap(s.capabilities).canSend)
         XCTAssertEqual(s.capabilities?.resumeBlockedReason, .ending)
-        XCTAssertTrue(try XCTUnwrap(s.capabilities).canArchive)
+        XCTAssertTrue(try XCTUnwrap(s.capabilities).canComplete)
         XCTAssertEqual(s.pendingApprovals, 2)
         XCTAssertEqual(s.agent?.name, "builder")
         XCTAssertEqual(s.lastTurnAt, "2026-07-05T00:00:00.000Z")
@@ -54,13 +54,13 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertNil(s.sessionState)
         XCTAssertNil(s.runState)
         XCTAssertEqual(s.effectiveRunState, .queued)
-        XCTAssertNil(s.filingState)
-        XCTAssertNil(s.effectiveFilingState)
+        XCTAssertNil(s.lifecycleState)
+        XCTAssertNil(s.effectiveLifecycleState)
         XCTAssertNil(s.title)
         XCTAssertNil(s.agent)
     }
 
-    func testDecodesSessionEnded() throws {
+    func testDecodesSessionEndedAndLegacyLifecycleAlias() throws {
         let ev = try decode("""
         {"type":"session.ended","sessionId":"s1","agentId":"a1","ts":"t",
          "data":{"status":"CANCELLED","runStatus":"CANCELLED","sessionState":"COMPLETED","runState":"CANCELLED","filingState":"ARCHIVED","endReason":"completed"}}
@@ -73,14 +73,14 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(d.sessionState, .completed)
         XCTAssertEqual(d.runState, .cancelled)
         XCTAssertEqual(d.effectiveRunState, .cancelled)
-        XCTAssertEqual(d.filingState, .archived)
-        XCTAssertEqual(d.effectiveFilingState, .archived)
+        XCTAssertEqual(d.lifecycleState, .completed)
+        XCTAssertEqual(d.effectiveLifecycleState, .completed)
         XCTAssertEqual(d.endReason, "completed")
 
         let natural = try decode("""
         {"type":"session.ended","sessionId":"s2","agentId":null,"ts":"t",
          "data":{"status":"SUCCEEDED","runStatus":"SUCCEEDED","sessionState":"COMPLETED",
-                 "runState":"SUCCEEDED","filingState":"OPEN","endReason":null}}
+                 "runState":"SUCCEEDED","lifecycleState":"OPEN","endReason":null}}
         """)
         let naturalPayload = try XCTUnwrap(natural.payload(ControlSessionEnded.self))
         XCTAssertNil(naturalPayload.endReason)

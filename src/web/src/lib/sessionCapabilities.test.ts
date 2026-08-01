@@ -12,16 +12,16 @@ import {
 describe('isCompleteShortcutEligible', () => {
   it('allows an Open detail selected from a non-Open surrounding scope', () => {
     expect(
-      isCompleteShortcutEligible({ capabilities: { canArchive: true } }, 'OPEN'),
+      isCompleteShortcutEligible({ capabilities: { canComplete: true } }, 'OPEN'),
     ).toBe(true);
   });
 
   it('rejects a Completed detail and an explicit server denial', () => {
     expect(
-      isCompleteShortcutEligible({ capabilities: { canArchive: true } }, 'ARCHIVED'),
+      isCompleteShortcutEligible({ capabilities: { canComplete: true } }, 'COMPLETED'),
     ).toBe(false);
     expect(
-      isCompleteShortcutEligible({ capabilities: { canArchive: false } }, 'OPEN'),
+      isCompleteShortcutEligible({ capabilities: { canComplete: false } }, 'OPEN'),
     ).toBe(false);
   });
 });
@@ -32,20 +32,33 @@ describe('sessionCapabilityOf', () => {
       capabilities: {
         canSend: false,
         canResume: false,
-        canArchive: true,
+        canComplete: true,
         canRestore: false,
       },
     };
 
     expect(sessionCapabilityOf(session, 'canSend', true)).toBe(false);
     expect(sessionCapabilityOf(session, 'canResume', true)).toBe(false);
-    expect(sessionCapabilityOf(session, 'canArchive', false)).toBe(true);
+    expect(sessionCapabilityOf(session, 'canComplete', false)).toBe(true);
     expect(sessionCapabilityOf(session, 'canRestore', true)).toBe(false);
   });
 
   it('uses the local fallback for old or partial payloads', () => {
     expect(sessionCapabilityOf({}, 'canResume', true)).toBe(true);
-    expect(sessionCapabilityOf({ capabilities: {} }, 'canArchive', false)).toBe(false);
+    expect(sessionCapabilityOf({ capabilities: {} }, 'canComplete', false)).toBe(false);
+  });
+
+  it('prefers canComplete and falls back to the legacy canArchive capability', () => {
+    expect(
+      sessionCapabilityOf(
+        { capabilities: { canComplete: false, canArchive: true } },
+        'canComplete',
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      sessionCapabilityOf({ capabilities: { canArchive: true } }, 'canComplete', false),
+    ).toBe(true);
   });
 });
 
@@ -102,7 +115,7 @@ describe('sessionSendDispositionOf', () => {
     expect(sessionSendDispositionOf({ runState: 'SUCCEEDED' }, true)).toBe('RESUME');
     expect(
       sessionSendDispositionOf(
-        { runState: 'SUCCEEDED', filingState: 'TRASH', capabilities: { canResume: true } },
+        { runState: 'SUCCEEDED', lifecycleState: 'TRASH', capabilities: { canResume: true } },
         true,
       ),
     ).toBe('BLOCK');

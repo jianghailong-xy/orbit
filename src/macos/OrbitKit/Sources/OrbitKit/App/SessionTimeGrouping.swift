@@ -37,7 +37,7 @@ public enum SessionTimeGrouping {
 
         for s in sessions {
             // Only Open honours pins; elsewhere a (possibly stale) pinnedAt just buckets
-            // by time like any other session, so no "Pinned" section appears in Archived/Trash.
+            // by time like any other session, so no "Pinned" section appears in Completed/Trash.
             if pinnedFirst, s.pinnedAt != nil { pinned.append(s); continue }
             buckets[bucketIndex(for: s, today: today, calendar: calendar)].append(s)
         }

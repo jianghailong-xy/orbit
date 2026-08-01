@@ -27,7 +27,7 @@ export enum SessionEndReason {
   TASK_DONE = 'task_done', // reaper recycled it because its task finished — resumable
   TASK_CANCELLED = 'task_cancelled', // reaper recycled it because its task was cancelled
   ENDED = 'ended', // user ended the session — resumable
-  COMPLETED = 'completed', // user marked it complete (archived)
+  COMPLETED = 'completed', // user moved it to Completed
   DELETED = 'deleted', // user deleted it (trash)
   ORPHANED = 'orphaned', // never-claimed run for an already-finished task
   CANCELLED = 'cancelled', // user stopped the run (batch-stop) — reads as a hard cancel, not dormant
@@ -35,7 +35,7 @@ export enum SessionEndReason {
 
 /**
  * Legacy combined lifecycle state. Retained for wire compatibility; new consumers
- * should use {@link SessionRunState} and {@link SessionFilingState} instead.
+ * should use {@link SessionRunState} and {@link SessionLifecycleState} instead.
  */
 export enum SessionState {
   QUEUED = 'QUEUED',
@@ -52,7 +52,7 @@ export enum SessionState {
 
 /**
  * User-facing execution state. Unlike the legacy {@link SessionState}, this describes
- * only what happened to the run and never changes when the session is archived,
+ * only what happened to the run and never changes when the session is completed,
  * restored, or moved to Trash.
  */
 export enum SessionRunState {
@@ -67,7 +67,21 @@ export enum SessionRunState {
   ENDED = 'ENDED',
 }
 
-/** Where a session is filed. Orthogonal to {@link SessionRunState}. */
+/**
+ * Where a session lives in the product lifecycle. Orthogonal to
+ * {@link SessionRunState}: a successful run can still be Open, and a failed run can
+ * be moved to Completed.
+ */
+export enum SessionLifecycleState {
+  OPEN = 'OPEN',
+  COMPLETED = 'COMPLETED',
+  TRASH = 'TRASH',
+}
+
+/**
+ * @deprecated Wire compatibility for clients deployed before Completed became the
+ * canonical lifecycle term. New code must use {@link SessionLifecycleState}.
+ */
 export enum SessionFilingState {
   OPEN = 'OPEN',
   ARCHIVED = 'ARCHIVED',
@@ -76,9 +90,14 @@ export enum SessionFilingState {
 
 type SessionStateSource = {
   endReason?: SessionEndReason | string | null;
+  completedAt?: Date | string | null;
+  /** @deprecated Read compatibility for pre-Completed rows and clients. */
   archivedAt?: Date | string | null;
   deletedAt?: Date | string | null;
 };
+
+const completionTimestamp = (input: SessionStateSource): Date | string | null | undefined =>
+  input.completedAt ?? input.archivedAt;
 
 /** Input accepted by {@link deriveSessionState}. New code can pass `runStatus`; the
  * legacy/raw `status` spelling remains accepted for existing Prisma/API objects. */
@@ -88,7 +107,7 @@ export type SessionStateInput = SessionStateSource &
     | { status: RunStatus | string; runStatus?: RunStatus | string | null }
   );
 
-/** Derive execution state without consulting archivedAt/deletedAt. */
+/** Derive execution state without consulting lifecycle timestamps. */
 export function deriveSessionRunState(input: SessionStateInput): SessionRunState {
   const rawStatus = String(input.runStatus ?? input.status ?? '').toUpperCase();
   const reason = String(input.endReason ?? '').toLowerCase();
@@ -126,11 +145,26 @@ export function deriveSessionRunState(input: SessionStateInput): SessionRunState
   }
 }
 
-/** Derive list membership without consulting the runner status or terminal reason. */
+/** Derive canonical lifecycle membership without consulting run status or end reason. */
+export function deriveSessionLifecycleState(input: SessionStateSource): SessionLifecycleState {
+  if (input.deletedAt != null) return SessionLifecycleState.TRASH;
+  if (completionTimestamp(input) != null) return SessionLifecycleState.COMPLETED;
+  return SessionLifecycleState.OPEN;
+}
+
+/**
+ * @deprecated Derive the legacy filing-state representation for old wire consumers.
+ * New code should call {@link deriveSessionLifecycleState}.
+ */
 export function deriveSessionFilingState(input: SessionStateSource): SessionFilingState {
-  if (input.deletedAt != null) return SessionFilingState.TRASH;
-  if (input.archivedAt != null) return SessionFilingState.ARCHIVED;
-  return SessionFilingState.OPEN;
+  switch (deriveSessionLifecycleState(input)) {
+    case SessionLifecycleState.COMPLETED:
+      return SessionFilingState.ARCHIVED;
+    case SessionLifecycleState.TRASH:
+      return SessionFilingState.TRASH;
+    default:
+      return SessionFilingState.OPEN;
+  }
 }
 
 /**
@@ -144,7 +178,9 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
   const reason = String(input.endReason ?? '').toLowerCase();
 
   if (input.deletedAt != null) return SessionState.DELETED;
-  if (input.archivedAt != null && rawStatus !== RunStatus.FAILED) return SessionState.COMPLETED;
+  if (completionTimestamp(input) != null && rawStatus !== RunStatus.FAILED) {
+    return SessionState.COMPLETED;
+  }
 
   switch (rawStatus) {
     case RunStatus.RUNNING:
@@ -178,12 +214,12 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
 
 /**
  * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
- * wasn't one (a hard archive/delete/batch-stop, or no reason recorded). TASK_DONE settles
+ * wasn't one (a hard complete/delete/batch-stop, or no reason recorded). TASK_DONE settles
  * SUCCEEDED; TASK_CANCELLED settles CANCELLED. IDLE/ENDED also settle CANCELLED, with
  * `endReason` distinguishing their dormant/resumable meaning. Returning an explicit
  * status is load-bearing for the reaper: its forceFinalize defaults to FAILED, so null
  * would resurface an unacknowledged graceful recycle as a run failure. Shared so the
- * runner's /complete and the reaper's backstop cannot drift apart.
+ * runner's /finalize and the reaper's backstop cannot drift apart.
  */
 export function gracefulEndStatus(endReason: string | null | undefined): RunStatus | null {
   switch (endReason) {

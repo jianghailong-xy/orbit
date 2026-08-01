@@ -1612,6 +1612,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // A graceful recycle and a hard stop both settle CANCELLED, so the panel's run
             // chip needs the reason to tell "dormant" from "cancelled" (see TaskDetailPanel).
             endReason: true,
+            completedAt: true,
             archivedAt: true,
             deletedAt: true,
             createdAt: true,
@@ -1624,6 +1625,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             title: true,
             status: true,
             endReason: true,
+            completedAt: true,
             archivedAt: true,
             deletedAt: true,
           },

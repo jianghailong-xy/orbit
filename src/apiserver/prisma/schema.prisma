@@ -374,7 +374,7 @@ model Session {
   // Why the session ended, orthogonal to `status` (which collapses every graceful end
   // to CANCELLED). Set by the path that requests the end — endLive (user end/complete/
   // delete) or the reaper (idle/task-done recycle, orphan) — and left untouched by the
-  // runner's async /complete. null = a natural agent finish (read `status`) or a
+  // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
   endReason         String?   @map("end_reason")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
@@ -460,9 +460,11 @@ model Session {
   commitStatus      String?   @map("commit_status")
   commitError       String?   @map("commit_error")
   commitRequestedAt DateTime? @map("commit_requested_at")
-  // Soft visibility: null = active. archivedAt hides the session into the Archived
-  // view, deletedAt into the trash. Both retain all data (transcript, billing) and
-  // are reversible — restore clears them. There is no hard delete.
+  // Product lifecycle: completedAt moves an Open session to Completed; deletedAt moves
+  // it to Trash. Both retain all data and restore clears them. archivedAt is a temporary
+  // rolling-deploy compatibility mirror maintained by migration 0076's database trigger.
+  completedAt       DateTime? @map("completed_at")
+  /// @deprecated Compatibility mirror of completedAt; do not use in new server code.
   archivedAt        DateTime? @map("archived_at")
   deletedAt         DateTime? @map("deleted_at")
   // Pin to the top of the session list: when set, the session sorts above unpinned ones

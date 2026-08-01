@@ -113,7 +113,7 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 		{
 			name:   "session complete",
 			method: http.MethodPost,
-			path:   "/api/runner/sessions/child-session/archive",
+			path:   "/api/runner/sessions/child-session/complete-session",
 			call: func(transport *Transport) error {
 				_, err := transport.completeSession("caller-session", "session-token", "child-session")
 				return err

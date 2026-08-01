@@ -20,7 +20,7 @@ private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let session: Session
     /// The tab this row is shown under; `nil` means an Open-list surface.
-    /// `.archived` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
+    /// `.completed` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
     /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
     /// confirmation) and drops Pin — a trashed session isn't orderable.
     let scope: SessionView?
@@ -30,12 +30,12 @@ private struct SessionRowActions: ViewModifier {
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
-    private var isCompleted: Bool { scope == .archived }
+    private var isCompleted: Bool { scope == .completed }
     private var isTrash: Bool { scope == .trash }
-    private var canArchive: Bool { session.capabilities?.canArchive ?? true }
+    private var canComplete: Bool { session.capabilities?.canComplete ?? true }
     private var canRestore: Bool { session.capabilities?.canRestore ?? true }
     private var canPerformPositiveAction: Bool {
-        isCompleted || isTrash ? canRestore : canArchive
+        isCompleted || isTrash ? canRestore : canComplete
     }
     private var isPinned: Bool { session.pinnedAt != nil }
 
@@ -73,12 +73,12 @@ private struct SessionRowActions: ViewModifier {
             .tint(.blue)
             .disabled(!canRestore)
         } else {
-            Button { model.archiveSession(session.id) } label: {
+            Button { model.completeSession(session.id) } label: {
                 Label(SessionCompletionPresentation.actionTitle,
                       systemImage: "checkmark.circle")
             }
             .tint(.green)
-            .disabled(!canArchive)
+            .disabled(!canComplete)
         }
     }
 

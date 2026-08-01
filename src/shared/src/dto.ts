@@ -4,6 +4,7 @@ import {
   RunnerStatus,
   RunStatus,
   SessionFilingState,
+  SessionLifecycleState,
   SessionRunState,
   SessionState,
 } from './enums';
@@ -27,6 +28,9 @@ export interface SessionCapabilities {
   canSend: boolean;
   canResume: boolean;
   resumeBlockedReason: SessionResumeBlockedReason | null;
+  /** Canonical capability for moving an Open session to Completed. */
+  canComplete: boolean;
+  /** @deprecated Compatibility alias of `canComplete`. */
   canArchive: boolean;
   canRestore: boolean;
 }
@@ -656,7 +660,7 @@ export interface FilePatch {
  * Runner → control plane: finalize the whole session to a terminal status,
  * distinct from per-turn /turn-complete.
  */
-export interface SessionCompleteRequest {
+export interface RunFinalizeRequest {
   status: RunStatus;
   /** Claude Code `result` text. */
   result?: string;
@@ -690,15 +694,20 @@ export interface SessionCompleteRequest {
 }
 
 /**
- * Control plane → runner response for POST /runner/sessions/:id/complete. `keepCheckout`
+ * Control plane → runner response for POST /runner/sessions/:id/finalize. `keepCheckout`
  * tells the runner whether to preserve the session's isolated worktree checkout: kept for
  * any resumable end (idle-park / user-end / task-done / cancel — the session can be
- * reopened), dropped only when the user archived (completed) or deleted the session.
+ * reopened), dropped only when the user completed or deleted the session.
  */
-export interface SessionCompleteResponse {
+export interface RunFinalizeResponse {
   ok: boolean;
   keepCheckout: boolean;
 }
+
+/** @deprecated Compatibility type alias; use {@link RunFinalizeRequest}. */
+export type SessionCompleteRequest = RunFinalizeRequest;
+/** @deprecated Compatibility type alias; use {@link RunFinalizeResponse}. */
+export type SessionCompleteResponse = RunFinalizeResponse;
 
 /** Runner → control plane: given the session ids of leftover worktree checkouts, ask which
  *  are safe to garbage-collect. Sent by the runner's startup worktree GC. */
@@ -707,7 +716,7 @@ export interface WorktreesRemovableRequest {
 }
 
 /** Control plane → runner: the subset of the queried ids whose checkout may be removed —
- *  a session that was archived (completed) or deleted, or is no longer a session at all.
+ *  a session that was completed or deleted, or is no longer a session at all.
  *  Any id absent from this list belongs to a still-resumable session and must be kept. */
 export interface WorktreesRemovableResponse {
   removable: string[];
@@ -787,11 +796,13 @@ export interface SessionSearchHit {
   status: string;
   /** Raw runner/process status. */
   runStatus: string;
-  /** @deprecated Combined lifecycle state; use `runState` + `filingState`. */
+  /** @deprecated Combined lifecycle state; use `runState` + `lifecycleState`. */
   sessionState: SessionState;
   /** Execution outcome, independent of where the session is filed. */
   runState: SessionRunState;
-  /** List membership, independent of the execution outcome. */
+  /** Canonical list membership, independent of the execution outcome. */
+  lifecycleState: SessionLifecycleState;
+  /** @deprecated Compatibility representation; use `lifecycleState`. */
   filingState: SessionFilingState;
   agent: { id: string; name: string } | null;
   runnerId: string | null;
@@ -799,8 +810,9 @@ export interface SessionSearchHit {
   taskTitle: string | null;
   lastTurnAt: string | Date | null;
   createdAt: string | Date;
-  /** Set when the session lives in Archived / Trash — the row badges where it is, because a
-   *  search that silently returned filed-away rows would look like it was showing Open ones. */
+  /** Set when the session has been moved to Completed. */
+  completedAt: string | Date | null;
+  /** @deprecated Compatibility alias of `completedAt`. */
   archivedAt: string | Date | null;
   deletedAt: string | Date | null;
   /** Why the session ended — carried so the clients' shared status-label logic reports the same

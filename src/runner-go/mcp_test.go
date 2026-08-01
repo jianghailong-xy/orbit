@@ -305,7 +305,7 @@ func TestSessionSearchRequiresQuery(t *testing.T) {
 	}
 }
 
-func TestMCPSessionCompleteUsesArchiveEndpoint(t *testing.T) {
+func TestMCPSessionCompleteUsesCompleteSessionEndpoint(t *testing.T) {
 	var gotMethod, gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
@@ -323,7 +323,7 @@ func TestMCPSessionCompleteUsesArchiveEndpoint(t *testing.T) {
 	if res["isError"] == true {
 		t.Fatalf("session_complete returned an error: %#v", res["content"])
 	}
-	if gotMethod != http.MethodPost || gotPath != "/api/runner/sessions/child-session/archive" {
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/sessions/child-session/complete-session" {
 		t.Fatalf("session_complete hit %s %s", gotMethod, gotPath)
 	}
 }

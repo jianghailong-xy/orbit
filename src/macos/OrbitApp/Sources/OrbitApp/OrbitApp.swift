@@ -44,9 +44,9 @@ struct OrbitApp: App {
             }
             // ⌘D → complete the open session. Disabled unless a session's console is showing.
             CommandGroup(after: .newItem) {
-                Button("Complete Session") { model.archiveCurrentSession() }
+                Button("Complete Session") { model.completeCurrentSession() }
                     .keyboardShortcut("d", modifiers: .command)
-                    .disabled(!model.signedIn || !model.canArchiveCurrentSession)
+                    .disabled(!model.signedIn || !model.canCompleteCurrentSession)
             }
             // Standard "Check for Updates…" in the app menu (right after "About Orbit").
             CommandGroup(after: .appInfo) {

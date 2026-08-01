@@ -144,10 +144,18 @@ export async function api<T = unknown>(
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as {
       message?: string;
     };
-    throw new Error(msg.message || res.statusText);
+    throw new ApiError(msg.message || res.statusText, res.status);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** HTTP-aware error used only where a rolling-upgrade compatibility fallback is safe. */
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
 /** Longest string the server keeps inside a tool call/result before clipping it to a preview and
@@ -434,12 +442,19 @@ export const commitSession = (sessionId: string) =>
 export const adoptSessionBranch = (sessionId: string) =>
   api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
 
-// Soft visibility actions for ended sessions. Complete files a session into the
-// Completed view; delete moves it to the trash. Both keep all data; restore (which
-// clears both) brings it back to the active list. Purge is the only hard delete: it
-// permanently removes a trashed session and all its data, irreversibly.
-export const archiveSession = (sessionId: string) =>
-  api(`/sessions/${sessionId}/archive`, { method: 'POST' });
+// Lifecycle actions for sessions. Complete moves a session into Completed; delete
+// moves it to Trash. Both keep all data; restore brings either back to Open. Purge is
+// the only hard delete: it permanently removes a trashed session and all its data.
+export const completeSession = async (sessionId: string) => {
+  try {
+    return await api(`/sessions/${sessionId}/complete`, { method: 'POST' });
+  } catch (error) {
+    // A new browser bundle may briefly overlap an older API replica. Fall back only when
+    // the canonical route is absent; authorization/conflict/server errors must not replay.
+    if (!(error instanceof ApiError) || error.status !== 404) throw error;
+    return api(`/sessions/${sessionId}/archive`, { method: 'POST' });
+  }
+};
 
 export const deleteSession = (sessionId: string) =>
   api(`/sessions/${sessionId}`, { method: 'DELETE' });
@@ -481,6 +496,8 @@ export interface SharedSession {
   title: string;
   agentName: string | null;
   runState?: string;
+  lifecycleState?: string;
+  /** Legacy API name retained during rolling upgrades. */
   filingState?: string;
   sessionState?: string;
   runStatus?: string;
@@ -550,8 +567,10 @@ export interface SessionChangedFile {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
-  /** Latest run outcome and sidebar filing location are independent product dimensions. */
+  /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
+  lifecycleState?: string;
+  /** Legacy API name retained during rolling upgrades. */
   filingState?: string;
   capabilities?: SessionCapabilities;
   /** Legacy mixed product lifecycle retained during migration. */
@@ -619,6 +638,8 @@ export interface SessionDetail {
   // not shared. Set/cleared by enable/disableSessionShare; drives the Share dialog's state.
   shareToken?: string | null;
   sharedAt?: string | null;
+  completedAt?: string | null;
+  /** Legacy API timestamp retained during rolling upgrades. */
   archivedAt?: string | null;
   deletedAt?: string | null;
   runningBgShells?: string[] | null;

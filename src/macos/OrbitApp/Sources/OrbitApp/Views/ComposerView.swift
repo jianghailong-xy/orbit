@@ -68,7 +68,7 @@ struct ComposerView: View {
     private var showsCompletedResumeNotice: Bool {
         guard let session = app.session(id: console.sessionID) else { return false }
         return ComposerLogic.showsCompletedResumeNotice(
-            filingState: session.effectiveFilingState,
+            lifecycleState: session.effectiveLifecycleState,
             capabilities: session.capabilities
         )
     }
