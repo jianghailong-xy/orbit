@@ -5284,6 +5284,38 @@ body {
   font-size: 13px;
 }
 
+.tdp-dependency-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 0;
+}
+.tdp-dependency-link {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-1);
+}
+.tdp-dependency-link:hover {
+  background: var(--bg-hover);
+  color: var(--brand);
+}
+.tdp-dependency-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.tdp-dependency-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tdp-session {
   display: flex;
   align-items: center;

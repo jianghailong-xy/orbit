@@ -588,14 +588,15 @@ export function TaskDetailPanel({
               dependsOn.map((d: any) => {
                 const meta = STATUS_META[d.dependsOnTask.status] ?? { label: d.dependsOnTask.status, tone: 'muted' };
                 return (
-                  <div
-                    key={d.dependsOnTask.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}
-                  >
-                    <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {d.dependsOnTask.title}
-                    </span>
+                  <div key={d.dependsOnTask.id} className="tdp-dependency-row">
+                    <Link
+                      to={`/tasks/${encodeId(d.dependsOnTask.id)}`}
+                      className="tdp-dependency-link"
+                      title={`Open task: ${d.dependsOnTask.title}`}
+                    >
+                      <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
+                      <span className="tdp-dependency-title">{d.dependsOnTask.title}</span>
+                    </Link>
                     <Button
                       type="text"
                       size="small"
