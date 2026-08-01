@@ -533,19 +533,24 @@ describe('progressive dependency graph projection', () => {
   it('keeps prior live topology when the fresh induced edge list is truncated', () => {
     const graph = {
       focusTaskId: 'A',
-      nodes: [node('A'), node('B'), node('C')],
+      nodes: [node('A'), node('B', 'OPEN', { dependentCount: 1 }), node('C')],
       edges: [edge('A', 'B'), edge('B', 'C')],
     };
     const refreshed = reconcileTaskDependencyGraphRefresh(graph, {
-      nodes: [node('A'), node('B'), node('C')],
+      nodes: [node('A'), node('B', 'OPEN', { dependentCount: 1 }), node('C')],
       edges: [edge('A', 'B')],
-      collapsedGroups: [],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 1, cursor: 'prefix-next' },
+      ],
       missingTaskIds: [],
       truncatedEdges: true,
     });
 
     expect(refreshed.nodes.map((item) => item.id)).toEqual(['A', 'B', 'C']);
     expect(refreshed.edges).toEqual([edge('A', 'B'), edge('B', 'C')]);
+    // The server prefix omitted B -> C, but the retained old edge satisfies B's exact degree.
+    expect(refreshed.collapsedGroups).toEqual([]);
+    // Transport truncation still keeps the fallback warning even with no identified boundary.
     expect(taskDependencyGraphTruncationState(refreshed)).toBe('limit');
   });
 

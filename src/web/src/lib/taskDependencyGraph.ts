@@ -140,6 +140,7 @@ export function reconcileTaskDependencyGraphRefresh(
   const missingTaskIds = new Set(refresh.missingTaskIds);
   const previousById = new Map(graph.nodes.map((node) => [node.id, node]));
   const baseById = new Map((freshBase?.nodes ?? []).map((node) => [node.id, node]));
+  const bulkNodeById = new Map(refresh.nodes.map((node) => [node.id, node]));
   const refreshedById = new Map<string, TaskDependencyGraphNode>();
   for (const freshNode of refresh.nodes) {
     if (missingTaskIds.has(freshNode.id)) continue;
@@ -194,9 +195,24 @@ export function reconcileTaskDependencyGraphRefresh(
   const edges = [...candidateEdges.values()].filter(
     (edge) => connectedTaskIds.has(edge.sourceTaskId) && connectedTaskIds.has(edge.targetTaskId),
   );
-  const collapsedGroups = refresh.collapsedGroups.filter(
-    (group) => group.hiddenCount > 0 && connectedTaskIds.has(group.anchorTaskId),
-  );
+  const collapsedGroups = refresh.collapsedGroups.flatMap((group) => {
+    if (!connectedTaskIds.has(group.anchorTaskId)) return [];
+    const bulkNode = bulkNodeById.get(group.anchorTaskId);
+    const total =
+      group.direction === 'prerequisites'
+        ? bulkNode?.prerequisiteCount
+        : bulkNode?.dependentCount;
+    if (total === undefined) return group.hiddenCount > 0 ? [group] : [];
+    const loaded = edges.filter((edge) =>
+      group.direction === 'prerequisites'
+        ? edge.targetTaskId === group.anchorTaskId
+        : edge.sourceTaskId === group.anchorTaskId,
+    ).length;
+    const hiddenCount = Math.max(0, total - loaded);
+    // Only reconcile identities supplied by the server: exact degree metadata cannot create the
+    // opaque cursor required for a brand-new boundary.
+    return hiddenCount > 0 ? [{ ...group, hiddenCount }] : [];
+  });
   return {
     ...graph,
     nodes,
