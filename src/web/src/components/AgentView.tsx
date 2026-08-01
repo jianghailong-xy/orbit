@@ -27,12 +27,11 @@ import {
   PushpinOutlined,
   SearchOutlined,
   ShareAltOutlined,
-  TagsOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Modal, Popover, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
@@ -768,10 +767,12 @@ export function AgentView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
-  // The tag picker is owned by the list rather than a row: changing a tag can move or hide that
-  // row under the current filter/grouping, but the picker should remain mounted until the save lands.
-  const [taggingSessionId, setTaggingSessionId] = useState<string | null>(null);
-  const [tagDraft, setTagDraft] = useState<string[]>([]);
+  // Controlled because the multi-select tag items stay open after a choice; ordinary actions
+  // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  // React Query publishes isPending through a batched render; this synchronous lock closes the
+  // small window where a second full-selection PUT could otherwise start before items disable.
+  const tagSaveInFlight = useRef(false);
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
@@ -2031,20 +2032,38 @@ export function AgentView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
-  // Apply the picker's complete selection in one write. Patch every list scope with the returned,
-  // server-ordered tags so row dots and tag grouping update immediately, then reconcile by refetch.
+  // Apply the menu's complete selection in one write. Optimistically patch every list scope so the
+  // checkmarks, row dots and tag grouping move immediately; the server response restores its order.
   const setTagsMut = useMutation({
     mutationFn: ({ id, tagIds }: { id: string; tagIds: string[] }) => setSessionTags(id, tagIds),
+    onMutate: ({ id, tagIds }) => {
+      const previousLists = qc.getQueriesData<any[]>({ queryKey: ['sessions'] });
+      const previousDetail = qc.getQueryData<any>(['session', id]);
+      const tags = sessionTags.filter((t) => tagIds.includes(t.id));
+      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
+      );
+      qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
+      return { previousLists, previousDetail };
+    },
     onSuccess: (tags, { id }) => {
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
       );
       qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
-      setTaggingSessionId(null);
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
-      void qc.invalidateQueries({ queryKey: ['session', id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, { id }, context) => {
+      context?.previousLists.forEach(([key, value]) => qc.setQueryData(key, value));
+      if (context?.previousDetail !== undefined) {
+        qc.setQueryData(['session', id], context.previousDetail);
+      }
+      message.error(e.message);
+    },
+    onSettled: (_data, _error, { id }) => {
+      tagSaveInFlight.current = false;
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+    },
   });
   // Enable worktree isolation for a non-git agent: flip autoInitGit so the runner `git
   // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
@@ -2631,6 +2650,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
     setHistIdx(-1);
+    setHeaderMenuOpen(false);
   }, [selectedId]);
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no agent in the URL, so fall back to the open session's agent, then runner.
@@ -2654,6 +2674,22 @@ export function AgentView({ runner }: { runner: Runner }) {
   const checkSlot = (on: boolean): ReactNode => (
     <span className="scope-menu-check">{on ? <CheckOutlined /> : null}</span>
   );
+  const selectedSessionTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
+  const setTagsFromMenu = ({
+    key,
+    selectedKeys,
+  }: {
+    key: string;
+    selectedKeys: string[];
+  }): void => {
+    if (!selected || tagSaveInFlight.current || !sessionTags.some((t) => t.id === key)) return;
+    const available = new Set(sessionTags.map((t) => t.id));
+    tagSaveInFlight.current = true;
+    setTagsMut.mutate({
+      id: selected.id,
+      tagIds: selectedKeys.filter((id) => available.has(id)),
+    });
+  };
   // One menu for everything that scopes the list: which slice (exclusive), then — below a
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
@@ -3107,14 +3143,24 @@ export function AgentView({ runner }: { runner: Runner }) {
               <Dropdown
                 trigger={['click']}
                 placement="bottomRight"
+                open={headerMenuOpen}
+                onOpenChange={setHeaderMenuOpen}
                 menu={{
+                  selectable: !selectedDeleted,
+                  multiple: !selectedDeleted,
+                  selectedKeys: selectedDeleted ? [] : selectedSessionTagIds,
+                  onSelect: selectedDeleted ? undefined : setTagsFromMenu,
+                  onDeselect: selectedDeleted ? undefined : setTagsFromMenu,
                   items: selectedDeleted
                     ? [
                         {
                           key: 'restore',
                           icon: <UndoOutlined />,
                           label: 'Restore',
-                          onClick: () => restoreMut.mutate(selected.id),
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            restoreMut.mutate(selected.id);
+                          },
                         },
                         { type: 'divider' },
                         {
@@ -3122,7 +3168,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete permanently',
-                          onClick: () => confirmPurge(selected.id),
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            confirmPurge(selected.id);
+                          },
                         },
                       ]
                     : [
@@ -3132,20 +3181,32 @@ export function AgentView({ runner }: { runner: Runner }) {
                           key: 'find',
                           icon: <SearchOutlined />,
                           label: `Find in session · ${FIND_HINT}`,
-                          onClick: () => openSessionFind(),
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            openSessionFind();
+                          },
                         },
                         ...(sessionTags.length > 0
                           ? [
                               {
-                                key: 'tags',
-                                icon: <TagsOutlined />,
-                                label: 'Tags…',
-                                onClick: () => {
-                                  setTagDraft(
-                                    ((selected.tags ?? []) as SessionTagRef[]).map((t) => t.id),
-                                  );
-                                  setTaggingSessionId(selected.id);
-                                },
+                                type: 'group' as const,
+                                label: 'Tags',
+                                children: sessionTags.map((t) => ({
+                                  key: t.id,
+                                  disabled: setTagsMut.isPending,
+                                  label: (
+                                    <span className="scope-menu-row">
+                                      <span className="scope-tag-label">
+                                        <span
+                                          className="session-section-dot"
+                                          style={{ background: t.color }}
+                                        />
+                                        {t.name}
+                                      </span>
+                                      {checkSlot(selectedSessionTagIds.includes(t.id))}
+                                    </span>
+                                  ),
+                                })),
                               },
                             ]
                           : []),
@@ -3159,7 +3220,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                                 key: 'restore',
                                 icon: <UndoOutlined />,
                                 label: 'Restore',
-                                onClick: () => restoreMut.mutate(selected.id),
+                                onClick: () => {
+                                  setHeaderMenuOpen(false);
+                                  restoreMut.mutate(selected.id);
+                                },
                               },
                               { type: 'divider' as const },
                             ]
@@ -3168,7 +3232,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                           key: 'share',
                           icon: <ShareAltOutlined />,
                           label: detailForSelected?.shareToken ? 'Share · link active' : 'Share…',
-                          onClick: () => setShareOpen(true),
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            setShareOpen(true);
+                          },
                         },
                         { type: 'divider' },
                         {
@@ -3176,7 +3243,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                           icon: <DeleteOutlined />,
                           danger: true,
                           label: 'Delete',
-                          onClick: () => deleteMut.mutate(selected.id),
+                          onClick: () => {
+                            setHeaderMenuOpen(false);
+                            deleteMut.mutate(selected.id);
+                          },
                         },
                       ],
                 }}
@@ -3186,45 +3256,6 @@ export function AgentView({ runner }: { runner: Runner }) {
             </>
           )}
         </div>
-
-        <Modal
-          open={taggingSessionId !== null}
-          title="Tags"
-          okText="Apply"
-          confirmLoading={setTagsMut.isPending}
-          cancelButtonProps={{ disabled: setTagsMut.isPending }}
-          maskClosable={!setTagsMut.isPending}
-          closable={!setTagsMut.isPending}
-          keyboard={!setTagsMut.isPending}
-          onCancel={() => {
-            if (!setTagsMut.isPending) setTaggingSessionId(null);
-          }}
-          onOk={() => {
-            if (taggingSessionId) setTagsMut.mutate({ id: taggingSessionId, tagIds: tagDraft });
-          }}
-        >
-          <Select
-            mode="multiple"
-            allowClear
-            disabled={setTagsMut.isPending}
-            value={tagDraft}
-            placeholder="Choose color labels"
-            optionFilterProp="title"
-            maxTagCount="responsive"
-            style={{ width: '100%' }}
-            onChange={(ids: string[]) => setTagDraft(ids)}
-            options={sessionTags.map((t) => ({
-              value: t.id,
-              title: t.name,
-              label: (
-                <span className="scope-tag-label">
-                  <span className="session-section-dot" style={{ background: t.color }} />
-                  {t.name}
-                </span>
-              ),
-            }))}
-          />
-        </Modal>
 
         {selected && !selectedDeleted && !composing && (
           <ShareModal
