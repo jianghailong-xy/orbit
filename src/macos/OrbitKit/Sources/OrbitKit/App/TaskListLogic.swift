@@ -28,13 +28,14 @@ public enum TaskScope: Hashable, Sendable {
 }
 
 public enum TaskFilter: String, CaseIterable, Sendable, Identifiable {
-    case runnable, all, ongoing, failed, done, cancelled
+    case runnable, all, running, ongoing, failed, done, cancelled
 
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .runnable:  return "Ready"
         case .all:       return "All"
+        case .running:   return "Running"
         case .ongoing:   return "Open"
         case .failed:    return "Failed"
         case .done:      return "Done"
@@ -47,6 +48,7 @@ public enum TaskFilter: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .runnable:  return "RUNNABLE"
         case .all:       return nil
+        case .running:   return "RUNNING"
         case .ongoing:   return "ONGOING"
         case .failed:    return "FAILED"
         case .done:      return "DONE"
@@ -58,6 +60,7 @@ public enum TaskFilter: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .runnable:  return TaskListLogic.canStart(task)
         case .all:       return true
+        case .running:   return TaskListLogic.isRunning(task)
         case .ongoing:   return task.status == .open || task.status == .inProgress
         case .failed:    return task.status == .failed
         case .done:      return task.status == .done
@@ -105,6 +108,7 @@ public struct TaskOverview: Equatable, Sendable {
         switch filter {
         case .runnable:  return runnable
         case .all:       return total
+        case .running:   return running
         case .ongoing:   return open + inProgress
         case .failed:    return failed
         case .done:      return done
@@ -172,7 +176,7 @@ public enum TaskListLogic {
 
     /// Cancelled is rare, matching Web: hide it until the scope contains one (or it is selected).
     public static func availableFilters(overview: TaskOverview, current: TaskFilter) -> [TaskFilter] {
-        var filters: [TaskFilter] = [.runnable, .all, .ongoing, .failed, .done]
+        var filters: [TaskFilter] = [.runnable, .all, .running, .ongoing, .failed, .done]
         if overview.cancelled > 0 || current == .cancelled { filters.append(.cancelled) }
         return filters
     }

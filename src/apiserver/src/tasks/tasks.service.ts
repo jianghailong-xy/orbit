@@ -605,9 +605,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const status = query.status?.trim().toUpperCase();
     const runnableOnly = status === 'RUNNABLE';
+    const runningOnly = status === 'RUNNING';
     let statuses: TaskStatus[] | undefined;
     if (status === 'ONGOING') statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS];
-    else if (status && !runnableOnly) {
+    else if (status && !runnableOnly && !runningOnly) {
       if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
         throw new BadRequestException('invalid task status');
       }
@@ -627,7 +628,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const filteredWhere: Prisma.TaskWhereInput = runnableOnly
       ? runnableTaskWhere(scopedWhere)
-      : { ...scopedWhere };
+      : runningOnly
+        ? { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } }
+        : { ...scopedWhere };
     if (statuses) filteredWhere.status = { in: statuses };
     const search = query.q?.trim();
     if (search) filteredWhere.title = { contains: search.slice(0, 200), mode: 'insensitive' };

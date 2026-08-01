@@ -137,6 +137,27 @@ test('runnable filter is applied before pagination with the same rules as the Ru
   });
 });
 
+test('running filter is applied before pagination from live session state', async () => {
+  let findManyWhere: any;
+  const service = serviceWith({
+    task: {
+      findMany: async (args: any) => {
+        findManyWhere = args.where;
+        return [];
+      },
+      count: async () => 0,
+      groupBy: async () => [],
+    },
+  });
+
+  await service.listPage(OWNER_ID, { status: 'RUNNING' });
+
+  assert.deepEqual(findManyWhere, {
+    ownerId: OWNER_ID,
+    sessions: { some: { status: RunStatus.RUNNING } },
+  });
+});
+
 test('paged list rejects invalid bounds and filters before querying Prisma', async () => {
   const service = serviceWith({});
   await assert.rejects(() => service.listPage(OWNER_ID, { limit: 201 }), /limit must be/);

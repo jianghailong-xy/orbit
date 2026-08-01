@@ -6,6 +6,10 @@ describe('taskPagePath', () => {
     expect(taskPagePath({ status: 'RUNNABLE' })).toBe('/tasks/page?status=RUNNABLE');
   });
 
+  it('sends the running execution-state filter', () => {
+    expect(taskPagePath({ status: 'RUNNING' })).toBe('/tasks/page?status=RUNNING');
+  });
+
   it('keeps an explicit All UI filter unfiltered at the API', () => {
     expect(taskPagePath({ status: 'ALL' })).toBe('/tasks/page');
   });

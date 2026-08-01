@@ -21,6 +21,7 @@ export function canStartTask(task: FilterableTask): boolean {
 
 export function matchesTaskFilter(task: FilterableTask, filter: string): boolean {
   if (filter === 'RUNNABLE') return canStartTask(task);
+  if (filter === 'RUNNING') return !!task.running;
   if (filter === 'ONGOING') return ['OPEN', 'IN_PROGRESS'].includes(task.status);
   if (filter === 'FAILED') return task.status === 'FAILED';
   if (filter === 'DONE') return task.status === 'DONE';

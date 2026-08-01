@@ -8,6 +8,15 @@ final class TaskListLogicTests: XCTestCase {
     }
 
     func testFilterMatches() {
+        let running = task(#"{"id":"1","title":"a","status":"DONE","running":true}"#)
+        let queued = task(#"{"id":"2","title":"a","status":"OPEN","queued":true}"#)
+        XCTAssertTrue(TaskFilter.running.matches(running))
+        XCTAssertFalse(TaskFilter.running.matches(queued))
+        XCTAssertFalse(TaskFilter.running.matches(task(#"{"id":"1","title":"a","status":"IN_PROGRESS"}"#)))
+        XCTAssertEqual(TaskFilter.running.queryValue, "RUNNING")
+        let overview = TaskListLogic.overview([running, queued])
+        XCTAssertEqual(overview.count(for: .running), 1)
+        XCTAssertTrue(TaskListLogic.availableFilters(overview: overview, current: .all).contains(.running))
         XCTAssertTrue(TaskFilter.ongoing.matches(task(#"{"id":"1","title":"a","status":"OPEN"}"#)))
         XCTAssertTrue(TaskFilter.ongoing.matches(task(#"{"id":"1","title":"a","status":"IN_PROGRESS"}"#)))
         XCTAssertFalse(TaskFilter.ongoing.matches(task(#"{"id":"1","title":"a","status":"DONE"}"#)))

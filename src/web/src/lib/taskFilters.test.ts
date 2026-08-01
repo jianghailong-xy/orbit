@@ -34,6 +34,12 @@ describe('task filters', () => {
     expect(canStartTask({ ...runnable, status: 'CANCELLED' })).toBe(true);
   });
 
+  it('matches the live execution overlay for the Running filter', () => {
+    expect(matchesTaskFilter({ ...runnable, status: 'DONE', running: true }, 'RUNNING')).toBe(true);
+    expect(matchesTaskFilter({ ...runnable, status: 'IN_PROGRESS' }, 'RUNNING')).toBe(false);
+    expect(matchesTaskFilter({ ...runnable, queued: true }, 'RUNNING')).toBe(false);
+  });
+
   it('preserves the existing lifecycle filters', () => {
     expect(matchesTaskFilter({ ...runnable, status: 'IN_PROGRESS' }, 'ONGOING')).toBe(true);
     expect(matchesTaskFilter({ ...runnable, status: 'FAILED' }, 'FAILED')).toBe(true);

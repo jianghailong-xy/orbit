@@ -384,6 +384,7 @@ export function TaskListView() {
     const opts = [
       { value: 'RUNNABLE', label: seg('Ready', counts.runnable) },
       { value: 'ALL', label: seg('All', counts.total) },
+      { value: 'RUNNING', label: seg('Running', counts.running) },
       { value: 'ONGOING', label: seg('Open', counts.open + counts.inProgress) },
       { value: 'FAILED', label: seg('Failed', counts.failed, counts.failed > 0) },
       { value: 'DONE', label: seg('Done', counts.done) },
@@ -766,6 +767,8 @@ export function TaskListView() {
                     ? `No tasks match “${query.trim()}”.`
                     : filter === 'RUNNABLE'
                       ? 'No tasks are ready to run.'
+                      : filter === 'RUNNING'
+                        ? 'No tasks are running.'
                       : isListView
                       ? 'No tasks in this list yet.'
                       : isUnlisted
