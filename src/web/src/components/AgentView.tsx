@@ -27,11 +27,12 @@ import {
   PushpinOutlined,
   SearchOutlined,
   ShareAltOutlined,
+  TagsOutlined,
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Modal, Popover, Select, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
@@ -130,6 +131,7 @@ import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
+import { setSessionTags } from '../lib/sessionTags';
 
 interface RunEvent {
   seq: number;
@@ -829,6 +831,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  // The tag picker is owned by the list rather than a row: changing a tag can move or hide that
+  // row under the current filter/grouping, but the picker should remain mounted until the save lands.
+  const [taggingSessionId, setTaggingSessionId] = useState<string | null>(null);
+  const [tagDraft, setTagDraft] = useState<string[]>([]);
   const [agentId, setAgentId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
@@ -2082,6 +2088,21 @@ export function AgentView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
+  // Apply the picker's complete selection in one write. Patch every list scope with the returned,
+  // server-ordered tags so row dots and tag grouping update immediately, then reconcile by refetch.
+  const setTagsMut = useMutation({
+    mutationFn: ({ id, tagIds }: { id: string; tagIds: string[] }) => setSessionTags(id, tagIds),
+    onSuccess: (tags, { id }) => {
+      qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+        Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, tags } : s)) : old,
+      );
+      qc.setQueryData<any>(['session', id], (old: any) => (old ? { ...old, tags } : old));
+      setTaggingSessionId(null);
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['session', id] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
   // Enable worktree isolation for a non-git agent: flip autoInitGit so the runner `git
   // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
   const enableIsoMut = useMutation({
@@ -3166,6 +3187,21 @@ export function AgentView({ runner }: { runner: Runner }) {
                           label: `Find in session · ${FIND_HINT}`,
                           onClick: () => openSessionFind(),
                         },
+                        ...(sessionTags.length > 0
+                          ? [
+                              {
+                                key: 'tags',
+                                icon: <TagsOutlined />,
+                                label: 'Tags…',
+                                onClick: () => {
+                                  setTagDraft(
+                                    ((selected.tags ?? []) as SessionTagRef[]).map((t) => t.id),
+                                  );
+                                  setTaggingSessionId(selected.id);
+                                },
+                              },
+                            ]
+                          : []),
                         { type: 'divider' as const },
                         // A Completed session is filed away, not gone — offer the same Restore
                         // its row has on the Completed tab, so one opened from there can be put
@@ -3203,6 +3239,45 @@ export function AgentView({ runner }: { runner: Runner }) {
             </>
           )}
         </div>
+
+        <Modal
+          open={taggingSessionId !== null}
+          title="Tags"
+          okText="Apply"
+          confirmLoading={setTagsMut.isPending}
+          cancelButtonProps={{ disabled: setTagsMut.isPending }}
+          maskClosable={!setTagsMut.isPending}
+          closable={!setTagsMut.isPending}
+          keyboard={!setTagsMut.isPending}
+          onCancel={() => {
+            if (!setTagsMut.isPending) setTaggingSessionId(null);
+          }}
+          onOk={() => {
+            if (taggingSessionId) setTagsMut.mutate({ id: taggingSessionId, tagIds: tagDraft });
+          }}
+        >
+          <Select
+            mode="multiple"
+            allowClear
+            disabled={setTagsMut.isPending}
+            value={tagDraft}
+            placeholder="Choose color labels"
+            optionFilterProp="title"
+            maxTagCount="responsive"
+            style={{ width: '100%' }}
+            onChange={(ids: string[]) => setTagDraft(ids)}
+            options={sessionTags.map((t) => ({
+              value: t.id,
+              title: t.name,
+              label: (
+                <span className="scope-tag-label">
+                  <span className="session-section-dot" style={{ background: t.color }} />
+                  {t.name}
+                </span>
+              ),
+            }))}
+          />
+        </Modal>
 
         {selected && !selectedDeleted && !composing && (
           <ShareModal

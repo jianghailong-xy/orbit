@@ -133,7 +133,7 @@ export const sessionEventSearchQuery = (sessionId: string, q: string) =>
 /**
  * The signed-in user's session-tag library, ordered system-first by the server — the source for
  * the list's tag filter and its "Group by Tag" section headings. Rarely changes and cheap, so the
- * console just holds it for the session; edits happen on the native clients' tag picker.
+ * console holds it for filtering, grouping, and the session tag picker.
  */
 export const sessionTagsQuery = () =>
   queryOptions({
