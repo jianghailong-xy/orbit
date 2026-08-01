@@ -27,8 +27,9 @@ runner.
   assigned work and drives Claude Code as a **long-lived process per session**
   (`claude -p --input-format stream-json`), fed user turns over an inbox long-poll. Streams
   normalized events + token/cost back to the control plane, runs each session in its own
-  **git worktree**, drains gracefully on restart, and self-updates from the control plane
-  at startup.
+  **git worktree**, drains gracefully on restart, and checks for control-plane updates at
+  startup and periodically while running; a live update stops new claims and drains sessions
+  before replacing the process.
 - **Web** (`src/web`) — Vite + React + Ant Design. Grouped task lists, agent CRUD, a live
   **chat console** (SSE) with in-flight **tool-approval** cards, image/file attachments,
   runner enrollment, a Skills browser, a cost dashboard, dark mode, and a mobile-responsive
@@ -138,8 +139,9 @@ curl -fsSL https://orbit.example.com/install.sh | ORBIT_NO_REGISTER=1 bash
 ```
 
 The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the runner
-self-updates from there at startup. Create a task in the UI, queue it, and watch the live
-stream — or start an interactive session and chat with the agent directly.
+self-updates from there at startup and periodically thereafter. Create a task in the UI,
+queue it, and watch the live stream — or start an interactive session and chat with the
+agent directly.
 
 The registered binary also exposes the agent-safe Task/TaskList surface for shell
 automation and, for orchestration-enabled agents, the MCP-equivalent Session surface.
@@ -165,13 +167,22 @@ Native Orbit MCP tools remain the preferred path when available.
 
 Inside an Orbit task session, task commands may omit the task id and use
 `ORBIT_TASK_ID`. Session commands require an explicit target id and a live caller
-session whose current agent has `enableOrchestration`; the runner injects a signed,
+session whose current agent has `enableOrchestration`; the runner receives a signed,
 session-bound credential and every request is re-authorized by the control plane.
-The credential is never included in `orbit capabilities` output. The runner machine's
-OS account remains the local trust boundary; sibling processes running as that account
-are not isolated from each other. Agent management remains MCP-only. Existing runners
-migrate their credential storage to private permissions on the next runner restart; the CLI
-refuses to use a legacy world-readable config until that migration has happened.
+Credential support is negotiated explicitly, so an older runner safely disables orchestration
+instead of exposing tools whose calls can only fail. The proof lives in a private per-session
+file, is read afresh for every operation, and is reissued and retried once when the control plane
+reports it missing or invalid. Proofs expire after 15 minutes and use an independent signing
+domain: by default the key is derived from `JWT_SECRET`, or deployments may set
+`RUNNER_ORCHESTRATION_JWT_SECRET` for independent rotation. The proof is never included in
+`orbit capabilities` output. Every call also rechecks the live session assignment and Agent
+setting, so ending, cancelling, deleting, reassigning, or disabling orchestration revokes access
+immediately rather than waiting for the 15-minute expiry. Missing, expired, or key-rotation-invalid
+proofs trigger one refresh and one retry; authorization-state denials do not. The runner machine's
+OS account remains the local trust boundary; sibling processes running as that account are not
+isolated from each other. Agent management remains MCP-only. Existing runners migrate their
+credential storage to private permissions on the next runner restart; the CLI refuses to use a
+legacy world-readable config until that migration has happened.
 Task CLI mutations are attributed to the runner owner, so agents should prefer native
 Orbit MCP tools when agent/session attribution matters.
 

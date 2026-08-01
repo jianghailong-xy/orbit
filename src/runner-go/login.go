@@ -128,6 +128,7 @@ func loginFlowFor(engine string) loginFlow {
 // server sees a status change — so start() must be idempotent while one is already running.
 type loginRelay struct {
 	mu      sync.Mutex
+	wg      sync.WaitGroup
 	running bool
 	stdin   io.WriteCloser
 	cancel  context.CancelFunc
@@ -232,9 +233,24 @@ func (r *loginRelay) start(attempt, engine string, report func(LoginResultReques
 		return
 	}
 	r.running, r.stdin, r.cancel, r.out, r.attempt = true, stdin, cancel, out, attempt
+	r.wg.Add(1)
 	r.mu.Unlock()
 
-	go r.pump(attempt, flow, cmd, out, cancel, stdin, report)
+	go func() {
+		defer r.wg.Done()
+		r.pump(attempt, flow, cmd, out, cancel, stdin, report)
+	}()
+}
+
+// stop cancels and joins every relay process started by this runner. The caller
+// must first stop heartbeat delivery so no new start can race with Wait.
+func (r *loginRelay) stop() {
+	r.mu.Lock()
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.mu.Unlock()
+	r.wg.Wait()
 }
 
 // pump watches the sign-in: publish the URL as soon as it appears, then wait for the CLI to exit

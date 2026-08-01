@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -94,6 +95,55 @@ func splitVer(v string) []int {
 	return out
 }
 
+// selfUpdateEnabled is shared by the startup updater and the long-running
+// runner's periodic update check. Dev binaries and explicitly pinned services
+// must neither replace themselves nor drain merely because a release exists.
+func selfUpdateEnabled() bool {
+	return version != "dev" && os.Getenv("ORBIT_NO_SELFUPDATE") == "" && platformKey() != ""
+}
+
+// publishedVersion fetches the control plane's current runner release. Keeping
+// this read separate from downloadAndSwap lets a live runner cheaply decide
+// whether to drain before the existing updater performs the actual replacement.
+func publishedVersion(ctx context.Context, server string) (string, error) {
+	server = strings.TrimRight(server, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server+"/dl/version.json", nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 8 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	var m Manifest
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return "", err
+	}
+	if m.Version == "" {
+		return "", fmt.Errorf("empty published version")
+	}
+	return m.Version, nil
+}
+
+// availableSelfUpdate reports the release that a running runner should drain
+// for. Errors are deliberately silent: the next periodic check will retry and
+// ordinary runner work must remain available through a control-plane hiccup.
+func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
+	if !selfUpdateEnabled() {
+		return "", false
+	}
+	remote, err := publishedVersion(ctx, server)
+	if err != nil || !isNewer(remote, version) {
+		return "", false
+	}
+	return remote, true
+}
+
 // downloadAndSwap fetches the published binary for `ver`, verifies it runs and
 // reports that version, then atomically swaps it over the current executable.
 func downloadAndSwap(server, key, ver string, logf func(string)) bool {
@@ -154,44 +204,40 @@ func downloadAndSwap(server, key, ver string, logf func(string)) bool {
 	return true
 }
 
+// execCurrentProcess starts a clean runner process image. In particular, it is
+// used after a live-update attempt returns so a partially stopped runLoop is
+// never reused in-process.
+func execCurrentProcess() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return syscall.Exec(exe, os.Args, os.Environ())
+}
+
 // selfUpdate silently pulls a strictly-newer orbit and re-execs. A dev build
 // (version == "dev") or ORBIT_NO_SELFUPDATE disables it; failures never block.
 func selfUpdate(server string) {
-	if version == "dev" || os.Getenv("ORBIT_NO_SELFUPDATE") != "" {
+	if !selfUpdateEnabled() {
 		return
 	}
 	key := platformKey()
-	if key == "" {
-		return
-	}
 	server = strings.TrimRight(server, "/")
 
-	client := &http.Client{Timeout: 8 * time.Second}
-	resp, err := client.Get(server + "/dl/version.json")
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return
-	}
-	var m Manifest
-	if json.NewDecoder(resp.Body).Decode(&m) != nil || m.Version == "" || !isNewer(m.Version, version) {
+	remote, err := publishedVersion(context.Background(), server)
+	if err != nil || !isNewer(remote, version) {
 		return
 	}
 
-	fmt.Printf("orbit %s -> %s: downloading update...\n", version, m.Version)
-	if !downloadAndSwap(server, key, m.Version, func(string) {}) {
+	fmt.Printf("orbit %s -> %s: downloading update...\n", version, remote)
+	if !downloadAndSwap(server, key, remote, func(string) {}) {
 		return
 	}
-	fmt.Printf("orbit updated to %s; restarting...\n", m.Version)
-	exe, err := os.Executable()
-	if err == nil {
-		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-			exe = resolved
-		}
-		_ = syscall.Exec(exe, os.Args, os.Environ())
-	}
+	fmt.Printf("orbit updated to %s; restarting...\n", remote)
+	_ = execCurrentProcess()
 }
 
 // upgrade is the loud manual fallback (`orbit upgrade`) for when the silent

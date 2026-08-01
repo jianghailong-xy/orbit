@@ -4,6 +4,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Headers,
   HttpCode,
   NotFoundException,
   Param,
@@ -42,6 +43,7 @@ import {
   RunnerHeartbeatResponse,
   LoginCommand,
   LoginResult,
+  OrchestrationCredentialResponse,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   SessionCommitResultRequest,
@@ -98,6 +100,20 @@ const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatu
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
 // Keep this distinct from LIVE: /complete must never finalize a freshly queued PENDING turn.
 const OPEN = OPEN_SESSION_STATUSES;
+const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
+export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
+
+export function runnerSupportsCapability(
+  header: string | string[] | undefined,
+  capability: string,
+): boolean {
+  const values = Array.isArray(header) ? header : header === undefined ? [] : [header];
+  return values.some((value) =>
+    value
+      .split(',')
+      .some((item) => item.trim().toLowerCase() === capability.toLowerCase()),
+  );
+}
 
 function normalizeProvider(value?: string | null): AgentProvider {
   return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
@@ -460,10 +476,20 @@ export class RunnerApiController {
   /** Long-poll: returns one claimed session, or null when nothing is available. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
-  async claim(@CurrentRunner() runner: { id: string }): Promise<ClaimedSession | null> {
+  async claim(
+    @CurrentRunner() runner: { id: string },
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+  ): Promise<ClaimedSession | null> {
     const job = await this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS);
     if (job?.allowOrchestration) {
-      job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
+      if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
+        job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
+      } else {
+        // Older runners only understand the boolean and would expose orchestration tools
+        // without being able to authenticate them. Negotiate the whole feature off.
+        job.allowOrchestration = false;
+        job.orchestrationToken = undefined;
+      }
     }
     // A claimed session may already have a warm process whose inbox long-poll is asleep.
     // Wake it only after the authoritative PENDING->RUNNING transition acquired a slot.
@@ -474,9 +500,16 @@ export class RunnerApiController {
   /** Retain every open checkout on restart; the payload status tells the runner which is active. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/reclaim')
-  async reclaim(@CurrentRunner() runner: { id: string }): Promise<ReclaimResponse> {
+  async reclaim(
+    @CurrentRunner() runner: { id: string; ownerId: string },
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+  ): Promise<ReclaimResponse> {
+    const supportsOrchestrationCredential = runnerSupportsCapability(
+      capabilities,
+      SESSION_ORCHESTRATION_CREDENTIAL_V1,
+    );
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runner.id, status: { in: OPEN } },
+      where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: { agent: true },
     });
     const out: ReclaimSession[] = [];
@@ -533,6 +566,18 @@ export class RunnerApiController {
         // Includes a custom provider's injected baseUrl/key (else just the agent's env).
         env: exec.env,
       };
+      // Reclaim must still return a cancelled/deleted live runtime so the runner can drain it,
+      // but orchestration discovery and credential issuance use the authorizer's exact live
+      // eligibility conditions. This prevents tools from appearing only to fail every call.
+      const allowOrchestration =
+        supportsOrchestrationCredential &&
+        s.ownerId === runner.ownerId &&
+        s.assignedRunnerId === runner.id &&
+        s.deletedAt === null &&
+        s.cancelRequestedAt === null &&
+        OPEN.includes(s.status) &&
+        agent?.deletedAt === null &&
+        agent.enableOrchestration;
       out.push({
         sessionId: s.id,
         status: s.status as SharedRunStatus,
@@ -550,8 +595,8 @@ export class RunnerApiController {
         mergeTarget: s.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
         agentId: s.agentId ?? undefined,
         taskId: s.taskId ?? undefined,
-        allowOrchestration: agent?.enableOrchestration ?? false,
-        orchestrationToken: agent?.enableOrchestration
+        allowOrchestration,
+        orchestrationToken: allowOrchestration
           ? await this.orchestration.issue(runner.id, s.id)
           : undefined,
       });
@@ -601,6 +646,17 @@ export class RunnerApiController {
     });
     this.realtime.notifyInbox(sessionId);
     return { ok: true };
+  }
+
+  /** Replace a missing/stale in-process proof without restarting the session runtime. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/orchestration-credential')
+  @HttpCode(200)
+  async refreshOrchestrationCredential(
+    @CurrentRunner() runner: { id: string; ownerId: string },
+    @Param('id', Base62UuidPipe) sessionId: string,
+  ): Promise<OrchestrationCredentialResponse> {
+    return { orchestrationToken: await this.orchestration.reissue(runner, sessionId) };
   }
 
   /** Per-session long-poll: the next user turn to feed the live claude process. */

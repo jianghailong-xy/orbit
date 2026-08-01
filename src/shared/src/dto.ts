@@ -439,8 +439,8 @@ export interface ClaimedSession {
   /** Whether this session's agent may orchestrate other sessions (Agent.enableOrchestration).
    *  Injected as ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes session_* tools. */
   allowOrchestration?: boolean;
-  /** Signed, runner/session-bound proof injected only into this session's runtime.
-   *  Required alongside ORBIT_SESSION_ID for session/agent orchestration calls. */
+  /** Signed, runner/session-bound proof persisted in the runner's private per-session
+   *  credential store. Required alongside ORBIT_SESSION_ID for orchestration calls. */
   orchestrationToken?: string;
 }
 
@@ -593,13 +593,18 @@ export interface ReclaimSession {
   taskId?: string;
   /** Orchestration opt-in, cf. ClaimedSession.allowOrchestration. */
   allowOrchestration?: boolean;
-  /** Fresh runner/session-bound orchestration proof, cf. ClaimedSession.orchestrationToken. */
+  /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */
 export interface ReclaimResponse {
   sessions: ReclaimSession[];
+}
+
+/** Runner-authenticated response for refreshing a live session's orchestration proof. */
+export interface OrchestrationCredentialResponse {
+  orchestrationToken: string;
 }
 
 /**

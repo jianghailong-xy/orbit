@@ -22,11 +22,16 @@ test('runner restart reclaims every open session so cold checkouts remain protec
     {} as never,
   );
 
-  assert.deepEqual(await controller.reclaim({ id: '11111111-1111-4111-8111-111111111111' }), {
-    sessions: [],
-  });
+  assert.deepEqual(
+    await controller.reclaim({
+      id: '11111111-1111-4111-8111-111111111111',
+      ownerId: '22222222-2222-4222-8222-222222222222',
+    }),
+    { sessions: [] },
+  );
   assert.deepEqual(where, {
     assignedRunnerId: '11111111-1111-4111-8111-111111111111',
+    ownerId: '22222222-2222-4222-8222-222222222222',
     status: { in: OPEN_SESSION_STATUSES },
   });
 });
@@ -67,7 +72,10 @@ test('reclaim returns lifecycle status so only RUNNING is registered active', as
     {} as never,
   );
 
-  const result = await controller.reclaim({ id: '33333333-3333-4333-8333-333333333333' });
+  const result = await controller.reclaim({
+    id: '33333333-3333-4333-8333-333333333333',
+    ownerId: '22222222-2222-4222-8222-222222222222',
+  });
 
   assert.equal(result.sessions[0]?.sessionId, sessionId);
   assert.equal(result.sessions[0]?.status, RunStatus.AWAITING_INPUT);

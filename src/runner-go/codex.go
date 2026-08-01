@@ -281,7 +281,7 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // Codex launches stdio MCP servers with a filtered environment. The Orbit MCP server reads
 // these values to attribute work to the current session/agent/task, gate orchestration tools,
 // and disable the Claude-only permission bridge, so explicitly forward the full context.
-const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_ORCHESTRATION_TOKEN","ORBIT_MCP_PERMISSION_PROMPT"]`
+const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
 
 func appendCodexOrbitMCPConfig(args []string, exe string) []string {
 	if exe == "" {
@@ -337,7 +337,6 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		"ORBIT_AGENT_ID="+job.AgentID,
 		"ORBIT_TASK_ID="+job.TaskID,
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envOrchestrationToken+"="+job.OrchestrationToken,
 		envMCPPermissionPrompt+"=0",
 	)
 	cmd.Stdin = strings.NewReader(prompt)

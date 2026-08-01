@@ -56,7 +56,7 @@ no API key is required.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
-  ORBIT_NO_SELFUPDATE      Disable the startup auto-update
+  ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
   ORBIT_NO_ENGINE_UPDATE   Disable the daily Claude/Codex CLI update check
 `
 
@@ -393,7 +393,11 @@ func finishRegister(runnerID, runnerToken, name string, server string, labels []
 
 	if foreground {
 		fmt.Printf("running %q in the foreground — Ctrl-C to stop\n", cfg.Name)
-		runLoop(cfg)
+		// If an update re-execs this process it should come back as a runner, not
+		// repeat registration and re-issue the credential from the original argv.
+		os.Args = []string{os.Args[0], "run"}
+		clearInheritedSessionContext()
+		runWithSelfUpdates(cfg, selfUpdate, func() bool { return runLoop(cfg) })
 		return
 	}
 	if !withService {
@@ -439,6 +443,7 @@ func cmdUnregister(bools map[string]bool) {
 }
 
 func cmdRun() {
+	clearInheritedSessionContext()
 	// Runner startup is a trusted path (unlike an agent-invoked read-only CLI
 	// command), so migrate the legacy 0755/0644 credential storage before use.
 	if err := hardenConfigStorage(); err != nil && !os.IsNotExist(err) {
@@ -450,8 +455,40 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")
 		os.Exit(1)
 	}
-	selfUpdate(cfg.ServerURL) // pull a newer orbit before settling into the loop
-	runLoop(cfg)
+	runWithSelfUpdates(cfg, selfUpdate, func() bool { return runLoop(cfg) })
+}
+
+// clearInheritedSessionContext removes a legacy/stale session identity inherited
+// from launchd or an invoking shell. Clearing only the proof is insufficient now
+// that a session id + allow gate can lazily refresh it. This is intentionally
+// runner-mode only: an already-running old provider's `orbit mcp` process may
+// still need its environment fallback during a rolling upgrade.
+func clearInheritedSessionContext() {
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if sessionContextEnvKey(key) {
+			_ = os.Unsetenv(key)
+		}
+	}
+}
+
+// runWithSelfUpdates supervises startup and live updates. A successful
+// selfUpdate replaces this process and never returns. If a post-drain update
+// attempt returns, re-exec even the current binary so stopped runLoop goroutines
+// can never overlap a fresh reclaim in the same process.
+func runWithSelfUpdates(cfg *RunnerConfig, update func(string), loop func() bool) {
+	superviseSelfUpdates(cfg.ServerURL, update, loop, execCurrentProcess)
+}
+
+func superviseSelfUpdates(server string, update func(string), loop func() bool, restart func() error) {
+	update(server)
+	if !loop() {
+		return
+	}
+	update(server)
+	if err := restart(); err != nil {
+		fmt.Fprintln(os.Stderr, "runner restart after update attempt failed:", err)
+	}
 }
 
 func cmdStatus() {

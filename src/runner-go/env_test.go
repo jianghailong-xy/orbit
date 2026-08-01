@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -34,5 +35,45 @@ func TestEnvWithAgent(t *testing.T) {
 func TestEnvWithAgentNil(t *testing.T) {
 	if len(envWithAgent(nil)) == 0 {
 		t.Error("nil agent env should still return the runner's environment")
+	}
+}
+
+func TestEnvWithAgentKeepsRunnerHomeReserved(t *testing.T) {
+	t.Setenv("ORBIT_HOME", "/runner/home")
+	env := envWithAgent(map[string]string{
+		"ORBIT_HOME":                  "/agent/home",
+		"ORBIT_SESSION_ID":            "agent-session",
+		"orbit_allow_orchestration":   "1",
+		"orbit_orchestration_token":   "agent-token",
+		"ORBIT_MCP_PERMISSION_PROMPT": "1",
+	})
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(key, "ORBIT_HOME") && entry != "ORBIT_HOME=/runner/home" {
+			t.Fatalf("agent environment overrode reserved ORBIT_HOME: %q", entry)
+		}
+		if sessionContextEnvKey(key) {
+			t.Fatalf("agent environment injected reserved session context: %q", entry)
+		}
+	}
+}
+
+func TestClearInheritedSessionContext(t *testing.T) {
+	reserved := []string{
+		"ORBIT_SESSION_ID",
+		"ORBIT_AGENT_ID",
+		"ORBIT_TASK_ID",
+		envMCPOrchestration,
+		envOrchestrationToken,
+		envMCPPermissionPrompt,
+	}
+	for _, key := range reserved {
+		t.Setenv(key, "stale-launchd-context")
+	}
+	clearInheritedSessionContext()
+	for _, key := range reserved {
+		if _, ok := os.LookupEnv(key); ok {
+			t.Fatalf("runner mode retained inherited %s", key)
+		}
 	}
 }

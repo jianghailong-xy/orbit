@@ -721,8 +721,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		Actor:     "runner_owner",
 	}
 	includeOrchestration := mcpOrchestrationEnabled() &&
-		ctx.SessionID != "" &&
-		strings.TrimSpace(os.Getenv(envOrchestrationToken)) != ""
+		ctx.SessionID != ""
 	descriptors := make(map[string]map[string]interface{})
 	for _, d := range toolDescriptors(false, includeOrchestration) {
 		name, _ := d["name"].(string)

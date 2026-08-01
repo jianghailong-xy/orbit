@@ -89,6 +89,28 @@ func TestSubmitCodeWithNoRelayReportsFailure(t *testing.T) {
 	}
 }
 
+func TestStoppingIdleLoginRelayReturns(t *testing.T) {
+	(&loginRelay{}).stop()
+}
+
+func TestStoppingLoginRelayCancelsAndJoinsCurrentAttempt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &loginRelay{running: true, cancel: cancel}
+	finished := make(chan struct{})
+	r.wg.Add(1)
+	go func() {
+		defer r.wg.Done()
+		<-ctx.Done()
+		close(finished)
+	}()
+	r.stop()
+	select {
+	case <-finished:
+	default:
+		t.Fatal("login relay returned before its attempt stopped")
+	}
+}
+
 func TestLatestLoginURLTakesTheLast(t *testing.T) {
 	first := "https://claude.com/cai/oauth/authorize?code=true&state=OLD&code_challenge=aaa"
 	second := "https://claude.com/cai/oauth/authorize?code=true&state=NEW&code_challenge=bbb"

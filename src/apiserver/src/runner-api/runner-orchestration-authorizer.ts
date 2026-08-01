@@ -2,18 +2,34 @@ import { BadRequestException, ForbiddenException, Inject, Injectable } from '@ne
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Runner } from '@prisma/client';
+import { createHmac } from 'node:crypto';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ORCHESTRATION_AUDIENCE = 'orbit-runner-orchestration';
 const ORCHESTRATION_PURPOSE = 'runner-orchestration';
-const LEGACY_ORCHESTRATION_RUNNER_VERSION = /^v?0\.1\.79(?:[-+].*)?$/;
+const ORCHESTRATION_KEY_DERIVATION_DOMAIN = 'orbit:runner-orchestration-jwt:v1';
+export const ORCHESTRATION_CREDENTIAL_MISSING_CODE = 'ORCHESTRATION_CREDENTIAL_MISSING';
+export const ORCHESTRATION_CREDENTIAL_INVALID_CODE = 'ORCHESTRATION_CREDENTIAL_INVALID';
+export const RUNNER_ORCHESTRATION_TOKEN_TTL_SECONDS = 15 * 60;
 export const RUNNER_ORCHESTRATION_JWT = Symbol('RUNNER_ORCHESTRATION_JWT');
 
-/** Dedicated JWT instance: access-token defaults (notably ACCESS_TOKEN_TTL) must not bleed in. */
+/**
+ * Dedicated JWT instance and signing domain. A deployment may supply an independently
+ * rotatable key; otherwise derive one from JWT_SECRET so an orchestration proof can never
+ * be accepted as a normal user access token signed directly by JWT_SECRET.
+ */
 export function createRunnerOrchestrationJwt(config: ConfigService): JwtService {
-  const secret = config.get<string>('JWT_SECRET');
-  if (!secret) throw new Error('JWT_SECRET is required');
+  const dedicatedSecret = config.get<string>('RUNNER_ORCHESTRATION_JWT_SECRET');
+  const rootSecret = config.get<string>('JWT_SECRET');
+  const secret = dedicatedSecret
+    ? dedicatedSecret
+    : rootSecret
+      ? createHmac('sha256', rootSecret).update(ORCHESTRATION_KEY_DERIVATION_DOMAIN).digest()
+      : undefined;
+  if (!secret) {
+    throw new Error('JWT_SECRET or RUNNER_ORCHESTRATION_JWT_SECRET is required');
+  }
   return new JwtService({ secret });
 }
 
@@ -22,10 +38,6 @@ type OrchestrationClaims = {
   runnerId?: string;
   purpose?: string;
 };
-
-function isLegacyOrchestrationRunner(version: string | null | undefined): boolean {
-  return LEGACY_ORCHESTRATION_RUNNER_VERSION.test(version ?? '');
-}
 
 /**
  * Authorizes runner-token calls made on behalf of an in-session orchestrator.
@@ -44,55 +56,80 @@ export class RunnerOrchestrationAuthorizer {
     private readonly prisma: PrismaService,
     @Inject(RUNNER_ORCHESTRATION_JWT)
     private readonly jwt: JwtService,
-    private readonly config: ConfigService,
   ) {}
 
   /** Mint a credential that proves which claimed process is making a later CLI/MCP call. */
   issue(runnerId: string, sessionId: string): Promise<string> {
     return this.jwt.signAsync(
       { runnerId, purpose: ORCHESTRATION_PURPOSE },
-      // The live-session DB predicate below is the revocation/lifetime boundary. Orbit
-      // sessions can remain awaiting input indefinitely, so a fixed JWT expiry would
-      // strand an otherwise-live session without any in-process refresh path.
-      { audience: ORCHESTRATION_AUDIENCE, subject: sessionId },
+      // A short cryptographic lifetime bounds a leaked proof. The runner reads its private
+      // credential file on every call and transparently reissues after an expiry-driven 403;
+      // the live-session predicate below remains the immediate revocation boundary.
+      {
+        audience: ORCHESTRATION_AUDIENCE,
+        subject: sessionId,
+        expiresIn: RUNNER_ORCHESTRATION_TOKEN_TTL_SECONDS,
+      },
     );
   }
 
+  /** Reissue only while the authenticated runner still owns an eligible live session. */
+  async reissue(
+    runner: Pick<Runner, 'id' | 'ownerId'>,
+    sessionId: string,
+  ): Promise<string> {
+    await this.assertLiveOrchestrationSession(runner, sessionId);
+    return this.issue(runner.id, sessionId);
+  }
+
   async assert(
-    runner: Pick<Runner, 'id' | 'ownerId'> & { version?: string | null },
+    runner: Pick<Runner, 'id' | 'ownerId'>,
     sessionId: string | undefined,
     credential: string | undefined,
   ): Promise<string> {
     if (!sessionId) throw new BadRequestException('missing session context');
-    // Optional, server-controlled rollout bridge for 0.1.79: web/apiserver deployment
-    // publishes the new runner binary, but external daemons update only when restarted.
-    // It is fail-closed by default and only an operator can enable this explicitly
-    // insecure legacy path. Remove the bridge after 0.1.79 runners have been retired.
     if (!credential) {
-      const legacyRolloutEnabled = ['1', 'true', 'yes', 'on'].includes(
-        (this.config.get<string>('ORBIT_ALLOW_LEGACY_ORCHESTRATION') ?? '').trim().toLowerCase(),
-      );
-      if (!legacyRolloutEnabled || !isLegacyOrchestrationRunner(runner.version)) {
-        throw new ForbiddenException('missing orchestration credential');
-      }
-    } else {
-      let claims: OrchestrationClaims;
-      try {
-        claims = await this.jwt.verifyAsync<OrchestrationClaims>(credential, {
-          audience: ORCHESTRATION_AUDIENCE,
-        });
-      } catch {
-        throw new ForbiddenException('invalid orchestration credential');
-      }
-      if (
-        claims.purpose !== ORCHESTRATION_PURPOSE ||
-        claims.sub !== sessionId ||
-        claims.runnerId !== runner.id
-      ) {
-        throw new ForbiddenException('invalid orchestration credential');
-      }
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: ORCHESTRATION_CREDENTIAL_MISSING_CODE,
+        message: 'missing orchestration credential',
+      });
     }
 
+    let claims: OrchestrationClaims;
+    try {
+      claims = await this.jwt.verifyAsync<OrchestrationClaims>(credential, {
+        audience: ORCHESTRATION_AUDIENCE,
+      });
+    } catch {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: ORCHESTRATION_CREDENTIAL_INVALID_CODE,
+        message: 'invalid orchestration credential',
+      });
+    }
+    if (
+      claims.purpose !== ORCHESTRATION_PURPOSE ||
+      claims.sub !== sessionId ||
+      claims.runnerId !== runner.id
+    ) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        error: 'Forbidden',
+        code: ORCHESTRATION_CREDENTIAL_INVALID_CODE,
+        message: 'invalid orchestration credential',
+      });
+    }
+
+    return this.assertLiveOrchestrationSession(runner, sessionId);
+  }
+
+  private async assertLiveOrchestrationSession(
+    runner: Pick<Runner, 'id' | 'ownerId'>,
+    sessionId: string,
+  ): Promise<string> {
     const session = await this.prisma.session.findFirst({
       where: {
         id: sessionId,

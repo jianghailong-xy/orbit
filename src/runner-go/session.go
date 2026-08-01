@@ -438,9 +438,36 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 // envWithAgent returns the runner's own environment with the agent's custom env vars
 // layered on top. Shared by the claude process and `!`-shells so a command run either
 // way sees the same configured environment.
+func sessionContextEnvKey(key string) bool {
+	switch strings.ToUpper(key) {
+	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID",
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt:
+		return true
+	default:
+		return false
+	}
+}
+
 func envWithAgent(agentEnv map[string]string) []string {
-	env := os.Environ()
+	// New provider processes must not inherit a stale orchestration credential from
+	// launchd/the runner or from agent-configured environment. Their MCP child reads
+	// the private session file and refreshes it lazily instead. Already-running
+	// providers retain the environment fallback for compatibility.
+	env := make([]string, 0, len(os.Environ())+len(agentEnv))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if !sessionContextEnvKey(key) {
+			env = append(env, entry)
+		}
+	}
 	for k, v := range agentEnv {
+		// ORBIT_HOME selects the owner-wide runner config and private session
+		// credential store. It is runner context, not an agent-customizable value.
+		// EqualFold also preserves this rule on Windows, whose environment keys are
+		// case-insensitive.
+		if sessionContextEnvKey(k) || strings.EqualFold(k, "ORBIT_HOME") {
+			continue
+		}
 		env = append(env, k+"="+v)
 	}
 	return env
@@ -509,7 +536,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		args,
 		a,
 		orbitExe,
-		job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+		job.AllowOrchestration,
 	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
@@ -581,7 +608,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envOrchestrationToken+"="+job.OrchestrationToken,
 	)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()

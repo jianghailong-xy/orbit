@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { RunStatus } from '@prisma/client';
 import {
   createRunnerOrchestrationJwt,
+  ORCHESTRATION_CREDENTIAL_INVALID_CODE,
+  ORCHESTRATION_CREDENTIAL_MISSING_CODE,
+  RUNNER_ORCHESTRATION_TOKEN_TTL_SECONDS,
   RunnerOrchestrationAuthorizer,
 } from './runner-orchestration-authorizer';
 
@@ -16,11 +20,25 @@ const VALID_CLAIMS = {
   purpose: 'runner-orchestration',
 };
 
+function isCredentialError(
+  error: unknown,
+  code: string,
+  message: string,
+): boolean {
+  if (!(error instanceof ForbiddenException)) return false;
+  const response = error.getResponse();
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    (response as { code?: string }).code === code &&
+    (response as { message?: string }).message === message
+  );
+}
+
 function makeAuthorizer(options: {
   result?: { id: string } | null;
   claims?: Record<string, unknown>;
   verifyError?: Error;
-  allowLegacy?: boolean;
 } = {}) {
   const events: string[] = [];
   const lookups: Array<Record<string, unknown>> = [];
@@ -37,6 +55,7 @@ function makeAuthorizer(options: {
   };
   const jwt = {
     signAsync: async (payload: unknown, jwtOptions: unknown) => {
+      events.push('sign');
       signCalls.push({ payload, options: jwtOptions });
       return CREDENTIAL;
     },
@@ -47,12 +66,8 @@ function makeAuthorizer(options: {
       return options.claims ?? VALID_CLAIMS;
     },
   };
-  const config = {
-    get: (key: string) =>
-      key === 'ORBIT_ALLOW_LEGACY_ORCHESTRATION' && options.allowLegacy ? 'true' : undefined,
-  };
   return {
-    authorizer: new RunnerOrchestrationAuthorizer(prisma as never, jwt as never, config as never),
+    authorizer: new RunnerOrchestrationAuthorizer(prisma as never, jwt as never),
     events,
     lookups,
     signCalls,
@@ -69,23 +84,72 @@ test('issue signs a runner/session-bound orchestration credential', async () => 
       options: {
         audience: 'orbit-runner-orchestration',
         subject: SESSION_ID,
+        expiresIn: RUNNER_ORCHESTRATION_TOKEN_TTL_SECONDS,
       },
     },
   ]);
 });
 
-test('the dedicated orchestration signer does not inherit the access-token expiry', async () => {
+test('orchestration credentials have the explicit 15-minute lifetime', async () => {
   const jwt = createRunnerOrchestrationJwt({
     get: (key: string) => (key === 'JWT_SECRET' ? 'test-secret-at-least-32-bytes-long' : undefined),
   } as never);
-  const token = await jwt.signAsync(
-    { runnerId: 'runner-1', purpose: 'runner-orchestration' },
-    { audience: 'orbit-runner-orchestration', subject: SESSION_ID },
+  const token = await new RunnerOrchestrationAuthorizer({} as never, jwt).issue(
+    'runner-1',
+    SESSION_ID,
   );
   const claims = jwt.decode(token) as Record<string, unknown>;
   assert.equal(claims.sub, SESSION_ID);
   assert.equal(claims.aud, 'orbit-runner-orchestration');
-  assert.equal(claims.exp, undefined);
+  assert.equal(
+    Number(claims.exp) - Number(claims.iat),
+    RUNNER_ORCHESTRATION_TOKEN_TTL_SECONDS,
+  );
+});
+
+test('the fallback signing key is domain-derived and rejected by normal access-token JWT', async () => {
+  const rootSecret = 'shared-root-secret-at-least-32-bytes-long';
+  const orchestrationJwt = createRunnerOrchestrationJwt({
+    get: (key: string) => (key === 'JWT_SECRET' ? rootSecret : undefined),
+  } as never);
+  const token = await new RunnerOrchestrationAuthorizer({} as never, orchestrationJwt).issue(
+    'runner-1',
+    SESSION_ID,
+  );
+
+  await assert.doesNotReject(() =>
+    orchestrationJwt.verifyAsync(token, { audience: 'orbit-runner-orchestration' }),
+  );
+  await assert.rejects(() => new JwtService({ secret: rootSecret }).verifyAsync(token));
+});
+
+test('an explicit orchestration secret overrides the derived signing key', async () => {
+  const rootSecret = 'shared-root-secret-at-least-32-bytes-long';
+  const dedicatedSecret = 'dedicated-orchestration-secret-at-least-32-bytes';
+  const dedicatedJwt = createRunnerOrchestrationJwt({
+    get: (key: string) =>
+      key === 'RUNNER_ORCHESTRATION_JWT_SECRET'
+        ? dedicatedSecret
+        : key === 'JWT_SECRET'
+          ? rootSecret
+          : undefined,
+  } as never);
+  const derivedJwt = createRunnerOrchestrationJwt({
+    get: (key: string) => (key === 'JWT_SECRET' ? rootSecret : undefined),
+  } as never);
+  const token = await new RunnerOrchestrationAuthorizer({} as never, dedicatedJwt).issue(
+    'runner-1',
+    SESSION_ID,
+  );
+
+  await assert.doesNotReject(() =>
+    new JwtService({ secret: dedicatedSecret }).verifyAsync(token, {
+      audience: 'orbit-runner-orchestration',
+    }),
+  );
+  await assert.rejects(() =>
+    derivedJwt.verifyAsync(token, { audience: 'orbit-runner-orchestration' }),
+  );
 });
 
 test('orchestration authorization requires both session context and its credential', async () => {
@@ -102,45 +166,50 @@ test('orchestration authorization requires both session context and its credenti
   await assert.rejects(
     () => second.authorizer.assert(RUNNER, SESSION_ID, undefined),
     (error: unknown) =>
-      error instanceof ForbiddenException && error.message === 'missing orchestration credential',
+      isCredentialError(
+        error,
+        ORCHESTRATION_CREDENTIAL_MISSING_CODE,
+        'missing orchestration credential',
+      ),
   );
   assert.deepEqual(second.verifyCalls, []);
   assert.deepEqual(second.lookups, []);
 });
 
-test('a server-controlled rollout flag lets 0.1.79 retain the live-session guard', async () => {
-  const { authorizer, events, verifyCalls } = makeAuthorizer({ allowLegacy: true });
-  const legacyRunner = { id: 'runner-1', ownerId: 'owner-1', version: '0.1.79' } as never;
-  assert.equal(await authorizer.assert(legacyRunner, SESSION_ID, undefined), SESSION_ID);
-  assert.deepEqual(events, ['database']);
-  assert.deepEqual(verifyCalls, []);
+test('reissue signs only after the runner still owns an eligible live session', async () => {
+  const { authorizer, events, lookups, signCalls } = makeAuthorizer();
+  assert.equal(await authorizer.reissue(RUNNER, SESSION_ID), CREDENTIAL);
+  assert.deepEqual(events, ['database', 'sign']);
+  assert.deepEqual(lookups, [
+    {
+      id: SESSION_ID,
+      ownerId: 'owner-1',
+      assignedRunnerId: 'runner-1',
+      deletedAt: null,
+      cancelRequestedAt: null,
+      status: {
+        in: [
+          RunStatus.PENDING,
+          RunStatus.RUNNING,
+          RunStatus.AWAITING_INPUT,
+          RunStatus.INTERRUPTED,
+        ],
+      },
+      agent: { enableOrchestration: true, deletedAt: null },
+    },
+  ]);
+  assert.equal(signCalls.length, 1);
 });
 
-test('the rollout bridge is off by default and never applies to credential-capable runners', async () => {
-  const legacyRunner = { id: 'runner-1', ownerId: 'owner-1', version: '0.1.79' } as never;
+test('reissue denies a session that fails any live ownership or agent guard', async () => {
+  const { authorizer, signCalls } = makeAuthorizer({ result: null });
   await assert.rejects(
-    () => makeAuthorizer().authorizer.assert(legacyRunner, SESSION_ID, undefined),
+    () => authorizer.reissue(RUNNER, SESSION_ID),
     (error: unknown) =>
-      error instanceof ForbiddenException && error.message === 'missing orchestration credential',
+      error instanceof ForbiddenException &&
+      error.message === 'orchestration is not enabled for this session',
   );
-
-  await assert.rejects(
-    () => makeAuthorizer({ allowLegacy: true }).authorizer.assert(RUNNER, SESSION_ID, undefined),
-    (error: unknown) =>
-      error instanceof ForbiddenException && error.message === 'missing orchestration credential',
-  );
-
-  const olderRunner = { id: 'runner-1', ownerId: 'owner-1', version: '0.1.78' } as never;
-  await assert.rejects(
-    () =>
-      makeAuthorizer({ allowLegacy: true }).authorizer.assert(
-        olderRunner,
-        SESSION_ID,
-        undefined,
-      ),
-    (error: unknown) =>
-      error instanceof ForbiddenException && error.message === 'missing orchestration credential',
-  );
+  assert.deepEqual(signCalls, []);
 });
 
 test('assert verifies the credential before applying the open-session database predicate, including PENDING', async () => {
@@ -173,12 +242,24 @@ test('assert verifies the credential before applying the open-session database p
   ]);
 });
 
+test('assert rechecks live session state on every request, even for the same credential', async () => {
+  const { authorizer, events, lookups } = makeAuthorizer();
+  await authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL);
+  await authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL);
+  assert.deepEqual(events, ['verify', 'database', 'verify', 'database']);
+  assert.equal(lookups.length, 2);
+});
+
 test('assert fails closed on an invalid signature before querying the session', async () => {
   const { authorizer, lookups } = makeAuthorizer({ verifyError: new Error('bad signature') });
   await assert.rejects(
     () => authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL),
     (error: unknown) =>
-      error instanceof ForbiddenException && error.message === 'invalid orchestration credential',
+      isCredentialError(
+        error,
+        ORCHESTRATION_CREDENTIAL_INVALID_CODE,
+        'invalid orchestration credential',
+      ),
   );
   assert.deepEqual(lookups, []);
 });
@@ -194,7 +275,11 @@ test('assert rejects credentials bound to another purpose, session, or runner be
     await assert.rejects(
       () => authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL),
       (error: unknown) =>
-        error instanceof ForbiddenException && error.message === 'invalid orchestration credential',
+        isCredentialError(
+          error,
+          ORCHESTRATION_CREDENTIAL_INVALID_CODE,
+          'invalid orchestration credential',
+        ),
     );
     assert.deepEqual(lookups, []);
   }

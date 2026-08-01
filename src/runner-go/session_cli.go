@@ -100,8 +100,9 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 
 // cmdSessionCLI is the native adapter for the MCP session_* orchestration tools.
 // The environment gate controls discovery and fails closed locally; every request
-// also carries the calling session and its signed credential so the control plane
-// can authorize the exact runtime against the current Agent.enableOrchestration value.
+// also carries the calling session; Transport reads or refreshes its signed credential
+// lazily so the control plane can authorize the exact runtime against the current
+// Agent.enableOrchestration value.
 func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, sessionHelp)
@@ -174,9 +175,6 @@ func requireCLIOrchestrationContext() (cliOrchestrationContext, error) {
 		return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)
 	}
 	token := strings.TrimSpace(os.Getenv(envOrchestrationToken))
-	if token == "" {
-		return cliOrchestrationContext{}, fmt.Errorf("session orchestration requires %s context", envOrchestrationToken)
-	}
 	return cliOrchestrationContext{sessionID: id, token: token}, nil
 }
 

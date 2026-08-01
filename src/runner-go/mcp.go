@@ -75,12 +75,12 @@ func mcpOrchestrationEnabled() bool {
 	}
 }
 
-// orchestrationEnabled requires both the agent opt-in and the server-issued proof
-// for this exact runtime. A bare, agent-controlled session id is not authorization.
+// orchestrationEnabled requires the agent opt-in and an exact session context.
+// The credential is read (or, if absent/invalid, refreshed) lazily by Transport,
+// so a long-lived MCP process never depends on its startup environment snapshot.
 func (s *mcpServer) orchestrationEnabled() bool {
 	return s.allowOrchestration &&
-		strings.TrimSpace(s.sessionID) != "" &&
-		strings.TrimSpace(s.orchestrationToken) != ""
+		strings.TrimSpace(s.sessionID) != ""
 }
 
 // orchestrationEnv renders the ORBIT_ALLOW_ORCHESTRATION value the runner injects at spawn.

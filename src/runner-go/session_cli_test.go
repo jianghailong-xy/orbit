@@ -30,8 +30,8 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	withoutCredential := buildCLICapabilities("/opt/orbit")
-	if capability := sessionCLIFirstSessionCapability(withoutCredential.Capabilities); capability != nil {
-		t.Fatalf("session capability exposed without an orchestration token: %#v", capability)
+	if capability := sessionCLICapabilityByID(withoutCredential.Capabilities, "session_list"); capability == nil {
+		t.Fatal("session capability missing with allow flag and caller session")
 	}
 
 	t.Setenv(envOrchestrationToken, "session-token")

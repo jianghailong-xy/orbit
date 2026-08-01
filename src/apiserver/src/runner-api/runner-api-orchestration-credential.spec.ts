@@ -1,17 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunnerApiController } from './runner-api.controller';
+import { RunStatus } from '@prisma/client';
+import {
+  RunnerApiController,
+  SESSION_ORCHESTRATION_CREDENTIAL_V1,
+  runnerSupportsCapability,
+} from './runner-api.controller';
 
-const RUNNER = { id: 'runner-1' };
+const RUNNER = { id: 'runner-1', ownerId: 'owner-1' };
 
 function makeController(options: {
   claimed?: Record<string, unknown> | null;
   reclaimed?: Array<Record<string, unknown>>;
 }) {
   const issueCalls: Array<[string, string]> = [];
+  const reissueCalls: Array<[typeof RUNNER, string]> = [];
+  const reclaimLookups: Array<Record<string, unknown>> = [];
   const prisma = {
     session: {
-      findMany: async () => options.reclaimed ?? [],
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        reclaimLookups.push(where);
+        return options.reclaimed ?? [];
+      },
     },
     user: {
       findUnique: async () => null,
@@ -31,6 +41,10 @@ function makeController(options: {
       issueCalls.push([runnerId, sessionId]);
       return `credential-for-${sessionId}`;
     },
+    reissue: async (runner: typeof RUNNER, sessionId: string) => {
+      reissueCalls.push([runner, sessionId]);
+      return `refreshed-credential-for-${sessionId}`;
+    },
   };
   const realtime = { notifyInbox: () => undefined };
   return {
@@ -42,19 +56,61 @@ function makeController(options: {
       orchestration as never,
     ),
     issueCalls,
+    reissueCalls,
+    reclaimLookups,
   };
 }
 
-test('claim attaches a session credential only to an orchestration-enabled job', async () => {
+test('runner capability parsing accepts lists without accepting partial names', () => {
+  assert.equal(
+    runnerSupportsCapability(
+      `future-capability, ${SESSION_ORCHESTRATION_CREDENTIAL_V1}`,
+      SESSION_ORCHESTRATION_CREDENTIAL_V1,
+    ),
+    true,
+  );
+  assert.equal(
+    runnerSupportsCapability(
+      ['future-capability', SESSION_ORCHESTRATION_CREDENTIAL_V1.toUpperCase()],
+      SESSION_ORCHESTRATION_CREDENTIAL_V1,
+    ),
+    true,
+  );
+  assert.equal(
+    runnerSupportsCapability(
+      `${SESSION_ORCHESTRATION_CREDENTIAL_V1}-extra`,
+      SESSION_ORCHESTRATION_CREDENTIAL_V1,
+    ),
+    false,
+  );
+  assert.equal(
+    runnerSupportsCapability(undefined, SESSION_ORCHESTRATION_CREDENTIAL_V1),
+    false,
+  );
+});
+
+test('claim enables orchestration only when the runner negotiated credential v1', async () => {
   const enabled = makeController({
     claimed: {
       sessionId: 'enabled-session',
       allowOrchestration: true,
     },
   });
-  const enabledJob = await enabled.controller.claim(RUNNER);
+  const enabledJob = await enabled.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1);
+  assert.equal(enabledJob?.allowOrchestration, true);
   assert.equal(enabledJob?.orchestrationToken, 'credential-for-enabled-session');
   assert.deepEqual(enabled.issueCalls, [['runner-1', 'enabled-session']]);
+
+  const legacy = makeController({
+    claimed: {
+      sessionId: 'legacy-session',
+      allowOrchestration: true,
+    },
+  });
+  const legacyJob = await legacy.controller.claim(RUNNER);
+  assert.equal(legacyJob?.allowOrchestration, false);
+  assert.equal(legacyJob?.orchestrationToken, undefined);
+  assert.deepEqual(legacy.issueCalls, []);
 
   const disabled = makeController({
     claimed: {
@@ -62,19 +118,34 @@ test('claim attaches a session credential only to an orchestration-enabled job',
       allowOrchestration: false,
     },
   });
-  const disabledJob = await disabled.controller.claim(RUNNER);
+  const disabledJob = await disabled.controller.claim(
+    RUNNER,
+    SESSION_ORCHESTRATION_CREDENTIAL_V1,
+  );
   assert.equal(disabledJob?.orchestrationToken, undefined);
   assert.deepEqual(disabled.issueCalls, []);
 
   const idle = makeController({ claimed: null });
-  assert.equal(await idle.controller.claim(RUNNER), null);
+  assert.equal(
+    await idle.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1),
+    null,
+  );
   assert.deepEqual(idle.issueCalls, []);
 });
 
-test('reclaim mints fresh credentials only for orchestration-enabled sessions', async () => {
-  const session = (id: string, enableOrchestration: boolean) => ({
+test('reclaim enables orchestration only when capability and every live guard match', async () => {
+  const session = (
+    id: string,
+    enableOrchestration: boolean,
+    overrides: Record<string, unknown> = {},
+    agentOverrides: Record<string, unknown> = {},
+  ) => ({
     id,
     ownerId: 'owner-1',
+    assignedRunnerId: 'runner-1',
+    status: RunStatus.RUNNING,
+    deletedAt: null,
+    cancelRequestedAt: null,
     title: id,
     provider: 'codex',
     runtimeSessionId: `runtime-${id}`,
@@ -103,13 +174,25 @@ test('reclaim mints fresh credentials only for orchestration-enabled sessions', 
       autoInitGit: false,
       defaultMergeTarget: null,
       enableOrchestration,
+      deletedAt: null,
+      ...agentOverrides,
     },
+    ...overrides,
   });
-  const { controller, issueCalls } = makeController({
-    reclaimed: [session('enabled-session', true), session('disabled-session', false)],
+  const { controller, issueCalls, reclaimLookups } = makeController({
+    reclaimed: [
+      session('enabled-session', true),
+      session('disabled-session', false),
+      session('cancelled-session', true, { cancelRequestedAt: new Date() }),
+      session('deleted-session', true, { deletedAt: new Date() }),
+      session('foreign-owner-session', true, { ownerId: 'owner-2' }),
+      session('other-runner-session', true, { assignedRunnerId: 'runner-2' }),
+      session('finished-session', true, { status: RunStatus.SUCCEEDED }),
+      session('deleted-agent-session', true, {}, { deletedAt: new Date() }),
+    ],
   });
 
-  const result = await controller.reclaim(RUNNER);
+  const result = await controller.reclaim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1);
   const enabled = result.sessions.find((item) => item.sessionId === 'enabled-session');
   const disabled = result.sessions.find((item) => item.sessionId === 'disabled-session');
   assert.equal(enabled?.allowOrchestration, true);
@@ -117,4 +200,39 @@ test('reclaim mints fresh credentials only for orchestration-enabled sessions', 
   assert.equal(disabled?.allowOrchestration, false);
   assert.equal(disabled?.orchestrationToken, undefined);
   assert.deepEqual(issueCalls, [['runner-1', 'enabled-session']]);
+  for (const item of result.sessions.filter((entry) => entry.sessionId !== 'enabled-session')) {
+    assert.equal(item.allowOrchestration, false, `${item.sessionId} unexpectedly enabled`);
+    assert.equal(item.orchestrationToken, undefined, `${item.sessionId} unexpectedly got a token`);
+  }
+  assert.deepEqual(reclaimLookups, [
+    {
+      assignedRunnerId: 'runner-1',
+      ownerId: 'owner-1',
+      status: {
+        in: [
+          RunStatus.PENDING,
+          RunStatus.RUNNING,
+          RunStatus.AWAITING_INPUT,
+          RunStatus.INTERRUPTED,
+        ],
+      },
+    },
+  ]);
+
+  const legacy = makeController({
+    reclaimed: [session('legacy-enabled-session', true)],
+  });
+  const legacyResult = await legacy.controller.reclaim(RUNNER);
+  assert.equal(legacyResult.sessions[0]?.allowOrchestration, false);
+  assert.equal(legacyResult.sessions[0]?.orchestrationToken, undefined);
+  assert.deepEqual(legacy.issueCalls, []);
+});
+
+test('credential refresh delegates to the runner-bound live-session reissuer', async () => {
+  const { controller, reissueCalls } = makeController({});
+  assert.deepEqual(
+    await controller.refreshOrchestrationCredential(RUNNER, 'caller-session'),
+    { orchestrationToken: 'refreshed-credential-for-caller-session' },
+  );
+  assert.deepEqual(reissueCalls, [[RUNNER, 'caller-session']]);
 });

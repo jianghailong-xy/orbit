@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -16,6 +17,24 @@ import (
 	"strings"
 	"time"
 )
+
+const (
+	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
+	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
+	orchestrationCredentialMissing   = "ORCHESTRATION_CREDENTIAL_MISSING"
+	orchestrationCredentialInvalid   = "ORCHESTRATION_CREDENTIAL_INVALID"
+)
+
+type transportHTTPError struct {
+	method     string
+	path       string
+	statusCode int
+	body       string
+}
+
+func (e *transportHTTPError) Error() string {
+	return fmt.Sprintf("%s %s -> %d %s", e.method, e.path, e.statusCode, e.body)
+}
 
 // Transport is an outbound-only HTTP client to the control plane.
 type Transport struct {
@@ -66,6 +85,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 		return err
 	}
 	req.Header.Set("content-type", "application/json")
+	req.Header.Set(runnerCapabilitiesHeader, sessionOrchestrationCredentialV1)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 	}
@@ -79,7 +99,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("%s %s -> %d %s", method, path, resp.StatusCode, string(data))
+		return &transportHTTPError{method: method, path: path, statusCode: resp.StatusCode, body: string(data)}
 	}
 	if out != nil && len(data) > 0 {
 		return json.Unmarshal(data, out)
@@ -592,19 +612,19 @@ func (t *Transport) createTaskList(title string) (json.RawMessage, error) {
 
 func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, orchestratorHeaders(parentSessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken)
 	return out, err
 }
 
 func (t *Transport) listSessions(callerSessionID, orchestrationToken, query string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("GET", "/runner/sessions"+query, nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
 func (t *Transport) searchSessions(callerSessionID, orchestrationToken, query string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("GET", "/runner/sessions/search"+query, nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -613,7 +633,7 @@ func (t *Transport) getSession(callerSessionID, orchestrationToken, id string) (
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -622,7 +642,7 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -631,7 +651,7 @@ func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id str
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -640,7 +660,7 @@ func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string,
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -649,7 +669,7 @@ func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -661,15 +681,14 @@ func (t *Transport) completeSession(callerSessionID, orchestrationToken, id stri
 	// /runner/sessions/:id/finalize is reserved for a runner reporting process teardown.
 	// The explicit suffix keeps the user-facing Complete action unambiguous.
 	path := "/runner/sessions/" + url.PathEscape(id) + "/complete-session"
-	headers := orchestratorHeaders(callerSessionID, orchestrationToken)
-	err := t.doHeaders(nil, "POST", path, nil, &out, taskOpTimeout, headers)
+	err := t.doOrchestration("POST", path, nil, &out, callerSessionID, orchestrationToken)
 	if err == nil || !strings.Contains(err.Error(), "POST "+path+" -> 404 ") {
 		return out, err
 	}
 	// New runners can overlap an older API replica that still exposes only /archive.
 	out = nil
 	legacyPath := "/runner/sessions/" + url.PathEscape(id) + "/archive"
-	err = t.doHeaders(nil, "POST", legacyPath, nil, &out, taskOpTimeout, headers)
+	err = t.doOrchestration("POST", legacyPath, nil, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -691,15 +710,88 @@ func orchestratorHeaders(sessionID, orchestrationToken string) map[string]string
 	return headers
 }
 
+func isRefreshableOrchestrationCredentialError(err error) bool {
+	var httpErr *transportHTTPError
+	if !errors.As(err, &httpErr) || httpErr.statusCode != http.StatusForbidden {
+		return false
+	}
+	var response struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal([]byte(httpErr.body), &response) == nil {
+		switch strings.ToUpper(strings.TrimSpace(response.Code)) {
+		case orchestrationCredentialMissing, orchestrationCredentialInvalid:
+			return true
+		}
+	}
+	// Message fallback keeps a new runner compatible with a server being rolled
+	// from the pre-code credential protocol. New servers return the stable code.
+	message := strings.ToLower(httpErr.body)
+	message = strings.NewReplacer("_", " ", "-", " ").Replace(message)
+	return strings.Contains(message, "orchestration") &&
+		(strings.Contains(message, "credential") || strings.Contains(message, "token")) &&
+		(strings.Contains(message, "missing") || strings.Contains(message, "invalid"))
+}
+
+func credentialForOrchestrationRequest(sessionID, fallback string) (string, error) {
+	token, err := loadOrchestrationCredential(sessionID)
+	if err == nil {
+		return token, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", fmt.Errorf("read session orchestration credential: %w", err)
+	}
+	return strings.TrimSpace(fallback), nil
+}
+
+func (t *Transport) refreshOrchestrationCredential(sessionID string) (string, error) {
+	if err := validatePathSegmentID(sessionID); err != nil {
+		return "", fmt.Errorf("session %w", err)
+	}
+	var response struct {
+		OrchestrationToken string `json:"orchestrationToken"`
+	}
+	path := "/runner/sessions/" + url.PathEscape(sessionID) + "/orchestration-credential"
+	if err := t.do(nil, http.MethodPost, path, nil, &response, taskOpTimeout); err != nil {
+		return "", err
+	}
+	token := strings.TrimSpace(response.OrchestrationToken)
+	if token == "" {
+		return "", fmt.Errorf("server returned an empty session orchestration credential")
+	}
+	if err := storeOrchestrationCredential(sessionID, token); err != nil {
+		return "", fmt.Errorf("store refreshed session orchestration credential: %w", err)
+	}
+	return token, nil
+}
+
+// doOrchestration reads the credential dynamically, then refreshes and retries
+// exactly once only when the server explicitly identifies it as missing/invalid.
+func (t *Transport) doOrchestration(method, path string, body, out interface{}, sessionID, fallbackToken string) error {
+	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
+	if err != nil {
+		return err
+	}
+	err = t.doHeaders(nil, method, path, body, out, taskOpTimeout, orchestratorHeaders(sessionID, token))
+	if !isRefreshableOrchestrationCredentialError(err) {
+		return err
+	}
+	token, refreshErr := t.refreshOrchestrationCredential(sessionID)
+	if refreshErr != nil {
+		return fmt.Errorf("refresh session orchestration credential: %w", refreshErr)
+	}
+	return t.doHeaders(nil, method, path, body, out, taskOpTimeout, orchestratorHeaders(sessionID, token))
+}
+
 func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/agents", nil, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
+	err := t.doOrchestration("GET", "/runner/agents", nil, &out, sessionID, orchestrationToken)
 	return out, err
 }
 
 func (t *Transport) createAgent(sessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/agents", body, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
+	err := t.doOrchestration("POST", "/runner/agents", body, &out, sessionID, orchestrationToken)
 	return out, err
 }
 
@@ -708,6 +800,6 @@ func (t *Transport) updateAgent(sessionID, orchestrationToken, id string, body i
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "PATCH", "/runner/agents/"+url.PathEscape(id), body, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
+	err := t.doOrchestration("PATCH", "/runner/agents/"+url.PathEscape(id), body, &out, sessionID, orchestrationToken)
 	return out, err
 }

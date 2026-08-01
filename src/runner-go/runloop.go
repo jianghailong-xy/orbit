@@ -8,17 +8,79 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
-const heartbeatInterval = 30 * time.Second
+const (
+	heartbeatInterval       = 30 * time.Second
+	selfUpdateCheckInterval = 10 * time.Minute
+)
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
 // immediately; only a mid-turn session consumes any of this budget. Keep systemd's
 // TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
 const shutdownDrainTimeout = 120 * time.Second
+
+type runLoopStopReason uint8
+
+const (
+	runLoopStopNone runLoopStopReason = iota
+	runLoopStopSignal
+	runLoopStopUpdate
+)
+
+type selfUpdateChecker func(context.Context, string) (string, bool)
+
+// waitForRunLoopStop owns the two reasons a healthy runner deliberately leaves
+// its claim loop. It is kept independent of the rest of runLoop so update timing
+// and signal precedence can be exercised without starting sessions or heartbeats.
+func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server string, interval time.Duration, check selfUpdateChecker) (runLoopStopReason, string) {
+	var ticker *time.Ticker
+	var ticks <-chan time.Time
+	if check != nil {
+		ticker = time.NewTicker(interval)
+		ticks = ticker.C
+		defer ticker.Stop()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return runLoopStopNone, ""
+		case <-signals:
+			return runLoopStopSignal, ""
+		case <-ticks:
+			if remote, ok := check(ctx, server); ok {
+				// The manifest request may have overlapped an operator/service stop.
+				// Prefer that explicit signal to an automatic restart when both are
+				// ready, rather than turning SIGTERM into an update by select lottery.
+				select {
+				case <-signals:
+					return runLoopStopSignal, ""
+				default:
+				}
+				return runLoopStopUpdate, remote
+			}
+		}
+	}
+}
+
+// restartForUpdate gives a stop signal received during session drain the final
+// say. signal.Stop is called before this in runLoop, so an empty channel is a
+// stable result rather than a race with a later signal delivery.
+func restartForUpdate(updateRequested, drainTimedOut bool, signals <-chan os.Signal) bool {
+	if !updateRequested || drainTimedOut {
+		return false
+	}
+	select {
+	case <-signals:
+		return false
+	default:
+		return true
+	}
+}
 
 // carryOverModelCatalog keeps a provider's last good model list when this round's refresh produced
 // nothing for it. The heartbeat replaces the server's stored catalog wholesale, so a half-failed
@@ -45,7 +107,10 @@ func reclaimInitiallyActive(status string) bool {
 	return status == "" || status == stRunning
 }
 
-func runLoop(cfg *RunnerConfig) {
+// runLoop returns true only when it drained because a newer runner release was
+// published. The caller performs the existing atomic self-update after all live
+// sessions have detached; SIGINT/SIGTERM continue to return false and exit.
+func runLoop(cfg *RunnerConfig) bool {
 	t := NewTransport(cfg.ServerURL, cfg.RunnerToken)
 
 	// Claude Code's cwd is per session: the server hands each claimed/reclaimed
@@ -73,7 +138,31 @@ func runLoop(cfg *RunnerConfig) {
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	go func() { <-sig; loopCancel() }()
+	monitorCtx, stopMonitor := context.WithCancel(context.Background())
+	monitorDone := make(chan struct{})
+	var updateRequested atomic.Bool
+	var check selfUpdateChecker
+	if selfUpdateEnabled() {
+		check = availableSelfUpdate
+	}
+	go func() {
+		defer close(monitorDone)
+		reason, remote := waitForRunLoopStop(monitorCtx, sig, cfg.ServerURL, selfUpdateCheckInterval, check)
+		if reason == runLoopStopNone {
+			return
+		}
+		if reason == runLoopStopUpdate {
+			updateRequested.Store(true)
+			logln(fmt.Sprintf("orbit %s update available; stopping claims and draining sessions", remote))
+		}
+		loopCancel()
+	}()
+	defer func() {
+		stopMonitor()
+		signal.Stop(sig)
+		<-monitorDone
+		loopCancel()
+	}()
 
 	// Slash assets (commands/skills) discovered on this machine, surfaced to the web
 	// composer's `/` autocomplete. Scanned now and refreshed every ~5 min; the cached
@@ -181,7 +270,14 @@ func runLoop(cfg *RunnerConfig) {
 
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
+	hbDone := make(chan struct{})
+	// Heartbeat-delivered work may spawn git subprocesses that outlive the heartbeat
+	// goroutine itself. Stop dispatching it as soon as drain begins and join anything
+	// already running before a self-update replaces this process image.
+	var heartbeatOps sync.WaitGroup
+	login := &loginRelay{}
 	go func() {
+		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
 		cycles := 0
@@ -194,7 +290,6 @@ func runLoop(cfg *RunnerConfig) {
 		artifactNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
-		login := &loginRelay{}
 		for {
 			select {
 			case <-hbStop:
@@ -268,6 +363,9 @@ func runLoop(cfg *RunnerConfig) {
 						c()
 					}
 				}
+				if loopCtx.Err() != nil {
+					continue
+				}
 				// Honor "merge to main" requests: merge each session's branch into main on
 				// our local repo and report the outcome. Each runs once (guarded against the
 				// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
@@ -282,7 +380,9 @@ func runLoop(cfg *RunnerConfig) {
 					if busy {
 						continue
 					}
+					heartbeatOps.Add(1)
 					go func(req MergeCommand) {
+						defer heartbeatOps.Done()
 						res := mergeToMain(req)
 						// Record where this session's work went, so a later "already merged"
 						// check (after a resume clears mergeStatus) looks at that branch and
@@ -310,7 +410,9 @@ func runLoop(cfg *RunnerConfig) {
 					if busy {
 						continue
 					}
+					heartbeatOps.Add(1)
 					go func(req CommitCommand) {
+						defer heartbeatOps.Done()
 						res := commitWorktree(req)
 						if err := t.commitResult(req.SessionID, CommitResultRequest{
 							Status: res.Status, Message: res.Message,
@@ -332,7 +434,9 @@ func runLoop(cfg *RunnerConfig) {
 					if busy {
 						continue
 					}
+					heartbeatOps.Add(1)
 					go func(req ArtifactCommand) {
+						defer heartbeatOps.Done()
 						res := uploadLegacyArtifact(loopCtx, t, req)
 						if err := t.artifactResult(req.SessionID, res); err != nil {
 							logln("artifact-result POST failed for", req.SessionID+":", err)
@@ -369,6 +473,14 @@ func runLoop(cfg *RunnerConfig) {
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		// Keep the signed proof out of the provider environment. New MCP/CLI calls read
+		// this private file for every operation, so a refreshed proof becomes visible
+		// without respawning Claude/Codex. A storage failure safely disables discovery
+		// for this process; the control plane remains the authorization boundary.
+		if err := stageOrchestrationCredential(job); err != nil {
+			logln("cannot stage orchestration credential for", job.SessionID+":", err)
+			job.AllowOrchestration = false
+		}
 		if initiallyActive {
 			if _, ok := pool.activate(job); ok {
 				return // warm reuse, or wake a cold supervisor for transparent resume
@@ -399,13 +511,19 @@ func runLoop(cfg *RunnerConfig) {
 		go func(j *ClaimedSession, dir string, live *liveSession, activeAtRegister bool) {
 			// loopCtx doubles as the shutdown signal: cancelled on SIGTERM/SIGINT, it tells
 			// the session to drain (finish its turn, then detach) rather than be killed.
+			defer func() {
+				if err := removeOrchestrationCredential(j.SessionID); err != nil {
+					logln("cannot remove orchestration credential for", j.SessionID+":", err)
+				}
+				pool.remove(live)
+				forgetMergeTarget(j.SessionID)
+			}()
+
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
 			// lightweight until their first real claim instead of starting one flush
 			// ticker, background tailer, and transcript watcher per cold session.
 			if !activeAtRegister && !pool.waitActive(live, jobCtx, loopCtx) {
 				if loopCtx.Err() != nil || jobCtx.Err() == nil {
-					pool.remove(live)
-					forgetMergeTarget(j.SessionID)
 					return
 				}
 				// A real cancel of a never-activated cold supervisor still needs the
@@ -413,8 +531,6 @@ func runLoop(cfg *RunnerConfig) {
 				// runInteractiveSession take that path without spawning an engine.
 			}
 			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsageProbe.mergeCodexRateLimits, pool, live)
-			pool.remove(live)
-			forgetMergeTarget(j.SessionID)
 		}(job, execDir, s, initiallyActive)
 	}
 
@@ -438,6 +554,16 @@ func runLoop(cfg *RunnerConfig) {
 				delay *= 2
 			}
 			continue
+		}
+		// Prune crash leftovers before any reclaimed provider can start and refresh
+		// its credential. This avoids racing cleanup against the atomic temp file used
+		// by a live refresh.
+		credentialLiveSet := make(map[string]bool, len(rec.Sessions))
+		for i := range rec.Sessions {
+			credentialLiveSet[rec.Sessions[i].SessionID] = true
+		}
+		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
+			logln("credential cleanup failed:", err)
 		}
 		for i := range rec.Sessions {
 			r := rec.Sessions[i]
@@ -483,7 +609,10 @@ func runLoop(cfg *RunnerConfig) {
 
 	for loopCtx.Err() == nil {
 		if pool.activeCount() >= pool.maxConcurrent() {
-			time.Sleep(500 * time.Millisecond)
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(500 * time.Millisecond):
+			}
 			continue
 		}
 		job, err := t.claimSession(loopCtx)
@@ -492,12 +621,19 @@ func runLoop(cfg *RunnerConfig) {
 				break
 			}
 			logln("claim failed:", err)
-			time.Sleep(2 * time.Second)
+			select {
+			case <-loopCtx.Done():
+			case <-time.After(2 * time.Second):
+			}
 			continue
 		}
 		if job == nil {
 			continue
 		}
+		// A successful claim response can narrowly win the race with loopCtx
+		// cancellation. Register it rather than orphaning an already-claimed session;
+		// startSession immediately observes the cancelled shutdown context, detaches
+		// it without spawning an engine, and includes it in the drain accounting.
 		startSession(job, true)
 	}
 
@@ -508,6 +644,7 @@ func runLoop(cfg *RunnerConfig) {
 	// Give sessions a little longer than their own drain budget to detach cleanly; past
 	// that we exit anyway (process teardown / systemd SIGKILL reaps any stragglers).
 	drainDeadline := time.Now().Add(shutdownDrainTimeout + 30*time.Second)
+	drainTimedOut := false
 	for {
 		n := pool.count()
 		if n == 0 {
@@ -515,11 +652,23 @@ func runLoop(cfg *RunnerConfig) {
 		}
 		if time.Now().After(drainDeadline) {
 			logln(fmt.Sprintf("drain deadline reached; %d session supervisor(s) still attached, exiting", n))
+			drainTimedOut = true
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 	close(hbStop)
+	<-hbDone
+	login.stop()
+	heartbeatOps.Wait()
+	// A SIGTERM delivered after update discovery still means "stop", not
+	// "install". Stop signal forwarding first so this final channel check cannot
+	// miss a delivery racing with the return value.
+	signal.Stop(sig)
+	// Never enter another run loop in this process while an old session goroutine
+	// may still own its credential or worktree. The service manager can restart a
+	// timed-out daemon; foreground mode exits cleanly for operator intervention.
+	return restartForUpdate(updateRequested.Load(), drainTimedOut, sig)
 }
 
 func uploadLegacyArtifact(ctx context.Context, t *Transport, req ArtifactCommand) ArtifactResultRequest {

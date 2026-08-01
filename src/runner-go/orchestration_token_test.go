@@ -228,21 +228,15 @@ func TestTransportKeepsCrossOriginRedirectsForCallsWithoutSessionCredential(t *t
 	}
 }
 
-func TestSessionCLICredentialGateControlsCapabilitiesAndRequests(t *testing.T) {
+func TestSessionCLIGateAllowsLazyCredentialAndDoesNotExposeIt(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	t.Setenv(envOrchestrationToken, "")
 
 	withoutToken := buildCLICapabilities("/opt/orbit")
-	if capability := sessionCLIFirstSessionCapability(withoutToken.Capabilities); capability != nil {
-		t.Fatalf("session capability exposed without an orchestration token: %#v", capability)
-	}
-
-	var out bytes.Buffer
-	err := cmdSessionCLI([]string{"list", "--json"}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), envOrchestrationToken) {
-		t.Fatalf("session list without orchestration token error = %v", err)
+	if capability := sessionCLICapabilityByID(withoutToken.Capabilities, "session_list"); capability == nil {
+		t.Fatal("session_list capability missing before lazy credential acquisition")
 	}
 
 	requestCount := 0
@@ -272,7 +266,7 @@ func TestSessionCLICredentialGateControlsCapabilitiesAndRequests(t *testing.T) {
 		t.Fatalf("capabilities leaked the orchestration token: %s", encodedCapabilities)
 	}
 
-	out.Reset()
+	var out bytes.Buffer
 	if err := cmdSessionCLI([]string{"list", "--json"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +275,7 @@ func TestSessionCLICredentialGateControlsCapabilitiesAndRequests(t *testing.T) {
 	}
 }
 
-func TestMCPOrchestrationRequiresCredential(t *testing.T) {
+func TestMCPOrchestrationAllowsLazyCredential(t *testing.T) {
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
@@ -296,8 +290,8 @@ func TestMCPOrchestrationRequiresCredential(t *testing.T) {
 	}
 	for _, tool := range []string{"session_list", "agent_list"} {
 		result := mcp.callTool(tool, map[string]interface{}{})
-		if result["isError"] != true {
-			t.Errorf("%s without orchestration token isError = %#v", tool, result["isError"])
+		if result["isError"] == true {
+			t.Errorf("%s without startup orchestration token isError = %#v", tool, result["isError"])
 		}
 	}
 	response, respond := mcp.handle(&rpcRequest{ID: json.RawMessage(`1`), Method: "tools/list"})
@@ -312,24 +306,28 @@ func TestMCPOrchestrationRequiresCredential(t *testing.T) {
 	if !ok {
 		t.Fatalf("tools/list tools = %#v", result["tools"])
 	}
+	foundSessionTool := false
 	for _, tool := range tools {
 		name, _ := tool["name"].(string)
-		if strings.HasPrefix(name, "session_") || strings.HasPrefix(name, "agent_") {
-			t.Fatalf("tools/list exposed %q without an orchestration token", name)
+		if name == "session_list" {
+			foundSessionTool = true
 		}
 	}
-	if requestCount != 0 {
-		t.Fatalf("requests without orchestration token = %d, want 0", requestCount)
+	if !foundSessionTool {
+		t.Fatal("tools/list omitted session tools before lazy credential acquisition")
+	}
+	if requestCount != 2 {
+		t.Fatalf("requests without startup orchestration token = %d, want 2", requestCount)
 	}
 }
 
-func TestCodexForwardsOrchestrationTokenToOrbitMCP(t *testing.T) {
-	if !strings.Contains(codexOrbitMCPEnvVarsConfig, `"ORBIT_ORCHESTRATION_TOKEN"`) {
-		t.Fatalf("Codex Orbit MCP env forwarding omits orchestration token: %s", codexOrbitMCPEnvVarsConfig)
+func TestCodexDoesNotForwardOrchestrationTokenToOrbitMCP(t *testing.T) {
+	if strings.Contains(codexOrbitMCPEnvVarsConfig, `"ORBIT_ORCHESTRATION_TOKEN"`) {
+		t.Fatalf("Codex Orbit MCP env forwarding exposes orchestration token: %s", codexOrbitMCPEnvVarsConfig)
 	}
 }
 
-func TestProviderProcessesReceiveSessionOrchestrationToken(t *testing.T) {
+func TestProviderProcessesDoNotReceiveSessionOrchestrationToken(t *testing.T) {
 	const wantToken = "signed-session-token"
 
 	newJobAndFakeProvider := func(t *testing.T, executable string) (*ClaimedSession, string, string) {
@@ -356,7 +354,7 @@ func TestProviderProcessesReceiveSessionOrchestrationToken(t *testing.T) {
 				PermissionMode: "dontAsk",
 				Env: map[string]string{
 					"ORBIT_TEST_CAPTURE_FILE": capture,
-					// Reserved session context must win over an agent-configured value.
+					// Agent config must not re-introduce this reserved credential.
 					envOrchestrationToken: "agent-controlled-value",
 				},
 			},
@@ -369,8 +367,8 @@ func TestProviderProcessesReceiveSessionOrchestrationToken(t *testing.T) {
 		for {
 			got, err := os.ReadFile(capture)
 			if err == nil {
-				if string(got) != wantToken {
-					t.Fatalf("provider orchestration token = %q, want %q", got, wantToken)
+				if string(got) != "" {
+					t.Fatalf("provider received an orchestration token snapshot")
 				}
 				return
 			}
