@@ -24,22 +24,30 @@ function makeService(overrides: Record<string, unknown> = {}) {
   };
   const updates: unknown[] = [];
   let notified = 0;
-  const prisma = {
-    session: {
-      findFirst: async () => session,
-      update: async (args: unknown) => {
-        updates.push(args);
-        return session;
-      },
+  const sessionDelegate = {
+    findFirst: async () => session,
+    update: async (args: unknown) => {
+      updates.push(args);
+      return session;
     },
+  };
+  const conversationTurnDelegate = {
+    findUnique: async () => null,
+    findFirst: async () => ({ seq: 1 }),
+    create: async ({ data }: { data: { seq: number } }) => ({ id: 'retry-turn', ...data }),
+  };
+  const prisma = {
+    session: sessionDelegate,
     runner: {
       findUnique: async () => ({ status: 'ONLINE', lastHeartbeatAt: now }),
     },
-    conversationTurn: {
-      findUnique: async () => null,
-      findFirst: async () => ({ seq: 1 }),
-      create: async ({ data }: { data: { seq: number } }) => ({ id: 'retry-turn', ...data }),
-    },
+    conversationTurn: conversationTurnDelegate,
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $queryRaw: async () => [{ id: session.id }],
+        session: sessionDelegate,
+        conversationTurn: conversationTurnDelegate,
+      }),
   } as never;
   const queue = {
     notifySessionQueued: () => {

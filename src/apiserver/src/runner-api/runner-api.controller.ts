@@ -580,6 +580,29 @@ export class RunnerApiController {
     return { sessions: out };
   }
 
+  /** Expire input leases abandoned when a warm runtime is evicted. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/release-leases')
+  @HttpCode(200)
+  async releaseLeases(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+  ): Promise<{ ok: true }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.prisma.conversationTurn.updateMany({
+      where: {
+        sessionId,
+        kind: { in: ['message', 'shell'] },
+        status: 'IN_FLIGHT',
+      },
+      // Keep this strictly before both the application and database clocks: dequeueTurn
+      // only makes a leased turn eligible again once lease_deadline_at < now().
+      data: { leaseDeadlineAt: new Date(Date.now() - 1000) },
+    });
+    this.realtime.notifyInbox(sessionId);
+    return { ok: true };
+  }
+
   /** Per-session long-poll: the next user turn to feed the live claude process. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/:id/inbox')

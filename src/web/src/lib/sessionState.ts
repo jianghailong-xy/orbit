@@ -92,9 +92,9 @@ export const isSessionTerminal = (session: SessionStateSource): boolean => !isSe
 export const isSessionBusy = (session: SessionStateSource): boolean =>
   ['QUEUED', 'RUNNING'].includes(sessionStateOf(session));
 
-/** Runner capacity follows the execution state, not the user-facing filing state. */
+/** Active-turn capacity follows the raw execution state, not the user-facing filing state. */
 export const sessionHoldsRunnerSlot = (session: SessionStateSource): boolean =>
-  ['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(sessionRunStatusOf(session));
+  sessionRunStatusOf(session) === 'RUNNING';
 
 /** Human-facing copy for an ended session. State selects the outcome; reason only enriches dormancy. */
 export function sessionEndedBanner(

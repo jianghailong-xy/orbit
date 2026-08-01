@@ -49,7 +49,7 @@ function makeController(pendingExecutable: number) {
   } as never;
   const queue = { notifySessionQueued: () => queueWakes++ } as never;
   return {
-    controller: new RunnerApiController(prisma, queue, realtime, {} as never),
+    controller: new RunnerApiController(prisma, queue, realtime, {} as never, {} as never),
     runnerId,
     sessionId,
     statusWrites,

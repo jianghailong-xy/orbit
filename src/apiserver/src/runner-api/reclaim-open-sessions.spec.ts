@@ -19,6 +19,7 @@ test('runner restart reclaims every open session so cold checkouts remain protec
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 
   assert.deepEqual(await controller.reclaim({ id: '11111111-1111-4111-8111-111111111111' }), {
@@ -60,6 +61,7 @@ test('reclaim returns lifecycle status so only RUNNING is registered active', as
   } as never;
   const controller = new RunnerApiController(
     prisma,
+    {} as never,
     {} as never,
     {} as never,
     {} as never,

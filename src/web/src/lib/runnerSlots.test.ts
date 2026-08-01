@@ -36,4 +36,15 @@ describe('runner slot accounting', () => {
 
     expect(runnerSlotUsage(mixed, 3)).toEqual({ active: 2, atCapacity: false });
   });
+
+  it('prefers runStatus while retaining the legacy status alias', () => {
+    const mixed = [
+      { runStatus: 'RUNNING', status: 'AWAITING_INPUT' },
+      { runStatus: 'AWAITING_INPUT', status: 'RUNNING' },
+      { runStatus: 'running' },
+      { status: 'RUNNING' },
+    ];
+
+    expect(activeSlotCount(mixed)).toBe(3);
+  });
 });

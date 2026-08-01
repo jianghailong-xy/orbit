@@ -32,11 +32,12 @@ function makeController(options: {
       return `credential-for-${sessionId}`;
     },
   };
+  const realtime = { notifyInbox: () => undefined };
   return {
     controller: new RunnerApiController(
       prisma as never,
       queue as never,
-      {} as never,
+      realtime as never,
       {} as never,
       orchestration as never,
     ),

@@ -100,6 +100,20 @@ describe('session state predicates', () => {
         status: 'RUNNING',
       }),
     ).toBe(false);
+
+    expect(
+      sessionHoldsRunnerSlot({
+        sessionState: 'AWAITING_INPUT',
+        runStatus: 'AWAITING_INPUT',
+      }),
+    ).toBe(false);
+    expect(
+      sessionHoldsRunnerSlot({
+        sessionState: 'INTERRUPTED',
+        runStatus: 'INTERRUPTED',
+      }),
+    ).toBe(false);
+    expect(sessionHoldsRunnerSlot({ status: 'running' })).toBe(true);
   });
 });
 

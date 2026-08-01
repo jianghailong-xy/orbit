@@ -97,8 +97,26 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	}
 }
 
-type turnCompleter func(TurnCompleteRequest) error
+type turnCompleter func(context.Context, TurnCompleteRequest) error
 type turnPermitWaiter func(context.Context) bool
+
+// contextUntilEither is used by control-plane handshakes that must survive a
+// provider process exit, but must still stop promptly when either the session is
+// cancelled or the runner begins shutting down.
+func contextUntilEither(ctx, stop context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	merged, cancel := context.WithCancel(ctx)
+	if stop == nil {
+		return merged, cancel
+	}
+	stopAfter := context.AfterFunc(stop, cancel)
+	return merged, func() {
+		stopAfter()
+		cancel()
+	}
+}
 
 // Only RUNNING means the server handed the already-owned permit directly to a
 // queued follow-up. Every other authoritative status means this turn no longer
@@ -201,13 +219,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
-	completeTurn := func(req TurnCompleteRequest) error {
+	completeTurn := func(ackCtx context.Context, req TurnCompleteRequest) error {
 		// Capture before the network round-trip. Once the server commits
 		// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 		// response returns; generation matching prevents this old ack from
 		// releasing the new claim's permit.
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(sessionID, req)
+		next, err := t.turnComplete(ackCtx, sessionID, req)
 		if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
@@ -225,12 +243,27 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	firstSpawn := !job.Reclaimed && !job.Resume
 	lastClaimJob := job
 	respawns := 0
+	needsLeaseReset := false
 	for {
 		if ctx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
 		if !pool.waitActive(live, ctx, shutdownCtx) {
 			break
+		}
+		if needsLeaseReset {
+			// The recycled process may have won an inbox lease just before its
+			// long-poll was cancelled. Do not reserve capacity or spawn its cold
+			// replacement until the server has made every such lease deliverable.
+			resetCtx, resetCancel := contextUntilEither(ctx, shutdownCtx)
+			err := retryReleaseTurnLeases(resetCtx, func(attemptCtx context.Context) error {
+				return t.releaseTurnLeases(attemptCtx, sessionID)
+			})
+			resetCancel()
+			if err != nil {
+				break
+			}
+			needsLeaseReset = false
 		}
 		engineGeneration, claimedJob, ok := pool.reserveEngine(live, ctx, shutdownCtx)
 		if !ok {
@@ -256,7 +289,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if evicted {
 			// Silent warm recycle: the Orbit session stays AWAITING_INPUT. If a
 			// claim raced the timer/LRU, active is already true and the next loop
-			// transparently cold-resumes; otherwise it sleeps cold.
+			// transparently cold-resumes after releasing any lease the dying inbox
+			// poll may have acquired; otherwise it sleeps cold.
+			needsLeaseReset = true
 			setTurn("")
 			logln(fmt.Sprintf("○ interactive engine %s recycled (session remains resumable)", job.SessionID))
 			continue

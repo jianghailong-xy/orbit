@@ -1,4 +1,8 @@
+import { sessionRunStatusOf } from './sessionState';
+
 export interface SlotSession {
+  runStatus?: string | null;
+  /** Legacy alias retained for payloads from older servers. */
   status?: string | null;
 }
 
@@ -10,7 +14,7 @@ export interface RunnerSlotUsage {
 // maxConcurrent limits turns that are actively executing. A warm or cold
 // AWAITING_INPUT session remains resumable, but it does not hold an active slot.
 export function activeSlotCount(sessions: readonly SlotSession[]): number {
-  return sessions.filter((session) => session.status === 'RUNNING').length;
+  return sessions.filter((session) => sessionRunStatusOf(session) === 'RUNNING').length;
 }
 
 export function runnerSlotUsage(

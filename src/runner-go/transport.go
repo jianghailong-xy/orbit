@@ -198,26 +198,56 @@ func (t *Transport) inbox(ctx context.Context, sessionID string) (*RunInboxRespo
 	return &r, nil
 }
 
-func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) (string, error) {
-	var r TurnCompleteResponse
-	var lastErr error
-	for attempt := 0; attempt < 2; attempt++ {
-		r = TurnCompleteResponse{}
-		if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second); err != nil {
-			lastErr = err
-			if attempt == 0 {
-				// The server may have committed the idempotent ack and lost only
-				// the response. Retry once so the runner learns the authoritative
-				// status instead of leaking a local active permit forever.
-				time.Sleep(200 * time.Millisecond)
-			}
-			continue
-		}
-		lastErr = nil
-		break
+const (
+	idempotentRetryInitialDelay = 100 * time.Millisecond
+	idempotentRetryMaxDelay     = 2 * time.Second
+)
+
+// retryIdempotent keeps retrying an idempotent control-plane operation until it
+// succeeds or its owner goes away. A capped backoff avoids both losing a
+// committed response and hammering an unavailable server.
+func retryIdempotent(ctx context.Context, op func(context.Context) error) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if lastErr != nil {
-		return "", lastErr
+	delay := idempotentRetryInitialDelay
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := op(ctx); err == nil {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		}
+		if delay < idempotentRetryMaxDelay {
+			delay *= 2
+			if delay > idempotentRetryMaxDelay {
+				delay = idempotentRetryMaxDelay
+			}
+		}
+	}
+}
+
+func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
+	var r TurnCompleteResponse
+	err := retryIdempotent(ctx, func(attemptCtx context.Context) error {
+		r = TurnCompleteResponse{}
+		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
+	})
+	if err != nil {
+		return "", err
 	}
 	status := r.Status
 	if status == "" {
@@ -229,6 +259,19 @@ func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) (strin
 		status = stAwaitingInput
 	}
 	return status, nil
+}
+
+// releaseTurnLeases expires any inbox leases held by an engine that was
+// silently recycled. The next cold process may then pull the turn immediately
+// instead of waiting for the normal lease deadline.
+func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID string) error {
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", nil, nil, 15*time.Second)
+}
+
+// retryReleaseTurnLeases is kept separate from process spawning so the ordering
+// guarantee (reset succeeds before a replacement engine exists) is easy to test.
+func retryReleaseTurnLeases(ctx context.Context, release func(context.Context) error) error {
+	return retryIdempotent(ctx, release)
 }
 
 // mergeResult reports the outcome of a heartbeat-delivered MergeCommand back to the server.
