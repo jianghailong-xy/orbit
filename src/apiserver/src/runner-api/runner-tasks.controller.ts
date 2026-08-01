@@ -57,6 +57,11 @@ export class RunnerTasksController {
     return this.tasks.update(runner.ownerId, id, dto);
   }
 
+  @Delete('tasks/:id')
+  deleteTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+    return this.tasks.remove(runner.ownerId, id);
+  }
+
   @Post('tasks/:id/execute')
   executeTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
     return this.tasks.execute(runner.ownerId, id);

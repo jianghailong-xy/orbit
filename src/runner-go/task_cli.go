@@ -17,6 +17,7 @@ Usage:
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task update [task-id] [options]
+  orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
 
@@ -77,6 +78,16 @@ Options:
   --clear-dependencies        Remove all prerequisites
   --auto-run-when-ready[=BOOL]
   --json
+
+task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+`,
+	"delete": `orbit task delete — permanently delete a task
+
+Usage:
+  orbit task delete [task-id] [--json]
+
+This cannot be undone. Comments and dependency edges are deleted; linked sessions
+are retained and detached from the task.
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,
@@ -149,6 +160,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskCreate(args[1:], in, out)
 	case "update":
 		return cliTaskUpdate(args[1:], in, out)
+	case "delete":
+		return cliTaskDelete(args[1:], out)
 	case "start":
 		return cliTaskStart(args[1:], out)
 	case "comment":
@@ -569,6 +582,28 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+func cliTaskDelete(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task delete")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.deleteTask(id)
+	if err != nil {
+		return fmt.Errorf("delete task: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliTaskStart(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task start")
@@ -680,6 +715,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task as the runner owner. ORBIT_AGENT_ID is used only as the default assignee; runner-wide CLI credentials do not claim agent authorship. This only records the task; call task_start when it should run immediately.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
+	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task as the runner owner. Runner-wide CLI credentials do not claim agent authorship.", Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},

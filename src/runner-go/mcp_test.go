@@ -64,6 +64,28 @@ func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
 	}
 }
 
+func TestMCPTaskDeleteUsesCurrentTaskAndDeleteEndpoint(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "task_delete") {
+		t.Fatalf("task_delete missing from the base task tools")
+	}
+
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_delete", map[string]interface{}{})
+	if res["isError"] == true {
+		t.Fatalf("task_delete returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/runner/tasks/t1" {
+		t.Fatalf("task_delete hit %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestMCPTaskDependencyToolsArePartOfBaseTaskTools(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	for _, name := range []string{"task_dependency_graph", "task_dependency_add", "task_dependency_remove"} {
@@ -195,14 +217,16 @@ func TestMCPTaskUpdateCarriesDependencyReplacement(t *testing.T) {
 
 func TestMCPTaskIDsCannotEscapeTaskRoute(t *testing.T) {
 	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
-	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
-		res := mcp.callTool("task_get", map[string]interface{}{"taskId": id})
-		if res["isError"] != true {
-			t.Fatalf("task_get(%q) isError = %#v", id, res["isError"])
-		}
-		content, _ := res["content"].([]map[string]interface{})
-		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
-			t.Fatalf("task_get(%q) result = %#v", id, res)
+	for _, tool := range []string{"task_get", "task_delete"} {
+		for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
+			res := mcp.callTool(tool, map[string]interface{}{"taskId": id})
+			if res["isError"] != true {
+				t.Fatalf("%s(%q) isError = %#v", tool, id, res["isError"])
+			}
+			content, _ := res["content"].([]map[string]interface{})
+			if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
+				t.Fatalf("%s(%q) result = %#v", tool, id, res)
+			}
 		}
 	}
 }

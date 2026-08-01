@@ -575,6 +575,15 @@ func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, er
 	return out, err
 }
 
+func (t *Transport) deleteTask(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) startTask(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

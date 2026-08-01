@@ -152,6 +152,7 @@ orbit capabilities --json
 orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
 orbit task update <task-id> --status DONE --json
+orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 orbit session create --prompt "Review the change" --agent-name reviewer --json
 orbit session get <session-id> --json

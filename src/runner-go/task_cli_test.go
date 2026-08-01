@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 8 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 9 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	if doc.Registered {
@@ -76,6 +77,24 @@ func TestTaskCLIGroupHelp(t *testing.T) {
 		if !strings.Contains(out.String(), "orbit task — manage Orbit tasks") {
 			t.Fatalf("help output = %q", out.String())
 		}
+	}
+}
+
+func TestTaskCLIHelpDocumentsDelete(t *testing.T) {
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "orbit task delete [task-id] [--json]") {
+		t.Fatalf("task help does not document delete: %q", out.String())
+	}
+
+	out.Reset()
+	if err := cmdTaskCLI([]string{"delete", "--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "orbit task delete") {
+		t.Fatalf("delete help output = %q", out.String())
 	}
 }
 
@@ -152,6 +171,47 @@ func TestTaskCLIUpdateAcceptsLeadingIDThenFlags(t *testing.T) {
 	}
 }
 
+func TestTaskCLIDeleteSendsDeleteAndEmitsServerJSON(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte("{\n  \"ok\": true\n}"))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"delete", "task-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/runner/tasks/task-1" {
+		t.Fatalf("request = %s %s", gotMethod, gotPath)
+	}
+	if out.String() != "{\"ok\":true}\n" {
+		t.Fatalf("--json output = %q", out.String())
+	}
+}
+
+func TestTaskCLIDeleteUsesCurrentTaskFallback(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_TASK_ID", "task-from-env")
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"delete", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/runner/tasks/task-from-env" {
+		t.Fatalf("request = %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestTaskCLIUpdateReplacesOrClearsDependencies(t *testing.T) {
 	var bodies []map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +276,53 @@ func TestTaskCLIUpdateCapabilityAdvertisesDependencyReplacement(t *testing.T) {
 		return
 	}
 	t.Fatal("task_update capability missing")
+}
+
+func TestTaskCLIDeleteCapabilityIsExactAndMutating(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Setenv(envMCPOrchestration, "")
+	doc := buildCLICapabilities("/opt/orbit")
+	var got *cliCapability
+	for i := range doc.Capabilities {
+		if doc.Capabilities[i].ID == "task_delete" {
+			got = &doc.Capabilities[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatal("task_delete capability missing")
+	}
+
+	wantArgv := []string{"/opt/orbit", "task", "delete"}
+	if !reflect.DeepEqual(got.Argv, wantArgv) {
+		t.Errorf("task_delete argv = %#v, want %#v", got.Argv, wantArgv)
+	}
+	wantHelpArgv := []string{"/opt/orbit", "task", "delete", "--help"}
+	if !reflect.DeepEqual(got.HelpArgv, wantHelpArgv) {
+		t.Errorf("task_delete help argv = %#v, want %#v", got.HelpArgv, wantHelpArgv)
+	}
+	if got.Usage != "orbit task delete [task-id] [--json]" {
+		t.Errorf("task_delete usage = %q", got.Usage)
+	}
+	wantArguments := []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}
+	if !reflect.DeepEqual(got.Arguments, wantArguments) {
+		t.Errorf("task_delete arguments = %#v, want %#v", got.Arguments, wantArguments)
+	}
+	wantSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"taskId": map[string]interface{}{
+				"type":        "string",
+				"description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted",
+			},
+		},
+	}
+	if !reflect.DeepEqual(got.MCPInputSchema, wantSchema) {
+		t.Errorf("task_delete schema = %#v, want %#v", got.MCPInputSchema, wantSchema)
+	}
+	if !got.Mutates {
+		t.Error("task_delete capability is not marked mutating")
+	}
 }
 
 func TestTaskCLIUsesCurrentTaskFallback(t *testing.T) {

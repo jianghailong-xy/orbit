@@ -31,6 +31,30 @@ test('executeTask is exposed as POST tasks/:id/execute', () => {
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
 });
 
+test('deleteTask removes the owned task through TasksService', async () => {
+  const seen: { ownerId?: string; taskId?: string } = {};
+  const expected = { ok: true };
+  const tasks = {
+    remove: async (ownerId: string, taskId: string) => {
+      seen.ownerId = ownerId;
+      seen.taskId = taskId;
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never);
+
+  const result = await controller.deleteTask(RUNNER, 'task-1');
+
+  assert.deepEqual(seen, { ownerId: 'owner-1', taskId: 'task-1' });
+  assert.equal(result, expected);
+});
+
+test('deleteTask is exposed as DELETE tasks/:id', () => {
+  const handler = RunnerTasksController.prototype.deleteTask;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'tasks/:id');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
+});
+
 test('dependency graph and edge edits stay owner-scoped through TasksService', async () => {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const tasks = {

@@ -57,6 +57,8 @@ func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.
 	for _, required := range []string{
 		"Bash('/usr/local/bin/orbit' task list *)",
 		"Bash(/usr/local/bin/orbit task list *)",
+		"Bash('/usr/local/bin/orbit' task delete *)",
+		"Bash(/usr/local/bin/orbit task delete *)",
 	} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("missing compatible Orbit CLI rule %q in %q", required, joined)

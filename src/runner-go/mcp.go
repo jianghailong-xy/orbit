@@ -292,6 +292,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_delete":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.deleteTask(id)
+		if err != nil {
+			return toolResult("delete task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_start":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -756,6 +767,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
 				},
 			}),
+		},
+		{
+			"name":        "task_delete",
+			"description": "Permanently delete a task. This cannot be undone. Comments and dependency edges are deleted; linked sessions are retained and detached from the task. taskId defaults to the current task.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
 			"name":        "task_start",

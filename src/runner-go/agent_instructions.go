@@ -78,7 +78,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
-		for _, action := range []string{"list", "get", "create", "update", "start", "comment"} {
+		for _, action := range []string{"list", "get", "create", "update", "delete", "start", "comment"} {
 			rules = append(rules, "Bash("+command+" task "+action+" *)")
 		}
 		for _, action := range []string{"list", "create"} {
