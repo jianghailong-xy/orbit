@@ -11,9 +11,11 @@ import { encodeId } from '../lib/idCodec';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
+  applyTaskDependencyGraphExpansionLedger,
   buildDirectTaskDependencyGraph,
-  mergeTaskDependencyGraphExpansion,
+  taskDependencyGraphStructureKey,
   type TaskDependencyBranchAggregate,
+  type TaskDependencyGraphExpansionLedgerEntry,
   type TaskDependencyGraphExpansionResponse,
   type TaskDependencyGraphResponse,
 } from '../lib/taskDependencyGraph';
@@ -185,6 +187,48 @@ export function TaskDetailPanel({
       !!q.data &&
       ((q.data.dependsOn?.length ?? 0) > 0 || (q.data.dependedOnBy?.length ?? 0) > 0),
   });
+  const dependencyGraphBaseStructureKey = useMemo(
+    () =>
+      dependencyGraphQ.data
+        ? taskDependencyGraphStructureKey(dependencyGraphQ.data)
+        : null,
+    [dependencyGraphQ.data],
+  );
+  const [dependencyExpansionLedger, setDependencyExpansionLedger] = useState<{
+    focusTaskId: string;
+    baseStructureKey: string | null;
+    entries: TaskDependencyGraphExpansionLedgerEntry[];
+  }>(() => ({ focusTaskId: taskId, baseStructureKey: null, entries: [] }));
+  const activeDependencyExpansionEntries =
+    dependencyExpansionLedger.focusTaskId === taskId &&
+    dependencyExpansionLedger.baseStructureKey === dependencyGraphBaseStructureKey
+      ? dependencyExpansionLedger.entries
+      : [];
+  const expandedDependencyGraphData = useMemo(
+    () =>
+      dependencyGraphQ.data
+        ? applyTaskDependencyGraphExpansionLedger(
+            dependencyGraphQ.data,
+            activeDependencyExpansionEntries,
+          )
+        : undefined,
+    [activeDependencyExpansionEntries, dependencyGraphQ.data],
+  );
+  useEffect(() => {
+    setDependencyExpansionLedger((previous) => {
+      if (
+        previous.focusTaskId === taskId &&
+        previous.baseStructureKey === dependencyGraphBaseStructureKey
+      ) {
+        return previous;
+      }
+      return {
+        focusTaskId: taskId,
+        baseStructureKey: dependencyGraphBaseStructureKey,
+        entries: [],
+      };
+    });
+  }, [dependencyGraphBaseStructureKey, taskId]);
   const [dependencyViewOverride, setDependencyViewOverride] = useState<'graph' | 'list' | null>(null);
   useEffect(() => setDependencyViewOverride(null), [taskId]);
 
@@ -292,8 +336,15 @@ export function TaskDetailPanel({
   });
 
   const expandDependencyBranch = useMutation({
-    mutationFn: (aggregate: TaskDependencyBranchAggregate) => {
-      const current = dependencyGraphQ.data;
+    mutationFn: ({
+      aggregate,
+      focusTaskId,
+    }: {
+      aggregate: TaskDependencyBranchAggregate;
+      focusTaskId: string;
+      baseStructureKey: string | null;
+    }) => {
+      const current = expandedDependencyGraphData;
       if (!current) throw new Error('The dependency graph is still loading.');
       const loadedNeighborTaskIds = current.edges.flatMap((edge) => {
         if (aggregate.direction === 'prerequisites' && edge.targetTaskId === aggregate.parentTaskId) {
@@ -304,7 +355,7 @@ export function TaskDetailPanel({
         }
         return [];
       });
-      return api<TaskDependencyGraphExpansionResponse>(`/tasks/${taskId}/dependency-graph/expand`, {
+      return api<TaskDependencyGraphExpansionResponse>(`/tasks/${focusTaskId}/dependency-graph/expand`, {
         method: 'POST',
         body: {
           anchorTaskId: aggregate.parentTaskId,
@@ -316,17 +367,28 @@ export function TaskDetailPanel({
         },
       });
     },
-    onSuccess: (expansion, aggregate) => {
-      qc.setQueryData<TaskDependencyGraphResponse>(
-        ['task', taskId, 'dependency-graph'],
-        (current) =>
-          current
-            ? mergeTaskDependencyGraphExpansion(current, expansion, {
-                anchorTaskId: aggregate.parentTaskId,
-                direction: aggregate.direction,
-              })
-            : current,
-      );
+    onSuccess: (expansion, request) => {
+      setDependencyExpansionLedger((previous) => {
+        if (
+          previous.focusTaskId !== request.focusTaskId ||
+          previous.baseStructureKey !== request.baseStructureKey
+        ) {
+          return previous;
+        }
+        return {
+          ...previous,
+          entries: [
+            ...previous.entries,
+            {
+              expansion,
+              requestedGroup: {
+                anchorTaskId: request.aggregate.parentTaskId,
+                direction: request.aggregate.direction,
+              },
+            },
+          ],
+        };
+      });
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -464,7 +526,7 @@ export function TaskDetailPanel({
       depth: 1,
     })),
   );
-  const dependencyGraph = dependencyGraphQ.data ?? fallbackDependencyGraph;
+  const dependencyGraph = expandedDependencyGraphData ?? fallbackDependencyGraph;
   const dependencyView = dependencyViewOverride ?? (dependencyGraph.edges.length > 0 ? 'graph' : 'list');
   // Expansion deltas add real nodes without replacing the initial aggregate counts.
   // Derive this display count from the merged snapshot so it advances after every batch.
@@ -719,11 +781,15 @@ export function TaskDetailPanel({
                     onOpenTask={onOpenTask}
                     onRemoveDependency={(id) => removeDependency.mutate(id)}
                     onExpandBranch={async (aggregate) => {
-                      await expandDependencyBranch.mutateAsync(aggregate);
+                      await expandDependencyBranch.mutateAsync({
+                        aggregate,
+                        focusTaskId: taskId,
+                        baseStructureKey: dependencyGraphBaseStructureKey,
+                      });
                     }}
                     expandingBranchKey={
                       expandDependencyBranch.isPending
-                        ? expandDependencyBranch.variables?.branchKey ?? null
+                        ? expandDependencyBranch.variables?.aggregate.branchKey ?? null
                         : null
                     }
                     removingTaskId={removeDependency.isPending ? removeDependency.variables : null}

@@ -25,6 +25,7 @@ import {
   normalizeTaskDependencyGraph,
   projectTaskDependencyGraph,
   taskDependencyEdgeKey,
+  viewportAfterDependencyGraphLayout,
   type TaskDependencyBranchAggregate,
   type NormalizedTaskDependencyGraph,
   type TaskDependencyGraphNode,
@@ -427,7 +428,6 @@ function DependencyFlow({
   const pendingAnchorRef = useRef<{
     id: string;
     position: { x: number; y: number };
-    viewport: { x: number; y: number; zoom: number };
   } | null>(null);
   const expandKeepingAnchor = useCallback(
     (aggregate: TaskDependencyBranchAggregate) => {
@@ -436,12 +436,11 @@ function DependencyFlow({
         pendingAnchorRef.current = {
           id: aggregate.parentTaskId,
           position,
-          viewport: getViewport(),
         };
       }
       onExpand(aggregate);
     },
-    [getViewport, onExpand, positions],
+    [onExpand, positions],
   );
   const fitContextKey = `${graph.focusTaskId}|${vertical ? 'TB' : 'LR'}|${fullScreen ? 'full' : 'inline'}`;
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -487,17 +486,13 @@ function DependencyFlow({
       pendingAnchorRef.current = null;
       return;
     }
-    const { viewport } = pendingAnchor;
+    const viewport = getViewport();
     void setViewport(
-      {
-        ...viewport,
-        x: viewport.x + (pendingAnchor.position.x - nextPosition.x) * viewport.zoom,
-        y: viewport.y + (pendingAnchor.position.y - nextPosition.y) * viewport.zoom,
-      },
+      viewportAfterDependencyGraphLayout(viewport, pendingAnchor.position, nextPosition),
       { duration: 0 },
     );
     pendingAnchorRef.current = null;
-  }, [positions, setViewport, structureKey]);
+  }, [getViewport, positions, setViewport, structureKey]);
   useEffect(() => {
     // Fit when this canvas/focus/orientation first appears. Progressive branch expansion keeps
     // the user's viewport intact instead of zooming the whole canvas after every batch.

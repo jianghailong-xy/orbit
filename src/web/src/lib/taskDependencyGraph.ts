@@ -71,6 +71,72 @@ export interface TaskDependencyGraphExpansionResponse {
   collapsedGroups?: TaskDependencyCollapsedGroup[];
 }
 
+export interface TaskDependencyGraphExpansionLedgerEntry {
+  expansion: TaskDependencyGraphExpansionResponse;
+  requestedGroup: Pick<TaskDependencyCollapsedGroup, 'anchorTaskId' | 'direction'>;
+}
+
+export interface DependencyGraphViewport {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export interface DependencyGraphPoint {
+  x: number;
+  y: number;
+}
+
+/** Preserve the current pan/zoom while compensating for one anchor's dagre movement. */
+export function viewportAfterDependencyGraphLayout(
+  currentViewport: DependencyGraphViewport,
+  previousAnchorPosition: DependencyGraphPoint,
+  nextAnchorPosition: DependencyGraphPoint,
+): DependencyGraphViewport {
+  return {
+    ...currentViewport,
+    x:
+      currentViewport.x +
+      (previousAnchorPosition.x - nextAnchorPosition.x) * currentViewport.zoom,
+    y:
+      currentViewport.y +
+      (previousAnchorPosition.y - nextAnchorPosition.y) * currentViewport.zoom,
+  };
+}
+
+/** Status/title changes are deliberately excluded; only dependency topology invalidates a ledger. */
+export function taskDependencyGraphStructureKey(graph: TaskDependencyGraphResponse): string {
+  const nodes = graph.nodes
+    .map((node) => [node.id, node.prerequisiteCount ?? null, node.dependentCount ?? null])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+  const edges = graph.edges.map(taskDependencyEdgeKey).sort();
+  const groups = (graph.collapsedGroups ?? [])
+    .map((group) => [group.anchorTaskId, group.direction, group.hiddenCount])
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  return JSON.stringify([graph.focusTaskId, graph.direction ?? null, nodes, edges, groups]);
+}
+
+/**
+ * Replay expansion deltas over a freshly refetched base snapshot. Fresh base task payloads win
+ * for overlapping ids, while nodes that exist only in the expansion ledger remain available.
+ */
+export function applyTaskDependencyGraphExpansionLedger(
+  base: TaskDependencyGraphResponse,
+  entries: readonly TaskDependencyGraphExpansionLedgerEntry[],
+): TaskDependencyGraphResponse {
+  if (entries.length === 0) return base;
+  const replayed = entries.reduce(
+    (graph, entry) =>
+      mergeTaskDependencyGraphExpansion(graph, entry.expansion, entry.requestedGroup),
+    base,
+  );
+  const freshBaseNodes = new Map(base.nodes.map((node) => [node.id, node]));
+  return {
+    ...replayed,
+    nodes: replayed.nodes.map((node) => freshBaseNodes.get(node.id) ?? node),
+  };
+}
+
 /**
  * Build the useful one-hop fallback available in task detail responses. The graph API
  * normally replaces this with the complete connected DAG, but keeping both directions

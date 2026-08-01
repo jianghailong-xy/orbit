@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyTaskDependencyGraphExpansionLedger,
   buildDirectTaskDependencyGraph,
   getFocusPathSets,
   getTaskDependencyMainPathNodeIds,
@@ -9,7 +10,9 @@ import {
   normalizeTaskDependencyGraph,
   projectTaskDependencyGraph,
   taskDependencyBranchKey,
+  taskDependencyGraphStructureKey,
   taskDependencyEdgeKey,
+  viewportAfterDependencyGraphLayout,
   type TaskDependencyGraphEdge,
   type TaskDependencyGraphNode,
 } from './taskDependencyGraph';
@@ -351,6 +354,71 @@ describe('progressive dependency graph projection', () => {
 
     expect(merged.edges).toContainEqual(edge('D', 'C'));
     expect(merged.collapsedGroups).toEqual([]);
+  });
+
+  it('replays expansion nodes after a base refetch while fresh base status wins', () => {
+    const base = {
+      focusTaskId: 'focus',
+      direction: 'both' as const,
+      nodes: [node('focus'), node('B', 'OPEN', { dependentCount: 1 })],
+      edges: [edge('focus', 'B')],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'dependents' as const, hiddenCount: 1, cursor: 'cursor' },
+      ],
+    };
+    const ledger = [
+      {
+        expansion: {
+          nodes: [node('B', 'FAILED', { dependentCount: 1 }), node('C')],
+          edges: [edge('B', 'C')],
+          remainingCount: 0,
+          collapsedGroups: [],
+        },
+        requestedGroup: { anchorTaskId: 'B', direction: 'dependents' as const },
+      },
+    ];
+    const refreshedBase = {
+      ...base,
+      nodes: [node('focus'), node('B', 'DONE', { dependentCount: 1 })],
+    };
+
+    const graph = applyTaskDependencyGraphExpansionLedger(refreshedBase, ledger);
+    expect(graph.nodes.map((item) => item.id)).toEqual(['focus', 'B', 'C']);
+    expect(graph.nodes.find((item) => item.id === 'B')?.status).toBe('DONE');
+    expect(graph.nodes.find((item) => item.id === 'C')?.status).toBe('OPEN');
+    expect(graph.edges).toContainEqual(edge('B', 'C'));
+  });
+
+  it('invalidates expansion ledgers only when the base dependency structure changes', () => {
+    const base = {
+      focusTaskId: 'focus',
+      direction: 'both' as const,
+      nodes: [node('focus'), node('B', 'OPEN', { dependentCount: 1 })],
+      edges: [edge('focus', 'B')],
+    };
+    expect(
+      taskDependencyGraphStructureKey({
+        ...base,
+        nodes: [node('focus', 'DONE'), node('B', 'FAILED', { dependentCount: 1 })],
+      }),
+    ).toBe(taskDependencyGraphStructureKey(base));
+    expect(
+      taskDependencyGraphStructureKey({
+        ...base,
+        nodes: [...base.nodes, node('C')],
+        edges: [...base.edges, edge('B', 'C')],
+      }),
+    ).not.toBe(taskDependencyGraphStructureKey(base));
+  });
+
+  it('preserves a user pan made after clicking while compensating anchor movement', () => {
+    expect(
+      viewportAfterDependencyGraphLayout(
+        { x: 70, y: -20, zoom: 1.5 },
+        { x: 100, y: 40 },
+        { x: 120, y: 10 },
+      ),
+    ).toEqual({ x: 40, y: 25, zoom: 1.5 });
   });
 });
 
