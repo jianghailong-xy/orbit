@@ -1139,6 +1139,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Refresh mutable payloads for every node in a client-maintained graph snapshot.
+   * Remote expansion can grow beyond the bounded base GET, so refetching only that base
+   * response would otherwise leave expanded titles, statuses, run flags and degree badges
+   * stale after a task.changed event.
+   */
+  async dependencyGraphNodes(ownerId: string, focusTaskId: string, taskIds: string[]) {
+    if (!UUID_RE.test(focusTaskId)) throw new NotFoundException('task not found');
+    if (!Array.isArray(taskIds) || taskIds.length < 1) {
+      throw new BadRequestException('taskIds must contain at least one task');
+    }
+    if (taskIds.length > MAX_DEPENDENCY_GRAPH_EXPANDED_NODES) {
+      throw new BadRequestException(
+        `taskIds must contain at most ${MAX_DEPENDENCY_GRAPH_EXPANDED_NODES} tasks`,
+      );
+    }
+    if (taskIds.some((id) => !UUID_RE.test(id))) {
+      throw new BadRequestException('dependency graph task ids must be UUIDs');
+    }
+    const uniqueTaskIds = [...new Set(taskIds)];
+    if (!uniqueTaskIds.includes(focusTaskId)) {
+      throw new BadRequestException('taskIds must include the focus task');
+    }
+
+    const taskRows = await this.prisma.task.findMany({
+      where: { ownerId, id: { in: uniqueTaskIds } },
+      select: { id: true, title: true, status: true, autoRunWhenReady: true },
+    });
+    // Unknown and cross-tenant ids are intentionally indistinguishable.
+    if (taskRows.length !== uniqueTaskIds.length) throw new NotFoundException('task not found');
+    const taskById = new Map(taskRows.map((task) => [task.id, task]));
+    const orderedTasks = uniqueTaskIds.map((id) => {
+      const task = taskById.get(id)!;
+      return { ...task, status: task.status as unknown as TaskStatus };
+    });
+    const [withRun, dependencyStates, connectionCounts] = await Promise.all([
+      this.withRunning(ownerId, orderedTasks, true),
+      this.dependencyStatesForGraph(ownerId, uniqueTaskIds),
+      this.dependencyConnectionCounts(ownerId, uniqueTaskIds),
+    ]);
+
+    return {
+      nodes: withRun.map((node) => ({
+        ...node,
+        ...(connectionCounts.get(node.id) ?? { prerequisiteCount: 0, dependentCount: 0 }),
+        dependencyState: dependencyStates.get(node.id) ?? 'NONE',
+      })),
+    };
+  }
+
+  /**
    * Load one deterministic page of direct relationships for a collapsed branch.
    *
    * `knownTaskIds` controls which task payloads are returned, while

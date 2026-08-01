@@ -71,6 +71,97 @@ export interface TaskDependencyGraphExpansionResponse {
   collapsedGroups?: TaskDependencyCollapsedGroup[];
 }
 
+export interface TaskDependencyGraphNodesResponse {
+  nodes: TaskDependencyGraphNode[];
+}
+
+export type TaskDependencyGraphTruncationState = 'expandable' | 'limit' | null;
+
+export function taskDependencyGraphTruncationState(
+  graph: Pick<TaskDependencyGraphResponse, 'collapsedGroups'>,
+): TaskDependencyGraphTruncationState {
+  const remaining = (graph.collapsedGroups ?? []).filter((group) => group.hiddenCount > 0);
+  if (remaining.length === 0) return null;
+  return remaining.some((group) => !!group.cursor) ? 'expandable' : 'limit';
+}
+
+function recomputeTaskDependencyGraphCounts(
+  graph: Pick<TaskDependencyGraphResponse, 'focusTaskId' | 'nodes' | 'edges' | 'counts'>,
+): TaskDependencyGraphResponse['counts'] {
+  if (!graph.counts) return undefined;
+  const normalized = normalizeTaskDependencyGraph(graph);
+  const reachable = (adjacency: ReadonlyMap<string, readonly string[]>): Set<string> => {
+    const reached = new Set<string>();
+    const pending = [...(adjacency.get(graph.focusTaskId) ?? [])];
+    while (pending.length > 0) {
+      const id = pending.pop()!;
+      if (reached.has(id) || id === graph.focusTaskId) continue;
+      reached.add(id);
+      pending.push(...(adjacency.get(id) ?? []));
+    }
+    return reached;
+  };
+  const upstreamIds = reachable(normalized.incomingByTaskId);
+  const downstreamIds = reachable(normalized.outgoingByTaskId);
+  const upstreamNodes = [...upstreamIds].map((id) => normalized.nodeById.get(id)!);
+  const done = upstreamNodes.filter((node) => node.status === 'DONE').length;
+  const failed = upstreamNodes.filter(
+    (node) => node.status === 'FAILED' || node.status === 'CANCELLED',
+  ).length;
+  return {
+    ...graph.counts,
+    upstream: upstreamIds.size,
+    downstream: downstreamIds.size,
+    connected: Math.max(normalized.nodes.length - 1, 0),
+    lateral: Math.max(
+      normalized.nodes.length - 1 - upstreamIds.size - downstreamIds.size,
+      0,
+    ),
+    total: normalized.nodes.length,
+    done,
+    remaining: upstreamIds.size - done - failed,
+    failed,
+  };
+}
+
+/**
+ * Overlay a bulk status/title refresh onto a replayed graph. Degree changes update only existing
+ * server-backed boundaries: the refresh endpoint intentionally returns no expansion cursor, so
+ * synthesizing a brand-new group here would create a button that can never be requested safely.
+ */
+export function refreshTaskDependencyGraphNodes(
+  graph: TaskDependencyGraphResponse,
+  freshNodes: readonly TaskDependencyGraphNode[],
+): TaskDependencyGraphResponse {
+  if (freshNodes.length === 0) return graph;
+  const freshById = new Map(freshNodes.map((node) => [node.id, node]));
+  const nodes = graph.nodes.map((node) => {
+    const fresh = freshById.get(node.id);
+    return fresh ? { ...node, ...fresh } : node;
+  });
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const collapsedGroups = graph.collapsedGroups?.flatMap((group) => {
+    const task = nodeById.get(group.anchorTaskId);
+    if (!task || !freshById.has(group.anchorTaskId)) return [group];
+    const total =
+      group.direction === 'prerequisites' ? task.prerequisiteCount : task.dependentCount;
+    if (total === undefined) return [group];
+    const loaded = graph.edges.filter((edge) =>
+      group.direction === 'prerequisites'
+        ? edge.targetTaskId === group.anchorTaskId
+        : edge.sourceTaskId === group.anchorTaskId,
+    ).length;
+    const hiddenCount = Math.max(0, total - loaded);
+    return hiddenCount > 0 ? [{ ...group, hiddenCount }] : [];
+  });
+  return {
+    ...graph,
+    nodes,
+    collapsedGroups,
+    counts: recomputeTaskDependencyGraphCounts({ ...graph, nodes }),
+  };
+}
+
 export interface TaskDependencyGraphExpansionLedgerEntry {
   expansion: TaskDependencyGraphExpansionResponse;
   requestedGroup: Pick<TaskDependencyCollapsedGroup, 'anchorTaskId' | 'direction'>;
@@ -594,53 +685,18 @@ export function mergeTaskDependencyGraphExpansion(
       ? [...groups.values()]
       : undefined;
 
-  let counts = current.counts;
-  if (counts) {
-    const normalized = normalizeTaskDependencyGraph({
-      focusTaskId: current.focusTaskId,
-      nodes: [...nodes.values()],
-      edges: mergedEdges,
-    });
-    const reachable = (adjacency: ReadonlyMap<string, readonly string[]>): Set<string> => {
-      const reached = new Set<string>();
-      const pending = [...(adjacency.get(current.focusTaskId) ?? [])];
-      while (pending.length > 0) {
-        const id = pending.pop()!;
-        if (reached.has(id) || id === current.focusTaskId) continue;
-        reached.add(id);
-        pending.push(...(adjacency.get(id) ?? []));
-      }
-      return reached;
-    };
-    const upstreamIds = reachable(normalized.incomingByTaskId);
-    const downstreamIds = reachable(normalized.outgoingByTaskId);
-    const upstreamNodes = [...upstreamIds].map((id) => normalized.nodeById.get(id)!);
-    const done = upstreamNodes.filter((node) => node.status === 'DONE').length;
-    const failed = upstreamNodes.filter(
-      (node) => node.status === 'FAILED' || node.status === 'CANCELLED',
-    ).length;
-    counts = {
-      ...counts,
-      upstream: upstreamIds.size,
-      downstream: downstreamIds.size,
-      connected: Math.max(normalized.nodes.length - 1, 0),
-      lateral: Math.max(
-        normalized.nodes.length - 1 - upstreamIds.size - downstreamIds.size,
-        0,
-      ),
-      total: normalized.nodes.length,
-      done,
-      remaining: upstreamIds.size - done - failed,
-      failed,
-    };
-  }
+  const mergedNodes = [...nodes.values()];
 
   return {
     ...current,
-    nodes: [...nodes.values()],
+    nodes: mergedNodes,
     edges: mergedEdges,
     collapsedGroups,
-    counts,
+    counts: recomputeTaskDependencyGraphCounts({
+      ...current,
+      nodes: mergedNodes,
+      edges: mergedEdges,
+    }),
   };
 }
 

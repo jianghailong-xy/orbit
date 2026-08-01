@@ -91,6 +91,15 @@ export class ExpandDependencyGraphDto {
   @IsString() @MinLength(1) cursor!: string;
 }
 
+export class RefreshDependencyGraphNodesDto {
+  /** Current client snapshot ids; duplicates are collapsed by TasksService. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  taskIds!: string[];
+}
+
 export class BatchExecuteDto {
   // The tasks to run. Tasks without a responsible agent / bound runner are skipped
   // server-side rather than failing the batch.

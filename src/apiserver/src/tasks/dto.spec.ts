@@ -6,6 +6,7 @@ import {
   BatchDeleteDto,
   CreateTaskDto,
   ExpandDependencyGraphDto,
+  RefreshDependencyGraphNodesDto,
   UpdateTaskDto,
 } from './dto';
 
@@ -79,4 +80,23 @@ test('dependency expansion DTO accepts 501-node snapshots and rejects unsafe bou
   assert.notEqual((await validate(tooMany)).length, 0);
   assert.notEqual((await validate(invalidDirection)).length, 0);
   assert.notEqual((await validate(invalidLimit)).length, 0);
+});
+
+test('dependency node refresh DTO accepts duplicate UUIDs and caps request payloads', async () => {
+  const valid = Object.assign(new RefreshDependencyGraphNodesDto(), {
+    taskIds: [TASK_A, TASK_A, TASK_B],
+  });
+  const malformed = Object.assign(new RefreshDependencyGraphNodesDto(), {
+    taskIds: [TASK_A, 'not-a-uuid'],
+  });
+  const tooMany = Object.assign(new RefreshDependencyGraphNodesDto(), {
+    taskIds: Array.from(
+      { length: 1_001 },
+      (_, index) => `00000000-0000-7000-8004-${index.toString(16).padStart(12, '0')}`,
+    ),
+  });
+
+  assert.equal((await validate(valid)).length, 0);
+  assert.notEqual((await validate(malformed)).length, 0);
+  assert.notEqual((await validate(tooMany)).length, 0);
 });

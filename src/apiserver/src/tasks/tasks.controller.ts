@@ -20,6 +20,7 @@ import {
   CreateTaskCommentDto,
   CreateTaskDto,
   ExpandDependencyGraphDto,
+  RefreshDependencyGraphNodesDto,
   UpdateTaskDto,
 } from './dto';
 import { TasksService } from './tasks.service';
@@ -77,6 +78,15 @@ export class TasksController {
     @Body() dto: ExpandDependencyGraphDto,
   ) {
     return this.tasks.expandDependencyGraph(user.userId, id, dto);
+  }
+
+  @Post(':id/dependency-graph/nodes')
+  dependencyGraphNodes(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RefreshDependencyGraphNodesDto,
+  ) {
+    return this.tasks.dependencyGraphNodes(user.userId, id, dto.taskIds);
   }
 
   @Get(':id')

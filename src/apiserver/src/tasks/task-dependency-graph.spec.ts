@@ -53,6 +53,7 @@ function graphFixture(
   const inducedWheres: any[] = [];
   const traversalTakes: number[] = [];
   let focusLookup: any;
+  let nodeRefreshWhere: any;
   let busyWhere: any;
 
   const prisma = {
@@ -66,6 +67,13 @@ function graphFixture(
       count: async (args: any) => {
         if (args.where.ownerId !== OWNER_ID) return 0;
         return (args.where.id.in as string[]).filter((id) => taskRows.has(id)).length;
+      },
+      findMany: async (args: any) => {
+        nodeRefreshWhere = args.where;
+        if (!ownsFocus || args.where.ownerId !== OWNER_ID) return [];
+        return (args.where.id.in as string[])
+          .map((id) => taskRows.get(id))
+          .filter((task): task is TaskRow => task !== undefined);
       },
     },
     taskDependency: {
@@ -182,6 +190,7 @@ function graphFixture(
     inducedWheres,
     traversalTakes,
     focusLookup: () => focusLookup,
+    nodeRefreshWhere: () => nodeRefreshWhere,
     busyWhere: () => busyWhere,
   };
 }
@@ -245,6 +254,111 @@ test('dependency graph expansion is exposed as an owner-scoped POST delta route'
   const handler = TasksController.prototype.expandDependencyGraph;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), ':id/dependency-graph/expand');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+test('dependency graph node refresh is exposed as an owner-scoped POST route', async () => {
+  const seen: any[] = [];
+  const expected = { nodes: [] };
+  const controller = new TasksController({
+    dependencyGraphNodes: async (...args: any[]) => {
+      seen.push(...args);
+      return expected;
+    },
+  } as never);
+
+  const result = await controller.dependencyGraphNodes(
+    { userId: OWNER_ID, email: 'owner@example.com' },
+    FOCUS,
+    { taskIds: [FOCUS, TASK_B] },
+  );
+
+  assert.equal(result, expected);
+  assert.deepEqual(seen, [OWNER_ID, FOCUS, [FOCUS, TASK_B]]);
+  const handler = TasksController.prototype.dependencyGraphNodes;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), ':id/dependency-graph/nodes');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+test('node refresh deduplicates in request order and returns current graph payloads', async () => {
+  const fixture = graphFixture();
+  const result = await fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [
+    FOCUS,
+    TASK_B,
+    TASK_B,
+    TASK_C,
+  ]);
+
+  assert.deepEqual(result.nodes, [
+    {
+      ...tasks.get(FOCUS),
+      running: false,
+      queued: false,
+      prerequisiteCount: 2,
+      dependentCount: 0,
+      dependencyState: 'BLOCKED',
+    },
+    {
+      ...tasks.get(TASK_B),
+      running: true,
+      queued: false,
+      prerequisiteCount: 1,
+      dependentCount: 1,
+      dependencyState: 'READY',
+    },
+    {
+      ...tasks.get(TASK_C),
+      running: false,
+      queued: true,
+      prerequisiteCount: 2,
+      dependentCount: 1,
+      dependencyState: 'BLOCKED_FAILED',
+    },
+  ]);
+  assert.deepEqual(fixture.nodeRefreshWhere(), {
+    ownerId: OWNER_ID,
+    id: { in: [FOCUS, TASK_B, TASK_C] },
+  });
+  assert.equal(fixture.busyWhere().ownerId, OWNER_ID);
+  assert.deepEqual(fixture.busyWhere().taskId.in, [FOCUS, TASK_B, TASK_C]);
+});
+
+test('node refresh validates focus, bounds, UUIDs, and every task owner before aggregation', async () => {
+  const fixture = graphFixture();
+  await assert.rejects(
+    () => fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [TASK_B]),
+    /must include the focus task/,
+  );
+  await assert.rejects(
+    () => fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS, 'not-a-uuid']),
+    /must be UUIDs/,
+  );
+  await assert.rejects(
+    () => fixture.service.dependencyGraphNodes(OWNER_ID, 'not-a-uuid', [FOCUS]),
+    /task not found/,
+  );
+  const tooMany = Array.from(
+    { length: 1_001 },
+    (_, index) => `00000000-0000-7000-8003-${index.toString(16).padStart(12, '0')}`,
+  );
+  await assert.rejects(
+    () => fixture.service.dependencyGraphNodes(OWNER_ID, tooMany[0], tooMany),
+    /at most 1000 tasks/,
+  );
+  const unknown = '550e8400-e29b-41d4-a716-446655449999';
+  await assert.rejects(
+    () => fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS, unknown]),
+    /task not found/,
+  );
+  assert.deepEqual(fixture.nodeRefreshWhere(), {
+    ownerId: OWNER_ID,
+    id: { in: [FOCUS, unknown] },
+  });
+
+  const notOwned = graphFixture(diamondEdges, false);
+  await assert.rejects(
+    () => notOwned.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS]),
+    /task not found/,
+  );
 });
 
 test('multi-level graph deduplicates diamond nodes and orients every edge prerequisite-first', async () => {

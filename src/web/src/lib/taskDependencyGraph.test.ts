@@ -9,8 +9,10 @@ import {
   mergeTaskDependencyGraphExpansion,
   normalizeTaskDependencyGraph,
   projectTaskDependencyGraph,
+  refreshTaskDependencyGraphNodes,
   taskDependencyBranchKey,
   taskDependencyGraphStructureKey,
+  taskDependencyGraphTruncationState,
   taskDependencyEdgeKey,
   viewportAfterDependencyGraphLayout,
   type TaskDependencyGraphEdge,
@@ -419,6 +421,74 @@ describe('progressive dependency graph projection', () => {
         { x: 120, y: 10 },
       ),
     ).toEqual({ x: 40, y: 25, zoom: 1.5 });
+  });
+
+  it('refreshes remote node payloads and reconciles existing boundary counts', () => {
+    const graph = {
+      focusTaskId: 'C',
+      nodes: [
+        node('P'),
+        node('B', 'OPEN', {
+          title: 'Old title',
+          depth: 2,
+          prerequisiteCount: 3,
+          dependentCount: 5,
+        }),
+        node('C'),
+      ],
+      edges: [edge('P', 'B'), edge('B', 'C')],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'prerequisites' as const, hiddenCount: 2, cursor: 'up' },
+        { anchorTaskId: 'B', direction: 'dependents' as const, hiddenCount: 4, cursor: 'down' },
+      ],
+      counts: {
+        upstream: 2,
+        downstream: 0,
+        connected: 2,
+        lateral: 0,
+        total: 3,
+        done: 0,
+        remaining: 2,
+        failed: 0,
+      },
+    };
+
+    const refreshed = refreshTaskDependencyGraphNodes(graph, [
+      node('B', 'DONE', {
+        title: 'Fresh title',
+        prerequisiteCount: 1,
+        dependentCount: 3,
+        running: false,
+      }),
+    ]);
+
+    expect(refreshed.nodes.find((item) => item.id === 'B')).toMatchObject({
+      title: 'Fresh title',
+      status: 'DONE',
+      depth: 2,
+    });
+    expect(refreshed.collapsedGroups).toEqual([
+      { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 2, cursor: 'down' },
+    ]);
+    expect(refreshed.counts).toMatchObject({ done: 1, remaining: 1, failed: 0 });
+  });
+
+  it('shows expansion guidance only while a server-backed branch remains', () => {
+    expect(taskDependencyGraphTruncationState({ collapsedGroups: [] })).toBeNull();
+    expect(
+      taskDependencyGraphTruncationState({
+        collapsedGroups: [
+          { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 3, cursor: 'next' },
+        ],
+      }),
+    ).toBe('expandable');
+    expect(
+      taskDependencyGraphTruncationState({
+        collapsedGroups: [
+          { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 3, cursor: null },
+        ],
+      }),
+    ).toBe('limit');
   });
 });
 

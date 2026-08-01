@@ -13,10 +13,13 @@ import { useToast } from '../lib/toast';
 import {
   applyTaskDependencyGraphExpansionLedger,
   buildDirectTaskDependencyGraph,
+  refreshTaskDependencyGraphNodes,
   taskDependencyGraphStructureKey,
+  taskDependencyGraphTruncationState,
   type TaskDependencyBranchAggregate,
   type TaskDependencyGraphExpansionLedgerEntry,
   type TaskDependencyGraphExpansionResponse,
+  type TaskDependencyGraphNodesResponse,
   type TaskDependencyGraphResponse,
 } from '../lib/taskDependencyGraph';
 import {
@@ -207,7 +210,7 @@ export function TaskDetailPanel({
     dependencyExpansionLedger.baseStructureKey === dependencyGraphBaseStructureKey
       ? dependencyExpansionLedger.entries
       : [];
-  const expandedDependencyGraphData = useMemo(
+  const replayedDependencyGraphData = useMemo(
     () =>
       dependencyGraphQ.data
         ? applyTaskDependencyGraphExpansionLedger(
@@ -217,6 +220,30 @@ export function TaskDetailPanel({
         : undefined,
     [activeDependencyExpansionEntries, dependencyGraphQ.data],
   );
+  const dependencyGraphKnownTaskIds = useMemo(
+    () => replayedDependencyGraphData?.nodes.map((node) => node.id).sort() ?? [],
+    [replayedDependencyGraphData],
+  );
+  const dependencyGraphNodesQ = useQuery({
+    queryKey: ['task', taskId, 'dependency-graph-nodes', dependencyGraphKnownTaskIds],
+    queryFn: () =>
+      api<TaskDependencyGraphNodesResponse>(`/tasks/${taskId}/dependency-graph/nodes`, {
+        method: 'POST',
+        body: { taskIds: dependencyGraphKnownTaskIds },
+      }),
+    enabled:
+      activeDependencyExpansionEntries.length > 0 && dependencyGraphKnownTaskIds.length > 0,
+  });
+  const expandedDependencyGraphData = useMemo(() => {
+    if (!replayedDependencyGraphData || !dependencyGraphNodesQ.data) {
+      return replayedDependencyGraphData;
+    }
+    const baseNodeIds = new Set(dependencyGraphQ.data?.nodes.map((node) => node.id) ?? []);
+    return refreshTaskDependencyGraphNodes(
+      replayedDependencyGraphData,
+      dependencyGraphNodesQ.data.nodes.filter((node) => !baseNodeIds.has(node.id)),
+    );
+  }, [dependencyGraphNodesQ.data, dependencyGraphQ.data?.nodes, replayedDependencyGraphData]);
   useEffect(() => {
     setDependencyExpansionLedger((previous) => {
       if (
@@ -530,6 +557,11 @@ export function TaskDetailPanel({
     })),
   );
   const dependencyGraph = expandedDependencyGraphData ?? fallbackDependencyGraph;
+  const dependencyTruncationState = taskDependencyGraphTruncationState(dependencyGraph);
+  const hiddenDependencyRelationshipCount = (dependencyGraph.collapsedGroups ?? []).reduce(
+    (sum, group) => sum + Math.max(group.hiddenCount, 0),
+    0,
+  );
   const dependencyView = dependencyViewOverride ?? (dependencyGraph.edges.length > 0 ? 'graph' : 'list');
   // Expansion deltas add real nodes without replacing the initial aggregate counts.
   // Derive this display count from the merged snapshot so it advances after every batch.
@@ -807,13 +839,11 @@ export function TaskDetailPanel({
                 removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
               />
             )}
-            {dependencyGraph.truncated && (
+            {dependencyTruncationState && (
               <div className="tdp-dependency-truncated">
-                The initial snapshot is limited to {dependencyGraph.limits?.maxDepth ?? 8} hops or{' '}
-                {dependencyGraph.limits?.maxNodes ?? 100} tasks
-                {dependencyGraph.limits?.maxEdges
-                  ? ` or ${dependencyGraph.limits.maxEdges} relationships`
-                  : ''}. Expand a collapsed branch to load the next batch.
+                {dependencyTruncationState === 'expandable'
+                  ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
+                  : `Graph expansion limit reached with ${hiddenDependencyRelationshipCount} relationship${hiddenDependencyRelationshipCount === 1 ? '' : 's'} still collapsed.`}
               </div>
             )}
             <Select
