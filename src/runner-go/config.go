@@ -2,10 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
+)
+
+const (
+	machineHomePerm os.FileMode = 0o700
+	configFilePerm  os.FileMode = 0o600
 )
 
 // expandTilde resolves a leading ~ or ~/ to the running user's home directory.
@@ -75,6 +83,10 @@ func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 
 func loadConfig() *RunnerConfig {
+	// This is intentionally read-only. ORBIT_HOME is inherited by agent shells,
+	// so an agent-safe command must not chmod an arbitrary environment-selected
+	// path merely by trying to load config. Trusted runner startup/save paths call
+	// hardenConfigStorage to create or migrate the private modes.
 	b, err := os.ReadFile(configPath())
 	if err != nil {
 		return nil
@@ -86,10 +98,95 @@ func loadConfig() *RunnerConfig {
 	return &c
 }
 
-func saveConfig(c *RunnerConfig) error {
-	if err := os.MkdirAll(machineHome(), 0o755); err != nil {
+// configStoragePrivate verifies that using the owner-wide runner token from an
+// agent-invoked CLI cannot expose it to another local account. It never mutates
+// the environment-selected path; trusted runner startup/save paths perform the
+// one-time migration via hardenConfigStorage.
+func configStoragePrivate() error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	dirInfo, err := os.Lstat(machineHome())
+	if err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(c, "", "  ")
-	return os.WriteFile(configPath(), b, 0o644)
+	if dirInfo.Mode()&os.ModeSymlink != 0 || !dirInfo.IsDir() {
+		return fmt.Errorf("%s is not a private directory", machineHome())
+	}
+	if dirInfo.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("%s has permissions %04o, want 0700", machineHome(), dirInfo.Mode().Perm())
+	}
+	fileInfo, err := os.Lstat(configPath())
+	if err != nil {
+		return err
+	}
+	if fileInfo.Mode()&os.ModeSymlink != 0 || !fileInfo.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a private regular file", configPath())
+	}
+	if fileInfo.Mode().Perm()&0o077 != 0 {
+		return fmt.Errorf("%s has permissions %04o, want 0600", configPath(), fileInfo.Mode().Perm())
+	}
+	return nil
+}
+
+func hardenMachineHomeDir() error {
+	return os.Chmod(machineHome(), machineHomePerm)
+}
+
+func hardenConfigStorage() error {
+	if err := hardenMachineHomeDir(); err != nil {
+		return err
+	}
+	f, err := os.Open(configPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := f.Chmod(configFilePerm); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func saveConfig(c *RunnerConfig) error {
+	if err := os.MkdirAll(machineHome(), machineHomePerm); err != nil {
+		return err
+	}
+	// MkdirAll and OpenFile do not update permissions when their targets already
+	// exist, so explicitly migrate legacy installations on every save.
+	if err := hardenMachineHomeDir(); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(configPath(), os.O_WRONLY|os.O_CREATE, configFilePerm)
+	if err != nil {
+		return err
+	}
+	// Change the mode on the opened file before truncating it. Besides avoiding
+	// a path race, this leaves an existing config intact if its mode cannot be
+	// secured.
+	if err := f.Chmod(configFilePerm); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Truncate(0); err != nil {
+		_ = f.Close()
+		return err
+	}
+	n, err := f.Write(b)
+	if err != nil {
+		_ = f.Close()
+		return err
+	}
+	if n != len(b) {
+		_ = f.Close()
+		return io.ErrShortWrite
+	}
+	return f.Close()
 }

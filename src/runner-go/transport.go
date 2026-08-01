@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -372,9 +373,19 @@ func (t *Transport) listTasks() (json.RawMessage, error) {
 	return out, err
 }
 
+func validatePathSegmentID(id string) error {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\?#%\r\n") {
+		return fmt.Errorf("id must be a single safe path segment")
+	}
+	return nil
+}
+
 func (t *Transport) getTask(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/tasks/"+id, nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id), nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -385,20 +396,29 @@ func (t *Transport) createTask(agentID, sessionID string, body interface{}) (jso
 }
 
 func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "PATCH", "/runner/tasks/"+id, body, &out, taskOpTimeout)
+	err := t.do(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout)
 	return out, err
 }
 
 func (t *Transport) startTask(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/tasks/"+id+"/execute", nil, &out, taskOpTimeout)
+	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/execute", nil, &out, taskOpTimeout)
 	return out, err
 }
 
 func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/tasks/"+id+"/comments",
+	err := t.doHeaders(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/comments",
 		map[string]string{"body": bodyText}, &out, taskOpTimeout, agentHeader(agentID))
 	return out, err
 }

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestNormalizeCodexReasoningEffort(t *testing.T) {
@@ -72,9 +74,29 @@ func TestCodexAppServerThreadParams(t *testing.T) {
 	if got["sandbox"] != "danger-full-access" {
 		t.Fatalf("sandbox = %v", got["sandbox"])
 	}
+	if _, ok := got["developerInstructions"]; ok {
+		t.Fatalf("thread params must not replace effective developer instructions: %q", got["developerInstructions"])
+	}
+	if _, ok := got["baseInstructions"]; ok {
+		t.Fatalf("baseInstructions should be absent without a system prompt: %q", got["baseInstructions"])
+	}
 	roots, ok := got["runtimeWorkspaceRoots"].([]string)
 	if !ok || len(roots) != 2 || roots[0] != "/repo" || roots[1] != "/tmp/uploads" {
 		t.Fatalf("runtimeWorkspaceRoots = %#v", got["runtimeWorkspaceRoots"])
+	}
+}
+
+func TestCodexAppServerThreadParamsForwardSystemInstructions(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{
+		SystemPrompt:       "Base agent instructions.",
+		AppendSystemPrompt: "Owner developer instructions.",
+	}}
+	got := codexThreadParams(job, "/repo", "/tmp/uploads")
+	if got["baseInstructions"] != "Base agent instructions." {
+		t.Fatalf("baseInstructions = %q", got["baseInstructions"])
+	}
+	if _, ok := got["developerInstructions"]; ok {
+		t.Fatalf("developerInstructions unexpectedly overrides local config: %q", got["developerInstructions"])
 	}
 }
 
@@ -92,8 +114,12 @@ func TestCodexAppServerIDExtraction(t *testing.T) {
 }
 
 func TestCodexAppServerTurnParams(t *testing.T) {
-	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5", Effort: "max"}}
-	got := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "orbit-turn-1", "hello", []string{"/tmp/a.png"})
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5", Effort: "max", AppendSystemPrompt: "Owner instructions."}}
+	exe := "/usr/local/bin/orbit"
+	got := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "orbit-turn-1", "hello", []string{"/tmp/a.png"}, codexTurnContextOptions{
+		Executable: exe,
+		Mode:       codexInstructionsAdditionalContext,
+	})
 	if got["threadId"] != "thread-1" {
 		t.Fatalf("threadId = %v", got["threadId"])
 	}
@@ -110,6 +136,172 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	sandbox, ok := got["sandboxPolicy"].(map[string]interface{})
 	if !ok || sandbox["type"] != "dangerFullAccess" {
 		t.Fatalf("sandboxPolicy = %#v", got["sandboxPolicy"])
+	}
+	additional, ok := got["additionalContext"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("additionalContext = %#v", got["additionalContext"])
+	}
+	orbit, ok := additional["orbit_00000000_cli"].(map[string]interface{})
+	if !ok || orbit["kind"] != "application" {
+		t.Fatalf("orbit CLI context = %#v", additional["orbit_00000000_cli"])
+	}
+	if orbit["value"] != orbitCLIInstructions(exe) {
+		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe))
+	}
+	owner, ok := additional["orbit_00000000_agent_append_00000000"].(map[string]interface{})
+	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
+		t.Fatalf("owner append context = %#v", additional["orbit_00000000_agent_append_00000000"])
+	}
+}
+
+func TestCodexInstructionModeForUserAgent(t *testing.T) {
+	tests := []struct {
+		userAgent string
+		want      codexInstructionMode
+	}{
+		{"orbit/0.124.0 (Linux)", codexInstructionsUserInput},
+		{"orbit/0.125.0 (Linux)", codexInstructionsInjectItems},
+		{"orbit/0.134.9 (Linux)", codexInstructionsInjectItems},
+		{"orbit/0.135.0 (Linux)", codexInstructionsAdditionalContext},
+		{"orbit/1.0.0 (Linux)", codexInstructionsAdditionalContext},
+		{"malformed", codexInstructionsUserInput},
+		{"", codexInstructionsUserInput},
+	}
+	for _, tt := range tests {
+		if got := codexInstructionModeForUserAgent(tt.userAgent); got != tt.want {
+			t.Errorf("codexInstructionModeForUserAgent(%q) = %v, want %v", tt.userAgent, got, tt.want)
+		}
+	}
+}
+
+func TestCodexInitializeResponseUserAgentPath(t *testing.T) {
+	var message codexRPCMessage
+	if err := json.Unmarshal([]byte(`{"id":1,"result":{"userAgent":"orbit/0.146.0 (Linux)","codexHome":"/tmp/codex"}}`), &message); err != nil {
+		t.Fatal(err)
+	}
+	result := rawObject(message.Result)
+	if got := codexInstructionModeForUserAgent(firstString(result, "userAgent")); got != codexInstructionsAdditionalContext {
+		t.Fatalf("initialize result mode = %v, result %#v", got, result)
+	}
+}
+
+func TestCodexCompactionRefreshesInstructionContextOnNextTurn(t *testing.T) {
+	additional := &codexAppServer{instructionMode: codexInstructionsAdditionalContext}
+	mode, generation := additional.prepareInstructionContext(func() error {
+		t.Fatal("additionalContext mode must not inject raw items")
+		return nil
+	})
+	if mode != codexInstructionsAdditionalContext || generation != 0 {
+		t.Fatalf("initial additional context = mode %v generation %d", mode, generation)
+	}
+	additional.markInstructionContextForRefresh()
+	_, generation = additional.prepareInstructionContext(func() error {
+		t.Fatal("additionalContext mode must not inject raw items")
+		return nil
+	})
+	if generation != 1 {
+		t.Fatalf("post-compaction generation = %d, want 1", generation)
+	}
+	_, stableGeneration := additional.prepareInstructionContext(func() error { return nil })
+	if stableGeneration != generation {
+		t.Fatalf("ordinary next turn changed generation from %d to %d", generation, stableGeneration)
+	}
+
+	legacy := &codexAppServer{instructionMode: codexInstructionsInjectItems}
+	injections := 0
+	legacy.markInstructionContextForRefresh()
+	mode, _ = legacy.prepareInstructionContext(func() error {
+		injections++
+		return nil
+	})
+	if mode != codexInstructionsInjectItems || injections != 1 {
+		t.Fatalf("legacy refresh = mode %v injections %d", mode, injections)
+	}
+	legacy.prepareInstructionContext(func() error {
+		injections++
+		return nil
+	})
+	if injections != 1 {
+		t.Fatalf("ordinary next legacy turn reinjected context %d times", injections)
+	}
+}
+
+func TestCodexCompactionNotificationShapes(t *testing.T) {
+	itemCamel, _ := json.Marshal(map[string]interface{}{"item": map[string]interface{}{"type": "contextCompaction"}})
+	itemSnake, _ := json.Marshal(map[string]interface{}{"item": map[string]interface{}{"type": "context_compaction"}})
+	for _, message := range []codexRPCMessage{
+		{Method: "thread/compacted"},
+		{Method: "item/completed", Params: itemCamel},
+		{Method: "item/completed", Params: itemSnake},
+	} {
+		if !codexNotificationCompacted(message) {
+			t.Fatalf("compaction notification not recognized: %#v", message)
+		}
+	}
+	normal, _ := json.Marshal(map[string]interface{}{"item": map[string]interface{}{"type": "agentMessage"}})
+	if codexNotificationCompacted(codexRPCMessage{Method: "item/completed", Params: normal}) {
+		t.Fatal("ordinary completed item reported as compaction")
+	}
+}
+
+func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{AppendSystemPrompt: "Owner instructions."}}
+	got := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-1", "hello", nil, codexTurnContextOptions{
+		Executable: "/usr/local/bin/orbit",
+		Mode:       codexInstructionsUserInput,
+	})
+	if _, ok := got["additionalContext"]; ok {
+		t.Fatalf("legacy params unexpectedly contain additionalContext: %#v", got)
+	}
+	injectedTurn := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-2", "hello", nil, codexTurnContextOptions{
+		Executable: "/usr/local/bin/orbit",
+		Mode:       codexInstructionsInjectItems,
+	})
+	if _, ok := injectedTurn["additionalContext"]; ok {
+		t.Fatalf("inject-items turn unexpectedly contains additionalContext: %#v", injectedTurn)
+	}
+	if input := injectedTurn["input"].([]map[string]interface{}); len(input) != 1 || input[0]["text"] != "hello" {
+		t.Fatalf("inject-items turn input = %#v", input)
+	}
+	input := got["input"].([]map[string]interface{})
+	if len(input) != 2 || !strings.Contains(input[0]["text"].(string), "<orbit_application_context>") || input[1]["text"] != "hello" {
+		t.Fatalf("legacy input = %#v", input)
+	}
+	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit")
+	if len(items) != 1 || items[0]["role"] != "developer" {
+		t.Fatalf("injected items = %#v", items)
+	}
+	content, ok := items[0]["content"].([]map[string]interface{})
+	if !ok || len(content) != 1 || content[0]["type"] != "input_text" || !strings.Contains(content[0]["text"].(string), "Owner instructions.") {
+		t.Fatalf("injected content = %#v", items[0]["content"])
+	}
+	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
+	if _, ok := thread["developerInstructions"]; ok {
+		t.Fatalf("thread params replace developer instructions: %#v", thread)
+	}
+}
+
+func TestCodexAdditionalContextChunksLongOwnerInstructionsLosslessly(t *testing.T) {
+	want := strings.Repeat("界abc", 900)
+	context := codexAgentAdditionalContext(AgentExecConfig{AppendSystemPrompt: want}, "/usr/local/bin/orbit", 7)
+	keys := make([]string, 0, len(context))
+	for key := range context {
+		if strings.HasPrefix(key, "orbit_00000007_agent_append_") {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	var got strings.Builder
+	for _, key := range keys {
+		entry := context[key].(map[string]interface{})
+		part := entry["value"].(string)
+		if len(part) > 900 || !utf8.ValidString(part) {
+			t.Fatalf("invalid context chunk %q: %d bytes", key, len(part))
+		}
+		got.WriteString(part)
+	}
+	if got.String() != want || len(keys) < 2 {
+		t.Fatalf("chunked owner instructions: %d keys, equal=%v", len(keys), got.String() == want)
 	}
 }
 

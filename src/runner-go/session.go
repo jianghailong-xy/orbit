@@ -356,15 +356,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	}
 	// Apply the agent's configured prompts (claim payload carries both; previously
 	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
-	if a.SystemPrompt != "" {
-		args = append(args, "--system-prompt", a.SystemPrompt)
-	}
-	if a.AppendSystemPrompt != "" {
-		args = append(args, "--append-system-prompt", a.AppendSystemPrompt)
-	}
-	if len(a.AllowedTools) > 0 {
-		args = append(args, "--allowedTools", strings.Join(a.AllowedTools, ","))
-	}
+	// The Orbit CLI discovery instructions are platform instructions and therefore
+	// always join the append prompt rather than replacing the provider's defaults.
+	orbitExe := orbitCLIExecutable()
+	args = appendClaudeAgentInstructionArgs(args, a, orbitExe)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
 	// reaches for them, but those entries are session-local todos that never reach
@@ -384,9 +379,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	for k, v := range a.McpConfig {
 		servers[k] = v
 	}
-	if exe, err := os.Executable(); err == nil {
+	if orbitExe != "" {
 		servers["orbit"] = map[string]interface{}{
-			"command": exe,
+			"command": orbitExe,
 			"args":    []string{"mcp"},
 			"timeout": mcpToolTimeoutMs,
 		}

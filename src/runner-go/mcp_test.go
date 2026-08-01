@@ -126,6 +126,20 @@ func TestMCPTaskUpdateCarriesDependencyReplacement(t *testing.T) {
 	}
 }
 
+func TestMCPTaskIDsCannotEscapeTaskRoute(t *testing.T) {
+	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
+	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
+		res := mcp.callTool("task_get", map[string]interface{}{"taskId": id})
+		if res["isError"] != true {
+			t.Fatalf("task_get(%q) isError = %#v", id, res["isError"])
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
+			t.Fatalf("task_get(%q) result = %#v", id, res)
+		}
+	}
+}
+
 func TestMCPOrchestrationEnv(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "")
 	if mcpOrchestrationEnabled() {

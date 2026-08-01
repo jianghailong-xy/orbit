@@ -43,6 +43,9 @@ Usage:
   orbit doctor                      Check the Claude/Codex CLIs are installed, signed in, and on the service PATH
   orbit engine-update               Update the Claude/Codex CLIs now (the daily check, on demand)
   orbit resume [session-id]         Resume a session in this terminal via claude --resume
+  orbit task <command>              Manage Orbit tasks
+  orbit task-list <command>         Manage Orbit task lists
+  orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
 Run 'orbit <command> --help' for command-specific options.
@@ -146,6 +149,17 @@ binary the background service resolves on its PATH — the same check the runner
 after startup and every 24h. Unlike the daily run it can't see live sessions, so prefer
 running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGINE_UPDATE.
 `,
+	"task":      taskHelp,
+	"task-list": taskListHelp,
+	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
+
+Usage:
+  orbit capabilities [--json]
+
+Shows the Task and TaskList commands available through this binary. --json emits
+a stable, machine-readable document including argument schemas from the built-in
+Orbit MCP server. Session and Agent orchestration are intentionally not exposed.
+`,
 	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
 
 Usage:
@@ -185,7 +199,9 @@ func main() {
 	}
 	// Per-subcommand help: `orbit <cmd> --help|-h` prints that command's help
 	// instead of running it.
-	if wantsHelp(args[1:]) {
+	// Nested resource commands own their leaf help (for example
+	// `orbit task create --help`). Other commands keep the flat help behavior.
+	if cmd != "task" && cmd != "task-list" && wantsHelp(args[1:]) {
 		fmt.Print(helpFor(cmd))
 		return
 	}
@@ -203,6 +219,21 @@ func main() {
 		cmdDoctor()
 	case "resume":
 		cmdResume(args[1:])
+	case "task":
+		if err := cmdTaskCLI(args[1:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit task:", err)
+			os.Exit(1)
+		}
+	case "task-list":
+		if err := cmdTaskListCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit task-list:", err)
+			os.Exit(1)
+		}
+	case "capabilities":
+		if err := cmdCapabilitiesCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit capabilities:", err)
+			os.Exit(1)
+		}
 	case "upgrade":
 		cmdUpgrade()
 	case "engine-update":
@@ -401,6 +432,12 @@ func cmdUnregister(bools map[string]bool) {
 }
 
 func cmdRun() {
+	// Runner startup is a trusted path (unlike an agent-invoked read-only CLI
+	// command), so migrate the legacy 0755/0644 credential storage before use.
+	if err := hardenConfigStorage(); err != nil && !os.IsNotExist(err) {
+		fmt.Fprintln(os.Stderr, "cannot secure runner config storage:", err)
+		os.Exit(1)
+	}
 	cfg := loadConfig()
 	if cfg == nil {
 		fmt.Fprintln(os.Stderr, "no runner config found — run `orbit register` first")

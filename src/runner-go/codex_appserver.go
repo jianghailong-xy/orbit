@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type codexRPCError struct {
@@ -28,6 +30,14 @@ type codexRPCMessage struct {
 	Error  *codexRPCError  `json:"error,omitempty"`
 }
 
+type codexInstructionMode uint8
+
+const (
+	codexInstructionsUserInput codexInstructionMode = iota
+	codexInstructionsInjectItems
+	codexInstructionsAdditionalContext
+)
+
 type codexAppServer struct {
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
@@ -41,6 +51,13 @@ type codexAppServer struct {
 	notifications chan codexRPCMessage
 	done          chan struct{}
 	doneOnce      sync.Once
+
+	orbitExecutable     string
+	instructionMode     codexInstructionMode
+	instructionMu       sync.Mutex
+	contextGeneration   uint64
+	contextRefreshEpoch uint64
+	contextNeedsRefresh bool
 }
 
 type codexAppActiveTurn struct {
@@ -75,6 +92,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to start codex thread: " + err.Error()})
 		return stFailed, true, false
+	}
+	if app.currentInstructionMode() == codexInstructionsInjectItems {
+		if err := app.injectAgentContext(ctx, threadID, job.Agent); err != nil {
+			// Some downstream builds can report a newer-looking user agent while
+			// omitting the experimental method. Preserve discoverability through
+			// the lower-priority user-input fallback instead of failing the session.
+			logln("codex thread/inject_items unavailable; using user context:", err)
+			app.setInstructionMode(codexInstructionsUserInput)
+		}
 	}
 	job.RuntimeSessionID = threadID
 	writeSessionMeta(scratchDir, job, execDir)
@@ -502,12 +528,13 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 		return nil, err
 	}
 	app := &codexAppServer{
-		cmd:           cmd,
-		cancel:        cancel,
-		stdin:         stdin,
-		pending:       map[string]chan codexRPCMessage{},
-		notifications: make(chan codexRPCMessage, 256),
-		done:          make(chan struct{}),
+		cmd:             cmd,
+		cancel:          cancel,
+		stdin:           stdin,
+		pending:         map[string]chan codexRPCMessage{},
+		notifications:   make(chan codexRPCMessage, 256),
+		done:            make(chan struct{}),
+		orbitExecutable: orbitCLIExecutable(),
 	}
 	if err := cmd.Start(); err != nil {
 		cancel()
@@ -531,16 +558,18 @@ func codexAppServerCommandArgs(job *ClaimedSession, stateDir, exe string) []stri
 }
 
 func (a *codexAppServer) initialize(ctx context.Context) error {
-	if _, err := a.request(ctx, "initialize", map[string]interface{}{
+	result, err := a.request(ctx, "initialize", map[string]interface{}{
 		"clientInfo": map[string]interface{}{
 			"name":    "orbit",
 			"title":   "Orbit",
 			"version": "0.1.0",
 		},
 		"capabilities": map[string]interface{}{"experimentalApi": true},
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
+	a.setInstructionMode(codexInstructionModeForUserAgent(firstString(result, "userAgent")))
 	return a.notify("initialized", map[string]interface{}{})
 }
 
@@ -565,15 +594,215 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 }
 
 func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string) (string, error) {
-	result, err := a.request(ctx, "turn/start", codexTurnParams(threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths))
+	mode, generation := a.prepareInstructionContext(func() error {
+		return a.injectAgentContext(ctx, threadID, job.Agent)
+	})
+	result, err := a.request(ctx, "turn/start", codexTurnParams(
+		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
+		codexTurnContextOptions{
+			Executable: a.orbitExecutable,
+			Mode:       mode,
+			Generation: generation,
+		},
+	))
 	if err != nil {
 		return "", err
 	}
 	return turnIDFromResult(result), nil
 }
 
-func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string) map[string]interface{} {
+func (a *codexAppServer) injectAgentContext(ctx context.Context, threadID string, agent AgentExecConfig) error {
+	items := codexInjectedAgentItems(agent, a.orbitExecutable)
+	if len(items) == 0 {
+		return nil
+	}
+	_, err := a.request(ctx, "thread/inject_items", map[string]interface{}{
+		"threadId": threadID,
+		"items":    items,
+	})
+	return err
+}
+
+func codexInjectedAgentItems(agent AgentExecConfig, executable string) []map[string]interface{} {
+	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable)
+	if strings.TrimSpace(context) == "" {
+		return nil
+	}
+	return []map[string]interface{}{
+		{
+			"type": "message",
+			"role": "developer",
+			"content": []map[string]interface{}{
+				{"type": "input_text", "text": context},
+			},
+		},
+	}
+}
+
+type codexTurnContextOptions struct {
+	Executable string
+	Mode       codexInstructionMode
+	Generation uint64
+}
+
+func (a *codexAppServer) setInstructionMode(mode codexInstructionMode) {
+	a.instructionMu.Lock()
+	a.instructionMode = mode
+	a.contextNeedsRefresh = false
+	a.instructionMu.Unlock()
+}
+
+func (a *codexAppServer) currentInstructionMode() codexInstructionMode {
+	a.instructionMu.Lock()
+	defer a.instructionMu.Unlock()
+	return a.instructionMode
+}
+
+func (a *codexAppServer) markInstructionContextForRefresh() {
+	a.instructionMu.Lock()
+	a.contextNeedsRefresh = true
+	a.contextRefreshEpoch++
+	a.instructionMu.Unlock()
+}
+
+// prepareInstructionContext runs immediately before turn/start. Compaction
+// notifications only mark state; refresh work is delayed until here so raw
+// history is never injected while Codex still has an active turn.
+func (a *codexAppServer) prepareInstructionContext(inject func() error) (codexInstructionMode, uint64) {
+	a.instructionMu.Lock()
+	mode := a.instructionMode
+	needsRefresh := a.contextNeedsRefresh
+	epoch := a.contextRefreshEpoch
+	if mode == codexInstructionsAdditionalContext && needsRefresh {
+		a.contextGeneration++
+		a.contextNeedsRefresh = false
+	} else if mode == codexInstructionsUserInput {
+		// User-input fallback is included on every turn, so compaction requires no
+		// special replay beyond the normal turn payload.
+		a.contextNeedsRefresh = false
+	}
+	generation := a.contextGeneration
+	a.instructionMu.Unlock()
+
+	if mode != codexInstructionsInjectItems || !needsRefresh {
+		return mode, generation
+	}
+	if err := inject(); err != nil {
+		logln("codex instruction refresh failed; using user context:", err)
+		a.setInstructionMode(codexInstructionsUserInput)
+		return codexInstructionsUserInput, generation
+	}
+	a.instructionMu.Lock()
+	if a.contextRefreshEpoch == epoch {
+		a.contextNeedsRefresh = false
+	}
+	mode = a.instructionMode
+	generation = a.contextGeneration
+	a.instructionMu.Unlock()
+	return mode, generation
+}
+
+func codexNotificationCompacted(msg codexRPCMessage) bool {
+	if msg.Method == "thread/compacted" {
+		return true
+	}
+	if msg.Method != "item/completed" {
+		return false
+	}
+	params := rawObject(msg.Params)
+	item := mapValue(firstPresent(params, "item"))
+	kind := strings.ToLower(firstString(item, "type", "kind"))
+	kind = strings.ReplaceAll(kind, "_", "")
+	return kind == "contextcompaction"
+}
+
+func codexInstructionModeForUserAgent(userAgent string) codexInstructionMode {
+	fields := strings.Fields(userAgent)
+	if len(fields) == 0 {
+		return codexInstructionsUserInput
+	}
+	slash := strings.IndexByte(fields[0], '/')
+	if slash < 0 || slash == len(fields[0])-1 {
+		return codexInstructionsUserInput
+	}
+	parts := strings.Split(fields[0][slash+1:], ".")
+	if len(parts) < 2 {
+		return codexInstructionsUserInput
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return codexInstructionsUserInput
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return codexInstructionsUserInput
+	}
+	if major > 0 || major == 0 && minor >= 135 {
+		return codexInstructionsAdditionalContext
+	}
+	if major == 0 && minor >= 125 {
+		return codexInstructionsInjectItems
+	}
+	return codexInstructionsUserInput
+}
+
+func splitUTF8ByBytes(value string, maxBytes int) []string {
+	if value == "" || maxBytes <= 0 {
+		return nil
+	}
+	parts := []string{}
+	for len(value) > maxBytes {
+		end := maxBytes
+		for end > 0 && !utf8.RuneStart(value[end]) {
+			end--
+		}
+		if end == 0 {
+			end = maxBytes
+		}
+		parts = append(parts, value[:end])
+		value = value[end:]
+	}
+	if value != "" {
+		parts = append(parts, value)
+	}
+	return parts
+}
+
+func codexAgentAdditionalContext(agent AgentExecConfig, executable string, generation uint64) map[string]interface{} {
+	context := map[string]interface{}{}
+	prefix := fmt.Sprintf("orbit_%08d_", generation)
+	if instruction := orbitCLIInstructions(executable); instruction != "" {
+		context[prefix+"cli"] = map[string]interface{}{
+			"kind":  "application",
+			"value": instruction,
+		}
+	}
+	// Codex caps each application-context value at 1,000 tokens. A UTF-8 byte
+	// budget is conservative because a token cannot encode less than one byte.
+	for i, part := range splitUTF8ByBytes(agent.AppendSystemPrompt, 900) {
+		context[fmt.Sprintf("%sagent_append_%08d", prefix, i)] = map[string]interface{}{
+			"kind":  "application",
+			"value": part,
+		}
+	}
+	return context
+}
+
+func codexLegacyAgentContext(agent AgentExecConfig, executable string) string {
+	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable)
+	if strings.TrimSpace(context) == "" {
+		return ""
+	}
+	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
+}
+
+func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbitTurnID, prompt string, imagePaths []string, contextOptions codexTurnContextOptions) map[string]interface{} {
 	input := []map[string]interface{}{}
+	if contextOptions.Mode == codexInstructionsUserInput {
+		if context := codexLegacyAgentContext(job.Agent, contextOptions.Executable); context != "" {
+			input = append(input, map[string]interface{}{"type": "text", "text": context})
+		}
+	}
 	if strings.TrimSpace(prompt) != "" || len(imagePaths) == 0 {
 		input = append(input, map[string]interface{}{"type": "text", "text": prompt})
 	}
@@ -598,6 +827,15 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		// denied. Full access removes that asymmetry with Claude.
 		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
 	}
+	if contextOptions.Mode == codexInstructionsAdditionalContext {
+		if additional := codexAgentAdditionalContext(job.Agent, contextOptions.Executable, contextOptions.Generation); len(additional) > 0 {
+			// Application context becomes developer-role fragments without replacing
+			// local/project developer_instructions. Keys stay stable across ordinary
+			// turns and advance a generation after history compaction so the context
+			// is restored when Codex has discarded prior developer messages.
+			params["additionalContext"] = additional
+		}
+	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
 	}
@@ -620,6 +858,9 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
+	}
+	if job.Agent.SystemPrompt != "" {
+		params["baseInstructions"] = job.Agent.SystemPrompt
 	}
 	return params
 }
@@ -704,6 +945,11 @@ func (a *codexAppServer) readLoop(r io.Reader) {
 			continue
 		}
 		if msg.Method != "" {
+			// Never lose this state transition even if the high-volume notification
+			// channel is full; the next turn must restore compacted instructions.
+			if codexNotificationCompacted(msg) {
+				a.markInstructionContextForRefresh()
+			}
 			select {
 			case a.notifications <- msg:
 			default:

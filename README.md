@@ -141,6 +141,31 @@ The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the
 self-updates from there at startup. Create a task in the UI, queue it, and watch the live
 stream — or start an interactive session and chat with the agent directly.
 
+The registered binary also exposes the agent-safe Task/TaskList surface for shell
+automation. Results are pretty-printed by default; pass `--json` for compact JSON:
+
+```bash
+orbit capabilities --json
+orbit task list --status OPEN --json
+orbit task create --title "Check deployment" --description "Verify health and logs" --json
+orbit task update <task-id> --status DONE --json
+orbit task-list create --title "Release" --json
+```
+
+Each Claude/Codex session receives a short discovery instruction pointing at the
+resolved absolute binary path and `capabilities --json`. Claude receives approval-free
+rules only for the listed Task/TaskList action prefixes; Codex receives the same context
+without replacing project-level developer instructions. Native Orbit MCP tools remain
+the preferred path when available.
+
+Inside an Orbit task session, task commands may omit the task id and use
+`ORBIT_TASK_ID`. Session and Agent orchestration remain MCP-only until they have a
+session-scoped CLI authorization path. Existing runners migrate their credential
+storage to private permissions on the next runner restart; the task CLI refuses to
+use a legacy world-readable config until that migration has happened. CLI mutations
+are attributed to the runner owner; agents should prefer the native Orbit MCP tools
+when agent/session attribution matters.
+
 ## Cost & tokens
 
 Runners report Claude Code's `total_cost_usd` / `usage` per run; Orbit aggregates these for
