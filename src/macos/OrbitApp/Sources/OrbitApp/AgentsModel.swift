@@ -22,7 +22,7 @@ final class AgentsModel {
     private(set) var loading = false
     var errorText: String?
 
-    // The selected agent's sessions for the current Active/Completed/System view.
+    // The selected agent's sessions for the current Active/Completed/Trash view.
     private(set) var agentSessions: [Session] = []
     private(set) var sessionsLoading = false
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same

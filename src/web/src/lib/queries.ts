@@ -79,7 +79,11 @@ export const meQuery = () =>
  * the query string one-to-one — `['sessions', runnerId, view]` — so every scope is its
  * own cache entry while the broad `['sessions']` prefix still invalidates them all.
  */
-export const sessionsQuery = (opts: { runnerId?: string | null; view?: string | null } = {}) => {
+export type SessionListView = 'active' | 'archived' | 'deleted';
+
+export const sessionsQuery = (
+  opts: { runnerId?: string | null; view?: SessionListView | null } = {},
+) => {
   const runnerId = opts.runnerId ?? null;
   const view = opts.view ?? null;
   const qs = new URLSearchParams();

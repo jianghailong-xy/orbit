@@ -374,12 +374,11 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
 }
 
 // The slices of the session list, in menu order. Active is the overwhelmingly common
-// one, so the other three live in the header's scope menu rather than a permanent tab row.
-type SessionView = 'active' | 'archived' | 'deleted' | 'system';
+// one, so the other two live in the header's scope menu rather than a permanent tab row.
+type SessionView = 'active' | 'archived' | 'deleted';
 const SESSION_VIEWS: { value: SessionView; label: string }[] = [
   { value: 'active', label: 'Active' },
   { value: 'archived', label: 'Completed' },
-  { value: 'system', label: 'System' },
   { value: 'deleted', label: 'Trash' },
 ];
 
@@ -817,7 +816,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Seeded from the account default by the effect below once `me` loads (mirrors how Model/Mode
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
-  // Which slice of the session list to show: active, archived, system, or trash.
+  // Which slice of the session list to show: active, archived, or trash.
   const [view, setView] = useState<SessionView>('active');
   // Optional narrowing/sectioning of the list by tag, mirroring the iOS drawer's filter menu.
   // Both are view-local UI state (not persisted) — the same as the native list.
@@ -1073,20 +1072,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   });
   const [resizing, setResizing] = useState(false);
 
-  // The list is scoped by `view`. A selected session (its transcript is open) is
-  // resolved from the loaded set, so force a view that contains it: `system` when
-  // browsing the System tab (system sessions live there), `archived` when browsing
-  // Completed (so an opened completed session resolves and stays highlighted),
-  // otherwise `active` — where live sessions and the runner's slot accounting live.
-  // (active also includes system sessions server-side, so deep-linking one still
-  // resolves.)
-  const effectiveView = selectedId
-    ? view === 'system'
-      ? 'system'
-      : view === 'archived'
-        ? 'archived'
-        : 'active'
-    : view;
+  // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
+  // open; every other open session resolves from Active, where live sessions and runner
+  // slot accounting live.
+  const effectiveView = selectedId ? (view === 'archived' ? 'archived' : 'active') : view;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
@@ -1195,22 +1184,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
   // the selected session's own agent.
   const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? detailForSelected?.agent?.id ?? null;
-  // The view the user actually sees: a system session forces System even when `view` is
-  // still 'active' (e.g. deep-linking one — the header's scope menu reads System). The
-  // list and arrow-nav must step through that view's sessions, not `view`'s.
-  const onSystemTab = view === 'system' || selected?.source === 'system';
   const visibleSessions = useMemo(() => {
     let list = scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions;
-    // System (auto-created) sessions get their own tab; the active query still returns
-    // them for slot accounting and deep-link resolution. Show only system sessions on the
-    // System tab; hide them from the Active list.
-    if (onSystemTab) list = list.filter((s) => s.source === 'system');
-    else if (view === 'active') list = list.filter((s) => s.source !== 'system');
     // The tag filter narrows here rather than at render so arrow-nav, auto-select and
     // "open the next session after archiving" all step through what's actually on screen.
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
-  }, [sessions, scopeAgentId, view, onSystemTab, tagFilter]);
+  }, [sessions, scopeAgentId, tagFilter]);
 
   // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
   // tag when the user switches grouping — both from the pure groupers shared in shape with
@@ -1278,7 +1258,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // the bottom.
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
-      if (!selectedId && view !== 'active' && view !== 'system' && view !== 'archived') return false;
+      if (!selectedId && view === 'deleted') return false;
       if (visibleSessions.length === 0) return false;
       const cur = visibleSessions.findIndex((s) => s.id === selectedId);
       let next: number;
@@ -2697,10 +2677,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // has no agent in the URL, so fall back to the open session's agent, then runner.
   const headAgentName =
     lockedAgent?.name ?? selected?.agent?.name ?? runner.displayName ?? runner.name;
-  // The view the header names (and the menu check-marks). A system session forces System
-  // even when `view` is still 'active' — deep-linking one lands that way, and the label has
-  // to match the conversation that's open.
-  const shownView: SessionView = selected?.source === 'system' ? 'system' : effectiveView;
+  // The view the header names (and the menu check-marks).
+  const shownView: SessionView = effectiveView;
   // Switching view while a session transcript is open closes it: the open session belongs
   // to the view it was opened from, so browsing another one means leaving the conversation.
   const switchView = (next: SessionView): void => {
@@ -2721,7 +2699,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // divider — the tag narrowing and sectioning. Tag entries only appear once the owner has
   // tags; the view entries always do, so Trash is reachable without ever having made one.
   // No group headings: the trigger already names the axis, and the shared check column is
-  // what marks the four views as a mutually exclusive set.
+  // what marks the three views as a mutually exclusive set.
   const scopeItems: MenuProps['items'] = [
     ...SESSION_VIEWS.map((v) => ({
       key: v.value,
@@ -2833,7 +2811,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
               chip row — both read as clutter in a narrow column, and Active is nearly always
               the answer. The trigger names the current view so a list scoped to
-              Completed/System/Trash always explains itself. (The native clients still tab.) */}
+              Completed/Trash always explains itself. (The native clients still tab.) */}
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
             <span
               className={`session-scope-menu${shownView !== 'active' || tagFilter || groupByTag ? ' on' : ''}`}
@@ -2877,9 +2855,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   ? 'No sessions yet.'
                   : view === 'archived'
                     ? 'No completed sessions.'
-                    : view === 'system'
-                      ? 'No system sessions.'
-                      : 'Trash is empty.'}
+                    : 'Trash is empty.'}
             </div>
           )}
           {sections.map((sec) => (
@@ -2924,12 +2900,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                 const menuItems: MenuProps['items'] =
                   view === 'archived'
                     ? [restoreItem, { type: 'divider' }, deleteItem]
-                    : view === 'system'
-                      ? [deleteItem]
-                      : view === 'deleted'
-                        ? [restoreItem, { type: 'divider' }, purgeItem]
-                        : [restoreItem];
-                // Active, System and Completed (archived) rows open their transcript; only
+                    : view === 'deleted'
+                      ? [restoreItem, { type: 'divider' }, purgeItem]
+                      : [restoreItem];
+                // Active and Completed (archived) rows open their transcript; only
                 // Trash (deleted) rows stay closed.
                 const openable = view !== 'deleted';
                 const line = sessionLine(s, openable);

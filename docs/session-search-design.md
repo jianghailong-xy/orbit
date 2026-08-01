@@ -7,7 +7,7 @@ iOS 用同一个面板(抽屉放大镜进入)。三端共用一个服务端 endp
 
 web 的 session 列表是 `GET /sessions?runnerId=&view=`,缓存键 `['sessions', runnerId, view]`
 按 runner + view 分片(`src/web/src/lib/queries.ts:81`)。⌘K 要跨 agent、跨 runner、跨
-Active/Completed/System/Trash 定位,客户端缓存里从来没有全量数据。原生端同理
+Active/Completed/Trash 定位,客户端缓存里从来没有全量数据。原生端同理
 (`APIClient.listSessions(view:runnerId:)`)。
 
 ## 2. 线上数据现状(2026-07-26 实测)

@@ -18,14 +18,13 @@ public struct SessionGroups: Equatable, Sendable {
 public enum SessionGrouping {
     /// Bucket sessions for the Active sidebar, preserving input order within each bucket.
     /// `needsYou` = has pending approvals; `running` = otherwise live (running / awaiting /
-    /// interrupted); `queued` = PENDING. Terminal/dormant sessions are excluded from Active, as are
-    /// auto-created (system) sessions — the server returns them on `view=active` for slot
-    /// accounting, but they live under their own System tab (web parity: `s.source !== 'system'`).
+    /// interrupted); `queued` = PENDING. Terminal/dormant sessions are excluded from Active.
+    /// All live sessions are grouped here because the separate System list has been removed.
     public static func group(_ sessions: [Session]) -> SessionGroups {
         var needsYou: [Session] = []
         var running: [Session] = []
         var queued: [Session] = []
-        for s in sessions where s.source != "system" {
+        for s in sessions {
             if (s.pendingApprovals ?? 0) > 0 {
                 needsYou.append(s)
             } else if s.status.isLive {

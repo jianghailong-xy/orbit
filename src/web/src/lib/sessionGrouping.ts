@@ -69,7 +69,7 @@ export function sessionTimeSections<T extends GroupableSession>(
 
   for (const s of sessions) {
     // Only the Active view honours pins; elsewhere a (possibly stale) pinnedAt just buckets by
-    // time like any other session, so no "Pinned" section appears in Completed/System/Trash.
+    // time like any other session, so no "Pinned" section appears in Completed/Trash.
     if (pinnedFirst && s.pinnedAt) pinned.push(s);
     else buckets[bucketIndex(s, today)].push(s);
   }

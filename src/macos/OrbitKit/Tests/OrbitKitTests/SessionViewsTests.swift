@@ -6,15 +6,13 @@ final class SessionViewsTests: XCTestCase {
     func testQueryValueMapsCompletedToArchived() {
         XCTAssertEqual(SessionView.active.queryValue, "active")
         XCTAssertEqual(SessionView.completed.queryValue, "archived")   // server calls it "archived"
-        XCTAssertEqual(SessionView.system.queryValue, "system")
         XCTAssertEqual(SessionView.trash.queryValue, "deleted")        // server calls it "deleted"
-        XCTAssertEqual(SessionView.allCases.map(\.title), ["Active", "Completed", "System", "Trash"])
+        XCTAssertEqual(SessionView.allCases.map(\.title), ["Active", "Completed", "Trash"])
     }
 
-    /// The console switcher mirrors the web Agent console's tabs, in order: Active, Completed,
-    /// System, Trash — full parity (System and Trash used to be excluded).
+    /// The console switcher mirrors the web Agent console's views, in order.
     func testPickerCasesMatchWebTabs() {
-        XCTAssertEqual(SessionView.pickerCases, [.active, .completed, .system, .trash])
+        XCTAssertEqual(SessionView.pickerCases, [.active, .completed, .trash])
     }
 
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.
@@ -35,20 +33,21 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertTrue(SessionFilter.forAgent([s], agentID: "a1").isEmpty)
     }
 
-    /// The Active tab hides auto-created (`source == "system"`) sessions — the server's `active`
-    /// query returns them (slot accounting / deep-link), so the client must filter, matching web.
-    func testForAgentViewHidesSystemSessionsOnActive() throws {
+    /// The removed System list must not strand rows from an older server/cache. Legacy
+    /// `source=system` rows remain visible in Active alongside every other active session.
+    func testForAgentViewKeepsLegacySystemSessionsOnActive() throws {
         let json = """
         [{"id":"s1","status":"RUNNING","source":"user","agent":{"id":"a1","name":"dev"}},
          {"id":"s2","status":"RUNNING","source":"system","agent":{"id":"a1","name":"dev"}},
          {"id":"s3","status":"PENDING","agent":{"id":"a1","name":"dev"}}]
         """
         let sessions = try JSONDecoder().decode([Session].self, from: Data(json.utf8))
-        // Active: system session s2 is dropped; a missing source counts as non-system.
-        XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .active).map(\.id), ["s1", "s3"])
-        // Completed/System keep what the server returned (System is server-side `source == system`).
+        XCTAssertEqual(
+            Set(SessionFilter.forAgent(sessions, agentID: "a1", view: .active).map(\.id)),
+            Set(["s1", "s2", "s3"])
+        )
+        // Completed preserves the server response order.
         XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .completed).map(\.id), ["s1", "s2", "s3"])
-        XCTAssertEqual(SessionFilter.forAgent(sessions, agentID: "a1", view: .system).map(\.id), ["s1", "s2", "s3"])
     }
 
     /// The Agent console orders like web's `AgentView`: pinned first, then most-recent activity
@@ -98,7 +97,7 @@ final class SessionViewsTests: XCTestCase {
         )
     }
 
-    /// Trash (deleted) is activity-ordered client-side like Active/System — web sorts every
+    /// Trash (deleted) is activity-ordered client-side like Active — web sorts every
     /// non-archived view by pinned-first then most-recent activity. (Only Completed, above, is
     /// left in the server's order.) Fixture is in input order oldest-first to prove the re-sort.
     func testForAgentTrashSortsByActivity() throws {

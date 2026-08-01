@@ -2,7 +2,7 @@ import SwiftUI
 import OrbitKit
 
 // Row-level session actions for the session lists (the Active sidebar and each agent's
-// Active/Completed/System/Trash list). Two surfaces, deliberately paired:
+// Active/Completed/Trash list). Two surfaces, deliberately paired:
 //   • swipeActions — the iOS accelerator, mapped to the platform convention (NOT the first-draft
 //     request, which had them reversed):
 //       – leading  (swipe right) → the positive actions: Complete/Pin (Restore on the Completed and

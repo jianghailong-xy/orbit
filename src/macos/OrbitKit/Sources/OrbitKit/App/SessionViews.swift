@@ -1,16 +1,14 @@
 import Foundation
 
 /// The lifecycle views a session list filters to (the `?view=` query param), mirroring the web
-/// Agent console's segmented switcher. "Completed" is the server's `archived` view; "System" is
-/// auto-created (source=system, e.g. task-execution) sessions.
+/// Agent console's switcher. "Completed" is the server's `archived` view.
 public enum SessionView: String, CaseIterable, Sendable, Identifiable {
-    case active, completed, system, trash
+    case active, completed, trash
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .active:    return "Active"
         case .completed: return "Completed"
-        case .system:    return "System"
         case .trash:     return "Trash"
         }
     }
@@ -20,15 +18,13 @@ public enum SessionView: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .active:    return "active"
         case .completed: return "archived"
-        case .system:    return "system"
         case .trash:     return "deleted"
         }
     }
 
     /// The cases offered in the console's switcher, in the web Agent console's order: Active,
-    /// Completed (archived), System (auto-created source=system sessions), and Trash (soft-deleted,
-    /// restorable until the server purges them). Full parity with the web segmented tabs.
-    public static let pickerCases: [SessionView] = [.active, .completed, .system, .trash]
+    /// Completed (archived), and Trash (soft-deleted, restorable until the server purges them).
+    public static let pickerCases: [SessionView] = [.active, .completed, .trash]
 }
 
 public enum SessionFilter {
@@ -45,12 +41,10 @@ public enum SessionFilter {
     }
 
     /// Sessions belonging to one agent, scoped for a specific Agent-console tab — mirrors the web
-    /// Agent console. The `active` query returns auto-created (`source == "system"`) sessions for
-    /// slot accounting and deep-link resolution, but they get their own System tab, so they're
-    /// hidden from the Active list. Completed/System views keep what the server returned (the
-    /// System query is already `source == "system"` server-side).
+    /// Agent console. Every non-archived session returned by the active query stays visible there;
+    /// there is no separate System list.
     ///
-    /// The activity-ordered views (Active/System) are re-sorted client-side to match web's Agent
+    /// The activity-ordered views (Active/Trash) are re-sorted client-side to match web's Agent
     /// console exactly — the server orders never-run (queued) sessions last (`last_turn_at DESC
     /// NULLS LAST`), but web ranks them by `createdAt` instead, so a freshly queued session sits
     /// among recent activity rather than pinned to the bottom. Completed (archived) is the one
@@ -60,8 +54,7 @@ public enum SessionFilter {
     /// (`if view === 'archived' return rows`). Without these two rules the clients disagree on order.
     public static func forAgent(_ sessions: [Session], agentID: String, view: SessionView) -> [Session] {
         let scoped = forAgent(sessions, agentID: agentID)
-        let visible = view == .active ? scoped.filter { $0.source != "system" } : scoped
-        return view == .completed ? visible : consoleSorted(visible)
+        return view == .completed ? scoped : consoleSorted(scoped)
     }
 
     /// Order a per-agent console list as web's `AgentView` does: pinned sessions first, then

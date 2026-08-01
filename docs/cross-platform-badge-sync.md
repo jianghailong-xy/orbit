@@ -19,7 +19,7 @@
     where: { status: 'PENDING', session: { ownerId: session.ownerId } },
   });
   ```
-- **客户端**(iOS/macOS 共享 OrbitKit)自己也会在前台把角标对账一遍:`AppModel.updateDockBadge → setBadgeCount(needsYou.count)`,数字来自 `SessionGrouping.needsYou`(`SessionGrouping.swift:24-38`)= **非 system、且 `pendingApprovals > 0` 的会话数**;而 `pendingApprovals` 服务端只对 **RUNNING** 会话计算(`sessions.service.ts:359-367`),其余强制为 0。
+- **客户端**(iOS/macOS 共享 OrbitKit)自己也会在前台把角标对账一遍:`AppModel.updateDockBadge → setBadgeCount(needsYou.count)`,数字来自 `SessionGrouping.needsYou`(`SessionGrouping.swift:24-38`)= **`pendingApprovals > 0` 的会话数**;而 `pendingApprovals` 服务端只对 **RUNNING** 会话计算(`sessions.service.ts:359-367`),其余强制为 0。
 
 ### 1.2 两个缺陷
 
@@ -30,7 +30,6 @@
 |---|---|---|
 | 计数单位 | **会话**(一个会话记 1) | **审批行**(一个会话 2 个待批记 2) |
 | 会话状态 | 只 RUNNING(`pendingApprovals` 只在 RUNNING 算) | 不限状态 |
-| system 会话 | 排除(`source != "system"`) | 计入 |
 | 死会话上的孤儿审批 | 不计(非 RUNNING) | **计入** |
 
 后果:一个会话挂 2 个待批 → 推送角标 `2`、前台对账后 `1`;更糟的是**孤儿审批**(见 §1.3)会让推送角标**只增不减、越攒越多**。
@@ -75,7 +74,7 @@
 
 把角标定义**收敛到服务端一个函数**,数值严格等于客户端 `needsYou`:
 
-> **角标 = 该 owner 名下「需要你回复」的会话数** = `source != 'system'` 且 `status == RUNNING` 且**至少有一个** `PENDING` 审批的会话数(按会话去重)。
+> **角标 = 该 owner 名下「需要你回复」的会话数** = `status == RUNNING` 且**至少有一个** `PENDING` 审批的会话数(按会话去重)。
 
 ```ts
 // PushService 内,唯一的 badge 计算;alert 推送与静默同步都用它
@@ -84,7 +83,6 @@ private async needsYouBadge(ownerId: string): Promise<number> {
     where: {
       ownerId,
       status: RunStatus.RUNNING,          // 对齐 pendingApprovals 只在 RUNNING 计
-      source: { not: 'system' },          // 对齐 SessionGrouping 排除 system
       approvals: { some: { status: 'PENDING' } },  // 会话级去重(count sessions, not rows)
     },
   });
@@ -94,7 +92,6 @@ private async needsYouBadge(ownerId: string): Promise<number> {
 **为什么是这个口径**:
 - **按会话数**而非审批行数 → 和用户在列表里看到的「N 个会话等你」一致,点开 App 数字不跳。
 - **`status == RUNNING`** → 自动排除 §1.3 的**孤儿审批**(死会话上的 PENDING 不再计),彻底修掉「只增不减」。
-- **排除 `system`** → 和三端 UI 的 Active 分组口径一致。
 
 逐条对齐见 §1.2 表格右移一列即「新权威」,与客户端**完全重合**。这一步单独就修掉了**缺陷 A**,且是 §4 的基础(两种推送共用它)。
 
@@ -226,7 +223,7 @@ P1–P2 可在 Linux 闭环(单测/编译);P3 客户端为主;P4 需真机 + 已
 ## 10. 小结
 
 - **一个根因,两种表现**:角标是**派生状态**,却既没有**唯一口径**(缺陷 A),又只在「新建审批」时下发、从不在「别处已处理」时下发(缺陷 B)。
-- **一个权威口径**(§3,按会话数、只 RUNNING、排除 system/孤儿)同时修好数字一致性与「只增不减」。
+- **一个权威口径**(§3,按会话数、只 RUNNING、排除孤儿)同时修好数字一致性与「只增不减」。
 - **一处 choke point**(§4,`publish()` 上的 badge 子集对账器 + 去抖 + 静默 background 推送)让数字每次变化都尽力同步到所有设备(含后台 iOS)、不打扰用户,并**顺带清掉已处理会话的横幅**。
 - **成本可控**:复用 APNs 通道与 `ownerCache`,**无 DB 迁移**;iOS 后台推送能力(`remote-notification`)**已就位**,客户端可零改动;macOS/web 因共享 `needsYou` 口径而天然一致。
 - **边界清晰**:force-quit 是已知限制(iOS 不投递静默推送),角标与横幅均由下次 alert 推送与前台对账兜底。

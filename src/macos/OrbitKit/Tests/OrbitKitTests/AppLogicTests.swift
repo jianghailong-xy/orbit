@@ -35,20 +35,19 @@ final class AppLogicTests: XCTestCase {
         XCTAssertFalse(g.isEmpty)
     }
 
-    /// System (auto-created) sessions ride the `view=active` payload but must not show in the Active
-    /// list — they have their own System tab (web parity). Excluded from every bucket.
-    func testActiveGroupingExcludesSystemSessions() {
+    /// Legacy `source=system` rows remain visible after the separate System list is removed.
+    func testActiveGroupingIncludesLegacySystemSessions() {
         let sessions = [
             session("live", .running),
-            session("sysRun", .running, source: "system"),               // live but system → dropped
-            session("sysNeeds", .running, approvals: 3, source: "system"), // even with approvals
+            session("sysRun", .running, source: "system"),
+            session("sysNeeds", .running, approvals: 3, source: "system"),
             session("queued", .pending),
-            session("sysQueued", .pending, source: "system"),            // queued but system → dropped
+            session("sysQueued", .pending, source: "system"),
         ]
         let g = SessionGrouping.group(sessions)
-        XCTAssertEqual(g.needsYou.map(\.id), [])
-        XCTAssertEqual(g.running.map(\.id), ["live"])
-        XCTAssertEqual(g.queued.map(\.id), ["queued"])
+        XCTAssertEqual(g.needsYou.map(\.id), ["sysNeeds"])
+        XCTAssertEqual(g.running.map(\.id), ["live", "sysRun"])
+        XCTAssertEqual(g.queued.map(\.id), ["queued", "sysQueued"])
     }
 
     func testEmptyGrouping() {

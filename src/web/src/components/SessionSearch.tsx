@@ -53,7 +53,7 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
  * The ⌘K session palette. Mounted once by the app shell, so it works from every route.
  *
  * It searches across everything the sidebar can't reach in one place: every agent, every runner,
- * and the Completed / System / Trash scopes as well as Active. With an empty query it lists
+ * and the Completed / Trash scopes as well as Active. With an empty query it lists
  * recents, which makes the same keystroke a fast session switcher.
  */
 export function SessionSearch() {

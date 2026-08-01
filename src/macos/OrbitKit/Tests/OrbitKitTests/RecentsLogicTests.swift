@@ -27,12 +27,12 @@ final class RecentsLogicTests: XCTestCase {
         XCTAssertEqual(RecentsLogic.recent(sessions).map(\.id), ["c", "b", "a"])
     }
 
-    func testExcludesSystemSource() {
+    func testIncludesLegacySystemSource() {
         let sessions = [
             session(#"{"id":"user","status":"RUNNING","source":"user","lastTurnAt":"2026-07-07T10:00:00.000Z"}"#),
             session(#"{"id":"sys","status":"RUNNING","source":"system","lastTurnAt":"2026-07-07T12:00:00.000Z"}"#),
         ]
-        XCTAssertEqual(RecentsLogic.recent(sessions).map(\.id), ["user"])
+        XCTAssertEqual(RecentsLogic.recent(sessions).map(\.id), ["sys", "user"])
     }
 
     func testRespectsLimit() {

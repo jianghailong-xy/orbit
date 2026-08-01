@@ -92,15 +92,14 @@ export class PushService {
   }
 
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
-   *  Mirrors the client's SessionGrouping.needsYou exactly: a non-system, RUNNING session with at
-   *  least one PENDING approval. Counting sessions (not approval rows) and gating on RUNNING keeps
-   *  the badge equal to what the app shows, and excludes orphaned approvals on dead sessions. */
+   *  Mirrors the client's SessionGrouping.needsYou exactly: a RUNNING session with at least one
+   *  PENDING approval. Counting sessions (not approval rows) and gating on RUNNING keeps the badge
+   *  equal to what the app shows, and excludes orphaned approvals on dead sessions. */
   async needsYouSessions(ownerId: string): Promise<string[]> {
     const rows = await this.prisma.session.findMany({
       where: {
         ownerId,
         status: RunStatus.RUNNING,
-        source: { not: 'system' },
         approvals: { some: { status: 'PENDING' } },
       },
       select: { id: true },

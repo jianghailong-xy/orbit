@@ -647,7 +647,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
       },
-      { source: 'system', batch },
+      // Task runs belong in Active regardless of whether they were started manually,
+      // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
+      // explicit so a future default change cannot silently move them back to System.
+      { source: 'user', batch },
     );
     return session.id;
   }

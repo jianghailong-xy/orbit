@@ -120,9 +120,9 @@ export class SessionsService {
     }
   }
 
-  // `source` defaults to "user"; internal callers (e.g. auto-replying to an @-mention)
-  // pass "system" so the session lands in the System tab instead of Active. It's not on
-  // CreateSessionDto, so HTTP clients can't spoof it.
+  // `source` is retained as internal provenance for backwards compatibility. Current clients
+  // no longer split out a System list, and task-linked runs are always "user" so older clients
+  // also place them in Active. `source` is not on CreateSessionDto, so HTTP clients can't spoof it.
   async create(
     ownerId: string,
     dto: CreateSessionDto,
@@ -219,7 +219,9 @@ export class SessionsService {
         agentId: dto.agentId,
         assignedRunnerId,
         taskId: dto.taskId,
-        source: opts?.source ?? 'user',
+        // A task session must remain discoverable in Active even if an internal caller
+        // accidentally asks for the legacy "system" provenance.
+        source: dto.taskId ? 'user' : (opts?.source ?? 'user'),
         batchId: opts?.batch?.id ?? null,
         batchMaxConcurrent: opts?.batch?.maxConcurrent ?? null,
         parentSessionId: opts?.parentSessionId ?? null,
@@ -329,8 +331,8 @@ export class SessionsService {
       ownerId,
       { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, effort },
       {
-        // Not source:'system' — orchestrated children appear in the normal (Active) list like any
-        // session; the parentSessionId link is what marks them as spawned/orchestrated.
+        // Orchestrated children appear in Active like any other session; the
+        // parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
         batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
       },
@@ -429,7 +431,7 @@ export class SessionsService {
    * Cross-scope session search backing the clients' ⌘K palette.
    *
    * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (active,
-   * completed, system and trash — "the one I'm thinking of" is usually filed away, and the hit
+   * completed and trash — "the one I'm thinking of" is usually filed away, and the hit
    * carries archivedAt/deletedAt so the row can say where it lives), and it reaches into
    * conversation text, which no list payload ever carries.
    *
@@ -701,15 +703,14 @@ export class SessionsService {
     filters: { runnerId?: string; view?: 'active' | 'archived' | 'deleted' | 'system' },
   ) {
     // active = neither archived nor deleted; archived = archived but not deleted;
-    // deleted (trash) = deleted, regardless of archive state; system = auto-created
-    // (a non-deleted system session), shown in its own tab. Default to active.
-    // Note: active still includes system sessions — they occupy runner slots and back
-    // selection/deep-link resolution. The web Active tab hides them from its list.
+    // deleted (trash) = deleted, regardless of archive state. Default to active.
+    // `system` is a removed scope retained only for installed older clients; explicitly
+    // return no rows so it can never fall through and duplicate Active.
     const visibility: Prisma.Sql =
       filters.view === 'deleted'
         ? Prisma.sql`s.deleted_at IS NOT NULL`
         : filters.view === 'system'
-          ? Prisma.sql`s.source = 'system' AND s.deleted_at IS NULL`
+          ? Prisma.sql`FALSE`
           : filters.view === 'archived'
             ? Prisma.sql`s.archived_at IS NOT NULL AND s.deleted_at IS NULL`
             : Prisma.sql`s.archived_at IS NULL AND s.deleted_at IS NULL`;

@@ -116,9 +116,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
-    /// How the session was created: "user" (default) or "system" (auto-created, e.g. a
-    /// task-execution session). The Active query returns both; the Agent console hides system
-    /// sessions from its Active tab and gives them a dedicated System tab — see `SessionFilter`.
+    /// Legacy internal provenance. Current clients keep every session in Active and no longer
+    /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
     /// The list row's second-line preview, built by `SessionLine`: the (server-truncated) last
     /// assistant reply, the tool currently in flight, and the live background-shell count.

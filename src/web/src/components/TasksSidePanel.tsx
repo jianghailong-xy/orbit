@@ -319,7 +319,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // sessions are blocked on an approval. Lets an agent row show its own attention count
   // (and hide its ⌘ shortcut) so you can jump straight to the agent that needs you.
   // Same active-sessions cache, no extra request; keyed by nested agent.id (flat
-  // agentId as fallback). System/host sessions carry no agent and roll up only into Active.
+  // agentId as fallback). Host sessions carry no agent and roll up only into Active.
   const agentNeedsYou = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of (activeSessions.data ?? []) as any[]) {
