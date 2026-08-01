@@ -220,20 +220,56 @@ body {
   max-width: calc(100vw - 32px);
   text-align: start;
   /* Toasts don't take clicks — the card floats over the header's right edge and used to
-     swallow them (it blocked the double-click-to-rename target). Errors opt back in below:
-     they stay put until dismissed, so they have to be clickable and selectable. */
+     swallow them (it blocked the double-click-to-rename target). Interactive cards opt back
+     in below. */
   pointer-events: none !important;
 }
+.ant-message-notice-content:has(.toast-action),
 .ant-message-notice-content:has(.toast-err) {
   pointer-events: auto !important;
+}
+.ant-message-notice-content:has(.toast-err) {
   user-select: text;
 }
 /* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
    AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
-   so the × would have nothing to push against; let that span fill the card instead. */
-.ant-message-custom-content > span:has(> .toast-err) {
+   so trailing actions would have nothing to push against; let that span fill the card instead. */
+.ant-message-custom-content > span:has(> .toast-err, > .toast-action) {
   flex: 1;
   min-width: 0;
+}
+/* Action toast: keep the message and its real button visually separate, with the action pinned
+   to the trailing edge and a comfortable hit target instead of an inline link. */
+.toast-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.toast-action-text {
+  min-width: 0;
+}
+.toast-action-btn {
+  flex: none;
+  margin: -4px -4px -4px auto;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  line-height: 22px;
+  cursor: pointer;
+}
+.toast-action-btn:hover {
+  background: var(--brand-tint);
+}
+.toast-action-btn:active {
+  background: var(--brand-tint-hover);
+}
+.toast-action-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
 }
 /* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
    × instead of centred against the whole block. (0,3,0) to outrank AntD's own align-items. */

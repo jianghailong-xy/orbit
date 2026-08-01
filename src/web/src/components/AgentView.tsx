@@ -1962,16 +1962,18 @@ export function AgentView({ runner }: { runner: Runner }) {
       key,
       type: 'success',
       content: (
-        <span>
-          {label}{' '}
-          <a
+        <span className="toast-action">
+          <span className="toast-action-text">{label}</span>
+          <button
+            type="button"
+            className="toast-action-btn"
             onClick={() => {
               message.destroy(key);
               restoreMut.mutate(id);
             }}
           >
             Undo
-          </a>
+          </button>
         </span>
       ),
       duration: 4,
