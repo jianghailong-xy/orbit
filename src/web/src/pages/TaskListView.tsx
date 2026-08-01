@@ -787,6 +787,7 @@ export function TaskListView() {
         <TaskDetailPanel
           taskId={selectedTaskId}
           summary={rows.find((r: any) => r.id === selectedTaskId)}
+          onOpenTask={setSelectedTaskId}
           onClose={() => setSelectedTaskId(null)}
         />
       )}

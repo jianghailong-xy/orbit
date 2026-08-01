@@ -5290,21 +5290,26 @@ body {
   gap: 2px;
   padding: 2px 0;
 }
-.tdp-dependency-link {
+.tdp-dependency-trigger {
   display: flex;
   flex: 1;
   min-width: 0;
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
   color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.tdp-dependency-link:hover {
+.tdp-dependency-trigger:hover {
   background: var(--bg-hover);
   color: var(--brand);
 }
-.tdp-dependency-link:focus-visible {
+.tdp-dependency-trigger:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }

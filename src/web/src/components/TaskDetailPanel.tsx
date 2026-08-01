@@ -138,10 +138,12 @@ interface AgentRow {
 export function TaskDetailPanel({
   taskId,
   summary,
+  onOpenTask,
   onClose,
 }: {
   taskId: string;
   summary?: TaskSummary;
+  onOpenTask: (taskId: string) => void;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -596,14 +598,15 @@ export function TaskDetailPanel({
                 const meta = STATUS_META[d.dependsOnTask.status] ?? { label: d.dependsOnTask.status, tone: 'muted' };
                 return (
                   <div key={d.dependsOnTask.id} className="tdp-dependency-row">
-                    <Link
-                      to={`/tasks/${encodeId(d.dependsOnTask.id)}`}
-                      className="tdp-dependency-link"
+                    <button
+                      type="button"
+                      className="tdp-dependency-trigger"
                       title={`Open task: ${d.dependsOnTask.title}`}
+                      onClick={() => onOpenTask(d.dependsOnTask.id)}
                     >
                       <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
                       <span className="tdp-dependency-title">{d.dependsOnTask.title}</span>
-                    </Link>
+                    </button>
                     <Button
                       type="text"
                       size="small"
