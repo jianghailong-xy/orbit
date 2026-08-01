@@ -43,7 +43,7 @@ struct ComposerView: View {
     #endif
 
     // The composer bar is pinned to the screen bottom, so iOS opens this Menu upward and presents
-    // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Fable → Haiku)
+    // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Opus → Haiku)
     // exactly like the web composer. macOS drops the menu down, so keep the source order there.
     private var modelMenuItems: [ModelOption] {
         let models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,

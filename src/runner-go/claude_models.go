@@ -10,10 +10,10 @@ import (
 )
 
 // The tier aliases Claude Code advertises in `/model` that we surface in Orbit's picker — matching
-// Claude Code's own quick-pick (Opus / Sonnet / Haiku). The CLI advertises more (`fable`, `best`,
+// Claude Code's own quick-pick (Opus / Fable / Sonnet / Haiku). The CLI advertises more (`best`,
 // `opusplan`, the `[1m]` variants), but those are deliberately left out of the quick-pick there too;
 // they stay reachable by pinning a full `--model` id. Order is picker order (Opus first = default).
-var claudeModelAliases = []string{"opus", "sonnet", "haiku"}
+var claudeModelAliases = []string{"opus", "fable", "sonnet", "haiku"}
 
 func claudeCLIAvailable() bool {
 	_, err := exec.LookPath("claude")

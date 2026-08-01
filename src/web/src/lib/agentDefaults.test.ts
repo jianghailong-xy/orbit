@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
-import { contextWindowFor, DEFAULT_CONTEXT_WINDOW, type ConfiguredProvider } from './agentDefaults';
+import {
+  CLAUDE_MODEL_OPTIONS,
+  contextWindowFor,
+  DEFAULT_CONTEXT_WINDOW,
+  supportsAuto,
+  type ConfiguredProvider,
+} from './agentDefaults';
+
+describe('Claude model options', () => {
+  it('matches the current Claude Code picker, including Fable 5', () => {
+    expect(CLAUDE_MODEL_OPTIONS).toEqual([
+      { value: 'claude-opus-5', label: 'Opus 5' },
+      { value: 'claude-fable-5', label: 'Fable 5' },
+      { value: 'claude-sonnet-5', label: 'Sonnet 5' },
+      { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
+    ]);
+    expect(contextWindowFor('claude-fable-5')).toBe(1_000_000);
+    expect(supportsAuto('claude-fable-5')).toBe(true);
+  });
+});
 
 describe('contextWindowFor', () => {
   it('takes Codex windows from the runner catalog, not a built-in guess', () => {

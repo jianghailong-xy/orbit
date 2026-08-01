@@ -12,7 +12,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertFalse(codex.contains("claude-opus-4-8"))
 
         let claude = AgentDefaults.models(for: "claude").map(\.id)
-        XCTAssertEqual(claude, ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"])
+        XCTAssertEqual(claude, ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"])
         XCTAssertFalse(claude.contains("gpt-5.6-sol"))
 
         // Unknown provider falls back to Claude, never to an empty menu.
@@ -29,6 +29,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol"), "GPT-5.6-Sol")
         XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.5"), "GPT-5.5")
         XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "Opus 5")
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-fable-5"), "Fable 5")
         // Unknown ids (incl. non-current models like claude-opus-4-8) fall back to the raw string.
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")
     }
@@ -124,6 +125,8 @@ final class AgentDefaultsTests: XCTestCase {
                        200_000)
         // Static ids are untouched by the configured list.
         XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-5", catalog: nil, configured: [deepseek]),
+                       1_000_000)
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-fable-5", catalog: nil, configured: [deepseek]),
                        1_000_000)
     }
 

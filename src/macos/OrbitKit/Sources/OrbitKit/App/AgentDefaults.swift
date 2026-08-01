@@ -59,11 +59,12 @@ public enum AgentDefaults {
         configured?.first { $0.slug == slug }
     }
 
-    /// Mirrors Claude Code's `/model` picker (Opus 5 default / Sonnet 5 / Haiku 4.5). Previous/other
-    /// models (Opus 4.8, Fable 5, …) aren't listed — like Claude Code, they stay reachable by pinning
-    /// the id directly and render as their raw id, same as any other non-current model.
+    /// Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
+    /// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as their
+    /// raw id, same as any other non-current model.
     public static let claudeModels: [ModelOption] = [
         ModelOption(id: "claude-opus-5", name: "Opus 5"),
+        ModelOption(id: "claude-fable-5", name: "Fable 5"),
         ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
         ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
     ]
@@ -152,14 +153,14 @@ public enum AgentDefaults {
     }
 
     /// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
-    /// Claude only: these are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K),
-    /// and the Claude CLI has no way to report them, so they have to live here. Codex models are
-    /// absent on purpose — the runner catalog carries their real `context_window` from
-    /// `codex debug models`, so it stays right as Codex ships new models. Keep in sync with web's
-    /// CONTEXT_WINDOW_BY_MODEL.
+    /// Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
+    /// Haiku 4.5 = 200K), and the Claude CLI has no way to report them, so they have to live here.
+    /// Codex models are absent on purpose — the runner catalog carries their real `context_window`
+    /// from `codex debug models`, so it stays right as Codex ships new models. Keep in sync with
+    /// web's CONTEXT_WINDOW_BY_MODEL.
     private static func knownContextWindow(for id: String) -> Int? {
         switch id {
-        case "claude-opus-5", "claude-sonnet-5": return 1_000_000
+        case "claude-opus-5", "claude-fable-5", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
         default: return nil
         }

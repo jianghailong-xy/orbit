@@ -1,6 +1,52 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestFetchClaudeModelCatalogMatchesClaudeCodePicker(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "claude")
+	script := `#!/bin/sh
+case "$2" in
+  "/model opus") echo "Set model to Opus 5 for this session only" ;;
+  "/model fable") echo "Set model to Fable 5 for this session only" ;;
+  "/model sonnet") echo "Set model to Sonnet 5 for this session only" ;;
+  "/model haiku") echo "Set model to Haiku 4.5 for this session only" ;;
+  *) exit 2 ;;
+esac
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	models, err := fetchClaudeModelCatalog(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ value, label string }{
+		{"claude-opus-5", "Opus 5"},
+		{"claude-fable-5", "Fable 5"},
+		{"claude-sonnet-5", "Sonnet 5"},
+		{"claude-haiku-4-5", "Haiku 4.5"},
+	}
+	if len(models) != len(want) {
+		t.Fatalf("len(models) = %d, want %d: %#v", len(models), len(want), models)
+	}
+	for i, expected := range want {
+		got := models[i]
+		if got.Value != expected.value || got.Label != expected.label {
+			t.Errorf("models[%d] = {%q, %q}, want {%q, %q}", i, got.Value, got.Label, expected.value, expected.label)
+		}
+		if got.Priority == nil || *got.Priority != i {
+			t.Errorf("models[%d].Priority = %v, want %d", i, got.Priority, i)
+		}
+	}
+}
 
 func TestParseSetModelName(t *testing.T) {
 	cases := map[string]string{

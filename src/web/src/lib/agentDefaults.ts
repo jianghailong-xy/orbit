@@ -37,11 +37,12 @@ export const mergedProviderOptions = (
 
 // Model options shared across the app. `value` is the local runtime's model id;
 // `label` is the friendly display name shown in every picker.
-// Mirrors Claude Code's `/model` picker (Opus 5 default / Sonnet 5 / Haiku 4.5). Previous/other
-// models (Opus 4.8, Fable 5, …) aren't listed — like Claude Code, they stay reachable by pinning
-// the id directly and render as their raw id, same as any other non-current model.
+// Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
+// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as their
+// raw id, same as any other non-current model.
 export const CLAUDE_MODEL_OPTIONS = [
   { value: 'claude-opus-5', label: 'Opus 5' },
+  { value: 'claude-fable-5', label: 'Fable 5' },
   { value: 'claude-sonnet-5', label: 'Sonnet 5' },
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
@@ -63,12 +64,14 @@ export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
 export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS];
 
 // Per-model context-window size (max input tokens), for the composer's context-usage gauge.
-// Claude only: these are the models' true windows (Opus 5 / Sonnet 5 = 1M, Haiku 4.5 = 200K), and
-// the Claude CLI has no way to report them, so they have to live here. Codex models are absent on
-// purpose — the runner catalog carries their real `context_window` from `codex debug models`, so
-// it stays right as Codex ships new models. Keep in sync with Swift's knownContextWindow(for:).
+// Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
+// Haiku 4.5 = 200K), and the Claude CLI has no way to report them, so they have to live here.
+// Codex models are absent on purpose — the runner catalog carries their real `context_window`
+// from `codex debug models`, so it stays right as Codex ships new models. Keep in sync with
+// Swift's knownContextWindow(for:).
 export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-opus-5': 1_000_000,
+  'claude-fable-5': 1_000_000,
   'claude-sonnet-5': 1_000_000,
   'claude-haiku-4-5': 200_000,
 };
@@ -178,7 +181,7 @@ export const MODE_OPTIONS = [
 ];
 
 // Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
-export const AUTO_CAPABLE_MODELS = new Set(['claude-opus-5', 'claude-sonnet-5']);
+export const AUTO_CAPABLE_MODELS = new Set(['claude-opus-5', 'claude-fable-5', 'claude-sonnet-5']);
 export const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
 
 // App defaults used when the user has set no preference of their own.
