@@ -14,6 +14,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   AddDependencyDto,
   BatchAssignDto,
+  BatchDeleteDto,
   BatchExecuteDto,
   BatchStopDto,
   CreateTaskCommentDto,
@@ -75,6 +76,11 @@ export class TasksController {
   @Post('batch-stop')
   batchStop(@CurrentUser() user: AuthUser, @Body() dto: BatchStopDto) {
     return this.tasks.batchStop(user.userId, dto.taskIds);
+  }
+
+  @Post('batch-delete')
+  batchDelete(@CurrentUser() user: AuthUser, @Body() dto: BatchDeleteDto) {
+    return this.tasks.batchDelete(user.userId, dto.taskIds);
   }
 
   @Post('batch-assign')

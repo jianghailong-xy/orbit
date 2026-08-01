@@ -982,6 +982,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /**
+   * Hard-delete many tasks with the same semantics as {@link remove}. The owner filter
+   * is part of the DELETE statement, so unknown and cross-tenant ids are indistinguishable
+   * and silently ignored. Task comments and dependency edges cascade-delete; task sessions
+   * are retained and detached by the Session.taskId SET NULL foreign key, including live runs.
+   */
+  async batchDelete(ownerId: string, taskIds: string[]) {
+    const uniqueIds = [...new Set(taskIds)];
+    if (uniqueIds.length === 0) return { deleted: 0 };
+    const result = await this.prisma.task.deleteMany({
+      where: { ownerId, id: { in: uniqueIds } },
+    });
+    return { deleted: result.count };
+  }
+
   /** Set (or clear, when assigneeId is null) the responsible agent on many tasks at once. */
   async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
     await this.assertOwnedAgent(ownerId, assigneeId);

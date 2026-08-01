@@ -76,6 +76,12 @@ export class BatchStopDto {
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 }
 
+export class BatchDeleteDto {
+  // Hard-delete the caller's matching tasks. Unknown and cross-tenant ids are ignored;
+  // duplicates are collapsed by TasksService before reaching PostgreSQL.
+  @IsArray() @IsUUID('all', { each: true }) taskIds!: string[];
+}
+
 export class BatchAssignDto {
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 

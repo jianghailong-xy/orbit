@@ -809,14 +809,18 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
   padding: 4px 10px;
   background: var(--brand-tint);
   border: 1px solid var(--brand-border);
   border-radius: 8px;
 }
 .tasks-bulkbar-count {
+  flex: none;
   font-size: 13px;
   color: var(--text-1);
+  white-space: nowrap;
 }
 
 /* Progress overview under the list title: done (green) + in-progress (blue) over the total. */

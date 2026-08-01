@@ -29,6 +29,7 @@ import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { deleteTask, deleteTasks } from '../lib/taskDeletion';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 
@@ -244,10 +245,33 @@ export function TaskListView() {
   const pageTitle = isListView ? (listQ.data?.title ?? '') : isUnlisted ? 'No list' : 'Active';
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
+  // A deletion changes every task collection: the paged all/unlisted views, the embedded
+  // tasks in a named-list detail query, and the sidebar's per-list counts.
+  const invalidateAfterDelete = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['tasks'] }),
+      // Deleting a prerequisite removes dependency edges from other task details.
+      qc.invalidateQueries({ queryKey: ['task'] }),
+      qc.invalidateQueries({ queryKey: ['task-list'] }),
+      qc.invalidateQueries({ queryKey: ['task-lists'] }),
+    ]);
 
   const remove = useMutation({
-    mutationFn: (id: string) => api(`/tasks/${id}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
+    mutationFn: deleteTask,
+    onSuccess: async (_res, id) => {
+      // A row can be both checked and open in the detail panel. Do not leave either bit of
+      // local UI state pointing at an entity which no longer exists.
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setSelectedTaskId((current) => (current === id ? null : current));
+      qc.removeQueries({ queryKey: ['task', id], exact: true });
+      message.success('Task deleted');
+      await invalidateAfterDelete();
+    },
     onError: (e: Error) => message.error(e.message),
   });
   // Single-task run/retry from the row's hover actions; reuses the per-task execute the
@@ -302,6 +326,19 @@ export function TaskListView() {
       message.success(`Set assignee on ${res.updated} task(s)`);
       invalidate();
     },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const batchDelete = useMutation({
+    mutationFn: deleteTasks,
+    onSuccess: async (res, ids) => {
+      const deletedIds = new Set(ids);
+      setSelectedIds(new Set());
+      setSelectedTaskId((current) => (current && deletedIds.has(current) ? null : current));
+      for (const id of ids) qc.removeQueries({ queryKey: ['task', id], exact: true });
+      message.success(`Deleted ${res.deleted} task${res.deleted === 1 ? '' : 's'}`);
+      await invalidateAfterDelete();
+    },
+    // Keep the selection intact on failure so the user can inspect the error and retry.
     onError: (e: Error) => message.error(e.message),
   });
 
@@ -605,8 +642,13 @@ export function TaskListView() {
           )}
           <Popconfirm
             title="Delete this task?"
+            description="This action cannot be undone."
             okText="Delete"
-            okButtonProps={{ danger: true }}
+            cancelText="Cancel"
+            okButtonProps={{
+              danger: true,
+              loading: remove.isPending && remove.variables === r.id,
+            }}
             onConfirm={() => remove.mutate(r.id)}
           >
             <Button
@@ -614,6 +656,9 @@ export function TaskListView() {
               type="text"
               danger
               icon={<DeleteOutlined />}
+              aria-label={`Delete ${r.title}`}
+              loading={remove.isPending && remove.variables === r.id}
+              disabled={remove.isPending && remove.variables !== r.id}
               onClick={(e) => e.stopPropagation()}
             />
           </Popconfirm>
@@ -691,6 +736,23 @@ export function TaskListView() {
                 <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
                   Set assignee
                 </Button>
+                <Popconfirm
+                  title={`Delete ${selectedRows.length} selected task${selectedRows.length === 1 ? '' : 's'}?`}
+                  description="This action cannot be undone."
+                  okText="Delete"
+                  cancelText="Cancel"
+                  okButtonProps={{ danger: true, loading: batchDelete.isPending }}
+                  onConfirm={() => batchDelete.mutate(selectedRows.map((r: any) => r.id))}
+                >
+                  <Button
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    loading={batchDelete.isPending}
+                  >
+                    Delete
+                  </Button>
+                </Popconfirm>
                 <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
                   Clear
                 </Button>

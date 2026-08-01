@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validate } from 'class-validator';
-import { AddDependencyDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import { AddDependencyDto, BatchDeleteDto, CreateTaskDto, UpdateTaskDto } from './dto';
 
 const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
@@ -33,4 +33,14 @@ test('task creation and single-edge DTOs reject non-UUID dependency ids', async 
 
   assert.notEqual((await validate(create)).length, 0);
   assert.notEqual((await validate(add)).length, 0);
+});
+
+test('batch delete accepts UUID arrays and rejects malformed task ids', async () => {
+  const valid = Object.assign(new BatchDeleteDto(), { taskIds: [TASK_A, TASK_A, TASK_B] });
+  const empty = Object.assign(new BatchDeleteDto(), { taskIds: [] });
+  const invalid = Object.assign(new BatchDeleteDto(), { taskIds: [TASK_A, 'not-a-uuid'] });
+
+  assert.equal((await validate(valid)).length, 0);
+  assert.equal((await validate(empty)).length, 0);
+  assert.notEqual((await validate(invalid)).length, 0);
 });
