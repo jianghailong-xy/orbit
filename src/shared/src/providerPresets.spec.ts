@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AgentProvider } from './enums';
 import { PROVIDER_PRESETS, providerPreset } from './providerPresets';
 
 // The catalogue is hand-edited whenever a vendor ships a model, and the server now derives real
@@ -11,7 +12,7 @@ describe('PROVIDER_PRESETS', () => {
     for (const slug of slugs) {
       // Same rule the server enforces on a configured provider (ProvidersService.assertSlug).
       expect(slug).toMatch(/^[a-z][a-z0-9-]*$/);
-      expect(['claude', 'codex']).not.toContain(slug);
+      expect(Object.values(AgentProvider)).not.toContain(slug);
     }
   });
 
@@ -34,6 +35,8 @@ describe('PROVIDER_PRESETS', () => {
 
   it('resolves a preset only for a slug it knows', () => {
     expect(providerPreset('anthropic')?.label).toBe('Anthropic (Claude)');
+    expect(providerPreset('moonshot')?.label).toBe('Kimi (Moonshot)');
+    expect(providerPreset('kimi')).toBeUndefined();
     expect(providerPreset('nope')).toBeUndefined();
     expect(providerPreset(null)).toBeUndefined();
     expect(providerPreset(undefined)).toBeUndefined();

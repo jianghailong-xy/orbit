@@ -90,13 +90,13 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
 /**
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
- * `claude`/`codex` provider runs on the runner's own OAuth login (fix it on that machine), any
+ * `claude`/`codex`/`kimi` provider runs on the runner's own login (fix it on that machine), any
  * other slug is a configured API key (fix it in Providers). AgentView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — 'claude' | 'codex' | a configured provider. */
+  /** Session's provider slug — 'claude' | 'codex' | 'kimi' | a configured provider. */
   provider: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
@@ -488,7 +488,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
 }
 
 /**
- * Sign-in commands for the two built-in providers, mirroring the runner's own `orbit doctor`
+ * Sign-in commands for the built-in providers, mirroring the runner's own `orbit doctor`
  * (engineSpecs in doctor.go): the interactive sign-in, plus the headless alternative for a
  * machine with no browser. Kept in step with doctor.go — the user may well run doctor next.
  */
@@ -507,6 +507,15 @@ const LOCAL_LOGIN: Record<string, { login: string; headless: ReactNode }> = {
       <>
         Run <code>codex login --device-auth</code> there — plain <code>codex login</code> waits on
         a localhost callback that only that machine's own browser can reach.
+      </>
+    ),
+  },
+  kimi: {
+    login: 'kimi login',
+    headless: (
+      <>
+        Run <code>kimi login</code> there — it uses the same device-code flow without a local
+        callback.
       </>
     ),
   },

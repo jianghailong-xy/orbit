@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
@@ -9,6 +10,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   StreamableFile,
   UploadedFile as UploadedFileParam,
   UnauthorizedException,
@@ -17,9 +19,11 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import {
   AgentProvider,
   AgentExecConfig,
+  ActivateTurnLeasesRequest,
   ArtifactResultRequest,
   ApprovalCreateRequest,
   ApprovalDecisionResponse,
@@ -35,6 +39,7 @@ import {
   QuestionAnswers,
   ReclaimResponse,
   ReclaimSession,
+  ReleaseTurnLeasesRequest,
   RunEventBatch,
   RunEventType,
   RunStatus as SharedRunStatus,
@@ -52,6 +57,8 @@ import {
   SessionDiffResultRequest,
   SessionEndReason,
   SessionMergeResultRequest,
+  TakeoverTurnLeasesRequest,
+  TakeoverTurnLeasesResponse,
   TurnAttachment,
   TurnCompleteRequest,
   WorktreesRemovableRequest,
@@ -60,6 +67,7 @@ import {
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
+import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, UploadedFile } from '../attachments/attachments.media';
 import { PrismaService } from '../prisma/prisma.service';
@@ -94,6 +102,7 @@ const INBOX_LEASE_MS = 300_000;
 // until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
+const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
@@ -115,13 +124,12 @@ export function runnerSupportsCapability(
   );
 }
 
-function normalizeProvider(value?: string | null): AgentProvider {
-  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-}
-
-function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
-  if (effort == null) return undefined;
-  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
+function parseLeaseGeneration(value?: string): string | null {
+  if (value == null || value === '') return null;
+  if (!LEASE_GENERATION_RE.test(value)) {
+    throw new BadRequestException('leaseGeneration must be a UUID');
+  }
+  return value.toLowerCase();
 }
 
 @Controller('runner')
@@ -168,8 +176,13 @@ export class RunnerApiController {
       orderBy: { enrolledAt: 'desc' },
     });
     const runner = existing
-      ? await this.prisma.runner.update({ where: { id: existing.id }, data: runnerData })
-      : await this.prisma.runner.create({ data: { ...runnerData, name: runnerName, ownerId } });
+      ? await this.prisma.runner.update({
+          where: { id: existing.id },
+          data: runnerData,
+        })
+      : await this.prisma.runner.create({
+          data: { ...runnerData, name: runnerName, ownerId },
+        });
 
     await this.prisma.enrollmentToken.update({
       where: { id: enrollment.id },
@@ -221,10 +234,7 @@ export class RunnerApiController {
   }
 
   /** Insert a device session, regenerating the short code on the rare collision. */
-  private async createDeviceSession(
-    dto: DeviceStartRequest,
-    deviceCode: string,
-  ): Promise<string> {
+  private async createDeviceSession(dto: DeviceStartRequest, deviceCode: string): Promise<string> {
     const expiresAt = new Date(Date.now() + DEVICE_TTL_MS);
     for (let attempt = 0; attempt < 5; attempt++) {
       const userCode = generateUserCode();
@@ -267,11 +277,16 @@ export class RunnerApiController {
       maxConcurrent: number;
     },
   ) {
-    const fresh =
-      !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
+    const fresh = !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
     const agents = await this.prisma.agent.findMany({
       where: { runnerId: runner.id, deletedAt: null },
-      select: { id: true, name: true, provider: true, agentKey: true, workDir: true },
+      select: {
+        id: true,
+        name: true,
+        provider: true,
+        agentKey: true,
+        workDir: true,
+      },
       orderBy: { name: 'asc' },
     });
     return {
@@ -308,6 +323,21 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string; version: string | null },
     @Body() dto: RunnerHeartbeatRequest,
   ): Promise<RunnerHeartbeatResponse> {
+    const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
+      throw new BadRequestException('too many supervised session IDs');
+    }
+    const supervisedSessionIds = heartbeatLeaseOwner
+      ? [
+          ...new Set(
+            (dto?.supervisedSessionIds ?? []).map((id) => {
+              const parsed = parseLeaseGeneration(id);
+              if (!parsed) throw new BadRequestException('supervised session IDs must be UUIDs');
+              return parsed;
+            }),
+          ),
+        ]
+      : [];
     const updated = await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
@@ -324,6 +354,28 @@ export class RunnerApiController {
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
       },
     });
+    // A cold supervisor never polls /inbox, so endpoint-level 409 fencing alone
+    // cannot tell an overlapping old process to detach it. Echo every locally
+    // supervised id and cancel anything that is no longer both open and owned by
+    // this exact process. Legacy heartbeats omit leaseOwner and skip this fence.
+    let ownershipLostSessionIds: string[] = [];
+    if (heartbeatLeaseOwner && supervisedSessionIds.length) {
+      try {
+        const matching = await this.prisma.session.findMany({
+          where: {
+            id: { in: supervisedSessionIds },
+            assignedRunnerId: runner.id,
+            status: { in: OPEN },
+            inboxLeaseOwner: heartbeatLeaseOwner,
+          },
+          select: { id: true },
+        });
+        const matchingIds = new Set(matching.map((session) => session.id));
+        ownershipLostSessionIds = supervisedSessionIds.filter((id) => !matchingIds.has(id));
+      } catch {
+        // Do not cancel on an indeterminate DB read; the next heartbeat retries.
+      }
+    }
     // Persist each running session's live worktree diff so the composer's status bar can
     // appear mid-turn, not just at turn-complete. The `status in OPEN` guard stops a
     // straggler heartbeat from overwriting a just-finalized session's committed diff;
@@ -333,7 +385,12 @@ export class RunnerApiController {
         await Promise.all(
           dto.sessions.map(async (s) => {
             await this.prisma.session.updateMany({
-              where: { id: s.sessionId, assignedRunnerId: runner.id, status: { in: OPEN } },
+              where: {
+                id: s.sessionId,
+                assignedRunnerId: runner.id,
+                status: { in: OPEN },
+                ...(heartbeatLeaseOwner ? { inboxLeaseOwner: heartbeatLeaseOwner } : {}),
+              },
               data: {
                 isolationStatus: s.isolationStatus,
                 changedFiles: (s.changedFiles ?? []) as unknown as Prisma.InputJsonValue,
@@ -352,7 +409,12 @@ export class RunnerApiController {
             });
             // New commits after an earlier merge: retire the stale "✓ Merged" so the bar
             // offers Merge again for the new work.
-            await this.clearStaleMergedStatus(s.sessionId, runner.id, s.branchMerged);
+            await this.clearStaleMergedStatus(
+              s.sessionId,
+              runner.id,
+              s.branchMerged,
+              heartbeatLeaseOwner ?? undefined,
+            );
           }),
         );
       } catch {
@@ -377,6 +439,7 @@ export class RunnerApiController {
     // syncs its self-gate to a UI/API change without needing a restart.
     return {
       cancelSessionIds,
+      leaseLostSessionIds: ownershipLostSessionIds,
       maxConcurrent: updated.maxConcurrent,
       mergeRequests,
       commitRequests,
@@ -401,16 +464,17 @@ export class RunnerApiController {
   private async drainLoginRequest(runnerId: string): Promise<LoginCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
-      select: { loginStatus: true, loginEngine: true, loginCode: true, loginAt: true },
+      select: {
+        loginStatus: true,
+        loginEngine: true,
+        loginCode: true,
+        loginAt: true,
+      },
     });
     if (!r?.loginStatus) return undefined;
     const started = r.loginAt?.getTime() ?? 0;
     if (started && Date.now() - started > LOGIN_RELAY_TIMEOUT_MS) {
-      if (
-        r.loginStatus === 'pending' ||
-        r.loginStatus === 'awaiting_code' ||
-        r.loginStatus === 'awaiting_approval'
-      ) {
+      if (r.loginStatus === 'pending' || r.loginStatus === 'awaiting_code' || r.loginStatus === 'awaiting_approval') {
         await this.prisma.runner.update({
           where: { id: runnerId },
           data: {
@@ -431,7 +495,10 @@ export class RunnerApiController {
         attempt: r.loginAt?.toISOString() ?? '',
       };
     if (r.loginStatus === 'awaiting_code' && r.loginCode) {
-      await this.prisma.runner.update({ where: { id: runnerId }, data: { loginCode: null } });
+      await this.prisma.runner.update({
+        where: { id: runnerId },
+        data: { loginCode: null },
+      });
       return { action: 'code', code: r.loginCode };
     }
     return undefined;
@@ -446,12 +513,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async loginResult(@CurrentRunner() runner: { id: string }, @Body() body: LoginResult) {
     const status = body?.status;
-    if (
-      status !== 'awaiting_code' &&
-      status !== 'awaiting_approval' &&
-      status !== 'done' &&
-      status !== 'failed'
-    ) {
+    if (status !== 'awaiting_code' && status !== 'awaiting_approval' && status !== 'done' && status !== 'failed') {
       throw new BadRequestException('Unknown login status');
     }
     const waiting = status === 'awaiting_code' || status === 'awaiting_approval';
@@ -512,6 +574,9 @@ export class RunnerApiController {
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: { agent: true },
     });
+    // This endpoint is deliberately read-only. The runner takes each row over with an
+    // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed reclaim
+    // request can never retire a generation activated from a newer response.
     const out: ReclaimSession[] = [];
     for (const s of sessions) {
       const agent = s.agent;
@@ -519,13 +584,17 @@ export class RunnerApiController {
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions.
-      const customRow = isBuiltinProvider(declared)
+      const customRow = isBuiltinProvider(declared, s.providerBuiltin)
         ? null
         : await this.prisma.modelProvider.findFirst({
-            where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: s.ownerId }] },
+            where: {
+              slug: declared!,
+              OR: [{ ownerId: null }, { ownerId: s.ownerId }],
+            },
           });
       const exec = resolveProviderExec({
         declaredProvider: declared,
+        declaredProviderBuiltin: s.providerBuiltin,
         customRow,
         sessionModel: s.model,
         agentModel: agent?.model,
@@ -555,9 +624,7 @@ export class RunnerApiController {
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
         permissionMode:
-          (s.permissionMode as PermissionMode) ??
-          (agent?.permissionMode as PermissionMode) ??
-          PermissionMode.DONT_ASK,
+          (s.permissionMode as PermissionMode) ?? (agent?.permissionMode as PermissionMode) ?? PermissionMode.DONT_ASK,
         // Per-session effort wins; else the agent's default effort (like model/mode above).
         effort: normalizeEffortForProvider(provider, s.effort ?? agent?.effort),
         maxTurns: agent?.maxTurns ?? undefined,
@@ -583,6 +650,7 @@ export class RunnerApiController {
         status: s.status as SharedRunStatus,
         provider,
         runtimeSessionId: runtime.runtimeSessionId,
+        leaseOwner: s.inboxLeaseOwner ?? undefined,
         title: s.title,
         sessionUuid: runtime.sessionUuid,
         maxSeq: agg._max.seq ?? 0,
@@ -601,28 +669,169 @@ export class RunnerApiController {
           : undefined,
       });
     }
-    // Release the leases the dead process took to its grave. A restart-time inbox
-    // long-poll can lease a message the runner never feeds claude — its drain cancels
-    // the poller and drops the pulled turn — and that orphaned IN_FLIGHT turn then
-    // blocks every message queued behind it (see dequeueTurn's `NOT EXISTS inflight`)
-    // for the rest of its 5-minute lease. This runner has just re-attached, so nothing
-    // is holding those leases any more: expire them so the first inbox poll re-delivers
-    // (as a continue nudge when the turn already produced output) instead of leaving
-    // the user's follow-ups sitting at "Queued".
-    if (out.length > 0) {
-      await this.prisma.conversationTurn.updateMany({
-        where: {
-          sessionId: { in: out.map((s) => s.sessionId) },
-          kind: { in: ['message', 'shell'] },
-          status: 'IN_FLIGHT',
-        },
-        // Dated into the past, not at "now": dequeueTurn tests `lease_deadline_at < now()`
-        // against the DB clock, so an exactly-now deadline would hinge on the two statements
-        // never sharing a timestamp.
-        data: { leaseDeadlineAt: new Date(Date.now() - 1000) },
-      });
-    }
     return { sessions: out };
+  }
+
+  /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/takeover-leases')
+  @HttpCode(200)
+  async takeoverLeases(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: TakeoverTurnLeasesRequest,
+  ): Promise<TakeoverTurnLeasesResponse> {
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+    const expectedLeaseOwner = parseLeaseGeneration(dto?.expectedLeaseOwner ?? undefined);
+    const status = await this.prisma.$transaction(async (tx) => {
+      const owned = await tx.$queryRaw<
+        Array<{
+          id: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+          status: RunStatus;
+        }>
+      >`
+        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner", status
+        FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE
+      `;
+      if (owned.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      if (!OPEN.includes(owned[0].status)) {
+        throw new ConflictException('session is no longer open');
+      }
+      const currentOwner = owned[0].inboxLeaseOwner;
+      if (currentOwner === leaseOwner) return owned[0].status;
+      if (currentOwner !== expectedLeaseOwner) {
+        throw new ConflictException('inbox lease owner changed; refresh the session snapshot');
+      }
+
+      const fence = owned[0].inboxLeaseGeneration ?? randomUUID();
+      await tx.$executeRaw`
+        INSERT INTO "inbox_lease_generation"
+          ("generation", "session_id", "lease_owner", "retired_at")
+        VALUES (${fence}::uuid, ${sessionId}::uuid, ${currentOwner}::uuid, now())
+        ON CONFLICT ("generation") DO UPDATE
+          SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+        WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+      `;
+      await tx.$executeRaw`
+        UPDATE "session"
+        SET "inbox_lease_generation" = ${fence}::uuid,
+            "inbox_lease_owner" = ${leaseOwner}::uuid
+        WHERE id = ${sessionId}::uuid
+      `;
+      await tx.$executeRaw`
+        UPDATE "conversation_turn"
+        SET "lease_deadline_at" = now() - interval '1 second'
+        WHERE "session_id" = ${sessionId}::uuid
+          AND kind IN ('message', 'shell')
+          AND status = 'IN_FLIGHT'
+      `;
+      return owned[0].status;
+    });
+    this.realtime.notifyInbox(sessionId);
+    return { ok: true, status: status as SharedRunStatus };
+  }
+
+  /** Activate one freshly reserved engine as this session's sole inbox consumer. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('sessions/:id/activate-leases')
+  @HttpCode(200)
+  async activateLeases(
+    @CurrentRunner() runner: { id: string },
+    @Param('id') sessionId: string,
+    @Body() dto: ActivateTurnLeasesRequest,
+  ): Promise<{ ok: true }> {
+    const generation = parseLeaseGeneration(dto?.leaseGeneration);
+    if (!generation) throw new BadRequestException('leaseGeneration is required');
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+    await this.prisma.$transaction(async (tx) => {
+      const owned = await tx.$queryRaw<
+        Array<{
+          id: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+        }>
+      >`
+        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner"
+        FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE
+      `;
+      if (owned.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      if (owned[0].inboxLeaseOwner !== leaseOwner) {
+        throw new ConflictException('this runner process does not own inbox activation');
+      }
+      const current = owned[0].inboxLeaseGeneration;
+      if (current && current !== generation) {
+        const currentState = await tx.$queryRaw<Array<{ retiredAt: Date | null }>>`
+          SELECT "retired_at" AS "retiredAt"
+          FROM "inbox_lease_generation"
+          WHERE "generation" = ${current}::uuid AND "session_id" = ${sessionId}::uuid
+        `;
+        // Missing metadata is an unknown active consumer, not permission to replace it.
+        if (currentState.length === 0 || currentState[0].retiredAt === null) {
+          throw new ConflictException('another inbox generation is active');
+        }
+      }
+
+      // Register before making the generation current. ON CONFLICT makes a lost committed
+      // response idempotent, while the verification below rejects a generation that release
+      // tombstoned before this delayed activation reached the Session lock.
+      await tx.$executeRaw`
+        INSERT INTO "inbox_lease_generation"
+          ("generation", "session_id", "lease_owner")
+        VALUES (${generation}::uuid, ${sessionId}::uuid, ${leaseOwner}::uuid)
+        ON CONFLICT ("generation") DO NOTHING
+      `;
+      const registered = await tx.$queryRaw<
+        Array<{
+          sessionId: string;
+          leaseOwner: string | null;
+          retiredAt: Date | null;
+        }>
+      >`
+        SELECT "session_id" AS "sessionId", "lease_owner" AS "leaseOwner",
+               "retired_at" AS "retiredAt"
+        FROM "inbox_lease_generation"
+        WHERE "generation" = ${generation}::uuid
+      `;
+      if (
+        registered.length !== 1 ||
+        registered[0].sessionId !== sessionId ||
+        registered[0].leaseOwner !== leaseOwner ||
+        registered[0].retiredAt !== null
+      ) {
+        throw new ConflictException('inbox generation has already been retired or reused');
+      }
+      await tx.$executeRaw`
+        UPDATE "session"
+        SET "inbox_lease_generation" = ${generation}::uuid
+        WHERE id = ${sessionId}::uuid
+      `;
+      // A legacy NULL poll or a predecessor may have leased after reclaim but before this
+      // activation acquired the Session lock. Make every non-current executable turn visible
+      // now, rather than letting it block the new engine for the normal five-minute deadline.
+      await tx.$executeRaw`
+        UPDATE "conversation_turn"
+        SET "lease_deadline_at" = now() - interval '1 second'
+        WHERE "session_id" = ${sessionId}::uuid
+          AND kind IN ('message', 'shell')
+          AND status = 'IN_FLIGHT'
+          AND "lease_generation" IS DISTINCT FROM ${generation}::uuid
+      `;
+    });
+    return { ok: true };
   }
 
   /** Expire input leases abandoned when a warm runtime is evicted. */
@@ -632,17 +841,52 @@ export class RunnerApiController {
   async releaseLeases(
     @CurrentRunner() runner: { id: string },
     @Param('id') sessionId: string,
+    @Body() dto?: ReleaseTurnLeasesRequest,
   ): Promise<{ ok: true }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
-    await this.prisma.conversationTurn.updateMany({
-      where: {
-        sessionId,
-        kind: { in: ['message', 'shell'] },
-        status: 'IN_FLIGHT',
-      },
-      // Keep this strictly before both the application and database clocks: dequeueTurn
-      // only makes a leased turn eligible again once lease_deadline_at < now().
-      data: { leaseDeadlineAt: new Date(Date.now() - 1000) },
+    const generation = parseLeaseGeneration(dto?.leaseGeneration);
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    await this.prisma.$transaction(async (tx) => {
+      // Use the same Session row lock as dequeueTurn. Whichever request arrives
+      // last observes the other's generation, so a delayed release from a dead
+      // process can never expire its replacement's lease.
+      const owned = await tx.$queryRaw<
+        Array<{
+          id: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+        }>
+      >`
+        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner" FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE
+      `;
+      if (owned.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      if (generation) {
+        // Upsert a tombstone even when release beats activation to the lock. A delayed
+        // activate(G1) then observes retired_at and cannot make G1 current again.
+        await tx.$executeRaw`
+          INSERT INTO "inbox_lease_generation"
+            ("generation", "session_id", "lease_owner", "retired_at")
+          VALUES (${generation}::uuid, ${sessionId}::uuid, ${leaseOwner}::uuid, now())
+          ON CONFLICT ("generation") DO UPDATE
+            SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
+          WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
+        `;
+      }
+      // A legacy runner omits both generation and owner. Preserve its NULL session state so
+      // the replacement legacy engine can continue polling; modern runners are fenced by
+      // takeover before they start a supervisor and always release a concrete generation.
+      await tx.$executeRaw`
+        UPDATE "conversation_turn"
+        SET "lease_deadline_at" = now() - interval '1 second'
+        WHERE "session_id" = ${sessionId}::uuid
+          AND kind IN ('message', 'shell')
+          AND status = 'IN_FLIGHT'
+          AND "lease_generation" IS NOT DISTINCT FROM ${generation}::uuid
+      `;
     });
     this.realtime.notifyInbox(sessionId);
     return { ok: true };
@@ -665,11 +909,12 @@ export class RunnerApiController {
   async inbox(
     @CurrentRunner() runner: { id: string },
     @Param('id') sessionId: string,
+    @Query('leaseGeneration') leaseGeneration?: string,
   ): Promise<RunInboxResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    const generation = parseLeaseGeneration(leaseGeneration);
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
-      const turn = await this.dequeueTurn(sessionId);
+      const turn = await this.dequeueTurn(sessionId, runner.id, generation);
       if (turn) return turn;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
@@ -697,7 +942,11 @@ export class RunnerApiController {
     });
     if (!att) throw new NotFoundException('attachment not found');
     const data = Buffer.from(att.data);
-    return new StreamableFile(data, { type: att.mimeType, disposition: 'inline', length: data.length });
+    return new StreamableFile(data, {
+      type: att.mimeType,
+      disposition: 'inline',
+      length: data.length,
+    });
   }
 
   /**
@@ -751,18 +1000,51 @@ export class RunnerApiController {
    * message, and PENDING or an expired IN_FLIGHT lease (at-least-once). Executable
    * messages are gated on the claim path having already set the Session to RUNNING.
    */
-  private async dequeueTurn(sessionId: string): Promise<RunInboxResponse | null> {
+  private async dequeueTurn(
+    sessionId: string,
+    runnerId: string,
+    leaseGeneration: string | null,
+  ): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
-      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
-      const leaseUntil = new Date(Date.now() + INBOX_LEASE_MS);
-      const rows = await tx.$queryRaw<
-        Array<{ id: string; seq: number; kind: string; content: string | null }>
-      >`
+      const owned = await tx.$queryRaw<Array<{ id: string; inboxLeaseGeneration: string | null }>>`
+        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration" FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
+        FOR UPDATE
+      `;
+      if (owned.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      if (owned[0].inboxLeaseGeneration !== leaseGeneration) {
+        // A modern poller carries a concrete generation. Once takeover/activation has
+        // replaced it, returning an empty poll would let the dead engine keep looping
+        // indefinitely. Tell it explicitly that its ownership was lost. Legacy NULL
+        // pollers retain the old empty-poll compatibility behavior during upgrades.
+        if (leaseGeneration) {
+          throw new ConflictException('inbox lease generation is no longer current');
+        }
+        return null;
+      }
+      if (leaseGeneration) {
+        const active = await tx.$queryRaw<Array<{ generation: string }>>`
+          SELECT "generation"
+          FROM "inbox_lease_generation"
+          WHERE "generation" = ${leaseGeneration}::uuid
+            AND "session_id" = ${sessionId}::uuid
+            AND "retired_at" IS NULL
+        `;
+        if (active.length === 0) {
+          throw new ConflictException('inbox lease generation is missing or retired');
+        }
+      }
+      const rows = await tx.$queryRaw<Array<{ id: string; seq: number; kind: string; content: string | null }>>`
         UPDATE "conversation_turn"
-          SET status = 'IN_FLIGHT', "delivered_at" = now(), "lease_deadline_at" = ${leaseUntil}
+          SET status = 'IN_FLIGHT',
+              "delivered_at" = now(),
+              "lease_deadline_at" = now() + (${INBOX_LEASE_MS} * interval '1 millisecond'),
+              "lease_generation" = ${leaseGeneration}::uuid
         WHERE id = (
           SELECT turn.id FROM "conversation_turn" turn
           WHERE turn."session_id" = ${sessionId}::uuid
@@ -813,7 +1095,10 @@ export class RunnerApiController {
         // A message turn that already produced runtime output is a lease re-delivery.
         // Resume with a continuation nudge instead of replaying its side effects.
         const started = await tx.runEvent.findFirst({
-          where: { turnId: t.id, type: { in: [...CLAUDE_STARTED_EVENT_TYPES] } },
+          where: {
+            turnId: t.id,
+            type: { in: [...CLAUDE_STARTED_EVENT_TYPES] },
+          },
           select: { id: true },
         });
         if (started) {
@@ -865,7 +1150,9 @@ export class RunnerApiController {
     await this.assertSessionOwnership(sessionId, runner.id);
     const existing = dto.toolUseId
       ? await this.prisma.approval.findUnique({
-          where: { sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId } },
+          where: {
+            sessionId_toolUseId: { sessionId, toolUseId: dto.toolUseId },
+          },
         })
       : null;
     const approval =
@@ -908,8 +1195,16 @@ export class RunnerApiController {
     await this.assertSessionOwnership(sessionId, runner.id);
     const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
     for (;;) {
-      const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId } });
-      if (!a) return { id: approvalId, status: 'DENIED', behavior: 'deny', message: 'approval not found' };
+      const a = await this.prisma.approval.findFirst({
+        where: { id: approvalId, sessionId },
+      });
+      if (!a)
+        return {
+          id: approvalId,
+          status: 'DENIED',
+          behavior: 'deny',
+          message: 'approval not found',
+        };
       if (a.status !== 'PENDING') {
         return {
           id: a.id,
@@ -933,28 +1228,44 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: TurnCompleteRequest,
   ) {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;
-    // A task run that failed mid-turn (e.g. an API/content-filter error the agent
-    // couldn't recover from — the runner now reports such turns as FAILED) would
-    // otherwise park at AWAITING_INPUT and sit there with the task stuck IN_PROGRESS
-    // and nothing watching. For a task-bound session we instead finalize the session
-    // FAILED and reclaim the task as FAILED so it surfaces for a human. Chat sessions
-    // (no taskId) keep parking so the user can retry in place.
-    const failTask = dto.status === RunStatus.FAILED && !!session.taskId;
     const finalized = await this.prisma.$transaction(async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
-      // lost-wakeup state AWAITING_INPUT + PENDING conversation turn.
-      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
-      const current = await tx.session.findUnique({ where: { id: sessionId }, select: { status: true } });
+      // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
+      // fences every write below to the runner process that currently owns the Session.
+      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      const current = await tx.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: { status: true, taskId: true },
+      });
+      // A task run that failed mid-turn (e.g. an API/content-filter error the agent
+      // couldn't recover from — the runner now reports such turns as FAILED) would
+      // otherwise park at AWAITING_INPUT and sit there with the task stuck IN_PROGRESS
+      // and nothing watching. For a task-bound session we instead finalize the session
+      // FAILED and reclaim the task as FAILED so it surfaces for a human. Chat sessions
+      // (no taskId) keep parking so the user can retry in place.
+      const failTask = dto.status === RunStatus.FAILED && !!current.taskId;
+      // Keep this formerly post-transaction cleanup behind the same process fence. It is
+      // valid for duplicate completions too, so apply it before the idempotent ack check.
+      if (dto.branchMerged === false) {
+        await tx.session.updateMany({
+          where: {
+            id: sessionId,
+            assignedRunnerId: runner.id,
+            mergeStatus: 'merged',
+          },
+          data: { mergeStatus: null, mergeError: null },
+        });
+      }
       // Idempotent ack: only the first turn-complete for this turn applies.
       const ack = await tx.conversationTurn.updateMany({
         where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, status: current?.status ?? session.status };
+        return { applied: false, status: current.status, failTask };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -971,15 +1282,21 @@ export class RunnerApiController {
       const pendingExecutable = failTask
         ? 0
         : await tx.conversationTurn.count({
-            where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
+            where: {
+              sessionId,
+              kind: { in: ['message', 'shell'] },
+              status: 'PENDING',
+            },
           });
-      const nextStatus = failTask
-        ? RunStatus.FAILED
-        : statusAfterTurnCompleted(pendingExecutable > 0);
+      const nextStatus = failTask ? RunStatus.FAILED : statusAfterTurnCompleted(pendingExecutable > 0);
       // Settle + bill only if this is still the active turn and is not being torn down,
       // so a late/retried completion cannot resurrect a finalized session or double-bill.
       const parked = await tx.session.updateMany({
-        where: { id: sessionId, cancelRequestedAt: null, status: RunStatus.RUNNING },
+        where: {
+          id: sessionId,
+          cancelRequestedAt: null,
+          status: RunStatus.RUNNING,
+        },
         data: {
           status: nextStatus,
           // On a failed task turn claude is still alive (the turn errored, the process
@@ -988,13 +1305,19 @@ export class RunnerApiController {
           // cancelRequestedAt so the next heartbeat's cancel-drain tells the runner to
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failTask
-            ? { error: dto.result || 'run failed', finishedAt: new Date(), cancelRequestedAt: new Date() }
+            ? {
+                error: dto.result || 'run failed',
+                finishedAt: new Date(),
+                cancelRequestedAt: new Date(),
+              }
             : {}),
           // Live worktree state for the composer's status bar, refreshed each turn (the
           // runner reports the worktree's uncommitted diff vs base on every turn-complete).
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
-            ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
+            ? {
+                changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue,
+              }
             : {}),
           ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
           // Whether the branch already landed in main — the turn-end snapshot an idle session
@@ -1013,16 +1336,28 @@ export class RunnerApiController {
         },
       });
       if (parked.count === 0) {
-        const latest = await tx.session.findUnique({ where: { id: sessionId }, select: { status: true } });
-        return { applied: false, status: latest?.status ?? current?.status ?? session.status };
+        const latest = await tx.session.findUnique({
+          where: { id: sessionId },
+          select: { status: true },
+        });
+        return {
+          applied: false,
+          status: latest?.status ?? current.status,
+          failTask,
+        };
       }
       // Per-file unified diffs to the side table (never on the session row, so the detail/
       // list payload stays small) — fetched on demand when the user opens a file's diff.
       if (dto.changedDiff !== undefined) {
         await tx.sessionDiff.upsert({
           where: { sessionId },
-          create: { sessionId, patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
-          update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+          create: {
+            sessionId,
+            patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+          },
+          update: {
+            patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+          },
         });
       }
       if (dto.modelUsage) {
@@ -1044,16 +1379,12 @@ export class RunnerApiController {
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
-        await reclaimStalledTask(tx, session.taskId!, TaskStatus.FAILED);
-        await postRunFailureComment(tx, session.taskId!, dto.result || 'run failed');
+        await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
+        await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, status: nextStatus };
+      return { applied: true, status: nextStatus, failTask };
     });
-    // Post-turn worktree verdict: new commits after an earlier merge retire the stale
-    // "✓ Merged" (see clearStaleMergedStatus). Outside the transaction — independent write,
-    // self-guarded, and valid even for a duplicate/late turn-complete.
-    await this.clearStaleMergedStatus(sessionId, runner.id, dto.branchMerged);
-    if (failTask) {
+    if (finalized.failTask) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {
@@ -1081,14 +1412,9 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/events')
   @HttpCode(202)
-  async events(
-    @CurrentRunner() runner: { id: string },
-    @Param('id') sessionId: string,
-    @Body() batch: RunEventBatch,
-  ) {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+  async events(@CurrentRunner() runner: { id: string }, @Param('id') sessionId: string, @Body() batch: RunEventBatch) {
+    const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     const events = batch?.events ?? [];
-    if (events.length === 0) return { ok: true };
 
     // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
     // text_delta / thinking_delta are streaming-animation increments: broadcast them
@@ -1103,208 +1429,224 @@ export class RunnerApiController {
         e.type !== RunEventType.THINKING_DELTA &&
         e.type !== RunEventType.BACKGROUND_OUTPUT,
     );
-    if (durable.length > 0) {
-      await this.prisma.runEvent.createMany({
-        data: durable.map((e) => ({
-          sessionId,
-          seq: e.seq,
-          type: e.type,
-          payload: e.payload as Prisma.InputJsonValue,
-          turnId: e.turnId ?? null,
-          createdAt: new Date(e.ts),
-        })),
-        skipDuplicates: true,
+    const session = await this.prisma.$transaction(async (tx) => {
+      // Take the Session lock before any event-side write. Besides fencing stale runner
+      // processes, a consistent lock order prevents event writes from racing a takeover
+      // outside the transaction and later deadlocking when they touch Session.
+      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: { status: true, runtimeSessionId: true },
       });
-      // Persisted conversation/background activity is liveness. Session-level system events
-      // are different: every reclaimed idle session emits init/resumed when its runner restarts,
-      // and counting that handshake would move every waiting session to "now" and scramble the
-      // recency sort. OPEN deliberately includes PENDING because a buffered tail from the prior
-      // turn may arrive after a concurrent send moved AWAITING_INPUT -> PENDING.
-      if (hasSessionActivity(durable)) {
-        await this.prisma.session.updateMany({
-          where: { id: sessionId, cancelRequestedAt: null, status: { in: OPEN } },
-          data: { lastTurnAt: new Date() },
+      if (durable.length > 0) {
+        await tx.runEvent.createMany({
+          data: durable.map((e) => ({
+            sessionId,
+            seq: e.seq,
+            type: e.type,
+            payload: e.payload as Prisma.InputJsonValue,
+            turnId: e.turnId ?? null,
+            createdAt: new Date(e.ts),
+          })),
+          skipDuplicates: true,
+        });
+        // Persisted conversation/background activity is liveness. Session-level system events
+        // are different: every reclaimed idle session emits init/resumed when its runner restarts,
+        // and counting that handshake would move every waiting session to "now" and scramble the
+        // recency sort. OPEN deliberately includes PENDING because a buffered tail from the prior
+        // turn may arrive after a concurrent send moved AWAITING_INPUT -> PENDING.
+        if (hasSessionActivity(durable)) {
+          await tx.session.updateMany({
+            where: {
+              id: sessionId,
+              cancelRequestedAt: null,
+              status: { in: OPEN },
+            },
+            data: { lastTurnAt: new Date() },
+          });
+        }
+      }
+
+      // Dynamic runtimes report their session id in an init/resumed event; unlike Claude
+      // (seeded at session creation) it's otherwise only persisted at /turn-complete.
+      // Capture it as soon as it lands so the reaper's startup
+      // watchdog (reaper.service.ts) can tell a live-but-slow first turn from a runtime
+      // that never came up — without this a first turn longer than the startup grace is
+      // force-failed as "<runtime> runtime not initialized". Fill only while unset (the id is
+      // stable per session), so this is a one-shot, retry-idempotent write.
+      if (!session.runtimeSessionId) {
+        const runtimeId = runtimeInitSessionId(durable);
+        if (runtimeId) {
+          await tx.session.updateMany({
+            where: { id: sessionId, runtimeSessionId: null },
+            data: { runtimeSessionId: runtimeId },
+          });
+        }
+      }
+
+      // Denormalize the latest assistant reply onto the session for the list's preview
+      // line. Take the highest-seq assistant event in this batch with non-empty text;
+      // seq is monotonic per session, so this only ever advances.
+      const lastAssistant = durable
+        .filter((e) => e.type === RunEventType.ASSISTANT)
+        .reduce<{ seq: number; text: string } | null>((acc, e) => {
+          const text = (e.payload as { text?: string } | null)?.text?.trim();
+          if (!text) return acc;
+          return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
+        }, null);
+      // Denormalize the "frontier" activity for the sidebar's live status line. The
+      // highest-seq durable event is the agent's latest known state: a tool_use means a
+      // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
+      // other frontier (assistant text, tool_result, turn end) means no tool is running
+      // → clear it. Batches arrive in seq order, so the latest batch's frontier is the
+      // latest overall. An empty (all-streaming) batch leaves the prior value untouched.
+      // The same frontier also carries `userText`: the message text when the latest event is
+      // a user turn (a turn just started, no reply yet) → the list shows it while awaiting the
+      // reply; any other frontier clears it, flipping the row back to the reply once it lands.
+      let frontier: {
+        seq: number;
+        tool: string | null;
+        userText: string | null;
+      } | null = null;
+      for (const e of durable) {
+        // Sub-agent (Task/Agent) events carry the spawning call's parentToolUseId. Skip
+        // them: while a sub-agent runs, its own tool_use/tool_result would clobber then
+        // clear the parent's frontier, dropping the sidebar out of "Running…" even though
+        // the parent's Task call is still in flight. The parent's own tool_use has no
+        // parentToolUseId, so it stays the frontier until its tool_result lands.
+        if ((e.payload as { parentToolUseId?: string } | null)?.parentToolUseId) continue;
+        if (frontier && e.seq <= frontier.seq) continue;
+        const tool =
+          e.type === RunEventType.TOOL_USE
+            ? String((e.payload as { name?: string } | null)?.name ?? '')
+                .trim()
+                .slice(0, 60) || null
+            : null;
+        // The pending question, denormalized like the tool above: the user turn's text when it's
+        // the frontier. A later frontier (assistant text, a tool, turn end) computes null here,
+        // which clears it — so the list swaps the message you just sent back for the reply the
+        // moment the agent responds. Stored full; the list query truncates it (left(…, PREVIEW_LEN)).
+        const userText =
+          e.type === RunEventType.USER
+            ? (
+                (e.payload as { text?: string; content?: string } | null)?.text ??
+                (e.payload as { content?: string } | null)?.content ??
+                ''
+              ).trim() || null
+            : null;
+        frontier = { seq: e.seq, tool, userText };
+      }
+      if (lastAssistant || frontier) {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: {
+            ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
+            ...(frontier ? { lastToolUse: frontier.tool, lastUserText: frontier.userText } : {}),
+          },
         });
       }
-    }
 
-    // Codex reports its runtime session id in the app-server `system` init/resumed
-    // event; unlike Claude (seeded at session creation) it's otherwise only persisted
-    // at /turn-complete. Capture it as soon as it lands so the reaper's codex startup
-    // watchdog (reaper.service.ts) can tell a live-but-slow first turn from a runtime
-    // that never came up — without this a first turn longer than the startup grace is
-    // force-failed as "codex runtime not initialized". Fill only while unset (the id is
-    // stable per session), so this is a one-shot, retry-idempotent write.
-    if (!session.runtimeSessionId) {
-      const runtimeId = runtimeInitSessionId(durable);
-      if (runtimeId) {
-        await this.prisma.session.updateMany({
-          where: { id: sessionId, runtimeSessionId: null },
-          data: { runtimeSessionId: runtimeId },
+      const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
+      if (toolUses.length > 0) {
+        await tx.toolCall.createMany({
+          data: toolUses.map((e) => ({
+            sessionId,
+            name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
+            input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+            startedAt: new Date(e.ts),
+          })),
         });
       }
-    }
 
-    // Denormalize the latest assistant reply onto the session for the list's preview
-    // line. Take the highest-seq assistant event in this batch with non-empty text;
-    // seq is monotonic per session, so this only ever advances.
-    const lastAssistant = durable
-      .filter((e) => e.type === RunEventType.ASSISTANT)
-      .reduce<{ seq: number; text: string } | null>((acc, e) => {
-        const text = (e.payload as { text?: string } | null)?.text?.trim();
-        if (!text) return acc;
-        return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
-      }, null);
-    // Denormalize the "frontier" activity for the sidebar's live status line. The
-    // highest-seq durable event is the agent's latest known state: a tool_use means a
-    // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
-    // other frontier (assistant text, tool_result, turn end) means no tool is running
-    // → clear it. Batches arrive in seq order, so the latest batch's frontier is the
-    // latest overall. An empty (all-streaming) batch leaves the prior value untouched.
-    // The same frontier also carries `userText`: the message text when the latest event is
-    // a user turn (a turn just started, no reply yet) → the list shows it while awaiting the
-    // reply; any other frontier clears it, flipping the row back to the reply once it lands.
-    let frontier: { seq: number; tool: string | null; userText: string | null } | null = null;
-    for (const e of durable) {
-      // Sub-agent (Task/Agent) events carry the spawning call's parentToolUseId. Skip
-      // them: while a sub-agent runs, its own tool_use/tool_result would clobber then
-      // clear the parent's frontier, dropping the sidebar out of "Running…" even though
-      // the parent's Task call is still in flight. The parent's own tool_use has no
-      // parentToolUseId, so it stays the frontier until its tool_result lands.
-      if ((e.payload as { parentToolUseId?: string } | null)?.parentToolUseId) continue;
-      if (frontier && e.seq <= frontier.seq) continue;
-      const tool =
-        e.type === RunEventType.TOOL_USE
-          ? String((e.payload as { name?: string } | null)?.name ?? '')
-              .trim()
-              .slice(0, 60) || null
-          : null;
-      // The pending question, denormalized like the tool above: the user turn's text when it's
-      // the frontier. A later frontier (assistant text, a tool, turn end) computes null here,
-      // which clears it — so the list swaps the message you just sent back for the reply the
-      // moment the agent responds. Stored full; the list query truncates it (left(…, PREVIEW_LEN)).
-      const userText =
-        e.type === RunEventType.USER
-          ? ((e.payload as { text?: string; content?: string } | null)?.text ??
-              (e.payload as { content?: string } | null)?.content ??
-              '').trim() || null
-          : null;
-      frontier = { seq: e.seq, tool, userText };
-    }
-    if (lastAssistant || frontier) {
-      await this.prisma.session.update({
-        where: { id: sessionId },
-        data: {
-          ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
-          ...(frontier ? { lastToolUse: frontier.tool, lastUserText: frontier.userText } : {}),
-        },
-      });
-    }
-
-    const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
-    if (toolUses.length > 0) {
-      await this.prisma.toolCall.createMany({
-        data: toolUses.map((e) => ({
-          sessionId,
-          name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
-          input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-          startedAt: new Date(e.ts),
-        })),
-      });
-    }
-
-    // Maintain the running background-shell set (Session.runningBgShells), which drives the
-    // "Background running" status on the list + header. Added on a Bash(run_in_background)
-    // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>,
-    // and cleared on a (re)spawn (Claude restarted → any prior background children are gone).
-    // Atomic array ops stay idempotent under event-batch retries.
-    const bgStarted = events
-      .filter(
+      // Maintain the running background-shell set (Session.runningBgShells), which drives the
+      // "Background running" status on the list + header. Added on a Bash(run_in_background)
+      // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>,
+      // and cleared on a (re)spawn (Claude restarted → any prior background children are gone).
+      // Atomic array ops stay idempotent under event-batch retries.
+      const bgStarted = events
+        .filter(
+          (e) =>
+            e.type === RunEventType.TOOL_USE &&
+            (e.payload as { name?: string }).name === 'Bash' &&
+            (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background === true,
+        )
+        .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
+        .filter(Boolean);
+      // Sub-agents (Task/Agent tool) run async: the launch tool_result ("Async agent launched")
+      // lands immediately and the parent then streams its own top-scope system progress events,
+      // so lastToolUse can't stay 'Agent'. Track in-flight sub-agents the same way as background
+      // shells — by their launch tool_use id, cleared by the same terminal background_task
+      // (bgEnded) — so the list can show "Running Agent…" the whole time one runs. Only top-level
+      // launches count; a sub-agent's own nested tool_use carries parentToolUseId, so skip those.
+      const subStarted = events
+        .filter(
+          (e) =>
+            e.type === RunEventType.TOOL_USE &&
+            ['Task', 'Agent'].includes(String((e.payload as { name?: string }).name ?? '')) &&
+            !(e.payload as { parentToolUseId?: string }).parentToolUseId,
+        )
+        .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
+        .filter(Boolean);
+      const bgEnded = events
+        .filter(
+          (e) =>
+            e.type === RunEventType.BACKGROUND_TASK &&
+            ['completed', 'failed', 'killed', 'stopped'].includes(
+              String((e.payload as { status?: unknown }).status ?? ''),
+            ),
+        )
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
+      // A *synchronous* sub-agent (Task/Agent run inline) reports completion as its own top-level
+      // tool_result, never a <task-notification> — so without this it stays in runningSubagents
+      // forever and the list is stuck on "Running Agent…". A sub-agent's own nested tool_results
+      // carry parentToolUseId (skip those), and an async agent's immediate "Async agent launched"
+      // ack is also a top-level tool_result for its id — but that one runs on and is cleared later
+      // by its terminal background_task (bgEnded), so exclude it. Any non-sub-agent tool_result id
+      // here is harmless: it's simply absent from runningSubagents, so array_remove is a no-op.
+      const subEnded = events
+        .filter(
+          (e) =>
+            e.type === RunEventType.TOOL_RESULT &&
+            !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
+            !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content),
+        )
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
+      const bgReset = events.some(
         (e) =>
-          e.type === RunEventType.TOOL_USE &&
-          (e.payload as { name?: string }).name === 'Bash' &&
-          (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background ===
-            true,
-      )
-      .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
-      .filter(Boolean);
-    // Sub-agents (Task/Agent tool) run async: the launch tool_result ("Async agent launched")
-    // lands immediately and the parent then streams its own top-scope system progress events,
-    // so lastToolUse can't stay 'Agent'. Track in-flight sub-agents the same way as background
-    // shells — by their launch tool_use id, cleared by the same terminal background_task
-    // (bgEnded) — so the list can show "Running Agent…" the whole time one runs. Only top-level
-    // launches count; a sub-agent's own nested tool_use carries parentToolUseId, so skip those.
-    const subStarted = events
-      .filter(
-        (e) =>
-          e.type === RunEventType.TOOL_USE &&
-          ['Task', 'Agent'].includes(String((e.payload as { name?: string }).name ?? '')) &&
-          !(e.payload as { parentToolUseId?: string }).parentToolUseId,
-      )
-      .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
-      .filter(Boolean);
-    const bgEnded = events
-      .filter(
-        (e) =>
-          e.type === RunEventType.BACKGROUND_TASK &&
-          ['completed', 'failed', 'killed', 'stopped'].includes(
-            String((e.payload as { status?: unknown }).status ?? ''),
-          ),
-      )
-      .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
-      .filter(Boolean);
-    // A *synchronous* sub-agent (Task/Agent run inline) reports completion as its own top-level
-    // tool_result, never a <task-notification> — so without this it stays in runningSubagents
-    // forever and the list is stuck on "Running Agent…". A sub-agent's own nested tool_results
-    // carry parentToolUseId (skip those), and an async agent's immediate "Async agent launched"
-    // ack is also a top-level tool_result for its id — but that one runs on and is cleared later
-    // by its terminal background_task (bgEnded), so exclude it. Any non-sub-agent tool_result id
-    // here is harmless: it's simply absent from runningSubagents, so array_remove is a no-op.
-    const subEnded = events
-      .filter(
-        (e) =>
-          e.type === RunEventType.TOOL_RESULT &&
-          !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
-          !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content),
-      )
-      .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
-      .filter(Boolean);
-    const bgReset = events.some(
-      (e) =>
-        e.type === RunEventType.SYSTEM &&
-        String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
-    );
-    if (bgReset) {
-      await this.prisma.session.update({
-        where: { id: sessionId },
-        data: { runningBgShells: [], runningSubagents: [] },
-      });
-    }
-    for (const id of bgStarted) {
-      await this.prisma
-        .$executeRaw`UPDATE "session" SET "running_bg_shells" = array_append(array_remove("running_bg_shells", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-    }
-    for (const id of subStarted) {
-      await this.prisma
-        .$executeRaw`UPDATE "session" SET "running_subagents" = array_append(array_remove("running_subagents", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-    }
-    // A terminal background_task id belongs to either a background shell or a sub-agent;
-    // array_remove is a no-op on the set that doesn't hold it, so clear from both.
-    for (const id of bgEnded) {
-      await this.prisma
-        .$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}), "running_subagents" = array_remove("running_subagents", ${id}) WHERE "id" = ${sessionId}::uuid`;
-    }
-    // Clear synchronously-completed sub-agents in one guarded write. The `&&` overlap check means
-    // ordinary (non-sub-agent) tool_results — the vast majority — match no rows and never rewrite
-    // the hot session row.
-    if (subEnded.length > 0) {
-      await this.prisma.$executeRaw`
+          e.type === RunEventType.SYSTEM && String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
+      );
+      if (bgReset) {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { runningBgShells: [], runningSubagents: [] },
+        });
+      }
+      for (const id of bgStarted) {
+        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_append(array_remove("running_bg_shells", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
+      }
+      for (const id of subStarted) {
+        await tx.$executeRaw`UPDATE "session" SET "running_subagents" = array_append(array_remove("running_subagents", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
+      }
+      // A terminal background_task id belongs to either a background shell or a sub-agent;
+      // array_remove is a no-op on the set that doesn't hold it, so clear from both.
+      for (const id of bgEnded) {
+        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}), "running_subagents" = array_remove("running_subagents", ${id}) WHERE "id" = ${sessionId}::uuid`;
+      }
+      // Clear synchronously-completed sub-agents in one guarded write. The `&&` overlap check means
+      // ordinary (non-sub-agent) tool_results — the vast majority — match no rows and never rewrite
+      // the hot session row.
+      if (subEnded.length > 0) {
+        await tx.$executeRaw`
         UPDATE "session"
         SET "running_subagents" = ARRAY(
           SELECT unnest("running_subagents") EXCEPT SELECT unnest(${subEnded}::text[])
         )
         WHERE "id" = ${sessionId}::uuid AND "running_subagents" && ${subEnded}::text[]`;
-    }
+      }
+      return session;
+    });
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
@@ -1334,25 +1676,22 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
-    if (!TERMINAL.includes(dto.status as RunStatus)) {
-      throw new BadRequestException('finalization status must be terminal');
-    }
 
     // Finalize in ONE row-locked transaction. Complete/remove/reaper also write this row,
     // so the locked re-read is the only snapshot allowed to decide the final status and
-    // checkout lifetime. A stale ownership fast-read above must never overwrite a newer
-    // cancel/end intent. Billing is accrued per-turn by /turn-complete.
+    // checkout lifetime. The process fence is evaluated from that same locked snapshot,
+    // so a predecessor cannot finalize after takeover. Billing is accrued per-turn by
+    // /turn-complete.
     const outcome = await this.prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) {
-        throw new ForbiddenException('session does not belong to this runner');
+      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      if (!TERMINAL.includes(dto.status as RunStatus)) {
+        throw new BadRequestException('finalization status must be terminal');
       }
-      const current = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      const current = await tx.session.findUniqueOrThrow({
+        where: { id: sessionId },
+      });
 
       // If cancel/end won the row lock, its reason is authoritative regardless of what
       // the runner reports. TASK_DONE settles SUCCEEDED; task-cancel/user-end/idle and
@@ -1389,7 +1728,9 @@ export class RunnerApiController {
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           isolationStatus: dto.isolationStatus ?? undefined,
           ...(dto.changedFiles !== undefined
-            ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
+            ? {
+                changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue,
+              }
             : {}),
           // Candidate branches for the ended session's "Merge to…" dropdown (older runners omit it).
           ...(dto.mergeTargets !== undefined ? { mergeTargets: dto.mergeTargets } : {}),
@@ -1411,8 +1752,13 @@ export class RunnerApiController {
       if (dto.changedDiff !== undefined) {
         await tx.sessionDiff.upsert({
           where: { sessionId },
-          create: { sessionId, patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
-          update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+          create: {
+            sessionId,
+            patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+          },
+          update: {
+            patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+          },
         });
       }
       // Drain any queued turns so nothing can be leased after the session ends.
@@ -1476,7 +1822,12 @@ export class RunnerApiController {
     const valid = ids.filter((id) => UUID.test(id));
     const keepRows = valid.length
       ? await this.prisma.session.findMany({
-          where: { id: { in: valid }, completedAt: null, archivedAt: null, deletedAt: null },
+          where: {
+            id: { in: valid },
+            completedAt: null,
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: { id: true },
         })
       : [];
@@ -1558,10 +1909,16 @@ export class RunnerApiController {
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
     const updated = await this.prisma.session.updateMany({
-      where: { id: sessionId, assignedRunnerId: runner.id, status: { in: OPEN } },
+      where: {
+        id: sessionId,
+        assignedRunnerId: runner.id,
+        status: { in: OPEN },
+      },
       data: {
         ...(dto.changedFiles !== undefined
-          ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }
+          ? {
+              changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue,
+            }
           : {}),
         ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
         // Recomputed with the diff, so opening the drawer refreshes "✓ In main" for an idle
@@ -1576,8 +1933,13 @@ export class RunnerApiController {
     if (updated.count > 0 && dto.changedDiff !== undefined) {
       await this.prisma.sessionDiff.upsert({
         where: { sessionId },
-        create: { sessionId, patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
-        update: { patches: dto.changedDiff as unknown as Prisma.InputJsonValue },
+        create: {
+          sessionId,
+          patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+        },
+        update: {
+          patches: dto.changedDiff as unknown as Prisma.InputJsonValue,
+        },
       });
     }
     // Opening the diff drawer recomputes branchMerged; new commits after an earlier merge
@@ -1600,14 +1962,12 @@ export class RunnerApiController {
     title: string;
   }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
-    const provider = normalizeProvider(session.provider);
+    const provider = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
     }
-    const agent = session.agentId
-      ? await this.prisma.agent.findUnique({ where: { id: session.agentId } })
-      : null;
+    const agent = session.agentId ? await this.prisma.agent.findUnique({ where: { id: session.agentId } }) : null;
     return {
       provider,
       sessionUuid: provider === AgentProvider.CLAUDE ? (session.claudeSessionId ?? runtimeSessionId) : runtimeSessionId,
@@ -1617,8 +1977,36 @@ export class RunnerApiController {
     };
   }
 
+  /**
+   * Serialize runner-originated writes on the Session row and fence them to the process
+   * identity installed by takeover. `IS NOT DISTINCT FROM` deliberately lets legacy
+   * runners that omit leaseOwner write only while the Session owner is still NULL.
+   */
+  private async lockSessionLeaseOwner(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    runnerId: string,
+    leaseOwner: string | null,
+  ): Promise<void> {
+    const locked = await tx.$queryRaw<Array<{ id: string; leaseOwnerMatches: boolean }>>`
+      SELECT id,
+             ("inbox_lease_owner" IS NOT DISTINCT FROM ${leaseOwner}::uuid) AS "leaseOwnerMatches"
+      FROM "session"
+      WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
+      FOR UPDATE
+    `;
+    if (locked.length === 0) {
+      throw new ForbiddenException('session does not belong to this runner');
+    }
+    if (!locked[0].leaseOwnerMatches) {
+      throw new ConflictException('runner process no longer owns this session');
+    }
+  }
+
   private async assertSessionOwnership(sessionId: string, runnerId: string) {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId } });
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+    });
     if (!session || session.assignedRunnerId !== runnerId) {
       throw new ForbiddenException('session does not belong to this runner');
     }
@@ -1641,10 +2029,16 @@ export class RunnerApiController {
     sessionId: string,
     runnerId: string,
     branchMerged?: boolean,
+    leaseOwner?: string,
   ): Promise<void> {
     if (branchMerged !== false) return;
     await this.prisma.session.updateMany({
-      where: { id: sessionId, assignedRunnerId: runnerId, mergeStatus: 'merged' },
+      where: {
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        mergeStatus: 'merged',
+        ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
+      },
       data: { mergeStatus: null, mergeError: null },
     });
   }

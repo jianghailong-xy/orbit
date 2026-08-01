@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,7 @@ const (
 // to this long for in-flight turns to finish + ack before exiting. Idle sessions detach
 // immediately; only a mid-turn session consumes any of this budget. Keep systemd's
 // TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
-const shutdownDrainTimeout = 120 * time.Second
+const shutdownDrainTimeout = 100 * time.Second
 
 type runLoopStopReason uint8
 
@@ -105,6 +106,135 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 // runner restart; only an explicitly RUNNING session owns an active-turn permit.
 func reclaimInitiallyActive(status string) bool {
 	return status == "" || status == stRunning
+}
+
+// reclaimStatusOpen is a second, runner-side terminal fence. Current servers
+// reject takeover for terminal rows, but an older server may return a status from
+// the row lock; never build a worktree/supervisor for one of those rows.
+func reclaimStatusOpen(status string) bool {
+	switch status {
+	case "", stPending, stRunning, stAwaitingInput, stInterrupted:
+		return true
+	default:
+		return false
+	}
+}
+
+func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
+	agent := r.Agent
+	if agent.Provider == "" {
+		agent.Provider = r.Provider
+	}
+	return &ClaimedSession{
+		SessionID:          r.SessionID,
+		Title:              r.Title,
+		Provider:           r.Provider,
+		Agent:              agent,
+		WorkDir:            r.WorkDir,
+		Branch:             r.Branch,
+		AutoInitGit:        r.AutoInitGit,
+		MergeTarget:        r.MergeTarget,
+		AgentID:            r.AgentID,
+		TaskID:             r.TaskID,
+		AllowOrchestration: r.AllowOrchestration,
+		OrchestrationToken: r.OrchestrationToken,
+		Reclaimed:          true,
+		SessionUUID:        r.SessionUUID,
+		RuntimeSessionID:   r.RuntimeSessionID,
+		LeaseOwner:         r.LeaseOwner,
+		MaxSeq:             r.MaxSeq,
+	}
+}
+
+type reclaimedStart struct {
+	job             *ClaimedSession
+	initiallyActive bool
+}
+
+// reclaimMissingSessions repairs both startup state and an ambiguous claim
+// response (the server may have committed PENDING -> RUNNING before the HTTP
+// response was lost). Every process takes rows over in stable session-id order,
+// and no supervisor starts until the whole snapshot's CAS operations succeed.
+func reclaimMissingSessions(
+	ctx context.Context,
+	t *Transport,
+	knownStates func() map[string]bool,
+) ([]reclaimedStart, error) {
+	delay := 250 * time.Millisecond
+	for ctx.Err() == nil {
+		rec, err := t.reclaim(ctx)
+		if err != nil {
+			if !isRetryableTransportError(err) {
+				return nil, err
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			if delay < 5*time.Second {
+				delay *= 2
+			}
+			continue
+		}
+
+		sessions := append([]ReclaimSession(nil), rec.Sessions...)
+		sort.SliceStable(sessions, func(i, j int) bool {
+			return sessions[i].SessionID < sessions[j].SessionID
+		})
+		localStates := knownStates()
+		pending := make([]reclaimedStart, 0, len(sessions))
+		retrySnapshot := false
+		lastID := ""
+		for i := range sessions {
+			r := sessions[i]
+			if r.SessionID == "" || r.SessionID == lastID {
+				continue
+			}
+			lastID = r.SessionID
+			knownActive, locallyKnown := localStates[r.SessionID]
+			if knownActive {
+				continue
+			}
+			// Only a RUNNING (or legacy RUNNING-only) reclaim can represent a
+			// response-lost follow-up for an existing warm/cold supervisor.
+			// Do not steal an idle local supervisor back from a newer process.
+			if locallyKnown && !reclaimInitiallyActive(r.Status) {
+				continue
+			}
+			job := claimedSessionFromReclaim(r)
+			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
+			if takeoverErr != nil {
+				// 409 means another process advanced the snapshot owner; 403 means
+				// the assignment changed after reclaim. Refresh the whole ordered set.
+				if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
+					retrySnapshot = true
+					break
+				}
+				return nil, takeoverErr
+			}
+			if !reclaimStatusOpen(status) {
+				continue
+			}
+			if locallyKnown && !reclaimInitiallyActive(status) {
+				continue
+			}
+			pending = append(pending, reclaimedStart{
+				job:             job,
+				initiallyActive: reclaimInitiallyActive(status),
+			})
+		}
+		if !retrySnapshot {
+			return pending, nil
+		}
+		delay = 250 * time.Millisecond
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
+	return nil, ctx.Err()
 }
 
 // runLoop returns true only when it drained because a newer runner release was
@@ -307,6 +437,11 @@ func runLoop(cfg *RunnerConfig) bool {
 					go refreshModelCatalog()
 				}
 				cancels, jobs := pool.snapshot()
+				supervisedSessionIDs := make([]string, 0, len(cancels))
+				for id := range cancels {
+					supervisedSessionIDs = append(supervisedSessionIDs, id)
+				}
+				sort.Strings(supervisedSessionIDs)
 				idle := pool.maxConcurrent() - pool.activeCount()
 				if idle < 0 {
 					idle = 0
@@ -341,6 +476,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				}
 				resp, err := t.heartbeat(HeartbeatRequest{
 					Status: "ONLINE", IdleCapacity: idle, Version: version,
+					LeaseOwner: t.leaseOwner, SupervisedSessionIDs: supervisedSessionIDs,
 					Commands: cmds, Skills: skills,
 					PlanUsage:    combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 					ModelCatalog: modelCatalog,
@@ -361,6 +497,11 @@ func runLoop(cfg *RunnerConfig) bool {
 				for _, id := range resp.CancelSessionIDs {
 					if c, ok := cancels[id]; ok {
 						c()
+					}
+				}
+				for _, id := range resp.LeaseLostSessionIDs {
+					if pool.detachCold(id) {
+						logln("detached cold supervisor after lease ownership changed:", id)
 					}
 				}
 				if loopCtx.Err() != nil {
@@ -468,6 +609,10 @@ func runLoop(cfg *RunnerConfig) bool {
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
 
+	takeoverSession := func(job *ClaimedSession) (string, error) {
+		return takeoverClaimedSession(loopCtx, t, job)
+	}
+
 	// startSession creates a lightweight supervisor for a newly-known session, or
 	// activates an existing warm/cold supervisor when a new turn claim arrives.
 	// A supervisor that was silently engine-evicted remains registered cold; its
@@ -542,58 +687,26 @@ func runLoop(cfg *RunnerConfig) bool {
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
 	reclaimed := false
-	for delay := time.Second; loopCtx.Err() == nil; {
-		rec, err := t.reclaim()
-		if err != nil {
-			logln("reclaim failed:", err)
-			select {
-			case <-loopCtx.Done():
-			case <-time.After(delay):
-			}
-			if delay < 30*time.Second {
-				delay *= 2
-			}
-			continue
-		}
+	pendingStarts, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+	if reclaimErr != nil && loopCtx.Err() == nil {
+		logln("reclaim permanently failed; stopping runner:", reclaimErr)
+		loopCancel()
+	} else if reclaimErr == nil {
 		// Prune crash leftovers before any reclaimed provider can start and refresh
 		// its credential. This avoids racing cleanup against the atomic temp file used
 		// by a live refresh.
-		credentialLiveSet := make(map[string]bool, len(rec.Sessions))
-		for i := range rec.Sessions {
-			credentialLiveSet[rec.Sessions[i].SessionID] = true
+		credentialLiveSet := make(map[string]bool, len(pendingStarts))
+		for _, pending := range pendingStarts {
+			credentialLiveSet[pending.job.SessionID] = true
 		}
 		if err := pruneOrchestrationCredentials(credentialLiveSet); err != nil {
 			logln("credential cleanup failed:", err)
 		}
-		for i := range rec.Sessions {
-			r := rec.Sessions[i]
-			logln(fmt.Sprintf("reclaiming session %s — %s", r.SessionID, r.Title))
-			agent := r.Agent
-			if agent.Provider == "" {
-				agent.Provider = r.Provider
-			}
-			job := &ClaimedSession{
-				SessionID:          r.SessionID,
-				Title:              r.Title,
-				Provider:           r.Provider,
-				Agent:              agent,
-				WorkDir:            r.WorkDir,
-				Branch:             r.Branch,
-				AutoInitGit:        r.AutoInitGit,
-				MergeTarget:        r.MergeTarget,
-				AgentID:            r.AgentID,
-				TaskID:             r.TaskID,
-				AllowOrchestration: r.AllowOrchestration,
-				OrchestrationToken: r.OrchestrationToken,
-				Reclaimed:          true,
-				SessionUUID:        r.SessionUUID,
-				RuntimeSessionID:   r.RuntimeSessionID,
-				MaxSeq:             r.MaxSeq,
-			}
-			startSession(job, reclaimInitiallyActive(r.Status))
+		for _, pending := range pendingStarts {
+			logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+			startSession(pending.job, pending.initiallyActive)
 		}
 		reclaimed = true
-		break
 	}
 
 	// Reap orphan worktrees from a previous process — any checkout whose session we did
@@ -621,9 +734,25 @@ func runLoop(cfg *RunnerConfig) bool {
 				break
 			}
 			logln("claim failed:", err)
-			select {
-			case <-loopCtx.Done():
-			case <-time.After(2 * time.Second):
+			if !isRetryableTransportError(err) {
+				logln("claim failure is permanent; stopping runner")
+				loopCancel()
+				break
+			}
+			// The claim transaction may have committed before its response was lost.
+			// Reclaim all runner-owned rows and attach any authoritative RUNNING row
+			// missing from the local pool before issuing another claim.
+			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+			if recoverErr != nil {
+				if loopCtx.Err() == nil {
+					logln("ambiguous claim reconciliation failed; stopping runner:", recoverErr)
+					loopCancel()
+				}
+				break
+			}
+			for _, pending := range recovered {
+				logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
+				startSession(pending.job, pending.initiallyActive)
 			}
 			continue
 		}
@@ -632,18 +761,49 @@ func runLoop(cfg *RunnerConfig) bool {
 		}
 		// A successful claim response can narrowly win the race with loopCtx
 		// cancellation. Register it rather than orphaning an already-claimed session;
-		// startSession immediately observes the cancelled shutdown context, detaches
-		// it without spawning an engine, and includes it in the drain accounting.
-		startSession(job, true)
+		// startSession observes the cancelled shutdown context and detaches without
+		// activating a lease generation or spawning an engine.
+		if loopCtx.Err() != nil {
+			startSession(job, true)
+			continue
+		}
+		status, err := takeoverSession(job)
+		if err != nil {
+			if loopCtx.Err() != nil {
+				startSession(job, true)
+				continue
+			}
+			logln("claim lease takeover failed for", job.SessionID+":", err)
+			if !isRetryableTransportError(err) && !isTransportHTTPStatus(err, 409) && !isTransportHTTPStatus(err, 403) {
+				logln("lease takeover failure is permanent; stopping runner")
+				loopCancel()
+				break
+			}
+			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+			if recoverErr != nil {
+				if loopCtx.Err() == nil {
+					logln("claim lease reconciliation failed for", job.SessionID+":", recoverErr)
+					loopCancel()
+				}
+				break
+			}
+			for _, pending := range recovered {
+				startSession(pending.job, pending.initiallyActive)
+			}
+			continue
+		}
+		if reclaimStatusOpen(status) {
+			startSession(job, reclaimInitiallyActive(status))
+		}
 	}
 
 	logln("runner stopping; draining session supervisors...")
 	// Keep the heartbeat goroutine alive through the drain: the server's reaper force-fails
 	// any live session whose runner has been silent >90s, so going quiet while we finish an
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
-	// Give sessions a little longer than their own drain budget to detach cleanly; past
-	// that we exit anyway (process teardown / systemd SIGKILL reaps any stragglers).
-	drainDeadline := time.Now().Add(shutdownDrainTimeout + 30*time.Second)
+	// Cover provider drain, both release backstops, the final event flush, and a racing
+	// terminal finalization. systemd's stop timeout remains above this whole envelope.
+	drainDeadline := time.Now().Add(shutdownSupervisorTimeout)
 	drainTimedOut := false
 	for {
 		n := pool.count()

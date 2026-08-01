@@ -389,8 +389,8 @@ func TestProviderProcessesDoNotReceiveSessionOrchestrationToken(t *testing.T) {
 
 		runClaudeSessionProcess(
 			context.Background(), context.Background(), NewTransport(api.URL, "runner-token"),
-			job, root, root, emit, func(string) {}, true, nil,
-			func(TurnCompleteRequest) error { return nil }, func(context.Context) bool { return true },
+			job, "11111111-1111-4111-8111-111111111111", root, root, emit, func(string) {}, true, nil,
+			func(TurnCompleteRequest) error { return nil }, func(context.Context) bool { return true }, func(error) {},
 		)
 		assertCaptured(t, capture)
 	})

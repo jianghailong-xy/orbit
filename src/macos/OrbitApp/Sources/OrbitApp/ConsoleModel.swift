@@ -206,7 +206,9 @@ final class ConsoleModel {
         self.permissionMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         // Seed the effort pill from the agent's default too (web parity), so a new session shows —
         // and starts at — the agent's configured effort unless the user overrides it.
-        if let ef = agent.effort, let e = Effort(rawValue: ef) { self.effort = e }
+        if let ef = agent.effort, let e = Effort(rawValue: ef) {
+            self.effort = AgentDefaults.normalizeEffort(e, for: provider)
+        }
         wireWorktree()
     }
 
@@ -581,12 +583,16 @@ final class ConsoleModel {
         // without one), so a model pick here can be written back to the agent as its new default.
         if let aid = s.agent?.id { agentID = aid }
         provider = s.provider ?? s.agent?.provider ?? "claude"
-        if let m = s.model { modelID = m }
+        modelID = s.model ?? s.agent?.model ?? AgentDefaults.defaultModel(for: provider)
         // A stored mode is adopted verbatim; a session with no stored mode falls back to
         // `dontAsk` (web's `permissionMode ?? 'dontAsk'`), never the hardcoded `.default`.
         if let pm = s.permissionMode { permissionMode = PermissionMode(rawValue: pm) ?? .default }
         else { permissionMode = .dontAsk }
-        if let ef = s.effort, let e = Effort(rawValue: ef) { effort = e }
+        if let ef = s.effort ?? s.agent?.effort, let e = Effort(rawValue: ef) {
+            effort = AgentDefaults.normalizeEffort(e, for: provider)
+        } else {
+            effort = .default
+        }
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.

@@ -129,8 +129,15 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 // onto the engine's environment — see envWithAgent / codexProviderArgs.
 func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 	keys := []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN"}
-	if bin == providerCodex {
+	switch bin {
+	case providerCodex:
 		keys = []string{"OPENAI_API_KEY", "OPENAI_BASE_URL"}
+	case providerKimi:
+		// Kimi only activates its environment-backed provider when both the
+		// model-name switch and API key are present. Conventional KIMI_API_KEY
+		// is config-file-only and must not suppress the local-login preflight.
+		return strings.TrimSpace(agentEnv["KIMI_MODEL_NAME"]) != "" &&
+			strings.TrimSpace(agentEnv["KIMI_MODEL_API_KEY"]) != ""
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {

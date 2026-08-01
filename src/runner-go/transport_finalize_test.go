@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,13 +11,22 @@ import (
 
 func TestFinalizeRunUsesCanonicalRoute(t *testing.T) {
 	var paths []string
+	transport := NewTransport("", "")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.URL.Path)
+		var body RunFinalizeRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.LeaseOwner != transport.leaseOwner {
+			t.Fatalf("lease owner = %q, want %q", body.LeaseOwner, transport.leaseOwner)
+		}
 		_ = json.NewEncoder(w).Encode(RunFinalizeResponse{Ok: true, KeepCheckout: false})
 	}))
 	defer server.Close()
+	transport.baseURL = server.URL
 
-	keep, err := NewTransport(server.URL, "").finalizeRun("session-1", RunFinalizeRequest{Status: "SUCCEEDED"})
+	keep, err := transport.finalizeRun(context.Background(), "session-1", RunFinalizeRequest{Status: "SUCCEEDED"})
 	if err != nil {
 		t.Fatalf("finalizeRun: %v", err)
 	}
@@ -40,7 +50,7 @@ func TestFinalizeRunFallsBackToLegacyCompleteRouteOn404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	keep, err := NewTransport(server.URL, "").finalizeRun("session-1", RunFinalizeRequest{Status: "CANCELLED"})
+	keep, err := NewTransport(server.URL, "").finalizeRun(context.Background(), "session-1", RunFinalizeRequest{Status: "CANCELLED"})
 	if err != nil {
 		t.Fatalf("finalizeRun fallback: %v", err)
 	}

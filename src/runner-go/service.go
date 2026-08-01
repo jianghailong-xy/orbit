@@ -108,14 +108,10 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 	unitPath := "/etc/systemd/system/" + svc + ".service"
 
 	// systemd gives services a minimal PATH and does not source the user's shell,
-	// so the `claude` CLI (installed in ~/.local/bin) isn't found. Bake in the
-	// user's login PATH at install time, mirroring the launchd path; ensure
-	// ~/.local/bin is on it since that's where the official installer puts claude.
-	pathEnv := userLoginPath(u, os.Getenv("PATH"))
-	localBin := filepath.Join(u.HomeDir, ".local", "bin")
-	if !pathContains(pathEnv, localBin) {
-		pathEnv = localBin + ":" + pathEnv
-	}
+	// so coding CLIs installed below the user's home aren't found. Bake in the
+	// user's login PATH at install time, mirroring the launchd path, plus
+	// ~/.local/bin where the official Claude and Kimi installers put their CLIs.
+	pathEnv := runnerEnginePath(u.HomeDir, userLoginPath(u, os.Getenv("PATH")))
 
 	unit := fmt.Sprintf(`[Unit]
 Description=Orbit runner (%s)
@@ -131,8 +127,8 @@ Restart=always
 RestartSec=5
 # Send SIGTERM to the runner only (not the claude children), so on stop/restart the
 # runner can drain — finish in-flight turns and detach — before claude is torn down.
-# TimeoutStopSec must exceed the runner's drain budget (shutdownDrainTimeout) so we
-# exit on our own; systemd SIGKILLs any stragglers in the cgroup after it.
+# The runner's complete shutdown envelope stays below this legacy-compatible value:
+# provider drain + lease release + event flush + a racing finalization + margin.
 KillMode=mixed
 TimeoutStopSec=180
 Environment=HOME=%s
@@ -287,6 +283,19 @@ func primaryGroup(u *user.User) string {
 	return u.Username
 }
 
+// runnerEnginePath adds the private-bin destination used by the official engine
+// installers. Services do not source shell rc files, and an engine may be
+// installed on demand after the unit/plist was written, so it must be present
+// even when the directory does not exist yet. ~/.kimi-code/bin is deliberately
+// absent: Kimi manages helper rg/fd binaries there, not the kimi executable.
+func runnerEnginePath(home, path string) string {
+	dir := filepath.Join(home, ".local", "bin")
+	if !pathContains(path, dir) {
+		path = dir + ":" + path
+	}
+	return path
+}
+
 // userLoginPath returns the target user's login PATH. When we're root dropping to
 // another user, the process PATH is root's (or sudo-sanitized), so query that
 // user's own login shell; otherwise the current PATH already is theirs.
@@ -336,30 +345,9 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 	if pathEnv == "" {
 		pathEnv = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 	}
+	pathEnv = runnerEnginePath(home, pathEnv)
 
-	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>%s</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>%s</string>
-    <string>run</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>ORBIT_HOME</key><string>%s</string>
-    <key>HOME</key><string>%s</string>
-    <key>PATH</key><string>%s</string>
-%s  </dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>%s</string>
-  <key>StandardErrorPath</key><string>%s</string>
-</dict>
-</plist>
-`, label, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
+	plist := renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath, proxyVars)
 
 	agentsDir := filepath.Dir(plistPath)
 	if err := writePlist(agentsDir, plistPath, plist); err != nil {
@@ -386,6 +374,35 @@ func installLaunchd(exe, orbitHome, label string, proxyVars []envVar) error {
 		"  Logs:    %s\n"+
 		"  Stop:    launchctl unload %s\n", label, plistPath, logPath, plistPath)
 	return nil
+}
+
+func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, proxyVars []envVar) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>%s</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>%s</string>
+    <string>run</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ORBIT_HOME</key><string>%s</string>
+    <key>HOME</key><string>%s</string>
+    <key>PATH</key><string>%s</string>
+%s  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <!-- Keep launchd's SIGTERM-to-SIGKILL window above the runner's complete
+       provider-drain, lease-release, event-flush, and finalization envelope. -->
+  <key>ExitTimeOut</key><integer>180</integer>
+  <key>StandardOutPath</key><string>%s</string>
+  <key>StandardErrorPath</key><string>%s</string>
+</dict>
+</plist>
+`, label, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
 }
 
 func run(name string, args ...string) error {

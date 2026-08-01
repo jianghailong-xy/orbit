@@ -4,11 +4,12 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
-// The runner execs whatever `claude`/`codex` is on PATH; nothing else keeps those CLIs
+// The runner execs whatever `claude`/`codex`/`kimi` is on PATH; nothing else keeps those CLIs
 // current, and the control plane pins new model slugs a stale engine will reject.
 // engineUpdateLoop closes that gap: once ~10 min after startup (staggered off the
 // boot-time selfUpdate and any burst of reclaimed sessions), then every 24h.
@@ -59,9 +60,11 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 	}
 }
 
-// updateEngine runs one engine's in-place update — each engine's own updater (`claude
-// update` / `codex update`); an engine with an empty updateCmd falls back to re-running
-// its idempotent installCmd — using the same service PATH + proxy env the runner spawns
+// updateEngine runs one engine's in-place update. Claude/Codex use their own updater;
+// the official standalone Kimi install repeats its idempotent installer because
+// `kimi update` is only a manual hint without a TTY. Package-managed Kimi installs
+// are left to their package manager instead of installing a second shadow copy.
+// It uses the same service PATH + proxy env the runner spawns
 // the engine with, then logs the version change. Engines not on the service PATH are
 // left alone (installing one is `orbit doctor`'s job).
 func updateEngine(ctx context.Context, spec engineSpec, servicePath string, proxyVars []envVar) {
@@ -73,9 +76,11 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		return
 	}
 	before := engineVersion(binPath)
-	cmdStr := spec.updateCmd
-	if cmdStr == "" {
-		cmdStr = spec.installCmd
+	home, _ := os.UserHomeDir()
+	cmdStr, mayUpdate := engineUpdateCommand(spec, binPath, home)
+	if !mayUpdate {
+		logln("engine-update:", spec.name, "skipped — package-managed install at", binPath)
+		return
 	}
 	cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
 	defer cancel()
@@ -104,6 +109,18 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		// usually one that wrote to a different install than the one PATH resolves.
 		logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
 	}
+}
+
+func engineUpdateCommand(spec engineSpec, binPath, home string) (string, bool) {
+	if spec.updateCmd != "" {
+		return spec.updateCmd, true
+	}
+	if spec.bin == providerKimi {
+		if home == "" || filepath.Clean(binPath) != filepath.Join(filepath.Clean(home), ".local", "bin", providerKimi) {
+			return "", false
+		}
+	}
+	return spec.installCmd, spec.installCmd != ""
 }
 
 // updateErrDetail extracts the most actionable line from a failed update's output: it

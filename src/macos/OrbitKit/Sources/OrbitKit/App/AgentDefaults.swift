@@ -35,6 +35,7 @@ public enum AgentDefaults {
     public static let providers: [ProviderOption] = [
         ProviderOption(id: "claude", name: "Claude"),
         ProviderOption(id: "codex", name: "Codex"),
+        ProviderOption(id: "kimi", name: "Kimi"),
     ]
 
     /// Provider-picker options with the control-plane–configured providers appended after the
@@ -53,7 +54,7 @@ public enum AgentDefaults {
     }
 
     /// Resolve a configured provider by slug — a built-in slug never matches (the server refuses
-    /// to mint one), so claude/codex always resolve to the static/catalog lists.
+    /// to mint one), so built-in runtimes always resolve to the static/catalog lists.
     private static func configuredProvider(_ slug: String,
                                            in configured: [ConfiguredProvider]?) -> ConfiguredProvider? {
         configured?.first { $0.slug == slug }
@@ -78,12 +79,20 @@ public enum AgentDefaults {
         ModelOption(id: "gpt-5.4-mini", name: "GPT-5.4 Mini"),
     ]
 
+    public static let kimiModels: [ModelOption] = [
+        ModelOption(id: "kimi-code/kimi-for-coding", name: "Kimi for Coding"),
+    ]
+
     public static let defaultModelID = "claude-opus-5"
 
-    /// The models a provider's pickers offer. Anything that isn't exactly "codex" is Claude —
-    /// matching apiserver's `agentProvider()`, so a stale provider string can't empty the menu.
+    /// The models a provider's pickers offer. Unknown provider strings fall back to Claude so a
+    /// stale value can't empty the menu.
     public static func models(for provider: String) -> [ModelOption] {
-        provider == "codex" ? codexModels : claudeModels
+        switch provider {
+        case "codex": return codexModels
+        case "kimi":  return kimiModels
+        default:      return claudeModels
+        }
     }
 
     public static func models(for provider: String, catalog: RunnerModelCatalog?) -> [ModelOption] {
@@ -105,7 +114,11 @@ public enum AgentDefaults {
 
     /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
     public static func defaultModel(for provider: String) -> String {
-        provider == "codex" ? "gpt-5.6-sol" : defaultModelID
+        switch provider {
+        case "codex": return "gpt-5.6-sol"
+        case "kimi":  return "kimi-code/kimi-for-coding"
+        default:      return defaultModelID
+        }
     }
 
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?) -> String {
@@ -126,12 +139,13 @@ public enum AgentDefaults {
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
     /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
-        (claudeModels + codexModels).first { $0.id == id }?.name ?? id
+        (claudeModels + codexModels + kimiModels).first { $0.id == id }?.name ?? id
     }
 
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
         (catalog?.models(for: "claude") ?? []).first { $0.id == id }?.name
             ?? (catalog?.models(for: "codex") ?? []).first { $0.id == id }?.name
+            ?? (catalog?.models(for: "kimi") ?? []).first { $0.id == id }?.name
             ?? friendlyName(id)
     }
 
@@ -144,12 +158,33 @@ public enum AgentDefaults {
     }
 
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
-    /// tops out at `xhigh` and adds `minimal`. Mirrors web's CLAUDE_/CODEX_EFFORT_OPTIONS. The
+    /// tops out at `xhigh` and adds `minimal`; managed Kimi exposes low/high/max. Mirrors web. The
     /// server and runner both coerce an illegal value, but a picker should never offer one.
     public static func efforts(for provider: String) -> [Effort] {
-        provider == "codex"
-            ? [.default, .minimal, .low, .medium, .high, .xhigh]
-            : [.default, .low, .medium, .high, .xhigh, .max]
+        switch provider {
+        case "codex": return [.default, .minimal, .low, .medium, .high, .xhigh]
+        case "kimi":  return [.default, .low, .high, .max]
+        default:      return [.default, .low, .medium, .high, .xhigh, .max]
+        }
+    }
+
+    /// Coerce a saved/account effort when it crosses into a runtime with a smaller effort
+    /// vocabulary. Mirrors the API normalization so stale sessions and synced preferences render
+    /// the same value the runtime will actually receive.
+    public static func normalizeEffort(_ effort: Effort, for provider: String) -> Effort {
+        switch provider {
+        case "codex":
+            return effort == .max ? .xhigh : effort
+        case "kimi":
+            switch effort {
+            case .minimal: return .low
+            case .medium:  return .high
+            case .xhigh:   return .max
+            default:       return effort
+            }
+        default:
+            return effort
+        }
     }
 
     /// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
@@ -162,6 +197,7 @@ public enum AgentDefaults {
         switch id {
         case "claude-opus-5", "claude-fable-5", "claude-sonnet-5": return 1_000_000
         case "claude-haiku-4-5": return 200_000
+        case "kimi-code/kimi-for-coding": return 262_144
         default: return nil
         }
     }

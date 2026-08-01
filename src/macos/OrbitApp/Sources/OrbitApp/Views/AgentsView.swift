@@ -413,7 +413,7 @@ struct NewSessionView: View {
         // (or one already seeded) is never clobbered. Mirrors web's me-preference seed effect.
         .task(id: defaultEffort) {
             if draft.effort == .default, let raw = defaultEffort, let e = Effort(rawValue: raw) {
-                draft.effort = e
+                draft.effort = AgentDefaults.normalizeEffort(e, for: draft.provider)
             }
         }
         .sheet(isPresented: $showSwitcher) {
@@ -642,7 +642,7 @@ struct AgentFormContent: View {
     private var modelOptions: [ModelOption] {
         AgentDefaults.models(for: provider, catalog: modelCatalog, configured: agents.configuredProviders)
     }
-    /// Runtime options: the built-ins (claude/codex) plus the control-plane–configured providers.
+    /// Runtime options: the built-ins plus the control-plane–configured providers.
     private var providerOptions: [ProviderOption] {
         AgentDefaults.providers(configured: agents.configuredProviders)
     }
@@ -664,6 +664,7 @@ struct AgentFormContent: View {
                         provider = new
                         model = AgentDefaults.defaultModel(for: new, catalog: modelCatalog,
                                                            configured: agents.configuredProviders)
+                        effort = AgentDefaults.normalizeEffort(effort, for: new)
                         if !AgentDefaults.efforts(for: new).contains(effort) { effort = .default }
                     }
                 )) {
@@ -764,7 +765,7 @@ struct AgentFormContent: View {
         model = agent.model ?? AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
                                                           configured: agents.configuredProviders)
         mode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
-        effort = Effort(rawValue: agent.effort ?? "") ?? .default
+        effort = prefilledEffort
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
@@ -772,13 +773,18 @@ struct AgentFormContent: View {
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
     /// for field so a look-and-close never fires a needless PATCH.
+    private var prefilledEffort: Effort {
+        let saved = Effort(rawValue: agent.effort ?? "") ?? .default
+        return AgentDefaults.normalizeEffort(saved, for: agent.provider ?? "claude")
+    }
+
     private var isDirty: Bool {
         name != agent.name
         || provider != (agent.provider ?? "claude")
         || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude", catalog: modelCatalog,
                                                                configured: agents.configuredProviders))
         || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
-        || effort != (Effort(rawValue: agent.effort ?? "") ?? .default)
+        || effort != prefilledEffort
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)

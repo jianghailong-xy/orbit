@@ -1,6 +1,10 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { pickFreeSlug, slugBase } from './provider-slug';
+import {
+  KIMI_ORPHAN_PROVIDER_TOMBSTONE,
+  pickFreeSlug,
+  slugBase,
+} from './provider-slug';
 
 test('provider-slug', async (t) => {
   await t.test('slugBase: derives a dispatchable id from what the user typed', () => {
@@ -24,12 +28,25 @@ test('provider-slug', async (t) => {
     // Gaps are reused: a deleted -2 is free again.
     assert.equal(pickFreeSlug('anthropic', ['anthropic', 'anthropic-3']), 'anthropic-2');
     // A prefix match that isn't a suffix of ours doesn't push us along.
-    assert.equal(pickFreeSlug('kimi', ['kimi-cn']), 'kimi');
+    assert.equal(pickFreeSlug('moonshot', ['moonshot-cn']), 'moonshot');
   });
 
   await t.test('pickFreeSlug: never hands out a runtime keyword', () => {
     // Naming a custom provider "Claude" must not produce a row that shadows the built-in runtime.
     assert.equal(pickFreeSlug(slugBase('Claude'), []), 'claude-2');
     assert.equal(pickFreeSlug(slugBase('Codex'), []), 'codex-2');
+    assert.equal(pickFreeSlug(slugBase('Kimi'), []), 'kimi-2');
+    assert.equal(
+      pickFreeSlug(KIMI_ORPHAN_PROVIDER_TOMBSTONE, []),
+      `${KIMI_ORPHAN_PROVIDER_TOMBSTONE}-2`,
+    );
+  });
+
+  await t.test('pickFreeSlug: reuses the first Moonshot gap used by the Kimi migration', () => {
+    assert.equal(pickFreeSlug('moonshot', ['moonshot']), 'moonshot-2');
+    assert.equal(
+      pickFreeSlug('moonshot', ['moonshot', 'moonshot-2', 'moonshot-4']),
+      'moonshot-3',
+    );
   });
 });

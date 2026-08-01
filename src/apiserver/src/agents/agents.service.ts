@@ -1,17 +1,12 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
 
 // The `orbit mcp` server is injected into every session, but under DONT_ASK its tools
 // are blocked unless allow-listed. Default new agents to allow the whole orbit server.
 const ORBIT_MCP_TOOL = 'mcp__orbit__*';
-const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
-  [AgentProvider.CLAUDE]: 'claude-opus-5',
-  [AgentProvider.CODEX]: 'gpt-5.6-sol',
-};
-
 @Injectable()
 export class AgentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -40,6 +35,7 @@ export class AgentsService {
         name: dto.name,
         description: dto.description,
         provider,
+        providerBuiltin: Object.values(AgentProvider).includes(provider as AgentProvider),
         // Built-in providers resolve a default model here; a custom provider's default lives on
         // its ModelProvider row, so the client sends an explicit model (claude's as a last resort).
         model:
@@ -123,6 +119,13 @@ export class AgentsService {
       permissionMode: dto.permissionMode,
       effort: dto.effort,
       provider: dto.provider,
+      ...(dto.provider !== undefined
+        ? {
+            providerBuiltin: Object.values(AgentProvider).includes(
+              dto.provider as AgentProvider,
+            ),
+          }
+        : {}),
       maxTurns: dto.maxTurns,
       maxBudgetUsd: dto.maxBudgetUsd,
       workDir: dto.workDir,

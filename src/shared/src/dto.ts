@@ -12,13 +12,7 @@ import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
-  | 'TRASHED'
-  | 'ENDING'
-  | 'NOT_TERMINAL'
-  | 'NOT_STARTED'
-  | 'MISSING_CONTEXT'
-  | 'NO_RUNNER'
-  | 'RUNNER_OFFLINE';
+  'TRASHED' | 'ENDING' | 'NOT_TERMINAL' | 'NOT_STARTED' | 'MISSING_CONTEXT' | 'NO_RUNNER' | 'RUNNER_OFFLINE';
 
 /**
  * Server-derived actions currently available for a session. Optional on containing
@@ -150,14 +144,16 @@ export interface SlashCommandInfo {
   /** Invocation name without the leading slash, e.g. "commit". */
   name: string;
   description?: string;
-  /** 'command' (.claude/commands/*.md) or 'skill' (.claude/skills/<name>/SKILL.md). */
+  /** 'command' or 'skill' in the owning runtime's slash registry. */
   type?: 'command' | 'skill';
+  /** Runtime that owns this asset. Absent means Claude for compatibility with old runners. */
+  provider?: AgentProvider;
   /** The agent whose workDir this project-level asset was found in. Empty/undefined
-   *  means host-level (~/.claude or the runner's default dir), shared by all agents;
+   *  means host-level (the runtime's home config or the runner's default dir), shared by all agents;
    *  the web composer scopes `/` autocomplete to host assets + the session's agent. */
   agentId?: string;
-  /** True for a name the Claude CLI registers itself — a built-in skill (`/loop`), a
-   *  plugin skill, a namespaced command — learned from the CLI's init handshake instead
+  /** True for a name the runtime registers itself — a built-in skill (`/loop`), a
+   *  plugin skill, or a namespaced command — learned from its protocol handshake instead
    *  of found on disk. Composers list these after the user's own commands and skills. */
   builtin?: boolean;
 }
@@ -238,22 +234,29 @@ export interface PlanUsageSnapshot {
 }
 
 /** Provider quota for the account a runner is logged into. Old runners report a
- *  flat Claude snapshot; newer runners may nest per-provider snapshots under
- *  `claude` / `codex` so one runner can surface both. */
+ *  flat Claude snapshot; newer runners may nest per-provider snapshots so one
+ *  runner can surface several runtimes. */
 export interface PlanUsage extends PlanUsageSnapshot {
   claude?: PlanUsageSnapshot;
   codex?: PlanUsageSnapshot;
+  kimi?: PlanUsageSnapshot;
 }
 
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
   /** How many more active turns the runner can accept right now. Warm idle
-   *  Claude/Codex processes do not consume this logical scheduling capacity. */
+   *  runtime processes do not consume this logical scheduling capacity. */
   idleCapacity: number;
   version?: string;
-  /** Custom slash commands the runner found under ~/.claude + its workDirs. */
+  /** Stable identity of this runner process. Together with supervisedSessionIds,
+   *  fences cold supervisors left behind by an overlapping old process. */
+  leaseOwner?: string;
+  /** Every session currently registered in this process's local supervisor pool,
+   *  including cold sessions that do not poll an inbox. */
+  supervisedSessionIds?: string[];
+  /** Runtime slash commands discovered by the runner, optionally scoped by provider/agent. */
   commands?: SlashCommandInfo[];
-  /** Skills the runner found under ~/.claude + its workDirs. */
+  /** Runtime skills discovered by the runner, optionally scoped by provider/agent. */
   skills?: SlashCommandInfo[];
   /** Provider quota for the account(s) this runner uses. Absent when unavailable
    *  or when the runner is too old to report it. */
@@ -297,6 +300,10 @@ export interface SessionLiveState {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Supervised sessions that no longer belong to this exact runner process.
+   *  Kept separate from durable user cancellation: a cold supervisor detaches
+   *  without finalizing, while active/warm engines observe their endpoint fence. */
+  leaseLostSessionIds?: string[];
   /** The runner's authoritative max-concurrent (the editable DB value). The runner
    *  adopts this live on each heartbeat, so a UI/API change to it takes effect within
    *  one heartbeat without restarting the runner. */
@@ -314,22 +321,23 @@ export interface RunnerHeartbeatResponse {
    *  before they were persisted as attachments. The runner uploads them back to the control
    *  plane so historical transcript links can download. */
   artifactRequests?: ArtifactCommand[];
-  /** One step of a browser-less `claude auth login` the user started from the web. Absent on
+  /** One step of a browser-less runtime login the user started from the web. Absent on
    *  older control planes, and whenever no sign-in is in flight for this runner. */
   loginRequest?: LoginCommand;
 }
 
-/** The two engines a runner signs in with its own OAuth login, rather than an API key. */
-export type LoginEngine = 'claude' | 'codex';
+/** Engines a runner signs in with on its own machine, rather than using a configured API key. */
+export type LoginEngine = 'claude' | 'codex' | 'kimi';
 
 /**
  * Control plane → runner: drive the interactive sign-in on the runner's own machine.
  *
- * `start` launches the engine's sign-in; the runner reports back what the user needs. The two
+ * `start` launches the engine's sign-in; the runner reports back what the user needs. The
  * engines differ in kind: `claude auth login` prints a URL whose redirect_uri is Anthropic-hosted
  * and then waits for the code that page gives the user (`code` carries it back), while
  * `codex login --device-auth` prints a URL *and* a one-time code to enter there, then polls for
- * the approval itself. Either way the user's browser never has to reach the runner — which plain
+ * the approval itself. Kimi has its own runtime-managed sign-in flow. Either way the user's
+ * browser never has to reach the runner — which plain
  * `codex login` would require, since it serves its callback on localhost on that machine.
  *
  * Redelivered every heartbeat until the runner's status report moves the server on, so both
@@ -425,6 +433,8 @@ export interface ClaimedSession {
   sessionUuid: string;
   /** Provider-neutral runtime session/thread id. For Claude this mirrors sessionUuid. */
   runtimeSessionId?: string;
+  /** Runner-process identity currently authorized to activate inbox generations. */
+  leaseOwner?: string;
   /** Highest RunEvent.seq already persisted, so a respawned runner continues the
    *  monotonic counter instead of colliding (events use skipDuplicates). */
   maxSeq: number;
@@ -446,6 +456,8 @@ export interface ClaimedSession {
 
 export interface RunEventBatch {
   events: NormalizedRunEvent[];
+  /** Stable UUID for the runner process that produced this batch. Omitted only by legacy runners. */
+  leaseOwner?: string;
 }
 
 export type ApprovalStatus = 'PENDING' | 'ALLOWED' | 'DENIED';
@@ -562,6 +574,35 @@ export interface RunInboxResponse {
   attachments?: TurnAttachment[];
 }
 
+/** Runner → control plane: expire only leases owned by one dead engine process.
+ * Optional during rolling upgrades; an omitted generation matches legacy NULL leases only. */
+export interface ReleaseTurnLeasesRequest {
+  leaseGeneration?: string;
+  /** Stable for one runner process. Lets the server distinguish a retry from a later process. */
+  leaseOwner?: string;
+}
+
+/** Runner → control plane: make one freshly reserved engine generation the sole inbox consumer.
+ * Idempotent for the same generation; rejected while a different generation remains active. */
+export interface ActivateTurnLeasesRequest {
+  leaseGeneration: string;
+  /** Stable UUID for this runner process, shared by reclaim and all of its engines. */
+  leaseOwner: string;
+}
+
+/** Runner process → control plane: atomically supersede the process identity observed in a
+ * reclaim/claim response and retire that predecessor's current inbox consumer. */
+export interface TakeoverTurnLeasesRequest {
+  leaseOwner: string;
+  expectedLeaseOwner?: string | null;
+}
+
+/** Authoritative Session state read while takeover holds the Session row lock. */
+export interface TakeoverTurnLeasesResponse {
+  ok: true;
+  status: RunStatus;
+}
+
 /** One open interactive session a restarted runner must retain. Only RUNNING is
  *  re-attached as an active turn; queued/idle sessions are registered cold so their
  *  worktree survives and a later claim can resume them without spawning eagerly. */
@@ -573,6 +614,8 @@ export interface ReclaimSession {
   provider?: AgentProvider;
   sessionUuid: string;
   runtimeSessionId?: string;
+  /** Runner-process identity that owned inbox activation when this snapshot was read. */
+  leaseOwner?: string;
   /** Highest persisted RunEvent.seq, so the runner continues the seq counter. */
   maxSeq: number;
   /** How to re-drive `claude` — same shape a fresh claim hands the runner, so the
@@ -613,6 +656,8 @@ export interface OrchestrationCredentialResponse {
  */
 export interface TurnCompleteRequest {
   turnId: string;
+  /** Stable UUID for the runner process completing this turn. Omitted only by legacy runners. */
+  leaseOwner?: string;
   /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
   status: RunStatus;
   result?: string;
@@ -667,6 +712,8 @@ export interface FilePatch {
  */
 export interface RunFinalizeRequest {
   status: RunStatus;
+  /** Stable UUID for the runner process finalizing this run. Omitted only by legacy runners. */
+  leaseOwner?: string;
   /** Claude Code `result` text. */
   result?: string;
   /** Claude Code result `subtype`. */
@@ -782,15 +829,7 @@ export interface ArtifactResultRequest {
  * palette doubles as a session switcher.
  */
 export type SessionSearchMatchField =
-  | 'id'
-  | 'title'
-  | 'prompt'
-  | 'reply'
-  | 'message'
-  | 'branch'
-  | 'agent'
-  | 'task'
-  | 'recent';
+  'id' | 'title' | 'prompt' | 'reply' | 'message' | 'branch' | 'agent' | 'task' | 'recent';
 
 /** One row of GET /sessions/search. Deliberately thinner than a session-list row — the palette
  *  renders a title, a status glyph, an agent name and a snippet, and nothing else. */

@@ -48,6 +48,11 @@ type HeartbeatRequest struct {
 	Status       string `json:"status"`
 	IdleCapacity int    `json:"idleCapacity"`
 	Version      string `json:"version,omitempty"`
+	// LeaseOwner identifies this exact runner process. SupervisedSessionIDs lets
+	// the control plane detach cold supervisors that no longer own their session;
+	// older runners omit both fields and retain the legacy heartbeat behavior.
+	LeaseOwner           string   `json:"leaseOwner,omitempty"`
+	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
 	// Slash assets discovered on this machine, surfaced to the web composer for
 	// `/` autocomplete. Empty slices are omitted so quiet heartbeats stay small.
 	Commands []SlashCommandInfo `json:"commands,omitempty"`
@@ -93,6 +98,9 @@ type SlashCommandInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"` // "command" | "skill"
+	// Provider scopes runtime-advertised commands. Empty is the historical
+	// Claude/filesystem registry; Kimi ACP entries carry "kimi".
+	Provider string `json:"provider,omitempty"`
 	// AgentID scopes a project-level asset to the agent whose workDir it was found in;
 	// empty means host-level (the runner's default dir or ~/.claude), shared by all agents.
 	AgentID string `json:"agentId,omitempty"`
@@ -119,6 +127,10 @@ type ModelInfo struct {
 
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
+	// LeaseLostSessionIDs is process-fence loss, not durable user cancellation.
+	// Cold supervisors detach locally; active/warm engines converge through their
+	// owner-fenced inbox/event/ack calls.
+	LeaseLostSessionIDs []string `json:"leaseLostSessionIds,omitempty"`
 	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
 	// control plane that doesn't send it — the runner keeps its current value then.
 	MaxConcurrent int `json:"maxConcurrent"`
@@ -143,7 +155,7 @@ type HeartbeatResponse struct {
 // must be idempotent.
 type LoginCommand struct {
 	Action string `json:"action"` // "start" | "code"
-	// Which CLI to sign in: "claude" | "codex". Empty from an older control plane, which only
+	// Which CLI to sign in: "claude" | "codex" | "kimi". Empty from an older control plane, which only
 	// ever drove claude.
 	Engine string `json:"engine,omitempty"`
 	// The authorization code the user pasted, for action "code".
@@ -276,7 +288,10 @@ type ClaimedSession struct {
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
-	MaxSeq           int    `json:"maxSeq"`
+	// LeaseOwner is the runner process identity observed when the server built this claim.
+	// A fresh process CAS-takes it over before it may activate an inbox generation.
+	LeaseOwner string `json:"leaseOwner,omitempty"`
+	MaxSeq     int    `json:"maxSeq"`
 	// Resume marks a session revived from an ended state: like a reclaim, claude's
 	// session already exists, so even the first spawn must --resume. Server-set.
 	Resume bool `json:"resume"`
@@ -349,6 +364,7 @@ type ReclaimSession struct {
 	Provider         string          `json:"provider,omitempty"`
 	SessionUUID      string          `json:"sessionUuid"`
 	RuntimeSessionID string          `json:"runtimeSessionId,omitempty"`
+	LeaseOwner       string          `json:"leaseOwner,omitempty"`
 	MaxSeq           int             `json:"maxSeq"`
 	Agent            AgentExecConfig `json:"agent"`
 	// WorkDir is claude's cwd for this session, from the session's agent.
@@ -373,6 +389,7 @@ type ReclaimResponse struct {
 }
 
 type TurnCompleteRequest struct {
+	LeaseOwner string                 `json:"leaseOwner,omitempty"`
 	TurnID     string                 `json:"turnId"`
 	Status     string                 `json:"status"`
 	Result     string                 `json:"result,omitempty"`
@@ -421,7 +438,8 @@ type RunEvent struct {
 }
 
 type RunEventBatch struct {
-	Events []RunEvent `json:"events"`
+	LeaseOwner string     `json:"leaseOwner,omitempty"`
+	Events     []RunEvent `json:"events"`
 }
 
 type TokenUsage struct {
@@ -452,6 +470,7 @@ type FilePatch struct {
 // RunFinalizeRequest reports the terminal outcome of the runner process. It is not the
 // user-facing Complete action, which changes a Session's lifecycleState to COMPLETED.
 type RunFinalizeRequest struct {
+	LeaseOwner       string                 `json:"leaseOwner,omitempty"`
 	Status           string                 `json:"status"`
 	Result           string                 `json:"result,omitempty"`
 	Subtype          string                 `json:"subtype,omitempty"`
@@ -560,6 +579,7 @@ const (
 
 // Run statuses — mirror RunStatus in @orbit/shared.
 const (
+	stPending       = "PENDING"
 	stRunning       = "RUNNING"
 	stSucceeded     = "SUCCEEDED"
 	stFailed        = "FAILED"

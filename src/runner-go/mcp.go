@@ -553,7 +553,7 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if s.sessionID == "" {
 		return toolResult(denyJSON("no session context (ORBIT_SESSION_ID unset)"), false)
 	}
-	id, err := s.t.createApproval(s.sessionID, map[string]interface{}{
+	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
 		"toolName":  getString(args, "tool_name"),
 		"input":     args["input"],
 		"toolUseId": getString(args, "tool_use_id"),
@@ -880,7 +880,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
-					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | a configured provider slug. Defaults to claude."},
+					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | kimi | a configured provider slug. Defaults to claude."},
 					"model":              str,
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,

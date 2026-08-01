@@ -321,11 +321,18 @@ public enum ComposerSlash {
         items.filter { ($0.agentId ?? "").isEmpty || $0.agentId == agentID }
     }
 
-    /// Codex has no slash registry: its app-server takes the prompt verbatim (nothing in the
-    /// protocol expands a `/name`), so claude's commands and skills are meaningless in a codex
-    /// session — only the local ones survive. Web parity: `codexComposer`.
+    /// Restrict runtime-owned slash assets to the active runtime. Older runners omit `provider`
+    /// for Claude entries, so nil remains Claude-compatible. Codex has no slash registry and keeps
+    /// only Orbit's local commands; local commands are available under every provider.
     public static func forProvider(items: [SlashCommandInfo], provider: String?) -> [SlashCommandInfo] {
-        provider == "codex" ? items.filter { $0.type == "local" } : items
+        items.filter { item in
+            if item.type == "local" { return true }
+            switch provider {
+            case "codex": return false
+            case "kimi":  return item.provider == "kimi"
+            default:      return item.provider == nil || item.provider == "claude"
+            }
+        }
     }
 
     /// Items matching the active token, optionally narrowed to one `type` ("command"/"skill"),

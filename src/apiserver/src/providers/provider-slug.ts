@@ -1,8 +1,13 @@
 import { AgentProvider } from '@orbit/shared';
 
+export const KIMI_ORPHAN_PROVIDER_TOMBSTONE = '__orbit_reserved_legacy_kimi_0077__';
+
 // The runtimes a configured provider borrows: their names are dispatch keywords, so no row may
 // claim one. Treated as taken rather than rejected — the caller never chose this string.
-const RESERVED = new Set<string>([AgentProvider.CLAUDE, AgentProvider.CODEX]);
+const RESERVED = new Set<string>([
+  ...Object.values(AgentProvider),
+  KIMI_ORPHAN_PROVIDER_TOMBSTONE,
+]);
 // What a name that survives none of the normalisation below falls back to (a label written
 // entirely in a non-Latin script, say).
 const FALLBACK = 'provider';

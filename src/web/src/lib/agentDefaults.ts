@@ -3,6 +3,7 @@ import type { RunnerModelCatalog } from '@orbit/shared';
 export const PROVIDER_OPTIONS = [
   { value: 'claude', label: 'Claude' },
   { value: 'codex', label: 'Codex' },
+  { value: 'kimi', label: 'Kimi' },
 ];
 
 type ModelOption = { value: string; label: string };
@@ -20,14 +21,14 @@ export interface ConfiguredProvider {
   defaultModel?: string | null;
 }
 
-/** Resolve a configured provider by slug — a built-in slug (claude/codex) never matches. */
+/** Resolve a configured provider by slug — built-in slugs never match. */
 const configuredProvider = (
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
 ): ConfiguredProvider | undefined =>
   provider ? (configured ?? []).find((p) => p.slug === provider) : undefined;
 
-/** Provider dropdown options: built-in (claude/codex) followed by the configured providers. */
+/** Provider dropdown options: built-in runtimes followed by the configured providers. */
 export const mergedProviderOptions = (
   configured?: ConfiguredProvider[] | null,
 ): { value: string; label: string }[] => [
@@ -56,12 +57,17 @@ export const CODEX_MODEL_OPTIONS = [
   { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
 ];
 
+export const KIMI_MODEL_OPTIONS = [
+  { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
+];
+
 export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
   claude: CLAUDE_MODEL_OPTIONS,
   codex: CODEX_MODEL_OPTIONS,
+  kimi: KIMI_MODEL_OPTIONS,
 };
 
-export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS];
+export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS, ...KIMI_MODEL_OPTIONS];
 
 // Per-model context-window size (max input tokens), for the composer's context-usage gauge.
 // Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
@@ -74,6 +80,7 @@ export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-fable-5': 1_000_000,
   'claude-sonnet-5': 1_000_000,
   'claude-haiku-4-5': 200_000,
+  'kimi-code/kimi-for-coding': 262_144,
 };
 export const DEFAULT_CONTEXT_WINDOW = 200_000;
 const catalogOptionsForProvider = (
@@ -112,6 +119,7 @@ export const contextWindowFor = (
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: 'claude-opus-5',
   codex: 'gpt-5.6-sol',
+  kimi: 'kimi-code/kimi-for-coding',
 };
 
 export const modelOptionsForProvider = (
@@ -164,11 +172,29 @@ export const CODEX_EFFORT_OPTIONS = [
   { value: 'xhigh', label: 'xHigh' },
 ];
 
-export const effortOptionsForProvider = (provider?: string | null) =>
-  provider === 'codex' ? CODEX_EFFORT_OPTIONS : CLAUDE_EFFORT_OPTIONS;
+export const KIMI_EFFORT_OPTIONS = [
+  { value: '', label: 'Default' },
+  { value: 'low', label: 'Low' },
+  { value: 'high', label: 'High' },
+  { value: 'max', label: 'Max' },
+];
 
-export const normalizeEffortForProvider = (provider: string | null | undefined, effort: string): string =>
-  provider === 'codex' && effort === 'max' ? 'xhigh' : effort;
+export const effortOptionsForProvider = (provider?: string | null) =>
+  provider === 'codex'
+    ? CODEX_EFFORT_OPTIONS
+    : provider === 'kimi'
+      ? KIMI_EFFORT_OPTIONS
+      : CLAUDE_EFFORT_OPTIONS;
+
+export const normalizeEffortForProvider = (provider: string | null | undefined, effort: string): string => {
+  if (provider === 'codex' && effort === 'max') return 'xhigh';
+  if (provider === 'kimi') {
+    if (effort === 'minimal') return 'low';
+    if (effort === 'medium') return 'high';
+    if (effort === 'xhigh') return 'max';
+  }
+  return effort;
+};
 
 // The permission mode a new session of the agent starts in.
 export const MODE_OPTIONS = [
@@ -181,7 +207,12 @@ export const MODE_OPTIONS = [
 ];
 
 // Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
-export const AUTO_CAPABLE_MODELS = new Set(['claude-opus-5', 'claude-fable-5', 'claude-sonnet-5']);
+export const AUTO_CAPABLE_MODELS = new Set([
+  'claude-opus-5',
+  'claude-fable-5',
+  'claude-sonnet-5',
+  'kimi-code/kimi-for-coding',
+]);
 export const supportsAuto = (m: string): boolean => AUTO_CAPABLE_MODELS.has(m);
 
 // App defaults used when the user has set no preference of their own.

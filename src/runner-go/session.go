@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,24 @@ import (
 
 const maxRespawns = 5
 
+const (
+	leaseActivationTimeout    = 20 * time.Second
+	finalLeaseReleaseTimeout  = 10 * time.Second
+	eventFlushShutdownGrace   = 20 * time.Second
+	finalizeRunShutdownGrace  = 20 * time.Second
+	shutdownSupervisorTimeout = shutdownDrainTimeout + 2*finalLeaseReleaseTimeout + eventFlushShutdownGrace + finalizeRunShutdownGrace + 10*time.Second
+)
+
+func newLeaseGeneration() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", err
+	}
+	id[6] = (id[6] & 0x0f) | 0x40 // UUID v4
+	id[8] = (id[8] & 0x3f) | 0x80 // RFC 4122 variant
+	return fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16]), nil
+}
+
 // mcpToolTimeoutMs is the largest per-server MCP tool timeout claude accepts (~24.8
 // days), which is as close to "never" as its config allows. Setting it raises BOTH of
 // claude's limits for that server: the idle timeout (no response or progress; 30 min
@@ -30,6 +49,7 @@ const mcpToolTimeoutMs = 2147483647
 const (
 	providerClaude = "claude"
 	providerCodex  = "codex"
+	providerKimi   = "kimi"
 )
 
 var ctrlReqCounter int64
@@ -57,8 +77,9 @@ func runtimeProvider(job *ClaimedSession) string {
 	if p == "" {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
-	if p == providerCodex {
-		return providerCodex
+	switch p {
+	case providerCodex, providerKimi:
+		return p
 	}
 	return providerClaude
 }
@@ -99,6 +120,7 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 
 type turnCompleter func(TurnCompleteRequest) error
 type turnPermitWaiter func(context.Context) bool
+type leaseLossHandler func(error)
 
 // contextUntilEither is used by control-plane handshakes that must survive a
 // provider process exit, but must still stop promptly when either the session is
@@ -157,6 +179,25 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	sessionID := job.SessionID
 	scratch := filepath.Join(runsDir(), sessionID)
 	_ = os.MkdirAll(scratch, 0o755)
+	// A newer runner process may fence this process while it is still active. Keep that
+	// signal separate from a UI cancel: lost ownership must detach without finalizing.
+	ownershipCtx, cancelOwnership := context.WithCancel(context.Background())
+	defer cancelOwnership()
+	sessionCtx, cancelSessionCtx := contextUntilEither(ctx, ownershipCtx)
+	defer cancelSessionCtx()
+	var ownershipLost atomic.Bool
+	markOwnershipLost := func(err error) {
+		if ownershipLost.CompareAndSwap(false, true) {
+			logln("session lease ownership lost for", sessionID+":", err)
+			cancelOwnership()
+		}
+	}
+	eventCtx, cancelEventCtx := contextWithStopGrace(
+		ownershipCtx,
+		shutdownCtx,
+		shutdownDrainTimeout+2*finalLeaseReleaseTimeout+eventFlushShutdownGrace,
+	)
+	defer cancelEventCtx()
 
 	// Persist enough metadata for `orbit resume` to work offline.
 	writeSessionMeta(scratch, job, execDir)
@@ -189,7 +230,19 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		events := buf
 		buf = nil
 		bufMu.Unlock()
-		if err := t.postEvents(sessionID, RunEventBatch{Events: events}); err != nil {
+		err := retryIdempotentWhile(eventCtx, func(attemptCtx context.Context) error {
+			return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
+		}, isRetryableTransportError)
+		if isLeaseOwnershipError(err) {
+			markOwnershipLost(err)
+			return
+		}
+		if err != nil {
+			// Keep the batch available to the final flush. Requests are seq-idempotent, so
+			// restoring after a lost committed response is safe and avoids dropping the tail.
+			bufMu.Lock()
+			buf = append(events, buf...)
+			bufMu.Unlock()
 			logln("event flush failed for", sessionID+":", err)
 		}
 	}
@@ -230,7 +283,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Watches background-shell output files for live output and turns Claude's
 	// <task-notification> messages into durable completion events. Shared across respawns;
 	// all tails stop when this session run returns.
-	bg := newBgTailer(ctx, emit)
+	bg := newBgTailer(sessionCtx, emit)
 	defer bg.stopAll()
 	// Claude records background-shell completions in its transcript even while the session is
 	// idle, but only streams them to stdout on the next turn; tail the transcript so a shell
@@ -245,7 +298,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// A normal ack retries for as long as the session lives. During runner
 	// shutdown it gets the same finite drain budget as the provider process, so a
 	// dead control plane cannot keep shutdown blocked forever.
-	turnAckCtx, cancelTurnAcks := contextWithStopGrace(ctx, shutdownCtx, shutdownDrainTimeout)
+	turnAckCtx, cancelTurnAcks := contextWithStopGrace(sessionCtx, shutdownCtx, shutdownDrainTimeout)
 	defer cancelTurnAcks()
 	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
 	// a queued follow-up is immediately ready; every other authoritative status
@@ -257,6 +310,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// releasing the new claim's permit.
 		permitGeneration := pool.permitGeneration(live)
 		next, err := t.turnComplete(turnAckCtx, sessionID, req)
+		if isLeaseOwnershipError(err) {
+			markOwnershipLost(err)
+		}
 		if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
@@ -274,29 +330,35 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	firstSpawn := !job.Reclaimed && !job.Resume
 	lastClaimJob := job
 	respawns := 0
-	needsLeaseReset := false
+	leaseResetGeneration := ""
+	retirePendingGeneration := func() error {
+		if leaseResetGeneration == "" {
+			return nil
+		}
+		generation := leaseResetGeneration
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), finalLeaseReleaseTimeout)
+		err := retryReleaseTurnLeases(releaseCtx, func(attemptCtx context.Context) error {
+			return t.releaseTurnLeases(attemptCtx, sessionID, generation)
+		})
+		releaseCancel()
+		if err == nil && leaseResetGeneration == generation {
+			leaseResetGeneration = ""
+		}
+		return err
+	}
 	for {
-		if ctx.Err() != nil || shutdownCtx.Err() != nil {
+		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
-		if !pool.waitActive(live, ctx, shutdownCtx) {
+		if !pool.waitActive(live, sessionCtx, shutdownCtx) {
 			break
 		}
-		if needsLeaseReset {
-			// The recycled process may have won an inbox lease just before its
-			// long-poll was cancelled. Do not reserve capacity or spawn its cold
-			// replacement until the server has made every such lease deliverable.
-			resetCtx, resetCancel := contextUntilEither(ctx, shutdownCtx)
-			err := retryReleaseTurnLeases(resetCtx, func(attemptCtx context.Context) error {
-				return t.releaseTurnLeases(attemptCtx, sessionID)
-			})
-			resetCancel()
-			if err != nil {
-				break
-			}
-			needsLeaseReset = false
+		leaseGeneration, generationErr := newLeaseGeneration()
+		if generationErr != nil {
+			logln("failed to create inbox lease generation for", sessionID+":", generationErr)
+			break
 		}
-		engineGeneration, claimedJob, ok := pool.reserveEngine(live, ctx, shutdownCtx)
+		engineGeneration, claimedJob, ok := pool.reserveEngine(live, sessionCtx, shutdownCtx)
 		if !ok {
 			continue
 		}
@@ -309,25 +371,82 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			firstSpawn = !job.Reclaimed && !job.Resume
 			writeSessionMeta(scratch, job, execDir)
 		}
-		engineCtx, engineCancel := context.WithCancel(ctx)
+		// From the first activation attempt onward the server may have committed this
+		// generation even if its response never reaches us. Keep a release backstop before
+		// issuing the request so cancellation cannot strand an active fence.
+		leaseResetGeneration = leaseGeneration
+		activateBaseCtx, activateBaseCancel := contextUntilEither(sessionCtx, shutdownCtx)
+		activateCtx, activateCancel := context.WithTimeout(activateBaseCtx, leaseActivationTimeout)
+		activateErr := retryActivateTurnLeases(activateCtx, func(attemptCtx context.Context) error {
+			return t.activateTurnLeases(attemptCtx, sessionID, leaseGeneration)
+		})
+		activateCancel()
+		activateBaseCancel()
+		if activateErr != nil {
+			pool.engineStopped(live, engineGeneration)
+			releaseErr := retirePendingGeneration()
+			if releaseErr != nil {
+				logln("inbox generation cleanup after activation failed for", sessionID+":", releaseErr)
+			}
+			if isLeaseOwnershipError(activateErr) {
+				markOwnershipLost(activateErr)
+			} else if isLeaseOwnershipError(releaseErr) {
+				markOwnershipLost(releaseErr)
+			} else if isRetryableTransportError(activateErr) && sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+				// Bound each activation/release attempt so no resident engine is held while
+				// the control plane is unavailable. Keep reconciling this already-RUNNING
+				// turn without finalizing or forgetting its local supervisor.
+				for releaseErr != nil && isRetryableTransportError(releaseErr) && sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+					select {
+					case <-sessionCtx.Done():
+					case <-shutdownCtx.Done():
+					case <-time.After(time.Second):
+					}
+					if sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+						releaseErr = retirePendingGeneration()
+					}
+				}
+				if releaseErr == nil && sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+					time.Sleep(time.Second)
+					continue
+				}
+				if releaseErr != nil && !isRetryableTransportError(releaseErr) {
+					status = stFailed
+				}
+			} else if sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+				logln("failed to activate inbox generation for", sessionID+":", activateErr)
+				status = stFailed
+			}
+			break
+		}
+		engineCtx, engineCancel := context.WithCancel(sessionCtx)
 		if pool.engineStarted(live, engineGeneration, engineCancel) {
 			engineCancel() // timer/LRU won while this engine was being reserved
 		}
-		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit)
+		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, leaseGeneration, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, markOwnershipLost)
 		engineCancel()
 		evicted := pool.engineStopped(live, engineGeneration)
+		// Retire before any cold wait, branch handling, or crash backoff. The HTTP inbox
+		// handler can outlive cancellation of the Go request, so leaving this until the next
+		// activation would let that detached poll consume a control turn with no receiver.
+		if releaseErr := retirePendingGeneration(); releaseErr != nil {
+			logln("inbox generation cleanup after process stop failed for", sessionID+":", releaseErr)
+			if sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
+				status = stFailed
+			}
+			break
+		}
 		firstSpawn = false
 		if evicted {
 			// Silent warm recycle: the Orbit session stays AWAITING_INPUT. If a
 			// claim raced the timer/LRU, active is already true and the next loop
 			// transparently cold-resumes after releasing any lease the dying inbox
 			// poll may have acquired; otherwise it sleeps cold.
-			needsLeaseReset = true
 			setTurn("")
 			logln(fmt.Sprintf("○ interactive engine %s recycled (session remains resumable)", job.SessionID))
 			continue
 		}
-		if ctx.Err() != nil || shutdownCtx.Err() != nil {
+		if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 			status = stCancelled
 			break
 		}
@@ -349,6 +468,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			logln(fmt.Sprintf("interactive run %s — config changed; resuming with model=%s mode=%s", job.SessionID, job.Agent.Model, job.Agent.PermissionMode))
 			continue
 		}
+		// Any unexpectedly dead engine may have taken an executable inbox
+		// lease with it. Expire that lease before the cold replacement starts;
+		// otherwise the at-least-once turn is invisible until the server's
+		// five-minute deadline (most visible with a crashed ACP process).
 		// An idle warm engine that exits unexpectedly simply becomes cold. Only an
 		// active turn spends the crash-respawn budget.
 		if !pool.isActive(live) {
@@ -361,16 +484,25 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			break
 		}
 		emit(evSystem, map[string]interface{}{"subtype": "resumed", "attempt": respawns})
-		logln(fmt.Sprintf("interactive run %s — claude exited unexpectedly; resuming (attempt %d)", job.SessionID, respawns))
+		logln(fmt.Sprintf("interactive run %s — %s exited unexpectedly; resuming (attempt %d)", job.SessionID, runtimeProvider(job), respawns))
 		time.Sleep(time.Duration(respawns) * time.Second)
 	}
 	if ctx.Err() != nil {
 		status = stCancelled
 	}
+	if leaseResetGeneration != "" {
+		if err := retirePendingGeneration(); err != nil {
+			logln("final inbox lease release failed for", sessionID+":", err)
+		}
+	}
 
 	close(stopFlush)
 	flushWg.Wait()
 	flush()
+	if ownershipLost.Load() {
+		logln(fmt.Sprintf("⏏ interactive run %s — detached after lease ownership changed", job.SessionID))
+		return
+	}
 
 	// Graceful drain: the runner is shutting down and this wasn't a real cancel/end (a
 	// UI cancel sets ctx.Err; an end/crash sets stSucceeded/stFailed). Leave the session
@@ -378,6 +510,23 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// in-flight turn, if any, already finished and acked during the drain.
 	if shutdownCtx.Err() != nil && ctx.Err() == nil && status == stCancelled {
 		logln(fmt.Sprintf("⏸ interactive run %s — detached for shutdown (resumable)", job.SessionID))
+		return
+	}
+	finalizeCtx, cancelFinalize := contextWithStopGrace(context.Background(), shutdownCtx, finalizeRunShutdownGrace)
+	defer cancelFinalize()
+	// Check the process fence before touching the shared git worktree. /finalize checks it
+	// again transactionally, but computing its payload can itself commit a park checkpoint.
+	confirmErr := retryTakeoverTurnLeases(finalizeCtx, func(attemptCtx context.Context) error {
+		_, err := t.takeoverTurnLeases(attemptCtx, job.SessionID, t.leaseOwner)
+		return err
+	})
+	if isLeaseOwnershipError(confirmErr) {
+		markOwnershipLost(confirmErr)
+		logln(fmt.Sprintf("⏏ interactive run %s — detached before stale worktree finalization", job.SessionID))
+		return
+	}
+	if confirmErr != nil {
+		logln("run ownership confirmation failed for", job.SessionID+":", confirmErr)
 		return
 	}
 
@@ -403,7 +552,17 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		finalizeRequest.MergeTargets = mergeTargetsForWT(job.WT)
 	}
-	keepCheckout, err := t.finalizeRun(job.SessionID, finalizeRequest)
+	keepCheckout := true
+	err := retryIdempotentWhile(finalizeCtx, func(attemptCtx context.Context) error {
+		var attemptErr error
+		keepCheckout, attemptErr = t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
+		return attemptErr
+	}, isRetryableTransportError)
+	if isLeaseOwnershipError(err) {
+		markOwnershipLost(err)
+		logln(fmt.Sprintf("⏏ interactive run %s — detached before stale finalization", job.SessionID))
+		return
+	}
 	if err != nil {
 		logln("run finalization failed for", job.SessionID+":", err)
 	} else {
@@ -473,7 +632,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	provider := runtimeProvider(job)
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
@@ -496,16 +655,19 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		}
 	}
 	if provider == providerCodex {
-		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit)
+		return runCodexSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
 	}
-	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit)
+	if provider == providerKimi {
+		return runKimiSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
+	}
+	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
 }
 
 // runClaudeSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
 // model/permission-mode change, reload=false for an unexpected crash.
-func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
+func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
@@ -654,9 +816,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		// Poller-goroutine-local (no lock), and intentionally lost on respawn.
 		var pendingShellCtx []string
 		for pollCtx.Err() == nil {
-			resp, err := t.inbox(pollCtx, job.SessionID)
+			resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
 			if err != nil {
 				if pollCtx.Err() != nil {
+					return
+				}
+				if isLeaseOwnershipError(err) {
+					onLeaseLost(err)
 					return
 				}
 				logln("inbox poll failed for", job.SessionID+":", err)

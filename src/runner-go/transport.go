@@ -38,12 +38,40 @@ func (e *transportHTTPError) Error() string {
 
 // Transport is an outbound-only HTTP client to the control plane.
 type Transport struct {
-	baseURL string
-	token   string
-	client  *http.Client
+	baseURL    string
+	token      string
+	client     *http.Client
+	leaseOwner string
+}
+
+func isTransportHTTPStatus(err error, status int) bool {
+	httpErr, ok := err.(*transportHTTPError)
+	return ok && httpErr.statusCode == status
+}
+
+// Only failures that can plausibly clear without changing the request are retried.
+// Retrying authorization/validation failures can wedge startup reclaim forever.
+func isRetryableTransportError(err error) bool {
+	httpErr, ok := err.(*transportHTTPError)
+	if !ok {
+		return true // network/timeout failures
+	}
+	return httpErr.statusCode == http.StatusRequestTimeout ||
+		httpErr.statusCode == http.StatusTooManyRequests ||
+		httpErr.statusCode >= http.StatusInternalServerError
+}
+
+func isLeaseOwnershipError(err error) bool {
+	return isTransportHTTPStatus(err, http.StatusConflict) ||
+		isTransportHTTPStatus(err, http.StatusForbidden) ||
+		isTransportHTTPStatus(err, http.StatusNotFound)
 }
 
 func NewTransport(baseURL, token string) *Transport {
+	leaseOwner, err := newLeaseGeneration()
+	if err != nil {
+		panic(fmt.Sprintf("create runner lease owner: %v", err))
+	}
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) == 0 {
@@ -61,7 +89,7 @@ func NewTransport(baseURL, token string) *Transport {
 			return nil
 		},
 	}
-	return &Transport{baseURL: baseURL, token: token, client: client}
+	return &Transport{baseURL: baseURL, token: token, client: client, leaseOwner: leaseOwner}
 }
 
 func (t *Transport) do(ctx context.Context, method, path string, body, out interface{}, timeout time.Duration) error {
@@ -167,16 +195,17 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 // reclaim lists every open session assigned to this runner so its lightweight
 // supervisor and checkout survive a runner restart. Only entries whose status is
 // RUNNING start active; other open states stay cold until a normal claim arrives.
-func (t *Transport) reclaim() (*ReclaimResponse, error) {
+func (t *Transport) reclaim(ctx context.Context) (*ReclaimResponse, error) {
 	var r ReclaimResponse
-	if err := t.do(nil, "GET", "/runner/sessions/reclaim", nil, &r, 15*time.Second); err != nil {
+	if err := t.do(ctx, "GET", "/runner/sessions/reclaim", nil, &r, 15*time.Second); err != nil {
 		return nil, err
 	}
 	return &r, nil
 }
 
-func (t *Transport) postEvents(sessionID string, batch RunEventBatch) error {
-	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
+func (t *Transport) postEvents(ctx context.Context, sessionID string, batch RunEventBatch) error {
+	batch.LeaseOwner = t.leaseOwner
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/events", batch, nil, 35*time.Second)
 }
 
 // finalizeRun finalizes the current run server-side and reports back whether the isolated worktree
@@ -184,10 +213,11 @@ func (t *Transport) postEvents(sessionID string, batch RunEventBatch) error {
 // This runner lifecycle endpoint is intentionally distinct from completeSession below, which is
 // the user-facing action that moves a Session to Completed.
 // Defaults to keep on any transport error, so an unreachable server never destroys a checkout.
-func (t *Transport) finalizeRun(sessionID string, b RunFinalizeRequest) (bool, error) {
+func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFinalizeRequest) (bool, error) {
 	var r RunFinalizeResponse
+	b.LeaseOwner = t.leaseOwner
 	path := "/runner/sessions/" + sessionID + "/finalize"
-	if err := t.do(nil, "POST", path, b, &r, 35*time.Second); err != nil {
+	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		// A newly upgraded runner can overlap an older control-plane replica during a
 		// rolling deploy. Only a missing canonical route falls back; every other error
 		// remains authoritative and keeps the checkout for safety.
@@ -196,7 +226,7 @@ func (t *Transport) finalizeRun(sessionID string, b RunFinalizeRequest) (bool, e
 		}
 		r = RunFinalizeResponse{}
 		legacyPath := "/runner/sessions/" + sessionID + "/complete"
-		if legacyErr := t.do(nil, "POST", legacyPath, b, &r, 35*time.Second); legacyErr != nil {
+		if legacyErr := t.do(ctx, "POST", legacyPath, b, &r, 35*time.Second); legacyErr != nil {
 			return true, legacyErr
 		}
 	}
@@ -220,9 +250,13 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 
 // inbox long-polls for the next user turn of an interactive session; returns nil
 // when the server holds then yields nothing (turnId == "").
-func (t *Transport) inbox(ctx context.Context, sessionID string) (*RunInboxResponse, error) {
+func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string) (*RunInboxResponse, error) {
 	var r RunInboxResponse
-	if err := t.do(ctx, "GET", "/runner/sessions/"+sessionID+"/inbox", nil, &r, 35*time.Second); err != nil {
+	path := "/runner/sessions/" + sessionID + "/inbox"
+	if leaseGeneration != "" {
+		path += "?leaseGeneration=" + url.QueryEscape(leaseGeneration)
+	}
+	if err := t.do(ctx, "GET", path, nil, &r, 35*time.Second); err != nil {
 		return nil, err
 	}
 	if r.TurnID == "" {
@@ -240,6 +274,14 @@ const (
 // succeeds or its owner goes away. A capped backoff avoids both losing a
 // committed response and hammering an unavailable server.
 func retryIdempotent(ctx context.Context, op func(context.Context) error) error {
+	return retryIdempotentWhile(ctx, op, func(error) bool { return true })
+}
+
+func retryIdempotentWhile(
+	ctx context.Context,
+	op func(context.Context) error,
+	shouldRetry func(error) bool,
+) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -250,6 +292,8 @@ func retryIdempotent(ctx context.Context, op func(context.Context) error) error 
 		}
 		if err := op(ctx); err == nil {
 			return nil
+		} else if !shouldRetry(err) {
+			return err
 		}
 		if err := ctx.Err(); err != nil {
 			return err
@@ -276,12 +320,50 @@ func retryIdempotent(ctx context.Context, op func(context.Context) error) error 
 	}
 }
 
+// takeoverTurnLeases revokes the process identity observed in a claim/reclaim snapshot.
+// expectedLeaseOwner is a CAS predecessor; empty means the session has never had a modern owner.
+func (t *Transport) takeoverTurnLeases(ctx context.Context, sessionID, expectedLeaseOwner string) (string, error) {
+	body := map[string]interface{}{
+		"leaseOwner":         t.leaseOwner,
+		"expectedLeaseOwner": nil,
+	}
+	if expectedLeaseOwner != "" {
+		body["expectedLeaseOwner"] = expectedLeaseOwner
+	}
+	var response struct {
+		Status string `json:"status"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/takeover-leases", body, &response, 15*time.Second)
+	return response.Status, err
+}
+
+func retryTakeoverTurnLeases(ctx context.Context, takeover func(context.Context) error) error {
+	return retryIdempotentWhile(ctx, takeover, isRetryableTransportError)
+}
+
+// takeoverClaimedSession always confirms even a matching snapshot owner with the server.
+// A claim/reclaim response can be stale by the time this process handles it, so a local
+// equality check cannot substitute for the Session row lock in takeover-leases.
+func takeoverClaimedSession(ctx context.Context, t *Transport, job *ClaimedSession) (string, error) {
+	var status string
+	err := retryTakeoverTurnLeases(ctx, func(attemptCtx context.Context) error {
+		var err error
+		status, err = t.takeoverTurnLeases(attemptCtx, job.SessionID, job.LeaseOwner)
+		return err
+	})
+	if err == nil {
+		job.LeaseOwner = t.leaseOwner
+	}
+	return status, err
+}
+
 func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCompleteRequest) (string, error) {
 	var r TurnCompleteResponse
-	err := retryIdempotent(ctx, func(attemptCtx context.Context) error {
+	b.LeaseOwner = t.leaseOwner
+	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
-	})
+	}, isRetryableTransportError)
 	if err != nil {
 		return "", err
 	}
@@ -300,14 +382,30 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 // releaseTurnLeases expires any inbox leases held by an engine that was
 // silently recycled. The next cold process may then pull the turn immediately
 // instead of waiting for the normal lease deadline.
-func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID string) error {
-	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", nil, nil, 15*time.Second)
+func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGeneration string) error {
+	body := map[string]string{"leaseOwner": t.leaseOwner}
+	if leaseGeneration != "" {
+		body["leaseGeneration"] = leaseGeneration
+	}
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/release-leases", body, nil, 15*time.Second)
+}
+
+// activateTurnLeases makes a freshly reserved process generation the only inbox consumer.
+// The server accepts an idempotent retry for the same generation and rejects a different
+// generation until its predecessor has been released.
+func (t *Transport) activateTurnLeases(ctx context.Context, sessionID, leaseGeneration string) error {
+	body := map[string]string{"leaseGeneration": leaseGeneration, "leaseOwner": t.leaseOwner}
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/activate-leases", body, nil, 15*time.Second)
 }
 
 // retryReleaseTurnLeases is kept separate from process spawning so the ordering
 // guarantee (reset succeeds before a replacement engine exists) is easy to test.
 func retryReleaseTurnLeases(ctx context.Context, release func(context.Context) error) error {
-	return retryIdempotent(ctx, release)
+	return retryIdempotentWhile(ctx, release, isRetryableTransportError)
+}
+
+func retryActivateTurnLeases(ctx context.Context, activate func(context.Context) error) error {
+	return retryIdempotentWhile(ctx, activate, isRetryableTransportError)
 }
 
 // mergeResult reports the outcome of a heartbeat-delivered MergeCommand back to the server.
@@ -428,12 +526,12 @@ func escapeMultipartFilename(name string) string {
 
 // createApproval registers a pending tool-permission request (from the orbit MCP
 // permission-prompt tool) and returns its id. Idempotent server-side on toolUseId.
-func (t *Transport) createApproval(sessionID string, body interface{}) (string, error) {
+func (t *Transport) createApproval(ctx context.Context, sessionID string, body interface{}) (string, error) {
 	var r struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
-	if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
+	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}
 	return r.ID, nil

@@ -4,11 +4,7 @@ import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { claudeOauthTokenFor } from '../providers/subscription-token';
-
-function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
-  if (effort == null) return undefined;
-  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
-}
+import { normalizeEffortForProvider } from '../common/runtime-provider';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -148,17 +144,18 @@ export class QueueService {
     const agent = session.agent;
     const declared = session.provider ?? agent?.provider ?? null;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
-    // provider (claude|codex), the model, and the process env (baseUrl + decrypted key injected)
+    // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
     // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
     // user could burn another tenant's key by naming their slug.
-    const customRow = isBuiltinProvider(declared)
+    const customRow = isBuiltinProvider(declared, session.providerBuiltin)
       ? null
       : await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         });
     const exec = resolveProviderExec({
       declaredProvider: declared,
+      declaredProviderBuiltin: session.providerBuiltin,
       customRow,
       sessionModel: session.model,
       agentModel: agent?.model,
@@ -175,6 +172,7 @@ export class QueueService {
       sessionId: session.id,
       provider,
       runtimeSessionId,
+      leaseOwner: session.inboxLeaseOwner ?? undefined,
       title: session.title,
       prompt: session.prompt,
       // The project directory the runtime runs in comes from the session's agent.

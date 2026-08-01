@@ -94,7 +94,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyUrl: 'https://platform.deepseek.com',
   },
   {
-    slug: 'kimi',
+    // `kimi` is reserved for the first-class Kimi runtime. Keep this Anthropic-compatible
+    // Moonshot endpoint available as a configured-provider preset under a distinct identity.
+    slug: 'moonshot',
     label: 'Kimi (Moonshot)',
     baseUrl: 'https://api.moonshot.ai/anthropic',
     models: [

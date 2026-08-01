@@ -6,6 +6,7 @@ import { AgentProvider } from './enums';
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   [AgentProvider.CLAUDE]: 'claude-opus-5',
   [AgentProvider.CODEX]: 'gpt-5.6-sol',
+  [AgentProvider.KIMI]: 'kimi-code/kimi-for-coding',
 };
 
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
@@ -17,14 +18,18 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
  *  account"). This is the server-side backstop, so no client version or stale row can produce that
  *  mismatch at dispatch.
  *
- *  Only the unambiguous `claude-*` / `gpt-*` prefixes are policed; unknown/custom ids (e.g. an
+ *  Only unambiguous built-in prefixes are policed; unknown/custom ids (e.g. an
  *  `ANTHROPIC_MODEL` endpoint override) pass through untouched. */
 export function modelForProvider(provider: AgentProvider, override?: string | null): string {
   const fallback = DEFAULT_MODEL_BY_PROVIDER[provider];
   // `||` (not `??`) so a blank override ('' from a degenerate row) also falls back to the default
   // rather than reaching the runner as `-m ''`.
   const model = override || fallback;
-  if (provider === AgentProvider.CODEX && model.startsWith('claude-')) return fallback;
-  if (provider === AgentProvider.CLAUDE && model.startsWith('gpt-')) return fallback;
+  const isClaudeModel = model.startsWith('claude-');
+  const isCodexModel = model.startsWith('gpt-');
+  const isKimiModel = model.startsWith('kimi-') || model.startsWith('kimi-code/');
+  if (provider !== AgentProvider.CLAUDE && isClaudeModel) return fallback;
+  if (provider !== AgentProvider.CODEX && isCodexModel) return fallback;
+  if (provider !== AgentProvider.KIMI && isKimiModel) return fallback;
   return model;
 }

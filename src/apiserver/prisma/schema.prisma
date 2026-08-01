@@ -59,16 +59,16 @@ enum CreatorType {
 }
 
 model User {
-  id           String   @id @default(uuid(7)) @db.Uuid
-  email        String   @unique
-  name         String
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  email                 String    @unique
+  name                  String
+  passwordHash          String    @map("password_hash")
+  createdAt             DateTime  @default(now()) @map("created_at")
   // Per-account UI preferences (theme, new-agent defaults). Shape: UserPreferences
   // (@orbit/shared). JSON so new keys need no migration; missing keys fall back.
-  preferences  Json     @default("{}")
+  preferences           Json      @default("{}")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
-  role         String   @default("MEMBER")
+  role                  String    @default("MEMBER")
   // AES-256-GCM ciphertext ("iv:tag:ct") of a Claude subscription token from `claude
   // setup-token`, injected as CLAUDE_CODE_OAUTH_TOKEN into this user's built-in-claude
   // sessions on EVERY runner. NULL = not configured, and each runner falls back to whatever
@@ -136,56 +136,56 @@ model DeviceToken {
 
 // A machine the user registered via `orbit register`. Claude Code runs here.
 model Runner {
-  id              String       @id @default(uuid(7)) @db.Uuid
-  name            String
+  id                String       @id @default(uuid(7)) @db.Uuid
+  name              String
   // User-set friendly name shown in the UI. `name` stays the machine-reported
   // identity used to match re-registrations, so renaming never creates a dup.
-  displayName     String?      @map("display_name")
-  hostname        String?
-  ownerId         String       @map("owner_id") @db.Uuid
-  owner           User         @relation(fields: [ownerId], references: [id])
-  labels          String[]     @default([])
-  status          RunnerStatus @default(OFFLINE)
-  maxConcurrent   Int          @default(1) @map("max_concurrent")
-  version         String?
-  tokenHash       String       @map("token_hash") // hash of the long-lived runner credential
-  lastHeartbeatAt DateTime?    @map("last_heartbeat_at")
-  enrolledAt      DateTime     @default(now()) @map("enrolled_at")
+  displayName       String?      @map("display_name")
+  hostname          String?
+  ownerId           String       @map("owner_id") @db.Uuid
+  owner             User         @relation(fields: [ownerId], references: [id])
+  labels            String[]     @default([])
+  status            RunnerStatus @default(OFFLINE)
+  maxConcurrent     Int          @default(1) @map("max_concurrent")
+  version           String?
+  tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
+  lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
+  enrolledAt        DateTime     @default(now()) @map("enrolled_at")
   // Slash commands / skills the runner discovered on its disk, reported via
   // heartbeat and surfaced to the web composer's `/` autocomplete. Arrays of
   // { name, description?, type? } (mirrors @orbit/shared SlashCommandInfo).
-  availableCommands Json?      @map("available_commands")
-  availableSkills   Json?      @map("available_skills")
+  availableCommands Json?        @map("available_commands")
+  availableSkills   Json?        @map("available_skills")
   // Latest provider quota for the account(s) this runner uses, reported via heartbeat.
   // Shape mirrors @orbit/shared PlanUsage.
-  planUsage         Json?      @map("plan_usage")
+  planUsage         Json?        @map("plan_usage")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
-  modelCatalog      Json?      @map("model_catalog")
+  modelCatalog      Json?        @map("model_catalog")
 
-  // Browser-less sign-in relay for this machine's Claude/Codex CLI. The runner drives the CLI
+  // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no
   // terminal access can still be signed in. State, not history: one sign-in at a time per
   // runner, since each CLI writes that machine's single credentials file.
   //   NULL       — nothing in flight
   //   pending    — user asked to sign in; the next heartbeat tells the runner to start
   //   awaiting_code — loginUrl holds the link to approve; loginCode carries the user's paste
-  //   awaiting_approval — device flow (codex): loginUrl + loginUserCode are what the user
+  //   awaiting_approval — device flow (codex/kimi): loginUrl + loginUserCode are what the user
   //                       enters in the browser; nothing comes back through us
   //   done | failed — terminal, loginMessage explains a failure
-  loginStatus  String?   @map("login_status")
+  loginStatus   String?   @map("login_status")
   // Which CLI the relay is driving: 'claude' | 'codex'. NULL on a row written before the relay
   // handled more than claude.
-  loginEngine  String?   @map("login_engine")
-  loginUrl     String?   @map("login_url")
+  loginEngine   String?   @map("login_engine")
+  loginUrl      String?   @map("login_url")
   // The device flow's one-time code, which the user types on loginUrl's page. Runner → user,
   // the opposite direction from loginCode.
-  loginUserCode String?  @map("login_user_code")
+  loginUserCode String?   @map("login_user_code")
   // The pasted authorization code, cleared as soon as the heartbeat hands it to the runner. It
   // is single-use and worthless without the PKCE verifier, which never leaves the runner.
-  loginCode    String?   @map("login_code")
-  loginMessage String?   @map("login_message")
+  loginCode     String?   @map("login_code")
+  loginMessage  String?   @map("login_message")
   // When the current relay started, so an abandoned one can be timed out.
-  loginAt      DateTime? @map("login_at")
+  loginAt       DateTime? @map("login_at")
 
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).
@@ -240,68 +240,71 @@ model DeviceEnrollment {
   @@map("device_enrollment")
 }
 
-// An agent definition: how to drive Claude Code for a class of sessions.
+// An agent definition: how to drive a local coding runtime for a class of sessions.
 model Agent {
-  id                 String   @id @default(uuid(7)) @db.Uuid
-  name               String
-  description        String?
-  // Which local coding runtime drives this agent. "claude" keeps the existing
-  // Claude Code path; "codex" uses the Codex runtime on the runner.
-  provider           String   @default("claude")
-  model              String   @default("claude-sonnet-4-6")
-  appendSystemPrompt String?  @map("append_system_prompt")
-  systemPrompt       String?  @map("system_prompt")
-  allowedTools       Json     @default("[]") @map("allowed_tools")
-  disallowedTools    Json     @default("[]") @map("disallowed_tools")
-  permissionMode     String   @default("dontAsk") @map("permission_mode")
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  name                String
+  description         String?
+  // Which local coding runtime drives this agent: "claude", "codex", "kimi", or a configured
+  // ModelProvider slug that resolves to one of the configurable runtimes at dispatch.
+  provider            String    @default("claude")
+  // Disambiguates the newly reserved `kimi` wire id from a stale pre-0077 custom-provider
+  // write during a rolling deployment. Old replicas omit this column and therefore write false.
+  providerBuiltin     Boolean   @default(false) @map("provider_builtin")
+  model               String    @default("claude-sonnet-4-6")
+  appendSystemPrompt  String?   @map("append_system_prompt")
+  systemPrompt        String?   @map("system_prompt")
+  allowedTools        Json      @default("[]") @map("allowed_tools")
+  disallowedTools     Json      @default("[]") @map("disallowed_tools")
+  permissionMode      String    @default("dontAsk") @map("permission_mode")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
-  effort             String?  @map("effort")
-  maxTurns           Int?     @map("max_turns")
-  maxBudgetUsd       Float?   @map("max_budget_usd")
-  mcpConfig          Json?    @map("mcp_config")
+  effort              String?   @map("effort")
+  maxTurns            Int?      @map("max_turns")
+  maxBudgetUsd        Float?    @map("max_budget_usd")
+  mcpConfig           Json?     @map("mcp_config")
   // routing: bind to a specific runner and/or match runner labels
-  targetRunnerId     String?  @map("target_runner_id") @db.Uuid
-  targetLabels       String[] @default([]) @map("target_labels")
+  targetRunnerId      String?   @map("target_runner_id") @db.Uuid
+  targetLabels        String[]  @default([]) @map("target_labels")
   // The machine (Runner) this agent belongs to, set when `orbit register` mints it;
   // null for hand-made config agents. Cascade so unregistering a machine drops them.
-  runnerId           String?  @map("runner_id") @db.Uuid
-  runner             Runner?  @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  runnerId            String?   @map("runner_id") @db.Uuid
+  runner              Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   // The project directory claude runs in for this agent, and its coding-tool key.
-  workDir            String?  @map("work_dir")
+  workDir             String?   @map("work_dir")
   // Custom environment variables injected into this agent's claude process (string map).
-  env                Json?    @map("env")
-  agentKey           String?  @map("agent_key")
-  enabled            Boolean  @default(true)
+  env                 Json?     @map("env")
+  agentKey            String?   @map("agent_key")
+  enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
   // baseline commit) on the next claim so its sessions can be worktree-isolated. Opt-in
   // per agent — the web "Enable isolation" action on a non-git run flips this on.
-  autoInitGit        Boolean  @default(false) @map("auto_init_git")
+  autoInitGit         Boolean   @default(false) @map("auto_init_git")
   // Whether this agent's sessions each run in their own per-session git worktree. Default off, so a
   // new agent's sessions run directly in workDir with no isolation unless the user opts in. Off → a
   // session gets no `branch` and the runner runs it directly in workDir with no worktree (the agent's
   // concurrent sessions then share one working tree); the merge/commit/diff machinery is skipped
   // since there's no isolated branch.
-  enableWorktree     Boolean  @default(false) @map("enable_worktree")
+  enableWorktree      Boolean   @default(false) @map("enable_worktree")
   // Opt-in per agent (default off): may this agent's in-session coding agent spawn and manage
   // OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those tools
   // aren't exposed and the runner-token spawn endpoint refuses.
-  enableOrchestration Boolean @default(false) @map("enable_orchestration")
+  enableOrchestration Boolean   @default(false) @map("enable_orchestration")
   // The branch this agent's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Agent-scoped so a chosen target sticks across all the agent's sessions.
-  defaultMergeTarget String?  @map("default_merge_target")
-  ownerId            String   @map("owner_id") @db.Uuid
-  owner              User     @relation(fields: [ownerId], references: [id])
-  createdAt          DateTime @default(now()) @map("created_at")
+  defaultMergeTarget  String?   @map("default_merge_target")
+  ownerId             String    @map("owner_id") @db.Uuid
+  owner               User      @relation(fields: [ownerId], references: [id])
+  createdAt           DateTime  @default(now()) @map("created_at")
   // Soft delete: deleting an agent stamps this instead of removing the row, so its
   // sessions/tasks stay linked (no orphaning) and it can be restored. NULL = live;
   // every user-facing listing filters on `deletedAt: null`. Runtime lookups by a live
   // session's agentId intentionally don't filter, so in-flight sessions keep running.
-  deletedAt          DateTime? @map("deleted_at")
+  deletedAt           DateTime? @map("deleted_at")
   // Sidebar display order set by drag-to-reorder; NULL sorts last (after positioned
   // agents, by createdAt) so existing/new agents stay oldest-first until reordered.
-  position           Int?     @map("position")
+  position            Int?      @map("position")
 
   sessions      Session[]
   assignedTasks Task[] // tasks assigned to this agent to execute
@@ -315,96 +318,105 @@ model Agent {
 // driven by one claude process on a runner. Chat events, user-input turns, tool
 // calls, and llm usage hang directly off the Session.
 model Session {
-  id                String    @id @default(uuid(7)) @db.Uuid
-  title             String
-  prompt            String // first-turn seed
-  ownerId           String    @map("owner_id") @db.Uuid
-  owner             User      @relation("SessionOwner", fields: [ownerId], references: [id])
-  creatorId         String    @map("creator_id") @db.Uuid
-  creator           User      @relation("SessionCreator", fields: [creatorId], references: [id])
-  assignedRunnerId  String?   @map("assigned_runner_id") @db.Uuid
-  assignedRunner    Runner?   @relation(fields: [assignedRunnerId], references: [id])
-  agentId           String?   @map("agent_id") @db.Uuid
-  agent             Agent?    @relation(fields: [agentId], references: [id])
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  title                String
+  prompt               String // first-turn seed
+  ownerId              String    @map("owner_id") @db.Uuid
+  owner                User      @relation("SessionOwner", fields: [ownerId], references: [id])
+  creatorId            String    @map("creator_id") @db.Uuid
+  creator              User      @relation("SessionCreator", fields: [creatorId], references: [id])
+  assignedRunnerId     String?   @map("assigned_runner_id") @db.Uuid
+  assignedRunner       Runner?   @relation(fields: [assignedRunnerId], references: [id])
+  agentId              String?   @map("agent_id") @db.Uuid
+  agent                Agent?    @relation(fields: [agentId], references: [id])
   // Optional parent work item; deleting the Task detaches but keeps the session.
-  taskId            String?   @map("task_id") @db.Uuid
-  task              Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
+  taskId               String?   @map("task_id") @db.Uuid
+  task                 Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
   // Set when another session's agent spawned this one via the orbit mcp session_create tool
   // (L3 orchestration). Detaches (SetNull) if the parent is purged; drives the orchestration
   // tree, the spawn-depth / child-count guards, and attribution.
-  parentSessionId   String?   @map("parent_session_id") @db.Uuid
-  parent            Session?  @relation("SessionSpawn", fields: [parentSessionId], references: [id], onDelete: SetNull)
-  children          Session[] @relation("SessionSpawn")
+  parentSessionId      String?   @map("parent_session_id") @db.Uuid
+  parent               Session?  @relation("SessionSpawn", fields: [parentSessionId], references: [id], onDelete: SetNull)
+  children             Session[] @relation("SessionSpawn")
   // Batch-run grouping: when a session is dispatched as part of a "批量运行" batch,
   // these tag it with that batch's id and the batch's own concurrency cap. The claim
   // queue gates live sessions per batch on batchMaxConcurrent — independent of, and on
   // top of, the runner's own max_concurrent. null = not part of any batch (ungated).
-  batchId           String?   @map("batch_id") @db.Uuid
-  batchMaxConcurrent Int?     @map("batch_max_concurrent")
+  batchId              String?   @map("batch_id") @db.Uuid
+  batchMaxConcurrent   Int?      @map("batch_max_concurrent")
   // Pre-generated Claude session id: --session-id on first spawn, --resume on
   // reclaim/respawn.
-  claudeSessionId   String?   @map("claude_session_id")
+  claudeSessionId      String?   @map("claude_session_id")
   // Provider-neutral runtime thread/session id. For Claude rows this mirrors
-  // claudeSessionId; for Codex it stores the Codex thread id returned by the runtime.
-  runtimeSessionId  String?   @map("runtime_session_id")
-  provider          String    @default("claude")
-  model             String? // per-session override; null -> agent -> server default
-  permissionMode    String?   @map("permission_mode")
+  // claudeSessionId; for Codex/Kimi it stores the id returned by the runtime.
+  runtimeSessionId     String?   @map("runtime_session_id")
+  provider             String    @default("claude")
+  // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
+  // stale old-replica write that still uses the former custom-provider slug `kimi`.
+  providerBuiltin      Boolean   @default(false) @map("provider_builtin")
+  // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
+  // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
+  inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
+  // Stable UUID of the runner process authorized to activate new generations. Process takeover
+  // is an expected-owner CAS, so a delayed request from a superseded process cannot regain control.
+  inboxLeaseOwner      String?   @map("inbox_lease_owner") @db.Uuid
+  model                String? // per-session override; null -> agent -> server default
+  permissionMode       String?   @map("permission_mode")
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude
   // uses the model's default.
-  effort            String?
+  effort               String?
   // Legacy internal provenance. Current clients use one Active list rather than splitting
   // out System; task-linked runs are always "user" for compatibility with older clients.
-  source            String    @default("user")
+  source               String    @default("user")
   // PENDING = created, claimable by its assigned runner.
-  status            RunStatus @default(PENDING)
+  status               RunStatus @default(PENDING)
   // billing, accrued per turn
-  sumInputTokens    Int       @default(0) @map("sum_input_tokens")
-  sumOutputTokens   Int       @default(0) @map("sum_output_tokens")
-  sumCacheRead      Int       @default(0) @map("sum_cache_read")
-  sumCacheWrite     Int       @default(0) @map("sum_cache_write")
-  numTurns          Int       @default(0) @map("num_turns")
-  costUsd           Float     @default(0) @map("cost_usd")
-  lastTurnAt        DateTime? @map("last_turn_at")
-  cancelRequestedAt DateTime? @map("cancel_requested_at")
-  startedAt         DateTime? @map("started_at")
-  finishedAt        DateTime? @map("finished_at")
-  error             String?
-  result            String?
+  sumInputTokens       Int       @default(0) @map("sum_input_tokens")
+  sumOutputTokens      Int       @default(0) @map("sum_output_tokens")
+  sumCacheRead         Int       @default(0) @map("sum_cache_read")
+  sumCacheWrite        Int       @default(0) @map("sum_cache_write")
+  numTurns             Int       @default(0) @map("num_turns")
+  costUsd              Float     @default(0) @map("cost_usd")
+  lastTurnAt           DateTime? @map("last_turn_at")
+  cancelRequestedAt    DateTime? @map("cancel_requested_at")
+  startedAt            DateTime? @map("started_at")
+  finishedAt           DateTime? @map("finished_at")
+  error                String?
+  result               String?
   // Why the session ended, orthogonal to `status` (which collapses every graceful end
   // to CANCELLED). Set by the path that requests the end — endLive (user end/complete/
   // delete) or the reaper (idle/task-done recycle, orphan) — and left untouched by the
   // runner's async /finalize. null = a natural agent finish (read `status`) or a
   // pre-migration row. Values: see SessionEndReason in @orbit/shared.
-  endReason         String?   @map("end_reason")
+  endReason            String?   @map("end_reason")
   // Denormalized preview: the text of the most recent `assistant` RunEvent, written on
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
-  lastAssistantText String?   @map("last_assistant_text")
+  lastAssistantText    String?   @map("last_assistant_text")
   // Denormalized "frontier" activity for the sidebar's live status line: the tool
   // name when a tool_use is the latest durable event (in flight, no tool_result yet),
   // cleared back to null on any other frontier (assistant text, tool_result, turn end).
   // Only meaningful while RUNNING; the list gates display on status so a stale value
   // on a finished session is never shown.
-  lastToolUse       String?   @map("last_tool_use")
+  lastToolUse          String?   @map("last_tool_use")
   // Denormalized "pending question": the latest user turn's text while it's the frontier — a
   // turn just started and the agent hasn't replied yet. Set alongside lastToolUse on event
   // ingestion and cleared (null) the moment any other frontier lands (assistant text, a tool,
   // turn end). Lets the list show the message you just sent while awaiting the reply, instead of
   // the now-stale previous reply. Only meaningful while RUNNING; display is status-gated.
-  lastUserText      String?   @map("last_user_text")
+  lastUserText         String?   @map("last_user_text")
   // Denormalized set of the agent's still-running background shells (Bash run_in_background):
   // the tool_use ids of launches that haven't yet reported a terminal `<task-notification>`.
   // Added on launch, removed on completion, cleared on (re)spawn/complete. Lets the list +
   // header show "Background running" without scanning events. Only meaningful while live.
-  runningBgShells   String[]  @map("running_bg_shells")
+  runningBgShells      String[]  @map("running_bg_shells")
   // Denormalized set of the agent's still-running sub-agents (Task/Agent tool): the tool_use
   // ids of sub-agent launches that haven't yet reported a terminal `<task-notification>`
   // (background_task). Added on launch, removed on completion, cleared on (re)spawn. The Agent
   // tool is async — its launch tool_result lands immediately and the parent then streams its
   // own top-scope system progress events, so lastToolUse can't carry this. Lets the list show
   // "Running Agent…" while a sub-agent is in flight. Only meaningful while live.
-  runningSubagents  String[]  @map("running_subagents")
+  runningSubagents     String[]  @map("running_subagents")
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
@@ -415,27 +427,27 @@ model Session {
   // the list payload. `isolationStatus` records what the runner actually did:
   // 'worktree' (isolated) or 'shared-nogit' (workDir wasn't a git repo, so it ran in
   // the shared dir with no isolation). All null for pre-feature / never-run sessions.
-  branch            String?
-  baseSha           String?   @map("base_sha")
-  changedFiles      Json?     @map("changed_files")
-  isolationStatus   String?   @map("isolation_status")
+  branch               String?
+  baseSha              String?   @map("base_sha")
+  changedFiles         Json?     @map("changed_files")
+  isolationStatus      String?   @map("isolation_status")
   // ── "Merge to main" (UI button on the worktree status bar) ──────────────────
   // The user can ask the runner to merge this session's `branch` into a target branch.
   // mergeStatus drives the button: 'pending' (queued for the next heartbeat of the
   // session's assigned runner) → 'merged' (mergedAt set) | 'conflict' | 'error'
   // (mergeError carries git's message / the failed precondition). All null until asked.
-  mergeStatus       String?   @map("merge_status")
-  mergeError        String?   @map("merge_error")
-  mergeRequestedAt  DateTime? @map("merge_requested_at")
-  mergedAt          DateTime? @map("merged_at")
+  mergeStatus          String?   @map("merge_status")
+  mergeError           String?   @map("merge_error")
+  mergeRequestedAt     DateTime? @map("merge_requested_at")
+  mergedAt             DateTime? @map("merged_at")
   // The branch the user chose to merge into (from the status bar's branch dropdown). Null
   // means the default — the runner auto-detects main, else master. Relayed to the runner in
   // the MergeCommand and shown on the merged ✓ chip.
-  mergeTarget       String?   @map("merge_target")
+  mergeTarget          String?   @map("merge_target")
   // Candidate merge targets the runner reported for this session's repo (local branches
   // minus Orbit's own orbit/* session branches), populating the dropdown. Refreshed each
   // heartbeat while live and at completion; empty for older runners (dropdown hidden).
-  mergeTargets      String[]  @default([]) @map("merge_targets")
+  mergeTargets         String[]  @default([]) @map("merge_targets")
   // branchMerged is the runner's verdict that this branch's work is already in the default target
   // (main, else master): the branch tip is an ancestor of it (fast-forward / command-line push), or
   // every post-fork commit has a patch-equivalent there (a squash/rebase merge under new SHAs, e.g.
@@ -443,56 +455,57 @@ model Session {
   // report: true → the bar shows a "✓ In main" chip instead of a redundant Merge button. Null = the
   // runner hasn't reported it (older runner / not yet recomputed) → the bar keeps its
   // mergeStatus-driven behavior.
-  branchMerged      Boolean?  @map("branch_merged")
+  branchMerged         Boolean?  @map("branch_merged")
   // The worktree's ACTUAL current HEAD branch, as last reported by the runner (git symbolic-ref).
   // Normally equals `branch`; it differs when the agent ran `git checkout -b` inside the worktree,
   // moving the work onto a branch Orbit isn't tracking. When it differs, the status bar flags the
   // divergence ("On <branch> — not tracked") instead of a stale "✓ In main", and offers Adopt
   // (which re-points `branch` here). Null = not isolated / not reported (older runner).
-  worktreeBranch    String?   @map("worktree_branch")
+  worktreeBranch       String?   @map("worktree_branch")
   // ── "Commit" (UI button on the worktree status bar, for a live session) ─────
   // worktreeDirty is the runner's last-reported `git status` for the live worktree: true
   // → the bar shows Commit (commit the uncommitted work onto `branch`), false → Merge.
   // commitStatus drives the Commit button while it runs: 'pending' (queued for the next
   // heartbeat) → 'committed' | 'nochange' | 'error' (commitError carries git's message).
   // All null until the runner reports / the user clicks commit.
-  worktreeDirty     Boolean?  @map("worktree_dirty")
-  commitStatus      String?   @map("commit_status")
-  commitError       String?   @map("commit_error")
-  commitRequestedAt DateTime? @map("commit_requested_at")
+  worktreeDirty        Boolean?  @map("worktree_dirty")
+  commitStatus         String?   @map("commit_status")
+  commitError          String?   @map("commit_error")
+  commitRequestedAt    DateTime? @map("commit_requested_at")
   // Product lifecycle: completedAt moves an Open session to Completed; deletedAt moves
   // it to Trash. Both retain all data and restore clears them. archivedAt is a temporary
   // rolling-deploy compatibility mirror maintained by migration 0076's database trigger.
-  completedAt       DateTime? @map("completed_at")
+  completedAt          DateTime? @map("completed_at")
   /// @deprecated Compatibility mirror of completedAt; do not use in new server code.
-  archivedAt        DateTime? @map("archived_at")
-  deletedAt         DateTime? @map("deleted_at")
+  archivedAt           DateTime? @map("archived_at")
+  deletedAt            DateTime? @map("deleted_at")
   // Pin to the top of the session list: when set, the session sorts above unpinned ones
   // (a per-owner personal ordering). null = not pinned. Toggled via POST/DELETE /sessions/:id/pin.
   // Ordering only — never affects visibility or the runner.
-  pinnedAt          DateTime? @map("pinned_at")
+  pinnedAt             DateTime? @map("pinned_at")
   // ── Public read-only share link ─────────────────────────────────────────────
   // shareToken is an unguessable token embedded in a public URL (/s/<token>); anyone
   // with the link can view this session's transcript read-only, no login. null = not
   // shared. Revoking sets it back to null (old links 404); re-sharing mints a fresh
   // token. sharedAt records when the current link was minted. Only the transcript is
   // exposed via the token (see SharedController) — never ownership/billing/runner internals.
-  shareToken        String?   @unique @map("share_token")
-  sharedAt          DateTime? @map("shared_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  shareToken           String?   @unique @map("share_token")
+  sharedAt             DateTime? @map("shared_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  events    RunEvent[]
-  turns     ConversationTurn[]
-  toolCalls ToolCall[]
-  llmUsage  LlmUsage[]
-  approvals Approval[]
+  events                RunEvent[]
+  turns                 ConversationTurn[]
+  toolCalls             ToolCall[]
+  llmUsage              LlmUsage[]
+  approvals             Approval[]
+  inboxLeaseGenerations InboxLeaseGeneration[]
   // Tasks an agent created from within this session (cf. Task.creatorSession).
-  createdTasks Task[] @relation("TaskCreatorSession")
-  attachments  Attachment[]
-  diff         SessionDiff?
+  createdTasks          Task[]                 @relation("TaskCreatorSession")
+  attachments           Attachment[]
+  diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
-  tagLinks     SessionTagLink[]
+  tagLinks              SessionTagLink[]
 
   @@index([assignedRunnerId, status])
   @@index([batchId, status])
@@ -501,6 +514,20 @@ model Session {
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
   @@map("session")
+}
+
+// Durable activation/retirement records for runner inbox consumers. A retired row is kept as a
+// tombstone so a delayed activate request cannot resurrect an engine after release or reclaim.
+model InboxLeaseGeneration {
+  generation  String    @id @db.Uuid
+  sessionId   String    @map("session_id") @db.Uuid
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  leaseOwner  String?   @map("lease_owner") @db.Uuid
+  activatedAt DateTime  @default(now()) @map("activated_at")
+  retiredAt   DateTime? @map("retired_at")
+
+  @@index([sessionId])
+  @@map("inbox_lease_generation")
 }
 
 // On-demand per-file unified diffs of a session's worktree changes, kept in a side table
@@ -564,26 +591,26 @@ model SessionTagLink {
 // process from the runner's seq-owning session loop, so persisting it as an event
 // would race the runner's monotonic seq. Idempotent on (sessionId, toolUseId).
 model Approval {
-  id          String    @id @default(uuid(7)) @db.Uuid
-  sessionId   String    @map("session_id") @db.Uuid
-  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  toolName    String    @map("tool_name")
-  input       Json
-  toolUseId   String?   @map("tool_use_id")
+  id           String    @id @default(uuid(7)) @db.Uuid
+  sessionId    String    @map("session_id") @db.Uuid
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  toolName     String    @map("tool_name")
+  input        Json
+  toolUseId    String?   @map("tool_use_id")
   // PENDING -> ALLOWED | DENIED
-  status      String    @default("PENDING")
-  message     String? // optional deny reason / note from the human
+  status       String    @default("PENDING")
+  message      String? // optional deny reason / note from the human
   // AskUserQuestion only: the human's picks, keyed by question text -> selected
   // option labels. The runner feeds this back to claude as updatedInput.answers.
-  answers     Json?
+  answers      Json?
   // Set when the human chose "allow + remember same kind": a claude permission rule
   // ({ toolName, ruleContent? }) the runner adds to the session so future matching
   // calls are auto-allowed by claude without re-prompting.
-  rememberRule Json?    @map("remember_rule")
+  rememberRule Json?     @map("remember_rule")
   // User who decided it (no FK; cf. Activity.actorId).
-  decidedById String?   @map("decided_by_id") @db.Uuid
-  createdAt   DateTime  @default(now()) @map("created_at")
-  decidedAt   DateTime? @map("decided_at")
+  decidedById  String?   @map("decided_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  decidedAt    DateTime? @map("decided_at")
 
   @@unique([sessionId, toolUseId])
   @@index([sessionId, status])
@@ -656,12 +683,15 @@ model ConversationTurn {
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
+  // Random runner-engine generation that owns the current delivery lease. A
+  // delayed release from a dead process may expire only its own generation.
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
   answeredAt      DateTime? @map("answered_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   // Image blobs sent with this turn (web composer). Linked when the turn is enqueued;
   // the inbox hands their refs to the runner. Cascade so withdrawing/ending drops them.
-  attachments     Attachment[]
+  attachments Attachment[]
 
   @@unique([sessionId, clientTurnId])
   @@unique([sessionId, seq])
@@ -676,25 +706,25 @@ model ConversationTurn {
 // survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
 // the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
 model Attachment {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  ownerId   String   @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
-  owner     User     @relation(fields: [ownerId], references: [id])
+  id        String            @id @default(uuid(7)) @db.Uuid
+  ownerId   String            @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
+  owner     User              @relation(fields: [ownerId], references: [id])
   // Optional session scope: set when uploaded inside a session composer so the blob
   // cascade-deletes with the session. Null for uploads made before the session exists.
-  sessionId String?  @map("session_id") @db.Uuid
-  session   Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String?           @map("session_id") @db.Uuid
+  session   Session?          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   // Optional turn scope: set when the attachment is sent with a user turn, so the inbox
   // can hand the runner exactly that turn's images. Null until linked at enqueue time;
   // cascades with the turn (withdrawing a queued turn or ending the session drops it).
   turnId    String?           @map("turn_id") @db.Uuid
   turn      ConversationTurn? @relation(fields: [turnId], references: [id], onDelete: Cascade)
-  mimeType  String   @map("mime_type")
-  sizeBytes Int      @map("size_bytes")
+  mimeType  String            @map("mime_type")
+  sizeBytes Int               @map("size_bytes")
   // Original upload filename. The runner writes a non-image/-PDF upload to the worktree
   // under this name and references it to claude. Null for legacy rows and pasted images.
-  fileName  String?  @map("file_name")
+  fileName  String?           @map("file_name")
   data      Bytes // raw bytes (bytea); Postgres TOAST compresses/offloads transparently
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])
   @@index([sessionId])
@@ -734,36 +764,36 @@ model TaskList {
 // Created by a user or an agent, optionally assigned to an agent to execute; the
 // agent's runs hang off it as Sessions.
 model Task {
-  id          String      @id @default(uuid(7)) @db.Uuid
-  title       String
-  description String?
-  status      TaskStatus  @default(OPEN)
+  id               String      @id @default(uuid(7)) @db.Uuid
+  title            String
+  description      String?
+  status           TaskStatus  @default(OPEN)
   // Tenant scope: list/authorization always filter by this column (like agents/sessions).
-  ownerId     String      @map("owner_id") @db.Uuid
-  owner       User        @relation(fields: [ownerId], references: [id])
+  ownerId          String      @map("owner_id") @db.Uuid
+  owner            User        @relation(fields: [ownerId], references: [id])
   // Polymorphic creator (no FK, cf. Activity.actorId): who/what authored the task.
-  creatorType CreatorType @map("creator_type")
-  creatorId   String      @map("creator_id") @db.Uuid
+  creatorType      CreatorType @map("creator_type")
+  creatorId        String      @map("creator_id") @db.Uuid
   // The session an in-session agent created this task from (real FK, optional; null for
   // user-created tasks). Deleting the session detaches but keeps the task. Lets the task
   // detail page link back to its origin run.
-  creatorSessionId String?  @map("creator_session_id") @db.Uuid
-  creatorSession   Session? @relation("TaskCreatorSession", fields: [creatorSessionId], references: [id], onDelete: SetNull)
+  creatorSessionId String?     @map("creator_session_id") @db.Uuid
+  creatorSession   Session?    @relation("TaskCreatorSession", fields: [creatorSessionId], references: [id], onDelete: SetNull)
   // The agent assigned to execute it (real FK, optional).
-  assigneeId  String?     @map("assignee_id") @db.Uuid
-  assignee    Agent?      @relation(fields: [assigneeId], references: [id])
+  assigneeId       String?     @map("assignee_id") @db.Uuid
+  assignee         Agent?      @relation(fields: [assigneeId], references: [id])
   // Optional parent list grouping; deleting the list detaches but keeps the task.
-  listId      String?     @map("list_id") @db.Uuid
-  list        TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
-  dueDate     DateTime?   @map("due_date")
+  listId           String?     @map("list_id") @db.Uuid
+  list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
+  dueDate          DateTime?   @map("due_date")
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
-  autoRunWhenReady Boolean @default(true) @map("auto_run_when_ready")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
-  comments TaskComment[]
-  sessions Session[] @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
+  comments     TaskComment[]
+  sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   // Dependency edges where THIS task is the dependent: the prerequisites it waits on.
   dependsOn    TaskDependency[] @relation("DependencyFromTask")
   // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
@@ -822,46 +852,46 @@ model TaskDependency {
 // A control-plane-configured model provider (e.g. DeepSeek) that borrows a built-in
 // runtime CLI instead of shipping its own. Sessions/agents keep its `slug` in their
 // `provider` column as a first-class identity (shown in pickers). At dispatch the queue
-// resolves the slug here, coerces the runner-facing provider to `runtime` (claude|codex),
+// resolves the slug here and coerces the runner-facing provider to `runtime` (claude|codex),
 // and injects baseUrl + the decrypted key into the borrowed CLI's process env so it talks
 // to this endpoint. The API key is stored AES-256-GCM encrypted (providers/provider-crypto.ts);
 // it is dispatched only over the runner-auth claim channel and NEVER returned to the browser.
 model ModelProvider {
-  id           String   @id @default(uuid(7)) @db.Uuid
+  id            String   @id @default(uuid(7)) @db.Uuid
   // Stable identity stored in Agent/Session.provider and shown in pickers, e.g. "deepseek".
-  slug         String   @unique
-  label        String
-  // Which built-in runtime CLI drives it: "claude" (Anthropic-compatible endpoint, Phase 1)
-  // or "codex" (OpenAI-compatible). Decides which env vars baseUrl/key inject into.
-  runtime      String   @default("claude")
-  baseUrl      String   @map("base_url")
+  slug          String   @unique
+  label         String
+  // Which configurable runtime CLI drives it: "claude" (Anthropic-compatible endpoint)
+  // or "codex" (OpenAI-compatible). Kimi is first-class and cannot be borrowed here.
+  runtime       String   @default("claude")
+  baseUrl       String   @map("base_url")
   // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Never
   // selected into a browser-facing payload.
-  apiKeyEnc    String   @map("api_key_enc")
+  apiKeyEnc     String   @map("api_key_enc")
   // Picker model list: [{ value, label, contextWindow? }]. `value` is the runtime model id
   // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken
   // at write time; reads serve the preset's current list instead (see presetSlug).
-  models       Json     @default("[]")
-  defaultModel String?  @map("default_model")
+  models        Json     @default("[]")
+  defaultModel  String?  @map("default_model")
   // The vendor preset (@orbit/shared PROVIDER_PRESETS) this row was created from — its identity,
   // fixed for life: the logo it shows and the vendor it "is", even when its own slug had to be
   // suffixed. NULL for a custom endpoint.
-  presetSlug   String?  @map("preset_slug")
+  presetSlug    String?  @map("preset_slug")
   // Whether the preset also OWNS the model list: true → models and default model resolve from the
   // catalogue on every read, so one added there reaches providers configured long before it
   // existed. Editing the list by hand clears this (the row keeps its identity, and can opt back
   // in); `models` above is then the row's own.
-  followsPreset Boolean @default(false) @map("follows_preset")
-  enabled      Boolean  @default(true)
+  followsPreset Boolean  @default(false) @map("follows_preset")
+  enabled       Boolean  @default(true)
   // Picker display order; NULL sorts last.
-  position     Int?
+  position      Int?
   // NULL = a shared provider (admin-managed, visible to everyone). Set = a personal (BYOK)
   // provider: visible in, and dispatchable for, only its owner's sessions. Slugs stay globally
   // unique either way, so dispatch-by-slug is never ambiguous.
-  ownerId      String?  @map("owner_id") @db.Uuid
-  owner        User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  ownerId       String?  @map("owner_id") @db.Uuid
+  owner         User?    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([ownerId])
   @@map("model_provider")

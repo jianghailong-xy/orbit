@@ -24,12 +24,12 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
+import type { PlanUsage } from '@orbit/shared';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, providersQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
-import { planUsageRows } from '../lib/planUsage';
+import { planUsageRows, planUsageSnapshots } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import {
   AUTO_CAPABLE_MODELS,
@@ -68,39 +68,9 @@ const fmtTime = (d?: string | null): string =>
       })
     : '—';
 
-function snapshotsForPlanUsage(usage: PlanUsage): { key: string; title: string; note: string; usage: PlanUsageSnapshot }[] {
-  if (usage.claude || usage.codex) {
-    return [
-      usage.claude && {
-        key: 'claude',
-        title: 'Claude usage',
-        note: 'Account-wide Claude subscription quota for this runner login',
-        usage: usage.claude,
-      },
-      usage.codex && {
-        key: 'codex',
-        title: 'Codex usage',
-        note: 'Account-wide Codex rate limits for this runner login',
-        usage: usage.codex,
-      },
-    ].filter(Boolean) as { key: string; title: string; note: string; usage: PlanUsageSnapshot }[];
-  }
-  const codex = usage.provider === 'codex' || usage.primary || usage.secondary || usage.rateLimits?.length;
-  return [
-    {
-      key: codex ? 'codex' : 'claude',
-      title: codex ? 'Codex usage' : 'Claude usage',
-      note: codex
-        ? 'Account-wide Codex rate limits for this runner login'
-        : 'Account-wide Claude subscription quota for this runner login',
-      usage,
-    },
-  ];
-}
-
 // Per-runner provider plan usage for the account(s) this runner is logged into.
 function PlanUsageSection({ usage }: { usage: PlanUsage }) {
-  const sections = snapshotsForPlanUsage(usage)
+  const sections = planUsageSnapshots(usage)
     .map((s) => ({ ...s, rows: planUsageRows(s.usage) }))
     .filter((s) => s.rows.length > 0);
   if (sections.length === 0) return null;
@@ -456,11 +426,8 @@ export function RunnerDetailPage() {
     // A configured provider shows its own label; fall back to the raw slug if it's since been
     // removed/disabled (so the row never silently mislabels it as Claude).
     const providerLabel =
-      a.provider === 'codex'
-        ? 'Codex'
-        : a.provider && a.provider !== 'claude'
-          ? (configuredProviders.find((p) => p.slug === a.provider)?.label ?? a.provider)
-          : 'Claude';
+      mergedProviderOptions(configuredProviders).find((p) => p.value === (a.provider ?? 'claude'))
+        ?.label ?? a.provider ?? 'Claude';
     return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">

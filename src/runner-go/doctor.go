@@ -14,7 +14,7 @@ import (
 )
 
 // engineSpec describes one coding-CLI engine the runner can drive. The bin names
-// (claude/codex) match runtimeProvider's provider constants, so the runtime
+// (claude/codex/kimi) match runtimeProvider's provider constants, so the runtime
 // pre-flight can look them up directly.
 type engineSpec struct {
 	name       string   // display name, e.g. "Claude Code"
@@ -79,6 +79,18 @@ var engineSpecs = []engineSpec{
 		loginRemoteFlag: "--device-auth",
 		loginHeadless:   "codex login --device-auth",
 	},
+	{
+		name:       "Kimi Code",
+		bin:        providerKimi,
+		installCmd: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
+		// `kimi update` deliberately becomes a read-only/manual hint without a
+		// TTY. The runner updater is unattended, so repeat the official
+		// idempotent installer instead (engineupdate.go's empty-command fallback).
+		updateCmd:     "",
+		installAlt:    "npm install -g @moonshot-ai/kimi-code",
+		loginArgs:     []string{"login"},
+		loginHeadless: "kimi login",
+	},
 }
 
 // authState is a tri-state sign-in probe result.
@@ -101,20 +113,15 @@ type engineHealth struct {
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
-// same way setupService bakes it on Linux: the user's login PATH plus ~/.local/bin
-// (where the official claude installer drops the binary). A CLI that works in your
-// shell but isn't here will spawn fine by hand yet fail under the service.
+// same way setupService bakes it: the user's login PATH plus ~/.local/bin,
+// used by the official Claude and Kimi installers. A CLI that works
+// in your shell but isn't here will spawn fine by hand yet fail under the service.
 func serviceLoginPath() string {
 	u, err := user.Current()
 	if err != nil {
 		return os.Getenv("PATH")
 	}
-	p := userLoginPath(u, os.Getenv("PATH"))
-	localBin := filepath.Join(u.HomeDir, ".local", "bin")
-	if !pathContains(p, localBin) {
-		p = localBin + ":" + p
-	}
-	return p
+	return runnerEnginePath(u.HomeDir, userLoginPath(u, os.Getenv("PATH")))
 }
 
 // lookPathIn finds an executable named bin within a colon-separated PATH, returning
@@ -177,6 +184,7 @@ func engineVersion(binPath string) string {
 //
 //	claude auth status  -> JSON {"loggedIn": bool}
 //	codex login status  -> exit 0 when signed in, non-zero when signed out
+//	kimi acp            -> initialize + authenticate JSON-RPC handshake
 //
 // Anything ambiguous (command errors, unexpected output) maps to authUnknown, so
 // doctor never wrongly claims "signed out".
@@ -206,6 +214,97 @@ func probeAuth(bin, binPath string) authState {
 			return authNo // ran and reported not-signed-in
 		}
 		return authUnknown // couldn't even run it
+	case providerKimi:
+		return probeKimiACPAuth(ctx, binPath)
+	}
+	return authUnknown
+}
+
+// kimiACPResponse is the small part of a JSON-RPC response needed by the auth
+// probe. Kimi's ACP server may emit unrelated notifications, so the response ID
+// is retained and matched rather than assuming the next JSON value is ours.
+type kimiACPResponse struct {
+	ID    json.RawMessage `json:"id"`
+	Error *struct {
+		Code int `json:"code"`
+	} `json:"error"`
+}
+
+func readKimiACPResponse(dec *json.Decoder, wantID int) (kimiACPResponse, error) {
+	for {
+		var response kimiACPResponse
+		if err := dec.Decode(&response); err != nil {
+			return kimiACPResponse{}, err
+		}
+		var id int
+		if json.Unmarshal(response.ID, &id) == nil && id == wantID {
+			return response, nil
+		}
+	}
+}
+
+// probeKimiACPAuth starts Kimi's non-interactive ACP endpoint and asks it to
+// validate the login already stored on disk. The initialize/authenticate pair is
+// the ACP-supported status check: authenticate returns -32000 only when login is
+// required. Protocol, process, and other errors stay authUnknown so doctor never
+// reports a false signed-out state.
+func probeKimiACPAuth(ctx context.Context, binPath string) authState {
+	cmd := exec.CommandContext(ctx, binPath, "acp")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return authUnknown
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return authUnknown
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		return authUnknown
+	}
+	defer func() {
+		_ = stdin.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	}()
+
+	enc, dec := json.NewEncoder(stdin), json.NewDecoder(stdout)
+	if err := enc.Encode(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": 1,
+			"clientCapabilities": map[string]any{
+				"fs": map[string]bool{"readTextFile": false, "writeTextFile": false},
+			},
+		},
+	}); err != nil {
+		return authUnknown
+	}
+	initialized, err := readKimiACPResponse(dec, 1)
+	if err != nil || initialized.Error != nil {
+		return authUnknown
+	}
+
+	if err := enc.Encode(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "authenticate",
+		"params":  map[string]string{"methodId": "login"},
+	}); err != nil {
+		return authUnknown
+	}
+	authenticated, err := readKimiACPResponse(dec, 2)
+	if err != nil {
+		return authUnknown
+	}
+	if authenticated.Error == nil {
+		return authYes
+	}
+	if authenticated.Error.Code == -32000 {
+		return authNo
 	}
 	return authUnknown
 }

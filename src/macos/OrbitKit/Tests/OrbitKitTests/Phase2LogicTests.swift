@@ -305,6 +305,27 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(codex.rows.map(\.percent), [22, 35, 90])
     }
 
+    func testPlanUsageSelectsKimiWithoutClaudeFallback() {
+        let legacyClaude = PlanUsage(
+            fiveHour: .init(utilization: 17),
+            sevenDay: .init(utilization: 42))
+        XCTAssertEqual(legacyClaude.snapshot(for: "claude")?.primaryPercent, 17)
+        XCTAssertNil(legacyClaude.snapshot(for: "kimi"))
+
+        let kimi = PlanUsageSnapshot(provider: "kimi", primary: .init(utilization: 63))
+        let nested = PlanUsage(
+            claude: .init(provider: "claude", fiveHour: .init(utilization: 11)),
+            codex: .init(provider: "codex", primary: .init(utilization: 22)),
+            kimi: kimi)
+        XCTAssertEqual(nested.snapshot(for: "kimi"), kimi)
+        XCTAssertEqual(nested.snapshots.map(\.0), ["Claude quota", "Codex quota", "Kimi quota"])
+
+        let flatKimi = PlanUsage(provider: "kimi", primary: .init(utilization: 71))
+        XCTAssertEqual(flatKimi.snapshot(for: "kimi")?.primaryPercent, 71)
+        XCTAssertNil(flatKimi.snapshot(for: "claude"))
+        XCTAssertEqual(flatKimi.snapshots.first?.0, "Kimi quota")
+    }
+
     func testMakeTurn() {
         let msg = ComposerLogic.makeTurn(clientTurnId: "c1", text: "hi", shell: false, attachmentIds: [])
         XCTAssertEqual(msg.kind, "message")
@@ -367,19 +388,29 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
-    /// A codex session can't invoke claude's assets — its app-server takes the prompt verbatim
-    /// — so only the local commands survive there, while claude keeps the full catalog.
+    /// Runtime-owned registries are isolated: Codex only keeps local Orbit commands, Kimi only
+    /// sees tagged Kimi entries, and Claude/custom providers accept legacy nil + Claude tags.
     func testSlashForProvider() {
         let items = ComposerHostCommand.slashItems + [
             SlashCommandInfo(name: "commit", type: "command"),
-            SlashCommandInfo(name: "loop", type: "skill", builtin: true),
+            SlashCommandInfo(name: "loop", type: "skill", builtin: true, provider: "claude"),
+            SlashCommandInfo(name: "deploy", type: "command", provider: "kimi"),
         ]
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
                        ["status", "commit", "loop"])
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "kimi").map(\.name),
+                       ["status", "deploy"])
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "deepseek").map(\.name),
+                       ["status", "commit", "loop"])
         // An unset provider is claude's (the default everywhere else in the composer).
-        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: nil).count, items.count)
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: nil).map(\.name),
+                       ["status", "commit", "loop"])
+
+        let claudeID = SlashCommandInfo(name: "same", type: "command", provider: "claude").id
+        let kimiID = SlashCommandInfo(name: "same", type: "command", provider: "kimi").id
+        XCTAssertNotEqual(claudeID, kimiID)
     }
 
     /// The CLI's own registry (built-in skills, plugin skills, namespaced commands) rides the

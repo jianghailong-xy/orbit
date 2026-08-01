@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 )
 
@@ -23,24 +24,43 @@ func TestUpdateErrDetail(t *testing.T) {
 	}
 }
 
+func TestKimiUpdatePreservesInstallSource(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	spec, ok := specFor(providerKimi)
+	if !ok {
+		t.Fatal("Kimi engine spec missing")
+	}
+	standalone := filepath.Join(home, ".local", "bin", "kimi")
+	if got, ok := engineUpdateCommand(spec, standalone, home); !ok || got != spec.installCmd {
+		t.Fatalf("standalone update = (%q, %v), want official installer", got, ok)
+	}
+	for _, managed := range []string{"/usr/local/bin/kimi", "/opt/homebrew/bin/kimi"} {
+		if got, ok := engineUpdateCommand(spec, managed, home); ok || got != "" {
+			t.Fatalf("package-managed %s update = (%q, %v), want skip", managed, got, ok)
+		}
+	}
+}
+
 func TestEngineSpecsUpdateCmd(t *testing.T) {
 	specs := map[string]engineSpec{}
 	for _, s := range engineSpecs {
 		specs[s.bin] = s
 	}
-	// Both engines update via their own updater, which acts on whichever install PATH
-	// resolves. Neither may fall back to installCmd: `npm i -g @openai/codex` targets
-	// `npm prefix -g` regardless of PATH, so it silently upgraded a copy the runner never
-	// execs on the root runner, and died with EACCES on the non-root one.
+	// Claude and Codex update via their own unattended updaters. Kimi's update command
+	// becomes a manual hint without a TTY, so it deliberately repeats the official
+	// idempotent installer via the empty-command fallback.
 	if got := specs[providerClaude].updateCmd; got != "claude update" {
 		t.Fatalf("claude updateCmd = %q, want %q", got, "claude update")
 	}
 	if got := specs[providerCodex].updateCmd; got != "codex update" {
 		t.Fatalf("codex updateCmd = %q, want %q", got, "codex update")
 	}
-	// No engine may rely on the installCmd fallback for its daily update.
+	if got := specs[providerKimi].updateCmd; got != "" {
+		t.Fatalf("kimi updateCmd = %q, want the unattended installer fallback", got)
+	}
+	// No other engine may rely on the installCmd fallback for its daily update.
 	for _, s := range engineSpecs {
-		if s.updateCmd == "" {
+		if s.updateCmd == "" && s.bin != providerKimi {
 			t.Errorf("%s has no updateCmd; the installCmd fallback can target a different install than PATH", s.name)
 		}
 	}

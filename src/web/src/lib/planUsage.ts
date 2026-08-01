@@ -1,4 +1,4 @@
-import type { PlanUsageRateLimit, PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
+import type { PlanUsage, PlanUsageRateLimit, PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
 
 export interface PlanUsageDisplayRow {
   key: string;
@@ -7,6 +7,88 @@ export interface PlanUsageDisplayRow {
   window: PlanUsageWindow;
   percent: number;
   nearLimit: boolean;
+}
+
+export interface PlanUsageSectionInfo {
+  key: string;
+  title: string;
+  note: string;
+  usage: PlanUsageSnapshot;
+}
+
+/** Pick the quota snapshot for one runtime without leaking another runtime's
+ * legacy-flat payload into it. New runners nest snapshots by provider; older
+ * runners reported one flat snapshot, where Claude may omit `provider` and
+ * Codex/Kimi identify themselves explicitly (or, for Codex, by its bucket
+ * fields). */
+export function planUsageSnapshotForProvider(
+  usage: PlanUsage | null | undefined,
+  provider: string,
+): PlanUsageSnapshot | null {
+  if (!usage) return null;
+  if (provider === 'kimi') {
+    if (usage.kimi) return usage.kimi;
+    return usage.provider === 'kimi' ? usage : null;
+  }
+  if (provider === 'codex') {
+    if (usage.codex) return usage.codex;
+    if (usage.provider && usage.provider !== 'codex') return null;
+    return usage.provider === 'codex' || usage.primary || usage.secondary || usage.rateLimits?.length
+      ? usage
+      : null;
+  }
+  if (provider === 'claude') {
+    if (usage.claude) return usage.claude;
+    return !usage.provider || usage.provider === 'claude' ? usage : null;
+  }
+  return null;
+}
+
+/** Split a runner's possibly multi-runtime quota payload into display sections. */
+export function planUsageSnapshots(usage: PlanUsage): PlanUsageSectionInfo[] {
+  if (usage.claude || usage.codex || usage.kimi) {
+    return [
+      usage.claude && {
+        key: 'claude',
+        title: 'Claude usage',
+        note: 'Account-wide Claude subscription quota for this runner login',
+        usage: usage.claude,
+      },
+      usage.codex && {
+        key: 'codex',
+        title: 'Codex usage',
+        note: 'Account-wide Codex rate limits for this runner login',
+        usage: usage.codex,
+      },
+      usage.kimi && {
+        key: 'kimi',
+        title: 'Kimi usage',
+        note: 'Account-wide Kimi quota for this runner login',
+        usage: usage.kimi,
+      },
+    ].filter(Boolean) as PlanUsageSectionInfo[];
+  }
+
+  const provider =
+    usage.provider === 'kimi'
+      ? 'kimi'
+      : usage.provider === 'codex' || usage.primary || usage.secondary || usage.rateLimits?.length
+        ? 'codex'
+        : 'claude';
+  if (provider === 'kimi') {
+    return [{ key: 'kimi', title: 'Kimi usage', note: 'Account-wide Kimi quota for this runner login', usage }];
+  }
+  const codex = provider === 'codex';
+  return [
+    {
+      key: provider,
+      title: codex ? 'Codex usage' : 'Claude usage',
+      note: codex
+        ? 'Account-wide Codex rate limits for this runner login'
+        : 'Account-wide Claude subscription quota for this runner login',
+      usage,
+    },
+  ];
 }
 
 const CLAUDE_ROWS: { key: 'fiveHour' | 'sevenDay' | 'sevenDayOpus' | 'sevenDaySonnet'; label: string }[] = [

@@ -33,15 +33,15 @@ var version = "dev"
 // image bakes its own PUBLIC_ORIGIN in; a plain `go build` keeps the hosted default.
 var defaultServer = "https://orbitd.io"
 
-var usage = `orbit — register a machine and run Claude Code tasks for an Orbit control plane
+var usage = `orbit — register a machine and run coding-agent tasks for an Orbit control plane
 
 Usage:
   orbit register [options]          Register this machine + install the service (approve in the browser)
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
-  orbit doctor                      Check the Claude/Codex CLIs are installed, signed in, and on the service PATH
-  orbit engine-update               Update the Claude/Codex CLIs now (the daily check, on demand)
+  orbit doctor                      Check the Claude/Codex/Kimi CLIs, sign-in, and service PATH
+  orbit engine-update               Update the Claude/Codex/Kimi CLIs now (the daily check, on demand)
   orbit resume [session-id]         Resume a session in this terminal via claude --resume
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
@@ -51,13 +51,13 @@ Usage:
 
 Run 'orbit <command> --help' for command-specific options.
 
-The runner drives the machine's local Claude Code login (run 'claude' then '/login');
-no API key is required.
+The runner drives the machine's local Claude Code, Codex, and Kimi Code logins;
+no provider API key is required for these built-in runtimes.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
   ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
-  ORBIT_NO_ENGINE_UPDATE   Disable the daily Claude/Codex CLI update check
+  ORBIT_NO_ENGINE_UPDATE   Disable the daily Claude/Codex/Kimi CLI update check
 `
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
@@ -81,7 +81,7 @@ Options:
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
-  --auto-install-engines   Let the runner install a missing Claude/Codex CLI itself, the first
+  --auto-install-engines   Let the runner install a missing Claude/Codex/Kimi CLI itself, the first
   --no-auto-install-engines  time a session needs one. Asked interactively when neither is
                            passed; an unattended register defaults to not installing.
   --proxy [<url>]          Use an HTTP proxy for claude on the runner so it can reach
@@ -119,7 +119,7 @@ Usage:
 Usage:
   orbit doctor
 
-Reports, for Claude Code and Codex, whether the CLI is installed, its version, a
+Reports, for Claude Code, Codex, and Kimi Code, whether the CLI is installed, its version, a
 best-effort sign-in check, and whether the background service's PATH can see it —
 with the exact install/sign-in command for anything that's missing. Exits non-zero
 when no engine is installed. Runs automatically at the end of 'orbit register'.
@@ -145,7 +145,7 @@ Use this if the startup auto-update isn't working.
 Usage:
   orbit engine-update
 
-Runs each installed engine's own updater (claude update / codex update) once, against the
+Runs each installed engine's updater once, against the
 binary the background service resolves on its PATH — the same check the runner runs ~10 min
 after startup and every 24h. Unlike the daily run it can't see live sessions, so prefer
 running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGINE_UPDATE.
@@ -603,7 +603,8 @@ func cmdResume(args []string) {
 	fmt.Println()
 
 	var cmd *exec.Cmd
-	if strings.ToLower(strings.TrimSpace(meta.Provider)) == providerCodex {
+	switch strings.ToLower(strings.TrimSpace(meta.Provider)) {
+	case providerCodex:
 		sessionID := meta.RuntimeSessionID
 		if sessionID == "" {
 			sessionID = meta.SessionUUID
@@ -614,7 +615,13 @@ func cmdResume(args []string) {
 		}
 		args = append(args, "resume", "--include-non-interactive", sessionID)
 		cmd = exec.Command("codex", args...)
-	} else {
+	case providerKimi:
+		if meta.RuntimeSessionID == "" {
+			fmt.Fprintln(os.Stderr, "this Kimi session has no runtime session id yet")
+			os.Exit(1)
+		}
+		cmd = exec.Command(providerKimi, "--resume", meta.RuntimeSessionID)
+	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}
 	if meta.WorkDir != "" {

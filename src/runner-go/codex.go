@@ -50,23 +50,27 @@ type codexPreparedTurn struct {
 	ImagePaths     []string
 }
 
-func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
-	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onRateLimits, completeTurn, waitTurnPermit)
+func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
 }
 
 // runCodexExecSessionProcess keeps the Orbit session alive while executing each user
 // message as one non-interactive `codex exec --json` turn. Codex owns conversation
 // continuity via the thread/session id returned by `thread.started`.
-func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
+func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	var pendingShellCtx []string
 	inflight := map[string]bool{}
 
 	for ctx.Err() == nil && shutdownCtx.Err() == nil {
-		resp, err := t.inbox(ctx, job.SessionID)
+		resp, err := t.inbox(ctx, job.SessionID, leaseGeneration)
 		if err != nil {
 			if ctx.Err() != nil || shutdownCtx.Err() != nil {
 				break
+			}
+			if isLeaseOwnershipError(err) {
+				onLeaseLost(err)
+				return stCancelled, true, false
 			}
 			logln("inbox poll failed for", job.SessionID+":", err)
 			time.Sleep(time.Second)

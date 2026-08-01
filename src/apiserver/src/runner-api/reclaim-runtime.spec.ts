@@ -27,6 +27,30 @@ test('codex sessions with a runtime id reclaim that runtime thread', () => {
   );
 });
 
+test('kimi sessions without a runtime id are reclaimable using the session id', () => {
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.KIMI,
+      sessionId: 'session-kimi',
+      runtimeSessionId: null,
+      claudeSessionId: null,
+    }),
+    { sessionUuid: 'session-kimi', runtimeSessionId: undefined },
+  );
+});
+
+test('kimi sessions with a runtime id reclaim that runtime thread', () => {
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.KIMI,
+      sessionId: 'session-kimi',
+      runtimeSessionId: 'kimi-thread-1',
+      claudeSessionId: null,
+    }),
+    { sessionUuid: 'kimi-thread-1', runtimeSessionId: 'kimi-thread-1' },
+  );
+});
+
 test('claude sessions without a runtime id are not reclaimable', () => {
   assert.equal(
     reclaimRuntimeIds({

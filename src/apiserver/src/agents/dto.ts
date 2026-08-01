@@ -18,7 +18,7 @@ export class CreateAgentDto {
   name!: string;
 
   @IsOptional() @IsString() description?: string;
-  // A built-in provider ("claude"/"codex") or a configured ModelProvider slug (e.g. "deepseek").
+  // A built-in provider ("claude"/"codex"/"kimi") or a configured ModelProvider slug.
   // Kept a plain string (not @IsIn a fixed enum) so custom providers pass; an unknown slug
   // simply falls back to the claude runtime at dispatch (resolveProviderExec).
   @IsOptional() @IsString() provider?: string;

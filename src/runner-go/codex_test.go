@@ -486,6 +486,37 @@ func TestCodexAppInterruptBeforeStartSkipsTurnStart(t *testing.T) {
 	}
 }
 
+func TestCodexAppFinalizeKeepsTurnActiveUntilAckFinishes(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{
+		orbitTurnID: "orbit-turn-1",
+		result:      codexTurnResult{Status: stSucceeded},
+	}
+	active.fullText.WriteString("done")
+
+	finishing, snapshot, ok := beginCodexAppTurnFinalize(&mu, &active)
+	if !ok || finishing == nil {
+		t.Fatal("first finalizer did not acquire the active turn")
+	}
+	if snapshot.orbitTurnID != "orbit-turn-1" || snapshot.fullText != "done" {
+		t.Fatalf("finalize snapshot = %#v", snapshot)
+	}
+	if active == nil || !active.finishing {
+		t.Fatal("turn became idle before its Orbit ack completed")
+	}
+	if _, _, duplicate := beginCodexAppTurnFinalize(&mu, &active); duplicate {
+		t.Fatal("a duplicate completion acquired the same turn")
+	}
+	if turnID, beforeStart := requestCodexAppInterrupt(&mu, &active); turnID != "" || beforeStart {
+		t.Fatalf("finishing turn was interrupted: (%q, %v)", turnID, beforeStart)
+	}
+
+	finishCodexAppTurnFinalize(&mu, &active, finishing)
+	if active != nil {
+		t.Fatal("turn remained active after its Orbit ack completed")
+	}
+}
+
 type emittedEvent struct {
 	typ     string
 	payload map[string]interface{}

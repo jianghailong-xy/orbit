@@ -10,7 +10,7 @@ final class RunnerWriteCodableTests: XCTestCase {
         {"id":"r1","name":"wikova","displayName":"Wikova","status":"ONLINE","online":true,
          "version":"0.1.34","maxConcurrent":8,
          "skills":[{"name":"deep-research","description":"fan-out research","type":"skill","agentId":"a1"}],
-         "commands":[{"name":"commit","description":"smart commit","type":"command"}]}
+         "commands":[{"name":"commit","description":"smart commit","type":"command","provider":"kimi"}]}
         """
         let r = try JSONDecoder().decode(Runner.self, from: Data(json.utf8))
         XCTAssertEqual(r.displayName, "Wikova")
@@ -19,8 +19,11 @@ final class RunnerWriteCodableTests: XCTestCase {
         XCTAssertEqual(r.skills?.first?.agentId, "a1")            // project-scoped
         XCTAssertNil(r.commands?.first?.agentId)                  // host-level
         XCTAssertEqual(r.commands?.first?.name, "commit")
-        // Identity is stable & distinguishes host vs agent scope.
-        XCTAssertEqual(r.skills?.first?.id, "a1:skill:deep-research")
+        XCTAssertNil(r.skills?.first?.provider)                   // legacy Claude payload
+        XCTAssertEqual(r.commands?.first?.provider, "kimi")
+        // Identity is stable & distinguishes provider plus host/agent scope.
+        XCTAssertEqual(r.skills?.first?.id, "legacy:a1:skill:deep-research")
+        XCTAssertEqual(r.commands?.first?.id, "kimi:host:command:commit")
     }
 
     /// An older runner payload without skills/commands/displayName still decodes.

@@ -39,6 +39,7 @@ import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
+import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
 import { truncatePayload } from './truncate-payload';
 import {
   deriveSessionCapabilities,
@@ -55,15 +56,6 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
       `${field} is too long: ${text.length} characters (max ${MAX_PROMPT_CHARS})`,
     );
   }
-}
-
-function agentProvider(value?: string | null): AgentProvider {
-  return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-}
-
-function normalizeEffortForProvider(provider: AgentProvider, effort?: string | null): string | undefined {
-  if (effort == null) return undefined;
-  return provider === AgentProvider.CODEX && effort === 'max' ? 'xhigh' : effort;
 }
 
 function legacyArtifactMime(filePath: string): string {
@@ -150,6 +142,7 @@ export class SessionsService {
     // The session's provider identity: a built-in ("claude"/"codex") or a custom slug
     // ("deepseek") inherited from the agent. Stored verbatim; the runtime is derived below.
     let provider: string = AgentProvider.CLAUDE;
+    let providerBuiltin = true;
     // Per-agent worktree toggle: default off. An agent with it turned off (the default)
     // makes its sessions run with no branch, so the runner runs them in the shared workDir.
     let enableWorktree = false;
@@ -163,20 +156,28 @@ export class SessionsService {
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { runnerId: true, provider: true, enableWorktree: true, permissionMode: true },
+        select: {
+          runnerId: true,
+          provider: true,
+          providerBuiltin: true,
+          enableWorktree: true,
+          permissionMode: true,
+        },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
       provider = agent.provider ?? AgentProvider.CLAUDE;
+      providerBuiltin = agent.providerBuiltin;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { provider: true, enableWorktree: true, permissionMode: true },
+        select: { provider: true, providerBuiltin: true, enableWorktree: true, permissionMode: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       provider = agent.provider ?? AgentProvider.CLAUDE;
+      providerBuiltin = agent.providerBuiltin;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     }
@@ -211,9 +212,9 @@ export class SessionsService {
     const usedFallbackTitle = !dto.title && !naming.title;
     const title = dto.title ?? naming.title ?? titleFromPrompt(dto.prompt);
     // provider is the identity stored on the row; runtime is which built-in CLI actually
-    // drives it (a custom provider borrows claude), and decides the pre-generated session-id
+    // drives it (a custom provider borrows Claude/Codex), and decides the pre-generated session-id
     // and effort normalization.
-    const runtime = agentProvider(provider);
+    const runtime = normalizeRuntimeProvider(provider, providerBuiltin);
     const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {
@@ -222,9 +223,10 @@ export class SessionsService {
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
+        providerBuiltin,
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
-        // Codex creates/returns its own thread id after the first exec turn.
+        // Codex/Kimi create and return their own thread id after process initialization.
         claudeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         permissionMode: dto.permissionMode ?? agentPermissionMode,
@@ -2511,7 +2513,10 @@ export class SessionsService {
       await this.linkAttachments(turn.id, attachmentIds, tx);
       const normalizedEffort =
         dto.effort !== undefined
-          ? normalizeEffortForProvider(agentProvider(current.provider), dto.effort)
+          ? normalizeEffortForProvider(
+              normalizeRuntimeProvider(current.provider, current.providerBuiltin),
+              dto.effort,
+            )
           : undefined;
       await tx.session.update({
         where: { id },
@@ -2582,7 +2587,7 @@ export class SessionsService {
 
   /**
    * Change the model / permission mode / effort of an already-started session. The live
-   * claude process was spawned with the old --model/--permission-mode flags, so we
+   * runtime process was spawned with the old model/permission-mode flags, so we
    * persist the new values and enqueue a `reload` control turn: the runner tears the
    * process down and re-spawns it with --resume + the new flags (full context kept).
    * The reload is deferred by the inbox lease until no message is in flight, so changing
@@ -2599,7 +2604,7 @@ export class SessionsService {
     if (SessionsService.TERMINAL.includes(session.status)) {
       throw new ConflictException('the session has ended');
     }
-    const provider = agentProvider(session.provider);
+    const provider = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
     const normalizedEffort =
       dto.effort !== undefined ? normalizeEffortForProvider(provider, dto.effort) : undefined;
     await this.prisma.session.update({

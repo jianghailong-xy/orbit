@@ -24,13 +24,17 @@ function makeController(pendingExecutable: number) {
   let inboxWakes = 0;
   let queueWakes = 0;
   const tx = {
-    $queryRaw: async () => [{ id: sessionId }],
+    $queryRaw: async () => [{ id: sessionId, leaseOwnerMatches: true }],
     conversationTurn: {
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
       count: async () => pendingExecutable,
     },
     session: {
+      findUniqueOrThrow: async () => ({
+        status: session.status,
+        taskId: session.taskId,
+      }),
       findUnique: async () => ({ status: session.status }),
       updateMany: async ({ data }: { data: { status: RunStatus } }) => {
         statusWrites.push(data.status);
@@ -61,11 +65,10 @@ function makeController(pendingExecutable: number) {
 test('turn completion releases the slot when no executable follow-up is pending', async () => {
   const h = makeController(0);
 
-  const result = await h.controller.turnComplete(
-    { id: h.runnerId },
-    h.sessionId,
-    { turnId: 'turn-1', status: SharedRunStatus.SUCCEEDED },
-  );
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.SUCCEEDED,
+  });
 
   assert.deepEqual(result, { ok: true, status: RunStatus.AWAITING_INPUT });
   assert.deepEqual(h.statusWrites, [RunStatus.AWAITING_INPUT]);
@@ -76,11 +79,10 @@ test('turn completion releases the slot when no executable follow-up is pending'
 test('turn completion retains RUNNING while a follow-up can reuse the held slot', async () => {
   const h = makeController(1);
 
-  const result = await h.controller.turnComplete(
-    { id: h.runnerId },
-    h.sessionId,
-    { turnId: 'turn-1', status: SharedRunStatus.SUCCEEDED },
-  );
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.SUCCEEDED,
+  });
 
   assert.deepEqual(result, { ok: true, status: RunStatus.RUNNING });
   assert.deepEqual(h.statusWrites, [RunStatus.RUNNING]);

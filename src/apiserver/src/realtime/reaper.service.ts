@@ -1,7 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RunStatus, TaskStatus } from '@prisma/client';
 import {
-  AgentProvider,
   RunEventType,
   SessionEndReason,
   SessionLifecycleState,
@@ -11,6 +10,8 @@ import {
   isAuthErrorText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
+import { initializesRuntimeDynamically } from '../common/runtime-provider';
+import { normalizeRuntimeProvider } from '../common/runtime-provider';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
@@ -27,7 +28,7 @@ const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
 const CANCEL_GRACE_MS = 2 * 60_000;
-const CODEX_STARTUP_GRACE_MS = 2 * 60_000;
+const DYNAMIC_RUNTIME_STARTUP_GRACE_MS = 2 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
@@ -88,13 +89,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         assignedRunnerId: true,
         status: true,
         provider: true,
+        providerBuiltin: true,
         runtimeSessionId: true,
         claudeSessionId: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
         endReason: true,
         task: { select: { status: true } },
-        agent: { select: { provider: true } },
+        agent: { select: { provider: true, providerBuiltin: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
     });
@@ -144,20 +146,23 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        const provider = s.provider ?? s.agent?.provider;
+        const provider = normalizeRuntimeProvider(
+          s.provider ?? s.agent?.provider,
+          s.providerBuiltin ?? s.agent?.providerBuiltin ?? true,
+        );
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         if (
-          provider === AgentProvider.CODEX &&
+          initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
           !s.claudeSessionId &&
-          now - lastTurn > CODEX_STARTUP_GRACE_MS
+          now - lastTurn > DYNAMIC_RUNTIME_STARTUP_GRACE_MS
         ) {
           await this.forceFinalize(
             s.id,
             s.assignedRunnerId,
             s.taskId,
-            'codex runtime not initialized',
+            `${provider} runtime not initialized`,
             { expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true },
           );
           continue;

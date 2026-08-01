@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import {
-  RunStatus as SharedRunStatus,
-  SessionEndReason,
-} from '@orbit/shared';
+import { RunStatus as SharedRunStatus, SessionEndReason } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -41,7 +38,7 @@ function makeController(current: LockedSnapshot) {
   const tx = {
     $queryRaw: async () => {
       order.push('lock');
-      return [{ id: SESSION_ID }];
+      return [{ id: SESSION_ID, leaseOwnerMatches: true }];
     },
     session: {
       findUniqueOrThrow: async () => {
@@ -78,13 +75,7 @@ function makeController(current: LockedSnapshot) {
     },
   } as never;
   return {
-    controller: new RunnerApiController(
-      prisma,
-      {} as never,
-      realtime,
-      {} as never,
-      {} as never,
-    ),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never),
     order,
     statusWrites,
     taskCountIds,
@@ -122,11 +113,7 @@ for (const lifecycleChange of [
       deletedAt: lifecycleChange.deletedAt,
     });
 
-    const response = await h.controller.finalize(
-      { id: RUNNER_ID },
-      SESSION_ID,
-      { status: SharedRunStatus.SUCCEEDED },
-    );
+    const response = await h.controller.finalize({ id: RUNNER_ID }, SESSION_ID, { status: SharedRunStatus.SUCCEEDED });
 
     assert.deepEqual(response, { ok: true, keepCheckout: false });
     assert.deepEqual(h.order.slice(0, 3), ['lock', 'read', 'update']);
@@ -148,11 +135,9 @@ test('finalize honors task_cancelled and reclaims the task from the locked snaps
     deletedAt: null,
   });
 
-  const response = await h.controller.finalize(
-    { id: RUNNER_ID },
-    SESSION_ID,
-    { status: SharedRunStatus.SUCCEEDED },
-  );
+  const response = await h.controller.finalize({ id: RUNNER_ID }, SESSION_ID, {
+    status: SharedRunStatus.SUCCEEDED,
+  });
 
   assert.deepEqual(response, { ok: true, keepCheckout: true });
   assert.deepEqual(h.statusWrites, [RunStatus.CANCELLED]);

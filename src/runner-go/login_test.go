@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Verbatim shape of what `claude auth login` writes to a pty: the URL arrives inside an OSC 8
@@ -243,5 +245,73 @@ func TestCodexLoginFlowUsesDeviceAuth(t *testing.T) {
 		if c.engine != providerClaude || !c.pty || !c.takesCode {
 			t.Errorf("engine %q should map to claude's paste-back flow, got %+v", engine, c)
 		}
+	}
+}
+
+// Verbatim format emitted by the current `kimi login` device-code flow. Kimi
+// writes this to stderr (the relay combines stderr/stdout), opens the complete
+// verification URL best-effort, and keeps polling until authorization finishes.
+const realKimiDeviceOutput = "\r\nOpening browser for Kimi device login: https://auth.kimi.com/verify?user_code=WDJB-MJHT\r\n" +
+	"If the browser did not open, paste the URL above and enter code: WDJB-MJHT\r\n" +
+	"Code expires in 900s.\r\n" +
+	"Waiting for authorization to complete...\r\n"
+
+func TestKimiDeviceScrape(t *testing.T) {
+	res := loginFlowFor(providerKimi).progress(realKimiDeviceOutput)
+	if res == nil {
+		t.Fatal("nothing scraped from Kimi's device-login output")
+	}
+	if res.Status != loginAwaitingApproval {
+		t.Errorf("Kimi's device flow waits on browser approval, got %q", res.Status)
+	}
+	if res.URL != "https://auth.kimi.com/verify?user_code=WDJB-MJHT" {
+		t.Errorf("Kimi URL scrape = %q", res.URL)
+	}
+	if res.UserCode != "WDJB-MJHT" {
+		t.Errorf("Kimi user-code scrape = %q", res.UserCode)
+	}
+}
+
+func TestKimiDeviceScrapeWaitsForBothHalves(t *testing.T) {
+	progress := loginFlowFor(providerKimi).progress
+	urlOnly := realKimiDeviceOutput[:strings.Index(realKimiDeviceOutput, "If the browser")]
+	if res := progress(urlOnly); res != nil {
+		t.Errorf("reported before the user code arrived: %+v", res)
+	}
+	if res := progress("see https://moonshotai.github.io/kimi-code for docs"); res != nil {
+		t.Errorf("matched unrelated Kimi output: %+v", res)
+	}
+}
+
+func TestKimiLoginFlowUsesDeviceAuth(t *testing.T) {
+	f := loginFlowFor(providerKimi)
+	if f.cmdLine() != "kimi login" {
+		t.Fatalf("Kimi must use its device-login subcommand, got %q", f.cmdLine())
+	}
+	if f.pty {
+		t.Error("Kimi writes device login progress without a pty")
+	}
+	if f.takesCode {
+		t.Error("Kimi polls itself; no code is pasted back to the runner")
+	}
+	if !f.successOnExit {
+		t.Error("Kimi documents exit 0 as successful login")
+	}
+}
+
+func TestKimiLoginCleanExitIsSuccess(t *testing.T) {
+	dir := t.TempDir()
+	writeFakeBin(t, dir, providerKimi, "exit 0")
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+
+	got := make(chan LoginResultRequest, 1)
+	(&loginRelay{}).start("kimi-clean-exit", providerKimi, func(res LoginResultRequest) { got <- res })
+	select {
+	case res := <-got:
+		if res.Status != loginDone {
+			t.Fatalf("Kimi exit 0 should finish login, got %+v", res)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Kimi clean exit produced no login result")
 	}
 }

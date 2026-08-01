@@ -349,4 +349,5 @@ export enum CreatorType {
 export enum AgentProvider {
   CLAUDE = 'claude',
   CODEX = 'codex',
+  KIMI = 'kimi',
 }

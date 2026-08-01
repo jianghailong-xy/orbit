@@ -312,12 +312,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// The agent nested on a session row (`{id, name, model}`).
+/// The agent nested on a session row. Model/effort are the effective fallbacks
+/// when task/orchestration-created sessions leave their own overrides null.
 public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String?
     public let provider: String?
     public let model: String?
+    public let effort: String?
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library

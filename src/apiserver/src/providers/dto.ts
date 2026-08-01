@@ -1,8 +1,9 @@
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
-// Custom providers borrow a built-in runtime: `claude` for Anthropic-compatible endpoints,
+// Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
 // `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, etc.). The runner
 // translates a codex provider's OPENAI_BASE_URL into codex `-c model_providers.*` overrides.
+// `kimi` is a first-class runtime identity and is deliberately not accepted here.
 const RUNTIMES = ['claude', 'codex'];
 
 export class CreateModelProviderDto {

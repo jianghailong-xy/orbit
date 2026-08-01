@@ -79,6 +79,58 @@ func TestProbeAuthCodex(t *testing.T) {
 	}
 }
 
+func fakeKimiACP(t *testing.T, authResponse string) string {
+	t.Helper()
+	return writeFakeBin(t, t.TempDir(), "kimi", `
+if [ "$1" != "acp" ]; then exit 3; fi
+IFS= read -r initialize
+case "$initialize" in
+  *'"method":"initialize"'*'"protocolVersion":1'*) ;;
+  *) exit 4 ;;
+esac
+# A notification before the response verifies the probe matches JSON-RPC IDs.
+echo '{"jsonrpc":"2.0","method":"window/logMessage","params":{}}'
+echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1}}'
+IFS= read -r authenticate
+case "$authenticate" in
+  *'"method":"authenticate"'*'"methodId":"login"'*) ;;
+  *) exit 5 ;;
+esac
+echo '`+authResponse+`'
+`)
+}
+
+func TestProbeAuthKimiACP(t *testing.T) {
+	yes := fakeKimiACP(t, `{"jsonrpc":"2.0","id":2,"result":null}`)
+	if got := probeAuth(providerKimi, yes); got != authYes {
+		t.Fatalf("successful ACP authenticate should be authYes, got %v", got)
+	}
+	no := fakeKimiACP(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"Authentication required"}}`)
+	if got := probeAuth(providerKimi, no); got != authNo {
+		t.Fatalf("ACP authRequired should be authNo, got %v", got)
+	}
+	unknown := fakeKimiACP(t, `{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"bad request"}}`)
+	if got := probeAuth(providerKimi, unknown); got != authUnknown {
+		t.Fatalf("an ACP protocol error should stay authUnknown, got %v", got)
+	}
+}
+
+func TestKimiEngineSpec(t *testing.T) {
+	spec, ok := specFor(providerKimi)
+	if !ok {
+		t.Fatal("Kimi engine spec is missing")
+	}
+	if spec.name != "Kimi Code" || spec.bin != "kimi" {
+		t.Fatalf("unexpected Kimi identity: %+v", spec)
+	}
+	if spec.installCmd != "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash" {
+		t.Fatalf("Kimi install command = %q", spec.installCmd)
+	}
+	if spec.loginCmd() != "kimi login" {
+		t.Fatalf("Kimi login command = %q", spec.loginCmd())
+	}
+}
+
 func TestCheckEngineDetectsBinary(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "claude")

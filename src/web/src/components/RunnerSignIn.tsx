@@ -6,7 +6,11 @@ import { api } from '../api';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
-const ENGINE_NAME: Record<LoginEngine, string> = { claude: 'Claude Code', codex: 'Codex' };
+const ENGINE_NAME: Record<LoginEngine, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  kimi: 'Kimi Code',
+};
 
 /** What the parked tab shows until the CLI prints its URL, so it doesn't read as a dead popup. */
 const WAITING_PAGE = `<!doctype html><meta charset="utf-8"><title>Signing in…</title>
@@ -17,15 +21,16 @@ Waiting for the sign-in link…</body>`;
  * Sign a runner back in from the browser, without a terminal on that machine.
  *
  * The runner drives the CLI's sign-in on its own box and reports back what the user has to do.
- * The two engines get there differently, which is why this renders two shapes:
+ * The engines get there differently, which is why this renders two shapes:
  *
  *  - claude: the CLI prints a URL whose redirect_uri is Anthropic-hosted, not localhost, so the
  *    user approves it in their own browser and the callback page shows a code to paste back here.
  *    What travels through Orbit is a single-use authorization code, useless without the PKCE
  *    verifier that never leaves the runner process.
- *  - codex: `--device-auth` prints a URL *and* a one-time code to enter on that page; the CLI
- *    then polls for the approval itself, so there is nothing to paste back — we just wait. (Plain
- *    `codex login` can't be relayed at all: it serves its callback on localhost on the runner.)
+ *  - codex/kimi: their device flows print a URL *and* a one-time code to enter on that page; the
+ *    CLI then polls for the approval itself, so there is nothing to paste back — we just wait.
+ *    (Plain `codex login` can't be relayed at all: it serves its callback on localhost on the
+ *    runner; Kimi's ordinary `kimi login` is already a device flow.)
  *
  * The URL only exists a second or two after the click that asked for it, by which point a
  * window.open() is outside the user gesture and gets blocked as a popup. So the click parks a

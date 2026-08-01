@@ -597,6 +597,8 @@ export interface SessionDetail {
   agent: {
     id: string;
     provider?: string | null;
+    model?: string | null;
+    effort?: string | null;
     defaultMergeTarget?: string | null;
     permissionMode?: string | null;
   } | null;

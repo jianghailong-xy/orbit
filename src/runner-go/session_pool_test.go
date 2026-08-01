@@ -271,6 +271,48 @@ func TestSessionPoolExecutableWaitsForClaimActivation(t *testing.T) {
 	}
 }
 
+func TestSessionPoolLeaseLossDetachesOnlyUnchangedColdSupervisor(t *testing.T) {
+	p := newSessionPool(1)
+	cancelled := 0
+	s, added := p.register(poolJob("cold"), func() { cancelled++ }, false)
+	if !added {
+		t.Fatal("cold session was not registered")
+	}
+
+	stopped := make(chan bool, 1)
+	go func() { stopped <- p.waitActive(s, context.Background(), context.Background()) }()
+	if !p.detachCold("cold") {
+		t.Fatal("unchanged cold supervisor did not detach on lease loss")
+	}
+	if cancelled != 0 {
+		t.Fatalf("cold lease detach invoked durable cancel %d time(s)", cancelled)
+	}
+	if p.count() != 0 {
+		t.Fatalf("pool count after cold detach = %d, want 0", p.count())
+	}
+	select {
+	case active := <-stopped:
+		if active {
+			t.Fatal("detached cold waiter reported activation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("detached cold waiter did not wake")
+	}
+
+	// Models a stale heartbeat mismatch that returns after a fresh claim. The
+	// new permit must survive; its changed local state makes detachCold a no-op.
+	fresh := registerPoolSession(t, p, "cold", false)
+	if _, ok := p.activate(poolJob("cold")); !ok {
+		t.Fatal("fresh claim did not activate the replacement supervisor")
+	}
+	if p.detachCold("cold") {
+		t.Fatal("stale lease-loss response detached a freshly activated permit")
+	}
+	if !p.isActive(fresh) || p.activeCount() != 1 {
+		t.Fatal("freshly activated permit was not retained")
+	}
+}
+
 func TestSessionPoolEvictsLeastRecentlyActiveWarm(t *testing.T) {
 	clock := newFakePoolClock()
 	p := newSessionPoolWithClock(2, clock)

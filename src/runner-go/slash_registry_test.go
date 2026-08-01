@@ -45,6 +45,33 @@ func TestSlashRegistryExtras(t *testing.T) {
 	}
 }
 
+// Runtime handshakes are independent: a Kimi-only command must not broaden Claude's
+// allowlist, and vice versa. Kimi entries carry a provider tag so clients can filter the
+// combined heartbeat payload without guessing from the command name.
+func TestSlashRegistrySeparatesProviders(t *testing.T) {
+	r := newSlashRegistry(filepath.Join(t.TempDir(), "reg.json"))
+	r.learn([]string{"claude-only", "shared-name"}, []string{"claude-skill"})
+	r.learnFor(providerKimi, []string{"kimi-only", "shared-name"}, []string{"kimi-skill"})
+
+	claudeCommands, claudeSkills := r.extras(nil)
+	eq(t, names(claudeCommands), []string{"claude-only", "shared-name"}, "Claude commands")
+	eq(t, names(claudeSkills), []string{"claude-skill"}, "Claude skills")
+	for _, item := range append(claudeCommands, claudeSkills...) {
+		if item.Provider != "" {
+			t.Fatalf("Claude item %q should be untagged for backwards compatibility: %+v", item.Name, item)
+		}
+	}
+
+	kimiCommands, kimiSkills := r.extrasFor(providerKimi, nil)
+	eq(t, names(kimiCommands), []string{"kimi-only", "shared-name"}, "Kimi commands")
+	eq(t, names(kimiSkills), []string{"kimi-skill"}, "Kimi skills")
+	for _, item := range append(kimiCommands, kimiSkills...) {
+		if item.Provider != providerKimi {
+			t.Fatalf("Kimi item %q should be provider-tagged: %+v", item.Name, item)
+		}
+	}
+}
+
 // End to end: a session's init handshake teaches the registry, and the next heartbeat
 // carries the CLI-only names alongside the disk scan — which is what stops the composer
 // from rejecting `/loop` as an unsupported command.
@@ -81,15 +108,25 @@ func TestInitHandshakeReachesHeartbeat(t *testing.T) {
 // the composer's allowlist until the next session boots.
 func TestSlashRegistryPersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "reg.json")
-	if !newSlashRegistry(path).learn([]string{"loop"}, []string{"review"}) {
+	r := newSlashRegistry(path)
+	if !r.learn([]string{"loop"}, []string{"review"}) {
 		t.Fatal("first learn should report a change")
+	}
+	if !r.learnFor(providerKimi, []string{"init"}, []string{"compact"}) {
+		t.Fatal("first Kimi learn should report a change")
 	}
 
 	reloaded := newSlashRegistry(path)
 	cmds, skills := reloaded.extras(nil)
 	eq(t, names(cmds), []string{"loop"}, "reloaded commands")
 	eq(t, names(skills), []string{"review"}, "reloaded skills")
+	kimiCommands, kimiSkills := reloaded.extrasFor(providerKimi, nil)
+	eq(t, names(kimiCommands), []string{"init"}, "reloaded Kimi commands")
+	eq(t, names(kimiSkills), []string{"compact"}, "reloaded Kimi skills")
 	if reloaded.learn([]string{"loop"}, []string{"review"}) {
 		t.Fatal("re-learning known names should report no change")
+	}
+	if reloaded.learnFor(providerKimi, []string{"init"}, []string{"compact"}) {
+		t.Fatal("re-learning known Kimi names should report no change")
 	}
 }

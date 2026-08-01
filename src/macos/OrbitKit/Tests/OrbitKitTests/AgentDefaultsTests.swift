@@ -2,8 +2,8 @@ import XCTest
 @testable import OrbitKit
 
 /// Provider-aware model and effort data, mirrored from web's src/web/src/lib/agentDefaults.ts.
-/// An unknown provider string always behaves like "claude" — the server treats anything that
-/// isn't exactly "codex" as Claude (see apiserver's agentProvider()).
+/// An unknown provider string always behaves like "claude", while each built-in runtime keeps its
+/// own model and effort choices.
 final class AgentDefaultsTests: XCTestCase {
 
     func testModelsForProvider() {
@@ -15,6 +15,10 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(claude, ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"])
         XCTAssertFalse(claude.contains("gpt-5.6-sol"))
 
+        let kimi = AgentDefaults.models(for: "kimi")
+        XCTAssertEqual(kimi.map(\.id), ["kimi-code/kimi-for-coding"])
+        XCTAssertEqual(kimi.map(\.name), ["Kimi for Coding"])
+
         // Unknown provider falls back to Claude, never to an empty menu.
         XCTAssertEqual(AgentDefaults.models(for: "gemini").map(\.id), claude)
     }
@@ -22,6 +26,7 @@ final class AgentDefaultsTests: XCTestCase {
     func testDefaultModelForProvider() {
         XCTAssertEqual(AgentDefaults.defaultModel(for: "codex"), "gpt-5.6-sol")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "claude"), "claude-opus-5")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "kimi"), "kimi-code/kimi-for-coding")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini"), AgentDefaults.defaultModelID)
     }
 
@@ -30,13 +35,14 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.5"), "GPT-5.5")
         XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "Opus 5")
         XCTAssertEqual(AgentDefaults.friendlyName("claude-fable-5"), "Fable 5")
+        XCTAssertEqual(AgentDefaults.friendlyName("kimi-code/kimi-for-coding"), "Kimi for Coding")
         // Unknown ids (incl. non-current models like claude-opus-4-8) fall back to the raw string.
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")
     }
 
     func testProviderOptions() {
-        XCTAssertEqual(AgentDefaults.providers.map(\.id), ["claude", "codex"])
-        XCTAssertEqual(AgentDefaults.providers.map(\.name), ["Claude", "Codex"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.id), ["claude", "codex", "kimi"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.name), ["Claude", "Codex", "Kimi"])
     }
 
     func testEffortsForProvider() {
@@ -44,10 +50,13 @@ final class AgentDefaultsTests: XCTestCase {
                        [.default, .low, .medium, .high, .xhigh, .max])
         XCTAssertEqual(AgentDefaults.efforts(for: "codex"),
                        [.default, .minimal, .low, .medium, .high, .xhigh])
+        XCTAssertEqual(AgentDefaults.efforts(for: "kimi"),
+                       [.default, .low, .high, .max])
 
         // The whole point: neither provider is offered a value it rejects.
         XCTAssertFalse(AgentDefaults.efforts(for: "claude").contains(.minimal))
         XCTAssertFalse(AgentDefaults.efforts(for: "codex").contains(.max))
+        XCTAssertFalse(AgentDefaults.efforts(for: "kimi").contains(.minimal))
 
         XCTAssertEqual(AgentDefaults.efforts(for: "gemini"), AgentDefaults.efforts(for: "claude"))
     }
@@ -56,6 +65,22 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(Effort.minimal.rawValue, "minimal")
         XCTAssertEqual(Effort.minimal.label, "Minimal")
         XCTAssertEqual(Effort.minimal.wire, "minimal")
+    }
+
+    func testEffortNormalizationForProvider() {
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.max, for: "codex"), .xhigh)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.high, for: "codex"), .high)
+
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.minimal, for: "kimi"), .low)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "kimi"), .high)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.xhigh, for: "kimi"), .max)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.default, for: "kimi"), .default)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.low, for: "kimi"), .low)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.high, for: "kimi"), .high)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.max, for: "kimi"), .max)
+
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.xhigh, for: "claude"), .xhigh)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "deepseek"), .medium)
     }
 
     // MARK: configured providers (control-plane custom slugs — GET /api/providers)
@@ -70,11 +95,11 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testMergedProviderOptions() {
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).map(\.id),
-                       ["claude", "codex", "deepseek"])
+                       ["claude", "codex", "kimi", "deepseek"])
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).last?.name, "DeepSeek")
         // No configured providers → the built-ins only, in their fixed order.
-        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex"])
-        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex"])
+        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex", "kimi"])
+        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex", "kimi"])
     }
 
     func testModelsForConfiguredProvider() {
@@ -128,6 +153,8 @@ final class AgentDefaultsTests: XCTestCase {
                        1_000_000)
         XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-fable-5", catalog: nil, configured: [deepseek]),
                        1_000_000)
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "kimi-code/kimi-for-coding", catalog: nil,
+                                                   configured: [deepseek]), 262_144)
     }
 
     func testCodexContextWindowComesFromRunnerCatalog() {
@@ -154,9 +181,18 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-new", catalog: catalog), 512_000)
     }
 
+    func testKimiRunnerCatalogDecodes() throws {
+        let json = #"{"kimi":[{"value":"kimi-code/kimi-for-coding","label":"Kimi for Coding","contextWindow":262144}]}"#
+        let catalog = try JSONDecoder().decode(RunnerModelCatalog.self, from: Data(json.utf8))
+        XCTAssertEqual(catalog.models(for: "kimi")?.map(\.id), ["kimi-code/kimi-for-coding"])
+        XCTAssertEqual(catalog.models(for: "kimi")?.map(\.name), ["Kimi for Coding"])
+        XCTAssertEqual(catalog.contextWindow(for: "kimi-code/kimi-for-coding"), 262_144)
+    }
+
     func testProviderNameResolution() {
         XCTAssertEqual(AgentDefaults.providerName("claude", configured: [deepseek]), "Claude")
         XCTAssertEqual(AgentDefaults.providerName("codex", configured: nil), "Codex")
+        XCTAssertEqual(AgentDefaults.providerName("kimi", configured: nil), "Kimi")
         XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: [deepseek]), "DeepSeek")
         // A removed/disabled provider's slug renders verbatim — never mislabels as Claude.
         XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: []), "deepseek")

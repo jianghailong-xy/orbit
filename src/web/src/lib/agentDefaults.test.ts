@@ -4,6 +4,12 @@ import {
   CLAUDE_MODEL_OPTIONS,
   contextWindowFor,
   DEFAULT_CONTEXT_WINDOW,
+  defaultModelForProvider,
+  effortOptionsForProvider,
+  KIMI_MODEL_OPTIONS,
+  mergedProviderOptions,
+  modelOptionsForProvider,
+  normalizeEffortForProvider,
   supportsAuto,
   type ConfiguredProvider,
 } from './agentDefaults';
@@ -18,6 +24,33 @@ describe('Claude model options', () => {
     ]);
     expect(contextWindowFor('claude-fable-5')).toBe(1_000_000);
     expect(supportsAuto('claude-fable-5')).toBe(true);
+  });
+});
+
+describe('Kimi runtime defaults', () => {
+  it('offers the managed Kimi coding model as its only default model', () => {
+    expect(mergedProviderOptions()).toContainEqual({ value: 'kimi', label: 'Kimi' });
+    expect(KIMI_MODEL_OPTIONS).toEqual([
+      { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
+    ]);
+    expect(modelOptionsForProvider('kimi')).toEqual(KIMI_MODEL_OPTIONS);
+    expect(defaultModelForProvider('kimi')).toBe('kimi-code/kimi-for-coding');
+    expect(contextWindowFor('kimi-code/kimi-for-coding')).toBe(262_144);
+    expect(supportsAuto('kimi-code/kimi-for-coding')).toBe(true);
+  });
+
+  it('offers Kimi efforts without Codex-only minimal', () => {
+    expect(effortOptionsForProvider('kimi')).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' },
+      { value: 'max', label: 'Max' },
+    ]);
+
+    expect(normalizeEffortForProvider('kimi', 'minimal')).toBe('low');
+    expect(normalizeEffortForProvider('kimi', 'medium')).toBe('high');
+    expect(normalizeEffortForProvider('kimi', 'xhigh')).toBe('max');
+    expect(normalizeEffortForProvider('kimi', 'high')).toBe('high');
   });
 });
 

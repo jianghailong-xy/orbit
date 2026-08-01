@@ -34,13 +34,14 @@ struct AgentAvatar: View {
         }
     }
 
-    /// Brand-accurate circle: Claude coral, OpenAI near-black for Codex, a distinct hue for
-    /// DeepSeek — so a runner with several providers reads at a glance.
+    /// Brand-aware circle: Claude coral, OpenAI near-black for Codex, and distinct hues for Kimi
+    /// and DeepSeek — so a runner with several providers reads at a glance.
     static func tint(for provider: String?) -> Color {
         switch provider?.lowercased() {
-        case "codex", "openai": return Color(red: 0.11, green: 0.11, blue: 0.12)   // OpenAI near-black
-        case "deepseek":        return Color(red: 0.36, green: 0.55, blue: 0.85)   // blue
-        default:                return Color(red: 0.85, green: 0.47, blue: 0.34)   // claude coral
+        case "codex", "openai":  return Color(red: 0.11, green: 0.11, blue: 0.12)  // OpenAI near-black
+        case "kimi", "moonshot": return Color(red: 0.36, green: 0.45, blue: 0.92)  // indigo
+        case "deepseek":         return Color(red: 0.36, green: 0.55, blue: 0.85)  // blue
+        default:                  return Color(red: 0.85, green: 0.47, blue: 0.34)  // claude coral
         }
     }
 

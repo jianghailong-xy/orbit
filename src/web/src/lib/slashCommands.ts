@@ -4,8 +4,10 @@ export interface ComposerSlashItem {
   name: string;
   description?: string | null;
   type?: ComposerSlashItemType;
+  /** Runtime that owns this item. Absent runner assets are legacy Claude entries. */
+  provider?: string | null;
   agentId?: string | null;
-  /** Registered by the Claude CLI itself (built-in skill, plugin skill, namespaced
+  /** Registered by the runtime itself (built-in skill, plugin skill, namespaced
    *  command) rather than found on disk — sorted below the user's own assets. */
   builtin?: boolean;
 }
@@ -61,6 +63,22 @@ export function slashCommandName(text: string): string | null {
 
 export function isLocalSlashCommand(name: string): boolean {
   return LOCAL_SLASH_ITEMS.some((it) => it.name.toLowerCase() === name.toLowerCase());
+}
+
+/** Codex alone lacks a runner slash registry; Kimi exposes commands and skills through ACP. */
+export function supportsRunnerSlashAssets(provider?: string | null): boolean {
+  return provider !== 'codex';
+}
+
+/** Match one runner-owned slash asset to the active runtime. Untagged assets come
+ *  from older runners and therefore belong to Claude (and Claude-compatible custom providers). */
+export function slashAssetMatchesProvider(
+  assetProvider: string | null | undefined,
+  activeProvider: string | null | undefined,
+): boolean {
+  if (activeProvider === 'codex') return false;
+  if (activeProvider === 'kimi') return assetProvider === 'kimi';
+  return !assetProvider || assetProvider === 'claude';
 }
 
 export function slashMatches(

@@ -64,6 +64,7 @@ type codexAppActiveTurn struct {
 	orbitTurnID        string
 	codexTurnID        string
 	startSent          bool
+	finishing          bool
 	interruptRequested bool
 	interruptSent      bool
 	result             codexTurnResult
@@ -72,7 +73,42 @@ type codexAppActiveTurn struct {
 	thinkText          strings.Builder
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
+type codexAppTurnSnapshot struct {
+	orbitTurnID string
+	result      codexTurnResult
+	fullText    string
+	deltaText   string
+}
+
+// beginCodexAppTurnFinalize makes completion single-flight while deliberately
+// leaving active non-nil. Shutdown waits for active to clear, so the supervisor
+// cannot tear down the event/turn-ack contexts after Codex reports completion but
+// before Orbit durably records it.
+func beginCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn) (*codexAppActiveTurn, codexAppTurnSnapshot, bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	if *active == nil || (*active).finishing {
+		return nil, codexAppTurnSnapshot{}, false
+	}
+	a := *active
+	a.finishing = true
+	return a, codexAppTurnSnapshot{
+		orbitTurnID: a.orbitTurnID,
+		result:      a.result,
+		fullText:    a.fullText.String(),
+		deltaText:   a.deltaText.String(),
+	}, true
+}
+
+func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn, finishing *codexAppActiveTurn) {
+	activeMu.Lock()
+	if *active == finishing {
+		*active = nil
+	}
+	activeMu.Unlock()
+}
+
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -121,36 +157,31 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	}
 
 	finalizeActive := func(result codexTurnResult) {
-		activeMu.Lock()
-		if active == nil {
-			activeMu.Unlock()
+		a, snapshot, ok := beginCodexAppTurnFinalize(&activeMu, &active)
+		if !ok {
 			return
 		}
-		a := active
 		if result.Status == "" {
-			result.Status = a.result.Status
+			result.Status = snapshot.result.Status
 		}
 		if result.Subtype == "" {
-			result.Subtype = a.result.Subtype
+			result.Subtype = snapshot.result.Subtype
 		}
 		if result.Result == "" {
-			result.Result = a.result.Result
+			result.Result = snapshot.result.Result
 		}
 		if result.Result == "" {
-			result.Result = strings.TrimSpace(a.fullText.String())
+			result.Result = strings.TrimSpace(snapshot.fullText)
 		}
 		if result.Result == "" {
-			result.Result = strings.TrimSpace(a.deltaText.String())
+			result.Result = strings.TrimSpace(snapshot.deltaText)
 		}
 		if result.Error == "" {
-			result.Error = a.result.Error
+			result.Error = snapshot.result.Error
 		}
 		if result.Usage == nil {
-			result.Usage = a.result.Usage
+			result.Usage = snapshot.result.Usage
 		}
-		orbitTurnID := a.orbitTurnID
-		active = nil
-		activeMu.Unlock()
 
 		if result.Status == "" {
 			result.Status = stSucceeded
@@ -164,7 +195,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
 		liveFiles, livePatches := liveDiff(job.WT)
 		if err := completeTurn(TurnCompleteRequest{
-			TurnID:           orbitTurnID,
+			TurnID:           snapshot.orbitTurnID,
 			Status:           result.Status,
 			Result:           result.Result,
 			Subtype:          result.Subtype,
@@ -181,7 +212,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
-		clearInflight(orbitTurnID)
+		finishCodexAppTurnFinalize(&activeMu, &active, a)
+		clearInflight(snapshot.orbitTurnID)
 		setTurn("")
 	}
 
@@ -344,10 +376,14 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		default:
 		}
 
-		resp, err := t.inbox(pollCtx, job.SessionID)
+		resp, err := t.inbox(pollCtx, job.SessionID, leaseGeneration)
 		if err != nil {
 			if pollCtx.Err() != nil {
 				continue
+			}
+			if isLeaseOwnershipError(err) {
+				onLeaseLost(err)
+				return stCancelled, true, false
 			}
 			logln("inbox poll failed for", job.SessionID+":", err)
 			time.Sleep(time.Second)
@@ -439,6 +475,10 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 		case "end":
 			requestActiveInterrupt(false)
+			// A turn/completed notification may already be flushing turn_end and
+			// /turn-complete on the notification goroutine. Keep the app-server and
+			// its ack context alive until that finalizer clears active.
+			waitForIdle()
 			return stSucceeded, true, false
 		}
 	}
@@ -448,6 +488,9 @@ func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn)
 	activeMu.Lock()
 	defer activeMu.Unlock()
 	if *active == nil {
+		return "", false
+	}
+	if (*active).finishing {
 		return "", false
 	}
 	(*active).interruptRequested = true
@@ -467,7 +510,7 @@ func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, 
 	}
 	activeMu.Lock()
 	defer activeMu.Unlock()
-	if *active == nil {
+	if *active == nil || (*active).finishing {
 		return ""
 	}
 	if orbitTurnID != "" && (*active).orbitTurnID != orbitTurnID {
@@ -484,7 +527,7 @@ func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, 
 func beginCodexAppTurnStart(activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID string) (bool, bool) {
 	activeMu.Lock()
 	defer activeMu.Unlock()
-	if *active == nil || (*active).orbitTurnID != orbitTurnID {
+	if *active == nil || (*active).finishing || (*active).orbitTurnID != orbitTurnID {
 		return false, false
 	}
 	if (*active).interruptRequested {

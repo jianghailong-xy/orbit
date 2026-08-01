@@ -419,6 +419,28 @@ func (p *sessionPool) isActive(s *liveSession) bool {
 	return p.sessions[s.id] == s && s.active
 }
 
+// detachCold removes a supervisor that has no active permit and no resident
+// engine without cancelling its session context. That distinction matters for a
+// heartbeat ownership mismatch: it is not a user cancel and must never enter the
+// worktree/finalize path. A stale heartbeat response arriving after a fresh claim
+// has activated (or started warming) the session is therefore a no-op.
+func (p *sessionPool) detachCold(id string) bool {
+	p.mu.Lock()
+	s := p.sessions[id]
+	if s == nil || s.active || s.resident {
+		p.mu.Unlock()
+		return false
+	}
+	if s.warmTimer != nil {
+		s.warmTimer.Stop()
+		s.warmTimer = nil
+	}
+	delete(p.sessions, id)
+	p.signalLocked(s)
+	p.mu.Unlock()
+	return true
+}
+
 func (p *sessionPool) remove(s *liveSession) {
 	p.mu.Lock()
 	if p.sessions[s.id] == s {
@@ -488,6 +510,20 @@ func (p *sessionPool) ids() map[string]bool {
 		ids[id] = true
 	}
 	return ids
+}
+
+// reclaimStates snapshots whether each locally known supervisor already owns an
+// active-turn permit. An ambiguous claim must revive a known cold/warm session
+// when reclaim says RUNNING, while a genuinely active one must not be activated
+// twice and advance its permit generation.
+func (p *sessionPool) reclaimStates() map[string]bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	states := make(map[string]bool, len(p.sessions))
+	for id, session := range p.sessions {
+		states[id] = session.active
+	}
+	return states
 }
 
 func (p *sessionPool) providerCount(provider string, activeOnly bool) int {

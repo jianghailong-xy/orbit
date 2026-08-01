@@ -91,3 +91,40 @@ func TestManualCodexDeviceLoginEndToEnd(t *testing.T) {
 		t.Fatal("relay never reported a device code")
 	}
 }
+
+// Kimi's equivalent device-flow smoke check. KIMI_CODE_HOME is redirected so
+// an opt-in run cannot consume or replace the machine's real login.
+func TestManualKimiDeviceLoginEndToEnd(t *testing.T) {
+	if os.Getenv("ORBIT_MANUAL_LOGIN_CHECK") != "1" {
+		t.Skip("manual check")
+	}
+	t.Setenv("KIMI_CODE_HOME", t.TempDir())
+
+	got := make(chan LoginResultRequest, 4)
+	r := &loginRelay{}
+	r.start("attempt-1", providerKimi, func(res LoginResultRequest) { got <- res })
+	t.Cleanup(func() {
+		r.mu.Lock()
+		cancel := r.cancel
+		r.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+	})
+
+	select {
+	case res := <-got:
+		t.Logf("status=%s url=%s code=%s message=%s", res.Status, res.URL, res.UserCode, res.Message)
+		if res.Status != loginAwaitingApproval {
+			t.Fatalf("expected %q, got %q (%s)", loginAwaitingApproval, res.Status, res.Message)
+		}
+		if res.URL == "" || res.UserCode == "" {
+			t.Fatalf("device flow needs both halves, got url=%q code=%q", res.URL, res.UserCode)
+		}
+		if strings.Contains(res.URL, "localhost") || strings.Contains(res.URL, "127.0.0.1") {
+			t.Fatalf("device URL points back at the runner: %s", res.URL)
+		}
+	case <-time.After(75 * time.Second):
+		t.Fatal("relay never reported a Kimi device code")
+	}
+}

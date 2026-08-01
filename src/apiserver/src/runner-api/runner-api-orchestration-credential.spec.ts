@@ -16,6 +16,10 @@ function makeController(options: {
   const issueCalls: Array<[string, string]> = [];
   const reissueCalls: Array<[typeof RUNNER, string]> = [];
   const reclaimLookups: Array<Record<string, unknown>> = [];
+  const tx = {
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
+  };
   const prisma = {
     session: {
       findMany: async ({ where }: { where: Record<string, unknown> }) => {
@@ -29,9 +33,7 @@ function makeController(options: {
     runEvent: {
       aggregate: async () => ({ _max: { seq: 3 } }),
     },
-    conversationTurn: {
-      updateMany: async () => ({ count: 0 }),
-    },
+    $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = {
     claimSessionForRunner: async () => options.claimed ?? null,
@@ -148,6 +150,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
     cancelRequestedAt: null,
     title: id,
     provider: 'codex',
+    providerBuiltin: true,
     runtimeSessionId: `runtime-${id}`,
     claudeSessionId: null,
     model: null,

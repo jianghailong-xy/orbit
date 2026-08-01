@@ -5,9 +5,11 @@ import {
   localStatusRows,
   openSlash,
   pickSlash,
+  slashAssetMatchesProvider,
   slashCommandName,
   slashMatches,
   slashToken,
+  supportsRunnerSlashAssets,
 } from './slashCommands';
 
 describe('slashCommands', () => {
@@ -49,6 +51,28 @@ describe('slashCommands', () => {
     expect(slashMatches(items, 'sta', null).map((it) => it.name)).toEqual(['status']);
     expect(slashMatches(items, '', 'command').map((it) => it.name)).toEqual(['commit']);
     expect(isLocalSlashCommand('STATUS')).toBe(true);
+  });
+
+  it('keeps Kimi runner commands and skills while limiting Codex', () => {
+    expect(supportsRunnerSlashAssets('codex')).toBe(false);
+    expect(supportsRunnerSlashAssets('kimi')).toBe(true);
+    expect(supportsRunnerSlashAssets('claude')).toBe(true);
+  });
+
+  it('keeps runtime slash registries isolated by provider', () => {
+    expect(slashAssetMatchesProvider(undefined, 'claude')).toBe(true);
+    expect(slashAssetMatchesProvider('claude', 'claude')).toBe(true);
+    expect(slashAssetMatchesProvider('kimi', 'claude')).toBe(false);
+
+    expect(slashAssetMatchesProvider('kimi', 'kimi')).toBe(true);
+    expect(slashAssetMatchesProvider(undefined, 'kimi')).toBe(false);
+    expect(slashAssetMatchesProvider('claude', 'kimi')).toBe(false);
+
+    expect(slashAssetMatchesProvider(undefined, 'codex')).toBe(false);
+    expect(slashAssetMatchesProvider('kimi', 'codex')).toBe(false);
+    // Configured providers use the Claude runtime and inherit legacy untagged assets.
+    expect(slashAssetMatchesProvider(undefined, 'moonshot')).toBe(true);
+    expect(slashAssetMatchesProvider('kimi', 'moonshot')).toBe(false);
   });
 
   it("ranks the CLI's built-in registry below the user's own assets", () => {

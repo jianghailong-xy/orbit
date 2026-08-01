@@ -2,8 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -149,5 +155,123 @@ func TestCarryOverModelCatalog(t *testing.T) {
 	first := &ModelCatalog{Codex: []ModelInfo{{Value: "gpt-5.6-sol", Label: "GPT-5.6-Sol"}}}
 	if got := carryOverModelCatalog(nil, first); got != first {
 		t.Fatalf("carryOverModelCatalog(nil, first) = %#v, want first unchanged", got)
+	}
+}
+
+func TestReclaimStatusOpenRejectsTerminalAndUnknownRows(t *testing.T) {
+	for _, tc := range []struct {
+		status string
+		open   bool
+	}{
+		{"", true}, // legacy reclaim responses contained RUNNING rows only
+		{stPending, true},
+		{stRunning, true},
+		{stAwaitingInput, true},
+		{stInterrupted, true},
+		{stSucceeded, false},
+		{stFailed, false},
+		{stCancelled, false},
+		{"FUTURE_TERMINAL", false},
+	} {
+		if got := reclaimStatusOpen(tc.status); got != tc.open {
+			t.Errorf("reclaimStatusOpen(%q) = %v, want %v", tc.status, got, tc.open)
+		}
+	}
+}
+
+func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
+	var mu sync.Mutex
+	var takeoverOrder []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
+			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{
+				{SessionID: "b", Status: stAwaitingInput},
+				{SessionID: "a", Status: stRunning},
+				{SessionID: "c", Status: stInterrupted},
+			}})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
+			parts := strings.Split(r.URL.Path, "/")
+			id := parts[len(parts)-2]
+			mu.Lock()
+			takeoverOrder = append(takeoverOrder, id)
+			mu.Unlock()
+			status := stAwaitingInput
+			if id == "a" {
+				status = stRunning
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": status})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	starts, err := reclaimMissingSessions(context.Background(), NewTransport(srv.URL, "token"), func() map[string]bool {
+		return map[string]bool{}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	gotOrder := append([]string(nil), takeoverOrder...)
+	mu.Unlock()
+	if strings.Join(gotOrder, ",") != "a,b,c" {
+		t.Fatalf("takeover order = %v, want [a b c]", gotOrder)
+	}
+	if len(starts) != 3 || starts[0].job.SessionID != "a" || !starts[0].initiallyActive {
+		t.Fatalf("reclaimed starts = %#v", starts)
+	}
+}
+
+func TestAmbiguousClaimCanBeRecoveredFromAuthoritativeReclaim(t *testing.T) {
+	var claimCommitted atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/claim":
+			claimCommitted.Store(true)
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_ = conn.Close() // commit happened, but the runner never received the session id
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
+			if !claimCommitted.Load() {
+				t.Error("reclaim happened before the simulated claim commit")
+			}
+			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{{
+				SessionID: "claimed-after-eof", Status: stRunning,
+			}}})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stRunning})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	transport := NewTransport(srv.URL, "token")
+	if job, err := transport.claimSession(context.Background()); err == nil || job != nil {
+		t.Fatalf("ambiguous claim = (%#v, %v), want a response-loss error", job, err)
+	}
+	pool := newSessionPool(1)
+	if _, added := pool.register(poolJob("claimed-after-eof"), func() {}, false); !added {
+		t.Fatal("failed to register the pre-existing cold supervisor")
+	}
+	starts, err := reclaimMissingSessions(context.Background(), transport, pool.reclaimStates)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(starts) != 1 || starts[0].job.SessionID != "claimed-after-eof" || !starts[0].initiallyActive {
+		t.Fatalf("recovered starts = %#v", starts)
+	}
+	for _, start := range starts {
+		if _, ok := pool.activate(start.job); !ok {
+			t.Fatalf("recovered known supervisor %s was not activated", start.job.SessionID)
+		}
+	}
+	if got := pool.activeCount(); got != 1 {
+		t.Fatalf("active permits after response-loss recovery = %d, want 1", got)
 	}
 }

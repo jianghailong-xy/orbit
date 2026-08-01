@@ -4,11 +4,13 @@ import { presetDefaultModel } from './preset-overlay';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
-const BUILTIN = new Set<string>([AgentProvider.CLAUDE, AgentProvider.CODEX]);
-
-/** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug. */
-export function isBuiltinProvider(slug?: string | null): boolean {
-  return !slug || BUILTIN.has(slug);
+/** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
+ * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
+ * deployment; Claude/Codex predate the discriminator and remain unambiguous. */
+export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
+  if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
+  if (slug === AgentProvider.KIMI) return providerBuiltin;
+  return false;
 }
 
 /** The minimal ModelProvider row shape the exec resolver needs (a subset of the Prisma row). */
@@ -40,8 +42,8 @@ function injectedEnv(row: ModelProviderRow): Record<string, string> {
 
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
- * runtime (claude|codex), the model to pass, and the process env. For a configured provider
- * the runner never learns its slug — it just receives a claude/codex job whose env points at
+ * built-in runtime, the model to pass, and the process env. For a configured provider
+ * the runner never learns its slug — it just receives a Claude/Codex job whose env points at
  * the provider's endpoint, so the runner needs no changes.
  *
  * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
@@ -49,6 +51,8 @@ function injectedEnv(row: ModelProviderRow): Record<string, string> {
  */
 export function resolveProviderExec(args: {
   declaredProvider?: string | null;
+  /** False only for a stale/pre-0077 custom-provider identity that happens to say `kimi`. */
+  declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
   sessionModel?: string | null;
   agentModel?: string | null;
@@ -80,7 +84,11 @@ export function resolveProviderExec(args: {
   // CLAUDE_CODE_OAUTH_TOKEN keeps its own value, matching how agentEnv already wins for
   // built-ins. Without it the runner just uses whatever local login that machine has.
   const provider =
-    args.declaredProvider === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    args.declaredProvider === AgentProvider.CODEX
+      ? AgentProvider.CODEX
+      : args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false
+        ? AgentProvider.KIMI
+        : AgentProvider.CLAUDE;
   const env =
     provider === AgentProvider.CLAUDE && claudeOauthToken
       ? { CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken, ...(agentEnv ?? {}) }

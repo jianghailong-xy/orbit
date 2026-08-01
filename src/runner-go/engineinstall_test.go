@@ -9,7 +9,7 @@ import (
 )
 
 // withFakeEngine swaps the engine table for one whose binary does not exist anywhere on this
-// machine (the real claude/codex are installed on a dev box, which would defeat the point), and
+// machine (the real claude/codex/kimi may be installed on a dev box, defeating the point), and
 // whose "installer" is a shell command the test controls. `dir` goes on PATH, so an installer
 // that writes a binary there is one the runner can then find.
 func withFakeEngine(t *testing.T, dir, installCmd string) (bin string) {
@@ -142,11 +142,25 @@ func TestEngineAuthPreflightSkipsInjectedCredentials(t *testing.T) {
 	if !hasInjectedCredentials(providerClaude, map[string]string{"ANTHROPIC_AUTH_TOKEN": "sk-x"}) {
 		t.Error("claude: ANTHROPIC_AUTH_TOKEN should count as injected credentials")
 	}
+	if !hasInjectedCredentials(providerKimi, map[string]string{
+		"KIMI_MODEL_NAME": "kimi-for-coding", "KIMI_MODEL_API_KEY": "sk-x",
+	}) {
+		t.Error("kimi: a complete KIMI_MODEL_* override should count as injected credentials")
+	}
+	if hasInjectedCredentials(providerKimi, map[string]string{"KIMI_MODEL_API_KEY": "sk-x"}) {
+		t.Error("kimi: KIMI_MODEL_API_KEY without the model-name switch is inactive")
+	}
+	if hasInjectedCredentials(providerKimi, map[string]string{"KIMI_API_KEY": "sk-x"}) {
+		t.Error("kimi: conventional provider keys are config-file-only")
+	}
 	if hasInjectedCredentials(providerCodex, map[string]string{"OPENAI_API_KEY": "  "}) {
 		t.Error("blank values are not credentials")
 	}
 	if hasInjectedCredentials(providerClaude, map[string]string{"OPENAI_API_KEY": "sk-x"}) {
 		t.Error("the other engine's key says nothing about claude's login")
+	}
+	if hasInjectedCredentials(providerKimi, map[string]string{"ANTHROPIC_API_KEY": "sk-x"}) {
+		t.Error("the other engine's key says nothing about kimi's login")
 	}
 	// With a key present the probe never runs, so even a signed-out machine passes.
 	if msg := engineAuthPreflight(providerCodex, map[string]string{"OPENAI_API_KEY": "sk-x"}); msg != "" {

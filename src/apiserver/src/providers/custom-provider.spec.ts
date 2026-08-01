@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { encryptSecret } from './provider-crypto';
-import { providerPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset } from '@orbit/shared';
 import { isBuiltinProvider, resolveProviderExec } from './custom-provider';
 
 const row = (over: Partial<Parameters<typeof resolveProviderExec>[0]['customRow'] & object> = {}) => ({
@@ -19,9 +19,22 @@ test('custom-provider', async (t) => {
   await t.test('isBuiltinProvider: built-ins and unset are built-in; a slug is not', () => {
     assert.equal(isBuiltinProvider('claude'), true);
     assert.equal(isBuiltinProvider('codex'), true);
+    assert.equal(isBuiltinProvider('kimi'), true);
+    assert.equal(isBuiltinProvider('kimi', false), false);
     assert.equal(isBuiltinProvider(null), true);
     assert.equal(isBuiltinProvider(undefined), true);
     assert.equal(isBuiltinProvider('deepseek'), false);
+  });
+
+  await t.test('a stale old-replica kimi identity is fenced to the historical Claude fallback', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: AgentProvider.KIMI,
+      declaredProviderBuiltin: false,
+      customRow: null,
+      sessionModel: 'kimi-k2.7-code',
+    });
+    assert.equal(exec.provider, AgentProvider.CLAUDE);
+    assert.equal(exec.model, 'claude-opus-5');
   });
 
   await t.test('built-in claude: model kept, agent env passed through, no injection', () => {
@@ -47,6 +60,32 @@ test('custom-provider', async (t) => {
     });
     assert.equal(exec.provider, 'codex');
     assert.equal(exec.model, 'gpt-5.6-sol');
+  });
+
+  await t.test('built-in kimi: dispatches directly with its default and no Claude token', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'kimi',
+      customRow: null,
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+      claudeOauthToken: 'sk-ant-oat-abc',
+    });
+    assert.equal(exec.provider, 'kimi');
+    assert.equal(exec.model, 'kimi-code/kimi-for-coding');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+  });
+
+  await t.test('configured provider runtime remains limited to Claude/Codex semantics', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'legacy-row',
+      customRow: row({ runtime: 'kimi' }),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+    });
+    assert.equal(exec.provider, 'claude');
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
   });
 
   await t.test('preset-backed provider: a retired stored default yields to the catalogue', () => {

@@ -58,6 +58,24 @@ var (
 	codexDeviceCodeRe = regexp.MustCompile(`[A-Z0-9]{4,}-[A-Z0-9]{4,}`)
 )
 
+// `kimi login` uses RFC 8628 device authorization and writes the browser URL
+// and user code to stderr. Anchor both patterns to Kimi's explanatory text so a
+// docs URL or build identifier cannot be mistaken for the login challenge.
+var (
+	kimiDeviceURLRe  = regexp.MustCompile(`(?m)Opening browser for Kimi device login:[ \t]*(https://[^\s\x1b\x07"']+)`)
+	kimiDeviceCodeRe = regexp.MustCompile(`(?mi)enter code:[ \t]*([A-Z0-9][A-Z0-9-]{2,}[A-Z0-9])`)
+)
+
+func kimiDeviceLogin(s string) (url, code string) {
+	if match := kimiDeviceURLRe.FindStringSubmatch(s); len(match) == 2 {
+		url = match[1]
+	}
+	if match := kimiDeviceCodeRe.FindStringSubmatch(s); len(match) == 2 {
+		code = match[1]
+	}
+	return url, code
+}
+
 // codexDeviceCode pulls the one-time code out of the CLI's output. Anchored to the line that
 // announces it ("2. Enter this one-time code") so nothing else that happens to look like a code
 // — a build tag, an id in a warning — can be mistaken for one.
@@ -69,12 +87,15 @@ func codexDeviceCode(s string) string {
 	return codexDeviceCodeRe.FindString(s[i:])
 }
 
-// loginFlow is how one engine's sign-in is driven. The two differ in kind, not in detail:
+// loginFlow is how one engine's sign-in is driven. The engines differ in kind,
+// not merely in command spelling:
 //
 //   - claude prints a URL whose redirect_uri is Anthropic-hosted, then waits on stdin for the
 //     code that page hands the user. It is a TUI, so it needs a pty to print anything at all.
 //   - codex's `--device-auth` prints a URL *and* a one-time code to enter there, then polls for
 //     the approval itself. Nothing is handed back, and it is plain stdout — no pty needed.
+//   - kimi's `login` is also a device flow, printed to stderr. Its documented exit 0 is the
+//     success signal, so the relay need not start a second ACP process after login completes.
 //
 // Plain `codex login` is not an option here: it serves its callback on localhost:1455 on the
 // runner, which the user's browser can't reach (see engineSpec.loginRemoteFlag).
@@ -87,12 +108,16 @@ type loginFlow struct {
 	progress func(out string) *LoginResultRequest
 	// takesCode is set for a flow the user pastes a code back into.
 	takesCode bool
+	// successOnExit makes a clean CLI exit authoritative. Claude and Codex retain
+	// their post-command auth probe because their exit status is not reliable.
+	successOnExit bool
 }
 
 func (f loginFlow) cmdLine() string { return strings.Join(f.argv, " ") }
 
 func loginFlowFor(engine string) loginFlow {
-	if engine == providerCodex {
+	switch engine {
+	case providerCodex:
 		return loginFlow{
 			engine: providerCodex,
 			argv:   []string{providerCodex, "login", "--device-auth"},
@@ -103,6 +128,19 @@ func loginFlowFor(engine string) loginFlow {
 				}
 				return &LoginResultRequest{Status: loginAwaitingApproval, URL: u, UserCode: code}
 			},
+		}
+	case providerKimi:
+		return loginFlow{
+			engine: providerKimi,
+			argv:   []string{providerKimi, "login"},
+			progress: func(out string) *LoginResultRequest {
+				u, code := kimiDeviceLogin(out)
+				if u == "" || code == "" {
+					return nil
+				}
+				return &LoginResultRequest{Status: loginAwaitingApproval, URL: u, UserCode: code}
+			},
+			successOnExit: true,
 		}
 	}
 	// Anything else (including the empty engine an older control plane sends) is claude.
@@ -120,8 +158,8 @@ func loginFlowFor(engine string) loginFlow {
 	}
 }
 
-// loginRelay drives one interactive `claude auth login` on this machine while the user approves
-// it in their own browser and pastes the resulting code back through the control plane.
+// loginRelay drives one engine login on this machine while the user completes
+// its browser authorization through the control plane.
 //
 // One at a time per runner: the CLI writes this machine's single credentials file, so two
 // concurrent sign-ins would race over it, and the heartbeat redelivers a `start` until the
@@ -299,6 +337,10 @@ poll:
 	}
 
 	if !sent {
+		if exited && exitErr == nil && flow.successOnExit {
+			report(LoginResultRequest{Status: loginDone})
+			return
+		}
 		// Either the CLI died immediately, or its output changed enough that the pattern no
 		// longer matches. Say so plainly — the card falls back to "run it on that machine".
 		if !exited {
@@ -314,6 +356,10 @@ poll:
 
 	if !exited {
 		exitErr = <-waited
+	}
+	if exitErr == nil && flow.successOnExit {
+		report(LoginResultRequest{Status: loginDone})
+		return
 	}
 	// The CLI's exit code isn't a reliable success signal, so ask the question `orbit doctor`
 	// asks: is this machine actually signed in now?

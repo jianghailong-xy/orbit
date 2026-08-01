@@ -83,12 +83,15 @@ import {
   localStatusRows,
   openSlash,
   pickSlash as replaceSlashToken,
+  slashAssetMatchesProvider,
   slashCommandName,
   slashMatches as getSlashMatches,
   slashToken as getSlashToken,
+  supportsRunnerSlashAssets,
   type ComposerSlashItem,
   type LocalStatusRow,
 } from '../lib/slashCommands';
+import { planUsageSnapshotForProvider } from '../lib/planUsage';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
@@ -128,7 +131,7 @@ import { ApprovalPanel } from './ApprovalPanel';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
-import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
+import type { PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
@@ -236,19 +239,6 @@ const IS_MAC =
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
 const fmtReset = (d?: string): string =>
   d ? new Date(d).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-
-function usageSnapshotForProvider(usage: PlanUsage | null | undefined, provider: string): PlanUsageSnapshot | null {
-  if (!usage) return null;
-  if (provider === 'codex') {
-    if (usage.codex) return usage.codex;
-    return usage.provider === 'codex' || usage.primary || usage.secondary || usage.rateLimits?.length ? usage : null;
-  }
-  if (provider === 'claude') {
-    if (usage.claude) return usage.claude;
-    return !usage.provider || usage.provider === 'claude' || usage.fiveHour || usage.sevenDay ? usage : null;
-  }
-  return null;
-}
 
 // 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
 const fmtTokens = (n: number): string =>
@@ -1345,7 +1335,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
   // Claude's commands and skills are meaningless in that session — don't offer them, and
   // don't gate sending on them. `/status` is ours and stays.
-  const codexComposer = shownProvider === 'codex';
+  const codexComposer = !supportsRunnerSlashAssets(shownProvider);
   // The selected session's permission mode as the SERVER resolves it: its own stored mode,
   // else the owning agent's, else dontAsk (queue.service.ts buildSession). Reading the session
   // row alone would show "Don't Ask" for every session that never stored one — and since the
@@ -1367,9 +1357,21 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
-    setModel(selected.model ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
+    const owningAgent = agentsForRunner.find((a) => a.id === selected.agent?.id);
+    setModel(
+      selected.model ??
+        detailForSelected?.agent?.model ??
+        selected.agent?.model ??
+        owningAgent?.model ??
+        defaultModelForProvider(provider, runner.modelCatalog, configuredProviders),
+    );
     setMode(PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default');
-    setEffort(normalizeEffortForProvider(provider, selected.effort ?? ''));
+    setEffort(
+      normalizeEffortForProvider(
+        provider,
+        selected.effort ?? detailForSelected?.agent?.effort ?? owningAgent?.effort ?? '',
+      ),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, live, effectivePermissionMode]);
 
@@ -2630,6 +2632,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           name: c.name,
           description: c.description,
           type: 'command' as const,
+          provider: c.provider,
           agentId: c.agentId,
           builtin: c.builtin,
         })),
@@ -2637,12 +2640,17 @@ export function AgentView({ runner }: { runner: Runner }) {
           name: s.name,
           description: s.description,
           type: 'skill' as const,
+          provider: s.provider,
           agentId: s.agentId,
           builtin: s.builtin,
         })),
-      ].filter((it) => !it.agentId || it.agentId === composerAgentId)),
+      ].filter(
+        (it) =>
+          slashAssetMatchesProvider(it.provider, shownProvider) &&
+          (!it.agentId || it.agentId === composerAgentId),
+      )),
     ],
-    [runner.commands, runner.skills, composerAgentId, codexComposer],
+    [runner.commands, runner.skills, composerAgentId, codexComposer, shownProvider],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -2726,8 +2734,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
-  const shownModel: string = live ? (selected.model ?? DEFAULT_MODEL) : model;
-  const shownPlanUsage = usageSnapshotForProvider(runner.planUsage, shownProvider);
+  const selectedAgent = agentsForRunner.find((a) => a.id === selected?.agent?.id);
+  const effectiveModel =
+    selected?.model ??
+    detailForSelected?.agent?.model ??
+    selected?.agent?.model ??
+    selectedAgent?.model ??
+    defaultModelForProvider(shownProvider, runner.modelCatalog, configuredProviders);
+  const effectiveEffort =
+    selected?.effort ?? detailForSelected?.agent?.effort ?? selectedAgent?.effort ?? '';
+  const shownModel: string = live ? effectiveModel : model;
+  const shownPlanUsage = planUsageSnapshotForProvider(runner.planUsage, shownProvider);
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
@@ -2753,7 +2770,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     : mode;
   const shownEffort: string = normalizeEffortForProvider(
     shownProvider,
-    live ? (selected.effort ?? '') : effort,
+    live ? effectiveEffort : effort,
   );
   const shownEffortOptions = effortOptionsForProvider(shownProvider);
   // Auto is offered only on models that support it (see supportsAuto); the option
@@ -3841,14 +3858,14 @@ export function AgentView({ runner }: { runner: Runner }) {
                   key: 'command',
                   icon: <CodeOutlined />,
                   label: 'Command',
-                  disabled: !runner.online || codexComposer || (runner.commands?.length ?? 0) === 0,
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'command'),
                   onClick: () => insertSlash('command'),
                 },
                 {
                   key: 'skill',
                   icon: <ThunderboltOutlined />,
                   label: 'Skill',
-                  disabled: !runner.online || codexComposer || (runner.skills?.length ?? 0) === 0,
+                  disabled: !runner.online || !slashItems.some((it) => it.type === 'skill'),
                   onClick: () => insertSlash('skill'),
                 },
                 {

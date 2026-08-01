@@ -95,7 +95,7 @@ export function RunnerRegisterGuide() {
       <div className="runner-center">
         <h1 className="page-title">Add a runner</h1>
         <p className="runner-sub">
-          A runner is a machine that runs Claude Code tasks for you. Run this one command on the
+          A runner is a machine that runs Claude Code, Codex, or Kimi tasks for you. Run this one command on the
           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
           the machine belongs to you. It appears in the list on the left once it comes online.
         </p>

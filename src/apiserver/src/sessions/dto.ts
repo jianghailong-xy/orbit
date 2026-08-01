@@ -4,8 +4,8 @@ export interface CreateSessionDto {
   /** First user message — seeds the session's first turn. */
   prompt: string;
   /** Compose the session from a `!cmd` draft: seed the first turn as a 'shell' turn
-   *  (run `prompt` on the runner, bypassing claude) instead of a normal message. claude
-   *  still spawns and idles; the command's output becomes context for the next message. */
+   *  (run `prompt` on the runner, bypassing the agent runtime) instead of a normal message. The
+   *  runtime still spawns and idles; the command's output becomes context for the next message. */
   shell?: boolean;
   /** The runner this session is pinned to. Optional when `agentId` is given —
    *  the runner is then derived from the agent's machine. */
@@ -39,7 +39,7 @@ export interface SessionTurnDto {
 }
 
 export interface SessionResumeDto extends SessionTurnDto {
-  /** Per-session overrides re-applied on resume (the runner re-spawns claude, so a
+  /** Per-session overrides re-applied on resume (the runner re-spawns the runtime, so a
    *  new mode/model/effort takes effect). Omitted fields keep the session's prior value. */
   model?: string;
   permissionMode?: string;
@@ -60,7 +60,7 @@ export interface SessionRenameDto {
 
 export interface SessionConfigDto {
   /** Change the model, permission mode and/or effort of an already-started session.
-   *  The runner re-spawns claude with --resume so the change takes effect on the next
+   *  The runner re-spawns the runtime so the change takes effect on the next
    *  turn. Only allowed between turns (AWAITING_INPUT); omitted fields are untouched.
    *  effort: '' clears it back to the model default; omitted keeps the running value. */
   model?: string;

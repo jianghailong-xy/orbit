@@ -21,5 +21,5 @@ export class SubmitLoginCodeDto {
 
 /** Which CLI to sign in. Absent from an older client, which only ever signed in claude. */
 export class StartLoginDto {
-  @IsOptional() @IsIn(['claude', 'codex']) engine?: LoginEngine;
+  @IsOptional() @IsIn(['claude', 'codex', 'kimi']) engine?: LoginEngine;
 }

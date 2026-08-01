@@ -5,28 +5,31 @@ import Foundation
 // it rides the GET /runners payload as `skills` / `commands` (both `SlashCommandInfo[]`). The
 // `Runner` response struct (DTOs.swift) is extended with those plus `displayName`.
 
-/// A slash command (`.claude/commands/*.md`) or skill (`.claude/skills/<name>/SKILL.md`) a runner
-/// discovered. `agentId` empty/nil ⇒ host-level (shared by all agents); else project-scoped to
-/// that agent's workDir — the web composer scopes `/` autocomplete to host + the session's agent.
+/// A slash command or skill a runner discovered. `agentId` empty/nil ⇒ host-level (shared by
+/// all agents); else project-scoped to that agent's workDir. `provider` identifies a runtime-owned
+/// registry entry; nil is a legacy Claude entry. Local Orbit commands have `type == "local"` and
+/// remain available under every provider.
 public struct SlashCommandInfo: Codable, Equatable, Sendable, Identifiable {
     public let name: String
     public let description: String?
     public let type: String?        // "command" | "skill"
     public let agentId: String?
+    public let provider: String?
     /// True for a name the Claude CLI registers itself (built-in skill like `/loop`, a plugin
     /// skill, a namespaced command), learned from its init handshake rather than found on
     /// disk. Listed after the user's own assets. Nil on runners too old to report it.
     public let builtin: Bool?
     /// Stable identity for SwiftUI lists (the same name can exist host-level and per-agent).
-    public var id: String { "\(agentId ?? "host"):\(type ?? ""):\(name)" }
+    public var id: String { "\(provider ?? "legacy"):\(agentId ?? "host"):\(type ?? ""):\(name)" }
 
     public init(name: String, description: String? = nil, type: String? = nil,
-                agentId: String? = nil, builtin: Bool? = nil) {
+                agentId: String? = nil, builtin: Bool? = nil, provider: String? = nil) {
         self.name = name
         self.description = description
         self.type = type
         self.agentId = agentId
         self.builtin = builtin
+        self.provider = provider
     }
 }
 
@@ -46,15 +49,28 @@ public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
 public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public let claude: [RunnerModelInfo]?
     public let codex: [RunnerModelInfo]?
+    public let kimi: [RunnerModelInfo]?
+
+    public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
+                kimi: [RunnerModelInfo]? = nil) {
+        self.claude = claude
+        self.codex = codex
+        self.kimi = kimi
+    }
 
     public func models(for provider: String) -> [ModelOption]? {
-        let rows = provider == "codex" ? codex : claude
+        let rows: [RunnerModelInfo]?
+        switch provider {
+        case "codex": rows = codex
+        case "kimi":  rows = kimi
+        default:      rows = claude
+        }
         guard let rows, !rows.isEmpty else { return nil }
         return rows.map { ModelOption(id: $0.value, name: $0.label) }
     }
 
     public func contextWindow(for id: String) -> Int? {
-        let all = (claude ?? []) + (codex ?? [])
+        let all = (claude ?? []) + (codex ?? []) + (kimi ?? [])
         return all.first { $0.value == id }?.contextWindow
     }
 }
@@ -181,7 +197,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
 }
 
 /// Provider quota for a runner's account. Old runners report a flat Claude snapshot;
-/// newer runners may nest provider snapshots under `claude` and `codex`.
+/// newer runners may nest provider snapshots under `claude`, `codex`, and `kimi`.
 public struct PlanUsage: Codable, Equatable, Sendable {
     public let provider: String?
     public let fiveHour: PlanUsageWindow?
@@ -198,6 +214,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let rateLimits: [PlanUsageRateLimit]?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
+    public let kimi: PlanUsageSnapshot?
     public let fetchedAt: String?
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
@@ -208,6 +225,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
+                kimi: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
@@ -224,6 +242,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.rateLimits = rateLimits
         self.claude = claude
         self.codex = codex
+        self.kimi = kimi
         self.fetchedAt = fetchedAt
     }
 }
@@ -317,20 +336,33 @@ public extension PlanUsage {
             let flat = flatSnapshot
             return flat.provider == "codex" || flat.primary != nil || flat.secondary != nil || flat.rateLimits?.isEmpty == false ? flat : nil
         }
+        if provider == "kimi" {
+            if let kimi { return kimi }
+            let flat = flatSnapshot
+            // Kimi must be explicit: its session must never inherit a legacy flat Claude quota.
+            return flat.provider == "kimi" ? flat : nil
+        }
         if let claude { return claude }
         let flat = flatSnapshot
-        return flat.provider == nil || flat.provider == "claude" || flat.fiveHour != nil || flat.sevenDay != nil ? flat : nil
+        return flat.provider == nil || flat.provider == "claude" ? flat : nil
     }
 
     var snapshots: [(String, PlanUsageSnapshot)] {
-        if claude != nil || codex != nil {
-            return [("Claude quota", claude), ("Codex quota", codex)].compactMap { entry in
+        if claude != nil || codex != nil || kimi != nil {
+            return [("Claude quota", claude), ("Codex quota", codex), ("Kimi quota", kimi)].compactMap { entry in
                 entry.1.map { (entry.0, $0) }
             }
         }
         let flat = flatSnapshot
-        let title = flat.provider == "codex" || flat.primary != nil || flat.secondary != nil || flat.rateLimits?.isEmpty == false
-            ? "Codex quota" : "Claude quota"
+        let title: String
+        if flat.provider == "kimi" {
+            title = "Kimi quota"
+        } else if flat.provider == "codex" || flat.primary != nil || flat.secondary != nil
+                    || flat.rateLimits?.isEmpty == false {
+            title = "Codex quota"
+        } else {
+            title = "Claude quota"
+        }
         return [(title, flat)]
     }
 
