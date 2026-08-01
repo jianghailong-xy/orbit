@@ -365,17 +365,28 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!type) return null;
     // User-scoped library events (publishForUser) are keyed `user:<ownerId>`, not by a session:
     // route them by that id and ship an empty sessionId — no owner lookup, nothing to summarize.
-    if (isUserScopedType(type)) {
+    // Most user-keyed events are libraries (tags/lists/providers), but task dependency edits
+    // also have no reliable creator-session anchor: an agent may edit a task the web created.
+    // Accept any control event explicitly published on the reserved user key while preserving
+    // the existing session-scoped task.changed path below.
+    if (isUserScopedType(type) || sessionId.startsWith(RealtimeService.USER_SCOPE)) {
       const owner = sessionId.startsWith(RealtimeService.USER_SCOPE)
         ? sessionId.slice(RealtimeService.USER_SCOPE.length)
         : null;
       if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
+      const id = String(ev.payload.id ?? '');
+      const data =
+        type === ControlEventType.TASK_CHANGED
+          ? { taskId: id }
+          : type === ControlEventType.AGENT_CHANGED
+            ? { agentId: id }
+            : { id };
       return {
         type,
         sessionId: '',
         agentId: null,
         ts: ev.ts ?? new Date().toISOString(),
-        data: { id: String(ev.payload.id ?? '') },
+        data,
       };
     }
     const meta = await this.resolveOwner(sessionId);

@@ -9,7 +9,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
-import { TaskStatus } from '@orbit/shared';
+import { RunEventType, TaskStatus } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -53,6 +53,11 @@ const DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH = 8;
 const MAX_DEPENDENCY_GRAPH_MAX_DEPTH = 32;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_NODES = 100;
 const MAX_DEPENDENCY_GRAPH_MAX_NODES = 500;
+// Dense DAGs can have O(nodes²) edges. Keep both the database read and serialized/MCP
+// response bounded as well as the node count; four edges per requested node is enough for
+// normal workflow graphs, while `truncated` makes unusually dense snapshots explicit.
+const DEPENDENCY_GRAPH_EDGES_PER_NODE = 4;
+const MAX_DEPENDENCY_GRAPH_EDGES = 2_000;
 
 export interface ListTasksPageQuery {
   cursor?: string;
@@ -239,27 +244,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
     if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
-    const task = await this.prisma.task.create({
-      data: {
-        title: dto.title,
-        description: dto.description,
-        ownerId,
-        // Defaults to the human (user-facing API); the runner path passes the agent.
-        creatorType: creator?.type ?? CreatorType.USER,
-        creatorId: creator?.id ?? ownerId,
-        creatorSessionId: sessionId,
-        assigneeId: dto.assigneeId,
-        listId: dto.listId,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-        autoRunWhenReady: dto.autoRunWhenReady,
-      },
-    });
-    if (dependsOnTaskIds.length) {
-      await this.prisma.taskDependency.createMany({
-        data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: task.id, dependsOnTaskId })),
-        skipDuplicates: true,
-      });
-    }
+    const data = {
+      title: dto.title,
+      description: dto.description,
+      ownerId,
+      // Defaults to the human (user-facing API); the runner path passes the agent.
+      creatorType: creator?.type ?? CreatorType.USER,
+      creatorId: creator?.id ?? ownerId,
+      creatorSessionId: sessionId,
+      assigneeId: dto.assigneeId,
+      listId: dto.listId,
+      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      autoRunWhenReady: dto.autoRunWhenReady,
+    } satisfies Prisma.TaskUncheckedCreateInput;
+    // Initial edges and their task must become visible atomically. Taking the same owner lock
+    // used by add/replace prevents a concurrent reverse-edge write from observing the new task
+    // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
+    const task = dependsOnTaskIds.length
+      ? await this.prisma.$transaction(async (tx) => {
+          await this.lockDependencyGraph(tx, ownerId);
+          const created = await tx.task.create({ data });
+          await tx.taskDependency.createMany({
+            data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+              taskId: created.id,
+              dependsOnTaskId,
+            })),
+          });
+          return created;
+        })
+      : await this.prisma.task.create({ data });
     // Push the new task to the owner's control-plane stream (GET /api/events) so their task
     // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
     // show up after a manual refresh". Scoped via the creating session (the MCP path always
@@ -492,6 +505,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       'maxNodes',
       MAX_DEPENDENCY_GRAPH_MAX_NODES,
     );
+    const maxEdges = Math.min(
+      maxNodes * DEPENDENCY_GRAPH_EDGES_PER_NODE,
+      MAX_DEPENDENCY_GRAPH_EDGES,
+    );
 
     const focus = await this.prisma.task.findFirst({
       where: { id: focusTaskId, ownerId },
@@ -517,13 +534,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     while (frontier.length > 0 && traversedDepth < maxDepth) {
       const nextDepth = traversedDepth + 1;
-      const rows = await this.prisma.taskDependency.findMany({
+      const remainingEdgeCapacity = maxEdges - edges.size;
+      if (remainingEdgeCapacity <= 0) {
+        truncated = true;
+        break;
+      }
+      const fetchedRows = await this.prisma.taskDependency.findMany({
         where: {
           taskId: { in: frontier },
           task: { ownerId },
           dependsOnTask: { ownerId },
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        // Fetch one sentinel row so a dense layer is reported as truncated without ever
+        // materializing its unbounded remainder in the API server.
+        take: remainingEdgeCapacity + 1,
         select: {
           taskId: true,
           dependsOnTaskId: true,
@@ -532,6 +557,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           },
         },
       });
+      const edgeLimitReached = fetchedRows.length > remainingEdgeCapacity;
+      const rows = fetchedRows.slice(0, remainingEdgeCapacity);
       const next = new Set<string>();
       for (const row of rows) {
         if (!nodes.has(row.dependsOnTaskId)) {
@@ -556,6 +583,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       frontier = [...next];
       traversedDepth = nextDepth;
+      if (edgeLimitReached) {
+        truncated = true;
+        break;
+      }
     }
 
     // Reaching the requested depth is only truncation when those boundary nodes really
@@ -601,7 +632,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       maxDepth: deepestDepth,
       truncated,
-      limits: { maxDepth, maxNodes },
+      limits: { maxDepth, maxNodes, maxEdges },
     };
   }
 
@@ -722,11 +753,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             }
             return task;
           });
-    // Same live-refresh nudge as create(): an agent's task_update (e.g. marking a task DONE)
-    // changes what the list shows, so route a task.changed via the task's creator session so
-    // the owner's list reflects it without a manual refresh. Null for the rare web-created task
-    // (no creator session) — those fall back to the poll.
-    if (before.creatorSessionId) this.realtime.publishTaskChanged(before.creatorSessionId, id);
+    // A dependency replacement may target a web-created task, which has no creator session to
+    // carry the refresh. Publish it on the owner's stream so Agent/MCP and CLI replacements
+    // refresh an already-open DAG immediately. Scalar-only updates keep their existing
+    // session-scoped event (and its agent context).
+    if (dependsOnTaskIds !== undefined) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
+    } else if (before.creatorSessionId) {
+      this.realtime.publishTaskChanged(before.creatorSessionId, id);
+    }
     // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
     // (both the user PATCH and the agent's task_update MCP flow through here). On the
     // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
@@ -846,7 +881,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       throw e;
     }
-    return this.get(ownerId, taskId);
+    const updated = await this.get(ownerId, taskId);
+    // Agent edits have no guaranteed session to publish through (the target may be web-created),
+    // so nudge the owner's control stream directly. The graph query lives under ['task'] and
+    // refreshes together with the detail/list views.
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    return updated;
   }
 
   /** Remove a prerequisite edge (no-op if it doesn't exist). */
@@ -857,7 +897,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.lockDependencyGraph(tx, ownerId);
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
     });
-    return this.get(ownerId, taskId);
+    const updated = await this.get(ownerId, taskId);
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    return updated;
   }
 
   async remove(ownerId: string, id: string) {

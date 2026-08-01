@@ -9,13 +9,14 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Modal, Popconfirm, Tooltip } from 'antd';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   getFocusPathSets,
   getTaskDependencyEdgeState,
@@ -36,7 +37,10 @@ interface DependencyNodeData extends Record<string, unknown> {
   task: TaskDependencyGraphNode;
   isFocus: boolean;
   isDirect: boolean;
+  hasIncoming: boolean;
+  hasOutgoing: boolean;
   dimmed: boolean;
+  vertical: boolean;
   removing: boolean;
   onOpenTask: (taskId: string) => void;
   onRemoveDependency?: (taskId: string) => void;
@@ -62,7 +66,9 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
       onMouseEnter={() => data.onHighlight(data.task.id)}
       onMouseLeave={() => data.onHighlight(null)}
     >
-      <Handle type="target" position={Position.Left} isConnectable={false} />
+      {data.hasIncoming && (
+        <Handle type="target" position={data.vertical ? Position.Top : Position.Left} isConnectable={false} />
+      )}
       <button
         type="button"
         className="tdg-node-main nodrag"
@@ -101,7 +107,9 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
           </button>
         </Popconfirm>
       )}
-      <Handle type="source" position={Position.Right} isConnectable={false} />
+      {data.hasOutgoing && (
+        <Handle type="source" position={data.vertical ? Position.Bottom : Position.Right} isConnectable={false} />
+      )}
     </div>
   );
 }
@@ -132,8 +140,33 @@ function pathFromNodeToFocus(
   return { nodeIds, edgeKeys };
 }
 
-function layoutGraph(
+function layoutPositions(
   graph: NormalizedTaskDependencyGraph,
+  vertical: boolean,
+): ReadonlyMap<string, { x: number; y: number }> {
+  const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  layout.setGraph({
+    rankdir: vertical ? 'TB' : 'LR',
+    ranksep: vertical ? 46 : 52,
+    nodesep: 24,
+    marginx: 24,
+    marginy: 24,
+  });
+  for (const task of graph.nodes) layout.setNode(task.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  for (const edge of graph.edges) layout.setEdge(edge.sourceTaskId, edge.targetTaskId);
+  dagre.layout(layout);
+  return new Map(
+    graph.nodes.map((task) => {
+      const position = layout.node(task.id) as { x: number; y: number };
+      return [task.id, { x: position.x - NODE_WIDTH / 2, y: position.y - NODE_HEIGHT / 2 }];
+    }),
+  );
+}
+
+function flowElements(
+  graph: NormalizedTaskDependencyGraph,
+  positions: ReadonlyMap<string, { x: number; y: number }>,
+  vertical: boolean,
   directPrerequisiteIds: ReadonlySet<string>,
   highlighted: ReturnType<typeof pathFromNodeToFocus>,
   onOpenTask: (taskId: string) => void,
@@ -141,21 +174,14 @@ function layoutGraph(
   removingTaskId: string | null,
   onHighlight: (taskId: string | null) => void,
 ): { nodes: DependencyFlowNode[]; edges: Edge[] } {
-  const layout = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  layout.setGraph({ rankdir: 'LR', ranksep: 64, nodesep: 28, marginx: 24, marginy: 24 });
-  for (const task of graph.nodes) layout.setNode(task.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
-  for (const edge of graph.edges) layout.setEdge(edge.sourceTaskId, edge.targetTaskId);
-  dagre.layout(layout);
-
   const nodes: DependencyFlowNode[] = graph.nodes.map((task) => {
-    const position = layout.node(task.id) as { x: number; y: number };
     const isFocus = task.id === graph.focusTaskId;
     return {
       id: task.id,
       type: 'taskDependency',
-      position: { x: position.x - NODE_WIDTH / 2, y: position.y - NODE_HEIGHT / 2 },
-      sourcePosition: Position.Right,
-      targetPosition: Position.Left,
+      position: positions.get(task.id) ?? { x: 0, y: 0 },
+      sourcePosition: vertical ? Position.Bottom : Position.Right,
+      targetPosition: vertical ? Position.Top : Position.Left,
       draggable: false,
       selectable: false,
       focusable: false,
@@ -163,7 +189,10 @@ function layoutGraph(
         task,
         isFocus,
         isDirect: directPrerequisiteIds.has(task.id),
+        hasIncoming: (graph.incomingByTaskId.get(task.id)?.length ?? 0) > 0,
+        hasOutgoing: (graph.outgoingByTaskId.get(task.id)?.length ?? 0) > 0,
         dimmed: !!highlighted && !highlighted.nodeIds.has(task.id),
+        vertical,
         removing: removingTaskId === task.id,
         onOpenTask,
         onRemoveDependency,
@@ -205,18 +234,43 @@ function layoutGraph(
 function DependencyFlow({
   graph,
   fullScreen,
+  vertical,
   onOpenTask,
   onRemoveDependency,
   removingTaskId,
 }: {
   graph: TaskDependencyGraphResponse;
   fullScreen: boolean;
+  vertical: boolean;
   onOpenTask: (taskId: string) => void;
   onRemoveDependency?: (taskId: string) => void;
   removingTaskId: string | null;
 }) {
   const normalized = useMemo(() => normalizeTaskDependencyGraph(graph), [graph]);
   const direct = useMemo(() => getFocusPathSets(normalized).directPrerequisiteIds, [normalized]);
+  const { fitBounds } = useReactFlow();
+  const reduceMotion =
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const structureKey = useMemo(
+    () =>
+      `${vertical ? 'TB' : 'LR'}|${normalized.topologicalNodeIds.join(',')}|${normalized.edges
+        .map(taskDependencyEdgeKey)
+        .join(',')}`,
+    [normalized, vertical],
+  );
+  // Dagre is the expensive part. Status/path hover only changes presentation, so keep positions
+  // stable and avoid recomputing the layout as the pointer moves between nodes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- structureKey captures every layout input
+  const positions = useMemo(() => layoutPositions(normalized, vertical), [structureKey]);
+  const graphBounds = useMemo(() => {
+    const points = [...positions.values()];
+    if (points.length === 0) return { x: 0, y: 0, width: NODE_WIDTH, height: NODE_HEIGHT };
+    const minX = Math.min(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxX = Math.max(...points.map((point) => point.x + NODE_WIDTH));
+    const maxY = Math.max(...points.map((point) => point.y + NODE_HEIGHT));
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }, [positions]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlighted = useMemo(
     () => pathFromNodeToFocus(normalized, highlightedId),
@@ -224,8 +278,10 @@ function DependencyFlow({
   );
   const elements = useMemo(
     () =>
-      layoutGraph(
+      flowElements(
         normalized,
+        positions,
+        vertical,
         direct,
         highlighted,
         onOpenTask,
@@ -233,8 +289,29 @@ function DependencyFlow({
         removingTaskId,
         setHighlightedId,
       ),
-    [normalized, direct, highlighted, onOpenTask, onRemoveDependency, removingTaskId],
+    [normalized, positions, vertical, direct, highlighted, onOpenTask, onRemoveDependency, removingTaskId],
   );
+  useEffect(() => {
+    // Fit once after a structural add/remove. Status-only realtime refreshes keep the same key,
+    // so the user's pan/zoom position does not jump while tasks progress.
+    let fitFrame = 0;
+    const layoutFrame = requestAnimationFrame(() => {
+      // React Flow commits controlled node positions to its internal store after this effect.
+      // A second frame ensures the viewport exists after a responsive LR/TB layout flip.
+      fitFrame = requestAnimationFrame(() => {
+        // Use our known dagre bounds rather than measured visible nodes: after a responsive
+        // direction flip React Flow may not have measured the newly off-screen final rank yet.
+        void fitBounds(graphBounds, {
+          padding: fullScreen ? 0.2 : 0.12,
+          duration: reduceMotion ? 0 : 180,
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(layoutFrame);
+      cancelAnimationFrame(fitFrame);
+    };
+  }, [fitBounds, fullScreen, graphBounds, reduceMotion, structureKey]);
 
   if (!normalized.focusNode || normalized.hasCycle) {
     return (
@@ -260,7 +337,9 @@ function DependencyFlow({
       zoomOnScroll={false}
       zoomOnDoubleClick={false}
       panOnScroll={false}
-      panOnDrag
+      // Inline narrow graphs prioritize scrolling the detail panel. Full-screen and wide
+      // layouts retain canvas panning; zoom/fit controls remain available in every mode.
+      panOnDrag={!vertical || fullScreen}
       preventScrolling={false}
       proOptions={{ hideAttribution: true }}
       ariaLabelConfig={{
@@ -302,9 +381,26 @@ export function TaskDependencyGraph({
   removingTaskId?: string | null;
 }) {
   const [fullScreen, setFullScreen] = useState(false);
+  const inlineCanvasRef = useRef<HTMLDivElement>(null);
+  // The default detail width is 600px, so start in the narrow TB layout and avoid a visible
+  // first-paint LR→TB flip for the common case. ResizeObserver corrects wider saved panels.
+  const [inlineVertical, setInlineVertical] = useState(true);
+  useEffect(() => {
+    const element = inlineCanvasRef.current;
+    if (!element) return;
+    const update = (width: number) => setInlineVertical(width < 640);
+    update(element.getBoundingClientRect().width);
+    const observer = new ResizeObserver((entries) => update(entries[0]?.contentRect.width ?? 0));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
     <>
-      <div className="tdg-canvas" aria-label={`Dependency graph for ${title}`}>
+      <div
+        ref={inlineCanvasRef}
+        className={`tdg-canvas${inlineVertical ? ' is-vertical' : ''}`}
+        aria-label={`Dependency graph for ${title}`}
+      >
         <Tooltip title="Open full-screen graph">
           <button
             type="button"
@@ -315,15 +411,18 @@ export function TaskDependencyGraph({
             <FullscreenOutlined />
           </button>
         </Tooltip>
-        <ReactFlowProvider>
-          <DependencyFlow
-            graph={graph}
-            fullScreen={false}
-            onOpenTask={onOpenTask}
-            onRemoveDependency={onRemoveDependency}
-            removingTaskId={removingTaskId}
-          />
-        </ReactFlowProvider>
+        {!fullScreen && (
+          <ReactFlowProvider>
+            <DependencyFlow
+              graph={graph}
+              fullScreen={false}
+              vertical={inlineVertical}
+              onOpenTask={onOpenTask}
+              onRemoveDependency={onRemoveDependency}
+              removingTaskId={removingTaskId}
+            />
+          </ReactFlowProvider>
+        )}
         <div className="tdg-direction">Prerequisite → dependent</div>
       </div>
       <Modal
@@ -340,6 +439,7 @@ export function TaskDependencyGraph({
             <DependencyFlow
               graph={graph}
               fullScreen
+              vertical={false}
               onOpenTask={onOpenTask}
               onRemoveDependency={onRemoveDependency}
               removingTaskId={removingTaskId}
@@ -348,61 +448,5 @@ export function TaskDependencyGraph({
         </div>
       </Modal>
     </>
-  );
-}
-
-export function TaskDependencyList({
-  graph,
-  onOpenTask,
-  onRemoveDependency,
-  removingTaskId = null,
-}: {
-  graph: TaskDependencyGraphResponse;
-  onOpenTask: (taskId: string) => void;
-  onRemoveDependency?: (taskId: string) => void;
-  removingTaskId?: string | null;
-}) {
-  const normalized = useMemo(() => normalizeTaskDependencyGraph(graph), [graph]);
-  const direct = useMemo(() => getFocusPathSets(normalized).directPrerequisiteIds, [normalized]);
-  return (
-    <div className="tdg-list" role="list" aria-label="Dependency graph as a list">
-      {normalized.nodes
-        .filter((node) => node.id !== normalized.focusTaskId)
-        .map((node) => {
-          const targets = (normalized.outgoingByTaskId.get(node.id) ?? [])
-            .map((id) => normalized.nodeById.get(id)?.title)
-            .filter(Boolean)
-            .join(', ');
-          return (
-            <div className="tdg-list-row" role="listitem" key={node.id}>
-              <button type="button" className="tdg-list-open" onClick={() => onOpenTask(node.id)}>
-                <TaskStatusPill status={node.status} running={node.running} queued={node.queued} />
-                <span className="tdg-list-copy">
-                  <span className="tdg-list-title" title={node.title}>{node.title}</span>
-                  <span className="tdg-list-relation" title={targets}>Required by {targets || 'another task'}</span>
-                </span>
-              </button>
-              {direct.has(node.id) && onRemoveDependency && (
-                <Popconfirm
-                  title="Remove prerequisite?"
-                  description="This task will no longer wait for this prerequisite."
-                  okText="Remove"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => onRemoveDependency(node.id)}
-                >
-                  <button
-                    type="button"
-                    className="tdg-list-remove"
-                    disabled={removingTaskId === node.id}
-                    aria-label={`Remove ${node.title} as a prerequisite`}
-                  >
-                    <CloseOutlined />
-                  </button>
-                </Popconfirm>
-              )}
-            </div>
-          );
-        })}
-    </div>
   );
 }

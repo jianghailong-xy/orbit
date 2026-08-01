@@ -14,6 +14,7 @@ function taskServiceFixture(
   const calls: string[] = [];
   let createdEdges: DependencyEdge[] = [];
   let dependencyReads = 0;
+  const published: unknown[][] = [];
 
   const task = {
     count: async ({ where }: any) =>
@@ -21,6 +22,10 @@ function taskServiceFixture(
     update: async ({ where, data }: any) => {
       calls.push('update');
       return { id: where.id, title: data.title ?? 'Task A', status: data.status ?? 'OPEN' };
+    },
+    create: async ({ data }: any) => {
+      calls.push('task-create');
+      return { id: TASK_A, ...data };
     },
   };
   const taskDependency = {
@@ -58,7 +63,11 @@ function taskServiceFixture(
       });
     },
   };
-  const service = new TasksService(prisma as never, {} as never, {} as never);
+  const service = new TasksService(
+    prisma as never,
+    {} as never,
+    { publishForUser: (...args: unknown[]) => published.push(args) } as never,
+  );
   (service as any).get = async () => ({
     id: TASK_A,
     title: 'Task A',
@@ -71,8 +80,24 @@ function taskServiceFixture(
     calls,
     createdEdges: () => createdEdges,
     dependencyReads: () => dependencyReads,
+    published,
   };
 }
+
+test('create publishes a task and its initial DAG edges in one owner-locked transaction', async () => {
+  const fixture = taskServiceFixture();
+
+  await fixture.service.create('owner', {
+    title: 'Task A',
+    dependsOnTaskIds: [TASK_B, TASK_C],
+  });
+
+  assert.deepEqual(fixture.calls, ['transaction', 'lock', 'task-create', 'create']);
+  assert.deepEqual(fixture.createdEdges(), [
+    { taskId: TASK_A, dependsOnTaskId: TASK_B },
+    { taskId: TASK_A, dependsOnTaskId: TASK_C },
+  ]);
+});
 
 test('update atomically replaces and deduplicates an existing task dependency set', async () => {
   const fixture = taskServiceFixture([{ taskId: TASK_A, dependsOnTaskId: TASK_B }]);
@@ -86,6 +111,7 @@ test('update atomically replaces and deduplicates an existing task dependency se
     { taskId: TASK_A, dependsOnTaskId: TASK_B },
     { taskId: TASK_A, dependsOnTaskId: TASK_C },
   ]);
+  assert.deepEqual(fixture.published, [['owner', 'task_changed', TASK_A]]);
 });
 
 test('an empty dependency replacement clears all prerequisites', async () => {
@@ -96,6 +122,7 @@ test('an empty dependency replacement clears all prerequisites', async () => {
   assert.deepEqual(fixture.calls, ['transaction', 'lock', 'update', 'delete']);
   assert.deepEqual(fixture.createdEdges(), []);
   assert.equal(fixture.dependencyReads(), 0);
+  assert.deepEqual(fixture.published, [['owner', 'task_changed', TASK_A]]);
 });
 
 test('omitting dependsOnTaskIds leaves dependency rows untouched', async () => {
@@ -105,6 +132,7 @@ test('omitting dependsOnTaskIds leaves dependency rows untouched', async () => {
 
   assert.deepEqual(fixture.calls, ['update']);
   assert.equal(fixture.dependencyReads(), 0);
+  assert.deepEqual(fixture.published, []);
 });
 
 test('dependency replacement rejects self-dependencies and cycles before writing', async () => {
@@ -136,8 +164,10 @@ test('single-edge add and remove use the same owner-scoped graph lock', async ()
   const add = taskServiceFixture();
   await add.service.addDependency('owner', TASK_A, TASK_B);
   assert.deepEqual(add.calls, ['transaction', 'lock', 'create']);
+  assert.deepEqual(add.published, [['owner', 'task_changed', TASK_A]]);
 
   const remove = taskServiceFixture([{ taskId: TASK_A, dependsOnTaskId: TASK_B }]);
   await remove.service.removeDependency('owner', TASK_A, TASK_B);
   assert.deepEqual(remove.calls, ['transaction', 'lock', 'delete']);
+  assert.deepEqual(remove.published, [['owner', 'task_changed', TASK_A]]);
 });

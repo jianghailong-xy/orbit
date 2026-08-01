@@ -46,6 +46,7 @@ function graphFixture(edges: StoredEdge[] = diamondEdges, ownsFocus = true) {
   const stateBatches: string[][] = [];
   const boundaryChecks: string[][] = [];
   const traversalWheres: any[] = [];
+  const traversalTakes: number[] = [];
   let focusLookup: any;
   let busyWhere: any;
 
@@ -63,6 +64,7 @@ function graphFixture(edges: StoredEdge[] = diamondEdges, ownsFocus = true) {
         if (args.select.dependsOnTask.select.id) {
           traversalBatches.push([...ids]);
           traversalWheres.push(args.where);
+          traversalTakes.push(args.take);
           return edges
             .filter((edge) => ids.includes(edge.taskId))
             .map((edge) => ({
@@ -101,6 +103,7 @@ function graphFixture(edges: StoredEdge[] = diamondEdges, ownsFocus = true) {
     stateBatches,
     boundaryChecks,
     traversalWheres,
+    traversalTakes,
     focusLookup: () => focusLookup,
     busyWhere: () => busyWhere,
   };
@@ -168,10 +171,11 @@ test('multi-level graph deduplicates diamond nodes and orients every edge prereq
   });
   assert.equal(result.maxDepth, 2);
   assert.equal(result.truncated, false);
-  assert.deepEqual(result.limits, { maxDepth: 8, maxNodes: 100 });
+  assert.deepEqual(result.limits, { maxDepth: 8, maxNodes: 100, maxEdges: 400 });
 
   // One traversal query per breadth-first layer, not one per task.
   assert.deepEqual(fixture.traversalBatches, [[FOCUS], [TASK_B, TASK_C], [TASK_D, TASK_E]]);
+  assert.deepEqual(fixture.traversalTakes, [401, 399, 396]);
   assert.equal(fixture.stateBatches.length, 1);
   assert.deepEqual(new Set(fixture.stateBatches[0]), new Set([FOCUS, TASK_B, TASK_C, TASK_D, TASK_E]));
   assert.ok(

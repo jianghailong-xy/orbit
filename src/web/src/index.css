@@ -5435,7 +5435,7 @@ body {
   background: var(--bg-sunken);
 }
 .tdg-canvas {
-  height: clamp(230px, 34vh, 340px);
+  height: clamp(300px, 46vh, 420px);
 }
 .tdg-full-canvas {
   height: calc(100vh - 150px);
@@ -5444,6 +5444,9 @@ body {
 .tdg-canvas .react-flow,
 .tdg-full-canvas .react-flow {
   background: transparent;
+}
+.tdg-canvas.is-vertical .react-flow__pane {
+  touch-action: pan-y;
 }
 .tdg-canvas .react-flow__controls,
 .tdg-full-canvas .react-flow__controls {
@@ -5610,6 +5613,11 @@ body {
 .tdg-node:hover .tdg-node-remove,
 .tdg-node:focus-within .tdg-node-remove {
   opacity: 1;
+}
+@media (hover: none) {
+  .tdg-node-remove {
+    opacity: 1;
+  }
 }
 .tdg-node-remove:hover,
 .tdg-node-remove:focus-visible {

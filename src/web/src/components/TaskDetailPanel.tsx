@@ -1,7 +1,7 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
-import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -11,7 +11,14 @@ import { encodeId } from '../lib/idCodec';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import type { TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
-import { TaskDependencyGraph, TaskDependencyList } from './TaskDependencyGraph';
+import { TaskDependencyList } from './TaskDependencyList';
+
+// Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
+// bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
+const LazyTaskDependencyGraph = lazy(async () => {
+  const module = await import('./TaskDependencyGraph');
+  return { default: module.TaskDependencyGraph };
+});
 
 // The detail panel's width is drag-resizable; persist the choice so it sticks across reloads.
 // Until the user resizes, width stays null and the CSS clamp (responsive default) wins.
@@ -265,9 +272,11 @@ export function TaskDetailPanel({
   // After any dependency/auto-run/mark-done change, refresh this panel and the list (its
   // lock indicators and the picker's task statuses both derive from the same data).
   const refreshTaskViews = () => {
-    qc.invalidateQueries({ queryKey: ['task', taskId] });
-    qc.invalidateQueries({ queryKey: ['tasks'] });
-    qc.invalidateQueries({ queryKey: ['task-list'] });
+    return Promise.all([
+      qc.invalidateQueries({ queryKey: ['task', taskId] }),
+      qc.invalidateQueries({ queryKey: ['tasks'] }),
+      qc.invalidateQueries({ queryKey: ['task-list'] }),
+    ]);
   };
 
   const addDependency = useMutation({
@@ -297,7 +306,7 @@ export function TaskDetailPanel({
     mutationFn: () => api(`/tasks/${taskId}`, { method: 'PATCH', body: { status: 'DONE' } }),
     onSuccess: () => {
       message.success('Marked done — downstream tasks released');
-      refreshTaskViews();
+      return refreshTaskViews();
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -649,8 +658,15 @@ export function TaskDetailPanel({
             {blocked && (
               <div className={`tdp-dependency-notice${dependencyState === 'BLOCKED_FAILED' ? ' is-failed' : ''}`}>
                 {dependencyState === 'BLOCKED_FAILED'
-                  ? `${failedDirectPrerequisites || 'A'} direct prerequisite${failedDirectPrerequisites === 1 ? '' : 's'} failed or was cancelled — resolve before running.`
+                  ? failedDirectPrerequisites === 1
+                    ? 'A direct prerequisite failed or was cancelled — resolve it before running.'
+                    : `${failedDirectPrerequisites} direct prerequisites failed or were cancelled — resolve them before running.`
                   : `${completedDirectPrerequisites} of ${dependsOn.length} direct prerequisites complete. All are required.`}
+              </div>
+            )}
+            {dependencyGraphQ.isError && dependsOn.length > 0 && (
+              <div className="tdp-dependency-graph-error" role="alert">
+                Multi-level dependencies could not be loaded. Showing direct prerequisites.
               </div>
             )}
             {dependsOn.length === 0 ? (
@@ -659,34 +675,16 @@ export function TaskDetailPanel({
               dependencyGraphQ.isLoading ? (
                 <div className="tdp-dependency-graph-loading"><Spin size="small" /></div>
               ) : (
-                <>
-                  {dependencyGraphQ.isError && (
-                    <div className="tdp-dependency-graph-error" role="alert">
-                      Multi-level dependencies could not be loaded. Showing direct prerequisites.
-                    </div>
-                  )}
-                  <TaskDependencyGraph
+                <Suspense fallback={<div className="tdp-dependency-graph-loading"><Spin size="small" /></div>}>
+                  <LazyTaskDependencyGraph
                     graph={dependencyGraph}
                     title={task?.title ?? 'Current task'}
                     onOpenTask={onOpenTask}
                     onRemoveDependency={(id) => removeDependency.mutate(id)}
                     removingTaskId={removeDependency.isPending ? removeDependency.variables : null}
                   />
-                </>
+                </Suspense>
               )
-            ) : dependencyGraphQ.isLoading ? (
-              dependsOn.map((d: any) => {
-                const meta = STATUS_META[d.dependsOnTask.status] ?? { label: d.dependsOnTask.status, tone: 'muted' };
-                return (
-                  <div key={d.dependsOnTask.id} className="tdp-dependency-row">
-                    <button type="button" className="tdp-dependency-trigger" onClick={() => onOpenTask(d.dependsOnTask.id)}>
-                      <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
-                      <span className="tdp-dependency-title">{d.dependsOnTask.title}</span>
-                    </button>
-                    <Button type="text" size="small" icon={<CloseOutlined />} loading={removeDependency.isPending} onClick={() => removeDependency.mutate(d.dependsOnTask.id)} aria-label="Remove dependency" />
-                  </div>
-                );
-              })
             ) : (
               <TaskDependencyList
                 graph={dependencyGraph}
@@ -697,7 +695,11 @@ export function TaskDetailPanel({
             )}
             {dependencyGraph.truncated && (
               <div className="tdp-dependency-truncated">
-                The graph reached its {dependencyGraph.limits?.maxNodes ?? 100}-task display limit.
+                The graph is truncated at {dependencyGraph.limits?.maxDepth ?? 8} levels or{' '}
+                {dependencyGraph.limits?.maxNodes ?? 100} tasks
+                {dependencyGraph.limits?.maxEdges
+                  ? ` or ${dependencyGraph.limits.maxEdges} relationships`
+                  : ''}.
               </div>
             )}
             <Select

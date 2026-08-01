@@ -43,6 +43,7 @@ export interface TaskDependencyGraphResponse {
   limits?: {
     maxDepth: number;
     maxNodes: number;
+    maxEdges?: number;
   };
 }
 
