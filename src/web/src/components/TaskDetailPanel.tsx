@@ -639,7 +639,8 @@ export function TaskDetailPanel({
               <div className="tdp-section-title">Dependencies</div>
               {hasDependencyRelations && (
                 <span className="tdp-dependency-summary">
-                  {connectedCount} connected · {upstreamCount} upstream · {downstreamCount} downstream
+                  {connectedCount} connected{dependencyGraph.truncated ? ' shown' : ''} · {upstreamCount} upstream ·{' '}
+                  {downstreamCount} downstream
                 </span>
               )}
               {hasDependencyRelations && (
