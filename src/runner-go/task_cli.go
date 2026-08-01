@@ -73,6 +73,8 @@ Options:
   --assignee-id ID | --clear-assignee
   --list-id ID | --clear-list
   --due-date ISO_DATE | --clear-due-date
+  --depends-on ID[,ID...]     Replace all prerequisites; repeatable
+  --clear-dependencies        Remove all prerequisites
   --auto-run-when-ready[=BOOL]
   --json
 
@@ -471,6 +473,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearList := fs.Bool("clear-list", false, "clear task list")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	clearDueDate := fs.Bool("clear-due-date", false, "clear due date")
+	var dependsOn csvFlag
+	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
+	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
 	autoRun := fs.Bool("auto-run-when-ready", false, "auto-run after dependencies complete")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
@@ -494,6 +499,12 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearDueDate && flagWasSet(fs, "due-date") {
 		return fmt.Errorf("--clear-due-date and --due-date cannot be used together")
+	}
+	if *clearDependencies && flagWasSet(fs, "depends-on") {
+		return fmt.Errorf("--clear-dependencies and --depends-on cannot be used together")
+	}
+	if flagWasSet(fs, "depends-on") && len(dependsOn) == 0 {
+		return fmt.Errorf("--depends-on cannot be empty; use --clear-dependencies")
 	}
 	desc, descSet, err := readCLIText(in, *description, flagWasSet(fs, "description"), *descriptionFile, flagWasSet(fs, "description-file"), "description")
 	if err != nil {
@@ -535,6 +546,11 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--due-date cannot be empty; use --clear-due-date")
 		}
 		body["dueDate"] = *dueDate
+	}
+	if *clearDependencies {
+		body["dependsOnTaskIds"] = []string{}
+	} else if flagWasSet(fs, "depends-on") {
+		body["dependsOnTaskIds"] = uniqueStrings(dependsOn)
 	}
 	if flagWasSet(fs, "auto-run-when-ready") {
 		body["autoRunWhenReady"] = *autoRun
@@ -663,7 +679,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task as the runner owner. ORBIT_AGENT_ID is used only as the default assignee; runner-wide CLI credentials do not claim agent authorship. This only records the task; call task_start when it should run immediately.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task as the runner owner. Runner-wide CLI credentials do not claim agent authorship.", Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},

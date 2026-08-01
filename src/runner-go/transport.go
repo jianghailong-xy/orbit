@@ -389,6 +389,40 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+func (t *Transport) taskDependencyGraph(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id)+"/dependency-graph", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) addTaskDependency(id, dependsOnTaskID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, fmt.Errorf("task id: %w", err)
+	}
+	if err := validatePathSegmentID(dependsOnTaskID); err != nil {
+		return nil, fmt.Errorf("prerequisite task id: %w", err)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/dependencies",
+		map[string]string{"dependsOnTaskId": dependsOnTaskID}, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) removeTaskDependency(id, dependsOnTaskID string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, fmt.Errorf("task id: %w", err)
+	}
+	if err := validatePathSegmentID(dependsOnTaskID); err != nil {
+		return nil, fmt.Errorf("prerequisite task id: %w", err)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/tasks/"+url.PathEscape(id)+"/dependencies/"+url.PathEscape(dependsOnTaskID), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) createTask(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/tasks", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))

@@ -198,6 +198,47 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_dependency_graph":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.taskDependencyGraph(id)
+		if err != nil {
+			return toolResult("get task dependency graph failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_dependency_add":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		dependsOnTaskID := getString(args, "dependsOnTaskId")
+		if dependsOnTaskID == "" {
+			return toolResult("dependsOnTaskId is required", true)
+		}
+		raw, err := s.t.addTaskDependency(id, dependsOnTaskID)
+		if err != nil {
+			return toolResult("add task dependency failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_dependency_remove":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		dependsOnTaskID := getString(args, "dependsOnTaskId")
+		if dependsOnTaskID == "" {
+			return toolResult("dependsOnTaskId is required", true)
+		}
+		raw, err := s.t.removeTaskDependency(id, dependsOnTaskID)
+		if err != nil {
+			return toolResult("remove task dependency failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_create":
 		title := getString(args, "title")
 		if title == "" {
@@ -609,6 +650,33 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_get",
 			"description": "Get one task with its comments and linked sessions.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_dependency_graph",
+			"description": "Read the complete multi-level dependency DAG connected to a task before changing its ordering. Returns task nodes and directed dependency edges across transitive prerequisites and downstream dependents; taskId defaults to the current task.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name":        "task_dependency_add",
+			"description": "Add one dependency edge: taskId waits for dependsOnTaskId. The server rejects cross-owner tasks, self-dependencies, duplicate edges, and cycles. Prefer this granular edit after reading task_dependency_graph when preserving every other edge.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"dependsOnTaskId": map[string]interface{}{
+					"type":        "string",
+					"description": "Prerequisite task id that must finish before taskId can run.",
+				},
+			}, "dependsOnTaskId"),
+		},
+		{
+			"name":        "task_dependency_remove",
+			"description": "Remove exactly one dependency edge from taskId to dependsOnTaskId, leaving every other edge unchanged. Read task_dependency_graph first when the surrounding DAG is not already known.",
+			"inputSchema": obj(map[string]interface{}{
+				"taskId": taskIDProp,
+				"dependsOnTaskId": map[string]interface{}{
+					"type":        "string",
+					"description": "Prerequisite task id whose edge should be removed from taskId.",
+				},
+			}, "dependsOnTaskId"),
 		},
 		{
 			"name":        "task_create",

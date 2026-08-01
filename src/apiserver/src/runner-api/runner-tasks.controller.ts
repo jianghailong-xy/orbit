@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { CreateTaskListDto } from '../task-lists/dto';
 import { TaskListsService } from '../task-lists/task-lists.service';
-import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from '../tasks/dto';
+import { AddDependencyDto, CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -42,6 +42,11 @@ export class RunnerTasksController {
     return this.tasks.get(runner.ownerId, id);
   }
 
+  @Get('tasks/:id/dependency-graph')
+  getTaskDependencyGraph(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+    return this.tasks.dependencyGraph(runner.ownerId, id);
+  }
+
   @Patch('tasks/:id')
   updateTask(@CurrentRunner() runner: Runner, @Param('id') id: string, @Body() dto: UpdateTaskDto) {
     return this.tasks.update(runner.ownerId, id, dto);
@@ -50,6 +55,24 @@ export class RunnerTasksController {
   @Post('tasks/:id/execute')
   executeTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
     return this.tasks.execute(runner.ownerId, id);
+  }
+
+  @Post('tasks/:id/dependencies')
+  addTaskDependency(
+    @CurrentRunner() runner: Runner,
+    @Param('id') id: string,
+    @Body() dto: AddDependencyDto,
+  ) {
+    return this.tasks.addDependency(runner.ownerId, id, dto.dependsOnTaskId);
+  }
+
+  @Delete('tasks/:id/dependencies/:dependsOnTaskId')
+  removeTaskDependency(
+    @CurrentRunner() runner: Runner,
+    @Param('id') id: string,
+    @Param('dependsOnTaskId') dependsOnTaskId: string,
+  ) {
+    return this.tasks.removeDependency(runner.ownerId, id, dependsOnTaskId);
   }
 
   @Post('tasks/:id/comments')
