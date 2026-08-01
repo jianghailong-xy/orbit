@@ -669,8 +669,8 @@ export class RunnerApiController {
 
   /**
    * Atomically lease the next deliverable turn for a session: interrupt/end before
-   * message, and PENDING or an expired IN_FLIGHT lease (at-least-once). Flips the
-   * session to RUNNING when a message is delivered so a concurrent send is serialized.
+   * message, and PENDING or an expired IN_FLIGHT lease (at-least-once). Executable
+   * messages are gated on the claim path having already set the Session to RUNNING.
    */
   private async dequeueTurn(sessionId: string): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {

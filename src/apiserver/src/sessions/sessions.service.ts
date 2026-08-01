@@ -2072,12 +2072,9 @@ export class SessionsService {
   /**
    * Stop a session and settle it to CANCELLED with endReason 'cancelled' — unlike
    * {@link end}, which reaches the same status under 'ended' and so still reads as
-   * dormant/resumable. A live session has its claude process torn down (endLive). A still-
-   * queued PENDING session is finalized in place: there's no claude to tear down and a
-   * runner may never claim it (offline / batch concurrency cap full), so endLive alone
-   * would leave it stuck PENDING — finalizing directly is what lets a batch-stop drop
-   * its queued, not-yet-started tasks. No-op (returns false) if already terminal or
-   * already ending. Used by {@link TasksService.batchStop}.
+   * dormant/resumable. A PENDING session is finalized in place (while any prior warm
+   * runtime is cancelled); other open states receive an end control. No-op (returns
+   * false) if already terminal or already ending. Used by {@link TasksService.batchStop}.
    */
   async cancel(ownerId: string, id: string): Promise<boolean> {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -2458,7 +2455,7 @@ export class SessionsService {
    * Soft-delete a session (moves it to the trash view). No data is removed — the
    * transcript and billing stay; restore brings it back. There is no hard delete.
    * A session that hasn't ended is deleted too: like `archive`, we recycle its runner
-   * process first (`endLive`) so a live claude isn't orphaned. Status settles to
+   * process first so a live runtime isn't orphaned. Status settles to
    * CANCELLED async while the row already sits in Trash.
    */
   async remove(ownerId: string, id: string) {

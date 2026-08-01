@@ -124,6 +124,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           );
           continue;
         }
+        // A cancel/end still inside its grace window gets the same chance to settle
+        // cleanly even if the runner heartbeat has just gone stale. Once the grace
+        // expires the branch above applies the intended (including graceful) outcome.
+        if (cancelAt) continue;
         if (offline) {
           // RUNNING is an active turn and cannot survive losing its runner. An idle
           // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;
