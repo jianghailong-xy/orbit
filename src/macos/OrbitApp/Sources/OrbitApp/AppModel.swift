@@ -116,6 +116,8 @@ final class AppModel {
     let notifications = NotificationManager()
     private(set) var baseURL: URL?
     private var api: APIClient?
+    /// Invalidates async detail reads when logout or an instance switch replaces their scope.
+    private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
     private var lastSnapshot: [Session]?
     /// The always-on control-plane stream (GET /api/events) and whether it's currently live.
@@ -125,6 +127,8 @@ final class AppModel {
     private var controlTask: Task<Void, Never>?
     private(set) var controlPlaneLive = false
     private var controlRefreshScheduled = false
+    /// Dedup exact refreshes when a control nudge and the fallback poll land together.
+    private var sessionDetailRefreshes: Set<String> = []
     /// Same coalescing, for the owner-level lists a control event can dirty (see apply / LibraryTarget).
     private var libraryRefreshScheduled = false
     private var pendingLibraryRefresh: Set<LibraryTarget> = []
@@ -166,6 +170,7 @@ final class AppModel {
     #endif
 
     private func configure(_ url: URL) {
+        apiGeneration &+= 1
         sessionDetails.removeAll()
         baseURL = url
         api = APIClient(baseURL: url, tokenStore: tokenStore)
@@ -268,6 +273,7 @@ final class AppModel {
     }
 
     func logout() {
+        apiGeneration &+= 1
         pollTask?.cancel()
         pollTask = nil
         controlTask?.cancel()
@@ -334,7 +340,13 @@ final class AppModel {
             if let self, self.user == nil { self.user = try? await self.api?.me() }
             while !Task.isCancelled {
                 if let self, !self.controlPlaneLive { await self.loadSessions() }
-                if let self { self.consoleRegistry?.flush(self.focusedConsoleSessionID) }
+                if let self {
+                    // The control stream has no purge event, and an Archived / Trash cold route is
+                    // absent from Open by definition. Refresh only that one focused fallback so a
+                    // remote filing change or permanent deletion cannot leave a ghost console.
+                    await self.refreshFocusedSessionDetailIfNeeded()
+                    self.consoleRegistry?.flush(self.focusedConsoleSessionID)
+                }
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
             }
         }
@@ -380,6 +392,7 @@ final class AppModel {
                     case .connected:
                         controlPlaneLive = true
                         await loadSessions()   // rebuild from snapshot, then follow
+                        await refreshFocusedSessionDetailIfNeeded()
                         // No replay on this stream, so reconcile the lists that only push can
                         // keep fresh (they have no poll at all) alongside the session snapshot.
                         scheduleLibraryRefresh(.agents)
@@ -458,6 +471,45 @@ final class AppModel {
             guard let self else { return }
             self.controlRefreshScheduled = false
             await self.loadSessions()
+            // A missing Open row is ambiguous: it may be the same stable Archived detail, or a
+            // cross-client Archive / Trash / purge transition. Resolve the focused cached row
+            // exactly after the control-driven snapshot rather than trusting absence as state.
+            await self.refreshFocusedSessionDetailIfNeeded()
+        }
+    }
+
+    /// Refresh the one exact-detail fallback currently driving a console. Loaded list rows remain
+    /// the primary snapshot and need no extra request. Stable cold Archived / Trash consoles cost
+    /// at most one bounded GET per poll tick; control events refresh them immediately. A 404 is an
+    /// authoritative remote purge, so remove the fallback and close its now-nonexistent console.
+    private func refreshFocusedSessionDetailIfNeeded() async {
+        guard let id = focusedConsoleSessionID,
+              let api,
+              sessionDetails.needsExactRefresh(
+                id,
+                preferring: sessions,
+                agents?.agentSessions ?? []
+              ),
+              sessionDetailRefreshes.insert(id).inserted else { return }
+        let generation = apiGeneration
+        defer { sessionDetailRefreshes.remove(id) }
+
+        do {
+            let resolved = try await api.session(id)
+            // An instance switch can complete while the old request is in flight. Never feed that
+            // response into the newly configured instance's cache or console registry.
+            guard apiGeneration == generation, self.api === api else { return }
+            sessionDetails.store(resolved)
+            consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
+        } catch APIError.http(let status, _) where status == 404 {
+            guard apiGeneration == generation, self.api === api else { return }
+            sessionDetails.remove(id)
+            dropIfOpen(id)
+        } catch APIError.unauthorized {
+            guard apiGeneration == generation, self.api === api else { return }
+            logout()
+        } catch {
+            // Transient failure: retain the last authoritative detail and retry on the next tick.
         }
     }
 
@@ -936,14 +988,29 @@ final class AppModel {
         // resurrect stale filing or capability state.
         guard !sessions.contains(where: { $0.id == id }) else { return }
         Task { @MainActor [weak self] in
-            guard let self, let resolved = try? await self.api?.session(id) else { return }
-            self.sessionDetails.store(resolved)
-            // Feed an already-hydrated console immediately too; ComposerView observes the same
-            // cache, while this closes the small race where its initial observation ran first.
-            self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
-            guard self.selectedSection == .agents,
-                  self.selectedAgentSessionID == id else { return }   // stale navigation resolve
-            self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
+            guard let self, let api = self.api else { return }
+            let generation = self.apiGeneration
+            do {
+                let resolved = try await api.session(id)
+                // Logout / instance switch can finish while this cold lookup is in flight.
+                guard self.apiGeneration == generation, self.api === api else { return }
+                self.sessionDetails.store(resolved)
+                // Feed an already-hydrated console immediately too; ComposerView observes the
+                // same cache, while this closes the race where its initial observation ran first.
+                self.consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
+                guard self.selectedSection == .agents,
+                      self.selectedAgentSessionID == id else { return } // stale navigation resolve
+                self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
+            } catch APIError.http(let status, _) where status == 404 {
+                guard self.apiGeneration == generation, self.api === api else { return }
+                self.sessionDetails.remove(id)
+                self.dropIfOpen(id)
+            } catch APIError.unauthorized {
+                guard self.apiGeneration == generation, self.api === api else { return }
+                self.logout()
+            } catch {
+                // Keep any prior cached detail on a transient failure; the focused poll retries.
+            }
         }
     }
 

@@ -64,6 +64,19 @@ final class SessionDetailCacheTests: XCTestCase {
         XCTAssertEqual(fallback?.capabilities?.resumeBlockedReason, .runnerOffline)
     }
 
+    func testExactRefreshIsNeededOnlyForCachedRowsMissingFromLoadedLists() {
+        let archived = session(
+            "archived", filing: .archived,
+            capabilities: SessionCapabilities(canSend: true, canResume: true,
+                                              canArchive: false, canRestore: true))
+        var cache = SessionDetailCache()
+
+        XCTAssertFalse(cache.needsExactRefresh(archived.id, preferring: [], []))
+        cache.store(archived)
+        XCTAssertTrue(cache.needsExactRefresh(archived.id, preferring: [], []))
+        XCTAssertFalse(cache.needsExactRefresh(archived.id, preferring: [archived], []))
+    }
+
     func testRemoveAndRemoveAllDropOnlyDetailFallbacks() {
         let capabilities = SessionCapabilities(canSend: false, canResume: false,
                                                resumeBlockedReason: .trashed,

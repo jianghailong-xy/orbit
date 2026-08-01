@@ -34,6 +34,14 @@ public struct SessionDetailCache: Sendable {
         }
     }
 
+    /// Whether an exact detail fetch is needed to keep a cached fallback authoritative.
+    /// A row present in any loaded list is refreshed by that list; a cached row absent from every
+    /// list (the normal Archived / Trash cold-route case) needs its own bounded detail refresh.
+    public func needsExactRefresh(_ id: String, preferring snapshots: [Session]...) -> Bool {
+        guard records[id] != nil else { return false }
+        return !snapshots.contains { snapshot in snapshot.contains { $0.id == id } }
+    }
+
     public mutating func remove(_ id: String) {
         records[id] = nil
     }
