@@ -1166,25 +1166,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       where: { ownerId, id: { in: uniqueTaskIds } },
       select: { id: true, title: true, status: true, autoRunWhenReady: true },
     });
-    // Unknown and cross-tenant ids are intentionally indistinguishable.
-    if (taskRows.length !== uniqueTaskIds.length) throw new NotFoundException('task not found');
     const taskById = new Map(taskRows.map((task) => [task.id, task]));
-    const orderedTasks = uniqueTaskIds.map((id) => {
+    // The focus remains the authorization boundary and must exist. Other deleted,
+    // unknown and cross-tenant ids are intentionally indistinguishable and omitted.
+    if (!taskById.has(focusTaskId)) throw new NotFoundException('task not found');
+    const existingTaskIds = uniqueTaskIds.filter((id) => taskById.has(id));
+    const missingTaskIds = uniqueTaskIds.filter((id) => !taskById.has(id));
+    const orderedTasks = existingTaskIds.map((id) => {
       const task = taskById.get(id)!;
       return { ...task, status: task.status as unknown as TaskStatus };
     });
-    const [withRun, dependencyStates, connectionCounts] = await Promise.all([
+    const [withRun, dependencyStates, connectionCounts, fetchedEdgeRows] = await Promise.all([
       this.withRunning(ownerId, orderedTasks, true),
-      this.dependencyStatesForGraph(ownerId, uniqueTaskIds),
-      this.dependencyConnectionCounts(ownerId, uniqueTaskIds),
+      this.dependencyStatesForGraph(ownerId, existingTaskIds),
+      this.dependencyConnectionCounts(ownerId, existingTaskIds),
+      this.prisma.taskDependency.findMany({
+        where: {
+          taskId: { in: existingTaskIds },
+          dependsOnTaskId: { in: existingTaskIds },
+          task: { ownerId },
+          dependsOnTask: { ownerId },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: MAX_DEPENDENCY_GRAPH_EDGES + 1,
+        select: { taskId: true, dependsOnTaskId: true },
+      }),
     ]);
+    const truncatedEdges = fetchedEdgeRows.length > MAX_DEPENDENCY_GRAPH_EDGES;
+    const edges = fetchedEdgeRows.slice(0, MAX_DEPENDENCY_GRAPH_EDGES).map((row) => ({
+      sourceTaskId: row.dependsOnTaskId,
+      targetTaskId: row.taskId,
+    }));
+    const nodes = withRun.map((node) => ({
+      ...node,
+      ...(connectionCounts.get(node.id) ?? { prerequisiteCount: 0, dependentCount: 0 }),
+      dependencyState: dependencyStates.get(node.id) ?? 'NONE',
+    }));
 
     return {
-      nodes: withRun.map((node) => ({
-        ...node,
-        ...(connectionCounts.get(node.id) ?? { prerequisiteCount: 0, dependentCount: 0 }),
-        dependencyState: dependencyStates.get(node.id) ?? 'NONE',
-      })),
+      nodes,
+      edges,
+      collapsedGroups: this.dependencyGraphCollapsedGroups(
+        ownerId,
+        focusTaskId,
+        'both',
+        existingTaskIds,
+        edges,
+        connectionCounts,
+      ),
+      missingTaskIds,
+      truncatedEdges,
     };
   }
 

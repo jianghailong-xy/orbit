@@ -54,6 +54,7 @@ export interface TaskDependencyGraphResponse {
   };
   /** Server-backed branch boundaries. Omitted by older/all-at-once graph responses. */
   collapsedGroups?: TaskDependencyCollapsedGroup[];
+  truncatedEdges?: boolean;
 }
 
 export interface TaskDependencyCollapsedGroup {
@@ -73,16 +74,22 @@ export interface TaskDependencyGraphExpansionResponse {
 
 export interface TaskDependencyGraphNodesResponse {
   nodes: TaskDependencyGraphNode[];
+  /** Complete current induced topology among the requested nodes, subject to truncatedEdges. */
+  edges: TaskDependencyGraphEdge[];
+  collapsedGroups: TaskDependencyCollapsedGroup[];
+  missingTaskIds: string[];
+  truncatedEdges: boolean;
 }
 
 export type TaskDependencyGraphTruncationState = 'expandable' | 'limit' | null;
 
 export function taskDependencyGraphTruncationState(
-  graph: Pick<TaskDependencyGraphResponse, 'collapsedGroups'>,
+  graph: Pick<TaskDependencyGraphResponse, 'collapsedGroups' | 'truncatedEdges'>,
 ): TaskDependencyGraphTruncationState {
   const remaining = (graph.collapsedGroups ?? []).filter((group) => group.hiddenCount > 0);
-  if (remaining.length === 0) return null;
-  return remaining.some((group) => !!group.cursor) ? 'expandable' : 'limit';
+  if (remaining.some((group) => !!group.cursor)) return 'expandable';
+  if (remaining.length > 0 || graph.truncatedEdges) return 'limit';
+  return null;
 }
 
 function recomputeTaskDependencyGraphCounts(
@@ -124,41 +131,79 @@ function recomputeTaskDependencyGraphCounts(
   };
 }
 
-/**
- * Overlay a bulk status/title refresh onto a replayed graph. Degree changes update only existing
- * server-backed boundaries: the refresh endpoint intentionally returns no expansion cursor, so
- * synthesizing a brand-new group here would create a button that can never be requested safely.
- */
-export function refreshTaskDependencyGraphNodes(
+/** Reconcile a replayed graph with a fresh bulk node/topology snapshot. */
+export function reconcileTaskDependencyGraphRefresh(
   graph: TaskDependencyGraphResponse,
-  freshNodes: readonly TaskDependencyGraphNode[],
+  refresh: TaskDependencyGraphNodesResponse,
+  freshBase?: TaskDependencyGraphResponse,
 ): TaskDependencyGraphResponse {
-  if (freshNodes.length === 0) return graph;
-  const freshById = new Map(freshNodes.map((node) => [node.id, node]));
-  const nodes = graph.nodes.map((node) => {
-    const fresh = freshById.get(node.id);
-    return fresh ? { ...node, ...fresh } : node;
-  });
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const collapsedGroups = graph.collapsedGroups?.flatMap((group) => {
-    const task = nodeById.get(group.anchorTaskId);
-    if (!task || !freshById.has(group.anchorTaskId)) return [group];
-    const total =
-      group.direction === 'prerequisites' ? task.prerequisiteCount : task.dependentCount;
-    if (total === undefined) return [group];
-    const loaded = graph.edges.filter((edge) =>
-      group.direction === 'prerequisites'
-        ? edge.targetTaskId === group.anchorTaskId
-        : edge.sourceTaskId === group.anchorTaskId,
-    ).length;
-    const hiddenCount = Math.max(0, total - loaded);
-    return hiddenCount > 0 ? [{ ...group, hiddenCount }] : [];
-  });
+  const missingTaskIds = new Set(refresh.missingTaskIds);
+  const previousById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const baseById = new Map((freshBase?.nodes ?? []).map((node) => [node.id, node]));
+  const refreshedById = new Map<string, TaskDependencyGraphNode>();
+  for (const freshNode of refresh.nodes) {
+    if (missingTaskIds.has(freshNode.id)) continue;
+    refreshedById.set(freshNode.id, {
+      ...previousById.get(freshNode.id),
+      ...freshNode,
+      // A base GET completing after the bulk request is newer for overlapping payloads.
+      ...baseById.get(freshNode.id),
+    });
+  }
+
+  const candidateEdges = new Map<string, TaskDependencyGraphEdge>();
+  if (refresh.truncatedEdges) {
+    // The refresh only contains a stable edge prefix. Retain prior non-missing edges because an
+    // omitted bridge is not evidence that the relationship was deleted.
+    for (const edge of graph.edges) {
+      if (refreshedById.has(edge.sourceTaskId) && refreshedById.has(edge.targetTaskId)) {
+        candidateEdges.set(taskDependencyEdgeKey(edge), edge);
+      }
+    }
+  }
+  for (const edge of refresh.edges) {
+    if (!refreshedById.has(edge.sourceTaskId) || !refreshedById.has(edge.targetTaskId)) continue;
+    candidateEdges.set(taskDependencyEdgeKey(edge), edge);
+  }
+
+  // A complete refresh can safely remove a deleted bridge and its disconnected old ledger
+  // subtree. A truncated edge prefix cannot prove disconnection, so that case retains all live
+  // nodes and prior edges above while still removing explicitly missing task ids.
+  const adjacent = new Map<string, string[]>();
+  for (const id of refreshedById.keys()) adjacent.set(id, []);
+  for (const edge of candidateEdges.values()) {
+    adjacent.get(edge.sourceTaskId)!.push(edge.targetTaskId);
+    adjacent.get(edge.targetTaskId)!.push(edge.sourceTaskId);
+  }
+  const connectedTaskIds = refresh.truncatedEdges
+    ? new Set(refreshedById.keys())
+    : new Set<string>();
+  if (!refresh.truncatedEdges) {
+    const pending = refreshedById.has(graph.focusTaskId) ? [graph.focusTaskId] : [];
+    while (pending.length > 0) {
+      const id = pending.pop()!;
+      if (connectedTaskIds.has(id)) continue;
+      connectedTaskIds.add(id);
+      for (const neighbor of adjacent.get(id) ?? []) {
+        if (!connectedTaskIds.has(neighbor)) pending.push(neighbor);
+      }
+    }
+  }
+
+  const nodes = [...refreshedById.values()].filter((node) => connectedTaskIds.has(node.id));
+  const edges = [...candidateEdges.values()].filter(
+    (edge) => connectedTaskIds.has(edge.sourceTaskId) && connectedTaskIds.has(edge.targetTaskId),
+  );
+  const collapsedGroups = refresh.collapsedGroups.filter(
+    (group) => group.hiddenCount > 0 && connectedTaskIds.has(group.anchorTaskId),
+  );
   return {
     ...graph,
     nodes,
+    edges,
     collapsedGroups,
-    counts: recomputeTaskDependencyGraphCounts({ ...graph, nodes }),
+    truncatedEdges: refresh.truncatedEdges,
+    counts: recomputeTaskDependencyGraphCounts({ ...graph, nodes, edges }),
   };
 }
 

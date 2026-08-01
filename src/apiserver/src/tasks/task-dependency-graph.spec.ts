@@ -314,6 +314,23 @@ test('node refresh deduplicates in request order and returns current graph paylo
       dependencyState: 'BLOCKED_FAILED',
     },
   ]);
+  assert.deepEqual(result.edges, [
+    { sourceTaskId: TASK_B, targetTaskId: FOCUS },
+    { sourceTaskId: TASK_C, targetTaskId: FOCUS },
+  ]);
+  assert.deepEqual(
+    result.collapsedGroups.map(({ anchorTaskId, direction, hiddenCount }) => ({
+      anchorTaskId,
+      direction,
+      hiddenCount,
+    })),
+    [
+      { anchorTaskId: TASK_B, direction: 'prerequisites', hiddenCount: 1 },
+      { anchorTaskId: TASK_C, direction: 'prerequisites', hiddenCount: 2 },
+    ],
+  );
+  assert.deepEqual(result.missingTaskIds, []);
+  assert.equal(result.truncatedEdges, false);
   assert.deepEqual(fixture.nodeRefreshWhere(), {
     ownerId: OWNER_ID,
     id: { in: [FOCUS, TASK_B, TASK_C] },
@@ -322,7 +339,7 @@ test('node refresh deduplicates in request order and returns current graph paylo
   assert.deepEqual(fixture.busyWhere().taskId.in, [FOCUS, TASK_B, TASK_C]);
 });
 
-test('node refresh validates focus, bounds, UUIDs, and every task owner before aggregation', async () => {
+test('node refresh validates focus and bounds while reporting non-focus missing tasks', async () => {
   const fixture = graphFixture();
   await assert.rejects(
     () => fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [TASK_B]),
@@ -345,10 +362,11 @@ test('node refresh validates focus, bounds, UUIDs, and every task owner before a
     /at most 1000 tasks/,
   );
   const unknown = '550e8400-e29b-41d4-a716-446655449999';
-  await assert.rejects(
-    () => fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS, unknown]),
-    /task not found/,
-  );
+  const partial = await fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS, unknown]);
+  assert.deepEqual(partial.nodes.map((node) => node.id), [FOCUS]);
+  assert.deepEqual(partial.edges, []);
+  assert.deepEqual(partial.missingTaskIds, [unknown]);
+  assert.equal(partial.truncatedEdges, false);
   assert.deepEqual(fixture.nodeRefreshWhere(), {
     ownerId: OWNER_ID,
     id: { in: [FOCUS, unknown] },
@@ -358,6 +376,95 @@ test('node refresh validates focus, bounds, UUIDs, and every task owner before a
   await assert.rejects(
     () => notOwned.service.dependencyGraphNodes(OWNER_ID, FOCUS, [FOCUS]),
     /task not found/,
+  );
+});
+
+test('node refresh replaces added and deleted edges and exposes new dependency groups', async () => {
+  const mutableEdges: StoredEdge[] = [{ taskId: FOCUS, dependsOnTaskId: TASK_B }];
+  const fixture = graphFixture(mutableEdges);
+  const requested = [FOCUS, TASK_B, TASK_C];
+
+  const before = await fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, requested);
+  assert.deepEqual(before.edges, [{ sourceTaskId: TASK_B, targetTaskId: FOCUS }]);
+
+  mutableEdges.splice(0, mutableEdges.length,
+    { taskId: FOCUS, dependsOnTaskId: TASK_C },
+    { taskId: TASK_B, dependsOnTaskId: TASK_D },
+  );
+  const after = await fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, requested);
+
+  assert.deepEqual(after.edges, [{ sourceTaskId: TASK_C, targetTaskId: FOCUS }]);
+  assert.equal(
+    after.edges.some(
+      (edge) => edge.sourceTaskId === TASK_B && edge.targetTaskId === FOCUS,
+    ),
+    false,
+  );
+  assert.deepEqual(
+    after.collapsedGroups.map(({ anchorTaskId, direction, hiddenCount }) => ({
+      anchorTaskId,
+      direction,
+      hiddenCount,
+    })),
+    [{ anchorTaskId: TASK_B, direction: 'prerequisites', hiddenCount: 1 }],
+  );
+});
+
+test('node refresh keeps non-focus tenant misses opaque and every topology query scoped', async () => {
+  const crossTenantTaskId = '550e8400-e29b-41d4-a716-446655449998';
+  const fixture = graphFixture();
+  const result = await fixture.service.dependencyGraphNodes(OWNER_ID, FOCUS, [
+    FOCUS,
+    TASK_B,
+    crossTenantTaskId,
+  ]);
+
+  assert.deepEqual(result.nodes.map((node) => node.id), [FOCUS, TASK_B]);
+  assert.deepEqual(result.missingTaskIds, [crossTenantTaskId]);
+  assert.ok(
+    fixture.inducedWheres.every(
+      (where) => where.task.ownerId === OWNER_ID && where.dependsOnTask.ownerId === OWNER_ID,
+    ),
+  );
+  assert.equal(fixture.busyWhere().ownerId, OWNER_ID);
+});
+
+test('node refresh caps dense induced edges and turns omitted relations into boundaries', async () => {
+  const denseIds = Array.from(
+    { length: 64 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554420${String(index).padStart(2, '0')}`,
+  );
+  const denseTasks = new Map<string, TaskRow>(
+    denseIds.map((id, index) => [
+      id,
+      { id, title: `Refresh dense ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const denseEdges: StoredEdge[] = [];
+  for (let source = 0; source < denseIds.length; source += 1) {
+    for (let target = source + 1; target < denseIds.length; target += 1) {
+      denseEdges.push({ taskId: denseIds[target], dependsOnTaskId: denseIds[source] });
+    }
+  }
+  const fixture = graphFixture(denseEdges, true, denseTasks);
+  const result = await fixture.service.dependencyGraphNodes(
+    OWNER_ID,
+    denseIds[0],
+    denseIds,
+  );
+
+  assert.equal(result.nodes.length, 64);
+  assert.equal(result.edges.length, 2_000);
+  assert.equal(result.truncatedEdges, true);
+  assert.equal(
+    result.collapsedGroups.reduce((sum, group) => sum + group.hiddenCount, 0),
+    32,
+  );
+  assert.deepEqual(result.missingTaskIds, []);
+  assert.ok(
+    fixture.inducedWheres.every(
+      (where) => where.task.ownerId === OWNER_ID && where.dependsOnTask.ownerId === OWNER_ID,
+    ),
   );
 });
 

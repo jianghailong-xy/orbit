@@ -13,7 +13,7 @@ import { useToast } from '../lib/toast';
 import {
   applyTaskDependencyGraphExpansionLedger,
   buildDirectTaskDependencyGraph,
-  refreshTaskDependencyGraphNodes,
+  reconcileTaskDependencyGraphRefresh,
   taskDependencyGraphStructureKey,
   taskDependencyGraphTruncationState,
   type TaskDependencyBranchAggregate,
@@ -235,15 +235,28 @@ export function TaskDetailPanel({
       activeDependencyExpansionEntries.length > 0 && dependencyGraphKnownTaskIds.length > 0,
   });
   const expandedDependencyGraphData = useMemo(() => {
-    if (!replayedDependencyGraphData || !dependencyGraphNodesQ.data) {
+    if (
+      !replayedDependencyGraphData ||
+      activeDependencyExpansionEntries.length === 0 ||
+      !dependencyGraphNodesQ.isSuccess ||
+      dependencyGraphNodesQ.isFetching ||
+      !dependencyGraphNodesQ.data
+    ) {
       return replayedDependencyGraphData;
     }
-    const baseNodeIds = new Set(dependencyGraphQ.data?.nodes.map((node) => node.id) ?? []);
-    return refreshTaskDependencyGraphNodes(
+    return reconcileTaskDependencyGraphRefresh(
       replayedDependencyGraphData,
-      dependencyGraphNodesQ.data.nodes.filter((node) => !baseNodeIds.has(node.id)),
+      dependencyGraphNodesQ.data,
+      dependencyGraphQ.data,
     );
-  }, [dependencyGraphNodesQ.data, dependencyGraphQ.data?.nodes, replayedDependencyGraphData]);
+  }, [
+    activeDependencyExpansionEntries.length,
+    dependencyGraphNodesQ.data,
+    dependencyGraphNodesQ.isFetching,
+    dependencyGraphNodesQ.isSuccess,
+    dependencyGraphQ.data,
+    replayedDependencyGraphData,
+  ]);
   useEffect(() => {
     setDependencyExpansionLedger((previous) => {
       if (
@@ -558,10 +571,6 @@ export function TaskDetailPanel({
   );
   const dependencyGraph = expandedDependencyGraphData ?? fallbackDependencyGraph;
   const dependencyTruncationState = taskDependencyGraphTruncationState(dependencyGraph);
-  const hiddenDependencyRelationshipCount = (dependencyGraph.collapsedGroups ?? []).reduce(
-    (sum, group) => sum + Math.max(group.hiddenCount, 0),
-    0,
-  );
   const dependencyView = dependencyViewOverride ?? (dependencyGraph.edges.length > 0 ? 'graph' : 'list');
   // Expansion deltas add real nodes without replacing the initial aggregate counts.
   // Derive this display count from the merged snapshot so it advances after every batch.
@@ -843,7 +852,7 @@ export function TaskDetailPanel({
               <div className="tdp-dependency-truncated">
                 {dependencyTruncationState === 'expandable'
                   ? `The initial snapshot is limited to ${dependencyGraph.limits?.maxDepth ?? 8} hops or ${dependencyGraph.limits?.maxNodes ?? 100} tasks${dependencyGraph.limits?.maxEdges ? ` or ${dependencyGraph.limits.maxEdges} relationships` : ''}. Expand a collapsed branch to load the next batch.`
-                  : `Graph expansion limit reached with ${hiddenDependencyRelationshipCount} relationship${hiddenDependencyRelationshipCount === 1 ? '' : 's'} still collapsed.`}
+                  : 'Graph expansion limit reached. Some branch connections remain collapsed.'}
               </div>
             )}
             <Select

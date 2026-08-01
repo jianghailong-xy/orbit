@@ -9,7 +9,7 @@ import {
   mergeTaskDependencyGraphExpansion,
   normalizeTaskDependencyGraph,
   projectTaskDependencyGraph,
-  refreshTaskDependencyGraphNodes,
+  reconcileTaskDependencyGraphRefresh,
   taskDependencyBranchKey,
   taskDependencyGraphStructureKey,
   taskDependencyGraphTruncationState,
@@ -453,14 +453,24 @@ describe('progressive dependency graph projection', () => {
       },
     };
 
-    const refreshed = refreshTaskDependencyGraphNodes(graph, [
-      node('B', 'DONE', {
-        title: 'Fresh title',
-        prerequisiteCount: 1,
-        dependentCount: 3,
-        running: false,
-      }),
-    ]);
+    const refreshed = reconcileTaskDependencyGraphRefresh(graph, {
+      nodes: [
+        node('P'),
+        node('B', 'DONE', {
+          title: 'Fresh title',
+          prerequisiteCount: 1,
+          dependentCount: 3,
+          running: false,
+        }),
+        node('C'),
+      ],
+      edges: [edge('P', 'B'), edge('B', 'C')],
+      collapsedGroups: [
+        { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 2, cursor: 'down' },
+      ],
+      missingTaskIds: [],
+      truncatedEdges: false,
+    });
 
     expect(refreshed.nodes.find((item) => item.id === 'B')).toMatchObject({
       title: 'Fresh title',
@@ -473,10 +483,77 @@ describe('progressive dependency graph projection', () => {
     expect(refreshed.counts).toMatchObject({ done: 1, remaining: 1, failed: 0 });
   });
 
+  it('replaces expanded edges and lets a newer base payload win for overlapping nodes', () => {
+    const graph = {
+      focusTaskId: 'A',
+      nodes: [node('A'), node('B', 'OPEN'), node('C')],
+      edges: [edge('A', 'B'), edge('B', 'C')],
+    };
+    const refreshed = reconcileTaskDependencyGraphRefresh(
+      graph,
+      {
+        nodes: [node('A'), node('B', 'FAILED'), node('C')],
+        edges: [edge('A', 'C'), edge('C', 'B')],
+        collapsedGroups: [],
+        missingTaskIds: [],
+        truncatedEdges: false,
+      },
+      {
+        ...graph,
+        nodes: [node('A'), node('B', 'DONE'), node('C')],
+      },
+    );
+
+    expect(refreshed.edges).toEqual([edge('A', 'C'), edge('C', 'B')]);
+    expect(refreshed.nodes.find((item) => item.id === 'B')?.status).toBe('DONE');
+  });
+
+  it('removes a missing bridge and its disconnected old ledger subtree', () => {
+    const graph = {
+      focusTaskId: 'A',
+      nodes: [node('A'), node('bridge'), node('remote-leaf')],
+      edges: [edge('A', 'bridge'), edge('bridge', 'remote-leaf')],
+      collapsedGroups: [
+        { anchorTaskId: 'remote-leaf', direction: 'dependents' as const, hiddenCount: 1, cursor: 'x' },
+      ],
+    };
+    const refreshed = reconcileTaskDependencyGraphRefresh(graph, {
+      nodes: [node('A'), node('remote-leaf')],
+      edges: [],
+      collapsedGroups: [],
+      missingTaskIds: ['bridge'],
+      truncatedEdges: false,
+    });
+
+    expect(refreshed.nodes.map((item) => item.id)).toEqual(['A']);
+    expect(refreshed.edges).toEqual([]);
+    expect(refreshed.collapsedGroups).toEqual([]);
+  });
+
+  it('keeps prior live topology when the fresh induced edge list is truncated', () => {
+    const graph = {
+      focusTaskId: 'A',
+      nodes: [node('A'), node('B'), node('C')],
+      edges: [edge('A', 'B'), edge('B', 'C')],
+    };
+    const refreshed = reconcileTaskDependencyGraphRefresh(graph, {
+      nodes: [node('A'), node('B'), node('C')],
+      edges: [edge('A', 'B')],
+      collapsedGroups: [],
+      missingTaskIds: [],
+      truncatedEdges: true,
+    });
+
+    expect(refreshed.nodes.map((item) => item.id)).toEqual(['A', 'B', 'C']);
+    expect(refreshed.edges).toEqual([edge('A', 'B'), edge('B', 'C')]);
+    expect(taskDependencyGraphTruncationState(refreshed)).toBe('limit');
+  });
+
   it('shows expansion guidance only while a server-backed branch remains', () => {
     expect(taskDependencyGraphTruncationState({ collapsedGroups: [] })).toBeNull();
     expect(
       taskDependencyGraphTruncationState({
+        truncatedEdges: true,
         collapsedGroups: [
           { anchorTaskId: 'B', direction: 'dependents', hiddenCount: 3, cursor: 'next' },
         ],
@@ -489,6 +566,9 @@ describe('progressive dependency graph projection', () => {
         ],
       }),
     ).toBe('limit');
+    expect(taskDependencyGraphTruncationState({ collapsedGroups: [], truncatedEdges: true })).toBe(
+      'limit',
+    );
   });
 });
 
