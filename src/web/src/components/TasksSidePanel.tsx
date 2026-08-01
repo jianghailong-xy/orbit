@@ -24,6 +24,7 @@ import { useControlPlaneLive } from '../lib/useControlPlane';
 import { orderAgents, groupAgentsByRunner, type AgentGroup } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import { sessionRunStatusOf } from '../lib/sessionState';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
 // page (Admin is appended for admins below). The agents themselves live in the "Agents"
@@ -311,7 +312,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     refetchInterval: controlLive
       ? false
       : (q) =>
-          (q.state.data ?? []).some((s: any) => s.status === 'RUNNING' || s.status === 'PENDING')
+          (q.state.data ?? []).some((s: any) =>
+            ['RUNNING', 'PENDING'].includes(sessionRunStatusOf(s)),
+          )
             ? 5_000
             : 15_000,
   });
