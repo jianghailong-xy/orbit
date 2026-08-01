@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, TaskStatus as SharedTaskStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { canRun, computeDependencyState } from '../tasks/task-dependencies';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
 @Injectable()
@@ -86,34 +87,50 @@ export class TaskListsService {
     });
     if (!list) throw new NotFoundException('task list not found');
     const tasks = await this.resolveTaskCreators(list.tasks);
-    // Tag each task with `running` (has a RUNNING session) and `queued` (has a PENDING
-    // session but nothing running yet) so the list view shows the same live indicators
-    // as the Active view — see TasksService.withRunning.
-    const busy = tasks.length
-      ? await this.prisma.session.groupBy({
-          by: ['taskId', 'status'],
-          where: {
-            ownerId,
-            taskId: { not: null },
-            task: { is: { listId: id } },
-            status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-          },
-          _count: { _all: true },
-        })
-      : [];
+    // Tag each task with the same live-run and dependency-gate fields as the Active view,
+    // so its row keeps the running/queued treatment and lock indicator in sync.
+    const [busy, dependencies] = tasks.length
+      ? await Promise.all([
+          this.prisma.session.groupBy({
+            by: ['taskId', 'status'],
+            where: {
+              ownerId,
+              taskId: { not: null },
+              task: { is: { listId: id } },
+              status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+            },
+            _count: { _all: true },
+          }),
+          this.prisma.taskDependency.findMany({
+            where: { task: { ownerId, listId: id } },
+            select: { taskId: true, dependsOnTask: { select: { status: true } } },
+          }),
+        ])
+      : [[], []];
     const running = new Set(
       busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId),
     );
     const queued = new Set(
       busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
     );
+    const prerequisiteStatuses = new Map<string, SharedTaskStatus[]>();
+    for (const dependency of dependencies) {
+      const statuses = prerequisiteStatuses.get(dependency.taskId) ?? [];
+      statuses.push(dependency.dependsOnTask.status as unknown as SharedTaskStatus);
+      prerequisiteStatuses.set(dependency.taskId, statuses);
+    }
     return {
       ...list,
-      tasks: tasks.map((t) => ({
-        ...t,
-        running: running.has(t.id),
-        queued: queued.has(t.id) && !running.has(t.id),
-      })),
+      tasks: tasks.map((t) => {
+        const dependencyState = computeDependencyState(prerequisiteStatuses.get(t.id) ?? []);
+        return {
+          ...t,
+          running: running.has(t.id),
+          queued: queued.has(t.id) && !running.has(t.id),
+          dependencyState,
+          blocked: !canRun(dependencyState),
+        };
+      }),
     };
   }
 
