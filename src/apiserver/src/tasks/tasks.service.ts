@@ -573,9 +573,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * stored `taskId depends on dependsOnTaskId` representation.
    *
    * Each breadth-first layer is fetched in at most two bounded queries, so query count
-   * grows with graph depth, never with node count. A final bounded induced-edge query restores
-   * cross-edges between already discovered nodes without repeatedly loading parent
-   * edges during bidirectional traversal.
+   * grows with graph depth, never with node count. A final bounded induced-edge query
+   * restores cross-edges between already discovered nodes without repeatedly loading
+   * parent edges during bidirectional traversal.
    */
   async dependencyGraph(
     ownerId: string,
@@ -583,10 +583,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     query: DependencyGraphQuery = {},
   ) {
     if (!UUID_RE.test(focusTaskId)) throw new NotFoundException('task not found');
-    const direction = query.direction ?? 'upstream';
-    if (direction !== 'upstream' && direction !== 'both') {
+    const rawDirection = query.direction ?? 'upstream';
+    if (rawDirection !== 'upstream' && rawDirection !== 'both') {
       throw new BadRequestException('direction must be upstream or both');
     }
+    const direction: DependencyGraphDirection = rawDirection;
     const maxDepth = dependencyGraphLimit(
       query.maxDepth,
       DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH,

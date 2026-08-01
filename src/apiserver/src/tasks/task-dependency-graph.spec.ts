@@ -177,13 +177,13 @@ test('dependency graph is exposed as an owner-scoped GET route and forwards its 
   const result = await controller.dependencyGraph(
     { userId: OWNER_ID, email: 'owner@example.com' },
     FOCUS,
-    'upstream',
+    'both',
     '4',
     '50',
   );
 
   assert.equal(result, expected);
-  assert.deepEqual(seen, [OWNER_ID, FOCUS, { direction: 'upstream', maxDepth: '4', maxNodes: '50' }]);
+  assert.deepEqual(seen, [OWNER_ID, FOCUS, { direction: 'both', maxDepth: '4', maxNodes: '50' }]);
   const handler = TasksController.prototype.dependencyGraph;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), ':id/dependency-graph');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
@@ -271,8 +271,8 @@ test('both direction discovers the full weakly connected diamond from a root pre
       { id: TASK_D, depth: 0 },
       { id: TASK_B, depth: 1 },
       { id: TASK_C, depth: 1 },
-      { id: FOCUS, depth: 2 },
       { id: TASK_E, depth: 2 },
+      { id: FOCUS, depth: 2 },
     ],
   );
   assert.deepEqual(result.edges, [
@@ -300,8 +300,8 @@ test('both direction discovers the full weakly connected diamond from a root pre
     [TASK_D],
     [TASK_B, TASK_C],
     [TASK_B, TASK_C],
-    [FOCUS, TASK_E],
-    [FOCUS, TASK_E],
+    [TASK_E, FOCUS],
+    [TASK_E, FOCUS],
   ]);
   assert.ok(
     fixture.traversalWheres.every(
