@@ -85,7 +85,7 @@ function graphFixture(
         if (args.select.task?.select?.id && args.select.dependsOnTask?.select?.id) {
           const ids = args.where.OR
             ? ((args.where.OR[0].taskId?.in ?? args.where.OR[0].dependsOnTaskId?.in) as string[])
-            : (args.where.taskId.in as string[]);
+            : ((args.where.taskId?.in ?? args.where.dependsOnTaskId?.in) as string[]);
           traversalBatches.push([...ids]);
           traversalWheres.push(args.where);
           traversalTakes.push(args.take);
@@ -295,13 +295,20 @@ test('both direction discovers the full weakly connected diamond from a root pre
   assert.equal(result.direction, 'both');
   assert.equal(result.maxDepth, 2);
   assert.equal(result.truncated, false);
-  assert.deepEqual(fixture.traversalBatches, [[TASK_D], [TASK_B, TASK_C], [FOCUS, TASK_E]]);
+  assert.deepEqual(fixture.traversalBatches, [
+    [TASK_D],
+    [TASK_D],
+    [TASK_B, TASK_C],
+    [TASK_B, TASK_C],
+    [FOCUS, TASK_E],
+    [FOCUS, TASK_E],
+  ]);
   assert.ok(
     fixture.traversalWheres.every(
       (where) =>
         where.task.ownerId === OWNER_ID &&
         where.dependsOnTask.ownerId === OWNER_ID &&
-        where.OR.length === 2,
+        (!!where.taskId?.in !== !!where.dependsOnTaskId?.in),
     ),
   );
   assert.ok(
@@ -320,8 +327,8 @@ test('both direction classifies ancestors, descendants, and lateral nodes from t
     result.nodes.map(({ id, depth }) => ({ id, depth })),
     [
       { id: TASK_C, depth: 0 },
-      { id: FOCUS, depth: 1 },
       { id: TASK_D, depth: 1 },
+      { id: FOCUS, depth: 1 },
       { id: TASK_E, depth: 1 },
       { id: TASK_B, depth: 2 },
     ],
@@ -405,6 +412,38 @@ test('both direction detects only relationships beyond depth and node boundaries
   assert.equal(completeResult.truncated, false);
 });
 
+test('both direction fairly admits direct tasks from each side under a fan-out budget', async () => {
+  const focus = '550e8400-e29b-41d4-a716-446655449000';
+  const prerequisites = Array.from(
+    { length: 13 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554491${String(index).padStart(2, '0')}`,
+  );
+  const dependent = '550e8400-e29b-41d4-a716-446655449200';
+  const fanTasks = new Map<string, TaskRow>(
+    [focus, ...prerequisites, dependent].map((id, index) => [
+      id,
+      { id, title: `Fan ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const fanEdges: StoredEdge[] = [
+    ...prerequisites.map((dependsOnTaskId) => ({ taskId: focus, dependsOnTaskId })),
+    { taskId: dependent, dependsOnTaskId: focus },
+  ];
+
+  const result = await graphFixture(fanEdges, true, fanTasks).service.dependencyGraph(
+    OWNER_ID,
+    focus,
+    { direction: 'both', maxNodes: 3 },
+  );
+
+  assert.deepEqual(result.nodes.map((node) => node.id), [focus, prerequisites[0], dependent]);
+  assert.deepEqual(result.edges, [
+    { sourceTaskId: prerequisites[0], targetTaskId: focus },
+    { sourceTaskId: focus, targetTaskId: dependent },
+  ]);
+  assert.equal(result.truncated, true);
+});
+
 test('dense both-direction snapshots enforce maxEdges while retaining a discovery path', async () => {
   const denseIds = Array.from(
     { length: 10 },
@@ -427,6 +466,15 @@ test('dense both-direction snapshots enforce maxEdges while retaining a discover
   for (let target = 1; target < denseIds.length; target += 1) {
     denseEdges.push({ taskId: denseIds[target], dependsOnTaskId: denseIds[0] });
   }
+  const exactCap = await graphFixture(denseEdges.slice(0, 40), true, denseTasks).service.dependencyGraph(
+    OWNER_ID,
+    denseIds[0],
+    { direction: 'both', maxNodes: 10 },
+  );
+  assert.equal(exactCap.nodes.length, 10);
+  assert.equal(exactCap.edges.length, 40);
+  assert.equal(exactCap.truncated, false);
+
   const result = await graphFixture(denseEdges, true, denseTasks).service.dependencyGraph(
     OWNER_ID,
     denseIds[0],

@@ -116,26 +116,53 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
 
 const NODE_TYPES = { taskDependency: DependencyNode };
 
-function pathFromNodeToFocus(
+/** Highlight the shortest weak (direction-agnostic) path to the focused task. In a `both`
+ * snapshot a hovered node may be downstream or lateral, so walking only outgoing edges would
+ * never reach the focus. Edge arrows still retain their prerequisite -> dependent direction. */
+function pathBetweenNodeAndFocus(
   graph: NormalizedTaskDependencyGraph,
   startId: string | null,
 ): { nodeIds: Set<string>; edgeKeys: Set<string> } | null {
   if (!startId || !graph.nodeById.has(startId)) return null;
   if (startId === graph.focusTaskId) {
-    const all = getFocusPathSets(graph);
-    return { nodeIds: new Set(all.nodeIds), edgeKeys: new Set(all.edgeKeys) };
+    return {
+      nodeIds: new Set(graph.nodeById.keys()),
+      edgeKeys: new Set(graph.edges.map(taskDependencyEdgeKey)),
+    };
   }
+
+  const visited = new Set<string>([startId]);
+  const previous = new Map<string, { from: string; edgeKey: string }>();
+  const pending = [startId];
+  for (let index = 0; index < pending.length && !visited.has(graph.focusTaskId); index += 1) {
+    const currentId = pending[index];
+    const adjacent = [
+      ...(graph.incomingByTaskId.get(currentId) ?? []).map((sourceTaskId) => ({
+        id: sourceTaskId,
+        edgeKey: taskDependencyEdgeKey({ sourceTaskId, targetTaskId: currentId }),
+      })),
+      ...(graph.outgoingByTaskId.get(currentId) ?? []).map((targetTaskId) => ({
+        id: targetTaskId,
+        edgeKey: taskDependencyEdgeKey({ sourceTaskId: currentId, targetTaskId }),
+      })),
+    ];
+    for (const neighbor of adjacent) {
+      if (visited.has(neighbor.id)) continue;
+      visited.add(neighbor.id);
+      previous.set(neighbor.id, { from: currentId, edgeKey: neighbor.edgeKey });
+      pending.push(neighbor.id);
+    }
+  }
+
   const nodeIds = new Set<string>([startId]);
   const edgeKeys = new Set<string>();
-  const pending = [startId];
-  while (pending.length > 0) {
-    const sourceTaskId = pending.pop()!;
-    for (const targetTaskId of graph.outgoingByTaskId.get(sourceTaskId) ?? []) {
-      edgeKeys.add(taskDependencyEdgeKey({ sourceTaskId, targetTaskId }));
-      if (nodeIds.has(targetTaskId)) continue;
-      nodeIds.add(targetTaskId);
-      if (targetTaskId !== graph.focusTaskId) pending.push(targetTaskId);
-    }
+  let cursor = graph.focusTaskId;
+  while (cursor !== startId) {
+    const step = previous.get(cursor);
+    if (!step) return { nodeIds, edgeKeys };
+    nodeIds.add(cursor);
+    edgeKeys.add(step.edgeKey);
+    cursor = step.from;
   }
   return { nodeIds, edgeKeys };
 }
@@ -168,7 +195,7 @@ function flowElements(
   positions: ReadonlyMap<string, { x: number; y: number }>,
   vertical: boolean,
   directPrerequisiteIds: ReadonlySet<string>,
-  highlighted: ReturnType<typeof pathFromNodeToFocus>,
+  highlighted: ReturnType<typeof pathBetweenNodeAndFocus>,
   onOpenTask: (taskId: string) => void,
   onRemoveDependency: ((taskId: string) => void) | undefined,
   removingTaskId: string | null,
@@ -273,7 +300,7 @@ function DependencyFlow({
   }, [positions]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlighted = useMemo(
-    () => pathFromNodeToFocus(normalized, highlightedId),
+    () => pathBetweenNodeAndFocus(normalized, highlightedId),
     [normalized, highlightedId],
   );
   const elements = useMemo(

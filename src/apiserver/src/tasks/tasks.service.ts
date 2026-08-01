@@ -101,6 +101,13 @@ export interface DependencyGraphNode {
   depth: number;
 }
 
+interface DependencyGraphTraversalRow {
+  taskId: string;
+  dependsOnTaskId: string;
+  task: { id: string; title: string; status: unknown; autoRunWhenReady: boolean };
+  dependsOnTask: { id: string; title: string; status: unknown; autoRunWhenReady: boolean };
+}
+
 interface TaskPageCursor {
   createdAt: string;
   id: string;
@@ -565,8 +572,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * execution direction (prerequisite -> dependent), the inverse of TaskDependency's
    * stored `taskId depends on dependsOnTaskId` representation.
    *
-   * Each breadth-first layer is fetched in one bounded query, so query count grows with
-   * graph depth, never with node count. A final bounded induced-edge query restores
+   * Each breadth-first layer is fetched in at most two bounded queries, so query count
+   * grows with graph depth, never with node count. A final bounded induced-edge query restores
    * cross-edges between already discovered nodes without repeatedly loading parent
    * edges during bidirectional traversal.
    */
@@ -630,42 +637,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         task: { ownerId },
         dependsOnTask: { ownerId },
       } satisfies Prisma.TaskDependencyWhereInput;
-      // Excluding the already visited opposite endpoint makes every traversal query a
-      // discovery query. In `both` mode this avoids re-reading the parent edge at every
-      // layer and makes the maxEdges sentinel meaningful even for dense diamonds.
-      const traversalWhere =
-        direction === 'upstream'
-          ? ({
-              ...ownerScope,
-              taskId: { in: frontier },
-              dependsOnTaskId: { notIn: visitedIds },
-            } satisfies Prisma.TaskDependencyWhereInput)
-          : ({
-              ...ownerScope,
-              OR: [
-                { taskId: { in: frontier }, dependsOnTaskId: { notIn: visitedIds } },
-                { dependsOnTaskId: { in: frontier }, taskId: { notIn: visitedIds } },
-              ],
-            } satisfies Prisma.TaskDependencyWhereInput);
-      const fetchedRows = await this.prisma.taskDependency.findMany({
-        where: traversalWhere,
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        // Fetch one sentinel row so a dense layer is reported as truncated without
-        // materializing an unbounded adjacency list in the API server.
-        take: maxEdges + 1,
-        select: {
-          taskId: true,
-          dependsOnTaskId: true,
-          task: {
-            select: { id: true, title: true, status: true, autoRunWhenReady: true },
+      // Excluding the already visited opposite endpoint makes these discovery queries:
+      // no parent edge is re-read on the next layer. In `both` mode each direction gets
+      // its own bounded query, then rows are interleaved. A single OR ordered by createdAt
+      // could otherwise let a large fan-in consume the whole budget and hide even one
+      // direct dependent (or vice versa).
+      const prerequisiteWhere = {
+        ...ownerScope,
+        taskId: { in: frontier },
+        dependsOnTaskId: { notIn: visitedIds },
+      } satisfies Prisma.TaskDependencyWhereInput;
+      const dependentWhere = {
+        ...ownerScope,
+        dependsOnTaskId: { in: frontier },
+        taskId: { notIn: visitedIds },
+      } satisfies Prisma.TaskDependencyWhereInput;
+      const fetchAdjacent = async (
+        where: Prisma.TaskDependencyWhereInput,
+      ): Promise<DependencyGraphTraversalRow[]> =>
+        this.prisma.taskDependency.findMany({
+          where,
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          // Fetch one sentinel row so exact-cap layers remain complete while oversized
+          // adjacency lists are reported as truncated without unbounded materialization.
+          take: maxEdges + 1,
+          select: {
+            taskId: true,
+            dependsOnTaskId: true,
+            task: {
+              select: { id: true, title: true, status: true, autoRunWhenReady: true },
+            },
+            dependsOnTask: {
+              select: { id: true, title: true, status: true, autoRunWhenReady: true },
+            },
           },
-          dependsOnTask: {
-            select: { id: true, title: true, status: true, autoRunWhenReady: true },
-          },
-        },
-      });
-      const edgeLimitReached = fetchedRows.length > maxEdges;
-      const rows = fetchedRows.slice(0, maxEdges);
+        });
+      const [prerequisiteRows, dependentRows] = await Promise.all([
+        fetchAdjacent(prerequisiteWhere),
+        direction === 'both' ? fetchAdjacent(dependentWhere) : Promise.resolve([]),
+      ]);
+      const edgeLimitReached = prerequisiteRows.length + dependentRows.length > maxEdges;
+      const rows: DependencyGraphTraversalRow[] = [];
+      for (
+        let prerequisiteIndex = 0, dependentIndex = 0;
+        rows.length < maxEdges &&
+        (prerequisiteIndex < prerequisiteRows.length || dependentIndex < dependentRows.length);
+      ) {
+        if (prerequisiteIndex < prerequisiteRows.length) {
+          rows.push(prerequisiteRows[prerequisiteIndex]);
+          prerequisiteIndex += 1;
+        }
+        if (rows.length < maxEdges && dependentIndex < dependentRows.length) {
+          rows.push(dependentRows[dependentIndex]);
+          dependentIndex += 1;
+        }
+      }
       const next = new Set<string>();
       for (const row of rows) {
         const candidate =
