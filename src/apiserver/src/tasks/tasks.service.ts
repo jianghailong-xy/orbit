@@ -96,6 +96,8 @@ export interface DependencyGraphQuery {
   direction?: string;
   maxDepth?: string | number;
   maxNodes?: string | number;
+  /** Opt-in display sampling that keeps one-edge continuations with admitted nodes. */
+  pairUnary?: string | boolean;
 }
 
 export type DependencyGraphDirection = 'upstream' | 'both';
@@ -234,6 +236,12 @@ function dependencyGraphExpansionLimit(value: string | number | undefined): numb
     );
   }
   return parsed;
+}
+
+function dependencyGraphBoolean(value: string | boolean | undefined, name: string): boolean {
+  if (value === undefined || value === false || value === 'false') return false;
+  if (value === true || value === 'true') return true;
+  throw new BadRequestException(`${name} must be true or false`);
 }
 
 @Injectable()
@@ -769,6 +777,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException('direction must be upstream or both');
     }
     const direction: DependencyGraphDirection = rawDirection;
+    const pairUnary = dependencyGraphBoolean(query.pairUnary, 'pairUnary');
     const maxDepth = dependencyGraphLimit(
       query.maxDepth,
       DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH,
@@ -806,6 +815,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // by maxEdges never returns orphan nodes. The final induced-edge query below fills in
     // all other relationships up to the response budget.
     const discoveryEdges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    // Unary companions are discovered one level ahead of the ordinary BFS frontier.
+    // Queue them by their real depth so later descendants keep correct depths and bounds.
+    const scheduledFrontiers = new Map<number, Set<string>>();
     let frontier = [focus.id];
     let traversedDepth = 0;
     let deepestDepth = 0;
@@ -874,14 +886,70 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           dependentIndex += 1;
         }
       }
+      // Optional display-oriented sampling keeps an admitted node with its sole
+      // continuation in the same snapshot. Candidate degree and endpoints are fetched
+      // in batches, and admission still follows the already interleaved row order, so
+      // upstream/downstream fairness and every node/edge limit remain intact.
+      const directCandidateIds = new Set<string>();
+      const upstreamCandidateIds = new Set<string>();
+      const downstreamCandidateIds = new Set<string>();
+      for (const row of rows) {
+        const isUpstream = direction === 'upstream' || frontierIds.has(row.taskId);
+        const candidate = isUpstream ? row.dependsOnTask : row.task;
+        if (nodes.has(candidate.id)) continue;
+        directCandidateIds.add(candidate.id);
+        (isUpstream ? upstreamCandidateIds : downstreamCandidateIds).add(candidate.id);
+      }
+      const unaryByCandidate = new Map<string, DependencyGraphTraversalRow>();
+      if (pairUnary && nextDepth < maxDepth && directCandidateIds.size > 0) {
+        const candidateCounts = await this.dependencyConnectionCounts(
+          ownerId,
+          [...directCandidateIds],
+        );
+        const unaryUpstreamIds = [...upstreamCandidateIds].filter(
+          (id) => candidateCounts.get(id)?.prerequisiteCount === 1,
+        );
+        const unaryDownstreamIds = [...downstreamCandidateIds].filter(
+          (id) => candidateCounts.get(id)?.dependentCount === 1,
+        );
+        const [unaryUpstreamRows, unaryDownstreamRows] = await Promise.all([
+          unaryUpstreamIds.length
+            ? fetchAdjacent({
+                taskId: { in: unaryUpstreamIds },
+                task: { ownerId },
+                dependsOnTask: { ownerId },
+              })
+            : Promise.resolve([]),
+          unaryDownstreamIds.length
+            ? fetchAdjacent({
+                dependsOnTaskId: { in: unaryDownstreamIds },
+                task: { ownerId },
+                dependsOnTask: { ownerId },
+              })
+            : Promise.resolve([]),
+        ]);
+        for (const row of unaryUpstreamRows) unaryByCandidate.set(row.taskId, row);
+        for (const row of unaryDownstreamRows) unaryByCandidate.set(row.dependsOnTaskId, row);
+      }
       const next = new Set<string>();
       for (const row of rows) {
-        const candidate =
-          direction === 'upstream' || frontierIds.has(row.taskId)
-            ? row.dependsOnTask
-            : row.task;
+        const isUpstream = direction === 'upstream' || frontierIds.has(row.taskId);
+        const candidate = isUpstream ? row.dependsOnTask : row.task;
         if (!nodes.has(candidate.id)) {
-          if (nodes.size >= maxNodes) {
+          const unaryRow = unaryByCandidate.get(candidate.id);
+          const unaryCandidate = unaryRow
+            ? isUpstream
+              ? unaryRow.dependsOnTask
+              : unaryRow.task
+            : undefined;
+          // A continuation that is itself a direct candidate must retain its shallower
+          // BFS depth; its own direct row will admit it normally.
+          const admitUnary =
+            unaryCandidate !== undefined &&
+            !nodes.has(unaryCandidate.id) &&
+            !directCandidateIds.has(unaryCandidate.id);
+          const requiredNodeSlots = 1 + (admitUnary ? 1 : 0);
+          if (nodes.size + requiredNodeSlots > maxNodes) {
             truncationReasons.add('maxNodes');
             continue;
           }
@@ -901,8 +969,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             `${discoveryEdge.sourceTaskId}:${discoveryEdge.targetTaskId}`,
             discoveryEdge,
           );
+          if (admitUnary && unaryRow && unaryCandidate) {
+            const unaryNode: DependencyGraphNode = {
+              ...unaryCandidate,
+              status: unaryCandidate.status as unknown as TaskStatus,
+              depth: nextDepth + 1,
+            };
+            nodes.set(unaryNode.id, unaryNode);
+            deepestDepth = Math.max(deepestDepth, nextDepth + 1);
+            const scheduled = scheduledFrontiers.get(nextDepth + 1) ?? new Set<string>();
+            scheduled.add(unaryNode.id);
+            scheduledFrontiers.set(nextDepth + 1, scheduled);
+            const unaryEdge = {
+              sourceTaskId: unaryRow.dependsOnTaskId,
+              targetTaskId: unaryRow.taskId,
+            };
+            discoveryEdges.set(`${unaryEdge.sourceTaskId}:${unaryEdge.targetTaskId}`, unaryEdge);
+          }
         }
       }
+      for (const scheduledId of scheduledFrontiers.get(nextDepth) ?? []) next.add(scheduledId);
+      scheduledFrontiers.delete(nextDepth);
       frontier = [...next];
       traversedDepth = nextDepth;
       if (edgeLimitReached) {
@@ -1030,6 +1117,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return {
       focusTaskId,
       direction,
+      pairUnary,
       nodes: graphNodes,
       edges: [...edges.values()],
       counts: {
@@ -1121,23 +1209,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       task: { ownerId },
       dependsOnTask: { ownerId },
     } satisfies Prisma.TaskDependencyWhereInput;
-    const adjacencyWhere =
-      direction === 'prerequisites'
-        ? ({
-            ...ownerScope,
-            taskId: query.anchorTaskId,
-            dependsOnTaskId: { notIn: loadedNeighborTaskIds },
-          } satisfies Prisma.TaskDependencyWhereInput)
-        : ({
-            ...ownerScope,
-            dependsOnTaskId: query.anchorTaskId,
-            taskId: { notIn: loadedNeighborTaskIds },
-          } satisfies Prisma.TaskDependencyWhereInput);
-    const candidateRows: DependencyGraphTraversalRow[] =
-      await this.prisma.taskDependency.findMany({
-        where: adjacencyWhere,
+    const fetchExpansionRows = async (
+      where: Prisma.TaskDependencyWhereInput,
+      take: number,
+    ): Promise<DependencyGraphTraversalRow[]> =>
+      this.prisma.taskDependency.findMany({
+        where,
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: limit,
+        take,
         select: {
           taskId: true,
           dependsOnTaskId: true,
@@ -1150,22 +1229,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+    // Missing edges to nodes already in the snapshot cost no node capacity. Fetch them
+    // first and separately from unknown neighbors so hitting the 1000-node cap can never
+    // strand a later diamond edge behind an earlier new-node row.
+    const knownAdjacencyWhere =
+      direction === 'prerequisites'
+        ? ({
+            ...ownerScope,
+            taskId: query.anchorTaskId,
+            dependsOnTaskId: { in: knownTaskIds, notIn: loadedNeighborTaskIds },
+          } satisfies Prisma.TaskDependencyWhereInput)
+        : ({
+            ...ownerScope,
+            dependsOnTaskId: query.anchorTaskId,
+            taskId: { in: knownTaskIds, notIn: loadedNeighborTaskIds },
+          } satisfies Prisma.TaskDependencyWhereInput);
+    const knownNeighborRows = await fetchExpansionRows(knownAdjacencyWhere, limit);
+    const remainingBatchSlots = limit - knownNeighborRows.length;
+    const unknownAdjacencyWhere =
+      direction === 'prerequisites'
+        ? ({
+            ...ownerScope,
+            taskId: query.anchorTaskId,
+            dependsOnTaskId: { notIn: [...loadedNeighborTaskIds, ...knownTaskIds] },
+          } satisfies Prisma.TaskDependencyWhereInput)
+        : ({
+            ...ownerScope,
+            dependsOnTaskId: query.anchorTaskId,
+            taskId: { notIn: [...loadedNeighborTaskIds, ...knownTaskIds] },
+          } satisfies Prisma.TaskDependencyWhereInput);
+    const unknownNeighborRows =
+      remainingBatchSlots > 0
+        ? await fetchExpansionRows(unknownAdjacencyWhere, remainingBatchSlots)
+        : [];
+
     // Preserve deterministic prefix pagination while enforcing the absolute node cap.
     // Existing-node edges cost no node capacity and are still returned.
     const availableNodeCapacity = MAX_DEPENDENCY_GRAPH_EXPANDED_NODES - knownTaskIds.length;
-    const pageRows: DependencyGraphTraversalRow[] = [];
+    const pageRows: DependencyGraphTraversalRow[] = [...knownNeighborRows];
     const newNodesById = new Map<
       string,
       { id: string; title: string; status: unknown; autoRunWhenReady: boolean }
     >();
-    for (const row of candidateRows) {
+    for (const row of unknownNeighborRows) {
       const neighbor = direction === 'prerequisites' ? row.dependsOnTask : row.task;
       if (
         !knownTaskIdSet.has(neighbor.id) &&
         !newNodesById.has(neighbor.id) &&
         newNodesById.size >= availableNodeCapacity
       ) {
-        break;
+        continue;
       }
       pageRows.push(row);
       if (!knownTaskIdSet.has(neighbor.id)) newNodesById.set(neighbor.id, neighbor);
@@ -1302,10 +1415,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState: dependencyStates.get(node.id) ?? 'NONE',
     }));
 
-    const capacityReached =
-      augmentedKnownTaskIds.length >= MAX_DEPENDENCY_GRAPH_EXPANDED_NODES && remainingCount > 0;
+    const atNodeCapacity = augmentedKnownTaskIds.length >= MAX_DEPENDENCY_GRAPH_EXPANDED_NODES;
+    const remainingKnownNeighborCount =
+      atNodeCapacity && remainingCount > 0
+        ? await this.prisma.taskDependency.count({
+            where:
+              direction === 'prerequisites'
+                ? ({
+                    ...ownerScope,
+                    taskId: query.anchorTaskId,
+                    dependsOnTaskId: {
+                      in: augmentedKnownTaskIds,
+                      notIn: updatedLoadedNeighborIds,
+                    },
+                  } satisfies Prisma.TaskDependencyWhereInput)
+                : ({
+                    ...ownerScope,
+                    dependsOnTaskId: query.anchorTaskId,
+                    taskId: { in: augmentedKnownTaskIds, notIn: updatedLoadedNeighborIds },
+                  } satisfies Prisma.TaskDependencyWhereInput),
+          })
+        : 0;
+    const capacityReached = atNodeCapacity && remainingCount > remainingKnownNeighborCount;
     const nextCursor =
-      remainingCount > 0 && !capacityReached
+      remainingCount > 0 && (!atNodeCapacity || remainingKnownNeighborCount > 0)
         ? encodeDependencyGraphBranchCursor(
             ownerId,
             focusTaskId,

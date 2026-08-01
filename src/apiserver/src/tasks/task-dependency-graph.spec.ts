@@ -202,10 +202,15 @@ test('dependency graph is exposed as an owner-scoped GET route and forwards its 
     'both',
     '4',
     '50',
+    'true',
   );
 
   assert.equal(result, expected);
-  assert.deepEqual(seen, [OWNER_ID, FOCUS, { direction: 'both', maxDepth: '4', maxNodes: '50' }]);
+  assert.deepEqual(seen, [
+    OWNER_ID,
+    FOCUS,
+    { direction: 'both', maxDepth: '4', maxNodes: '50', pairUnary: 'true' },
+  ]);
   const handler = TasksController.prototype.dependencyGraph;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), ':id/dependency-graph');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
@@ -585,6 +590,90 @@ test('dense both-direction snapshots enforce maxEdges while retaining a discover
   }
 });
 
+test('pairUnary samples complete W/P pairs within maxNodes while remaining opt-in', async () => {
+  const check = '550e8400-e29b-41d4-a716-446655444000';
+  const works = Array.from(
+    { length: 4 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554441${String(index).padStart(2, '0')}`,
+  );
+  const parquets = Array.from(
+    { length: 4 },
+    (_, index) => `550e8400-e29b-41d4-a716-4466554442${String(index).padStart(2, '0')}`,
+  );
+  const pairTasks = new Map<string, TaskRow>(
+    [check, ...works, ...parquets].map((id, index) => [
+      id,
+      { id, title: `Pair ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  const pairEdges: StoredEdge[] = [
+    ...works.map((dependsOnTaskId) => ({ taskId: check, dependsOnTaskId })),
+    ...works.map((taskId, index) => ({ taskId, dependsOnTaskId: parquets[index] })),
+  ];
+
+  const defaultResult = await graphFixture(pairEdges, true, pairTasks).service.dependencyGraph(
+    OWNER_ID,
+    check,
+    { direction: 'both', maxNodes: 5 },
+  );
+  assert.equal(defaultResult.pairUnary, false);
+  assert.deepEqual(defaultResult.nodes.map((node) => node.id), [check, ...works]);
+  assert.equal(
+    defaultResult.collapsedGroups.filter(
+      (group) => group.direction === 'prerequisites' && works.includes(group.anchorTaskId),
+    ).length,
+    4,
+  );
+
+  const pairedResult = await graphFixture(pairEdges, true, pairTasks).service.dependencyGraph(
+    OWNER_ID,
+    check,
+    { direction: 'both', maxNodes: 5, pairUnary: true },
+  );
+  assert.equal(pairedResult.pairUnary, true);
+  assert.equal(pairedResult.nodes.length, 5);
+  assert.deepEqual(pairedResult.nodes.map((node) => node.id), [
+    check,
+    works[0],
+    parquets[0],
+    works[1],
+    parquets[1],
+  ]);
+  assert.deepEqual(pairedResult.edges, [
+    { sourceTaskId: works[0], targetTaskId: check },
+    { sourceTaskId: works[1], targetTaskId: check },
+    { sourceTaskId: parquets[0], targetTaskId: works[0] },
+    { sourceTaskId: parquets[1], targetTaskId: works[1] },
+  ]);
+  assert.deepEqual(pairedResult.collapsedGroups.map(({ anchorTaskId, direction, hiddenCount }) => ({
+    anchorTaskId,
+    direction,
+    hiddenCount,
+  })), [{ anchorTaskId: check, direction: 'prerequisites', hiddenCount: 2 }]);
+  assert.deepEqual(pairedResult.truncationReasons, ['maxNodes']);
+  assert.equal(pairedResult.maxDepth, 2);
+});
+
+test('pairUnary queues its companion at the real BFS depth before traversing farther', async () => {
+  const chainEdges: StoredEdge[] = [
+    { taskId: FOCUS, dependsOnTaskId: TASK_B },
+    { taskId: TASK_B, dependsOnTaskId: TASK_C },
+    { taskId: TASK_C, dependsOnTaskId: TASK_D },
+  ];
+  const result = await graphFixture(chainEdges).service.dependencyGraph(OWNER_ID, FOCUS, {
+    direction: 'both',
+    pairUnary: true,
+  });
+
+  assert.deepEqual(result.nodes.map(({ id, depth }) => ({ id, depth })), [
+    { id: FOCUS, depth: 0 },
+    { id: TASK_B, depth: 1 },
+    { id: TASK_C, depth: 2 },
+    { id: TASK_D, depth: 3 },
+  ]);
+  assert.equal(result.truncated, false);
+});
+
 test('high-fan-out branches expand in deterministic batches with exact remaining counts', async () => {
   const focus = '550e8400-e29b-41d4-a716-446655448000';
   const prerequisites = Array.from(
@@ -895,6 +984,69 @@ test('paged expansion has a 1000-node hard cap without inheriting the 500-node G
   assert.equal(result.limits.maxNodes, 1_000);
 });
 
+test('the node cap still pages zero-cost missing edges to known diamond neighbors', async () => {
+  const focus = '550e8400-e29b-41d4-a716-446655443000';
+  const otherIds = Array.from(
+    { length: 1_000 },
+    (_, index) => `00000000-0000-7000-8002-${index.toString(16).padStart(12, '0')}`,
+  );
+  const knownA = otherIds[0];
+  const knownB = otherIds[1];
+  const hiddenNew = otherIds[otherIds.length - 1];
+  const allIds = [focus, ...otherIds];
+  const largeTasks = new Map<string, TaskRow>(
+    allIds.map((id, index) => [
+      id,
+      { id, title: `Capped ${index}`, status: TaskStatus.OPEN, autoRunWhenReady: true },
+    ]),
+  );
+  // The unknown edge sorts first in the fixture. A single mixed query would hit it,
+  // exhaust node capacity, and fail to reach the two later known-neighbor edges.
+  const fixture = graphFixture(
+    [
+      { taskId: focus, dependsOnTaskId: hiddenNew },
+      { taskId: focus, dependsOnTaskId: knownA },
+      { taskId: focus, dependsOnTaskId: knownB },
+    ],
+    true,
+    largeTasks,
+  );
+  const initial = await fixture.service.dependencyGraph(OWNER_ID, focus, {
+    direction: 'both',
+    maxNodes: 1,
+  });
+  const knownTaskIds = allIds.filter((id) => id !== hiddenNew);
+  const cursor = initial.collapsedGroups[0].cursor!;
+
+  const first = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds,
+    loadedNeighborTaskIds: [],
+    limit: 1,
+    cursor,
+  });
+  assert.deepEqual(first.nodes, []);
+  assert.deepEqual(first.edges, [{ sourceTaskId: knownA, targetTaskId: focus }]);
+  assert.equal(first.remainingCount, 2);
+  assert.equal(first.capacityReached, true);
+  assert.equal(typeof first.nextCursor, 'string');
+
+  const second = await fixture.service.expandDependencyGraph(OWNER_ID, focus, {
+    anchorTaskId: focus,
+    direction: 'prerequisites',
+    knownTaskIds,
+    loadedNeighborTaskIds: [knownA],
+    limit: 1,
+    cursor: first.nextCursor!,
+  });
+  assert.deepEqual(second.nodes, []);
+  assert.deepEqual(second.edges, [{ sourceTaskId: knownB, targetTaskId: focus }]);
+  assert.equal(second.remainingCount, 1);
+  assert.equal(second.capacityReached, true);
+  assert.equal(second.nextCursor, null);
+});
+
 test('graph rejects invalid input and never exposes a non-owned focus task', async () => {
   const invalid = graphFixture();
   await assert.rejects(() => invalid.service.dependencyGraph(OWNER_ID, 'not-a-uuid'), /task not found/);
@@ -909,6 +1061,10 @@ test('graph rejects invalid input and never exposes a non-owned focus task', asy
   await assert.rejects(
     () => invalid.service.dependencyGraph(OWNER_ID, FOCUS, { maxNodes: 501 }),
     /maxNodes must be/,
+  );
+  await assert.rejects(
+    () => invalid.service.dependencyGraph(OWNER_ID, FOCUS, { pairUnary: 'yes' }),
+    /pairUnary must be true or false/,
   );
   assert.equal(invalid.focusLookup(), undefined);
 

@@ -182,7 +182,10 @@ export function TaskDetailPanel({
   // invalidation refresh both the detail and graph together.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
-    queryFn: () => api<TaskDependencyGraphResponse>(`/tasks/${taskId}/dependency-graph?direction=both`),
+    queryFn: () =>
+      api<TaskDependencyGraphResponse>(
+        `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true`,
+      ),
     enabled:
       !!q.data &&
       ((q.data.dependsOn?.length ?? 0) > 0 || (q.data.dependedOnBy?.length ?? 0) > 0),

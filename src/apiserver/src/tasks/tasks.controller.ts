@@ -60,8 +60,14 @@ export class TasksController {
     @Query('direction') direction?: string,
     @Query('maxDepth') maxDepth?: string,
     @Query('maxNodes') maxNodes?: string,
+    @Query('pairUnary') pairUnary?: string,
   ) {
-    return this.tasks.dependencyGraph(user.userId, id, { direction, maxDepth, maxNodes });
+    return this.tasks.dependencyGraph(user.userId, id, {
+      direction,
+      maxDepth,
+      maxNodes,
+      pairUnary,
+    });
   }
 
   @Post(':id/dependency-graph/expand')
