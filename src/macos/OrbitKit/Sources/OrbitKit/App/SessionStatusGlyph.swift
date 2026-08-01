@@ -7,10 +7,9 @@ import Foundation
 /// Kept in OrbitKit (not the SwiftUI view) so the exact web mapping is shared by macOS + iOS and
 /// unit-tested. The view turns `shape`/`tone` into an SF Symbol (or spinner) and a colour.
 ///
-/// Note vs. web: the list payload sends neither `deletedAt` nor `archivedAt`, so the tab drives the
-/// glyph instead — `completed` carries the Completed (archived) tab (a filed session reads as done
-/// even though its status settled to CANCELLED; a genuine FAILED still surfaces its real glyph), and
-/// `deleted` carries the Trash tab (web branches on `deletedAt` first with the same neutral ⊖).
+/// New servers provide `sessionState`, the authoritative user-facing lifecycle. The tab-derived
+/// `completed` / `deleted` flags and low-level `status` / `endReason` mapping remain for older
+/// servers that omit it.
 public struct SessionStatusGlyph: Equatable, Sendable {
     /// How the view should draw the glyph. `.spinner` is the animated "working" indicator (web's
     /// `LoadingOutlined spin`); `.symbol` names an SF Symbol.
@@ -41,7 +40,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     /// The glyph for a session, mirroring web `StatusIcon({ session, completed })`.
     /// `completed` = the Completed (archived) tab is showing this row; `deleted` = the Trash tab.
     public static func make(for s: Session, completed: Bool = false, deleted: Bool = false) -> SessionStatusGlyph {
-        make(status: s.status, completed: completed, deleted: deleted,
+        make(status: s.effectiveRunStatus, sessionState: s.sessionState,
+             completed: completed, deleted: deleted,
              pendingApprovals: s.pendingApprovals, runningBgCount: s.runningBgCount,
              error: s.error, endReason: s.endReason)
     }
@@ -50,12 +50,20 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     /// `Session` — the ⌘K search hit, whose payload is deliberately thinner. Faking a `Session` to
     /// call the overload above would mean getting a long memberwise init exactly right for no gain.
     public static func make(status: RunStatus,
+                            sessionState: SessionState? = nil,
                             completed: Bool = false,
                             deleted: Bool = false,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
                             error: String? = nil,
                             endReason: String? = nil) -> SessionStatusGlyph {
+        if let sessionState, sessionState != .unknown {
+            return make(sessionState: sessionState,
+                        pendingApprovals: pendingApprovals,
+                        runningBgCount: runningBgCount,
+                        error: error)
+        }
+
         // Trash tab: a soft-deleted session reads as deleted regardless of its settled status —
         // web branches on `deletedAt` first with the same neutral ⊖ + "Deleted" tooltip.
         if deleted {
@@ -109,6 +117,67 @@ public struct SessionStatusGlyph: Equatable, Sendable {
 
         case .pending:
             return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
+        }
+    }
+
+    /// Authoritative mapping for the control plane's normalized, user-facing lifecycle.
+    private static func make(sessionState: SessionState,
+                             pendingApprovals: Int?,
+                             runningBgCount: Int?,
+                             error: String?) -> SessionStatusGlyph {
+        switch sessionState {
+        case .queued:
+            return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
+
+        case .running:
+            if (pendingApprovals ?? 0) > 0 {
+                return .init(shape: .symbol("pause.circle"), tone: .warning,
+                             label: "Waiting for approval")
+            }
+            return .init(shape: .spinner, tone: .brand, label: "Running")
+
+        case .awaitingInput:
+            if (runningBgCount ?? 0) > 0 {
+                return .init(shape: .spinner, tone: .brand,
+                             label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
+            }
+            return .init(shape: .symbol("message"), tone: .neutral,
+                         label: "Waiting for your reply")
+
+        case .dormant:
+            return .init(shape: .symbol("pause.circle"), tone: .neutral,
+                         label: "Dormant — send a message to resume")
+
+        case .completed:
+            return .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
+                         label: "Completed")
+
+        case .failed:
+            let err = (error ?? "").lowercased()
+            if err.contains("offline") {
+                return .init(shape: .symbol("wifi.slash"), tone: .neutral,
+                             label: "Disconnected — runner went offline")
+            }
+            let detail = (error?.isEmpty == false) ? error! : "Failed"
+            return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
+
+        case .cancelled:
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled")
+
+        case .interrupted:
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Interrupted")
+
+        case .ended:
+            return .init(shape: .symbol("minus.circle"), tone: .neutral,
+                         label: "Ended — task already finished")
+
+        case .deleted:
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")
+
+        case .unknown:
+            // Filtered by the caller so an unknown future state uses the legacy mapping.
+            assertionFailure("Unknown session state must use the legacy status fallback")
+            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")
         }
     }
 }

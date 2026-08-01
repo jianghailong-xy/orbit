@@ -62,7 +62,8 @@ struct WorktreeBar: View {
         // never reliably reaches `.running` on a cold open of an already-running session (no durable
         // "running" event is replayed), which left Commit enabled — and Merge shown — mid-turn. Fall
         // back to the reconciled stream status only until the session record loads (fresh deep link).
-        let turnActive = (app.session(id: console.sessionID)?.status ?? console.sessionStatus) == .running
+        let turnActive = (app.session(id: console.sessionID)?.effectiveRunStatus
+            ?? console.sessionStatus) == .running
         let primary = WorktreeBarLogic.primary(worktreeDirty: d.worktreeDirty,
                                                 committed: committed, turnActive: turnActive)
         let add = files.reduce(0) { $0 + max(0, $1.additions) }

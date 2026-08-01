@@ -8,12 +8,14 @@ import {
   ControlEvent,
   ControlEventType,
   ControlSessionSummary,
+  deriveSessionState,
   isLifecycleType,
   MergeCommand,
   NormalizedRunEvent,
   RunEventType,
   RunStatus,
   SessionEndReason,
+  SessionState,
 } from '@orbit/shared';
 import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +32,17 @@ const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
 const MAX_NOTIFY_BYTES = 7000; // Postgres NOTIFY payload limit is 8000 bytes; stay under.
 const CANCEL_MAX_AGE_MS = 60 * 60_000; // stop redelivering a cancel after an hour
+
+/** session.ended is emitted only for archive/delete. Reconstruct those filing fields so
+ * rolling replicas that receive only the synthetic event still derive the same state. */
+function endedSessionState(status: RunStatus | string, endReason: SessionEndReason | string): SessionState {
+  return deriveSessionState({
+    status,
+    endReason,
+    archivedAt: endReason === SessionEndReason.COMPLETED ? 'archived' : null,
+    deletedAt: endReason === SessionEndReason.DELETED ? 'deleted' : null,
+  });
+}
 
 /**
  * Realtime fan-out. Within a process it uses an in-memory RxJS hub (events) and an
@@ -262,11 +275,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    *  a gracefully recycled session stays in the active list, so recycling isn't an "ended"
    *  either (see the design doc). */
   publishSessionEnded(sessionId: string, status: RunStatus | string, endReason: SessionEndReason): void {
+    const sessionState = endedSessionState(status, endReason);
     this.publish(sessionId, {
       seq: 0,
       type: RunEventType.SESSION_ENDED,
       ts: new Date().toISOString(),
-      payload: { status, endReason },
+      payload: { status, runStatus: status, sessionState, endReason },
     });
   }
 
@@ -415,7 +429,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Decision Q4: the session left the active list — no more events will follow, so drop
         // its owner mapping now instead of waiting for LRU pressure.
         this.ownerCache.delete(sessionId);
-        data = { status: ev.payload.status, endReason: ev.payload.endReason };
+        {
+          const runStatus = String(ev.payload.runStatus ?? ev.payload.status) as RunStatus;
+          const endReason = String(ev.payload.endReason) as SessionEndReason;
+          const sessionState =
+            (ev.payload.sessionState as SessionState | undefined) ?? endedSessionState(runStatus, endReason);
+          data = { status: runStatus, runStatus, sessionState, endReason };
+        }
         break;
       case ControlEventType.SESSION_ERROR:
         data = errorPayloadOf(ev.payload) as unknown as Record<string, unknown>;
@@ -479,12 +499,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         status: true,
+        endReason: true,
+        archivedAt: true,
+        deletedAt: true,
         agentId: true,
         lastTurnAt: true,
         agent: { select: { id: true, name: true, model: true } },
       },
     });
     if (!s) return null;
+    const sessionState = deriveSessionState(s);
     // A blocked permission keeps a session RUNNING, so only RUNNING sessions can hold a live
     // approval — skip the count otherwise (mirrors the list endpoint).
     const pendingApprovals =
@@ -493,6 +517,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       id: s.id,
       title: s.title ?? null,
       status: s.status as RunStatus,
+      runStatus: s.status as RunStatus,
+      sessionState,
       agentId: s.agentId ?? null,
       agent: s.agent
         ? { id: s.agent.id, name: s.agent.name ?? null, model: s.agent.model ?? null }

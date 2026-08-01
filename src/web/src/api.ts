@@ -480,6 +480,8 @@ export interface SharedEvent {
 export interface SharedSession {
   title: string;
   agentName: string | null;
+  sessionState?: string;
+  runStatus?: string;
   status: string;
   createdAt: string;
   events: SharedEvent[];
@@ -546,6 +548,10 @@ export interface SessionChangedFile {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
+  /** Authoritative product lifecycle; prefer this for every user-facing state decision. */
+  sessionState?: string;
+  /** Explicit runner/process state. `status` is its legacy alias. */
+  runStatus?: string;
   status?: string;
   title?: string;
   prompt?: string | null;

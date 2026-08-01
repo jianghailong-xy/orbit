@@ -12,7 +12,7 @@ final class ControlEventCodableTests: XCTestCase {
     func testDecodesSessionUpdatedWithFullSummary() throws {
         let ev = try decode("""
         {"type":"session.updated","sessionId":"s1","agentId":"a1","ts":"2026-07-05T00:00:00.000Z",
-         "data":{"id":"s1","title":"Fix bug","status":"RUNNING","agentId":"a1",
+         "data":{"id":"s1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","agentId":"a1",
                  "agent":{"id":"a1","name":"builder","model":"opus"},
                  "pendingApprovals":2,"lastTurnAt":"2026-07-05T00:00:00.000Z"}}
         """)
@@ -22,7 +22,10 @@ final class ControlEventCodableTests: XCTestCase {
         let s = try XCTUnwrap(ev.payload(ControlSessionSummary.self))
         XCTAssertEqual(s.id, "s1")
         XCTAssertEqual(s.title, "Fix bug")
-        XCTAssertEqual(s.status, .running)
+        XCTAssertEqual(s.status, .pending)
+        XCTAssertEqual(s.runStatus, .running)
+        XCTAssertEqual(s.effectiveRunStatus, .running)
+        XCTAssertEqual(s.sessionState, .running)
         XCTAssertEqual(s.pendingApprovals, 2)
         XCTAssertEqual(s.agent?.name, "builder")
         XCTAssertEqual(s.lastTurnAt, "2026-07-05T00:00:00.000Z")
@@ -38,6 +41,9 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertNil(ev.agentId)
         let s = try XCTUnwrap(ev.payload(ControlSessionSummary.self))
         XCTAssertEqual(s.status, .pending)
+        XCTAssertNil(s.runStatus)
+        XCTAssertEqual(s.effectiveRunStatus, .pending)
+        XCTAssertNil(s.sessionState)
         XCTAssertNil(s.title)
         XCTAssertNil(s.agent)
     }
@@ -45,11 +51,14 @@ final class ControlEventCodableTests: XCTestCase {
     func testDecodesSessionEnded() throws {
         let ev = try decode("""
         {"type":"session.ended","sessionId":"s1","agentId":"a1","ts":"t",
-         "data":{"status":"SUCCEEDED","endReason":"completed"}}
+         "data":{"status":"CANCELLED","runStatus":"CANCELLED","sessionState":"COMPLETED","endReason":"completed"}}
         """)
         XCTAssertEqual(ev.type, .sessionEnded)
         let d = try XCTUnwrap(ev.payload(ControlSessionEnded.self))
-        XCTAssertEqual(d.status, .succeeded)
+        XCTAssertEqual(d.status, .cancelled)
+        XCTAssertEqual(d.runStatus, .cancelled)
+        XCTAssertEqual(d.effectiveRunStatus, .cancelled)
+        XCTAssertEqual(d.sessionState, .completed)
         XCTAssertEqual(d.endReason, "completed")
     }
 

@@ -14,6 +14,12 @@ import {
   buildDirectTaskDependencyGraph,
   type TaskDependencyGraphResponse,
 } from '../lib/taskDependencyGraph';
+import {
+  isSessionBusy,
+  sessionRunStatusOf,
+  sessionStateOf,
+  type SessionStateValue,
+} from '../lib/sessionState';
 import { TaskDependencyList } from './TaskDependencyList';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
@@ -39,39 +45,22 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   FAILED: { label: 'Failed', tone: 'red' },
 };
 
-// RunStatus (session.status) -> a single run's badge label + tone. The task header uses
-// STATUS_META; a run's enum is different (PENDING/RUNNING/SUCCEEDED/FAILED/CANCELLED/
-// AWAITING_INPUT/INTERRUPTED). AWAITING_INPUT means the turn finished and the agent is
-// waiting on you, so it gets a distinct amber tone rather than a neutral grey. Read it
-// through runStatusMeta below, not directly — CANCELLED needs the end reason.
-const RUN_STATUS_META: Record<string, { label: string; tone: string }> = {
-  PENDING: { label: 'Queued', tone: 'muted' },
+// Authoritative user-facing SessionState -> a single run's badge. Raw runStatus remains
+// available for execution-only decisions such as detecting a genuinely successful run.
+const SESSION_STATE_META: Record<SessionStateValue, { label: string; tone: string }> = {
+  QUEUED: { label: 'Queued', tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
-  SUCCEEDED: { label: 'Done', tone: 'green' },
+  COMPLETED: { label: 'Completed', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
   CANCELLED: { label: 'Cancelled', tone: 'muted' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },
+  DORMANT: { label: 'Dormant', tone: 'muted' },
+  ENDED: { label: 'Ended', tone: 'muted' },
+  DELETED: { label: 'Deleted', tone: 'muted' },
 };
 
-// End reasons that make a CANCELLED run a *positively* terminal one. Anything else — an
-// idle recycle, a user end, or a legacy row with no reason recorded — is dormant and
-// resumable, so it must not wear the accusatory "Cancelled". Same set (and same
-// fail-to-neutral default) as AgentView's status glyph, which is the other place a
-// graceful end has to be told apart from a hard stop now that both settle CANCELLED.
-const HARD_END_REASONS = new Set(['orphaned', 'deleted', 'completed', 'cancelled']);
-
-const runStatusMeta = (s: { status: string; endReason?: string | null }) =>
-  s.status === 'CANCELLED' && !HARD_END_REASONS.has(s.endReason ?? '')
-    ? { label: 'Dormant', tone: 'muted' }
-    : (RUN_STATUS_META[s.status] ?? { label: s.status, tone: 'muted' });
-
-// The task counts as "执行中" only while one of its sessions is actually working:
-// queued for a runner slot (PENDING) or running (RUNNING). AWAITING_INPUT and
-// INTERRUPTED are idle states — the agent finished its turn and is waiting (grey
-// icons in AgentView), so the run is over and 开始执行 should be re-enabled.
-const BUSY_SESSION_STATUSES = new Set(['PENDING', 'RUNNING']);
-const isSessionBusy = (status?: string): boolean => !!status && BUSY_SESSION_STATUSES.has(status);
+const sessionStatusMeta = (session: any) => SESSION_STATE_META[sessionStateOf(session)];
 
 const fmt = (d?: string | null): string =>
   d
@@ -177,7 +166,7 @@ export function TaskDetailPanel({
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
     refetchInterval: (query) =>
-      (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s.status)) ? 4000 : false,
+      (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s)) ? 4000 : false,
   });
   const task = q.data ?? summary;
 
@@ -444,7 +433,9 @@ export function TaskDetailPanel({
     .map((t: any) => ({ value: t.id, label: t.title }));
   // §6.3 safety net: a run finished successfully but the task still isn't DONE while
   // dependents wait — surface a one-click "标记完成" so the pipeline doesn't stall.
-  const hasSucceededSession = sessions.some((s: any) => s.status === 'SUCCEEDED');
+  const hasSucceededSession = sessions.some(
+    (s: any) => sessionRunStatusOf(s) === 'SUCCEEDED',
+  );
   const needsDoneConfirm =
     dependedOnBy.length > 0 && task?.status !== 'DONE' && hasSucceededSession;
 
@@ -453,7 +444,7 @@ export function TaskDetailPanel({
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also
   // debounces it against repeated clicks (no second trigger until the current run ends).
-  const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s.status));
+  const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s));
   // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
   const executeDisabled = !canExecute || running || blocked;
   const executeHint = blocked
@@ -747,14 +738,15 @@ export function TaskDetailPanel({
               <div className="tdp-muted">No runs yet</div>
             ) : (
               sessions.map((s: any) => {
-                const meta = runStatusMeta(s);
+                const state = sessionStateOf(s);
+                const meta = sessionStatusMeta(s);
                 return (
                   <Link
                     key={s.id}
                     to={`/sessions/${encodeId(s.id)}`}
-                    className={`tdp-session${s.status === 'FAILED' ? ' is-failed' : ''}`}
+                    className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
                   >
-                    <span className={`tdp-dot ${s.status}`} />
+                    <span className={`tdp-dot ${state}`} />
                     <div className="tdp-session-main">
                       {/* Agent leads — it's what tells two runs of the same task apart; the
                           system-generated title just repeats the task name. */}

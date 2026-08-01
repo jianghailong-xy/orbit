@@ -74,7 +74,7 @@ final class SessionSearchCodableTests: XCTestCase {
     func testDecodesResponse() throws {
         let json = """
         {"q":"4QISUlGbd1LAaxJywzvT7x","contentSearched":true,"hits":[
-          {"id":"a","title":"Fix merge","status":"SUCCEEDED","agent":{"id":"ag","name":"orbit"},
+          {"id":"a","title":"Fix merge","status":"PENDING","runStatus":"SUCCEEDED","sessionState":"COMPLETED","agent":{"id":"ag","name":"orbit"},
            "runnerId":"r","taskId":null,"taskTitle":null,"lastTurnAt":"2026-07-26T10:00:00.000Z",
            "createdAt":"2026-07-26T09:00:00.000Z","archivedAt":null,"deletedAt":null,
            "endReason":null,"matchField":"id","snippet":"4QISUlGbd1LAaxJywzvT7x"}
@@ -84,6 +84,9 @@ final class SessionSearchCodableTests: XCTestCase {
         XCTAssertTrue(res.contentSearched)
         XCTAssertEqual(res.hits.count, 1)
         XCTAssertEqual(res.hits[0].matchField, .id)
+        XCTAssertEqual(res.hits[0].runStatus, .succeeded)
+        XCTAssertEqual(res.hits[0].effectiveRunStatus, .succeeded)
+        XCTAssertEqual(res.hits[0].sessionState, .completed)
         XCTAssertEqual(res.hits[0].agent?.name, "orbit")
     }
 
@@ -97,5 +100,8 @@ final class SessionSearchCodableTests: XCTestCase {
         """.data(using: .utf8)!
         let res = try JSONDecoder().decode(SessionSearchResponse.self, from: json)
         XCTAssertEqual(res.hits[0].matchField, .message)
+        XCTAssertNil(res.hits[0].runStatus)
+        XCTAssertEqual(res.hits[0].effectiveRunStatus, .pending)
+        XCTAssertNil(res.hits[0].sessionState)
     }
 }

@@ -29,12 +29,14 @@ public enum SessionDelta {
             if before == 0 && after > 0 {
                 events.append(.needsApproval(sessionID: s.id, title: s.title ?? "Session", count: after))
             }
-            if let prev = prevByID[s.id], prev.status.isLive, isTerminal(s.status) {
-                events.append(.finished(sessionID: s.id, title: s.title ?? "Session", status: s.status))
+            if let prev = prevByID[s.id], prev.effectiveRunStatus.isLive,
+               isTerminal(s.effectiveRunStatus) {
+                events.append(.finished(sessionID: s.id, title: s.title ?? "Session",
+                                        status: s.effectiveRunStatus))
             }
         }
         // Sessions that were live and dropped out of the Active list → finished (status unknown).
-        for p in previous where p.status.isLive && curByID[p.id] == nil && p.id != focusedSessionID {
+        for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && p.id != focusedSessionID {
             events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
         }
         return events

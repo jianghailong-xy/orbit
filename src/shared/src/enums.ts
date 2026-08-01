@@ -33,6 +33,81 @@ export enum SessionEndReason {
 }
 
 /**
+ * Authoritative, user-facing lifecycle state of a session. `RunStatus` remains the
+ * runner/process state persisted in Postgres; this enum combines that raw outcome with
+ * the session's filing state (`archivedAt` / `deletedAt`) and terminal reason so every
+ * API consumer sees the same product semantics.
+ */
+export enum SessionState {
+  QUEUED = 'QUEUED',
+  RUNNING = 'RUNNING',
+  AWAITING_INPUT = 'AWAITING_INPUT',
+  DORMANT = 'DORMANT',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+  INTERRUPTED = 'INTERRUPTED',
+  ENDED = 'ENDED',
+  DELETED = 'DELETED',
+}
+
+type SessionStateSource = {
+  endReason?: SessionEndReason | string | null;
+  archivedAt?: Date | string | null;
+  deletedAt?: Date | string | null;
+};
+
+/** Input accepted by {@link deriveSessionState}. New code can pass `runStatus`; the
+ * legacy/raw `status` spelling remains accepted for existing Prisma/API objects. */
+export type SessionStateInput = SessionStateSource &
+  (
+    | { runStatus: RunStatus | string; status?: RunStatus | string | null }
+    | { status: RunStatus | string; runStatus?: RunStatus | string | null }
+  );
+
+/**
+ * Derive the stable, user-facing state without changing the stored runner status.
+ * Filing state wins first, except that a real FAILED outcome remains visible after
+ * archiving. CANCELLED is intentionally fail-to-dormant for missing/unknown legacy
+ * reasons; a bare INTERRUPTED remains explicitly interrupted.
+ */
+export function deriveSessionState(input: SessionStateInput): SessionState {
+  const rawStatus = String(input.runStatus ?? input.status ?? '').toUpperCase();
+  const reason = String(input.endReason ?? '').toLowerCase();
+
+  if (input.deletedAt != null) return SessionState.DELETED;
+  if (input.archivedAt != null && rawStatus !== RunStatus.FAILED) return SessionState.COMPLETED;
+
+  switch (rawStatus) {
+    case RunStatus.RUNNING:
+      return SessionState.RUNNING;
+    case RunStatus.AWAITING_INPUT:
+      return SessionState.AWAITING_INPUT;
+    case RunStatus.SUCCEEDED:
+      return SessionState.COMPLETED;
+    case RunStatus.FAILED:
+      return SessionState.FAILED;
+    case RunStatus.PENDING:
+      return SessionState.QUEUED;
+    case RunStatus.CANCELLED:
+    case RunStatus.INTERRUPTED:
+      if (reason === SessionEndReason.ORPHANED) return SessionState.ENDED;
+      if (
+        reason === SessionEndReason.COMPLETED ||
+        reason === SessionEndReason.DELETED ||
+        reason === SessionEndReason.CANCELLED
+      ) {
+        return SessionState.CANCELLED;
+      }
+      if (rawStatus === RunStatus.INTERRUPTED && reason === '') return SessionState.INTERRUPTED;
+      return SessionState.DORMANT;
+    default:
+      // Unknown future/legacy raw values must not look live or queued.
+      return SessionState.ENDED;
+  }
+}
+
+/**
  * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
  * wasn't one (a hard archive/delete/batch-stop, or no reason recorded). TASK_DONE settles
  * SUCCEEDED — the agent finished its work, and a completed run must never read as

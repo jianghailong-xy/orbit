@@ -50,7 +50,7 @@ public enum MenuBar {
 
     private static func subtitle(for s: Session) -> String {
         if let n = s.pendingApprovals, n > 0 { return "\(n) pending approval\(n == 1 ? "" : "s")" }
-        switch s.status {
+        switch s.effectiveRunStatus {
         case .running: return "Running"
         case .awaitingInput: return "Awaiting input"
         case .pending: return "Queued"
@@ -58,7 +58,7 @@ public enum MenuBar {
         // status would call a merely dormant session "Cancelled". Only `endReason` separates
         // them — defer to the reason-aware word rather than spell the rule out a third time.
         case .cancelled: return SessionHeader.statusWord(for: s)
-        default: return s.status.rawValue.capitalized
+        default: return s.effectiveRunStatus.rawValue.capitalized
         }
     }
 }

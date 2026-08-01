@@ -207,7 +207,7 @@ export function SessionSearch() {
               onMouseEnter={() => setActive(i)}
               onClick={() => openHit(hit)}
             >
-              <StatusIcon session={hit} completed={!!hit.archivedAt} />
+              <StatusIcon session={hit} />
               <div className="ssearch-body">
                 <div className="ssearch-title-line">
                   <span className="ssearch-title">{hit.title}</span>

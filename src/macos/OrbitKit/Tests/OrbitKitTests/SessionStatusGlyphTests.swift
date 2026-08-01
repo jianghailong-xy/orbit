@@ -5,8 +5,12 @@ import XCTest
 /// carries the meaning, so each state is asserted on shape + tone + label.
 final class SessionStatusGlyphTests: XCTestCase {
     private func session(_ status: RunStatus, pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
-                         error: String? = nil, endReason: String? = nil) -> Session {
-        Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
+                         error: String? = nil, endReason: String? = nil,
+                         runStatus: RunStatus? = nil,
+                         sessionState: SessionState? = nil) -> Session {
+        Session(id: "s", title: "t", status: status, runStatus: runStatus,
+                sessionState: sessionState,
+                agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason)
     }
@@ -110,11 +114,81 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted"))
     }
 
+    func testServerSessionStateOverridesLegacyStatusAndTabFallbacks() {
+        let cases: [(SessionState, SessionStatusGlyph)] = [
+            (.queued, .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")),
+            (.running, .init(shape: .spinner, tone: .brand, label: "Running")),
+            (.awaitingInput, .init(shape: .symbol("message"), tone: .neutral,
+                                  label: "Waiting for your reply")),
+            (.dormant, .init(shape: .symbol("pause.circle"), tone: .neutral,
+                             label: "Dormant — send a message to resume")),
+            (.completed, .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
+                               label: "Completed")),
+            (.failed, .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: "Failed")),
+            (.cancelled, .init(shape: .symbol("minus.circle"), tone: .neutral,
+                               label: "Cancelled")),
+            (.interrupted, .init(shape: .symbol("minus.circle"), tone: .neutral,
+                                 label: "Interrupted")),
+            (.ended, .init(shape: .symbol("minus.circle"), tone: .neutral,
+                           label: "Ended — task already finished")),
+            (.deleted, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Deleted")),
+        ]
+        for (state, expected) in cases {
+            let s = session(.cancelled, endReason: "cancelled", sessionState: state)
+            XCTAssertEqual(SessionStatusGlyph.make(for: s, completed: true, deleted: true),
+                           expected, state.rawValue)
+        }
+    }
+
+    func testServerLiveStatesRetainUsefulDetail() {
+        let approval = session(.cancelled, pendingApprovals: 2, sessionState: .running)
+        XCTAssertEqual(SessionStatusGlyph.make(for: approval),
+                       .init(shape: .symbol("pause.circle"), tone: .warning,
+                             label: "Waiting for approval"))
+
+        let background = session(.cancelled, runningBgCount: 3, sessionState: .awaitingInput)
+        XCTAssertEqual(SessionStatusGlyph.make(for: background),
+                       .init(shape: .spinner, tone: .brand,
+                             label: "3 background processes running"))
+
+        let offline = session(.cancelled, error: "runner offline", sessionState: .failed)
+        XCTAssertEqual(SessionStatusGlyph.make(for: offline),
+                       .init(shape: .symbol("wifi.slash"), tone: .neutral,
+                             label: "Disconnected — runner went offline"))
+    }
+
+    func testRunStatusAliasWinsInLegacyFallback() {
+        let s = session(.succeeded, endReason: "idle", runStatus: .cancelled)
+        XCTAssertEqual(SessionStatusGlyph.make(for: s),
+                       .init(shape: .symbol("pause.circle"), tone: .neutral,
+                             label: "Dormant — send a message to resume"))
+    }
+
+    func testUnknownServerSessionStateDecodesAndUsesLegacyFallback() throws {
+        let json = #"{"id":"s1","status":"SUCCEEDED","sessionState":"NEW_FUTURE_STATE"}"#
+        let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(s.sessionState, .unknown)
+        XCTAssertEqual(SessionStatusGlyph.make(for: s),
+                       .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
+                             label: "Completed"))
+    }
+
     /// The list payload's terminal-state fields decode (server keys: error / endReason).
     func testSessionDecodesTerminalFields() throws {
-        let json = #"{"id":"s1","status":"CANCELLED","error":null,"endReason":"orphaned"}"#
+        let json = #"{"id":"s1","status":"RUNNING","runStatus":"CANCELLED","sessionState":"ENDED","error":null,"endReason":"orphaned"}"#
         let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(s.runStatus, .cancelled)
+        XCTAssertEqual(s.effectiveRunStatus, .cancelled)
+        XCTAssertEqual(s.sessionState, .ended)
         XCTAssertEqual(s.endReason, "orphaned")
         XCTAssertNil(s.error)
+    }
+
+    func testSessionStateIsOptionalForOlderServers() throws {
+        let json = #"{"id":"s1","status":"CANCELLED"}"#
+        let s = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertNil(s.sessionState)
+        XCTAssertNil(s.runStatus)
+        XCTAssertEqual(s.effectiveRunStatus, .cancelled)
     }
 }

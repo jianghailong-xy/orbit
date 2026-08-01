@@ -27,9 +27,9 @@ public enum SessionGrouping {
         for s in sessions {
             if (s.pendingApprovals ?? 0) > 0 {
                 needsYou.append(s)
-            } else if s.status.isLive {
+            } else if s.effectiveRunStatus.isLive {
                 running.append(s)
-            } else if s.status == .pending {
+            } else if s.effectiveRunStatus == .pending {
                 queued.append(s)
             }
         }

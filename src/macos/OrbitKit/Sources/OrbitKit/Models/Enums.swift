@@ -24,6 +24,30 @@ public enum RunStatus: String, Codable, Sendable {
     }
 }
 
+/// User-facing lifecycle of a session, normalized by the control plane independently of the
+/// runner's low-level `RunStatus`. For example, completing a live session can stop its runner with
+/// `RunStatus.cancelled` while this state remains `.completed`.
+public enum SessionState: String, Codable, Sendable, CaseIterable {
+    case queued = "QUEUED"
+    case running = "RUNNING"
+    case awaitingInput = "AWAITING_INPUT"
+    case dormant = "DORMANT"
+    case completed = "COMPLETED"
+    case failed = "FAILED"
+    case cancelled = "CANCELLED"
+    case interrupted = "INTERRUPTED"
+    case ended = "ENDED"
+    case deleted = "DELETED"
+    /// Forward-compatibility floor. Presentation treats it exactly like a missing state and falls
+    /// back to the low-level run status rather than failing the containing payload.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = SessionState(rawValue: raw) ?? .unknown
+    }
+}
+
 /// Health of a registered runner machine.
 public enum RunnerStatus: String, Codable, Sendable {
     case online = "ONLINE"

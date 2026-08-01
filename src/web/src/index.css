@@ -5803,8 +5803,8 @@ body {
 .tdp-dot.RUNNING {
   background: var(--brand);
 }
-.tdp-dot.SUCCEEDED,
-.tdp-dot.ENDED {
+.tdp-dot.COMPLETED,
+.tdp-dot.SUCCEEDED {
   background: var(--success-solid);
 }
 .tdp-dot.FAILED {

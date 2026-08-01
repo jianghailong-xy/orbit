@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { withSessionState } from '../sessions/session-state';
 import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
@@ -868,11 +869,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // A graceful recycle and a hard stop both settle CANCELLED, so the panel's run
             // chip needs the reason to tell "dormant" from "cancelled" (see TaskDetailPanel).
             endReason: true,
+            archivedAt: true,
+            deletedAt: true,
             createdAt: true,
             agent: { select: { name: true } },
           },
         },
-        creatorSession: { select: { id: true, title: true, status: true } },
+        creatorSession: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            endReason: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
         // Prerequisites this task waits on, and the tasks blocked until this one is DONE.
         dependsOn: {
           include: { dependsOnTask: { select: { id: true, title: true, status: true } } },
@@ -888,6 +900,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     );
     return {
       ...task,
+      sessions: task.sessions.map((session) => withSessionState(session)),
+      creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
     };

@@ -75,16 +75,26 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let id: String
     public let title: String?
     public let status: RunStatus
+    /// Explicit low-level runner state; `status` is retained for older control planes.
+    public let runStatus: RunStatus?
+    /// Server-normalized state, omitted by older control planes.
+    public let sessionState: SessionState?
     public let agentId: String?
     public let agent: AgentRef?
     public let pendingApprovals: Int
     public let lastTurnAt: String?
+
+    public var effectiveRunStatus: RunStatus { runStatus ?? status }
 }
 
 /// `data` for `session.ended`.
 public struct ControlSessionEnded: Codable, Equatable, Sendable {
     public let status: RunStatus
+    public let runStatus: RunStatus?
+    public let sessionState: SessionState?
     public let endReason: String
+
+    public var effectiveRunStatus: RunStatus { runStatus ?? status }
 }
 
 /// `data` for `session.error`. `recoverable=true` marks a mid-turn (non-fatal) error; `false`

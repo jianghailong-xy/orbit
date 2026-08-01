@@ -1,4 +1,4 @@
-import { RunStatus, SessionEndReason } from './enums';
+import { RunStatus, SessionEndReason, SessionState } from './enums';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -67,7 +67,12 @@ export interface ControlEvent {
 export interface ControlSessionSummary {
   id: string;
   title: string | null;
+  /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */
   status: RunStatus;
+  /** Raw runner/process status. */
+  runStatus: RunStatus;
+  /** Authoritative product-level session lifecycle state. */
+  sessionState: SessionState;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null } | null;
   pendingApprovals: number;
@@ -76,7 +81,12 @@ export interface ControlSessionSummary {
 
 /** `data` for `session.ended`. */
 export interface ControlSessionEnded {
+  /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */
   status: RunStatus;
+  /** Raw runner/process status at the time the session left Active. */
+  runStatus: RunStatus;
+  /** Authoritative product-level state after the archive/delete action. */
+  sessionState: SessionState;
   endReason: SessionEndReason;
 }
 

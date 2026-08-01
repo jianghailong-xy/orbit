@@ -138,7 +138,8 @@ struct SessionSearchRow: View {
     let query: String
 
     var body: some View {
-        let glyph = SessionStatusGlyph.make(status: hit.status,
+        let glyph = SessionStatusGlyph.make(status: hit.effectiveRunStatus,
+                                            sessionState: hit.sessionState,
                                             completed: hit.archivedAt != nil,
                                             deleted: hit.deletedAt != nil,
                                             endReason: hit.endReason)

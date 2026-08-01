@@ -1,4 +1,4 @@
-import { AgentProvider, PermissionMode, RunnerStatus, RunStatus } from './enums';
+import { AgentProvider, PermissionMode, RunnerStatus, RunStatus, SessionState } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 
 /**
@@ -748,7 +748,12 @@ export type SessionSearchMatchField =
 export interface SessionSearchHit {
   id: string;
   title: string;
+  /** @deprecated Raw runner status; retained as a wire-compatible alias of `runStatus`. */
   status: string;
+  /** Raw runner/process status. */
+  runStatus: string;
+  /** Authoritative product-level session lifecycle state. */
+  sessionState: SessionState;
   agent: { id: string; name: string } | null;
   runnerId: string | null;
   taskId: string | null;

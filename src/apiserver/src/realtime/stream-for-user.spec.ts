@@ -69,6 +69,8 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   assert.equal(data.id, 'sessA');
   assert.equal(data.title, 'Fix bug');
   assert.equal(data.status, 'RUNNING');
+  assert.equal(data.runStatus, 'RUNNING');
+  assert.equal(data.sessionState, 'RUNNING');
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
   assert.deepEqual(data.agent, { id: 'agentA', name: 'builder', model: 'opus' });
@@ -146,18 +148,23 @@ test('publishSessionCreated surfaces as session.created with the full summary', 
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
 });
 
-test('publishSessionEnded surfaces as session.ended with status+endReason', async () => {
+test('publishSessionEnded preserves raw CANCELLED while surfacing completed sessionState', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
 
-  svc.publishSessionEnded('sessA', RunStatus.SUCCEEDED, SessionEndReason.COMPLETED);
+  svc.publishSessionEnded('sessA', RunStatus.CANCELLED, SessionEndReason.COMPLETED);
   await delay(30);
   sub.unsubscribe();
 
   assert.equal(got.length, 1);
   assert.equal(got[0].type, 'session.ended');
-  assert.deepEqual(got[0].data, { status: 'SUCCEEDED', endReason: 'completed' });
+  assert.deepEqual(got[0].data, {
+    status: 'CANCELLED',
+    runStatus: 'CANCELLED',
+    sessionState: 'COMPLETED',
+    endReason: 'completed',
+  });
 });
 
 test('publishTaskChanged surfaces as task.changed with the taskId, scoped to the session owner', async () => {

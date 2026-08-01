@@ -138,7 +138,7 @@ struct ComposerView: View {
                 // derived `console.state.status` — that never reaches `.running` on a cold open of an
                 // already-running session, so the stop affordance used to never appear.
                 if ComposerLogic.showsInterrupt(
-                    session: app.session(id: console.sessionID)?.status,
+                    session: app.session(id: console.sessionID)?.effectiveRunStatus,
                     stream: console.state.status,
                     hasText: !console.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                     hasAttachments: !console.pendingAttachments.isEmpty,
@@ -154,7 +154,7 @@ struct ComposerView: View {
                     Button {
                         // Capture the authoritative status at tap time so a mid-turn send is labeled
                         // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.
-                        let status = app.session(id: console.sessionID)?.status
+                        let status = app.session(id: console.sessionID)?.effectiveRunStatus
                         Task { await console.send(authoritative: status) }
                     } label: {
                         Image(systemName: "arrow.up.circle.fill")
@@ -577,7 +577,7 @@ struct ComposerView: View {
             console.pickSlash(matches[min(slashIndex, matches.count - 1)].name)
             slashDismissed = nil
         } else {
-            let status = app.session(id: console.sessionID)?.status
+            let status = app.session(id: console.sessionID)?.effectiveRunStatus
             Task { await console.send(authoritative: status) }
         }
     }

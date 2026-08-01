@@ -96,6 +96,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String?
     public let status: RunStatus
+    /// Explicit low-level runner state from newer servers. `status` remains on the wire for
+    /// compatibility; consumers should read `effectiveRunStatus`.
+    public let runStatus: RunStatus?
+    /// Server-normalized, user-facing lifecycle. Optional for compatibility with older servers;
+    /// presentation falls back to `status` / `endReason` when absent.
+    public let sessionState: SessionState?
     public let agentId: String?
     public let assignedRunnerId: String?
     public let provider: String?
@@ -141,7 +147,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
 
-    public init(id: String, title: String?, status: RunStatus, agentId: String?,
+    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+
+    public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
+                sessionState: SessionState? = nil,
+                agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
                 pendingApprovals: Int?, branch: String?,
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
@@ -153,6 +163,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.id = id
         self.title = title
         self.status = status
+        self.runStatus = runStatus
+        self.sessionState = sessionState
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
         self.provider = provider
@@ -398,6 +410,12 @@ public struct SessionDetailAgent: Codable, Equatable, Sendable {
 /// older runners omit fields, and they're all null before the first worktree report.
 public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let id: String
+    /// This deliberately slim detail DTO historically ignored the raw status. Both spellings are
+    /// optional so older/slim payloads still decode; consumers should read `effectiveRunStatus`.
+    public let status: RunStatus?
+    public let runStatus: RunStatus?
+    /// Server-normalized, user-facing lifecycle; absent when talking to an older control plane.
+    public let sessionState: SessionState?
     /// The isolated branch this session's work lives on (`orbit/<slug>-<hash>`), or nil pre-isolation.
     public let branch: String?
     /// What the runner did: "worktree" (isolated) | "shared-nogit" (no git → the shared workDir).
@@ -430,13 +448,20 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// create-vs-revoke state. The shared page lives at `<baseURL>/s/<shareToken>`.
     public let shareToken: String?
 
-    public init(id: String, branch: String? = nil, isolationStatus: String? = nil,
+    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+
+    public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
+                sessionState: SessionState? = nil,
+                branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil) {
         self.id = id
+        self.status = status
+        self.runStatus = runStatus
+        self.sessionState = sessionState
         self.branch = branch
         self.isolationStatus = isolationStatus
         self.changedFiles = changedFiles
@@ -529,6 +554,10 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String
     public let status: RunStatus
+    /// Explicit low-level runner state from newer servers; `status` remains the legacy fallback.
+    public let runStatus: RunStatus?
+    /// Server-normalized state, optional for older search endpoints.
+    public let sessionState: SessionState?
     public let agent: SessionAgentRef?
     public let runnerId: String?
     public let taskId: String?
@@ -546,6 +575,8 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
     public let snippet: String?
 
+    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+
     /// Unknown `matchField` values decode to `.message` rather than failing the whole response: a
     /// newer server adding a field must not blank the palette on an older client.
     public init(from decoder: Decoder) throws {
@@ -553,6 +584,8 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
         id = try c.decode(String.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
         status = try c.decode(RunStatus.self, forKey: .status)
+        runStatus = try c.decodeIfPresent(RunStatus.self, forKey: .runStatus)
+        sessionState = try c.decodeIfPresent(SessionState.self, forKey: .sessionState)
         agent = try c.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
         taskId = try c.decodeIfPresent(String.self, forKey: .taskId)

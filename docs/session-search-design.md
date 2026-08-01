@@ -124,7 +124,9 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
   hits: Array<{
     id: string,
     title: string,
-    status: RunStatus,
+    status: RunStatus,             // 兼容字段；等于 runStatus
+    runStatus: RunStatus,          // runner/进程的原始执行态
+    sessionState: SessionState,    // 服务端统一派生的权威用户态
     agent: { id: string, name: string } | null,
     runnerId: string | null,
     taskId: string | null,
@@ -133,7 +135,7 @@ Nest 按装饰器声明顺序匹配,写在后面 `search` 会被当成 id 吃掉
     createdAt: string,
     archivedAt: string | null,     // 结果行标注「在 Completed」
     deletedAt: string | null,      // 结果行标注「在 Trash」
-    endReason: string | null,      // 让三端状态文案与会话列表一致
+    endReason: string | null,      // 诊断/兼容；状态文案以 sessionState 为准
     matchField: 'id'|'title'|'prompt'|'reply'|'message'|'branch'|'agent'|'task'|'recent',
     snippet: string | null,        // 命中处 ±60 字符窗口,服务端截 + 折叠空白
   }>

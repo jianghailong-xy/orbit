@@ -21,6 +21,7 @@ import {
   MAX_PROMPT_CHARS,
   RunEventType,
   SessionEndReason,
+  SessionState,
   type SessionSearchHit,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +33,7 @@ import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { truncatePayload } from './truncate-payload';
+import { withSessionState } from './session-state';
 
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
@@ -257,7 +259,7 @@ export class SessionsService {
     // Retry off the hot path (generous timeout + retries) and swap in a clean title when it
     // lands — the branch is left as-is (the runner may already hold a worktree on it).
     if (usedFallbackTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
-    return session;
+    return withSessionState(session);
   }
 
   /**
@@ -303,7 +305,15 @@ export class SessionsService {
     ownerId: string,
     parentSessionId: string,
     dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
-  ): Promise<{ id: string; status: RunStatus; title: string; agentName: string | null; provider: string }> {
+  ): Promise<{
+    id: string;
+    status: RunStatus;
+    runStatus: RunStatus;
+    sessionState: SessionState;
+    title: string;
+    agentName: string | null;
+    provider: string;
+  }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     const parent = await this.prisma.session.findFirst({
       where: { id: parentSessionId, ownerId },
@@ -345,6 +355,8 @@ export class SessionsService {
     return {
       id: created.id,
       status: created.status,
+      runStatus: created.runStatus,
+      sessionState: created.sessionState,
       title: created.title,
       agentName: targetAgent?.name ?? null,
       provider: created.provider,
@@ -405,7 +417,7 @@ export class SessionsService {
     ownerId: string,
     filters: { status?: RunStatus; parentSessionId?: string },
   ) {
-    return this.prisma.session.findMany({
+    const sessions = await this.prisma.session.findMany({
       where: {
         ownerId,
         deletedAt: null,
@@ -416,6 +428,9 @@ export class SessionsService {
         id: true,
         title: true,
         status: true,
+        endReason: true,
+        archivedAt: true,
+        deletedAt: true,
         agentId: true,
         parentSessionId: true,
         lastAssistantText: true,
@@ -425,6 +440,7 @@ export class SessionsService {
       orderBy: [{ lastTurnAt: 'desc' }, { createdAt: 'desc' }],
       take: 100,
     });
+    return sessions.map((session) => withSessionState(session));
   }
 
   /**
@@ -440,6 +456,8 @@ export class SessionsService {
         title: true,
         prompt: true,
         status: true,
+        archivedAt: true,
+        deletedAt: true,
         provider: true,
         model: true,
         effort: true,
@@ -473,7 +491,7 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    return session;
+    return withSessionState(session);
   }
 
   /**
@@ -765,26 +783,28 @@ export class SessionsService {
           LIMIT ${take}::int
         `);
 
-    return rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      status: r.status,
-      agent: r.agentId ? { id: r.agentId, name: r.agentName ?? '' } : null,
-      runnerId: r.runnerId,
-      taskId: r.taskId,
-      taskTitle: r.taskTitle,
-      lastTurnAt: r.lastTurnAt,
-      createdAt: r.createdAt,
-      archivedAt: r.archivedAt,
-      deletedAt: r.deletedAt,
-      endReason: r.endReason,
-      matchField: r.matchField,
-      // Collapse the whitespace a snippet cut out of a markdown reply is full of, so the palette
-      // row reads as one line instead of an accordion of blank space. This is also why no match
-      // offset is carried: collapsing shifts every position, so clients locate the query inside
-      // the finished snippet instead.
-      snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
-    }));
+    return rows.map((r) =>
+      withSessionState({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        agent: r.agentId ? { id: r.agentId, name: r.agentName ?? '' } : null,
+        runnerId: r.runnerId,
+        taskId: r.taskId,
+        taskTitle: r.taskTitle,
+        lastTurnAt: r.lastTurnAt,
+        createdAt: r.createdAt,
+        archivedAt: r.archivedAt,
+        deletedAt: r.deletedAt,
+        endReason: r.endReason,
+        matchField: r.matchField,
+        // Collapse the whitespace a snippet cut out of a markdown reply is full of, so the palette
+        // row reads as one line instead of an accordion of blank space. This is also why no match
+        // offset is carried: collapsing shifts every position, so clients locate the query inside
+        // the finished snippet instead.
+        snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
+      }),
+    );
   }
 
   async list(
@@ -829,6 +849,8 @@ export class SessionsService {
       costUsd: number;
       error: string | null;
       endReason: string | null;
+      archivedAt: Date | null;
+      deletedAt: Date | null;
       source: string;
       provider: string;
       model: string | null;
@@ -860,6 +882,8 @@ export class SessionsService {
         s.cost_usd        AS "costUsd",
         s.error,
         s.end_reason      AS "endReason",
+        s.archived_at     AS "archivedAt",
+        s.deleted_at      AS "deletedAt",
         s.source, s.provider, s.model,
         s.permission_mode AS "permissionMode",
         s.effort,
@@ -896,35 +920,39 @@ export class SessionsService {
       ORDER BY ${orderBy}
     `);
     // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
-    const sessions = rows.map((r) => ({
-      id: r.id,
-      status: r.status,
-      title: r.title,
-      createdAt: r.createdAt,
-      lastTurnAt: r.lastTurnAt,
-      startedAt: r.startedAt,
-      numTurns: r.numTurns,
-      costUsd: r.costUsd,
-      error: r.error,
-      endReason: r.endReason,
-      source: r.source,
-      provider: r.provider,
-      model: r.model,
-      permissionMode: r.permissionMode,
-      effort: r.effort,
-      lastAssistantText: r.lastAssistantText,
-      lastToolUse: r.lastToolUse,
-      lastUserText: r.lastUserText,
-      mergeStatus: r.mergeStatus,
-      pinnedAt: r.pinnedAt,
-      tags: r.tags,
-      runningBgCount: r.runningBgCount,
-      runningSubagentCount: r.runningSubagentCount,
-      agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
-      assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
-      taskId: r.taskId,
-      taskTitle: r.taskTitle,
-    }));
+    const sessions = rows.map((r) =>
+      withSessionState({
+        id: r.id,
+        status: r.status,
+        title: r.title,
+        createdAt: r.createdAt,
+        lastTurnAt: r.lastTurnAt,
+        startedAt: r.startedAt,
+        numTurns: r.numTurns,
+        costUsd: r.costUsd,
+        error: r.error,
+        endReason: r.endReason,
+        archivedAt: r.archivedAt,
+        deletedAt: r.deletedAt,
+        source: r.source,
+        provider: r.provider,
+        model: r.model,
+        permissionMode: r.permissionMode,
+        effort: r.effort,
+        lastAssistantText: r.lastAssistantText,
+        lastToolUse: r.lastToolUse,
+        lastUserText: r.lastUserText,
+        mergeStatus: r.mergeStatus,
+        pinnedAt: r.pinnedAt,
+        tags: r.tags,
+        runningBgCount: r.runningBgCount,
+        runningSubagentCount: r.runningSubagentCount,
+        agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
+        assignedRunner: r.runnerId ? { id: r.runnerId, name: r.runnerName } : null,
+        taskId: r.taskId,
+        taskTitle: r.taskTitle,
+      }),
+    );
     // A turn blocked on a permission prompt keeps the session RUNNING, so the
     // list can't tell "running" from "waiting for approval" without this count.
     // Only RUNNING sessions can hold a live approval; skip the query otherwise.
@@ -958,7 +986,7 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
-    return { ...rest, tags };
+    return withSessionState({ ...rest, tags });
   }
 
   /**
@@ -1003,11 +1031,15 @@ export class SessionsService {
         id: true,
         title: true,
         status: true,
+        endReason: true,
+        archivedAt: true,
+        deletedAt: true,
         createdAt: true,
         agent: { select: { name: true } },
       },
     });
     if (!session) throw new NotFoundException('shared session not found');
+    const stateful = withSessionState(session);
     const events = await this.prisma.runEvent.findMany({
       where: { sessionId: session.id },
       orderBy: { seq: 'asc' },
@@ -1016,7 +1048,9 @@ export class SessionsService {
     return {
       title: session.title,
       agentName: session.agent?.name ?? null,
-      status: session.status,
+      status: stateful.status,
+      runStatus: stateful.runStatus,
+      sessionState: stateful.sessionState,
       createdAt: session.createdAt,
       events: events.map((e) => ({
         seq: e.seq,

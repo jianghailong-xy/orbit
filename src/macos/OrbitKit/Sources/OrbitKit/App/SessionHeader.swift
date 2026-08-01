@@ -14,10 +14,41 @@ public enum SessionHeader {
         return "Session"
     }
 
-    /// The short state word — a port of web `statusLabel`. Uses only the fields the session-list
-    /// payload carries on the clients (no `runningSubagentCount`), matching `SessionStatusGlyph`.
+    /// The short state word — a port of web `statusLabel`. The control plane's normalized
+    /// `sessionState` is authoritative when present; the legacy run status and end reason remain a
+    /// compatibility fallback for older servers.
     public static func statusWord(for s: Session) -> String {
-        switch s.status {
+        if let state = s.sessionState {
+            switch state {
+            case .queued:
+                return "Queued"
+            case .running:
+                return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
+            case .awaitingInput:
+                if (s.runningBgCount ?? 0) > 0 {
+                    return SessionLine.bgRunningLabel(s.runningBgCount ?? 0)
+                }
+                return "Waiting for your reply"
+            case .dormant:
+                return "Dormant"
+            case .completed:
+                return "Completed"
+            case .failed:
+                return (s.error ?? "").lowercased().contains("offline") ? "Disconnected" : "Failed"
+            case .cancelled:
+                return "Cancelled"
+            case .interrupted:
+                return "Interrupted"
+            case .ended:
+                return "Ended"
+            case .deleted:
+                return "Deleted"
+            case .unknown:
+                break
+            }
+        }
+
+        switch s.effectiveRunStatus {
         case .running:
             return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
         case .awaitingInput:
@@ -31,10 +62,10 @@ public enum SessionHeader {
             let reason = s.endReason ?? ""
             let terminal =
                 reason == "orphaned" || reason == "deleted" || reason == "completed" ||
-                reason == "cancelled" || (s.status == .interrupted && reason.isEmpty)
+                reason == "cancelled" || (s.effectiveRunStatus == .interrupted && reason.isEmpty)
             if !terminal { return "Dormant" }
             return reason == "orphaned" ? "Ended"
-                 : s.status == .interrupted ? "Interrupted"
+                 : s.effectiveRunStatus == .interrupted ? "Interrupted"
                  : "Cancelled"
         case .pending:
             return "Queued"

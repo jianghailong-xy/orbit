@@ -554,7 +554,7 @@ final class ConsoleModel {
     /// at the hardcoded `.default` instead of the mode the session actually uses.
     private func loadContext() async {
         guard let s = try? await api.session(sessionID) else { return }
-        serverStatus = s.status
+        serverStatus = s.effectiveRunStatus
         agentName = s.agent?.name
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so a model pick here can be written back to the agent as its new default.
@@ -569,7 +569,7 @@ final class ConsoleModel {
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
-        if ComposerLogic.isLive(status: s.status) {
+        if ComposerLogic.isLive(status: s.effectiveRunStatus) {
             syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
         }
         // Plan usage rides the GET /runners list (there's no per-runner detail endpoint —
@@ -592,7 +592,7 @@ final class ConsoleModel {
     /// the stream alone can leave an ended session looking live; this lets the composer pick
     /// resume over a doomed POST /turns. No-op on a transient fetch failure (keeps the last value).
     private func refreshServerStatus() async {
-        if let s = try? await api.session(sessionID) { serverStatus = s.status }
+        if let s = try? await api.session(sessionID) { serverStatus = s.effectiveRunStatus }
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -657,7 +657,8 @@ final class ConsoleModel {
         if !composerText.hasPrefix("!") { composerText = "!" + composerText }
     }
 
-    /// `authoritative` is the session's live control-plane status (`app.session(id:)?.status`), read
+    /// `authoritative` is the session's live control-plane run status
+    /// (`app.session(id:)?.effectiveRunStatus`), read
     /// by the view at tap time — the same source the Stop button uses. It decides whether a mid-turn
     /// send is labeled "Queued"; nil until the session record loads, where it falls back to the
     /// stream-reconciled status. See `ComposerLogic.willQueue`.

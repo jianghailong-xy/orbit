@@ -5,10 +5,14 @@ import XCTest
 /// "`statusLabel` · `fmtTime`" subtitle. `statusWord` must agree with web's `statusLabel`.
 final class SessionHeaderTests: XCTestCase {
     private func session(_ status: RunStatus, title: String? = "t",
+                         runStatus: RunStatus? = nil,
+                         sessionState: SessionState? = nil,
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          error: String? = nil, endReason: String? = nil,
                          createdAt: String? = nil, lastTurnAt: String? = nil) -> Session {
-        Session(id: "s", title: title, status: status, agentId: nil, assignedRunnerId: nil,
+        Session(id: "s", title: title, status: status, runStatus: runStatus,
+                sessionState: sessionState,
+                agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, error: error, endReason: endReason,
                 createdAt: createdAt, lastTurnAt: lastTurnAt)
@@ -64,6 +68,45 @@ final class SessionHeaderTests: XCTestCase {
 
     func testStatusWordQueued() {
         XCTAssertEqual(SessionHeader.statusWord(for: session(.pending)), "Queued")
+    }
+
+    func testServerSessionStateOverridesContradictoryLegacyFields() {
+        let cases: [(SessionState, String)] = [
+            (.queued, "Queued"),
+            (.running, "Running"),
+            (.awaitingInput, "Waiting for your reply"),
+            (.dormant, "Dormant"),
+            (.completed, "Completed"),
+            (.failed, "Failed"),
+            (.cancelled, "Cancelled"),
+            (.interrupted, "Interrupted"),
+            (.ended, "Ended"),
+            (.deleted, "Deleted"),
+        ]
+        for (state, expected) in cases {
+            let s = session(.cancelled, sessionState: state, endReason: "completed")
+            XCTAssertEqual(SessionHeader.statusWord(for: s), expected, state.rawValue)
+        }
+    }
+
+    func testServerLiveStatesRetainUsefulDetail() {
+        XCTAssertEqual(SessionHeader.statusWord(for: session(
+            .cancelled, sessionState: .running, pendingApprovals: 1)), "Waiting for approval")
+        XCTAssertEqual(SessionHeader.statusWord(for: session(
+            .cancelled, sessionState: .awaitingInput, runningBgCount: 2)),
+            "2 background processes running")
+        XCTAssertEqual(SessionHeader.statusWord(for: session(
+            .cancelled, sessionState: .failed, error: "runner offline")), "Disconnected")
+    }
+
+    func testRunStatusAliasWinsInLegacyFallback() {
+        let s = session(.succeeded, runStatus: .cancelled, endReason: "idle")
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Dormant")
+    }
+
+    func testUnknownServerSessionStateUsesLegacyFallback() {
+        let s = session(.succeeded, sessionState: .unknown)
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Completed")
     }
 
     // MARK: subtitle — "state · when"

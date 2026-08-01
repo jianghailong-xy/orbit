@@ -132,6 +132,14 @@ import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
+import {
+  isSessionLive,
+  isSessionTerminal,
+  sessionEndedBanner,
+  sessionHoldsRunnerSlot,
+  sessionRunStatusOf,
+  sessionStateOf,
+} from '../lib/sessionState';
 
 interface RunEvent {
   seq: number;
@@ -183,9 +191,6 @@ const fmtBytes = (n: number): string => {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const TERMINAL = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
-// Session statuses that occupy one of the runner's maxConcurrent slots.
-const SLOT_HELD = ['RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'];
 // UI label <-> claude --permission-mode value — the full set claude 2.1.x accepts.
 // Prompting modes (Default/Plan/Accept Edits) work without a TTY because the runner
 // routes permission prompts to the orbit approval panel (the MCP permission_prompt
@@ -502,7 +507,8 @@ const parkedWorkLabel = (s: any): string | null =>
 // blue = working, amber = needs you, grey = queued, default = reply content.
 type SessionLine = { text: string; tone: 'preview' | 'running' | 'approval' | 'queued' };
 const sessionLine = (s: any, live: boolean): SessionLine | null => {
-  if (live && s.status === 'RUNNING') {
+  const state = sessionStateOf(s);
+  if (live && state === 'RUNNING') {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
     // A sub-agent in flight: lastToolUse is already cleared (the async Agent tool_result +
@@ -518,7 +524,7 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && s.status === 'PENDING') return { text: 'Queued', tone: 'queued' };
+  if (live && state === 'QUEUED') return { text: 'Queued', tone: 'queued' };
   // Parked (AWAITING_INPUT) but still doing background work — a sub-agent and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-agent parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -531,61 +537,46 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
 // wording) so the glyph and the header label always agree.
-export function statusLabel(session: any): string {
-  if (session.deletedAt) return 'Deleted';
-  if (session.archivedAt && session.status !== 'FAILED') return 'Completed';
-  const status: string = session.status;
-  if (status === 'RUNNING')
+export function statusLabel(session: any, legacyCompleted = false): string {
+  const state = sessionStateOf(session, { legacyCompleted });
+  if (state === 'DELETED') return 'Deleted';
+  if (state === 'COMPLETED') return 'Completed';
+  if (state === 'RUNNING')
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
-  if (status === 'AWAITING_INPUT') return parkedWorkLabel(session) ?? 'Waiting for your reply';
-  if (status === 'SUCCEEDED') return 'Completed';
-  if (status === 'FAILED') {
+  if (state === 'AWAITING_INPUT') return parkedWorkLabel(session) ?? 'Waiting for your reply';
+  if (state === 'FAILED') {
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
   }
-  if (status === 'CANCELLED' || status === 'INTERRUPTED') {
-    const reason: string = session.endReason ?? '';
-    const terminal =
-      reason === 'orphaned' ||
-      reason === 'deleted' ||
-      reason === 'completed' ||
-      reason === 'cancelled' ||
-      (status === 'INTERRUPTED' && reason === '');
-    if (!terminal) return 'Dormant';
-    return reason === 'orphaned' ? 'Ended' : status === 'INTERRUPTED' ? 'Interrupted' : 'Cancelled';
-  }
-  return 'Queued'; // PENDING
+  if (state === 'CANCELLED') return 'Cancelled';
+  if (state === 'DORMANT') return 'Dormant';
+  if (state === 'INTERRUPTED') return 'Interrupted';
+  if (state === 'ENDED') return 'Ended';
+  return 'Queued';
 }
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
 // neutral terminal (dormant / cancelled / interrupted / disconnected). A runner that
 // went offline is reaped to FAILED with error 'runner offline'; that's a dropped
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
-// `status` collapses every graceful end to CANCELLED, so `endReason` is what tells a
-// benign recycle (idle/task-done/user-ended — resumable, shown as paused) apart from a
-// real cancel/orphan (shown as ⊖).
+// New payloads carry the authoritative user-facing sessionState. The resolver retains a
+// centralized fallback for old servers whose raw status collapses graceful ends to CANCELLED.
 export function StatusIcon({ session, completed }: { session: any; completed?: boolean }) {
-  const status: string = session.status;
+  const state = sessionStateOf(session, { legacyCompleted: completed });
   const fontSize = 16;
-  if (session.deletedAt)
+  if (state === 'DELETED')
     return (
       <Tooltip title="Deleted">
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
-  // In the Completed (archived) view the user has deliberately filed this session, so
-  // archivedAt itself IS the "done by me" signal. Archiving a still-live session ends it,
-  // and its status settles to CANCELLED async — so most filed sessions would otherwise
-  // render as a grey ⊖ "Cancelled", contradicting the very action ("Complete") that put
-  // them here. Show them as completed instead. A genuine FAILED is the one outcome still
-  // worth surfacing post-filing, so it falls through to the real status icon below.
-  if (completed && status !== 'FAILED')
+  if (state === 'COMPLETED')
     return (
       <Tooltip title="Completed">
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
-  if (status === 'RUNNING') {
+  if (state === 'RUNNING') {
     return (session.pendingApprovals ?? 0) > 0 ? (
       <Tooltip title="Waiting for approval">
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
@@ -596,7 +587,7 @@ export function StatusIcon({ session, completed }: { session: any; completed?: b
       </Tooltip>
     );
   }
-  if (status === 'AWAITING_INPUT') {
+  if (state === 'AWAITING_INPUT') {
     const work = parkedWorkLabel(session);
     return work ? (
       <Tooltip title={work}>
@@ -608,13 +599,7 @@ export function StatusIcon({ session, completed }: { session: any; completed?: b
       </Tooltip>
     );
   }
-  if (status === 'SUCCEEDED')
-    return (
-      <Tooltip title="Completed">
-        <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
-      </Tooltip>
-    );
-  if (status === 'FAILED') {
+  if (state === 'FAILED') {
     const err: string = typeof session.error === 'string' ? session.error : '';
     if (err.toLowerCase().includes('offline'))
       return (
@@ -628,85 +613,31 @@ export function StatusIcon({ session, completed }: { session: any; completed?: b
       </Tooltip>
     );
   }
-  if (status === 'CANCELLED' || status === 'INTERRUPTED') {
-    const reason: string = session.endReason ?? '';
-    // Default to dormant, ⊖ only for a positively-terminal end. A benign recycle
-    // (idle/task_done) or a user-end is resumable even though it settles CANCELLED; and a
-    // legacy CANCELLED row with an unknown (null/pre-migration) reason should fail to the
-    // neutral, resumable read — "we don't know why it ended" must not render as the
-    // accusatory "Cancelled". The hard ends keep ⊖: orphaned/deleted/completed, plus a
-    // bare INTERRUPTED (a turn cut short with no graceful-end reason recorded).
-    const terminalCancel =
-      reason === 'orphaned' ||
-      reason === 'deleted' ||
-      reason === 'completed' ||
-      reason === 'cancelled' ||
-      (status === 'INTERRUPTED' && reason === '');
-    if (!terminalCancel)
-      return (
-        <Tooltip title="Dormant — send a message to resume">
-          <PauseCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
-        </Tooltip>
-      );
+  if (state === 'DORMANT')
     return (
-      <Tooltip
-        title={
-          reason === 'orphaned'
-            ? 'Ended — task already finished'
-            : status === 'INTERRUPTED'
-              ? 'Interrupted'
-              : 'Cancelled'
-        }
-      >
+      <Tooltip title="Dormant — send a message to resume">
+        <PauseCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
+      </Tooltip>
+    );
+  if (state === 'CANCELLED' || state === 'INTERRUPTED') {
+    return (
+      <Tooltip title={state === 'INTERRUPTED' ? 'Interrupted' : 'Cancelled'}>
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   }
+  if (state === 'ENDED')
+    return (
+      <Tooltip title="Ended — task already finished">
+        <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
+      </Tooltip>
+    );
   // PENDING — queued, not yet started
   return (
     <Tooltip title="Queued">
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
-}
-
-// Human-facing copy for a terminal session's banner. `status` alone is too coarse — it
-// collapses idle-recycle, user-complete, delete and orphan all into CANCELLED — so the
-// end reason drives the wording, falling back to status for a natural finish / legacy
-// row. The suffix says whether sending a message resumes the session or starts fresh.
-function endedBanner(session: any, resumable: boolean, runnerOnline: boolean): string {
-  const status: string = session.status;
-  const reason: string = session.endReason ?? '';
-  const suffix = resumable
-    ? ' Send a message to resume this session.'
-    : runnerOnline
-      ? ' Sending a message starts a new session.'
-      : ' Runner offline — bring it online to resume.';
-  let base: string;
-  if (status === 'SUCCEEDED') base = 'Session completed.';
-  else if (status === 'FAILED') {
-    // A dropped connection isn't a crash — the suffix already names the offline runner,
-    // so keep the base neutral and avoid repeating "offline".
-    const err: string = typeof session.error === 'string' ? session.error : '';
-    base = err.toLowerCase().includes('offline') ? 'Session interrupted.' : 'Session failed.';
-  } else {
-    // CANCELLED — disambiguate the overloaded status by reason.
-    base =
-      reason === 'idle'
-        ? 'Session ended automatically after a long idle period.'
-        : reason === 'task_done'
-          ? 'The linked task is done, so the session ended automatically.'
-          : reason === 'orphaned'
-            ? 'Session ended (the linked task is done).'
-            : reason === 'deleted'
-              ? 'Session deleted.'
-              : reason === 'completed'
-                ? 'Session completed.'
-                : reason === 'cancelled'
-                  ? 'Session cancelled.'
-                  : 'Session ended.'; // 'ended' or a pre-migration row
-  }
-  return base + suffix;
 }
 
 function SessionStatusCard({ card }: { card: LocalStatusCard }) {
@@ -1120,7 +1051,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     refetchInterval: (q) =>
       q.state.data?.mergeStatus === 'pending' || q.state.data?.commitStatus === 'pending'
         ? 3000
-        : selectedFromList && !TERMINAL.includes(selectedFromList.status)
+        : selectedFromList && isSessionLive(selectedFromList)
           ? 5000
           : false,
   });
@@ -1129,7 +1060,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     const d = detailForSelected as any;
     // A freshly-created session primes only id/runner/agent into this cache; keep the
     // existing "Starting..." placeholder until the real detail/list row supplies title/status.
-    if (!d || typeof d.title !== 'string' || typeof d.status !== 'string') return null;
+    if (
+      !d ||
+      typeof d.title !== 'string' ||
+      (typeof d.sessionState !== 'string' &&
+        typeof d.runStatus !== 'string' &&
+        typeof d.status !== 'string')
+    )
+      return null;
     return {
       ...d,
       runningBgCount: Array.isArray(d.runningBgShells) ? d.runningBgShells.length : (d.runningBgCount ?? 0),
@@ -1170,7 +1108,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.error(`Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`);
     }
   }, [detailForSelected, message]);
-  const live = selected && !selectedDeleted ? !TERMINAL.includes(selected.status) : false;
+  const live = selected && !selectedDeleted ? isSessionLive(selected) : false;
   // An ended session can be revived (--resume claude's context) only if it actually
   // ran and its runner is online — the transcript lives on that machine's disk.
   const resumable = !!selected && !selectedDeleted && !live && !!selected.startedAt && runner.online;
@@ -1398,11 +1336,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // full, a newly created session sits PENDING instead of starting — surface that
   // as an explicit concurrency wait rather than a silent "Starting…".
   const liveSlots = useMemo(
-    () => sessions.filter((s) => SLOT_HELD.includes(s.status)).length,
+    () => sessions.filter(sessionHoldsRunnerSlot).length,
     [sessions],
   );
   const atCapacity = typeof runner.maxConcurrent === 'number' && liveSlots >= runner.maxConcurrent;
-  const queuedForSlot = !!selected && selected.status === 'PENDING' && atCapacity;
+  const queuedForSlot = !!selected && sessionStateOf(selected) === 'QUEUED' && atCapacity;
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -1696,7 +1634,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // that share a status (both AWAITING_INPUT) wouldn't change `runStatus`, so without the
   // selectedId dep this effect wouldn't re-run and idle would stay wrongly false — flipping
   // turnActive on and hiding the worktree bar's "committed"/merge state until a refresh.
-  const runStatus: string | undefined = selected?.status;
+  const runStatus = selected ? sessionRunStatusOf(selected) : undefined;
   useEffect(() => {
     if (runStatus === 'AWAITING_INPUT') setIdle(true);
     else if (runStatus === 'RUNNING') setIdle(false);
@@ -2421,7 +2359,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // still be queued mid-turn. Ending the whole session isn't a button here: it's destructive
   // and the reaper recycles an idle/finished session's slot on its own.
   const showStop =
-    selected?.status === 'RUNNING' && !text.trim() && readyImages.length === 0 && !replyTo;
+    !!selected &&
+    sessionRunStatusOf(selected) === 'RUNNING' &&
+    !text.trim() &&
+    readyImages.length === 0 &&
+    !replyTo;
 
   // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -2795,8 +2737,8 @@ export function AgentView({ runner }: { runner: Runner }) {
     ? `${headAgentName} · New session`
     : selected
       ? headTime
-        ? `${statusLabel(selected)} · ${headTime}`
-        : statusLabel(selected)
+        ? `${statusLabel(selected, effectiveView === 'archived')} · ${headTime}`
+        : statusLabel(selected, effectiveView === 'archived')
       : selectedMissing
         ? 'Session not found'
       : selectedId
@@ -2879,7 +2821,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 {sec.title}
               </div>
               {sec.sessions.map((s) => {
-                const ended = TERMINAL.includes(s.status);
+                const ended = isSessionTerminal(s);
                 const restoreItem = {
                   key: 'restore',
                   icon: <UndoOutlined />,
@@ -3315,7 +3257,10 @@ export function AgentView({ runner }: { runner: Runner }) {
           ) : selectedId ? (
             <div className="agent-sessions" ref={scrollRef}>
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
-              {selected && !selectedDeleted && selected.status === 'PENDING' && events.length === 0 && (
+              {selected &&
+                !selectedDeleted &&
+                sessionStateOf(selected) === 'QUEUED' &&
+                events.length === 0 && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -3384,8 +3329,8 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
               {selected &&
                 !selectedDeleted &&
-                !TERMINAL.includes(selected.status) &&
-                selected.status !== 'PENDING' &&
+                isSessionLive(selected) &&
+                sessionStateOf(selected) !== 'QUEUED' &&
                 events.length === 0 &&
                 !streamingText &&
                 !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
@@ -3420,8 +3365,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                     </div>
                   );
                 })()}
-              {selected && !selectedDeleted && TERMINAL.includes(selected.status) && (
-                <div className="chat-note">{endedBanner(selected, !!resumable, !!runner.online)}</div>
+              {selected && !selectedDeleted && isSessionTerminal(selected) && (
+                <div className="chat-note">
+                  {sessionEndedBanner(selected, !!resumable, !!runner.online)}
+                </div>
               )}
             </div>
           ) : composing ? (

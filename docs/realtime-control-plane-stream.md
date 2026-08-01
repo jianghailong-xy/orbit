@@ -146,8 +146,8 @@ export enum ControlEventType {
 
 `data` 载荷约定(够驱动列表/通知即可,**不塞 transcript 正文**):
 - `SESSION_CREATED` / `SESSION_UPDATED`(决议 Q2:**推完整精简摘要**,客户端无脑 upsert):
-  `{ id, title, status, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。**不做字段级 delta**(避免客户端做易错的字段合并)。
-- `SESSION_ENDED`:`{ status, endReason }`。
+  `{ id, title, status, runStatus, sessionState, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。`runStatus` 是 runner/进程的原始执行态；`sessionState` 是服务端结合归档状态和结束原因后得到的权威用户态；`status` 仅作为 `runStatus` 的兼容别名保留。**不做字段级 delta**(避免客户端做易错的字段合并)。
+- `SESSION_ENDED`:`{ status, runStatus, sessionState, endReason }`。例如运行中的会话被用户 Complete 后，可以是 `runStatus=CANCELLED`、`sessionState=COMPLETED`；客户端展示只读 `sessionState`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
 - `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
@@ -215,7 +215,7 @@ streamForUser(userId: string): Observable<ControlEvent> {
 发的位置:
 
 - **created**:`SessionsService.create`(新建)+ `restore`(从归档/回收站恢复,重回 active)→ `publishSessionCreated`。`streamForUser` 补全完整 summary。
-- **ended**:`SessionsService.archive`(endReason=`completed`)+ `remove`(软删,endReason=`deleted`)→ `publishSessionEnded(id, status, endReason)`。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 status 决定离开 active),而**优雅回收**(endReason `idle`/`ended`,同样落 CANCELLED)仍留在 active(休眠)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
+- **ended**:`SessionsService.archive`(endReason=`completed`)+ `remove`(软删,endReason=`deleted`)→ `publishSessionEnded(id, status, endReason)`，映射时同时给出权威 `sessionState=COMPLETED/DELETED`。**这俩是"列表成员变化但不带 STATUS 事件"的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 `sessionState` 判断用户态，必要时读 `runStatus` 诊断执行结果),而**优雅回收**(endReason `idle`/`ended`,原始运行态同样落 CANCELLED)仍留在 active(`sessionState=DORMANT`)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
 - **evict-on-ended(Q4)**:`session.ended` 映射时顺手 `ownerCache.delete(sessionId)`。
 
 后续按同一机制补的合成信号(都进 `isLifecycleType`,都不持久化):`session_updated`(改名/打标签这类"列表行变了但没有 turn"的场景,复用 `session.updated` 的完整 summary)、`task_changed`(MCP `task_create/update/comment`)、`agent_changed`(MCP `agent_create/update`)。

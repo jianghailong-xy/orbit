@@ -165,6 +165,7 @@ final class WorktreeBarLogicTests: XCTestCase {
         let json = #"""
         {
           "id": "s1", "title": "ignored", "status": "AWAITING_INPUT",
+          "runStatus": "AWAITING_INPUT", "sessionState": "AWAITING_INPUT",
           "branch": "orbit/fix-a1b2c3", "isolationStatus": "worktree",
           "worktreeDirty": false, "mergeStatus": "pending", "mergeTarget": "main",
           "mergeTargets": ["main", "develop"], "branchMerged": false,
@@ -176,6 +177,10 @@ final class WorktreeBarLogicTests: XCTestCase {
         }
         """#
         let d = try JSONDecoder().decode(SessionDetail.self, from: Data(json.utf8))
+        XCTAssertEqual(d.status, .awaitingInput)
+        XCTAssertEqual(d.runStatus, .awaitingInput)
+        XCTAssertEqual(d.effectiveRunStatus, .awaitingInput)
+        XCTAssertEqual(d.sessionState, .awaitingInput)
         XCTAssertEqual(d.branch, "orbit/fix-a1b2c3")
         XCTAssertEqual(d.isolationStatus, "worktree")
         XCTAssertEqual(d.worktreeDirty, false)
@@ -189,6 +194,10 @@ final class WorktreeBarLogicTests: XCTestCase {
     func testSessionDetailToleratesMissingWorktreeFields() throws {
         // A slim payload (older runner / pre-isolation) decodes with everything optional as nil.
         let d = try JSONDecoder().decode(SessionDetail.self, from: Data(#"{"id":"s2"}"#.utf8))
+        XCTAssertNil(d.sessionState)
+        XCTAssertNil(d.status)
+        XCTAssertNil(d.runStatus)
+        XCTAssertNil(d.effectiveRunStatus)
         XCTAssertEqual(d.id, "s2")
         XCTAssertNil(d.branch)
         XCTAssertNil(d.changedFiles)
