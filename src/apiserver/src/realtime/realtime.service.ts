@@ -367,12 +367,20 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // route them by that id and ship an empty sessionId — no owner lookup, nothing to summarize.
     // Most user-keyed events are libraries (tags/lists/providers), but task dependency edits
     // also have no reliable creator-session anchor: an agent may edit a task the web created.
-    // Accept any control event explicitly published on the reserved user key while preserving
-    // the existing session-scoped task.changed path below.
-    if (isUserScopedType(type) || sessionId.startsWith(RealtimeService.USER_SCOPE)) {
-      const owner = sessionId.startsWith(RealtimeService.USER_SCOPE)
-        ? sessionId.slice(RealtimeService.USER_SCOPE.length)
-        : null;
+    // Task/agent change nudges are therefore allowed too; session-derived event families remain
+    // on the normal owner-resolution path below.
+    const userKeyed = sessionId.startsWith(RealtimeService.USER_SCOPE);
+    if (userKeyed) {
+      // Only event families with a self-contained id payload may use the owner key. Session
+      // lifecycle/approval events require DB-derived session context and must never bypass it.
+      if (
+        !isUserScopedType(type) &&
+        type !== ControlEventType.TASK_CHANGED &&
+        type !== ControlEventType.AGENT_CHANGED
+      ) {
+        return null;
+      }
+      const owner = sessionId.slice(RealtimeService.USER_SCOPE.length);
       if (owner !== userId && owner !== RealtimeService.USER_SCOPE_ALL) return null;
       const id = String(ev.payload.id ?? '');
       const data =
@@ -389,6 +397,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         data,
       };
     }
+    // Library events are meaningful only on the reserved owner/global key.
+    if (isUserScopedType(type)) return null;
     const meta = await this.resolveOwner(sessionId);
     if (!meta || meta.ownerId !== userId) return null;
 

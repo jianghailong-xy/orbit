@@ -12,8 +12,8 @@ const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
 const OTHER_TASK = '550e8400-e29b-41d4-a716-446655440002';
 
-function serviceWith(prisma: unknown): TasksService {
-  return new TasksService(prisma as never, {} as never, {} as never);
+function serviceWith(prisma: unknown, realtime: unknown = { publishForUser: () => undefined }): TasksService {
+  return new TasksService(prisma as never, {} as never, realtime as never);
 }
 
 test('batch delete is exposed as POST tasks/batch-delete and forwards the authenticated owner', async () => {
@@ -47,21 +47,25 @@ test('batch delete deduplicates ids and deletes only rows owned by the caller', 
     [OTHER_TASK, OTHER_OWNER_ID],
   ]);
   let deleteWhere: any;
-  const service = serviceWith({
-    task: {
-      deleteMany: async ({ where }: any) => {
-        deleteWhere = where;
-        let count = 0;
-        for (const id of where.id.in) {
-          if (rows.get(id) === where.ownerId) {
-            rows.delete(id);
-            count += 1;
+  const published: unknown[][] = [];
+  const service = serviceWith(
+    {
+      task: {
+        deleteMany: async ({ where }: any) => {
+          deleteWhere = where;
+          let count = 0;
+          for (const id of where.id.in) {
+            if (rows.get(id) === where.ownerId) {
+              rows.delete(id);
+              count += 1;
+            }
           }
-        }
-        return { count };
+          return { count };
+        },
       },
     },
-  });
+    { publishForUser: (...args: unknown[]) => published.push(args) },
+  );
 
   const result = await service.batchDelete(OWNER_ID, [TASK_A, TASK_A, OTHER_TASK, TASK_B]);
 
@@ -73,6 +77,7 @@ test('batch delete deduplicates ids and deletes only rows owned by the caller', 
   assert.equal(rows.has(TASK_A), false);
   assert.equal(rows.has(TASK_B), false);
   assert.equal(rows.get(OTHER_TASK), OTHER_OWNER_ID);
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
 });
 
 test('empty batch delete is a no-op', async () => {
@@ -117,23 +122,28 @@ test('single delete rejects malformed and non-owned ids before deleting', async 
 
 test('single delete hard-deletes an owned task', async () => {
   let deletedId: string | undefined;
-  const service = serviceWith({
-    task: {
-      findFirst: async () => ({
-        id: TASK_A,
-        ownerId: OWNER_ID,
-        status: 'CANCELLED',
-        creatorSessionId: null,
-        comments: [],
-        dependsOn: [],
-      }),
-      delete: async ({ where }: any) => {
-        deletedId = where.id;
-        return { id: where.id };
+  const published: unknown[][] = [];
+  const service = serviceWith(
+    {
+      task: {
+        findFirst: async () => ({
+          id: TASK_A,
+          ownerId: OWNER_ID,
+          status: 'CANCELLED',
+          creatorSessionId: null,
+          comments: [],
+          dependsOn: [],
+        }),
+        delete: async ({ where }: any) => {
+          deletedId = where.id;
+          return { id: where.id };
+        },
       },
     },
-  });
+    { publishForUser: (...args: unknown[]) => published.push(args) },
+  );
 
   assert.deepEqual(await service.remove(OWNER_ID, TASK_A), { ok: true });
   assert.equal(deletedId, TASK_A);
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
 });

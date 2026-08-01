@@ -692,7 +692,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_dependency_remove",
-			"description": "Remove exactly one dependency edge from taskId to dependsOnTaskId, leaving every other edge unchanged. Read task_dependency_graph first when the surrounding DAG is not already known.",
+			"description": "Idempotently remove one dependency edge from taskId to dependsOnTaskId, leaving every other edge unchanged; an already-absent edge is a no-op. Read task_dependency_graph first when the surrounding DAG is not already known.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"dependsOnTaskId": map[string]interface{}{

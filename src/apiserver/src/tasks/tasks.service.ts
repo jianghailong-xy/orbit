@@ -881,12 +881,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       throw e;
     }
-    const updated = await this.get(ownerId, taskId);
     // Agent edits have no guaranteed session to publish through (the target may be web-created),
     // so nudge the owner's control stream directly. The graph query lives under ['task'] and
-    // refreshes together with the detail/list views.
+    // refreshes together with the detail/list views. Publish before response hydration so a rare
+    // post-commit read failure cannot leave other clients stale or make a retry-only conflict.
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
-    return updated;
+    return this.get(ownerId, taskId);
   }
 
   /** Remove a prerequisite edge (no-op if it doesn't exist). */
@@ -897,14 +897,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.lockDependencyGraph(tx, ownerId);
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
     });
-    const updated = await this.get(ownerId, taskId);
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
-    return updated;
+    return this.get(ownerId, taskId);
   }
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
     await this.prisma.task.delete({ where: { id } });
+    // Cascades may remove prerequisite edges from other open DAGs, so invalidate the owner's
+    // task snapshots even though the deleted focus task itself can no longer be fetched.
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
     return { ok: true };
   }
 
@@ -1210,6 +1212,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const result = await this.prisma.task.deleteMany({
       where: { ownerId, id: { in: uniqueIds } },
     });
+    if (result.count > 0) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, uniqueIds[0]);
+    }
     return { deleted: result.count };
   }
 
