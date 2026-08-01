@@ -17,7 +17,6 @@ describe('task filters', () => {
 
   it.each([
     ['done', { status: 'DONE' }],
-    ['cancelled', { status: 'CANCELLED' }],
     ['unassigned', { assignee: null }],
     ['without a runner', { assignee: { runner: null } }],
     ['running', { running: true }],
@@ -29,6 +28,10 @@ describe('task filters', () => {
 
   it('keeps failed tasks available for retry', () => {
     expect(canStartTask({ ...runnable, status: 'FAILED' })).toBe(true);
+  });
+
+  it('keeps cancelled tasks restartable, matching the existing Run action', () => {
+    expect(canStartTask({ ...runnable, status: 'CANCELLED' })).toBe(true);
   });
 
   it('preserves the existing lifecycle filters', () => {

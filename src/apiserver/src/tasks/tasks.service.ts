@@ -37,18 +37,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // this set so it falls through to the resume path, where the trigger delivers its prompt
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
-const RUNNABLE_TASK_STATUSES: TaskStatus[] = [
-  TaskStatus.OPEN,
-  TaskStatus.IN_PROGRESS,
-  TaskStatus.FAILED,
-];
 
 /** Database-side mirror of the task row's Run/Retry visibility predicate. */
 function runnableTaskWhere(scope: Prisma.TaskWhereInput): Prisma.TaskWhereInput {
   return {
     AND: [
       scope,
-      { status: { in: RUNNABLE_TASK_STATUSES } },
+      { status: { not: TaskStatus.DONE } },
       { assignee: { is: { runnerId: { not: null } } } },
       { sessions: { none: { status: { in: SINGLE_RUN_DEDUP } } } },
       {

@@ -403,9 +403,9 @@ export function TaskListView() {
   );
   const allSelected = rows.length > 0 && rows.every((r: any) => selectedIds.has(r.id));
   const someSelected = rows.some((r: any) => selectedIds.has(r.id));
-  // Keep the batch preview aligned with the rows that actually offer Run/Retry.
+  // A task can run only if it has a responsible agent bound to a runner.
   const runnableRows = useMemo(
-    () => selectedRows.filter((r: any) => canStartTask(r)),
+    () => selectedRows.filter((r: any) => r.assignee?.runner?.id),
     [selectedRows],
   );
 
@@ -436,7 +436,7 @@ export function TaskListView() {
 
   const openBatch = () => {
     if (runnableRows.length === 0) {
-      message.warning('None of the selected tasks can be run right now');
+      message.warning('None of the selected tasks have a runnable assignee (or no runner bound)');
       return;
     }
     // Batch concurrency is its own knob (it doesn't touch any runner's cap); default to
@@ -816,7 +816,7 @@ export function TaskListView() {
         <p style={{ marginTop: 0 }}>
           Will run <b>{runnableRows.length}</b> selected task(s)
           {selectedRows.length > runnableRows.length
-            ? `, skipping ${selectedRows.length - runnableRows.length} that cannot run right now`
+            ? `, skipping ${selectedRows.length - runnableRows.length} (no assignee or no runner bound)`
             : ''}
           .
         </p>

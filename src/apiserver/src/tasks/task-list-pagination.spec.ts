@@ -125,7 +125,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
   assert.deepEqual(findManyWhere, {
     AND: [
       { ownerId: OWNER_ID },
-      { status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.FAILED] } },
+      { status: { not: TaskStatus.DONE } },
       { assignee: { is: { runnerId: { not: null } } } },
       { sessions: { none: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } } },
       {

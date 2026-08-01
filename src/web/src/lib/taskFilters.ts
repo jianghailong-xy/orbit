@@ -8,12 +8,10 @@ export interface FilterableTask {
   assignee?: { runner?: { id?: string | null } | null } | null;
 }
 
-const STARTABLE_STATUSES = new Set(['OPEN', 'IN_PROGRESS', 'FAILED']);
-
 /** Keep the default task filter and the row-level Run action on one definition. */
 export function canStartTask(task: FilterableTask): boolean {
   return (
-    STARTABLE_STATUSES.has(task.status) &&
+    task.status !== 'DONE' &&
     !!task.assignee?.runner?.id &&
     !task.running &&
     !task.queued &&
