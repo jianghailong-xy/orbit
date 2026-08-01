@@ -32,7 +32,13 @@ function makeController() {
   const realtime = { publish: () => undefined };
   return {
     calls,
-    controller: new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never),
+    controller: new RunnerApiController(
+      prisma as never,
+      {} as never,
+      realtime as never,
+      {} as never,
+      {} as never,
+    ),
   };
 }
 
