@@ -6,21 +6,35 @@ import { RunnerAgentsController } from './runner-agents.controller';
 // A runner whose calling session passes the shared orchestration authorizer, so every case below
 // exercises the field whitelist rather than the gate.
 const RUNNER = { id: 'r1', ownerId: 'o1' } as never;
-const orchestration = {
-  assert: async (_runner: unknown, sessionId: string | undefined) => sessionId!,
-} as never;
+const ORCHESTRATION_TOKEN = 'signed-session-credential';
 
 /** Builds a controller whose AgentsService just captures the sanitized DTO, plus the
  *  control-plane push each write fires (see `published`). */
 function makeController() {
   const seen: {
+    listOwner?: string;
     create?: Record<string, unknown>;
     update?: Record<string, unknown>;
     published?: [string, string];
-  } = {};
+    authorizations: Array<[unknown, string | undefined, string | undefined]>;
+  } = { authorizations: [] };
   const agents = {
+    list: async (ownerId: string) => {
+      seen.listOwner = ownerId;
+      return ['agent'];
+    },
     create: async (_ownerId: string, dto: Record<string, unknown>) => (seen.create = dto),
     update: async (_ownerId: string, _id: string, dto: Record<string, unknown>) => (seen.update = dto),
+  } as never;
+  const orchestration = {
+    assert: async (
+      runner: unknown,
+      sessionId: string | undefined,
+      credential: string | undefined,
+    ) => {
+      seen.authorizations.push([runner, sessionId, credential]);
+      return sessionId!;
+    },
   } as never;
   const realtime = {
     publishAgentChanged: (sessionId: string, agentId: string) => {
@@ -30,9 +44,16 @@ function makeController() {
   return { controller: new RunnerAgentsController(agents, orchestration, realtime), seen };
 }
 
+test('list forwards the session credential to the orchestration authorizer', async () => {
+  const { controller, seen } = makeController();
+  assert.deepEqual(await controller.listAgents(RUNNER, 's1', ORCHESTRATION_TOKEN), ['agent']);
+  assert.equal(seen.listOwner, 'o1');
+  assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
+});
+
 test('create forwards the agent config fields an orchestrator may set', async () => {
   const { controller, seen } = makeController();
-  await controller.createAgent(RUNNER, 's1', {
+  await controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
     name: 'child',
     env: { FOO: 'bar' },
     permissionMode: 'acceptEdits',
@@ -45,11 +66,12 @@ test('create forwards the agent config fields an orchestrator may set', async ()
   assert.equal(seen.create?.workDir, undefined);
   // Bound to the calling runner by default.
   assert.equal(seen.create?.runnerId, 'r1');
+  assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
 test('update forwards them too', async () => {
   const { controller, seen } = makeController();
-  await controller.updateAgent(RUNNER, 's1', 'a1', {
+  await controller.updateAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
     env: { A: '1' },
     permissionMode: 'plan',
     defaultMergeTarget: 'main',
@@ -61,11 +83,12 @@ test('update forwards them too', async () => {
   assert.equal(seen.update?.runnerId, undefined);
   // The agent list refresh is scoped to the CALLING session, and names the updated agent.
   assert.deepEqual(seen.published, ['s1', 'a1']);
+  assert.deepEqual(seen.authorizations, [[RUNNER, 's1', ORCHESTRATION_TOKEN]]);
 });
 
 test('enableOrchestration and enabled are still dropped (human-only, web UI)', async () => {
   const { controller, seen } = makeController();
-  await controller.createAgent(RUNNER, 's1', {
+  await controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
     name: 'child',
     enableOrchestration: true,
     enabled: false,
@@ -77,7 +100,11 @@ test('enableOrchestration and enabled are still dropped (human-only, web UI)', a
 test('rejects an unknown permissionMode', async () => {
   const { controller } = makeController();
   await assert.rejects(
-    () => controller.createAgent(RUNNER, 's1', { name: 'child', permissionMode: 'yolo' }),
+    () =>
+      controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
+        name: 'child',
+        permissionMode: 'yolo',
+      }),
     BadRequestException,
   );
 });
@@ -85,17 +112,27 @@ test('rejects an unknown permissionMode', async () => {
 test('rejects a non-string env value — the runner decodes env as map[string]string', async () => {
   const { controller } = makeController();
   await assert.rejects(
-    () => controller.createAgent(RUNNER, 's1', { name: 'child', env: { NESTED: { a: 1 } } }),
+    () =>
+      controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
+        name: 'child',
+        env: { NESTED: { a: 1 } },
+      }),
     BadRequestException,
   );
   await assert.rejects(
-    () => controller.createAgent(RUNNER, 's1', { name: 'child', env: ['FOO=bar'] }),
+    () =>
+      controller.createAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, {
+        name: 'child',
+        env: ['FOO=bar'],
+      }),
     BadRequestException,
   );
 });
 
 test('an omitted env leaves the stored map untouched', async () => {
   const { controller, seen } = makeController();
-  await controller.updateAgent(RUNNER, 's1', 'a1', { model: 'claude-opus-5' });
+  await controller.updateAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
+    model: 'claude-opus-5',
+  });
   assert.equal(seen.update?.env, undefined);
 });

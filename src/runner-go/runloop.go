@@ -454,6 +454,7 @@ func runLoop(cfg *RunnerConfig) {
 				AgentID:            r.AgentID,
 				TaskID:             r.TaskID,
 				AllowOrchestration: r.AllowOrchestration,
+				OrchestrationToken: r.OrchestrationToken,
 				Reclaimed:          true,
 				SessionUUID:        r.SessionUUID,
 				RuntimeSessionID:   r.RuntimeSessionID,

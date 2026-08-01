@@ -720,7 +720,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
 		Actor:     "runner_owner",
 	}
-	includeOrchestration := mcpOrchestrationEnabled() && ctx.SessionID != ""
+	includeOrchestration := mcpOrchestrationEnabled() &&
+		ctx.SessionID != "" &&
+		strings.TrimSpace(os.Getenv(envOrchestrationToken)) != ""
 	descriptors := make(map[string]map[string]interface{})
 	for _, d := range toolDescriptors(false, includeOrchestration) {
 		name, _ := d["name"].(string)

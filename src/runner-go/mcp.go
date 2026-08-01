@@ -33,6 +33,7 @@ func cmdMcp() {
 		sessionID:             os.Getenv("ORBIT_SESSION_ID"),
 		agentID:               os.Getenv("ORBIT_AGENT_ID"),
 		taskID:                os.Getenv("ORBIT_TASK_ID"),
+		orchestrationToken:    os.Getenv(envOrchestrationToken),
 		allowPermissionPrompt: mcpPermissionPromptEnabled(),
 		allowOrchestration:    mcpOrchestrationEnabled(),
 	}
@@ -44,6 +45,7 @@ type mcpServer struct {
 	sessionID             string
 	agentID               string // attributes created tasks/comments; "" => server falls back to USER
 	taskID                string // the "current task" default for get/update/comment
+	orchestrationToken    string // signed proof binding orchestration calls to sessionID
 	allowPermissionPrompt bool   // Claude-only live approval bridge
 	allowOrchestration    bool   // L3: expose session_* tools (Agent.enableOrchestration)
 }
@@ -60,6 +62,7 @@ func mcpPermissionPromptEnabled() bool {
 }
 
 const envMCPOrchestration = "ORBIT_ALLOW_ORCHESTRATION"
+const envOrchestrationToken = "ORBIT_ORCHESTRATION_TOKEN"
 
 // mcpOrchestrationEnabled gates the session_* tools. Unlike the permission prompt it defaults
 // OFF: only an agent whose enableOrchestration is set (surfaced via this env) may orchestrate.
@@ -70,6 +73,14 @@ func mcpOrchestrationEnabled() bool {
 	default:
 		return false
 	}
+}
+
+// orchestrationEnabled requires both the agent opt-in and the server-issued proof
+// for this exact runtime. A bare, agent-controlled session id is not authorization.
+func (s *mcpServer) orchestrationEnabled() bool {
+	return s.allowOrchestration &&
+		strings.TrimSpace(s.sessionID) != "" &&
+		strings.TrimSpace(s.orchestrationToken) != ""
 }
 
 // orchestrationEnv renders the ORBIT_ALLOW_ORCHESTRATION value the runner injects at spawn.
@@ -144,7 +155,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt, s.allowOrchestration)}), true
+		return s.ok(req.ID, map[string]interface{}{"tools": toolDescriptors(s.allowPermissionPrompt, s.orchestrationEnabled())}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -318,7 +329,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_create":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		prompt := getString(args, "prompt")
@@ -336,7 +347,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		} else if s.agentID != "" {
 			body["agentId"] = s.agentID
 		}
-		raw, err := s.t.createSession(s.sessionID, body)
+		raw, err := s.t.createSession(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create session failed: "+err.Error(), true)
 		}
@@ -346,44 +357,44 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_list":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
-		raw, err := s.t.listSessions(s.sessionID, sessionListQuery(args))
+		raw, err := s.t.listSessions(s.sessionID, s.orchestrationToken, sessionListQuery(args))
 		if err != nil {
 			return toolResult("list sessions failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_search":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		if getString(args, "query") == "" {
 			return toolResult("query is required", true)
 		}
-		raw, err := s.t.searchSessions(s.sessionID, sessionSearchQuery(args))
+		raw, err := s.t.searchSessions(s.sessionID, s.orchestrationToken, sessionSearchQuery(args))
 		if err != nil {
 			return toolResult("search sessions failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_get":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.getSession(s.sessionID, id)
+		raw, err := s.t.getSession(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_send":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
@@ -391,28 +402,28 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" || msg == "" {
 			return toolResult("sessionId and message are required", true)
 		}
-		raw, err := s.t.sendSessionMessage(s.sessionID, id, map[string]interface{}{"message": msg})
+		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, map[string]interface{}{"message": msg})
 		if err != nil {
 			return toolResult("send message failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_interrupt":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.interruptSession(s.sessionID, id)
+		raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_merge":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
@@ -421,38 +432,38 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "targetBranch")
-		raw, err := s.t.mergeSession(s.sessionID, id, body)
+		raw, err := s.t.mergeSession(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "session_end":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "sessionId")
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.endSession(s.sessionID, id)
+		raw, err := s.t.endSession(s.sessionID, s.orchestrationToken, id)
 		if err != nil {
 			return toolResult("end session failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "agent_list":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
-		raw, err := s.t.listAgents(s.sessionID)
+		raw, err := s.t.listAgents(s.sessionID, s.orchestrationToken)
 		if err != nil {
 			return toolResult("list agents failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "agent_create":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		name := getString(args, "name")
@@ -461,14 +472,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"name": name}
 		copyIfPresent(body, args, "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
-		raw, err := s.t.createAgent(s.sessionID, body)
+		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
 	case "agent_update":
-		if !s.allowOrchestration {
+		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
 		}
 		id := getString(args, "agentId")
@@ -480,7 +491,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
-		raw, err := s.t.updateAgent(s.sessionID, id, body)
+		raw, err := s.t.updateAgent(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("update agent failed: "+err.Error(), true)
 		}
@@ -749,7 +760,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		envProp := map[string]interface{}{
 			"type":                 "object",
 			"additionalProperties": str,
-			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map — read the current one with agent_list and send the full merged set, or existing vars are dropped.",
+			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map. Existing values are intentionally secret and are not returned by agent_list, so provide the complete desired map.",
 		}
 		permissionModeProp := map[string]interface{}{
 			"type":        "string",
@@ -889,7 +900,10 @@ const maxSessionWaitPolls = 200
 // PENDING/RUNNING (reaching AWAITING_INPUT once its first turn produced a result, or a
 // terminal state) — then returns its full row so the caller reads the result inline.
 func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
-	raw, err := waitForSessionRaw(s.t, s.sessionID, created)
+	raw, err := waitForSessionRaw(s.t, cliOrchestrationContext{
+		sessionID: s.sessionID,
+		token:     s.orchestrationToken,
+	}, created)
 	if err != nil {
 		return toolResult("wait: "+err.Error(), true)
 	}
@@ -945,6 +959,8 @@ func getNumber(args map[string]interface{}, key string) int {
 	switch v := args[key].(type) {
 	case float64:
 		return int(v)
+	case int:
+		return v
 	case string:
 		n, _ := strconv.Atoi(v)
 		return n

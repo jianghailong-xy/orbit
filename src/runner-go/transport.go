@@ -24,7 +24,22 @@ type Transport struct {
 }
 
 func NewTransport(baseURL, token string) *Transport {
-	return &Transport{baseURL: baseURL, token: token, client: &http.Client{}}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) == 0 {
+				return nil
+			}
+			first := via[0].URL
+			if req.URL.Scheme != first.Scheme || !strings.EqualFold(req.URL.Host, first.Host) {
+				// Go's default redirect policy protects Authorization across hosts, but it
+				// copies unknown headers. Refuse the redirect before a session credential
+				// in X-Orbit-Session-Token can reach another origin.
+				return fmt.Errorf("refusing cross-origin redirect to %s", req.URL.Redacted())
+			}
+			return nil
+		},
+	}
+	return &Transport{baseURL: baseURL, token: token, client: client}
 }
 
 func (t *Transport) do(ctx context.Context, method, path string, body, out interface{}, timeout time.Duration) error {
@@ -470,97 +485,107 @@ func (t *Transport) createTaskList(title string) (json.RawMessage, error) {
 }
 
 // ── Session orchestration ops for the `orbit mcp` server (L3) ──────────────
-// Owner-scoped, runner-token-authenticated. createSession passes the current session as
-// X-Orbit-Session-Id so the server attributes the child and enforces the orchestration guards.
+// Owner-scoped, runner-token-authenticated. Each call also carries the current session id
+// and its signed credential so the server can prove which claimed process made the request.
 
-func (t *Transport) createSession(parentSessionID string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, orchestratorHeader(parentSessionID))
+	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, orchestratorHeaders(parentSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) listSessions(callerSessionID, query string) (json.RawMessage, error) {
+func (t *Transport) listSessions(callerSessionID, orchestrationToken, query string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) searchSessions(callerSessionID, query string) (json.RawMessage, error) {
+func (t *Transport) searchSessions(callerSessionID, orchestrationToken, query string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) getSession(callerSessionID, id string) (json.RawMessage, error) {
+func (t *Transport) getSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) sendSessionMessage(callerSessionID, id string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) interruptSession(callerSessionID, id string) (json.RawMessage, error) {
+func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) mergeSession(callerSessionID, id string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) endSession(callerSessionID, id string) (json.RawMessage, error) {
+func (t *Transport) endSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, taskOpTimeout, orchestratorHeaders(callerSessionID, orchestrationToken))
 	return out, err
 }
 
 // ── Agent management ops for the `orbit mcp` server (L3 orchestration) ──────
 // Owner-scoped via the runner token; gated server-side on the CALLING session's agent
-// having orchestration enabled (passed as X-Orbit-Session-Id, like session_create).
+// having orchestration enabled (proved by the session id plus its signed credential).
 
-func orchestratorHeader(sessionID string) map[string]string {
-	if sessionID == "" {
+func orchestratorHeaders(sessionID, orchestrationToken string) map[string]string {
+	if sessionID == "" && orchestrationToken == "" {
 		return nil
 	}
-	return map[string]string{"X-Orbit-Session-Id": sessionID}
+	headers := make(map[string]string, 2)
+	if sessionID != "" {
+		headers["X-Orbit-Session-Id"] = sessionID
+	}
+	if orchestrationToken != "" {
+		headers["X-Orbit-Session-Token"] = orchestrationToken
+	}
+	return headers
 }
 
-func (t *Transport) listAgents(sessionID string) (json.RawMessage, error) {
+func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "GET", "/runner/agents", nil, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	err := t.doHeaders(nil, "GET", "/runner/agents", nil, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) createAgent(sessionID string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) createAgent(sessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, "POST", "/runner/agents", body, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	err := t.doHeaders(nil, "POST", "/runner/agents", body, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
 	return out, err
 }
 
-func (t *Transport) updateAgent(sessionID, id string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) updateAgent(sessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, "PATCH", "/runner/agents/"+id, body, &out, taskOpTimeout, orchestratorHeader(sessionID))
+	err := t.doHeaders(nil, "PATCH", "/runner/agents/"+url.PathEscape(id), body, &out, taskOpTimeout, orchestratorHeaders(sessionID, orchestrationToken))
 	return out, err
 }

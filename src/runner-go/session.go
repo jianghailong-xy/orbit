@@ -359,7 +359,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The Orbit CLI discovery instructions are platform instructions and therefore
 	// always join the append prompt rather than replacing the provider's defaults.
 	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(args, a, orbitExe, job.AllowOrchestration)
+	args = appendClaudeAgentInstructionArgs(
+		args,
+		a,
+		orbitExe,
+		job.AllowOrchestration && strings.TrimSpace(job.OrchestrationToken) != "",
+	)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
 	// reaches for them, but those entries are session-local todos that never reach
@@ -430,6 +435,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
+		envOrchestrationToken+"="+job.OrchestrationToken,
 	)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()

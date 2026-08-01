@@ -71,6 +71,7 @@ import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-prov
 import { claudeOauthTokenFor } from '../providers/subscription-token';
 import { runtimeInitSessionId } from './runtime-init';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent } from '../common/system-noise';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
@@ -106,6 +107,7 @@ export class RunnerApiController {
     private readonly queue: QueueService,
     private readonly realtime: RealtimeService,
     private readonly push: PushService,
+    private readonly orchestration: RunnerOrchestrationAuthorizer,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -450,8 +452,12 @@ export class RunnerApiController {
   /** Long-poll: returns one claimed session, or null when nothing is available. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
-  claim(@CurrentRunner() runner: { id: string }): Promise<ClaimedSession | null> {
-    return this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS);
+  async claim(@CurrentRunner() runner: { id: string }): Promise<ClaimedSession | null> {
+    const job = await this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS);
+    if (job?.allowOrchestration) {
+      job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
+    }
+    return job;
   }
 
   /** A restarted runner re-attaches to its still-live sessions and --resumes them. */
@@ -533,6 +539,9 @@ export class RunnerApiController {
         agentId: s.agentId ?? undefined,
         taskId: s.taskId ?? undefined,
         allowOrchestration: agent?.enableOrchestration ?? false,
+        orchestrationToken: agent?.enableOrchestration
+          ? await this.orchestration.issue(runner.id, s.id)
+          : undefined,
       });
     }
     // Release the leases the dead process took to its grave. A restart-time inbox

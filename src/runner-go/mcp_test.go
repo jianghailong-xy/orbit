@@ -274,7 +274,11 @@ func TestSessionSearchQuery(t *testing.T) {
 // An empty query must be rejected locally: server-side it would mean "return recents",
 // which is session_list's job, not a search result.
 func TestSessionSearchRequiresQuery(t *testing.T) {
-	srv := &mcpServer{allowOrchestration: true}
+	srv := &mcpServer{
+		allowOrchestration: true,
+		sessionID:          "s1",
+		orchestrationToken: "session-token",
+	}
 	res := srv.callTool("session_search", map[string]interface{}{})
 	if res["isError"] != true {
 		t.Fatalf("session_search with no query: isError = %#v", res["isError"])
@@ -320,7 +324,7 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	mcp := &mcpServer{allowOrchestration: true, sessionID: "s1", t: NewTransport(srv.URL, "tok")}
+	mcp := &mcpServer{allowOrchestration: true, sessionID: "s1", orchestrationToken: "session-token", t: NewTransport(srv.URL, "tok")}
 	args := map[string]interface{}{
 		"name":               "child",
 		"agentId":            "a1",
@@ -349,6 +353,32 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		if gotBody["defaultMergeTarget"] != "develop" {
 			t.Fatalf("%s body defaultMergeTarget = %#v", name, gotBody["defaultMergeTarget"])
 		}
+	}
+}
+
+func TestMCPAgentUpdateRejectsUnsafeIDBeforeTransport(t *testing.T) {
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{
+		allowOrchestration: true,
+		sessionID:          "s1",
+		orchestrationToken: "session-token",
+		t:                  NewTransport(srv.URL, "tok"),
+	}
+	result := mcp.callTool("agent_update", map[string]interface{}{
+		"agentId": "../sessions",
+		"name":    "unsafe",
+	})
+	if result["isError"] != true {
+		t.Fatalf("agent_update result = %#v, want error", result)
+	}
+	if requestCount != 0 {
+		t.Fatalf("unsafe agent id sent %d requests, want 0", requestCount)
 	}
 }
 

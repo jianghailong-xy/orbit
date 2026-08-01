@@ -36,9 +36,10 @@ export class RunnerSessionsController {
   async createSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') parentSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Body() dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ) {
-    const caller = await this.orchestration.assert(runner, parentSessionId);
+    const caller = await this.orchestration.assert(runner, parentSessionId, orchestrationToken);
     return this.sessions.spawnFromSession(runner.ownerId, caller, dto);
   }
 
@@ -46,10 +47,11 @@ export class RunnerSessionsController {
   async listSessions(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Query('status') status: string | undefined,
     @Query('parentSessionId') parentSessionId: string | undefined,
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     // Ignore an unknown status rather than letting Prisma 500 on a bad enum value.
     const s =
       status && (Object.values(RunStatus) as string[]).includes(status) ? (status as RunStatus) : undefined;
@@ -63,10 +65,11 @@ export class RunnerSessionsController {
   async searchSessions(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Query('q') q: string | undefined,
     @Query('limit') limit: string | undefined,
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.search(runner.ownerId, q, Number(limit) || 20);
   }
 
@@ -74,9 +77,10 @@ export class RunnerSessionsController {
   async getSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.getForOrchestration(runner.ownerId, id);
   }
 
@@ -84,10 +88,11 @@ export class RunnerSessionsController {
   async sendMessage(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
     @Body() dto: { message: string },
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.createTurn(runner.ownerId, id, {
       clientTurnId: randomUUID(),
       content: dto.message,
@@ -98,9 +103,10 @@ export class RunnerSessionsController {
   async interruptSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.interrupt(runner.ownerId, id);
   }
 
@@ -108,10 +114,11 @@ export class RunnerSessionsController {
   async mergeSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
     @Body() dto: { targetBranch?: string },
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch);
   }
 
@@ -119,9 +126,10 @@ export class RunnerSessionsController {
   async endSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
   ) {
-    await this.orchestration.assert(runner, callingSessionId);
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.end(runner.ownerId, id);
   }
 }

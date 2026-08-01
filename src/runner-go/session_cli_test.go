@@ -15,6 +15,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_SESSION_ID", "")
 	t.Setenv(envMCPOrchestration, "")
+	t.Setenv(envOrchestrationToken, "")
 
 	off := buildCLICapabilities("/opt/orbit")
 	if capability := sessionCLIFirstSessionCapability(off.Capabilities); capability != nil {
@@ -28,6 +29,12 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 	}
 
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	withoutCredential := buildCLICapabilities("/opt/orbit")
+	if capability := sessionCLIFirstSessionCapability(withoutCredential.Capabilities); capability != nil {
+		t.Fatalf("session capability exposed without an orchestration token: %#v", capability)
+	}
+
+	t.Setenv(envOrchestrationToken, "session-token")
 	on := buildCLICapabilities("/opt/orbit")
 	descriptors := map[string]map[string]interface{}{}
 	for _, descriptor := range toolDescriptors(false, true) {
@@ -173,6 +180,9 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 				if got := r.Header.Get("X-Orbit-Session-Id"); got != "parent-session" {
 					t.Errorf("X-Orbit-Session-Id = %q, want parent-session", got)
 				}
+				if got := r.Header.Get("X-Orbit-Session-Token"); got != "session-token" {
+					t.Errorf("X-Orbit-Session-Token = %q, want session-token", got)
+				}
 				if got := r.Header.Get("X-Orbit-Agent-Id"); got != "" {
 					t.Errorf("unexpected X-Orbit-Agent-Id = %q", got)
 				}
@@ -200,6 +210,7 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			configureCLITestRunner(t, srv.URL)
 			t.Setenv(envMCPOrchestration, "true")
 			t.Setenv("ORBIT_SESSION_ID", "parent-session")
+			t.Setenv(envOrchestrationToken, "session-token")
 			t.Setenv("ORBIT_AGENT_ID", "current-agent")
 
 			var out bytes.Buffer
@@ -237,9 +248,10 @@ func TestSessionCLICreateUsesMCPAgentRoutingDefaults(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var gotBody map[string]interface{}
-			var gotCaller string
+			var gotCaller, gotCredential string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotCaller = r.Header.Get("X-Orbit-Session-Id")
+				gotCredential = r.Header.Get("X-Orbit-Session-Token")
 				_ = json.NewDecoder(r.Body).Decode(&gotBody)
 				_, _ = w.Write([]byte(`{"id":"child"}`))
 			}))
@@ -247,6 +259,7 @@ func TestSessionCLICreateUsesMCPAgentRoutingDefaults(t *testing.T) {
 			configureCLITestRunner(t, srv.URL)
 			t.Setenv(envMCPOrchestration, "1")
 			t.Setenv("ORBIT_SESSION_ID", "current-session")
+			t.Setenv(envOrchestrationToken, "session-token")
 			t.Setenv("ORBIT_AGENT_ID", "current-agent")
 
 			var out bytes.Buffer
@@ -255,6 +268,9 @@ func TestSessionCLICreateUsesMCPAgentRoutingDefaults(t *testing.T) {
 			}
 			if gotCaller != "current-session" {
 				t.Errorf("caller session header = %q", gotCaller)
+			}
+			if gotCredential != "session-token" {
+				t.Errorf("caller session token header = %q", gotCredential)
 			}
 			if !reflect.DeepEqual(gotBody, tc.wantBody) {
 				t.Errorf("body = %#v, want %#v", gotBody, tc.wantBody)
@@ -269,6 +285,9 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 		requestCount++
 		if got := r.Header.Get("X-Orbit-Session-Id"); got != "caller-session" {
 			t.Errorf("request %d caller header = %q", requestCount, got)
+		}
+		if got := r.Header.Get("X-Orbit-Session-Token"); got != "session-token" {
+			t.Errorf("request %d caller token header = %q", requestCount, got)
 		}
 		w.Header().Set("content-type", "application/json")
 		switch requestCount {
@@ -292,6 +311,7 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
 	t.Setenv("ORBIT_AGENT_ID", "")
 
 	var out bytes.Buffer
@@ -316,6 +336,9 @@ func TestSessionCLIPropagatesForbiddenWithoutDroppingContextOrRetrying(t *testin
 		if got := r.Header.Get("X-Orbit-Session-Id"); got != "caller-session" {
 			t.Errorf("caller header = %q", got)
 		}
+		if got := r.Header.Get("X-Orbit-Session-Token"); got != "session-token" {
+			t.Errorf("caller token header = %q", got)
+		}
 		http.Error(w, "orchestration disabled", http.StatusForbidden)
 	}))
 	defer srv.Close()
@@ -323,6 +346,7 @@ func TestSessionCLIPropagatesForbiddenWithoutDroppingContextOrRetrying(t *testin
 	configureCLITestRunner(t, srv.URL)
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
 
 	var out bytes.Buffer
 	err := cmdSessionCLI([]string{"get", "child-session", "--json"}, strings.NewReader(""), &out)
@@ -369,11 +393,13 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	// A target operation never falls back to the caller's own session. Requiring an
 	// explicit id avoids accidentally interrupting, merging, or ending the caller.
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
+	t.Setenv(envOrchestrationToken, "session-token")
 	for _, action := range []string{"get", "send", "interrupt", "merge", "end"} {
 		args := []string{action, "--json"}
 		if action == "send" {
 			args = append(args, "--message", "hello")
 		}
+		var out bytes.Buffer
 		err := cmdSessionCLI(args, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "session id is required") {
 			t.Errorf("session %s without target error = %v", action, err)
@@ -384,6 +410,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 func TestSessionCLIValidatesArgumentsAndRejectsArbitraryFiles(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
+	t.Setenv(envOrchestrationToken, "session-token")
 
 	tests := []struct {
 		name      string
@@ -412,6 +439,7 @@ func TestSessionCLIValidatesArgumentsAndRejectsArbitraryFiles(t *testing.T) {
 func TestSessionCLIPathIDsCannotEscapeSessionRoute(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "current-session")
+	t.Setenv(envOrchestrationToken, "session-token")
 
 	for _, action := range []string{"get", "send", "interrupt", "merge", "end"} {
 		for _, id := range []string{"../tasks", "..%2Ftasks", "a/b", `a\b`, "a?query"} {

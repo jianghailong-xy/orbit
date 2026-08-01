@@ -6,11 +6,16 @@ import { RunnerSessionsController } from './runner-sessions.controller';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 const CALLER_SESSION_ID = 'caller-session';
+const ORCHESTRATION_TOKEN = 'signed-session-credential';
 const TARGET_SESSION_ID = 'target-session';
 
 type RouteCase = {
   name: string;
-  invoke: (controller: RunnerSessionsController, caller?: string) => Promise<unknown>;
+  invoke: (
+    controller: RunnerSessionsController,
+    caller?: string,
+    credential?: string,
+  ) => Promise<unknown>;
   serviceMethod: string;
 };
 
@@ -19,45 +24,62 @@ type RouteCase = {
 // the target session instead of the agent session making the orchestration request.
 const ROUTES: RouteCase[] = [
   {
+    name: 'create',
+    invoke: (c, caller, credential) =>
+      c.createSession(RUNNER, caller, credential, { prompt: 'do the work' }),
+    serviceMethod: 'spawnFromSession',
+  },
+  {
     name: 'list',
-    invoke: (c, caller) => c.listSessions(RUNNER, caller, undefined, undefined),
+    invoke: (c, caller, credential) =>
+      c.listSessions(RUNNER, caller, credential, undefined, undefined),
     serviceMethod: 'listForOrchestration',
   },
   {
     name: 'search',
-    invoke: (c, caller) => c.searchSessions(RUNNER, caller, 'needle', '5'),
+    invoke: (c, caller, credential) =>
+      c.searchSessions(RUNNER, caller, credential, 'needle', '5'),
     serviceMethod: 'search',
   },
   {
     name: 'get',
-    invoke: (c, caller) => c.getSession(RUNNER, caller, TARGET_SESSION_ID),
+    invoke: (c, caller, credential) =>
+      c.getSession(RUNNER, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'getForOrchestration',
   },
   {
     name: 'send',
-    invoke: (c, caller) => c.sendMessage(RUNNER, caller, TARGET_SESSION_ID, { message: 'continue' }),
+    invoke: (c, caller, credential) =>
+      c.sendMessage(RUNNER, caller, credential, TARGET_SESSION_ID, { message: 'continue' }),
     serviceMethod: 'createTurn',
   },
   {
     name: 'interrupt',
-    invoke: (c, caller) => c.interruptSession(RUNNER, caller, TARGET_SESSION_ID),
+    invoke: (c, caller, credential) =>
+      c.interruptSession(RUNNER, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'interrupt',
   },
   {
     name: 'merge',
-    invoke: (c, caller) => c.mergeSession(RUNNER, caller, TARGET_SESSION_ID, { targetBranch: 'main' }),
+    invoke: (c, caller, credential) =>
+      c.mergeSession(RUNNER, caller, credential, TARGET_SESSION_ID, { targetBranch: 'main' }),
     serviceMethod: 'mergeToMain',
   },
   {
     name: 'end',
-    invoke: (c, caller) => c.endSession(RUNNER, caller, TARGET_SESSION_ID),
+    invoke: (c, caller, credential) =>
+      c.endSession(RUNNER, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'end',
   },
 ];
 
 function makeController(orchestrationEnabled: boolean) {
   const serviceCalls: string[] = [];
-  const authorizationCalls: Array<{ runner: unknown; sessionId: unknown }> = [];
+  const authorizationCalls: Array<{
+    runner: unknown;
+    sessionId: unknown;
+    credential: unknown;
+  }> = [];
   const sessions = new Proxy(
     {},
     {
@@ -68,9 +90,10 @@ function makeController(orchestrationEnabled: boolean) {
     },
   );
   const authorizer = {
-    assert: async (runner: unknown, sessionId: unknown) => {
-      authorizationCalls.push({ runner, sessionId });
+    assert: async (runner: unknown, sessionId: unknown, credential: unknown) => {
+      authorizationCalls.push({ runner, sessionId, credential });
       if (!sessionId) throw new BadRequestException('missing session context');
+      if (!credential) throw new ForbiddenException('missing orchestration credential');
       if (!orchestrationEnabled) {
         throw new ForbiddenException('orchestration is not enabled for this agent');
       }
@@ -94,8 +117,27 @@ test('all session orchestration routes reject a missing calling session before d
     );
     assert.deepEqual(
       authorizationCalls,
-      [{ runner: RUNNER, sessionId: undefined }],
+      [{ runner: RUNNER, sessionId: undefined, credential: undefined }],
       `${route.name} did not authorize the calling context`,
+    );
+    assert.deepEqual(serviceCalls, [], `${route.name} must reject before calling SessionsService`);
+  }
+});
+
+test('all session orchestration routes reject a missing credential before doing work', async () => {
+  for (const route of ROUTES) {
+    const { controller, serviceCalls, authorizationCalls } = makeController(true);
+    await assert.rejects(
+      () => route.invoke(controller, CALLER_SESSION_ID),
+      (error: unknown) =>
+        error instanceof ForbiddenException &&
+        error.message === 'missing orchestration credential',
+      route.name,
+    );
+    assert.deepEqual(
+      authorizationCalls,
+      [{ runner: RUNNER, sessionId: CALLER_SESSION_ID, credential: undefined }],
+      `${route.name} did not authorize the credential`,
     );
     assert.deepEqual(serviceCalls, [], `${route.name} must reject before calling SessionsService`);
   }
@@ -105,7 +147,7 @@ test('all session orchestration routes reject a calling session whose agent is n
   for (const route of ROUTES) {
     const { controller, serviceCalls, authorizationCalls } = makeController(false);
     await assert.rejects(
-      () => route.invoke(controller, CALLER_SESSION_ID),
+      () => route.invoke(controller, CALLER_SESSION_ID, ORCHESTRATION_TOKEN),
       (error: unknown) =>
         error instanceof ForbiddenException &&
         error.message === 'orchestration is not enabled for this agent',
@@ -113,7 +155,13 @@ test('all session orchestration routes reject a calling session whose agent is n
     );
     assert.deepEqual(
       authorizationCalls,
-      [{ runner: RUNNER, sessionId: CALLER_SESSION_ID }],
+      [
+        {
+          runner: RUNNER,
+          sessionId: CALLER_SESSION_ID,
+          credential: ORCHESTRATION_TOKEN,
+        },
+      ],
       `${route.name} did not authorize the calling context`,
     );
     assert.deepEqual(serviceCalls, [], `${route.name} must reject before calling SessionsService`);
@@ -123,11 +171,17 @@ test('all session orchestration routes reject a calling session whose agent is n
 test('all session orchestration routes accept an enabled caller and invoke only their service method', async () => {
   for (const route of ROUTES) {
     const { controller, serviceCalls, authorizationCalls } = makeController(true);
-    const result = await route.invoke(controller, CALLER_SESSION_ID);
+    const result = await route.invoke(controller, CALLER_SESSION_ID, ORCHESTRATION_TOKEN);
     assert.deepEqual(result, { route: route.serviceMethod }, route.name);
     assert.deepEqual(
       authorizationCalls,
-      [{ runner: RUNNER, sessionId: CALLER_SESSION_ID }],
+      [
+        {
+          runner: RUNNER,
+          sessionId: CALLER_SESSION_ID,
+          credential: ORCHESTRATION_TOKEN,
+        },
+      ],
       `${route.name} did not authorize the calling context`,
     );
     assert.deepEqual(serviceCalls, [route.serviceMethod], route.name);

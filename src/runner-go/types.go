@@ -287,6 +287,9 @@ type ClaimedSession struct {
 	// AllowOrchestration mirrors the agent's enableOrchestration; injected as
 	// ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes the session_* tools.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
+	// OrchestrationToken proves this runtime is the calling session. It is injected
+	// into the child process but never exposed through CLI capability output.
+	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Reclaimed marks a session re-attached after a runner restart: the claude
 	// session already exists, so the first spawn must --resume, not --session-id.
 	// Runner-internal (never sent by the server).
@@ -349,6 +352,8 @@ type ReclaimSession struct {
 	TaskID  string `json:"taskId,omitempty"`
 	// AllowOrchestration, cf. ClaimedSession.AllowOrchestration.
 	AllowOrchestration bool `json:"allowOrchestration,omitempty"`
+	// OrchestrationToken, cf. ClaimedSession.OrchestrationToken.
+	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.
 	Branch string `json:"branch,omitempty"`
 	// AutoInitGit, cf. ClaimedSession.AutoInitGit.

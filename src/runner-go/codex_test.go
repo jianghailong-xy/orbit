@@ -35,7 +35,7 @@ func TestNormalizeCodexReasoningEffort(t *testing.T) {
 
 func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	t.Helper()
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_ORCHESTRATION_TOKEN","ORBIT_MCP_PERMISSION_PROMPT"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {

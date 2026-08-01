@@ -93,8 +93,8 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 
 // cmdSessionCLI is the native adapter for the MCP session_* orchestration tools.
 // The environment gate controls discovery and fails closed locally; every request
-// also carries the calling session so the control plane can authorize it against
-// the current runner and Agent.enableOrchestration value.
+// also carries the calling session and its signed credential so the control plane
+// can authorize the exact runtime against the current Agent.enableOrchestration value.
 func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, sessionHelp)
@@ -121,45 +121,54 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
-	callerSessionID, err := requireCLIOrchestrationContext()
+	ctx, err := requireCLIOrchestrationContext()
 	if err != nil {
 		return err
 	}
 
 	switch action {
 	case "create":
-		return cliSessionCreate(args[1:], in, out, callerSessionID)
+		return cliSessionCreate(args[1:], in, out, ctx)
 	case "list":
-		return cliSessionList(args[1:], out, callerSessionID)
+		return cliSessionList(args[1:], out, ctx)
 	case "search":
-		return cliSessionSearch(args[1:], out, callerSessionID)
+		return cliSessionSearch(args[1:], out, ctx)
 	case "get":
-		return cliSessionGet(args[1:], out, callerSessionID)
+		return cliSessionGet(args[1:], out, ctx)
 	case "send":
-		return cliSessionSend(args[1:], in, out, callerSessionID)
+		return cliSessionSend(args[1:], in, out, ctx)
 	case "interrupt":
-		return cliSessionInterrupt(args[1:], out, callerSessionID)
+		return cliSessionInterrupt(args[1:], out, ctx)
 	case "merge":
-		return cliSessionMerge(args[1:], out, callerSessionID)
+		return cliSessionMerge(args[1:], out, ctx)
 	case "end":
-		return cliSessionEnd(args[1:], out, callerSessionID)
+		return cliSessionEnd(args[1:], out, ctx)
 	default:
 		panic("unreachable session command")
 	}
 }
 
-func requireCLIOrchestrationContext() (string, error) {
+type cliOrchestrationContext struct {
+	sessionID string
+	token     string
+}
+
+func requireCLIOrchestrationContext() (cliOrchestrationContext, error) {
 	if !mcpOrchestrationEnabled() {
-		return "", fmt.Errorf(orchestrationOffMsg)
+		return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
 	}
 	id := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if id == "" {
-		return "", fmt.Errorf("session orchestration requires ORBIT_SESSION_ID context")
+		return cliOrchestrationContext{}, fmt.Errorf("session orchestration requires ORBIT_SESSION_ID context")
 	}
 	if err := validatePathSegmentID(id); err != nil {
-		return "", fmt.Errorf("ORBIT_SESSION_ID %w", err)
+		return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)
 	}
-	return id, nil
+	token := strings.TrimSpace(os.Getenv(envOrchestrationToken))
+	if token == "" {
+		return cliOrchestrationContext{}, fmt.Errorf("session orchestration requires %s context", envOrchestrationToken)
+	}
+	return cliOrchestrationContext{sessionID: id, token: token}, nil
 }
 
 func resolveSessionCLIId(leading string, trailing []string) (string, error) {
@@ -195,7 +204,7 @@ func validateSessionCLIStatus(status string) error {
 	}
 }
 
-func cliSessionCreate(args []string, in io.Reader, out io.Writer, callerSessionID string) error {
+func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit session create")
 	prompt := fs.String("prompt", "", "session prompt")
 	promptFile := fs.String("prompt-file", "", "read prompt from stdin (-)")
@@ -251,12 +260,12 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, callerSessionI
 	if err != nil {
 		return err
 	}
-	raw, err := t.createSession(callerSessionID, body)
+	raw, err := t.createSession(ctx.sessionID, ctx.token, body)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	if *wait {
-		raw, err = waitForSessionRaw(t, callerSessionID, raw)
+		raw, err = waitForSessionRaw(t, ctx, raw)
 		if err != nil {
 			return fmt.Errorf("wait for session: %w", err)
 		}
@@ -264,7 +273,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, callerSessionI
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionList(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionList(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit session list")
 	status := fs.String("status", "", "session status")
 	parentSessionID := fs.String("parent-session-id", "", "parent session id")
@@ -297,14 +306,14 @@ func cliSessionList(args []string, out io.Writer, callerSessionID string) error 
 	if err != nil {
 		return err
 	}
-	raw, err := t.listSessions(callerSessionID, sessionListQuery(queryArgs))
+	raw, err := t.listSessions(ctx.sessionID, ctx.token, sessionListQuery(queryArgs))
 	if err != nil {
 		return fmt.Errorf("list sessions: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionSearch(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionSearch(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	fs := newCLIFlagSet("orbit session search")
 	query := fs.String("query", "", "search query")
 	limit := fs.Int("limit", 0, "maximum hits")
@@ -329,14 +338,14 @@ func cliSessionSearch(args []string, out io.Writer, callerSessionID string) erro
 	if err != nil {
 		return err
 	}
-	raw, err := t.searchSessions(callerSessionID, sessionSearchQuery(queryArgs))
+	raw, err := t.searchSessions(ctx.sessionID, ctx.token, sessionSearchQuery(queryArgs))
 	if err != nil {
 		return fmt.Errorf("search sessions: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionGet(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session get")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
@@ -351,14 +360,14 @@ func cliSessionGet(args []string, out io.Writer, callerSessionID string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.getSession(callerSessionID, id)
+	raw, err := t.getSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionSend(args []string, in io.Reader, out io.Writer, callerSessionID string) error {
+func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session send")
 	message := fs.String("message", "", "follow-up message")
@@ -382,14 +391,14 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, callerSessionID 
 	if err != nil {
 		return err
 	}
-	raw, err := t.sendSessionMessage(callerSessionID, id, map[string]interface{}{"message": messageText})
+	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, map[string]interface{}{"message": messageText})
 	if err != nil {
 		return fmt.Errorf("send session message: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionInterrupt(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, jsonOut, err := parseSessionTargetArgs("orbit session interrupt", args)
 	if err != nil {
 		return err
@@ -398,14 +407,14 @@ func cliSessionInterrupt(args []string, out io.Writer, callerSessionID string) e
 	if err != nil {
 		return err
 	}
-	raw, err := t.interruptSession(callerSessionID, id)
+	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, jsonOut)
 }
 
-func cliSessionMerge(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit session merge")
 	targetBranch := fs.String("target-branch", "", "merge target branch")
@@ -428,14 +437,14 @@ func cliSessionMerge(args []string, out io.Writer, callerSessionID string) error
 	if err != nil {
 		return err
 	}
-	raw, err := t.mergeSession(callerSessionID, id, body)
+	raw, err := t.mergeSession(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("merge session: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionEnd(args []string, out io.Writer, callerSessionID string) error {
+func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) error {
 	id, jsonOut, err := parseSessionTargetArgs("orbit session end", args)
 	if err != nil {
 		return err
@@ -444,7 +453,7 @@ func cliSessionEnd(args []string, out io.Writer, callerSessionID string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.endSession(callerSessionID, id)
+	raw, err := t.endSession(ctx.sessionID, ctx.token, id)
 	if err != nil {
 		return fmt.Errorf("end session: %w", err)
 	}
@@ -467,7 +476,7 @@ func parseSessionTargetArgs(name string, args []string) (string, bool, error) {
 
 // waitForSessionRaw mirrors MCP session_create(wait): poll until the first turn
 // settles, then return the full sanitized orchestration detail.
-func waitForSessionRaw(t *Transport, callerSessionID string, created json.RawMessage) (json.RawMessage, error) {
+func waitForSessionRaw(t *Transport, ctx cliOrchestrationContext, created json.RawMessage) (json.RawMessage, error) {
 	var handle struct {
 		ID string `json:"id"`
 	}
@@ -476,7 +485,7 @@ func waitForSessionRaw(t *Transport, callerSessionID string, created json.RawMes
 	}
 	for i := 0; i < maxSessionWaitPolls; i++ {
 		time.Sleep(sessionWaitInterval)
-		raw, err := t.getSession(callerSessionID, handle.ID)
+		raw, err := t.getSession(ctx.sessionID, ctx.token, handle.ID)
 		if err != nil {
 			return nil, fmt.Errorf("get session failed: %w", err)
 		}
@@ -487,7 +496,7 @@ func waitForSessionRaw(t *Transport, callerSessionID string, created json.RawMes
 			return raw, nil
 		}
 	}
-	raw, err := t.getSession(callerSessionID, handle.ID)
+	raw, err := t.getSession(ctx.sessionID, ctx.token, handle.ID)
 	if err != nil {
 		return nil, fmt.Errorf("timed out; get session failed: %w", err)
 	}
