@@ -119,6 +119,25 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertFalse(ComposerLogic.shouldResume(status: .awaitingInput))
     }
 
+    func testCompletedResumeNoticeHonorsAuthoritativeCapability() {
+        let allowed = SessionCapabilities(canSend: true, canResume: true,
+                                          canArchive: false, canRestore: true)
+        let blocked = SessionCapabilities(canSend: false, canResume: false,
+                                          resumeBlockedReason: .missingContext,
+                                          canArchive: false, canRestore: true)
+
+        XCTAssertTrue(ComposerLogic.showsCompletedResumeNotice(
+            filingState: .archived, capabilities: allowed))
+        XCTAssertTrue(ComposerLogic.showsCompletedResumeNotice(
+            filingState: .archived, capabilities: nil))
+        XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
+            filingState: .archived, capabilities: blocked))
+        XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
+            filingState: .open, capabilities: allowed))
+        XCTAssertFalse(ComposerLogic.showsCompletedResumeNotice(
+            filingState: .trash, capabilities: allowed))
+    }
+
     func testCapabilitiesAuthoritativelyGateSendAndResume() {
         let resumable = SessionCapabilities(canSend: true, canResume: true,
                                             canArchive: true, canRestore: false)

@@ -37,6 +37,17 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertTrue(SessionFilter.forAgent([s], agentID: "a1").isEmpty)
     }
 
+    func testRemovingAuthoritativelyMissingSessionIsScopedAndIdempotent() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(#"[{"id":"gone","status":"SUCCEEDED"},{"id":"kept","status":"FAILED"}]"#.utf8)
+        )
+
+        let once = SessionFilter.removing("gone", from: sessions)
+        XCTAssertEqual(once.map(\.id), ["kept"])
+        XCTAssertEqual(SessionFilter.removing("gone", from: once), once)
+    }
+
     /// The removed System list must not strand rows from an older server/cache. Legacy
     /// `source=system` rows remain visible in Active alongside every other active session.
     func testForAgentViewKeepsLegacySystemSessionsOnActive() throws {

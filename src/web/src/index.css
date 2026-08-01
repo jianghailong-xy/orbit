@@ -2832,7 +2832,7 @@ body {
     --row-bg: var(--bg-hover);
   }
 }
-/* Completed / trash rows are managed, not opened — no pointer affordance. */
+/* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
 }

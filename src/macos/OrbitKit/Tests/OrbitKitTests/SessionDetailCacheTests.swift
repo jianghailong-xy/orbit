@@ -77,6 +77,19 @@ final class SessionDetailCacheTests: XCTestCase {
         XCTAssertFalse(cache.needsExactRefresh(archived.id, preferring: [archived], []))
     }
 
+    func testFocusedOpenSnapshotBecomesFallbackAndRefreshCandidateAfterListRemoval() {
+        let focused = session(
+            "focused-open", filing: .open,
+            capabilities: SessionCapabilities(canSend: true, canResume: false,
+                                              canArchive: true, canRestore: false))
+        var cache = SessionDetailCache()
+
+        cache.store(focused) // AppModel.syncConsoleFocus seeds the loaded snapshot.
+        XCTAssertFalse(cache.needsExactRefresh(focused.id, preferring: [focused], []))
+        XCTAssertTrue(cache.needsExactRefresh(focused.id, preferring: [], []))
+        XCTAssertEqual(cache.resolve(focused.id, preferring: [])?.effectiveFilingState, .open)
+    }
+
     func testRemoveAndRemoveAllDropOnlyDetailFallbacks() {
         let capabilities = SessionCapabilities(canSend: false, canResume: false,
                                                resumeBlockedReason: .trashed,

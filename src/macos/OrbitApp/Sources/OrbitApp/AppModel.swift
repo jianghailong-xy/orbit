@@ -536,6 +536,15 @@ final class AppModel {
     /// by depending on a view unmounting.
     func syncConsoleFocus() {
         let id = focusedConsoleSessionID
+        // Every focused console needs an exact-detail fallback, not only cold deep links. If an
+        // Open row is filed or purged on another client, the next list refresh removes it; retaining
+        // this last loaded snapshot makes `needsExactRefresh` detect that absence and GET the new
+        // filing state (or authoritative 404) instead of silently losing all session context.
+        if let id,
+           let loaded = sessions.first(where: { $0.id == id })
+                ?? agents?.agentSessions.first(where: { $0.id == id }) {
+            sessionDetails.store(loaded)
+        }
         consoleRegistry?.focus(id, agentID: id.flatMap { agentID(for: $0) })
     }
 
@@ -796,6 +805,11 @@ final class AppModel {
     /// Remove every local fallback for an authoritative detail 404, then close the ghost console.
     private func discardMissingSession(_ id: String) {
         sessionDetails.invalidateNotFound(id)
+        agents?.discardSession(id)
+        sessions = SessionFilter.removing(id, from: sessions)
+        if let lastSnapshot { self.lastSnapshot = SessionFilter.removing(id, from: lastSnapshot) }
+        menuSummary = MenuBar.summary(from: sessions)
+        updateDockBadge(menuSummary.badge)
         consoleRegistry?.discardMissing(id)
         dropIfOpen(id)
     }

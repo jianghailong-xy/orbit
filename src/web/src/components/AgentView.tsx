@@ -144,6 +144,7 @@ import {
 import { hasOutlivingSessionWork, isSessionTurnActive } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import {
+  isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
   sessionCapabilityOf,
   sessionResumeBlockedMessage,
@@ -1986,8 +1987,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       message.info('This message is already being processed and cannot be withdrawn');
     }
   };
-  // Filing actions are reversible. Moving an ended session or sending one to Trash happens
-  // immediately with Undo; ending a live run first gets an explicit confirmation below.
+  // Filing actions happen immediately and offer Undo; Complete also ends a live run.
   const restoreMut = useMutation({
     mutationFn: (id: string) => restoreSession(id),
     onSuccess: (_d, id) => {
@@ -2087,13 +2087,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
       if (!(e.metaKey || e.ctrlKey)) return;
-      if (view !== 'active' || !selected || selectedFilingState !== 'OPEN') return;
+      if (
+        !selected ||
+        !isCompleteShortcutEligible(selectedSession, selectedFilingState)
+      )
+        return;
       e.preventDefault();
+      setHeaderMenuOpen(false);
       requestComplete(selected);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [view, selected, selectedFilingState, requestComplete]);
+  }, [selected, selectedSession, selectedFilingState, requestComplete]);
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
@@ -3394,7 +3399,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                                   icon: <CheckOutlined />,
                                   label: 'Complete',
                                   disabled: !selectedCanArchive,
-                                  onClick: () => requestComplete(selected),
+                                  onClick: () => {
+                                    setHeaderMenuOpen(false);
+                                    requestComplete(selected);
+                                  },
                                 },
                                 { type: 'divider' as const },
                               ]

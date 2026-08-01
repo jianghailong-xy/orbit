@@ -65,8 +65,12 @@ struct ComposerView: View {
         console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
     }
 
-    private var isCompletedSession: Bool {
-        app.session(id: console.sessionID)?.effectiveFilingState == .archived
+    private var showsCompletedResumeNotice: Bool {
+        guard let session = app.session(id: console.sessionID) else { return false }
+        return ComposerLogic.showsCompletedResumeNotice(
+            filingState: session.effectiveFilingState,
+            capabilities: session.capabilities
+        )
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
@@ -91,7 +95,7 @@ struct ComposerView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            if isCompletedSession {
+            if showsCompletedResumeNotice {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
                     Text("Completed · Sending a message will resume this session in Open.")

@@ -2629,10 +2629,18 @@ export class SessionsService {
 
   /** Bring an Archived or soft-deleted session back to Open. */
   async restore(ownerId: string, id: string) {
-    await this.get(ownerId, id); // ownership check (404s otherwise)
-    await this.prisma.session.update({
-      where: { id },
-      data: { archivedAt: null, deletedAt: null },
+    await this.prisma.$transaction(async (tx) => {
+      // Serialize with purge: if restore wins, purge re-reads an Open row and refuses;
+      // if purge wins, this lock query sees no row and restore returns 404.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      await tx.session.update({
+        where: { id },
+        data: { archivedAt: null, deletedAt: null },
+      });
     });
     // Back in Open — same signal as a brand-new session (the control plane's
     // session.created carries a full summary either way).
@@ -2663,15 +2671,20 @@ export class SessionsService {
    * created are detached (Task.creatorSessionId → null), not deleted.
    */
   async purge(ownerId: string, id: string) {
-    const session = await this.prisma.session.findFirst({
-      where: { id, ownerId },
-      select: { id: true, deletedAt: true },
+    await this.prisma.$transaction(async (tx) => {
+      // The Trash guard and irreversible delete must share the same row lock as restore.
+      // A pre-lock deletedAt read could otherwise delete a session restored in between.
+      const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null }>>`
+        SELECT id, "deleted_at" AS "deletedAt" FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      const session = locked[0];
+      if (!session) throw new NotFoundException('session not found');
+      if (!session.deletedAt) {
+        throw new BadRequestException('session must be in Trash before it can be permanently deleted');
+      }
+      await tx.session.delete({ where: { id: session.id } });
     });
-    if (!session) throw new NotFoundException('session not found');
-    if (!session.deletedAt) {
-      throw new BadRequestException('session must be in Trash before it can be permanently deleted');
-    }
-    await this.prisma.session.delete({ where: { id: session.id } });
     return { ok: true };
   }
 }

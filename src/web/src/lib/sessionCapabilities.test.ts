@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
   sessionCapabilityOf,
   sessionResumeBlockedMessage,
@@ -7,6 +8,23 @@ import {
   sessionSendBlockedMessage,
   sessionSendDispositionOf,
 } from './sessionCapabilities';
+
+describe('isCompleteShortcutEligible', () => {
+  it('allows an Open detail selected from a non-Open surrounding scope', () => {
+    expect(
+      isCompleteShortcutEligible({ capabilities: { canArchive: true } }, 'OPEN'),
+    ).toBe(true);
+  });
+
+  it('rejects a Completed detail and an explicit server denial', () => {
+    expect(
+      isCompleteShortcutEligible({ capabilities: { canArchive: true } }, 'ARCHIVED'),
+    ).toBe(false);
+    expect(
+      isCompleteShortcutEligible({ capabilities: { canArchive: false } }, 'OPEN'),
+    ).toBe(false);
+  });
+});
 
 describe('sessionCapabilityOf', () => {
   it('prefers an explicit server boolean over the legacy local fallback', () => {

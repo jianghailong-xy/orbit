@@ -107,6 +107,12 @@ final class AgentsModel {
         agentSessions.insert(session, at: 0)
     }
 
+    /// Remove a session after its exact detail endpoint returned 404. The current Completed / Trash
+    /// list may otherwise retain a tappable ghost row until its next successful polling response.
+    func discardSession(_ id: String) {
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
+    }
+
     /// Load one agent's sessions for a view. The list endpoint filters by view only, so narrow to
     /// the agent client-side (the payload nests `agent.id`), mirroring the web agent console.
     ///

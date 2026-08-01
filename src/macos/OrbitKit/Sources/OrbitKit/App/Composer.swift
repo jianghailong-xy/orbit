@@ -15,6 +15,14 @@ public enum ComposerLogic {
     /// anything larger. Very large content belongs in an uploaded file, not a prompt.
     public static let maxPromptChars = 50_000
 
+    /// Whether a Completed-session composer should explain that sending will return it to Open.
+    /// A missing capability keeps the legacy optimistic presentation, but an explicit server
+    /// denial is authoritative and must leave only the more useful blocked-reason copy visible.
+    public static func showsCompletedResumeNotice(filingState: SessionFilingState,
+                                                  capabilities: SessionCapabilities?) -> Bool {
+        filingState == .archived && capabilities?.canResume != false
+    }
+
     /// Map session status → send availability. Terminal statuses are `sendNow` because a send
     /// revives them via `--resume` (full context preserved).
     public static func availability(status: RunStatus) -> SendAvailability {

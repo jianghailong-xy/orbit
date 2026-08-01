@@ -2,6 +2,7 @@ import type { SessionCapabilities, SessionResumeBlockedReason } from '@orbit/sha
 import {
   isSessionLive,
   sessionFilingStateOf,
+  type SessionFilingState,
   type SessionStateSource,
 } from './sessionState';
 
@@ -29,6 +30,18 @@ export function sessionCapabilityOf(
 ): boolean {
   const value = session.capabilities?.[capability];
   return typeof value === 'boolean' ? value : fallback;
+}
+
+/** The selection itself owns Complete eligibility; its surrounding list scope does not. */
+export function isCompleteShortcutEligible(
+  session: SessionCapabilitySource | null | undefined,
+  filingState: SessionFilingState | null | undefined,
+): boolean {
+  return (
+    !!session &&
+    filingState === 'OPEN' &&
+    sessionCapabilityOf(session, 'canArchive', true)
+  );
 }
 
 export function sessionResumeBlockedReasonOf(

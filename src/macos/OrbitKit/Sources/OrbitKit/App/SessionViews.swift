@@ -33,6 +33,12 @@ public enum SessionCompletionPresentation {
 }
 
 public enum SessionFilter {
+    /// Remove an authoritatively missing record from a loaded list. Idempotent so duplicate 404s
+    /// from a control nudge and focused-detail poll cannot resurrect or otherwise disturb rows.
+    public static func removing(_ id: String, from sessions: [Session]) -> [Session] {
+        sessions.filter { $0.id != id }
+    }
+
     /// Sessions belonging to one agent. The list payload nests the agent as `agent.id` (the flat
     /// `agentId` is absent there), so filter on that. Server order (lastTurnAt desc) is preserved.
     public static func forAgent(_ sessions: [Session], agentID: String) -> [Session] {
