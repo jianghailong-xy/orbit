@@ -37,6 +37,28 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // this set so it falls through to the resume path, where the trigger delivers its prompt
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+const RUNNABLE_TASK_STATUSES: TaskStatus[] = [
+  TaskStatus.OPEN,
+  TaskStatus.IN_PROGRESS,
+  TaskStatus.FAILED,
+];
+
+/** Database-side mirror of the task row's Run/Retry visibility predicate. */
+function runnableTaskWhere(scope: Prisma.TaskWhereInput): Prisma.TaskWhereInput {
+  return {
+    AND: [
+      scope,
+      { status: { in: RUNNABLE_TASK_STATUSES } },
+      { assignee: { is: { runnerId: { not: null } } } },
+      { sessions: { none: { status: { in: SINGLE_RUN_DEDUP } } } },
+      {
+        dependsOn: {
+          none: { dependsOnTask: { status: { not: TaskStatus.DONE } } },
+        },
+      },
+    ],
+  };
+}
 
 // How often the auto-run reconciler re-checks for ready-but-unstarted tasks (see
 // reconcileReadyTasks). This is only a backstop — the instant path is triggerDependents,
@@ -389,9 +411,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
 
     const status = query.status?.trim().toUpperCase();
+    const runnableOnly = status === 'RUNNABLE';
     let statuses: TaskStatus[] | undefined;
     if (status === 'ONGOING') statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS];
-    else if (status) {
+    else if (status && !runnableOnly) {
       if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
         throw new BadRequestException('invalid task status');
       }
@@ -409,7 +432,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       scopedWhere.assigneeId = query.assigneeId;
     }
 
-    const filteredWhere: Prisma.TaskWhereInput = { ...scopedWhere };
+    const filteredWhere: Prisma.TaskWhereInput = runnableOnly
+      ? runnableTaskWhere(scopedWhere)
+      : { ...scopedWhere };
     if (statuses) filteredWhere.status = { in: statuses };
     const search = query.q?.trim();
     if (search) filteredWhere.title = { contains: search.slice(0, 200), mode: 'insensitive' };
@@ -429,7 +454,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       : filteredWhere;
 
-    const [rows, filteredTotal, statusGroups, running, queued] = await Promise.all([
+    const [rows, filteredTotal, statusGroups, running, queued, runnable] = await Promise.all([
       this.prisma.task.findMany({
         where: pageWhere,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -463,6 +488,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
         },
       }),
+      this.prisma.task.count({ where: runnableTaskWhere(scopedWhere) }),
     ]);
 
     const hasMore = rows.length > limit;
@@ -485,6 +511,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       cancelled: byStatus.get(TaskStatus.CANCELLED) ?? 0,
       running,
       queued,
+      runnable,
     };
 
     return {

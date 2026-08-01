@@ -7,6 +7,7 @@ export interface TaskCounts {
   cancelled: number;
   running: number;
   queued: number;
+  runnable: number;
 }
 
 export interface TaskPage<T = any> {

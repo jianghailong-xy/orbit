@@ -30,17 +30,9 @@ import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
+import { canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from '../lib/taskFilters';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
-
-// Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED).
-const matchesFilter = (status: string, f: string): boolean => {
-  if (f === 'ONGOING') return ['OPEN', 'IN_PROGRESS'].includes(status);
-  if (f === 'FAILED') return status === 'FAILED';
-  if (f === 'DONE') return status === 'DONE';
-  if (f === 'CANCELLED') return status === 'CANCELLED';
-  return true;
-};
 
 // Rank for the "状态" sort: 运行中 (executing now) ranks first, then 排队中 (waiting), then by
 // lifecycle, so ascending groups 运行中 above 排队中 above 已完成/已取消 (descending flips it).
@@ -103,8 +95,8 @@ export function TaskListView() {
       },
       { replace: true },
     );
-  const filter = searchParams.get('filter') ?? 'ALL';
-  const setFilter = (v: string) => setParam('filter', v, 'ALL');
+  const filter = searchParams.get('filter') ?? DEFAULT_TASK_FILTER;
+  const setFilter = (v: string) => setParam('filter', v, DEFAULT_TASK_FILTER);
   // Free-text filter over the visible rows' titles; lives in the URL (?q=…) like the rest
   // of the view state so it survives a refresh and is shareable.
   const query = searchParams.get('q') ?? '';
@@ -295,12 +287,12 @@ export function TaskListView() {
     () =>
       taskData
         .filter((t: any) => (isUnlisted ? !t.listId : true))
-        .filter((t: any) => matchesFilter(t.status, filter)),
+        .filter((t: any) => matchesTaskFilter(t, filter)),
     [taskData, filter, isUnlisted],
   );
 
   const listRows = useMemo(
-    () => (listQ.data?.tasks ?? []).filter((t: any) => matchesFilter(t.status, filter)),
+    () => (listQ.data?.tasks ?? []).filter((t: any) => matchesTaskFilter(t, filter)),
     [listQ.data, filter],
   );
 
@@ -337,6 +329,7 @@ export function TaskListView() {
       cancelled: 0,
       running: 0,
       queued: 0,
+      runnable: 0,
     };
     for (const t of baseRows) {
       if (t.status === 'DONE') c.done++;
@@ -347,6 +340,7 @@ export function TaskListView() {
       // Live session overlays — orthogonal to lifecycle status, so counted separately.
       if (t.running) c.running++;
       else if (t.queued) c.queued++;
+      if (canStartTask(t)) c.runnable++;
     }
     return c;
   }, [baseRows, isListView, taskPageCounts]);
@@ -388,6 +382,7 @@ export function TaskListView() {
       </span>
     );
     const opts = [
+      { value: 'RUNNABLE', label: seg('Ready', counts.runnable) },
       { value: 'ALL', label: seg('All', counts.total) },
       { value: 'ONGOING', label: seg('Open', counts.open + counts.inProgress) },
       { value: 'FAILED', label: seg('Failed', counts.failed, counts.failed > 0) },
@@ -408,9 +403,9 @@ export function TaskListView() {
   );
   const allSelected = rows.length > 0 && rows.every((r: any) => selectedIds.has(r.id));
   const someSelected = rows.some((r: any) => selectedIds.has(r.id));
-  // A task can run only if it has a responsible agent bound to a runner.
+  // Keep the batch preview aligned with the rows that actually offer Run/Retry.
   const runnableRows = useMemo(
-    () => selectedRows.filter((r: any) => r.assignee?.runner?.id),
+    () => selectedRows.filter((r: any) => canStartTask(r)),
     [selectedRows],
   );
 
@@ -441,7 +436,7 @@ export function TaskListView() {
 
   const openBatch = () => {
     if (runnableRows.length === 0) {
-      message.warning('None of the selected tasks have a runnable assignee (or no runner bound)');
+      message.warning('None of the selected tasks can be run right now');
       return;
     }
     // Batch concurrency is its own knob (it doesn't touch any runner's cap); default to
@@ -521,8 +516,7 @@ export function TaskListView() {
     const displayTitle = stripped?.trim() ? stripped : (r.title ?? '');
     // Row-level run/retry: offered only for an actionable, runnable task that isn't busy,
     // blocked, or already done. FAILED reframes the same action as "Retry".
-    const canRunRow =
-      !!r.assignee?.runner?.id && !r.running && !r.queued && !r.blocked && r.status !== 'DONE';
+    const canRunRow = canStartTask(r);
     const isRetry = r.status === 'FAILED';
     return (
       <div
@@ -770,7 +764,9 @@ export function TaskListView() {
                 <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
                   {query.trim()
                     ? `No tasks match “${query.trim()}”.`
-                    : isListView
+                    : filter === 'RUNNABLE'
+                      ? 'No tasks are ready to run.'
+                      : isListView
                       ? 'No tasks in this list yet.'
                       : isUnlisted
                         ? 'No tasks without a list yet.'
@@ -820,7 +816,7 @@ export function TaskListView() {
         <p style={{ marginTop: 0 }}>
           Will run <b>{runnableRows.length}</b> selected task(s)
           {selectedRows.length > runnableRows.length
-            ? `, skipping ${selectedRows.length - runnableRows.length} (no assignee or no runner bound)`
+            ? `, skipping ${selectedRows.length - runnableRows.length} that cannot run right now`
             : ''}
           .
         </p>

@@ -59,6 +59,7 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
         countWheres.push(args.where);
         if (args.where.sessions?.some?.status === RunStatus.RUNNING) return 1;
         if (args.where.sessions?.some?.status === RunStatus.PENDING) return 2;
+        if (args.where.AND?.some((clause: any) => clause.assignee)) return 3;
         return 17;
       },
       groupBy: async () => [
@@ -101,8 +102,39 @@ test('paged list applies database filters, caps rows, and returns aggregate coun
     cancelled: 0,
     running: 1,
     queued: 2,
+    runnable: 3,
   });
-  assert.equal(countWheres.length, 3);
+  assert.equal(countWheres.length, 4);
+});
+
+test('runnable filter is applied before pagination with the same rules as the Run action', async () => {
+  let findManyWhere: any;
+  const service = serviceWith({
+    task: {
+      findMany: async (args: any) => {
+        findManyWhere = args.where;
+        return [];
+      },
+      count: async () => 0,
+      groupBy: async () => [],
+    },
+  });
+
+  await service.listPage(OWNER_ID, { status: 'RUNNABLE' });
+
+  assert.deepEqual(findManyWhere, {
+    AND: [
+      { ownerId: OWNER_ID },
+      { status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.FAILED] } },
+      { assignee: { is: { runnerId: { not: null } } } },
+      { sessions: { none: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } } },
+      {
+        dependsOn: {
+          none: { dependsOnTask: { status: { not: TaskStatus.DONE } } },
+        },
+      },
+    ],
+  });
 });
 
 test('paged list rejects invalid bounds and filters before querying Prisma', async () => {
