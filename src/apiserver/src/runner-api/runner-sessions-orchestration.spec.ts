@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { SessionsService } from '../sessions/sessions.service';
 import { RunnerSessionsController } from './runner-sessions.controller';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
@@ -131,4 +132,30 @@ test('all session orchestration routes accept an enabled caller and invoke only 
     );
     assert.deepEqual(serviceCalls, [route.serviceMethod], route.name);
   }
+});
+
+test('session orchestration detail uses an explicit allowlist and never returns agent secrets', async () => {
+  let query: { where?: Record<string, unknown>; select?: Record<string, unknown> } = {};
+  const prisma = {
+    session: {
+      findFirst: async (args: typeof query) => {
+        query = args;
+        return { id: TARGET_SESSION_ID, status: 'RUNNING' };
+      },
+    },
+  };
+  const service = new SessionsService(prisma as never, {} as never, {} as never);
+  await service.getForOrchestration('owner-1', TARGET_SESSION_ID);
+
+  assert.deepEqual(query.where, { id: TARGET_SESSION_ID, ownerId: 'owner-1' });
+  assert.equal(query.select?.id, true);
+  assert.equal(query.select?.lastAssistantText, true);
+  for (const field of ['shareToken', 'sharedAt', 'runtimeSessionId', 'claudeSessionId']) {
+    assert.equal(query.select?.[field], undefined, `session detail exposed ${field}`);
+  }
+  const agent = query.select?.agent as { select?: Record<string, unknown> } | undefined;
+  for (const field of ['env', 'mcpConfig', 'systemPrompt', 'appendSystemPrompt', 'agentKey']) {
+    assert.equal(agent?.select?.[field], undefined, `session detail exposed agent.${field}`);
+  }
+  assert.deepEqual(agent?.select, { id: true, name: true, provider: true, model: true });
 });
