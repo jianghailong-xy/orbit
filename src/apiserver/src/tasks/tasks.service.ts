@@ -43,6 +43,44 @@ const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 // fired the moment a prerequisite reaches DONE — so a coarse cadence is enough.
 const RECONCILE_INTERVAL_MS = 60_000;
 
+// PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used
+// by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
+// that ceiling even when an owner has tens of thousands of tasks.
+const TASK_ID_QUERY_CHUNK = 5_000;
+const DEFAULT_TASK_PAGE_SIZE = 100;
+const MAX_TASK_PAGE_SIZE = 200;
+
+export interface ListTasksPageQuery {
+  cursor?: string;
+  limit?: string | number;
+  status?: string;
+  listId?: string;
+  assigneeId?: string;
+  q?: string;
+}
+
+interface TaskPageCursor {
+  createdAt: string;
+  id: string;
+}
+
+function encodeTaskPageCursor(task: { createdAt: Date; id: string }): string {
+  return Buffer.from(
+    JSON.stringify({ createdAt: task.createdAt.toISOString(), id: task.id } satisfies TaskPageCursor),
+  ).toString('base64url');
+}
+
+function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as TaskPageCursor;
+    const createdAt = new Date(parsed.createdAt);
+    if (!UUID_RE.test(parsed.id) || Number.isNaN(createdAt.getTime())) throw new Error('invalid');
+    return { createdAt, id: parsed.id };
+  } catch {
+    throw new BadRequestException('invalid task cursor');
+  }
+}
+
 @Injectable()
 export class TasksService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TasksService.name);
@@ -122,16 +160,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
     if (taskIds.length === 0) return new Map();
-    const edges = await this.prisma.taskDependency.findMany({
-      where: { taskId: { in: taskIds } },
-      select: { taskId: true, dependsOnTask: { select: { status: true } } },
-    });
     const byTask = new Map<string, TaskStatus[]>();
-    for (const e of edges) {
-      const status = e.dependsOnTask.status as unknown as TaskStatus;
-      const arr = byTask.get(e.taskId);
-      if (arr) arr.push(status);
-      else byTask.set(e.taskId, [status]);
+    const uniqueIds = [...new Set(taskIds)];
+    for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
+      const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
+      const edges = await this.prisma.taskDependency.findMany({
+        where: { taskId: { in: ids } },
+        select: { taskId: true, dependsOnTask: { select: { status: true } } },
+      });
+      for (const e of edges) {
+        const status = e.dependsOnTask.status as unknown as TaskStatus;
+        const arr = byTask.get(e.taskId);
+        if (arr) arr.push(status);
+        else byTask.set(e.taskId, [status]);
+      }
     }
     const out = new Map<string, DependencyState>();
     for (const [taskId, statuses] of byTask) out.set(taskId, computeDependencyState(statuses));
@@ -224,7 +266,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         _count: { select: { comments: true } },
       },
     });
-    const withRun = await this.withRunning(tasks);
+    const withRun = await this.withRunning(ownerId, tasks);
     const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
     return withRun.map((t) => {
       const dependencyState = states.get(t.id) ?? 'NONE';
@@ -232,6 +274,124 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // shared with the execute/batch gates so the UI never offers a run the API rejects.
       return { ...t, dependencyState, blocked: !canRun(dependencyState) };
     });
+  }
+
+  /**
+   * Cursor-paged task list for interactive clients. Filters run in PostgreSQL so the
+   * browser never has to download an owner's entire task history just to search or open
+   * one status tab. GET /tasks remains as a compatibility endpoint for existing runners.
+   */
+  async listPage(ownerId: string, query: ListTasksPageQuery = {}) {
+    const limit = query.limit === undefined ? DEFAULT_TASK_PAGE_SIZE : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TASK_PAGE_SIZE) {
+      throw new BadRequestException(`limit must be an integer from 1 to ${MAX_TASK_PAGE_SIZE}`);
+    }
+
+    const status = query.status?.trim().toUpperCase();
+    let statuses: TaskStatus[] | undefined;
+    if (status === 'ONGOING') statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS];
+    else if (status) {
+      if (!Object.values(TaskStatus).includes(status as TaskStatus)) {
+        throw new BadRequestException('invalid task status');
+      }
+      statuses = [status as TaskStatus];
+    }
+
+    const scopedWhere: Prisma.TaskWhereInput = { ownerId };
+    if (query.listId === 'none') scopedWhere.listId = null;
+    else if (query.listId) {
+      if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
+      scopedWhere.listId = query.listId;
+    }
+    if (query.assigneeId) {
+      if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
+      scopedWhere.assigneeId = query.assigneeId;
+    }
+
+    const filteredWhere: Prisma.TaskWhereInput = { ...scopedWhere };
+    if (statuses) filteredWhere.status = { in: statuses };
+    const search = query.q?.trim();
+    if (search) filteredWhere.title = { contains: search.slice(0, 200), mode: 'insensitive' };
+
+    const cursor = query.cursor ? decodeTaskPageCursor(query.cursor) : undefined;
+    const pageWhere: Prisma.TaskWhereInput = cursor
+      ? {
+          AND: [
+            filteredWhere,
+            {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            },
+          ],
+        }
+      : filteredWhere;
+
+    const [rows, filteredTotal, statusGroups, running, queued] = await Promise.all([
+      this.prisma.task.findMany({
+        where: pageWhere,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        include: {
+          assignee: {
+            select: {
+              id: true,
+              name: true,
+              model: true,
+              runnerId: true,
+              runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
+            },
+          },
+          _count: { select: { comments: true } },
+        },
+      }),
+      this.prisma.task.count({ where: filteredWhere }),
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: scopedWhere,
+        _count: { _all: true },
+      }),
+      this.prisma.task.count({
+        where: { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } },
+      }),
+      this.prisma.task.count({
+        where: {
+          ...scopedWhere,
+          sessions: { some: { status: RunStatus.PENDING } },
+          NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
+        },
+      }),
+    ]);
+
+    const hasMore = rows.length > limit;
+    const pageTasks = hasMore ? rows.slice(0, limit) : rows;
+    const [withRun, states] = await Promise.all([
+      this.withRunning(ownerId, pageTasks),
+      this.dependencyStatesFor(pageTasks.map((task) => task.id)),
+    ]);
+    const items = withRun.map((task) => {
+      const dependencyState = states.get(task.id) ?? 'NONE';
+      return { ...task, dependencyState, blocked: !canRun(dependencyState) };
+    });
+    const byStatus = new Map(statusGroups.map((group) => [group.status, group._count._all]));
+    const counts = {
+      total: statusGroups.reduce((sum, group) => sum + group._count._all, 0),
+      open: byStatus.get(TaskStatus.OPEN) ?? 0,
+      inProgress: byStatus.get(TaskStatus.IN_PROGRESS) ?? 0,
+      done: byStatus.get(TaskStatus.DONE) ?? 0,
+      failed: byStatus.get(TaskStatus.FAILED) ?? 0,
+      cancelled: byStatus.get(TaskStatus.CANCELLED) ?? 0,
+      running,
+      queued,
+    };
+
+    return {
+      items,
+      nextCursor: hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null,
+      total: filteredTotal,
+      counts,
+    };
   }
 
   /**
@@ -243,13 +403,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * page. The list-detail view (TaskListsService) computes the same flags inline.
    */
   private async withRunning<T extends { id: string }>(
+    ownerId: string,
     tasks: T[],
   ): Promise<(T & { running: boolean; queued: boolean })[]> {
     if (tasks.length === 0) return [];
     const busy = await this.prisma.session.groupBy({
       by: ['taskId', 'status'],
       where: {
-        taskId: { in: tasks.map((t) => t.id) },
+        ownerId,
+        taskId: { not: null },
         status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
       },
       _count: { _all: true },

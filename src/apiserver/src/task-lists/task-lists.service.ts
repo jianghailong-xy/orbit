@@ -89,12 +89,13 @@ export class TaskListsService {
     // Tag each task with `running` (has a RUNNING session) and `queued` (has a PENDING
     // session but nothing running yet) so the list view shows the same live indicators
     // as the Active view — see TasksService.withRunning.
-    const ids = tasks.map((t) => t.id);
-    const busy = ids.length
+    const busy = tasks.length
       ? await this.prisma.session.groupBy({
           by: ['taskId', 'status'],
           where: {
-            taskId: { in: ids },
+            ownerId,
+            taskId: { not: null },
+            task: { is: { listId: id } },
             status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
           },
           _count: { _all: true },
@@ -125,8 +126,12 @@ export class TaskListsService {
     tasks: T[],
   ): Promise<(T & { creatorName: string | null })[]> {
     if (tasks.length === 0) return [];
-    const userIds = tasks.filter((t) => t.creatorType === CreatorType.USER).map((t) => t.creatorId);
-    const agentIds = tasks.filter((t) => t.creatorType === CreatorType.AGENT).map((t) => t.creatorId);
+    const userIds = [
+      ...new Set(tasks.filter((t) => t.creatorType === CreatorType.USER).map((t) => t.creatorId)),
+    ];
+    const agentIds = [
+      ...new Set(tasks.filter((t) => t.creatorType === CreatorType.AGENT).map((t) => t.creatorId)),
+    ];
     const [users, agents] = await Promise.all([
       userIds.length
         ? this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })

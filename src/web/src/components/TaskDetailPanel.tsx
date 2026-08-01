@@ -8,6 +8,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 
 // The detail panel's width is drag-resizable; persist the choice so it sticks across reloads.
@@ -236,8 +237,14 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // All tasks, to pick prerequisites from (excludes this task + ones already added).
-  const allTasksQ = useQuery({ queryKey: ['tasks'], queryFn: () => api<any[]>('/tasks') });
+  // Search prerequisite candidates server-side. Loading every task made this picker and
+  // the surrounding panel unusable for large task sets; the first 50 recent matches are
+  // enough for browsing and typing narrows across the owner's full task history.
+  const [dependencyQuery, setDependencyQuery] = useState('');
+  const dependencyTasksQ = useQuery({
+    queryKey: ['tasks', 'dependency-search', dependencyQuery],
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery })),
+  });
 
   // After any dependency/auto-run/mark-done change, refresh this panel and the list (its
   // lock indicators and the picker's task statuses both derive from the same data).
@@ -365,7 +372,7 @@ export function TaskDetailPanel({
   const blocked = dependencyState === 'BLOCKED' || dependencyState === 'BLOCKED_FAILED';
   const prereqIds = new Set(dependsOn.map((d: any) => d.dependsOnTask.id));
   // Candidate prerequisites: every other task not already a prerequisite of this one.
-  const dependencyOptions = (allTasksQ.data ?? [])
+  const dependencyOptions = (dependencyTasksQ.data?.items ?? [])
     .filter((t: any) => t.id !== taskId && !prereqIds.has(t.id))
     .map((t: any) => ({ value: t.id, label: t.title }));
   // §6.3 safety net: a run finished successfully but the task still isn't DONE while
@@ -614,11 +621,15 @@ export function TaskDetailPanel({
               placeholder="Add a prerequisite…"
               value={null}
               showSearch
-              optionFilterProp="label"
-              loading={allTasksQ.isLoading || addDependency.isPending}
+              filterOption={false}
+              onSearch={setDependencyQuery}
+              loading={dependencyTasksQ.isLoading || addDependency.isPending}
               popupMatchSelectWidth={false}
               options={dependencyOptions}
-              onChange={(val) => val && addDependency.mutate(val)}
+              onChange={(val) => {
+                if (val) addDependency.mutate(val);
+                setDependencyQuery('');
+              }}
             />
             {dependsOn.length > 0 && (
               <div

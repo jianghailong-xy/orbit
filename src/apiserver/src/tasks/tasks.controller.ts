@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -34,6 +35,20 @@ export class TasksController {
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.tasks.list(user.userId);
+  }
+
+  // Kept above :id so Nest never interprets the literal "page" as a task UUID.
+  @Get('page')
+  listPage(
+    @CurrentUser() user: AuthUser,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('listId') listId?: string,
+    @Query('assigneeId') assigneeId?: string,
+    @Query('q') q?: string,
+  ) {
+    return this.tasks.listPage(user.userId, { cursor, limit, status, listId, assigneeId, q });
   }
 
   @Get(':id')

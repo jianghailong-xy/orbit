@@ -23,6 +23,7 @@ import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import { orderAgents, groupAgentsByRunner, type AgentGroup } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
+import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
 // page (Admin is appended for admins below). The agents themselves live in the "Agents"
@@ -293,15 +294,14 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return m;
   }, [runners.data]);
 
-  // Task count for the "未分组" (no-list) bucket. Reuses the ['tasks'] cache the main
-  // view populates, so it adds no extra network request.
-  const tasks = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => api<any[]>('/tasks'),
-    refetchInterval: (q) =>
-      (q.state.data ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
+  // Task count for the "No list" bucket. Ask the paged endpoint for one row plus the
+  // aggregate instead of downloading every unlisted task into the sidebar.
+  const unlistedTasks = useQuery({
+    queryKey: ['tasks', 'unlisted-count'],
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
+    refetchInterval: 15_000,
   });
-  const unlistedCount = (tasks.data ?? []).filter((t: any) => !t.listId).length;
+  const unlistedCount = unlistedTasks.data?.counts.total ?? 0;
 
   // Live sessions (RUNNING/PENDING), used below to decorate each agent row with its own
   // "needs you" count. Polls faster while anything is live. Shares the ['sessions', null,

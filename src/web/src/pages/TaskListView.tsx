@@ -10,7 +10,7 @@ import {
   StopOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Avatar,
   Button,
@@ -29,6 +29,7 @@ import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 
 // Filters over the real TaskStatus enum (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED).
@@ -182,16 +183,6 @@ export function TaskListView() {
     else setSort('created', 'desc');
   };
 
-  // Poll while any task is running so its live indicator clears once the run ends;
-  // 5s busy / 15s idle, matching the sidebar's task-list poll.
-  const tasks = useQuery({
-    queryKey: ['tasks'],
-    queryFn: () => api<any[]>('/tasks'),
-    refetchInterval: (q) =>
-      (q.state.data ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
-  });
-  const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
-
   // /lists/<base62> renders a single user list instead of all tasks: fetch that list
   // and render its tasks (GET /task-lists/:id includes them). decodeId -> the UUID.
   // "/lists/none" is the virtual "未分组" view — tasks with no list. It isn't a real
@@ -199,6 +190,40 @@ export function TaskListView() {
   const listMatch = useMatch('/lists/:key');
   const isUnlisted = listMatch?.params.key === 'none';
   const listId = listMatch && !isUnlisted ? decodeId(listMatch.params.key) : null;
+  const isListView = !!listId;
+
+  // The all-tasks and unlisted views use cursor pagination. Status/title/list filters are
+  // executed server-side, so even an owner with tens of thousands of tasks downloads at
+  // most 200 rows per request. Poll only the pages the user has actually loaded.
+  const tasks = useInfiniteQuery({
+    queryKey: ['tasks', 'page', { filter, query, listId: isUnlisted ? 'none' : undefined }],
+    queryFn: ({ pageParam }) =>
+      api<TaskPage>(
+        taskPagePath({
+          cursor: pageParam,
+          limit: 200,
+          status: filter,
+          listId: isUnlisted ? 'none' : undefined,
+          q: query,
+        }),
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !isListView,
+    refetchInterval: (q) =>
+      (q.state.data?.pages ?? []).some((page) =>
+        page.items.some((t: any) => t.running || t.queued),
+      )
+        ? 5_000
+        : 15_000,
+  });
+  const taskData = useMemo(
+    () => (tasks.data?.pages ?? []).flatMap((page) => page.items),
+    [tasks.data],
+  );
+  const taskPageCounts = tasks.data?.pages[0]?.counts;
+  const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+
   const listQ = useQuery({
     queryKey: ['task-list', listId],
     queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
@@ -206,7 +231,6 @@ export function TaskListView() {
     refetchInterval: (q) =>
       (q.state.data?.tasks ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
   });
-  const isListView = !!listId;
   // A /tasks/:id deep link (e.g. a session header's "回到任务") opens that task's detail
   // panel; decodeId -> the UUID TaskDetailPanel fetches by.
   const taskMatch = useMatch('/tasks/:id');
@@ -283,10 +307,10 @@ export function TaskListView() {
 
   const taskRows = useMemo(
     () =>
-      (tasks.data ?? [])
+      taskData
         .filter((t: any) => (isUnlisted ? !t.listId : true))
         .filter((t: any) => matchesFilter(t.status, filter)),
-    [tasks.data, filter, isUnlisted],
+    [taskData, filter, isUnlisted],
   );
 
   const listRows = useMemo(
@@ -313,10 +337,11 @@ export function TaskListView() {
     () =>
       isListView
         ? (listQ.data?.tasks ?? [])
-        : (tasks.data ?? []).filter((t: any) => (isUnlisted ? !t.listId : true)),
-    [isListView, listQ.data, tasks.data, isUnlisted],
+        : taskData.filter((t: any) => (isUnlisted ? !t.listId : true)),
+    [isListView, listQ.data, taskData, isUnlisted],
   );
   const counts = useMemo(() => {
+    if (!isListView && taskPageCounts) return taskPageCounts;
     const c = {
       total: baseRows.length,
       done: 0,
@@ -338,7 +363,7 @@ export function TaskListView() {
       else if (t.queued) c.queued++;
     }
     return c;
-  }, [baseRows]);
+  }, [baseRows, isListView, taskPageCounts]);
 
   // Tasks in a list usually share a boilerplate title prefix ("实现 EGIU Unit …"). Compute
   // the longest common prefix across the whole view, trim it back to the last word boundary
@@ -710,6 +735,10 @@ export function TaskListView() {
             <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
               This list could not be loaded.
             </div>
+          ) : !isListView && tasks.isError ? (
+            <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
+              Tasks could not be loaded.
+            </div>
           ) : (
             <div className={`orbit-tasklist${showAssigneeCol ? '' : ' no-assignee'}`}>
               <div className="col-head-row">
@@ -738,6 +767,16 @@ export function TaskListView() {
                 </div>
               ) : (
                 rows.map((r: any) => renderRow(r))
+              )}
+              {!isListView && tasks.hasNextPage && (
+                <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center' }}>
+                  <Button
+                    loading={tasks.isFetchingNextPage}
+                    onClick={() => tasks.fetchNextPage()}
+                  >
+                    Load more ({taskData.length} of {tasks.data?.pages[0]?.total ?? taskData.length})
+                  </Button>
+                </div>
               )}
             </div>
           )}

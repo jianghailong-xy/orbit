@@ -496,6 +496,7 @@ model Session {
   @@index([batchId, status])
   @@index([parentSessionId])
   @@index([ownerId])
+  @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
   @@map("session")
 }
@@ -767,6 +768,9 @@ model Task {
   dependedOnBy TaskDependency[] @relation("DependencyToTask")
 
   @@index([ownerId])
+  @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
+  @@index([ownerId, status, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_status_created_id_idx")
+  @@index([ownerId, listId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_list_created_id_idx")
   @@index([assigneeId])
   @@index([listId])
   @@index([status])
