@@ -64,7 +64,7 @@ func withOrbitCLIInstructions(configured, executable string) string {
 	return strings.TrimRight(configured, "\r\n") + "\n\n" + orbit
 }
 
-func orbitCLIAllowedTools(executable string) []string {
+func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	if executable == "" {
 		return nil
 	}
@@ -83,6 +83,11 @@ func orbitCLIAllowedTools(executable string) []string {
 		}
 		for _, action := range []string{"list", "create"} {
 			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
+		}
+		if allowOrchestration {
+			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end"} {
+				rules = append(rules, "Bash("+command+" session "+action+" *)")
+			}
 		}
 	}
 	return rules
@@ -122,10 +127,10 @@ func appendUnique(values []string, additions ...string) []string {
 }
 
 // appendClaudeAgentInstructionArgs adds discovery instructions while preserving
-// the owner's tool policy. Only the resolved executable's Phase 1 command
-// prefixes are added; arbitrary orbit subcommands and PATH-resolved binaries do
-// not become approval-free.
-func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, executable string) []string {
+// the owner's tool policy. Session command prefixes are added only when the
+// current claimed session may orchestrate; arbitrary orbit subcommands and
+// PATH-resolved binaries do not become approval-free.
+func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, executable string, allowOrchestration bool) []string {
 	// The raw absolute path remains safe for direct exec/MCP configuration. Only
 	// inject and auto-allow the CLI when it is also unambiguous in Claude's
 	// comma-separated Bash(...) permission grammar.
@@ -136,7 +141,7 @@ func appendClaudeAgentInstructionArgs(args []string, agent AgentExecConfig, exec
 	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
-	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable)...)
+	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	}

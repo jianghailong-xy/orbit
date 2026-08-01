@@ -659,7 +659,7 @@ type cliCapabilitySpec struct {
 	Mutates     bool
 }
 
-var phase1CLICapabilities = []cliCapabilitySpec{
+var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task as the runner owner. ORBIT_AGENT_ID is used only as the default assignee; runner-wide CLI credentials do not claim agent authorship. This only records the task; call task_start when it should run immediately.", Mutates: true},
@@ -698,13 +698,24 @@ type cliCapabilitiesDocument struct {
 }
 
 func buildCLICapabilities(executable string) cliCapabilitiesDocument {
+	ctx := cliCapabilityContext{
+		SessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
+		AgentID:   strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")),
+		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
+		Actor:     "runner_owner",
+	}
+	includeOrchestration := mcpOrchestrationEnabled() && ctx.SessionID != ""
 	descriptors := make(map[string]map[string]interface{})
-	for _, d := range toolDescriptors(false, false) {
+	for _, d := range toolDescriptors(false, includeOrchestration) {
 		name, _ := d["name"].(string)
 		descriptors[name] = d
 	}
-	commands := make([]cliCapability, 0, len(phase1CLICapabilities))
-	for _, spec := range phase1CLICapabilities {
+	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
+	if includeOrchestration {
+		specs = append(specs, sessionCLICapabilities...)
+	}
+	commands := make([]cliCapability, 0, len(specs))
+	for _, spec := range specs {
 		d := descriptors[spec.Tool]
 		description, _ := d["description"].(string)
 		if spec.Description != "" {
@@ -723,12 +734,6 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			MCPInputSchema: schema,
 			Mutates:        spec.Mutates,
 		})
-	}
-	ctx := cliCapabilityContext{
-		SessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
-		AgentID:   strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")),
-		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
-		Actor:     "runner_owner",
 	}
 	registered := false
 	unavailableReason := ""

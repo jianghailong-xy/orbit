@@ -45,6 +45,7 @@ Usage:
   orbit resume [session-id]         Resume a session in this terminal via claude --resume
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
+  orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
@@ -151,14 +152,15 @@ running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGIN
 `,
 	"task":      taskHelp,
 	"task-list": taskListHelp,
+	"session":   sessionHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
 Usage:
   orbit capabilities [--json]
 
-Shows the Task and TaskList commands available through this binary. --json emits
-a stable, machine-readable document including argument schemas from the built-in
-Orbit MCP server. Session and Agent orchestration are intentionally not exposed.
+Shows the commands available through this binary. --json emits a stable,
+machine-readable document including argument schemas from the built-in Orbit MCP
+server. Session commands appear only inside an orchestration-enabled agent session.
 `,
 	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
 
@@ -201,7 +203,7 @@ func main() {
 	// instead of running it.
 	// Nested resource commands own their leaf help (for example
 	// `orbit task create --help`). Other commands keep the flat help behavior.
-	if cmd != "task" && cmd != "task-list" && wantsHelp(args[1:]) {
+	if cmd != "task" && cmd != "task-list" && cmd != "session" && wantsHelp(args[1:]) {
 		fmt.Print(helpFor(cmd))
 		return
 	}
@@ -227,6 +229,11 @@ func main() {
 	case "task-list":
 		if err := cmdTaskListCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit task-list:", err)
+			os.Exit(1)
+		}
+	case "session":
+		if err := cmdSessionCLI(args[1:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit session:", err)
 			os.Exit(1)
 		}
 	case "capabilities":

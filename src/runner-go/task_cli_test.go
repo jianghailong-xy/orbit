@@ -25,6 +25,7 @@ func configureCLITestRunner(t *testing.T, serverURL string) {
 
 func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Setenv(envMCPOrchestration, "")
 	t.Setenv("ORBIT_SESSION_ID", "session-1")
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
 	t.Setenv("ORBIT_TASK_ID", "task-1")

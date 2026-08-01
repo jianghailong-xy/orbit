@@ -359,7 +359,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The Orbit CLI discovery instructions are platform instructions and therefore
 	// always join the append prompt rather than replacing the provider's defaults.
 	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(args, a, orbitExe)
+	args = appendClaudeAgentInstructionArgs(args, a, orbitExe, job.AllowOrchestration)
 	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
 	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
 	// reaches for them, but those entries are session-local todos that never reach

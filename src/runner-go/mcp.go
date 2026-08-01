@@ -821,29 +821,9 @@ const maxSessionWaitPolls = 200
 // PENDING/RUNNING (reaching AWAITING_INPUT once its first turn produced a result, or a
 // terminal state) — then returns its full row so the caller reads the result inline.
 func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface{} {
-	var c struct {
-		ID string `json:"id"`
-	}
-	if json.Unmarshal(created, &c) != nil || c.ID == "" {
-		return toolResult(prettyJSON(created), false) // no id to poll; hand back what we have
-	}
-	for i := 0; i < maxSessionWaitPolls; i++ {
-		time.Sleep(sessionWaitInterval)
-		raw, err := s.t.getSession(s.sessionID, c.ID)
-		if err != nil {
-			return toolResult("wait: get session failed: "+err.Error(), true)
-		}
-		var st struct {
-			Status string `json:"status"`
-		}
-		if json.Unmarshal(raw, &st) == nil && sessionSettled(st.Status) {
-			return toolResult(prettyJSON(raw), false)
-		}
-	}
-	// Timed out still running: return the latest state (non-error) so the agent can poll on.
-	raw, err := s.t.getSession(s.sessionID, c.ID)
+	raw, err := waitForSessionRaw(s.t, s.sessionID, created)
 	if err != nil {
-		return toolResult("wait timed out; get session failed: "+err.Error(), true)
+		return toolResult("wait: "+err.Error(), true)
 	}
 	return toolResult(prettyJSON(raw), false)
 }
