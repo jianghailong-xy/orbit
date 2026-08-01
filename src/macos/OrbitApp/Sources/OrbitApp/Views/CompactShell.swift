@@ -231,7 +231,9 @@ private struct CompactSections: View {
             NavigationSplitView {
                 TasksListView()
                     .drawerToggle(open: openDrawer)
-                    .refreshable { await model.tasks?.load() }
+                    .refreshable {
+                        await model.tasks?.refresh(selectedTaskID: model.selectedTaskID)
+                    }
             } detail: {
                 TaskDetailView()
             }
@@ -350,6 +352,8 @@ private struct NavigationDrawer: View {
     /// Guards the one-time seed of the selected agent's machine, so a later agent list reload doesn't
     /// re-open a group the user has since collapsed.
     @State private var didSeedExpansion = false
+    /// Completed task lists are intentionally collapsed by default, matching the Web sidebar.
+    @State private var completedTaskListsExpanded = false
 
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
@@ -385,6 +389,8 @@ private struct NavigationDrawer: View {
                     // so the machine list stays collapsible instead of always-expanded.
                     if section == .agents {
                         agentsRows
+                    } else if section == .tasks {
+                        taskRows
                     } else {
                         sectionRow(section)
                     }
@@ -402,6 +408,9 @@ private struct NavigationDrawer: View {
             // Agents are always shown now, so load the list when the drawer mounts (mirrors the macOS
             // sidebar), then land on the first agent. It's light; the heavy session list loads separately.
             .task { await model.loadAgentsThenLand() }
+            // Task-list summaries and the No-list count are navigation data, so fetch them with the
+            // drawer rather than waiting until the user opens one list.
+            .task { await model.tasks?.loadNavigation() }
             // Seed the machine you're currently in open on first load (so the drawer lands showing your
             // context), then let taps win — the selected machine stays collapsible. See `isExpanded`.
             .onChange(of: selectedGroupKey, initial: true) { _, key in
@@ -444,6 +453,10 @@ private struct NavigationDrawer: View {
     private func sectionRow(_ section: AppSection) -> some View {
         let selected = section == model.selectedSection
         return Button {
+            if section == .tasks {
+                model.selectedTaskID = nil
+                model.tasks?.selectScope(.all)
+            }
             model.selectedSection = section
             close()
         } label: {
@@ -461,6 +474,118 @@ private struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    // MARK: Task lists
+
+    /// Web's task IA: No list is a peer destination, active named lists stay visible, and fully
+    /// completed lists fold into a separate disclosure. A generic All Tasks row is retained only
+    /// as a fallback when there is no task navigation data (and for older control planes).
+    @ViewBuilder
+    private var taskRows: some View {
+        if let tasks = model.tasks {
+            if tasks.unlistedCount > 0 {
+                taskScopeRow(scope: .unlisted, title: "No list", count: tasks.unlistedCount,
+                             systemImage: "tray")
+            }
+
+            if !tasks.activeLists.isEmpty {
+                drawerGroupLabel("Task List", count: tasks.activeLists.count)
+                ForEach(tasks.activeLists) { list in taskListRow(list, completed: false) }
+            }
+
+            if !tasks.completedLists.isEmpty {
+                Button { completedTaskListsExpanded.toggle() } label: {
+                    pill(selected: false) {
+                        HStack(spacing: 8) {
+                            Text("Completed").font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text("\(tasks.completedLists.count)")
+                                .font(.orbitMeta).foregroundStyle(.secondary)
+                            Image(systemName: completedTaskListsExpanded ? "chevron.down" : "chevron.right")
+                                .font(.orbitMeta).foregroundStyle(.tertiary)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .drawerRow()
+                if completedTaskListsExpanded {
+                    ForEach(tasks.completedLists) { list in taskListRow(list, completed: true) }
+                }
+            }
+
+            if tasks.unlistedCount == 0 && tasks.lists.isEmpty {
+                sectionRow(.tasks)
+            }
+        }
+    }
+
+    private func drawerGroupLabel(_ title: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(title).font(.subheadline.weight(.semibold))
+            Text("\(count)").font(.orbitMeta)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.leading, DrawerMetrics.textLeading)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    private func taskListRow(_ list: TaskListSummary, completed: Bool) -> some View {
+        let running = (list.runningTasks ?? 0) > 0
+        return Button {
+            openTaskScope(.list(list.id))
+        } label: {
+            pill(selected: taskScopeSelected(.list(list.id)), indent: 12) {
+                HStack(spacing: 10) {
+                    if running {
+                        ProgressView().controlSize(.mini).tint(.blue)
+                    } else {
+                        Circle().fill(completed ? Color.green : Color.secondary.opacity(0.45))
+                            .frame(width: 8, height: 8)
+                    }
+                    Text(list.title)
+                        .lineLimit(1)
+                        .foregroundStyle(completed ? .secondary : .primary)
+                    Spacer(minLength: 6)
+                    Text("\(list.taskCount)").font(.orbitMeta).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    private func taskScopeRow(scope: TaskScope, title: String, count: Int,
+                              systemImage: String) -> some View {
+        Button { openTaskScope(scope) } label: {
+            pill(selected: taskScopeSelected(scope)) {
+                HStack(spacing: 12) {
+                    Image(systemName: systemImage).frame(width: 24)
+                    Text(title).foregroundStyle(.primary)
+                    Spacer(minLength: 6)
+                    Text("\(count)").font(.orbitMeta).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    private func taskScopeSelected(_ scope: TaskScope) -> Bool {
+        model.selectedSection == .tasks && model.tasks?.scope == scope
+    }
+
+    private func openTaskScope(_ scope: TaskScope) {
+        model.selectedTaskID = nil
+        model.tasks?.selectScope(scope)
+        model.selectedSection = .tasks
+        close()
     }
 
     // MARK: Recents

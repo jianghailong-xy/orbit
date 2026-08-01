@@ -19,6 +19,9 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let dueDate: String?
     public let autoRunWhenReady: Bool?
     public let creatorSessionId: String?
+    public let creatorType: String?
+    public let creatorId: String?
+    public let creatorName: String?
     public let createdAt: String?
     public let updatedAt: String?
 
@@ -44,7 +47,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, assigneeId, listId, dueDate, autoRunWhenReady
-        case creatorSessionId, createdAt, updatedAt
+        case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case running, queued, blocked, dependencyState
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
@@ -103,12 +106,82 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String?
     public let status: RunStatus?
+    public let runState: SessionRunState?
+    public let sessionState: SessionState?
+    public let endReason: String?
+    public let archivedAt: String?
+    public let deletedAt: String?
     public let createdAt: String?
     public let agent: AgentNameRef?
+
+    /// Resolve the task detail's modern run state first, retaining compatibility with older
+    /// servers that only returned the raw runner status or the legacy mixed session state.
+    public var resolvedRunState: SessionRunState? {
+        SessionRunState.resolveOptional(runState, legacy: sessionState,
+                                        status: status, endReason: endReason)
+    }
 }
 
 public struct AgentNameRef: Codable, Equatable, Sendable {
     public let name: String?
+}
+
+// MARK: - list/page responses
+
+/// A user-created task list as returned by `GET /task-lists`. `runningTasks` and `completed`
+/// are server-derived navigation state: a busy list stays active even when its other tasks are
+/// done, and an empty list is never considered completed.
+public struct TaskListSummary: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let createdAt: String?
+    public let updatedAt: String?
+    public let runningTasks: Int?
+    public let completed: Bool?
+    public let counts: TaskListCounts?
+
+    public var taskCount: Int { counts?.tasks ?? 0 }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, createdAt, updatedAt, runningTasks, completed
+        case counts = "_count"
+    }
+}
+
+public struct TaskListCounts: Codable, Equatable, Sendable {
+    public let tasks: Int?
+}
+
+/// A named list detail. Its task rows use the same list shape as `GET /tasks`, including live
+/// run/dependency overlays, so the native list can render either endpoint identically.
+public struct TaskListDetail: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let createdAt: String?
+    public let updatedAt: String?
+    public let tasks: [TaskItem]
+}
+
+/// Aggregate counts are scoped to the selected list (or No list), but deliberately ignore the
+/// active status/search filter. This keeps the filter badges and progress summary stable.
+public struct TaskPageCounts: Codable, Equatable, Sendable {
+    public let total: Int
+    public let open: Int
+    public let inProgress: Int
+    public let done: Int
+    public let failed: Int
+    public let cancelled: Int
+    public let running: Int
+    public let queued: Int
+    public let runnable: Int
+}
+
+/// Cursor page returned by `GET /tasks/page`. The cursor is opaque and must be passed back as-is.
+public struct TaskPage: Codable, Equatable, Sendable {
+    public let items: [TaskItem]
+    public let nextCursor: String?
+    public let total: Int
+    public let counts: TaskPageCounts
 }
 
 // MARK: - requests

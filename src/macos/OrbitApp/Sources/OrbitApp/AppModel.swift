@@ -40,7 +40,14 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first agent-list
     /// load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
-    var selectedTaskID: String?
+    var selectedTaskID: String? {
+        didSet {
+            // The detail store is a single slot. Clear it synchronously on every selection change
+            // so an A response cannot paint under B, and a deleted task cannot leave compact iOS
+            // navigation stuck on a spinner with a non-nil selection.
+            if selectedTaskID != oldValue { tasks?.clearDetail() }
+        }
+    }
     var selectedRunnerID: String?
     /// iOS only: whether Settings has pushed its Runners sub-page (Runners was moved off the drawer
     /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
@@ -457,7 +464,9 @@ final class AppModel {
             let targets = self.pendingLibraryRefresh
             self.pendingLibraryRefresh.removeAll()
             if targets.contains(.agents) { await self.agents?.load() }
-            if targets.contains(.tasks) { await self.tasks?.load() }
+            if targets.contains(.tasks) {
+                await self.tasks?.refresh(selectedTaskID: self.selectedTaskID)
+            }
         }
     }
 
@@ -982,7 +991,13 @@ final class AppModel {
         switch route {
         case .active:          if selectedAgentID == nil { selectedAgentID = orderedAgents.first?.id }
         case .session(let id): openSession(id)
-        case .task(let id):    selectedTaskID = id
+        case .task(let id):
+            // A deep link or dependency jump may target a task outside the currently selected
+            // named list. Aggregate scope guarantees the row and detail can resolve together.
+            tasks?.selectScope(.all)
+            tasks?.filter = .all
+            tasks?.searchText = ""
+            selectedTaskID = id
         case .runner(let id):  selectedRunnerID = id
         }
     }

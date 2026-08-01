@@ -239,7 +239,18 @@ public final class APIClient: @unchecked Sendable {
 
     // MARK: tasks
     public func tasks() async throws -> [TaskItem] { try await get("tasks") }
+    public func taskPage(cursor: String? = nil, limit: Int = 200, status: String? = nil,
+                         listId: String? = nil, query: String? = nil) async throws -> TaskPage {
+        var q = [URLQueryItem(name: "limit", value: String(limit))]
+        if let cursor { q.append(URLQueryItem(name: "cursor", value: cursor)) }
+        if let status { q.append(URLQueryItem(name: "status", value: status)) }
+        if let listId { q.append(URLQueryItem(name: "listId", value: listId)) }
+        if let query, !query.isEmpty { q.append(URLQueryItem(name: "q", value: query)) }
+        return try await get("tasks/page", query: q)
+    }
     public func task(_ id: String) async throws -> TaskItem { try await get("tasks/\(id)") }
+    public func taskLists() async throws -> [TaskListSummary] { try await get("task-lists") }
+    public func taskList(_ id: String) async throws -> TaskListDetail { try await get("task-lists/\(id)") }
     public func createTask(_ req: CreateTaskRequest) async throws -> TaskItem { try await post("tasks", body: req) }
     public func updateTask(_ id: String, _ req: UpdateTaskRequest) async throws -> TaskItem { try await patch("tasks/\(id)", body: req) }
     public func deleteTask(_ id: String) async throws { try await deleteRaw("tasks/\(id)") }

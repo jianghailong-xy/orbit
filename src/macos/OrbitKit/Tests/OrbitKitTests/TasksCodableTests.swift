@@ -39,7 +39,7 @@ final class TasksCodableTests: XCTestCase {
           "id":"t1","title":"Ship","status":"DONE",
           "assignee":{"id":"a1","name":"dev","model":"claude-opus-4-8"},
           "comments":[{"id":"c1","body":"hi","authorType":"USER","authorId":"u1","authorName":"Jiang","createdAt":"2026-06-26T00:00:00Z"}],
-          "sessions":[{"id":"s1","title":"run","status":"SUCCEEDED","createdAt":"2026-06-26T00:00:00Z","agent":{"name":"dev"}}],
+          "sessions":[{"id":"s1","title":"run","status":"SUCCEEDED","runState":"SUCCEEDED","endReason":"completed","createdAt":"2026-06-26T00:00:00Z","agent":{"name":"dev"}}],
           "creatorSession":{"id":"s0","title":"orig","status":"SUCCEEDED"},
           "dependsOn":[{"dependsOnTask":{"id":"t0","title":"prep","status":"DONE"}}],
           "dependedOnBy":[{"task":{"id":"t2","title":"next","status":"OPEN"}}],
@@ -51,6 +51,7 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertEqual(t.comments?.first?.authorName, "Jiang")
         XCTAssertEqual(t.sessions?.first?.agent?.name, "dev")
         XCTAssertEqual(t.sessions?.first?.status, .succeeded)
+        XCTAssertEqual(t.sessions?.first?.resolvedRunState, .succeeded)
         XCTAssertEqual(t.creatorSession?.title, "orig")
         XCTAssertEqual(t.dependsOn?.first?.dependsOnTask?.status, .done)   // prerequisite edge
         XCTAssertEqual(t.dependedOnBy?.first?.task?.id, "t2")             // dependent edge
@@ -102,6 +103,38 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertEqual(obj["dependsOnTaskIds"] as? [String], ["t0"])
         XCTAssertFalse(obj.keys.contains("assigneeId"))
         XCTAssertFalse(obj.keys.contains("dueDate"))
+    }
+
+    func testTaskPageDecodesCountsAndOpaqueCursor() throws {
+        let json = """
+        {
+          "items":[{"id":"t1","title":"Ready","status":"OPEN"}],
+          "nextCursor":"opaque.cursor",
+          "total":1,
+          "counts":{"total":9,"open":3,"inProgress":1,"done":2,"failed":1,
+                    "cancelled":2,"running":1,"queued":1,"runnable":3}
+        }
+        """
+        let page = try JSONDecoder().decode(TaskPage.self, from: Data(json.utf8))
+        XCTAssertEqual(page.items.first?.id, "t1")
+        XCTAssertEqual(page.nextCursor, "opaque.cursor")
+        XCTAssertEqual(page.counts.runnable, 3)
+        XCTAssertEqual(page.counts.cancelled, 2)
+    }
+
+    func testTaskListSummaryAndDetailDecode() throws {
+        let summaryJSON = """
+        {"id":"l1","title":"Release","runningTasks":2,"completed":false,"_count":{"tasks":4}}
+        """
+        let summary = try JSONDecoder().decode(TaskListSummary.self, from: Data(summaryJSON.utf8))
+        XCTAssertEqual(summary.taskCount, 4)
+        XCTAssertEqual(summary.runningTasks, 2)
+
+        let detailJSON = """
+        {"id":"l1","title":"Release","tasks":[{"id":"t1","title":"Ship","status":"OPEN"}]}
+        """
+        let detail = try JSONDecoder().decode(TaskListDetail.self, from: Data(detailJSON.utf8))
+        XCTAssertEqual(detail.tasks.map(\.id), ["t1"])
     }
 }
 
