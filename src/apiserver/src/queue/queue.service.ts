@@ -13,8 +13,8 @@ function normalizeEffortForProvider(provider: AgentProvider, effort?: string | n
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
  * PENDING sessions assigned to it; claims are atomic via `FOR UPDATE SKIP LOCKED`
- * and gated, server-side, on the runner's `maxConcurrent` so it never gets more
- * live sessions than it can host.
+ * and gated, server-side, on the runner's `maxConcurrent` active turns. Warm/cold
+ * idle runtimes are retained independently and do not consume that limit.
  */
 @Injectable()
 export class QueueService {
@@ -62,7 +62,9 @@ export class QueueService {
     // The global transaction-scoped advisory lock also makes a batch cap spanning several
     // runners authoritative. buildSession deliberately stays outside this short lock.
     const rows = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
+      // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
+      // executeRaw deliberately discards that result (same pattern as pg_notify).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
       return tx.$queryRaw<Array<{ id: string }>>`
         UPDATE "session" SET
           status = 'RUNNING',

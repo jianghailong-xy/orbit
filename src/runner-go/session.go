@@ -107,7 +107,11 @@ func retainsTurnPermit(status string) bool { return status == stRunning }
 
 func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{}), pool *sessionPool, live *liveSession) {
 	syncJobProvider(job)
-	scratch := filepath.Join(runsDir(), job.SessionID)
+	// Stable across warm/cold claims. The outer loop swaps `job` to the newest
+	// claim payload on a cold resume while the event flusher runs concurrently.
+	// Capture the immutable id so that goroutine never races that pointer swap.
+	sessionID := job.SessionID
+	scratch := filepath.Join(runsDir(), sessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 
 	// Persist enough metadata for `orbit resume` to work offline.
@@ -141,8 +145,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		events := buf
 		buf = nil
 		bufMu.Unlock()
-		if err := t.postEvents(job.SessionID, RunEventBatch{Events: events}); err != nil {
-			logln("event flush failed for", job.SessionID+":", err)
+		if err := t.postEvents(sessionID, RunEventBatch{Events: events}); err != nil {
+			logln("event flush failed for", sessionID+":", err)
 		}
 	}
 	emit := func(eventType string, payload map[string]interface{}) {
@@ -203,7 +207,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// response returns; generation matching prevents this old ack from
 		// releasing the new claim's permit.
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(job.SessionID, req)
+		next, err := t.turnComplete(sessionID, req)
 		if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
