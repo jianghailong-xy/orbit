@@ -10,6 +10,7 @@ import {
   isAuthErrorText,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
+import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
@@ -21,26 +22,23 @@ const REAP_INTERVAL_MS = 30_000;
 const PURGE_INTERVAL_MS = 60 * 60_000;
 const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60_000;
 const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
-const IDLE_AFTER_MS = 4 * 60 * 60_000; // gracefully end a session idle this long (4h)
 // A cancel/end a live (online) runner hasn't honored within this window means the
 // session is wedged — e.g. the runner restarted and never re-attached (no reclaim),
-// so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize it so the
-// leaked AWAITING_INPUT session can't hold a concurrency slot forever.
+// so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
 const CANCEL_GRACE_MS = 2 * 60_000;
 const CODEX_STARTUP_GRACE_MS = 2 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
-// A task in a terminal state has no work left, so a session still parked at
-// AWAITING_INPUT for it (e.g. a "开始执行" run whose agent marked the task DONE) is
-// just holding a concurrency slot. Recycle it immediately instead of waiting out
-// IDLE_AFTER_MS. Covers DONE from either the agent (MCP) or a manual user edit.
+// A task in a terminal state has no work left, so its warm runtime may be recycled
+// immediately. Ordinary idle sessions are never ended here: the runner owns the 4h
+// warm-process TTL and the Session remains AWAITING_INPUT after that process exits.
 const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED];
 
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
- * whose runner dies would sit RUNNING/AWAITING_INPUT forever, leaking a session and
- * a concurrency slot and showing the UI a live-but-dead chat. v1 is single-replica;
+ * whose runner dies mid-turn would sit RUNNING forever, leaking an active-turn slot.
+ * An AWAITING_INPUT session is intentionally independent of runner liveness. v1 is single-replica;
  * for multi-replica this needs a leader lock (deferred to the HA phase).
  */
 @Injectable()
@@ -86,7 +84,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
 
   private async sweep(): Promise<void> {
     const now = Date.now();
-    const idleCutoff = new Date(now - IDLE_AFTER_MS);
     const sessions = await this.prisma.session.findMany({
       where: { status: { in: LIVE } },
       select: {
@@ -110,17 +107,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const hb = s.assignedRunner?.lastHeartbeatAt?.getTime() ?? 0;
         const offline =
           !s.assignedRunner || s.assignedRunner.status === 'OFFLINE' || now - hb > OFFLINE_AFTER_MS;
-        if (offline) {
-          await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline');
-          continue;
-        }
-        // Online runner that hasn't honored a cancel/end in time: the session is
-        // wedged (e.g. a restarted runner that never re-attached). Force-finalize so
-        // the slot is freed; without this both branches below skip it forever. An
-        // unacknowledged *graceful* end (idle recycle / task done / user end) is not a
-        // run failure — a healthy session that simply sat untouched for IDLE_AFTER_MS
-        // must not resurface as FAILED — so settle it at the same benign terminal state
-        // /complete would have given it. Only a hard cancel still lands FAILED.
+        // A runner that hasn't honored a cancel/end in time is wedged. Handle this
+        // before ordinary offline liveness so a graceful end remains graceful even if
+        // the runner disappeared while tearing down.
         const cancelAt = s.cancelRequestedAt?.getTime() ?? 0;
         if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
           const graceful = gracefulEndStatus(s.endReason);
@@ -129,8 +118,21 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             s.assignedRunnerId,
             s.taskId,
             graceful ? `${s.endReason} end not honored` : 'cancel not honored',
-            graceful ? { status: graceful } : {},
+            graceful
+              ? { status: graceful, expectedStatuses: [s.status] }
+              : { expectedStatuses: [s.status] },
           );
+          continue;
+        }
+        if (offline) {
+          // RUNNING is an active turn and cannot survive losing its runner. An idle
+          // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;
+          // its next message simply waits in PENDING until this runner is online.
+          if (runnerOfflineIsFatal(s.status)) {
+            await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
+              expectedStatuses: [RunStatus.RUNNING],
+            });
+          }
           continue;
         }
         const provider = s.provider ?? s.agent?.provider;
@@ -147,6 +149,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             s.assignedRunnerId,
             s.taskId,
             'codex runtime not initialized',
+            { expectedStatuses: [RunStatus.RUNNING] },
           );
           continue;
         }
@@ -169,24 +172,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, why, {
               resetTaskTo: TaskStatus.FAILED,
               failureDetail: text,
+              expectedStatuses: [RunStatus.AWAITING_INPUT],
             });
             continue;
           }
         }
-        // Tear a parked session down when its task is already finished (recycle the
-        // slot now) or when it has sat idle past IDLE_AFTER_MS.
+        // A task-bound runtime has no more work once its task is terminal. This is a
+        // business completion, not idle expiry; ordinary AWAITING_INPUT sessions stay open.
         const taskDone = !!s.task && TASK_TERMINAL.includes(s.task.status);
-        if (
-          s.status === RunStatus.AWAITING_INPUT &&
-          !s.cancelRequestedAt &&
-          (taskDone || now - lastTurn > IDLE_AFTER_MS)
-        ) {
-          await this.endParked(
-            s.id,
-            s.assignedRunnerId,
-            idleCutoff,
-            taskDone ? SessionEndReason.TASK_DONE : SessionEndReason.IDLE,
-          );
+        if (s.status === RunStatus.AWAITING_INPUT && !s.cancelRequestedAt && taskDone) {
+          await this.endParked(s.id, s.assignedRunnerId, SessionEndReason.TASK_DONE);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
@@ -216,6 +211,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       // Detail recorded on the task comment for a genuine failure (resetTaskTo=FAILED);
       // defaults to `reason`. Lets the API-error backstop surface the actual error text.
       failureDetail?: string;
+      /** State observed by the sweep; prevents a stale decision finalizing a newer turn. */
+      expectedStatuses?: RunStatus[];
     } = {},
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -223,7 +220,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.session.updateMany({
-        where: { id: sessionId, status: { in: LIVE } },
+        where: { id: sessionId, status: { in: opts.expectedStatuses ?? LIVE } },
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).
         data: {
@@ -264,27 +261,26 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Gracefully tear down a session parked at AWAITING_INPUT (inbox 'end' turn +
-   * cancel), freeing its concurrency slot. Triggered when the session's task is
-   * already terminal (its work is done) or when it has been idle past IDLE_AFTER_MS.
+   * cancel). Triggered only when the session's task is already terminal; ordinary
+   * process-idle expiry is runner-local and leaves the Session AWAITING_INPUT.
    */
   private async endParked(
     sessionId: string,
     runnerId: string | null,
-    idleCutoff: Date,
     reason: SessionEndReason,
   ): Promise<void> {
     // Claim the teardown atomically: re-evaluate the trigger at execution time and put
     // the cancelRequestedAt flip + the 'end' turn in ONE transaction so a seq P2002
     // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
-    // re-check mirrors sweep() — still parked, and either its task is terminal or it's
-    // still idle — so a turn that arrived since the sweep read doesn't get cut off.
+    // re-check mirrors sweep() — still parked and its task is terminal — so a turn
+    // that arrived since the sweep read doesn't get cut off.
     const done = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.session.updateMany({
         where: {
           id: sessionId,
           status: RunStatus.AWAITING_INPUT,
           cancelRequestedAt: null,
-          OR: [{ task: { status: { in: TASK_TERMINAL } } }, { lastTurnAt: { lt: idleCutoff } }],
+          task: { status: { in: TASK_TERMINAL } },
         },
         data: { cancelRequestedAt: new Date(), endReason: reason },
       });

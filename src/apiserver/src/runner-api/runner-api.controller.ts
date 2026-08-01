@@ -36,6 +36,7 @@ import {
   ReclaimSession,
   RunEventBatch,
   RunEventType,
+  RunStatus as SharedRunStatus,
   RunInboxResponse,
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
@@ -57,6 +58,7 @@ import {
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
+import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, UploadedFile } from '../attachments/attachments.media';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -91,6 +93,11 @@ const INBOX_LEASE_MS = 300_000;
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
+// PENDING is also open/resumable. In the active-turn model it can briefly coexist with
+// a still-warm runtime (a new message arrived after the prior turn released its slot), so
+// late event tails and heartbeat snapshots must remain streamable while it waits to claim.
+// Keep this distinct from LIVE: /complete must never finalize a freshly queued PENDING turn.
+const OPEN = OPEN_SESSION_STATUSES;
 
 function normalizeProvider(value?: string | null): AgentProvider {
   return value === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
@@ -302,7 +309,7 @@ export class RunnerApiController {
       },
     });
     // Persist each running session's live worktree diff so the composer's status bar can
-    // appear mid-turn, not just at turn-complete. The `status in LIVE` guard stops a
+    // appear mid-turn, not just at turn-complete. The `status in OPEN` guard stops a
     // straggler heartbeat from overwriting a just-finalized session's committed diff;
     // the try/catch keeps a DB hiccup here from failing the heartbeat (→ reads as offline).
     if (dto?.sessions?.length) {
@@ -310,7 +317,7 @@ export class RunnerApiController {
         await Promise.all(
           dto.sessions.map(async (s) => {
             await this.prisma.session.updateMany({
-              where: { id: s.sessionId, assignedRunnerId: runner.id, status: { in: LIVE } },
+              where: { id: s.sessionId, assignedRunnerId: runner.id, status: { in: OPEN } },
               data: {
                 isolationStatus: s.isolationStatus,
                 changedFiles: (s.changedFiles ?? []) as unknown as Prisma.InputJsonValue,
@@ -458,15 +465,18 @@ export class RunnerApiController {
     if (job?.allowOrchestration) {
       job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
     }
+    // A claimed session may already have a warm process whose inbox long-poll is asleep.
+    // Wake it only after the authoritative PENDING->RUNNING transition acquired a slot.
+    if (job) this.realtime.notifyInbox(job.sessionId);
     return job;
   }
 
-  /** A restarted runner re-attaches to its still-live sessions and --resumes them. */
+  /** Retain every open checkout on restart; the payload status tells the runner which is active. */
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/reclaim')
   async reclaim(@CurrentRunner() runner: { id: string }): Promise<ReclaimResponse> {
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runner.id, status: { in: LIVE } },
+      where: { assignedRunnerId: runner.id, status: { in: OPEN } },
       include: { agent: true },
     });
     const out: ReclaimSession[] = [];
@@ -525,6 +535,7 @@ export class RunnerApiController {
       };
       out.push({
         sessionId: s.id,
+        status: s.status as SharedRunStatus,
         provider,
         runtimeSessionId: runtime.runtimeSessionId,
         title: s.title,
@@ -662,74 +673,74 @@ export class RunnerApiController {
    * session to RUNNING when a message is delivered so a concurrent send is serialized.
    */
   private async dequeueTurn(sessionId: string): Promise<RunInboxResponse | null> {
-    const leaseUntil = new Date(Date.now() + INBOX_LEASE_MS);
-    const rows = await this.prisma.$queryRaw<
-      Array<{ id: string; seq: number; kind: string; content: string | null }>
-    >`
-      UPDATE "conversation_turn"
-        SET status = 'IN_FLIGHT', "delivered_at" = now(), "lease_deadline_at" = ${leaseUntil}
-      WHERE id = (
-        SELECT id FROM "conversation_turn"
-        WHERE "session_id" = ${sessionId}::uuid
-          AND (
-            -- interrupt/end land immediately, even mid-message (interrupt is the point).
-            -- 'diff' (an on-demand live-diff refresh) is read-only and claude-independent, so
-            -- it lands immediately too — even mid-turn — and is acked on delivery below.
-            ("kind" IN ('interrupt', 'end', 'diff')
-              AND ("status" = 'PENDING' OR ("status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())))
-            -- A crashed in-flight message: re-deliver the same one (at-least-once lease).
-            OR ("kind" IN ('message', 'shell') AND "status" = 'IN_FLIGHT' AND "lease_deadline_at" < now())
-            -- reload (a model/mode/effort change) and the next queued message both wait
-            -- until no message is in flight, so a config change made mid-turn applies
-            -- between turns (re-spawn) instead of aborting the running one. reload is
-            -- ordered ahead of queued messages below, so the next turn runs under it.
-            OR ("kind" IN ('reload', 'message', 'shell') AND "status" = 'PENDING' AND NOT EXISTS (
-              SELECT 1 FROM "conversation_turn" inflight
-              WHERE inflight."session_id" = ${sessionId}::uuid
-                AND inflight."kind" IN ('message', 'shell')
-                AND inflight."status" = 'IN_FLIGHT'
-            ))
-          )
-        ORDER BY (CASE WHEN "kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN "kind" = 'reload' THEN 1 ELSE 2 END), "seq" ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT 1
-      )
-      RETURNING id, seq, kind, content
-    `;
-    if (rows.length === 0) return null;
-    const t = rows[0];
-    let attachments: TurnAttachment[] | undefined;
-    let content = t.content ?? undefined;
-    if (t.kind === 'message' || t.kind === 'shell') {
-      // A shell turn runs on the runner too, so flip RUNNING the same way — it serializes
-      // a concurrent send and keeps the idle reaper off while the command executes.
-      await this.prisma.session.updateMany({
-        where: {
-          id: sessionId,
-          status: { in: [RunStatus.AWAITING_INPUT, RunStatus.PENDING, RunStatus.INTERRUPTED] },
-        },
-        data: { status: RunStatus.RUNNING, lastTurnAt: new Date() },
-      });
-      // Hand the runner this turn's attachment refs (id + mime + filename); it fetches the
-      // bytes via GET /api/attachments/:id and dispatches on the type (image/PDF inlined as
-      // content blocks, anything else written to the worktree). Shell turns have none, so
-      // the field is omitted.
+    return this.prisma.$transaction(async (tx) => {
+      // More than one inbox poller can briefly exist around a warm activation or runner
+      // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
+      // cannot both lease different messages from the same snapshot.
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      const leaseUntil = new Date(Date.now() + INBOX_LEASE_MS);
+      const rows = await tx.$queryRaw<
+        Array<{ id: string; seq: number; kind: string; content: string | null }>
+      >`
+        UPDATE "conversation_turn"
+          SET status = 'IN_FLIGHT', "delivered_at" = now(), "lease_deadline_at" = ${leaseUntil}
+        WHERE id = (
+          SELECT turn.id FROM "conversation_turn" turn
+          WHERE turn."session_id" = ${sessionId}::uuid
+            AND (
+              -- interrupt/end land immediately, even mid-message (interrupt is the point).
+              -- diff is read-only and runtime-independent, so it may land while idle too.
+              (turn."kind" IN ('interrupt', 'end', 'diff')
+                AND (turn."status" = 'PENDING' OR (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())))
+              -- A reload is ordered between executable turns, but does not itself consume
+              -- an active-turn slot. A cold runtime can leave it queued until the next claim.
+              OR (turn."kind" = 'reload' AND turn."status" = 'PENDING' AND NOT EXISTS (
+                SELECT 1 FROM "conversation_turn" inflight
+                WHERE inflight."session_id" = ${sessionId}::uuid
+                  AND inflight."kind" IN ('message', 'shell')
+                  AND inflight."status" = 'IN_FLIGHT'
+              ))
+              -- User executable turns are deliverable only after claim changed the Session
+              -- to RUNNING. An AWAITING_INPUT process may remain warm, but its inbox cannot
+              -- bypass maxConcurrent merely because it is already resident.
+              OR (turn."kind" IN ('message', 'shell')
+                AND EXISTS (
+                  SELECT 1 FROM "session" active
+                  WHERE active.id = ${sessionId}::uuid
+                    AND active.status = 'RUNNING'
+                    AND active."cancel_requested_at" IS NULL
+                )
+                AND (
+                  (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())
+                  OR (turn."status" = 'PENDING' AND NOT EXISTS (
+                    SELECT 1 FROM "conversation_turn" inflight
+                    WHERE inflight."session_id" = ${sessionId}::uuid
+                      AND inflight."kind" IN ('message', 'shell')
+                      AND inflight."status" = 'IN_FLIGHT'
+                  ))
+                ))
+            )
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'reload' THEN 1 ELSE 2 END), turn."seq" ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        RETURNING id, seq, kind, content
+      `;
+      if (rows.length === 0) return null;
+      const t = rows[0];
+      let attachments: TurnAttachment[] | undefined;
+      let content = t.content ?? undefined;
       if (t.kind === 'message') {
-        // A message turn that already produced claude-side output is a re-delivery of a turn
-        // interrupted mid-flight: its runner died/restarted before acking, so the at-least-once
-        // lease re-delivered it. claude already has this message in the context `--resume`
-        // restores, so re-feeding the original text would re-run its side effects (e.g. a deploy
-        // that restarted this very runner). Deliver a continue nudge instead — and skip its
-        // attachments, already in that restored context. A turn with no output yet never reached
-        // claude (a first send, or a still-pending re-delivery), so it's delivered unchanged.
-        const started = await this.prisma.runEvent.findFirst({
+        // A message turn that already produced runtime output is a lease re-delivery.
+        // Resume with a continuation nudge instead of replaying its side effects.
+        const started = await tx.runEvent.findFirst({
           where: { turnId: t.id, type: { in: [...CLAUDE_STARTED_EVENT_TYPES] } },
           select: { id: true },
         });
         if (started) {
           content = buildResumeContinuation(t.content);
         } else {
-          const atts = await this.prisma.attachment.findMany({
+          const atts = await tx.attachment.findMany({
             where: { turnId: t.id },
             select: { id: true, mimeType: true, fileName: true },
             orderBy: { createdAt: 'asc' },
@@ -742,22 +753,22 @@ export class RunnerApiController {
             }));
           }
         }
+      } else if (t.kind !== 'shell') {
+        // Control turns are fire-and-forget: ack on delivery so a stale one cannot
+        // repeatedly jump ahead of real messages after each lease window.
+        await tx.conversationTurn.updateMany({
+          where: { id: t.id, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
       }
-    } else {
-      // Control turns (interrupt/end/reload/diff) are fire-and-forget: ack on delivery so a
-      // stale one can never re-fire ahead of real messages every lease window.
-      await this.prisma.conversationTurn.updateMany({
-        where: { id: t.id, status: { not: 'ANSWERED' } },
-        data: { status: 'ANSWERED', answeredAt: new Date() },
-      });
-    }
-    return {
-      turnId: t.id,
-      seq: t.seq,
-      kind: t.kind as ConversationTurnKind,
-      content,
-      attachments,
-    };
+      return {
+        turnId: t.id,
+        seq: t.seq,
+        kind: t.kind as ConversationTurnKind,
+        content,
+        attachments,
+      };
+    });
   }
 
   /**
@@ -835,7 +846,7 @@ export class RunnerApiController {
     }
   }
 
-  /** A single interactive turn finished; park the session awaiting the next input. */
+  /** A single interactive turn finished; retain or release its active-turn slot. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/turn-complete')
   async turnComplete(
@@ -853,12 +864,19 @@ export class RunnerApiController {
     // (no taskId) keep parking so the user can retry in place.
     const failTask = dto.status === RunStatus.FAILED && !!session.taskId;
     const finalized = await this.prisma.$transaction(async (tx) => {
+      // Serialize completion with createTurn's enqueue transition. Whichever locks the
+      // Session first determines whether a follow-up is already queued; this prevents the
+      // lost-wakeup state AWAITING_INPUT + PENDING conversation turn.
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      const current = await tx.session.findUnique({ where: { id: sessionId }, select: { status: true } });
       // Idempotent ack: only the first turn-complete for this turn applies.
       const ack = await tx.conversationTurn.updateMany({
         where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
-      if (ack.count === 0) return false;
+      if (ack.count === 0) {
+        return { applied: false, status: current?.status ?? session.status };
+      }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
       // would make a shell-first session (claude never received a message) try to --resume a
@@ -868,13 +886,23 @@ export class RunnerApiController {
         select: { kind: true },
       });
       const turnInc = completed?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
-      // Park (or, on a failed task turn, finalize) + bill ONLY if the session is still
-      // live and not being torn down, so a late/retried turn-complete can never
-      // resurrect a finalized/cancelled session or double-bill it.
+      // If a follow-up arrived before this completion acquired the Session lock, the
+      // current active slot passes directly to it and the inbox may deliver it next. With
+      // no executable follow-up, release the slot while the runtime remains warm.
+      const pendingExecutable = failTask
+        ? 0
+        : await tx.conversationTurn.count({
+            where: { sessionId, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
+          });
+      const nextStatus = failTask
+        ? RunStatus.FAILED
+        : statusAfterTurnCompleted(pendingExecutable > 0);
+      // Settle + bill only if this is still the active turn and is not being torn down,
+      // so a late/retried completion cannot resurrect a finalized session or double-bill.
       const parked = await tx.session.updateMany({
-        where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
+        where: { id: sessionId, cancelRequestedAt: null, status: RunStatus.RUNNING },
         data: {
-          status: failTask ? RunStatus.FAILED : RunStatus.AWAITING_INPUT,
+          status: nextStatus,
           // On a failed task turn claude is still alive (the turn errored, the process
           // didn't exit), so finalizing FAILED here would leak its runner concurrency
           // slot — the process lingers, holding a slot, until the runner restarts. Set
@@ -905,7 +933,10 @@ export class RunnerApiController {
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
         },
       });
-      if (parked.count === 0) return false; // session no longer live -> turn acked, no billing
+      if (parked.count === 0) {
+        const latest = await tx.session.findUnique({ where: { id: sessionId }, select: { status: true } });
+        return { applied: false, status: latest?.status ?? current?.status ?? session.status };
+      }
       // Per-file unified diffs to the side table (never on the session row, so the detail/
       // list payload stays small) — fetched on demand when the user opens a file's diff.
       if (dto.changedDiff !== undefined) {
@@ -937,7 +968,7 @@ export class RunnerApiController {
         await reclaimStalledTask(tx, session.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, session.taskId!, dto.result || 'run failed');
       }
-      return true;
+      return { applied: true, status: nextStatus };
     });
     // Post-turn worktree verdict: new commits after an earlier merge retire the stale
     // "✓ Merged" (see clearStaleMergedStatus). Outside the transaction — independent write,
@@ -946,7 +977,7 @@ export class RunnerApiController {
     if (failTask) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
-      if (finalized) {
+      if (finalized.applied) {
         this.realtime.publish(sessionId, {
           seq: Number.MAX_SAFE_INTEGER,
           type: RunEventType.STATUS,
@@ -954,12 +985,18 @@ export class RunnerApiController {
           payload: { status: RunStatus.FAILED, final: true },
         });
       }
-      return { ok: true };
+      return { ok: true, status: finalized.status };
     }
-    // The turn just parked the session at AWAITING_INPUT; wake the inbox poller so any
-    // queued follow-up message is leased now instead of after the long-poll window.
+    // RUNNING means the already-held slot passes to a queued follow-up. AWAITING_INPUT
+    // still wakes control turns (reload/diff/end), while executable messages remain gated
+    // until a future claim changes the Session back to RUNNING.
     this.realtime.notifyInbox(sessionId);
-    return { ok: true };
+    if (finalized.applied && finalized.status === RunStatus.AWAITING_INPUT) {
+      // A runner slot just became available; wake claim long-polls immediately instead
+      // of leaving unrelated PENDING sessions to the periodic retry fallback.
+      this.queue.notifySessionQueued();
+    }
+    return { ok: true, status: finalized.status };
   }
 
   @UseGuards(RunnerAuthGuard)
@@ -999,14 +1036,14 @@ export class RunnerApiController {
         })),
         skipDuplicates: true,
       });
-      // Persisted conversation/background activity is liveness — reset the idle clock so the
-      // reaper doesn't tear down a session that's actively working. Session-level system events
+      // Persisted conversation/background activity is liveness. Session-level system events
       // are different: every reclaimed idle session emits init/resumed when its runner restarts,
       // and counting that handshake would move every waiting session to "now" and scramble the
-      // recency sort. A system event carrying a turnId still counts as real in-turn activity.
+      // recency sort. OPEN deliberately includes PENDING because a buffered tail from the prior
+      // turn may arrive after a concurrent send moved AWAITING_INPUT -> PENDING.
       if (hasSessionActivity(durable)) {
         await this.prisma.session.updateMany({
-          where: { id: sessionId, cancelRequestedAt: null, status: { in: LIVE } },
+          where: { id: sessionId, cancelRequestedAt: null, status: { in: OPEN } },
           data: { lastTurnAt: new Date() },
         });
       }
@@ -1190,16 +1227,16 @@ export class RunnerApiController {
         WHERE "id" = ${sessionId}::uuid AND "running_subagents" && ${subEnded}::text[]`;
     }
 
-    // Broadcast to live subscribers while the session is active (any LIVE status);
+    // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
     // remain in the persisted transcript and appear on replay. NB: must include
     // AWAITING_INPUT, not just RUNNING — the runner emits a turn's final batch
     // (last text_delta + the authoritative `assistant` + `turn_end`) into its 250ms
     // buffer, then immediately calls /turn-complete, which parks the session at
     // AWAITING_INPUT. So that buffered batch almost always arrives here AFTER the
-    // park; gating on RUNNING alone dropped every turn's tail from the live stream
-    // (it only reappeared on refresh, via replay).
-    if (LIVE.includes(session.status)) {
+    // park; gating on RUNNING alone dropped every turn's tail from the live stream.
+    // PENDING matters for the same reason when a new message races that buffered tail.
+    if (OPEN.includes(session.status)) {
       for (const e of events) {
         // Persisted above either way — but a `system` progress ping renders as nothing on every
         // client, so spending a frame on it only costs the reader bandwidth. The replay paths
@@ -1411,7 +1448,7 @@ export class RunnerApiController {
   /** A freshly recomputed live worktree diff, pushed in response to a 'diff' inbox control
    *  turn (the web opened a file whose stored patch lagged). Overwrites the session's
    *  changedFiles and the SessionDiff side-table patches together, so the file list and the
-   *  per-file diffs are consistent again. Guarded to LIVE + this runner (mirrors the heartbeat
+   *  per-file diffs are consistent again. Guarded to OPEN + this runner (mirrors the heartbeat
    *  guard) so a straggler can't clobber a just-finalized session's committed diff. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/diff')
@@ -1423,7 +1460,7 @@ export class RunnerApiController {
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
     const updated = await this.prisma.session.updateMany({
-      where: { id: sessionId, assignedRunnerId: runner.id, status: { in: LIVE } },
+      where: { id: sessionId, assignedRunnerId: runner.id, status: { in: OPEN } },
       data: {
         ...(dto.changedFiles !== undefined
           ? { changedFiles: dto.changedFiles as unknown as Prisma.InputJsonValue }

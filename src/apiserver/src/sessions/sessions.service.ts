@@ -32,6 +32,7 @@ import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } 
 import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
+import { statusAfterTurnEnqueued } from '../common/session-scheduling';
 import { truncatePayload } from './truncate-payload';
 import { withSessionState } from './session-state';
 
@@ -1596,17 +1597,20 @@ export class SessionsService {
    * first wins and the other no-ops (insertTurn is idempotent on clientTurnId). No-op once
    * any turn exists (already seeded, or a re-claimed session with history).
    */
-  private async ensurePromptSeeded(session: { id: string; prompt: string }) {
-    const count = await this.prisma.conversationTurn.count({ where: { sessionId: session.id } });
+  private async ensurePromptSeeded(
+    tx: Prisma.TransactionClient,
+    session: { id: string; prompt: string },
+  ) {
+    const count = await tx.conversationTurn.count({ where: { sessionId: session.id } });
     if (count > 0) return;
-    const turn = await this.insertTurn(session.id, {
+    const turn = await this.insertTurnLocked(tx, session.id, {
       kind: 'message',
       content: session.prompt,
       clientTurnId: SessionsService.initialTurnClientId(session.id),
     });
     // Link any compose-page uploads (scoped to the session, still turn-less) to the seed
     // turn, exactly as the claim would, so they ride along with the prompt.
-    await this.prisma.attachment.updateMany({
+    await tx.attachment.updateMany({
       where: { sessionId: session.id, turnId: null },
       data: { turnId: turn.id },
     });
@@ -1619,42 +1623,40 @@ export class SessionsService {
     return `initial-${sessionId}`;
   }
 
+  /** Allocate a turn while the caller holds the Session row lock. */
+  private async insertTurnLocked(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    data: { kind: string; content?: string; clientTurnId: string },
+  ) {
+    const existing = await tx.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId: data.clientTurnId } },
+    });
+    if (existing) return existing;
+    const last = await tx.conversationTurn.findFirst({
+      where: { sessionId },
+      orderBy: { seq: 'desc' },
+      select: { seq: true },
+    });
+    return tx.conversationTurn.create({
+      data: { sessionId, seq: (last?.seq ?? 0) + 1, status: 'PENDING', ...data },
+    });
+  }
+
   /**
-   * Allocate the next per-session delivery seq and insert a turn. Retries on a seq
-   * race (unique sessionId+seq); returns the existing row if clientTurnId was
-   * already used (idempotent — defeats double-clicks / cross-tab duplicate sends).
+   * Allocate the next per-session delivery seq under a row lock. Every producer uses
+   * this path, so concurrent user/control turns cannot race on the unique (session,seq).
    */
   private async insertTurn(
     sessionId: string,
     data: { kind: string; content?: string; clientTurnId: string },
   ) {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const last = await this.prisma.conversationTurn.findFirst({
-        where: { sessionId },
-        orderBy: { seq: 'desc' },
-        select: { seq: true },
-      });
-      const seq = (last?.seq ?? 0) + 1;
-      try {
-        return await this.prisma.conversationTurn.create({
-          data: { sessionId, seq, status: 'PENDING', ...data },
-        });
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-          const dup = await this.prisma.conversationTurn.findUnique({
-            where: { sessionId_clientTurnId: { sessionId, clientTurnId: data.clientTurnId } },
-          });
-          if (dup) return dup; // clientTurnId already used -> idempotent
-          continue; // seq collision -> retry
-        }
-        throw e;
-      }
-    }
-    throw new ConflictException('could not allocate a turn (too much contention)');
-  }
-
-  private async enqueueControlTurn(sessionId: string, kind: 'interrupt' | 'end') {
-    await this.insertTurn(sessionId, { kind, clientTurnId: randomUUID() });
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
+      if (rows.length === 0) throw new NotFoundException('session not found');
+      return this.insertTurnLocked(tx, sessionId, data);
+    });
   }
 
   /**
@@ -1667,10 +1669,11 @@ export class SessionsService {
     ownerId: string,
     sessionId: string,
     attachmentIds: string[] | undefined,
+    tx: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
-    const found = await this.prisma.attachment.findMany({
+    const found = await tx.attachment.findMany({
       where: { id: { in: ids }, ownerId, sessionId, turnId: null },
       select: { id: true },
     });
@@ -1704,9 +1707,13 @@ export class SessionsService {
 
   /** Stamp pre-validated attachments with the turn they belong to, so the inbox can
    *  deliver them. `turnId: null` in the filter keeps a concurrent link from double-using one. */
-  private async linkAttachments(turnId: string, attachmentIds: string[]): Promise<void> {
+  private async linkAttachments(
+    turnId: string,
+    attachmentIds: string[],
+    tx: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
     if (attachmentIds.length === 0) return;
-    await this.prisma.attachment.updateMany({
+    await tx.attachment.updateMany({
       where: { id: { in: attachmentIds }, turnId: null },
       data: { turnId },
     });
@@ -1715,46 +1722,96 @@ export class SessionsService {
   /** Enqueue a user message for a live or still-queued (PENDING) session. */
   async createTurn(ownerId: string, id: string, dto: SessionTurnDto) {
     assertPromptSize(dto.content, 'message');
-    const session = await this.getSendable(ownerId, id);
-    const existing = await this.prisma.conversationTurn.findUnique({
-      where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+    await this.getSendable(ownerId, id); // fast ownership/lifecycle validation
+    const queued = await this.prisma.$transaction(async (tx) => {
+      // Linearize against claim and turnComplete. If completion wins, it first releases
+      // RUNNING->AWAITING_INPUT and this enqueue changes it to PENDING. If enqueue wins,
+      // completion sees this turn and retains RUNNING. Neither ordering can lose a wakeup.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        throw new ConflictException('the session has ended');
+      }
+      const existing = await tx.conversationTurn.findUnique({
+        where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
+      });
+      if (existing) {
+        return {
+          turn: existing,
+          wakeQueue: session.status === RunStatus.PENDING,
+          wakeInbox: session.status === RunStatus.RUNNING,
+        };
+      }
+      // Check attachments only after the idempotency lookup: on a retry of a successful
+      // request they are already linked to this same turn and must not make the retry fail.
+      // For a genuinely new request validation still precedes the turn insert.
+      const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds, tx);
+      // A claim can race the lazy first-turn seed. While holding the same Session lock as
+      // queue.buildSession, ensure an unestablished runtime cannot lose its opening prompt.
+      if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
+      const turn = await this.insertTurnLocked(tx, id, {
+        // Whitelist: this endpoint cannot manufacture control turns.
+        kind: dto.kind === 'shell' ? 'shell' : 'message',
+        content: dto.content,
+        clientTurnId: dto.clientTurnId,
+      });
+      await this.linkAttachments(turn.id, attachmentIds, tx);
+      const nextStatus = statusAfterTurnEnqueued(session.status);
+      await tx.session.update({
+        where: { id },
+        data: { status: nextStatus, lastTurnAt: new Date() },
+      });
+      return {
+        turn,
+        wakeQueue: nextStatus === RunStatus.PENDING,
+        wakeInbox: nextStatus === RunStatus.RUNNING,
+      };
     });
-    if (existing) return { turnId: existing.id, seq: existing.seq }; // idempotent
-    // Validate any image refs up front so a bad one fails the request before a turn lands.
-    const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds);
-    // The session may still be PENDING (queued, waiting for a runner slot). Its first turn
-    // (the prompt) isn't seeded until the runner claims it, so seed it now — otherwise this
-    // follow-up would land at seq 1 and the claim would drop the prompt. No-op once seeded.
-    if (session.status === RunStatus.PENDING) await this.ensurePromptSeeded(session);
-    // Accept the message even while a turn is running: it's queued as PENDING and
-    // delivery is serialized in the inbox (dequeueTurn releases the next message only
-    // once the in-flight one is answered). The user can withdraw a still-queued one.
-    const turn = await this.insertTurn(id, {
-      // Whitelist: the turns endpoint may only enqueue 'message' or 'shell' — never a
-      // control kind (interrupt/end/reload), which have their own dedicated routes.
-      kind: dto.kind === 'shell' ? 'shell' : 'message',
-      content: dto.content,
-      clientTurnId: dto.clientTurnId,
-    });
-    await this.linkAttachments(turn.id, attachmentIds);
-    // User activity resets the idle clock so the reaper won't tear down a session
-    // that just received a message but hasn't been picked up by the runner yet.
-    await this.prisma.session.update({ where: { id }, data: { lastTurnAt: new Date() } });
-    this.realtime.notifyInbox(id);
-    return { turnId: turn.id, seq: turn.seq };
+    if (queued.wakeQueue) this.queue.notifySessionQueued();
+    if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    return { turnId: queued.turn.id, seq: queued.turn.seq };
   }
 
   /** Abort the in-flight turn of a live session (the process stays alive). */
   async interrupt(ownerId: string, id: string) {
-    const session = await this.getLive(ownerId, id);
-    // Drop any queued-but-undelivered follow-ups: interrupting means "stop", so the
-    // user's pending messages shouldn't fire after the in-flight turn is aborted. An
-    // already-delivered message is IN_FLIGHT, not PENDING — it's the turn being aborted.
-    await this.prisma.conversationTurn.deleteMany({
-      where: { sessionId: session.id, kind: 'message', status: 'PENDING' },
+    await this.getLive(ownerId, id);
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
+        throw new ConflictException('the session has ended');
+      }
+      // Drop queued-but-undelivered follow-ups: interrupting means "stop", so they
+      // should not fire after the current turn is aborted.
+      await tx.conversationTurn.deleteMany({
+        where: { sessionId: id, kind: 'message', status: 'PENDING' },
+      });
+      if (session.status === RunStatus.RUNNING) {
+        const executable = await tx.conversationTurn.count({
+          where: {
+            sessionId: id,
+            kind: { in: ['message', 'shell'] },
+            status: { in: ['PENDING', 'IN_FLIGHT'] },
+          },
+        });
+        if (executable === 0) {
+          // turnComplete already handed the slot to a queued follow-up, but that next
+          // turn has not been leased. Dropping it would strand the runner-local permit;
+          // roll back and let the caller retry once the next turn actually starts.
+          throw new ConflictException('the next turn is already starting');
+        }
+      }
+      await this.insertTurnLocked(tx, id, { kind: 'interrupt', clientTurnId: randomUUID() });
     });
-    await this.enqueueControlTurn(session.id, 'interrupt');
-    this.realtime.notifyInbox(session.id);
+    this.realtime.notifyInbox(id);
     return { ok: true };
   }
 
@@ -1794,24 +1851,60 @@ export class SessionsService {
    *  appear in the transcript, so cancelling is rejected. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
-    const res = await this.prisma.conversationTurn.deleteMany({
-      // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
-      where: {
-        id: turnId,
-        sessionId: id,
-        kind: 'message',
-        status: 'PENDING',
-        clientTurnId: { not: SessionsService.initialTurnClientId(id) },
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        throw new ConflictException('the session has ended');
+      }
+      const res = await tx.conversationTurn.deleteMany({
+        // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
+        where: {
+          id: turnId,
+          sessionId: id,
+          kind: 'message',
+          status: 'PENDING',
+          clientTurnId: { not: SessionsService.initialTurnClientId(id) },
+        },
+      });
+      if (res.count === 0) throw new ConflictException('message already started or not found');
+
+      // Sending to AWAITING_INPUT changes the Session to PENDING. If that last queued
+      // message is withdrawn before claim, restore the idle state instead of letting an
+      // empty claim consume a slot forever.
+      const executable = await tx.conversationTurn.count({
+        where: {
+          sessionId: id,
+          kind: { in: ['message', 'shell'] },
+          status: { in: ['PENDING', 'IN_FLIGHT'] },
+        },
+      });
+      if (executable === 0 && session.status === RunStatus.RUNNING) {
+        // Claim has already reserved a runner-local permit but the runner has not leased
+        // this turn yet. Deleting the last executable turn would leave that handoff with
+        // no /turn-complete capable of releasing its local permit. Roll the delete back;
+        // from the user's perspective the message has crossed the "started" boundary.
+        throw new ConflictException('message already started or not found');
+      }
+      if (executable === 0 && session.status === RunStatus.PENDING) {
+        await tx.session.update({
+          where: { id },
+          data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() },
+        });
+      }
     });
-    if (res.count === 0) throw new ConflictException('message already started or not found');
+    this.realtime.notifyInbox(id);
     return { ok: true };
   }
 
   /** End a live session (closes the runner's claude process). */
   async end(ownerId: string, id: string) {
-    const session = await this.getLive(ownerId, id);
-    await this.endLive(session, SessionEndReason.ENDED);
+    const session = await this.getSendable(ownerId, id);
+    await this.endOpen(ownerId, id, SessionEndReason.ENDED);
     return { ok: true };
   }
 
@@ -1990,61 +2083,63 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) return false;
-    if (session.status === RunStatus.PENDING) {
-      // Atomic against the claim queue, which flips PENDING→RUNNING. Guarding on
-      // status=PENDING means the runner can't have started claude under us.
-      const res = await this.prisma.session.updateMany({
-        where: { id, status: RunStatus.PENDING },
-        data: {
-          status: RunStatus.CANCELLED,
-          endReason: SessionEndReason.CANCELLED,
-          cancelRequestedAt: new Date(),
-          finishedAt: new Date(),
-        },
-      });
-      if (res.count > 0) {
-        // Drain queued turns so nothing can be leased if the row is ever revived.
-        await this.prisma.conversationTurn.updateMany({
-          where: { sessionId: id, status: { not: 'ANSWERED' } },
-          data: { status: 'ANSWERED', answeredAt: new Date() },
-        });
-        this.realtime.notifyInbox(id);
-        return true;
-      }
-      // Lost the race: the runner claimed it (now RUNNING). Re-load and tear it down.
-      const live = await this.prisma.session.findFirst({ where: { id, ownerId } });
-      if (!live || SessionsService.TERMINAL.includes(live.status) || live.cancelRequestedAt) return false;
-      await this.endLive(live, SessionEndReason.CANCELLED);
-      return true;
-    }
-    await this.endLive(session, SessionEndReason.CANCELLED);
-    return true;
+    return this.endOpen(ownerId, id, SessionEndReason.CANCELLED);
   }
 
   /**
-   * Signal the runner to tear down a session's claude process: mark cancel-requested,
-   * record why it ended, enqueue an `end` control turn, and (if claimed) ask the runner
-   * to cancel now. The status settles to CANCELLED async once the runner reports back —
-   * `endReason` is what lets the UI tell that benign end apart from a real cancel.
-   * Caller must have already loaded the session and confirmed it isn't terminal.
+   * Linearize send/claim/end on the Session row. A still-PENDING session is settled
+   * directly; RUNNING/AWAITING_INPUT/INTERRUPTED gets an end control for its runtime.
+   * This avoids stale pre-lock status reads creating PENDING+cancelRequestedAt wedges.
    */
-  private async endLive(
-    session: { id: string; assignedRunnerId: string | null },
+  private async endOpen(
+    ownerId: string,
+    sessionId: string,
     reason: SessionEndReason,
-  ) {
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { cancelRequestedAt: new Date(), endReason: reason },
+  ): Promise<boolean> {
+    const ended = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
+        return { changed: false, runnerId: session.assignedRunnerId };
+      }
+      if (session.status === RunStatus.PENDING) {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: {
+            status: RunStatus.CANCELLED,
+            endReason: reason,
+            cancelRequestedAt: new Date(),
+            finishedAt: new Date(),
+          },
+        });
+        await tx.conversationTurn.updateMany({
+          where: { sessionId, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+      } else {
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { cancelRequestedAt: new Date(), endReason: reason },
+        });
+        // Drop queued messages so they cannot replay if the session is later revived.
+        await tx.conversationTurn.deleteMany({
+          where: { sessionId, kind: 'message', status: 'PENDING' },
+        });
+        await this.insertTurnLocked(tx, sessionId, {
+          kind: 'end',
+          clientTurnId: randomUUID(),
+        });
+      }
+      return { changed: true, runnerId: session.assignedRunnerId };
     });
-    // Drop queued-but-undelivered messages so they can't replay if the session is
-    // later revived (resume re-claims the same row and would otherwise deliver these
-    // stale PENDING turns ahead of the new message).
-    await this.prisma.conversationTurn.deleteMany({
-      where: { sessionId: session.id, kind: 'message', status: 'PENDING' },
-    });
-    await this.enqueueControlTurn(session.id, 'end');
-    if (session.assignedRunnerId) this.realtime.requestCancel(session.assignedRunnerId, session.id);
-    this.realtime.notifyInbox(session.id);
+    if (!ended.changed) return false;
+    if (ended.runnerId) this.realtime.requestCancel(ended.runnerId, sessionId);
+    this.realtime.notifyInbox(sessionId);
+    return true;
   }
 
   /**
@@ -2280,7 +2375,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endLive(session, SessionEndReason.COMPLETED);
+      await this.endOpen(ownerId, id, SessionEndReason.COMPLETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { archivedAt: new Date() } });
     // Archive is a list-membership change with no STATUS event — signal the control plane so
@@ -2370,7 +2465,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (!SessionsService.TERMINAL.includes(session.status) && !session.cancelRequestedAt) {
-      await this.endLive(session, SessionEndReason.DELETED);
+      await this.endOpen(ownerId, id, SessionEndReason.DELETED);
     }
     await this.prisma.session.update({ where: { id: session.id }, data: { deletedAt: new Date() } });
     // Soft-delete is a list-membership change with no STATUS event — signal the control plane.

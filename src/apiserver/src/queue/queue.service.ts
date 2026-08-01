@@ -56,43 +56,50 @@ export class QueueService {
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
-    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
-      UPDATE "session" SET status = 'RUNNING', "started_at" = now(), "last_turn_at" = now(), "updated_at" = now()
-      WHERE id = (
-        SELECT s.id FROM "session" s
-        WHERE s.status = 'PENDING'
-          AND s."assigned_runner_id" = ${runner.id}::uuid
-          -- A runner may only ever drive sessions owned by its own owner.
-          AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
-          -- Server-authoritative concurrency cap: never hand a runner more live
-          -- sessions (RUNNING/AWAITING_INPUT/INTERRUPTED stay live between turns)
-          -- than its maxConcurrent, even if its self-gating drifts after a restart.
-          AND (
-            SELECT count(*) FROM "session" live
-            WHERE live."assigned_runner_id" = ${runner.id}::uuid
-              AND live."status" IN ('RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-          ) < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
-          -- Batch-run cap, independent of the runner cap above: a session tagged with a
-          -- batch_id may only start while fewer than batch_max_concurrent of its batch
-          -- siblings are mid-turn (counted across all runners). Untagged sessions skip this.
-          -- Unlike the runner cap, AWAITING_INPUT does NOT count: a batch sibling that
-          -- finished its turn and is waiting on a human burns no capacity, and counting it
-          -- would wedge the rest of the batch behind an idle chat until the reaper's 4h
-          -- idle recycle. The runner cap above still bounds what the host actually hosts.
-          AND (
-            s."batch_id" IS NULL
-            OR (
-              SELECT count(*) FROM "session" bl
-              WHERE bl."batch_id" = s."batch_id"
-                AND bl."status" IN ('RUNNING', 'INTERRUPTED')
-            ) < s."batch_max_concurrent"
-          )
-        ORDER BY s."created_at" ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT 1
-      )
-      RETURNING id
-    `;
+    // Serialize the short count+claim critical section across API replicas. Row locking
+    // only the candidate is insufficient: two concurrent statements can lock different
+    // PENDING rows, both observe the same RUNNING count, and over-claim the final slot.
+    // The global transaction-scoped advisory lock also makes a batch cap spanning several
+    // runners authoritative. buildSession deliberately stays outside this short lock.
+    const rows = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
+      return tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE "session" SET
+          status = 'RUNNING',
+          "started_at" = COALESCE("started_at", now()),
+          "last_turn_at" = now(),
+          "updated_at" = now()
+        WHERE id = (
+          SELECT s.id FROM "session" s
+          WHERE s.status = 'PENDING'
+            AND s."cancel_requested_at" IS NULL
+            AND s."assigned_runner_id" = ${runner.id}::uuid
+            -- A runner may only ever drive sessions owned by its own owner.
+            AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
+            -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
+            -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
+            AND (
+              SELECT count(*) FROM "session" active
+              WHERE active."assigned_runner_id" = ${runner.id}::uuid
+                AND active."status" = 'RUNNING'
+            ) < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
+            -- Batch-run cap, independent of the runner cap above. It has the same
+            -- active-turn semantics: only a sibling currently RUNNING consumes capacity.
+            AND (
+              s."batch_id" IS NULL
+              OR (
+                SELECT count(*) FROM "session" ba
+                WHERE ba."batch_id" = s."batch_id"
+                  AND ba."status" = 'RUNNING'
+              ) < s."batch_max_concurrent"
+            )
+          ORDER BY s."created_at" ASC
+          FOR UPDATE SKIP LOCKED
+          LIMIT 1
+        )
+        RETURNING id
+      `;
+    });
     if (rows.length === 0) return null;
     return this.buildSession(rows[0].id);
   }
@@ -107,15 +114,15 @@ export class QueueService {
     // died before the runtime ever ran (bad PATH, missing cwd, …) still leaves a seeded
     // turn behind, so "has any turn" would wrongly resume a session that
     // was never created, failing forever with "No conversation found".
-    const turnCount = await this.prisma.conversationTurn.count({
-      where: { sessionId: session.id },
-    });
     const resume = session.numTurns > 0;
-    if (turnCount === 0) {
-      // Truly fresh (first claim ever): seed the first turn from the session prompt
-      // so every turn (incl. the first) flows through the same inbox + turn-complete
-      // path on the runner.
-      const turn = await this.prisma.conversationTurn.create({
+    // Serialize lazy first-turn seeding with createTurn. A message can arrive after the
+    // PENDING->RUNNING claim but before buildSession runs; without the Session row lock it
+    // could take seq=1 and make this path mistake the follow-up for the opening prompt.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
+      const turnCount = await tx.conversationTurn.count({ where: { sessionId: session.id } });
+      if (turnCount > 0) return;
+      const turn = await tx.conversationTurn.create({
         data: {
           sessionId: session.id,
           seq: 1,
@@ -126,14 +133,11 @@ export class QueueService {
         },
         select: { id: true },
       });
-      // Link any images pasted on the compose page (scoped to this session on create,
-      // still turn-less) to this first turn, so the inbox delivers them like any other
-      // turn's attachments. No-op for a text-only first turn.
-      await this.prisma.attachment.updateMany({
+      await tx.attachment.updateMany({
         where: { sessionId: session.id, turnId: null },
         data: { turnId: turn.id },
       });
-    }
+    });
     // Continue the monotonic event seq past whatever a prior run persisted (incl. a
     // failed first run's error events) so new events never collide; 0 when fresh.
     const maxSeq =

@@ -5,17 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
 import type { LoginEngine, RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
+import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
 
 // Three missed 30s heartbeats — a runner quieter than this reads as offline.
 const OFFLINE_AFTER_MS = 90_000;
-// A session occupies one of a runner's slots while it's in any of these states —
-// the same set the claim queue counts against maxConcurrent.
-const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 // Cap device-enrollment userCode lookups per user, so an authenticated insider
 // cannot brute-force another user's pending enrollment code online.
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
@@ -71,7 +68,10 @@ export class RunnersService {
     // utilization (e.g. "3 / 16 running") rather than capacity alone.
     const liveCounts = await this.prisma.session.groupBy({
       by: ['assignedRunnerId'],
-      where: { assignedRunnerId: { in: runners.map((r) => r.id) }, status: { in: LIVE } },
+      where: {
+        assignedRunnerId: { in: runners.map((r) => r.id) },
+        status: { in: ACTIVE_TURN_STATUSES },
+      },
       _count: { _all: true },
     });
     const activeByRunner = new Map(

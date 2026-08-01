@@ -144,9 +144,9 @@ func (t *Transport) claimSession(ctx context.Context) (*ClaimedSession, error) {
 	return &r, nil
 }
 
-// reclaim lists this runner's still-live sessions so a restarted runner can
-// re-attach and --resume them (instead of orphaning them, which would leak their
-// AWAITING_INPUT concurrency slots forever).
+// reclaim lists every open session assigned to this runner so its lightweight
+// supervisor and checkout survive a runner restart. Only entries whose status is
+// RUNNING start active; other open states stay cold until a normal claim arrives.
 func (t *Transport) reclaim() (*ReclaimResponse, error) {
 	var r ReclaimResponse
 	if err := t.do(nil, "GET", "/runner/sessions/reclaim", nil, &r, 15*time.Second); err != nil {
@@ -198,8 +198,37 @@ func (t *Transport) inbox(ctx context.Context, sessionID string) (*RunInboxRespo
 	return &r, nil
 }
 
-func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) error {
-	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, nil, 35*time.Second)
+func (t *Transport) turnComplete(sessionID string, b TurnCompleteRequest) (string, error) {
+	var r TurnCompleteResponse
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		r = TurnCompleteResponse{}
+		if err := t.do(nil, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second); err != nil {
+			lastErr = err
+			if attempt == 0 {
+				// The server may have committed the idempotent ack and lost only
+				// the response. Retry once so the runner learns the authoritative
+				// status instead of leaking a local active permit forever.
+				time.Sleep(200 * time.Millisecond)
+			}
+			continue
+		}
+		lastErr = nil
+		break
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	status := r.Status
+	if status == "" {
+		status = r.SessionStatus
+	}
+	if status == "" {
+		// Backward compatibility: before active-turn permits the server always
+		// parked a successful ack and returned only {ok:true}.
+		status = stAwaitingInput
+	}
+	return status, nil
 }
 
 // mergeResult reports the outcome of a heartbeat-delivered MergeCommand back to the server.

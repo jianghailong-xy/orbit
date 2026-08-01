@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -20,14 +19,6 @@ const heartbeatInterval = 30 * time.Second
 // immediately; only a mid-turn session consumes any of this budget. Keep systemd's
 // TimeoutStopSec comfortably above it (see service.go) so we exit before any SIGKILL.
 const shutdownDrainTimeout = 120 * time.Second
-
-// liveSession pairs a running session's cancel func with its job, so the heartbeat
-// goroutine can report each session's live worktree diff (from job.WT) without reaching
-// into the session's own goroutine.
-type liveSession struct {
-	cancel context.CancelFunc
-	job    *ClaimedSession
-}
 
 // carryOverModelCatalog keeps a provider's last good model list when this round's refresh produced
 // nothing for it. The heartbeat replaces the server's stored catalog wholesale, so a half-failed
@@ -45,6 +36,13 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 		next.Claude = prev.Claude
 	}
 	return next
+}
+
+// Older servers omitted status and reclaimed RUNNING sessions only. Newer
+// servers return every open session so its checkout remains protected across a
+// runner restart; only an explicitly RUNNING session owns an active-turn permit.
+func reclaimInitiallyActive(status string) bool {
+	return status == "" || status == stRunning
 }
 
 func runLoop(cfg *RunnerConfig) {
@@ -65,16 +63,12 @@ func runLoop(cfg *RunnerConfig) {
 		return expandTilde(dir)
 	}
 
-	var mu sync.Mutex
-	active := map[string]*liveSession{}
-
 	// Server-authoritative concurrency cap. Seeded from the local config (the value
 	// `orbit register --max-concurrent` baked in), then kept in sync with the DB value
 	// the control plane returns on each heartbeat — so editing a runner's max-concurrent
 	// in the UI takes effect within one heartbeat, no restart. The local config value is
 	// only the initial seed; the DB value is authoritative once the first heartbeat lands.
-	var maxConcurrent atomic.Int64
-	maxConcurrent.Store(int64(cfg.MaxConcurrent))
+	pool := newSessionPool(cfg.MaxConcurrent)
 
 	loopCtx, loopCancel := context.WithCancel(context.Background())
 	sig := make(chan os.Signal, 1)
@@ -130,16 +124,9 @@ func runLoop(cfg *RunnerConfig) {
 	// Each probe refreshes quickly while active and slowly while an agent for that
 	// provider exists, so idle reset windows do not leave stale UI gauges behind.
 	activeProviderCount := func(provider string) int {
-		mu.Lock()
-		defer mu.Unlock()
-		n := 0
-		for _, s := range active {
-			if runtimeProvider(s.job) == provider {
-				n++
-			}
-		}
-		return n
+		return pool.providerCount(provider, true)
 	}
+	residentProviderCount := func(provider string) int { return pool.providerCount(provider, false) }
 	claudeUsageProbe := newClaudePlanUsageProbe()
 	claudeActive := func() int { return activeProviderCount(providerClaude) }
 	claudeIdle := func() bool { return providerConfigured(providerClaude) }
@@ -186,7 +173,7 @@ func runLoop(cfg *RunnerConfig) {
 	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
 	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
-	go engineUpdateLoop(loopCtx, activeProviderCount, doctorProxyVars(cfg.ServerURL))
+	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL))
 
 	// Engines are installed on demand rather than at register time; this is the consent
 	// that was collected there (see ensureEngine).
@@ -224,15 +211,8 @@ func runLoop(cfg *RunnerConfig) {
 				if cycles%120 == 0 { // model catalog (Codex + Claude) every ~60 min
 					go refreshModelCatalog()
 				}
-				mu.Lock()
-				idle := int(maxConcurrent.Load()) - len(active)
-				cancels := make(map[string]context.CancelFunc, len(active))
-				jobs := make([]*ClaimedSession, 0, len(active))
-				for k, v := range active {
-					cancels[k] = v.cancel
-					jobs = append(jobs, v.job)
-				}
-				mu.Unlock()
+				cancels, jobs := pool.snapshot()
+				idle := pool.maxConcurrent() - pool.activeCount()
 				if idle < 0 {
 					idle = 0
 				}
@@ -278,7 +258,8 @@ func runLoop(cfg *RunnerConfig) {
 				// Adopt the control plane's authoritative max-concurrent (the editable DB
 				// value). 0 means an older server that doesn't report it — keep current.
 				if resp.MaxConcurrent > 0 {
-					if prev := maxConcurrent.Swap(int64(resp.MaxConcurrent)); prev != int64(resp.MaxConcurrent) {
+					if prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {
+						pool.setMax(resp.MaxConcurrent)
 						logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 					}
 				}
@@ -383,9 +364,16 @@ func runLoop(cfg *RunnerConfig) {
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
 
-	// startSession registers a session in `active` and drives it in its own
-	// goroutine, removing it on exit. Shared by fresh claims and reclaimed sessions.
-	startSession := func(job *ClaimedSession) {
+	// startSession creates a lightweight supervisor for a newly-known session, or
+	// activates an existing warm/cold supervisor when a new turn claim arrives.
+	// A supervisor that was silently engine-evicted remains registered cold; its
+	// next claim wakes it without creating a duplicate supervisor.
+	startSession := func(job *ClaimedSession, initiallyActive bool) {
+		if initiallyActive {
+			if _, ok := pool.activate(job); ok {
+				return // warm reuse, or wake a cold supervisor for transparent resume
+			}
+		}
 		// Per-session git worktree isolation: when the agent's workDir is a git repo, run
 		// claude in its own checkout on job.Branch instead of the shared dir. Falls back to
 		// the shared dir (recording why on job.IsolationStatus) for non-git workDirs.
@@ -400,24 +388,40 @@ func runLoop(cfg *RunnerConfig) {
 			uncommitParkCheckpoint(job.WT)
 		}
 		jobCtx, cancel := context.WithCancel(context.Background())
-		mu.Lock()
-		active[job.SessionID] = &liveSession{cancel: cancel, job: job}
-		mu.Unlock()
-		go func(j *ClaimedSession, dir string) {
+		s, added := pool.register(job, cancel, initiallyActive)
+		if !added {
+			cancel()
+			if initiallyActive {
+				pool.activate(job)
+			}
+			return
+		}
+		go func(j *ClaimedSession, dir string, live *liveSession, activeAtRegister bool) {
 			// loopCtx doubles as the shutdown signal: cancelled on SIGTERM/SIGINT, it tells
 			// the session to drain (finish its turn, then detach) rather than be killed.
-			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsageProbe.mergeCodexRateLimits)
-			mu.Lock()
-			delete(active, j.SessionID)
-			mu.Unlock()
+			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
+			// lightweight until their first real claim instead of starting one flush
+			// ticker, background tailer, and transcript watcher per cold session.
+			if !activeAtRegister && !pool.waitActive(live, jobCtx, loopCtx) {
+				if loopCtx.Err() != nil || jobCtx.Err() == nil {
+					pool.remove(live)
+					forgetMergeTarget(j.SessionID)
+					return
+				}
+				// A real cancel of a never-activated cold supervisor still needs the
+				// normal worktree/server finalization below. Its cancelled context makes
+				// runInteractiveSession take that path without spawning an engine.
+			}
+			runInteractiveSession(t, j, jobCtx, loopCtx, dir, codexUsageProbe.mergeCodexRateLimits, pool, live)
+			pool.remove(live)
 			forgetMergeTarget(j.SessionID)
-		}(job, execDir)
+		}(job, execDir, s, initiallyActive)
 	}
 
-	// Re-attach to still-live interactive sessions from a previous process: without
-	// this a restart orphans them (they stay AWAITING_INPUT, leaking a concurrency
-	// slot and never seeing their inbox 'end'/cancel). Resume each before claiming
-	// new work so the slot accounting is correct from the first heartbeat.
+	// Rebuild supervisors for every open session before garbage-collecting old
+	// checkouts. Only sessions that were RUNNING re-acquire an active-turn permit;
+	// PENDING/AWAITING_INPUT/INTERRUPTED sessions remain registered cold until a
+	// normal claim activates them.
 	// Retried with backoff: on a joint restart the apiserver is often still down when
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
@@ -442,7 +446,7 @@ func runLoop(cfg *RunnerConfig) {
 			if agent.Provider == "" {
 				agent.Provider = r.Provider
 			}
-			startSession(&ClaimedSession{
+			job := &ClaimedSession{
 				SessionID:          r.SessionID,
 				Title:              r.Title,
 				Provider:           r.Provider,
@@ -459,7 +463,8 @@ func runLoop(cfg *RunnerConfig) {
 				SessionUUID:        r.SessionUUID,
 				RuntimeSessionID:   r.RuntimeSessionID,
 				MaxSeq:             r.MaxSeq,
-			})
+			}
+			startSession(job, reclaimInitiallyActive(r.Status))
 		}
 		reclaimed = true
 		break
@@ -471,21 +476,13 @@ func runLoop(cfg *RunnerConfig) {
 	// reclaim above actually answered: without that list every live session looks like
 	// an orphan and we would delete the checkouts we are about to resume.
 	if reclaimed {
-		mu.Lock()
-		liveSet := make(map[string]bool, len(active))
-		for id := range active {
-			liveSet[id] = true
-		}
-		mu.Unlock()
+		liveSet := pool.ids()
 		gcWorktrees(t, liveSet)
 		gcUploads(liveSet)
 	}
 
 	for loopCtx.Err() == nil {
-		mu.Lock()
-		n := len(active)
-		mu.Unlock()
-		if n >= int(maxConcurrent.Load()) {
+		if pool.activeCount() >= pool.maxConcurrent() {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
@@ -501,10 +498,10 @@ func runLoop(cfg *RunnerConfig) {
 		if job == nil {
 			continue
 		}
-		startSession(job)
+		startSession(job, true)
 	}
 
-	logln("runner stopping; draining active sessions...")
+	logln("runner stopping; draining session supervisors...")
 	// Keep the heartbeat goroutine alive through the drain: the server's reaper force-fails
 	// any live session whose runner has been silent >90s, so going quiet while we finish an
 	// in-flight turn would get the very session we're trying to preserve marked FAILED.
@@ -512,14 +509,12 @@ func runLoop(cfg *RunnerConfig) {
 	// that we exit anyway (process teardown / systemd SIGKILL reaps any stragglers).
 	drainDeadline := time.Now().Add(shutdownDrainTimeout + 30*time.Second)
 	for {
-		mu.Lock()
-		n := len(active)
-		mu.Unlock()
+		n := pool.count()
 		if n == 0 {
 			break
 		}
 		if time.Now().After(drainDeadline) {
-			logln(fmt.Sprintf("drain deadline reached; %d session(s) still active, exiting", n))
+			logln(fmt.Sprintf("drain deadline reached; %d session supervisor(s) still attached, exiting", n))
 			break
 		}
 		time.Sleep(200 * time.Millisecond)

@@ -213,7 +213,8 @@ export interface PlanUsage extends PlanUsageSnapshot {
 
 export interface RunnerHeartbeatRequest {
   status: RunnerStatus;
-  /** How many more concurrent sessions the runner can accept right now. */
+  /** How many more active turns the runner can accept right now. Warm idle
+   *  Claude/Codex processes do not consume this logical scheduling capacity. */
   idleCapacity: number;
   version?: string;
   /** Custom slash commands the runner found under ~/.claude + its workDirs. */
@@ -225,14 +226,14 @@ export interface RunnerHeartbeatRequest {
   planUsage?: PlanUsage;
   /** Runtime model catalog reported by this runner. Absent on older runners. */
   modelCatalog?: RunnerModelCatalog;
-  /** Live worktree state for each session this runner is currently running, so the
-   *  composer's status bar appears mid-turn — not just after a turn completes. Absent
-   *  from older runners (the bar then waits for the first turn-complete as before). */
+  /** Live worktree state for each session supervised by this runner, including an
+   *  AWAITING_INPUT session whose runtime is warm or has gone cold. Absent from older
+   *  runners (the bar then waits for the first turn-complete as before). */
   sessions?: SessionLiveState[];
 }
 
-/** One running session's live worktree diff, reported on the heartbeat while a turn is
- *  still in flight (cf. TurnCompleteRequest, which carries the same at turn boundaries). */
+/** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
+ *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {
   sessionId: string;
   /** What the runner did: 'worktree' | 'shared-nogit'. */
@@ -527,9 +528,13 @@ export interface RunInboxResponse {
   attachments?: TurnAttachment[];
 }
 
-/** One interactive session a restarted runner can re-attach to and --resume. */
+/** One open interactive session a restarted runner must retain. Only RUNNING is
+ *  re-attached as an active turn; queued/idle sessions are registered cold so their
+ *  worktree survives and a later claim can resume them without spawning eagerly. */
 export interface ReclaimSession {
   sessionId: string;
+  /** Omitted by older servers, which runners conservatively treat as RUNNING. */
+  status?: RunStatus;
   title: string;
   provider?: AgentProvider;
   sessionUuid: string;

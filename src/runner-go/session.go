@@ -97,7 +97,15 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	}
 }
 
-func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{})) {
+type turnCompleter func(TurnCompleteRequest) error
+type turnPermitWaiter func(context.Context) bool
+
+// Only RUNNING means the server handed the already-owned permit directly to a
+// queued follow-up. Every other authoritative status means this turn no longer
+// owns a permit; generation matching in sessionPool protects a newer claim.
+func retainsTurnPermit(status string) bool { return status == stRunning }
+
+func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{}), pool *sessionPool, live *liveSession) {
 	syncJobProvider(job)
 	scratch := filepath.Join(runsDir(), job.SessionID)
 	_ = os.MkdirAll(scratch, 0o755)
@@ -186,16 +194,73 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
+	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
+	// a queued follow-up is immediately ready; every other authoritative status
+	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
+	completeTurn := func(req TurnCompleteRequest) error {
+		// Capture before the network round-trip. Once the server commits
+		// AWAITING_INPUT, a new send/claim may reach pool.activate before this
+		// response returns; generation matching prevents this old ack from
+		// releasing the new claim's permit.
+		permitGeneration := pool.permitGeneration(live)
+		next, err := t.turnComplete(job.SessionID, req)
+		if err == nil && !retainsTurnPermit(next) {
+			pool.park(live, permitGeneration)
+		}
+		return err
+	}
+	// The server changes PENDING -> RUNNING before returning a claim and may wake
+	// this warm process's inbox before the claim HTTP response reaches runLoop.
+	// Gate executable turns locally until pool.activate has installed that permit;
+	// control turns deliberately bypass this hook in the provider loops.
+	waitTurnPermit := func(waitCtx context.Context) bool {
+		return pool.waitActive(live, waitCtx, shutdownCtx)
+	}
 	// A reclaimed or revived session's claude session already exists, so even its
 	// first spawn must --resume (firstSpawn=false), not --session-id.
 	firstSpawn := !job.Reclaimed && !job.Resume
+	lastClaimJob := job
 	respawns := 0
 	for {
 		if ctx.Err() != nil || shutdownCtx.Err() != nil {
 			break
 		}
-		st, ended, reload := runSessionProcess(ctx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits)
+		if !pool.waitActive(live, ctx, shutdownCtx) {
+			break
+		}
+		engineGeneration, claimedJob, ok := pool.reserveEngine(live, ctx, shutdownCtx)
+		if !ok {
+			continue
+		}
+		// A cold supervisor receives a fresh claim payload before it starts. Adopt
+		// its current model/env/runtime ids while retaining the runner-local WT that
+		// sessionPool.activate copied over.
+		if claimedJob != nil && claimedJob != lastClaimJob {
+			job = claimedJob
+			lastClaimJob = claimedJob
+			firstSpawn = !job.Reclaimed && !job.Resume
+			writeSessionMeta(scratch, job, execDir)
+		}
+		engineCtx, engineCancel := context.WithCancel(ctx)
+		if pool.engineStarted(live, engineGeneration, engineCancel) {
+			engineCancel() // timer/LRU won while this engine was being reserved
+		}
+		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit)
+		engineCancel()
+		evicted := pool.engineStopped(live, engineGeneration)
 		firstSpawn = false
+		if evicted {
+			// Silent warm recycle: the Orbit session stays AWAITING_INPUT. If a
+			// claim raced the timer/LRU, active is already true and the next loop
+			// transparently cold-resumes; otherwise it sleeps cold.
+			setTurn("")
+			logln(fmt.Sprintf("○ interactive engine %s recycled (session remains resumable)", job.SessionID))
+			continue
+		}
+		if ctx.Err() != nil || shutdownCtx.Err() != nil {
+			status = stCancelled
+			break
+		}
 		if ended {
 			status = st
 			break
@@ -204,9 +269,19 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if reload {
 			// The user changed the model / permission-mode mid-session: re-spawn with
 			// --resume + the new flags (already applied to job.Agent). Not a crash, so
-			// it doesn't consume the respawn budget and skips the back-off sleep.
+			// it doesn't consume the respawn budget. If the session is idle, leave it
+			// cold rather than spawning a process that owns no active permit; its next
+			// claim resumes directly with these updated flags.
+			if !pool.isActive(live) {
+				continue
+			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 			logln(fmt.Sprintf("interactive run %s — config changed; resuming with model=%s mode=%s", job.SessionID, job.Agent.Model, job.Agent.PermissionMode))
+			continue
+		}
+		// An idle warm engine that exits unexpectedly simply becomes cold. Only an
+		// active turn spends the crash-respawn budget.
+		if !pool.isActive(live) {
 			continue
 		}
 		// Unexpected crash — resume up to maxRespawns times with a small back-off.
@@ -300,7 +375,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{})) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
 	provider := runtimeProvider(job)
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
@@ -323,16 +398,16 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		}
 	}
 	if provider == providerCodex {
-		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits)
+		return runCodexSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit)
 	}
-	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg)
+	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit)
 }
 
 // runClaudeSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
 // model/permission-mode change, reload=false for an unexpected crash.
-func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer) (string, bool, bool) {
+func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
@@ -499,6 +574,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 			switch resp.Kind {
 			case "message":
+				if !waitTurnPermit(procCtx) {
+					return
+				}
 				// Attribute this process's output to this turn. Set BEFORE the dedup
 				// early-return so a lease re-delivery (turn still running) still tags
 				// the resumed/replayed output with the correct turn.
@@ -609,6 +687,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					return
 				}
 			case "shell":
+				if !waitTurnPermit(procCtx) {
+					return
+				}
 				// `!`-prefixed shell command: run it on the runner (no claude), echo the
 				// output, and buffer it for the next message's context. Dedup on turnId so
 				// a lease re-delivery can't re-run side effects.
@@ -625,7 +706,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// running, surfaced in the Background-processes tray (output + completion),
 					// not buffered into the next message's context.
 					runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
-					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: "started in background", Subtype: "shell",
 						RuntimeSessionID: currentRuntimeSessionID(job),
@@ -636,7 +717,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					shOut, shExit := runShellTurn(procCtx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
 					pendingShellCtx = append(pendingShellCtx,
 						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-					if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded,
 						Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
 						RuntimeSessionID: currentRuntimeSessionID(job),
@@ -804,7 +885,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// Live worktree state for the composer's status bar: what this turn left in
 				// the worktree (uncommitted), so the diff updates each turn, not just at end.
 				liveFiles, livePatches := liveDiff(job.WT)
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+				if err := completeTurn(TurnCompleteRequest{
 					TurnID:           turnID,
 					Status:           turnStatus,
 					Result:           r.Result,

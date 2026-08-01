@@ -72,7 +72,7 @@ type codexAppActiveTurn struct {
 	thinkText          strings.Builder
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{})) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -163,7 +163,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
 		liveFiles, livePatches := liveDiff(job.WT)
-		if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+		if err := completeTurn(TurnCompleteRequest{
 			TurnID:           orbitTurnID,
 			Status:           result.Status,
 			Result:           result.Result,
@@ -356,9 +356,18 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if resp == nil {
 			continue
 		}
+		// A warm timer/LRU eviction may cancel the engine while its inbox
+		// long-poll response is in flight. Never feed a newly-claimed message to
+		// the process generation that just lost that race.
+		if pollCtx.Err() != nil || ctx.Err() != nil {
+			return stCancelled, true, false
+		}
 
 		switch resp.Kind {
 		case "message":
+			if !waitTurnPermit(ctx) {
+				return stCancelled, true, false
+			}
 			setTurn(resp.TurnID)
 			inflightMu.Lock()
 			dup := inflight[resp.TurnID]
@@ -373,6 +382,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			pendingShellCtx = nil
 
 		case "shell":
+			if !waitTurnPermit(ctx) {
+				return stCancelled, true, false
+			}
 			inflightMu.Lock()
 			if inflight[resp.TurnID] {
 				inflightMu.Unlock()
@@ -383,7 +395,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			setTurn(resp.TurnID)
 			if shCmd, isBg := splitBackground(resp.Content); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
@@ -394,7 +406,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				shOut, shExit := runShellTurn(ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
 				pendingShellCtx = append(pendingShellCtx,
 					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),

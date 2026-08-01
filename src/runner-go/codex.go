@@ -50,14 +50,14 @@ type codexPreparedTurn struct {
 	ImagePaths     []string
 }
 
-func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{})) (string, bool, bool) {
-	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onRateLimits)
+func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
+	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onRateLimits, completeTurn, waitTurnPermit)
 }
 
 // runCodexExecSessionProcess keeps the Orbit session alive while executing each user
 // message as one non-interactive `codex exec --json` turn. Codex owns conversation
 // continuity via the thread/session id returned by `thread.started`.
-func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer) (string, bool, bool) {
+func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter) (string, bool, bool) {
 	setTurn("")
 	var pendingShellCtx []string
 	inflight := map[string]bool{}
@@ -75,9 +75,15 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 		if resp == nil {
 			continue
 		}
+		if ctx.Err() != nil || shutdownCtx.Err() != nil {
+			break // timer/LRU/shutdown raced the inbox response
+		}
 
 		switch resp.Kind {
 		case "message":
+			if !waitTurnPermit(ctx) {
+				break
+			}
 			if inflight[resp.TurnID] {
 				continue
 			}
@@ -98,7 +104,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			}
 			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
 			liveFiles, livePatches := liveDiff(job.WT)
-			if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+			if err := completeTurn(TurnCompleteRequest{
 				TurnID:           resp.TurnID,
 				Status:           result.Status,
 				Result:           result.Result,
@@ -120,6 +126,9 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			setTurn("")
 
 		case "shell":
+			if !waitTurnPermit(ctx) {
+				break
+			}
 			if inflight[resp.TurnID] {
 				continue
 			}
@@ -127,7 +136,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 			setTurn(resp.TurnID)
 			if shCmd, isBg := splitBackground(resp.Content); isBg {
 				runShellTurnBackground(bg, execDir, scratchDir, shCmd, resp.TurnID, emit, job.Agent.Env)
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
@@ -138,7 +147,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				shOut, shExit := runShellTurn(ctx, execDir, resp.Content, emit, resp.TurnID, job.Agent.Env)
 				pendingShellCtx = append(pendingShellCtx,
 					fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, shOut))
-				if err := t.turnComplete(job.SessionID, TurnCompleteRequest{
+				if err := completeTurn(TurnCompleteRequest{
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),

@@ -338,8 +338,13 @@ type RunInboxResponse struct {
 }
 
 type ReclaimSession struct {
-	SessionID        string          `json:"sessionId"`
-	Title            string          `json:"title"`
+	SessionID string `json:"sessionId"`
+	Title     string `json:"title"`
+	// Status lets the runner rebuild every still-open session supervisor while
+	// consuming an active-turn permit only for work that was actually RUNNING.
+	// Empty is retained for compatibility with older servers whose reclaim list
+	// contained RUNNING sessions only.
+	Status           string          `json:"status,omitempty"`
 	Provider         string          `json:"provider,omitempty"`
 	SessionUUID      string          `json:"sessionUuid"`
 	RuntimeSessionID string          `json:"runtimeSessionId,omitempty"`
@@ -393,6 +398,17 @@ type TurnCompleteRequest struct {
 	BranchMerged bool `json:"branchMerged"`
 	// WorktreeBranch: the worktree's actual current HEAD branch (see SessionLiveState.WorktreeBranch).
 	WorktreeBranch string `json:"worktreeBranch,omitempty"`
+}
+
+// TurnCompleteResponse carries the control-plane status after the ack. Newer
+// servers keep RUNNING when a queued follow-up is ready, and return
+// AWAITING_INPUT only when this runner may release its active-turn permit. Older
+// servers returned only {ok:true}; transport.go treats an omitted status as the
+// historical AWAITING_INPUT behavior.
+type TurnCompleteResponse struct {
+	OK            bool   `json:"ok"`
+	Status        string `json:"status,omitempty"`
+	SessionStatus string `json:"sessionStatus,omitempty"`
 }
 
 type RunEvent struct {
@@ -540,6 +556,7 @@ const (
 
 // Run statuses — mirror RunStatus in @orbit/shared.
 const (
+	stRunning       = "RUNNING"
 	stSucceeded     = "SUCCEEDED"
 	stFailed        = "FAILED"
 	stCancelled     = "CANCELLED"
