@@ -135,6 +135,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           if (runnerOfflineIsFatal(s.status)) {
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
               expectedStatuses: [RunStatus.RUNNING],
+              onlyIfNotCancelling: true,
             });
           }
           continue;
@@ -153,7 +154,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             s.assignedRunnerId,
             s.taskId,
             'codex runtime not initialized',
-            { expectedStatuses: [RunStatus.RUNNING] },
+            { expectedStatuses: [RunStatus.RUNNING], onlyIfNotCancelling: true },
           );
           continue;
         }
@@ -177,6 +178,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
               resetTaskTo: TaskStatus.FAILED,
               failureDetail: text,
               expectedStatuses: [RunStatus.AWAITING_INPUT],
+              onlyIfNotCancelling: true,
             });
             continue;
           }
@@ -217,6 +219,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       failureDetail?: string;
       /** State observed by the sweep; prevents a stale decision finalizing a newer turn. */
       expectedStatuses?: RunStatus[];
+      /** Non-cancel decisions must not overwrite an end/cancel that won the race. */
+      onlyIfNotCancelling?: boolean;
     } = {},
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -224,7 +228,11 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.session.updateMany({
-        where: { id: sessionId, status: { in: opts.expectedStatuses ?? LIVE } },
+        where: {
+          id: sessionId,
+          status: { in: opts.expectedStatuses ?? LIVE },
+          ...(opts.onlyIfNotCancelling ? { cancelRequestedAt: null } : {}),
+        },
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).
         data: {
