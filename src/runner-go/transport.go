@@ -441,53 +441,64 @@ func (t *Transport) createTaskList(title string) (json.RawMessage, error) {
 
 func (t *Transport) createSession(parentSessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	var h map[string]string
-	if parentSessionID != "" {
-		h = map[string]string{"X-Orbit-Session-Id": parentSessionID}
+	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, orchestratorHeader(parentSessionID))
+	return out, err
+}
+
+func (t *Transport) listSessions(callerSessionID, query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	return out, err
+}
+
+func (t *Transport) searchSessions(callerSessionID, query string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
+	return out, err
+}
+
+func (t *Transport) getSession(callerSessionID, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
 	}
-	err := t.doHeaders(nil, "POST", "/runner/sessions", body, &out, taskOpTimeout, h)
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", "/runner/sessions/"+url.PathEscape(id), nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
 	return out, err
 }
 
-func (t *Transport) listSessions(query string) (json.RawMessage, error) {
+func (t *Transport) sendSessionMessage(callerSessionID, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/sessions"+query, nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
 	return out, err
 }
 
-func (t *Transport) searchSessions(query string) (json.RawMessage, error) {
+func (t *Transport) interruptSession(callerSessionID, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/sessions/search"+query, nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
 	return out, err
 }
 
-func (t *Transport) getSession(id string) (json.RawMessage, error) {
+func (t *Transport) mergeSession(callerSessionID, id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/sessions/"+id, nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
 	return out, err
 }
 
-func (t *Transport) sendSessionMessage(id string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) endSession(callerSessionID, id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/sessions/"+id+"/turns", body, &out, taskOpTimeout)
-	return out, err
-}
-
-func (t *Transport) interruptSession(id string) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/sessions/"+id+"/interrupt", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-func (t *Transport) mergeSession(id string, body interface{}) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/sessions/"+id+"/merge", body, &out, taskOpTimeout)
-	return out, err
-}
-
-func (t *Transport) endSession(id string) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/sessions/"+id+"/end", nil, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/end", nil, &out, taskOpTimeout, orchestratorHeader(callerSessionID))
 	return out, err
 }
 

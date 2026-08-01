@@ -308,7 +308,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if !s.allowOrchestration {
 			return toolResult(orchestrationOffMsg, true)
 		}
-		raw, err := s.t.listSessions(sessionListQuery(args))
+		raw, err := s.t.listSessions(s.sessionID, sessionListQuery(args))
 		if err != nil {
 			return toolResult("list sessions failed: "+err.Error(), true)
 		}
@@ -321,7 +321,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getString(args, "query") == "" {
 			return toolResult("query is required", true)
 		}
-		raw, err := s.t.searchSessions(sessionSearchQuery(args))
+		raw, err := s.t.searchSessions(s.sessionID, sessionSearchQuery(args))
 		if err != nil {
 			return toolResult("search sessions failed: "+err.Error(), true)
 		}
@@ -335,7 +335,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.getSession(id)
+		raw, err := s.t.getSession(s.sessionID, id)
 		if err != nil {
 			return toolResult("get session failed: "+err.Error(), true)
 		}
@@ -350,7 +350,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" || msg == "" {
 			return toolResult("sessionId and message are required", true)
 		}
-		raw, err := s.t.sendSessionMessage(id, map[string]interface{}{"message": msg})
+		raw, err := s.t.sendSessionMessage(s.sessionID, id, map[string]interface{}{"message": msg})
 		if err != nil {
 			return toolResult("send message failed: "+err.Error(), true)
 		}
@@ -364,7 +364,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.interruptSession(id)
+		raw, err := s.t.interruptSession(s.sessionID, id)
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
@@ -380,7 +380,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "targetBranch")
-		raw, err := s.t.mergeSession(id, body)
+		raw, err := s.t.mergeSession(s.sessionID, id, body)
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
@@ -394,7 +394,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.endSession(id)
+		raw, err := s.t.endSession(s.sessionID, id)
 		if err != nil {
 			return toolResult("end session failed: "+err.Error(), true)
 		}
@@ -829,7 +829,7 @@ func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface
 	}
 	for i := 0; i < maxSessionWaitPolls; i++ {
 		time.Sleep(sessionWaitInterval)
-		raw, err := s.t.getSession(c.ID)
+		raw, err := s.t.getSession(s.sessionID, c.ID)
 		if err != nil {
 			return toolResult("wait: get session failed: "+err.Error(), true)
 		}
@@ -841,7 +841,7 @@ func (s *mcpServer) waitForSession(created json.RawMessage) map[string]interface
 		}
 	}
 	// Timed out still running: return the latest state (non-error) so the agent can poll on.
-	raw, err := s.t.getSession(c.ID)
+	raw, err := s.t.getSession(s.sessionID, c.ID)
 	if err != nil {
 		return toolResult("wait timed out; get session failed: "+err.Error(), true)
 	}

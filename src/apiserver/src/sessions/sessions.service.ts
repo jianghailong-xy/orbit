@@ -428,6 +428,55 @@ export class SessionsService {
   }
 
   /**
+   * Owner-scoped detail returned to an orchestrating agent. Keep this deliberately
+   * narrower than the UI detail query: the full Agent row contains injected env,
+   * MCP config, prompts, and other configuration that must not become model output.
+   */
+  async getForOrchestration(ownerId: string, id: string) {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        title: true,
+        prompt: true,
+        status: true,
+        provider: true,
+        model: true,
+        effort: true,
+        agentId: true,
+        parentSessionId: true,
+        taskId: true,
+        assignedRunnerId: true,
+        createdAt: true,
+        startedAt: true,
+        finishedAt: true,
+        lastTurnAt: true,
+        numTurns: true,
+        costUsd: true,
+        lastAssistantText: true,
+        lastUserText: true,
+        lastToolUse: true,
+        result: true,
+        error: true,
+        endReason: true,
+        branch: true,
+        changedFiles: true,
+        isolationStatus: true,
+        mergeStatus: true,
+        mergeError: true,
+        mergeTarget: true,
+        mergedAt: true,
+        branchMerged: true,
+        worktreeBranch: true,
+        agent: { select: { id: true, name: true, provider: true, model: true } },
+        assignedRunner: { select: { id: true, name: true } },
+      },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return session;
+  }
+
+  /**
    * Cross-scope session search backing the clients' ⌘K palette.
    *
    * Distinct from `list` above in two ways that matter: it spans EVERY scope at once (active,

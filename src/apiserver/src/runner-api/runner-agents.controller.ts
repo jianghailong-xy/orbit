@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   Headers,
   Param,
@@ -14,10 +13,10 @@ import { Runner } from '@prisma/client';
 import { PermissionMode } from '@orbit/shared';
 import { AgentsService } from '../agents/agents.service';
 import { CreateAgentDto, UpdateAgentDto } from '../agents/dto';
-import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 
 // Fields an in-session orchestrator may set on an agent. Deliberately EXCLUDES
 // enableOrchestration (and enabled): the orchestration permission is human-granted in the web
@@ -51,7 +50,7 @@ const PERMISSION_MODES: string[] = Object.values(PermissionMode);
 export class RunnerAgentsController {
   constructor(
     private readonly agents: AgentsService,
-    private readonly prisma: PrismaService,
+    private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly realtime: RealtimeService,
   ) {}
 
@@ -60,7 +59,7 @@ export class RunnerAgentsController {
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
   ) {
-    await this.assertOrchestrator(runner.ownerId, sessionId);
+    await this.orchestration.assert(runner, sessionId);
     return this.agents.list(runner.ownerId);
   }
 
@@ -70,7 +69,7 @@ export class RunnerAgentsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() body: OrchestratorAgentInput,
   ) {
-    const scope = await this.assertOrchestrator(runner.ownerId, sessionId);
+    const scope = await this.orchestration.assert(runner, sessionId);
     if (!body.name) throw new BadRequestException('name is required');
     // Bind to the calling runner by default so the new agent can actually run sessions.
     const agent = await this.agents.create(
@@ -91,7 +90,7 @@ export class RunnerAgentsController {
     @Param('id') id: string,
     @Body() body: OrchestratorAgentInput,
   ) {
-    const scope = await this.assertOrchestrator(runner.ownerId, sessionId);
+    const scope = await this.orchestration.assert(runner, sessionId);
     const agent = await this.agents.update(
       runner.ownerId,
       id,
@@ -138,20 +137,5 @@ export class RunnerAgentsController {
       out[k] = v;
     }
     return out;
-  }
-
-  /** The calling session's agent must have orchestration enabled (mirrors session_create).
-   *  Returns that session's id — proven to exist under this owner — so the callers can scope a
-   *  control-plane publish to it without re-asserting it's non-null. */
-  private async assertOrchestrator(ownerId: string, sessionId: string | undefined): Promise<string> {
-    if (!sessionId) throw new BadRequestException('missing session context');
-    const session = await this.prisma.session.findFirst({
-      where: { id: sessionId, ownerId },
-      select: { agent: { select: { enableOrchestration: true } } },
-    });
-    if (!session?.agent?.enableOrchestration) {
-      throw new ForbiddenException('orchestration is not enabled for this agent');
-    }
-    return sessionId;
   }
 }

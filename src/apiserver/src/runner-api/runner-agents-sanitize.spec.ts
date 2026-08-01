@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { RunnerAgentsController } from './runner-agents.controller';
 
-// A runner whose session belongs to an orchestration-enabled agent, so assertOrchestrator passes
-// and every case below exercises the field whitelist rather than the gate.
+// A runner whose calling session passes the shared orchestration authorizer, so every case below
+// exercises the field whitelist rather than the gate.
 const RUNNER = { id: 'r1', ownerId: 'o1' } as never;
-const prisma = {
-  session: { findFirst: async () => ({ agent: { enableOrchestration: true } }) },
+const orchestration = {
+  assert: async (_runner: unknown, sessionId: string | undefined) => sessionId!,
 } as never;
 
 /** Builds a controller whose AgentsService just captures the sanitized DTO, plus the
@@ -27,7 +27,7 @@ function makeController() {
       seen.published = [sessionId, agentId];
     },
   } as never;
-  return { controller: new RunnerAgentsController(agents, prisma, realtime), seen };
+  return { controller: new RunnerAgentsController(agents, orchestration, realtime), seen };
 }
 
 test('create forwards the agent config fields an orchestrator may set', async () => {

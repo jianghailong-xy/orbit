@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -14,6 +13,7 @@ import { Runner, RunStatus } from '@prisma/client';
 import { SessionsService } from '../sessions/sessions.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 
 /**
  * Session orchestration (L3) for in-session agents, reached by the `orbit mcp` server with the
@@ -27,24 +27,29 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
 export class RunnerSessionsController {
-  constructor(private readonly sessions: SessionsService) {}
+  constructor(
+    private readonly sessions: SessionsService,
+    private readonly orchestration: RunnerOrchestrationAuthorizer,
+  ) {}
 
   @Post('sessions')
-  createSession(
+  async createSession(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') parentSessionId: string | undefined,
     @Body() dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ) {
-    if (!parentSessionId) throw new BadRequestException('missing parent session context');
-    return this.sessions.spawnFromSession(runner.ownerId, parentSessionId, dto);
+    const caller = await this.orchestration.assert(runner, parentSessionId);
+    return this.sessions.spawnFromSession(runner.ownerId, caller, dto);
   }
 
   @Get('sessions')
-  listSessions(
+  async listSessions(
     @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Query('status') status: string | undefined,
     @Query('parentSessionId') parentSessionId: string | undefined,
   ) {
+    await this.orchestration.assert(runner, callingSessionId);
     // Ignore an unknown status rather than letting Prisma 500 on a bad enum value.
     const s =
       status && (Object.values(RunStatus) as string[]).includes(status) ? (status as RunStatus) : undefined;
@@ -55,25 +60,34 @@ export class RunnerSessionsController {
   // runner's owner. MUST stay above `sessions/:id` — Nest matches in declaration order, so below
   // it the literal path would be swallowed as an id.
   @Get('sessions/search')
-  searchSessions(
+  async searchSessions(
     @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Query('q') q: string | undefined,
     @Query('limit') limit: string | undefined,
   ) {
+    await this.orchestration.assert(runner, callingSessionId);
     return this.sessions.search(runner.ownerId, q, Number(limit) || 20);
   }
 
   @Get('sessions/:id')
-  getSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
-    return this.sessions.get(runner.ownerId, id);
+  async getSession(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.orchestration.assert(runner, callingSessionId);
+    return this.sessions.getForOrchestration(runner.ownerId, id);
   }
 
   @Post('sessions/:id/turns')
-  sendMessage(
+  async sendMessage(
     @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Param('id') id: string,
     @Body() dto: { message: string },
   ) {
+    await this.orchestration.assert(runner, callingSessionId);
     return this.sessions.createTurn(runner.ownerId, id, {
       clientTurnId: randomUUID(),
       content: dto.message,
@@ -81,21 +95,33 @@ export class RunnerSessionsController {
   }
 
   @Post('sessions/:id/interrupt')
-  interruptSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+  async interruptSession(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.orchestration.assert(runner, callingSessionId);
     return this.sessions.interrupt(runner.ownerId, id);
   }
 
   @Post('sessions/:id/merge')
-  mergeSession(
+  async mergeSession(
     @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Param('id') id: string,
     @Body() dto: { targetBranch?: string },
   ) {
+    await this.orchestration.assert(runner, callingSessionId);
     return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch);
   }
 
   @Post('sessions/:id/end')
-  endSession(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+  async endSession(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id') id: string,
+  ) {
+    await this.orchestration.assert(runner, callingSessionId);
     return this.sessions.end(runner.ownerId, id);
   }
 }
