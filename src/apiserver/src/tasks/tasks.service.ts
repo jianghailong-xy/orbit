@@ -534,13 +534,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       });
       const next = new Set<string>();
       for (const row of rows) {
-        let prerequisite = nodes.get(row.dependsOnTaskId);
-        if (!prerequisite) {
+        if (!nodes.has(row.dependsOnTaskId)) {
           if (nodes.size >= maxNodes) {
             truncated = true;
             continue;
           }
-          prerequisite = {
+          const prerequisite: DependencyGraphNode = {
             ...row.dependsOnTask,
             status: row.dependsOnTask.status as unknown as TaskStatus,
             depth: nextDepth,

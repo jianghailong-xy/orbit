@@ -52,6 +52,17 @@ export class TasksController {
     return this.tasks.listPage(user.userId, { cursor, limit, status, listId, assigneeId, q });
   }
 
+  @Get(':id/dependency-graph')
+  dependencyGraph(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('direction') direction?: string,
+    @Query('maxDepth') maxDepth?: string,
+    @Query('maxNodes') maxNodes?: string,
+  ) {
+    return this.tasks.dependencyGraph(user.userId, id, { direction, maxDepth, maxNodes });
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.tasks.get(user.userId, id);
