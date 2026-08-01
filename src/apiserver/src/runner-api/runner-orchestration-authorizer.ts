@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Runner, RunStatus } from '@prisma/client';
+import { Runner } from '@prisma/client';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ORCHESTRATION_AUDIENCE = 'orbit-runner-orchestration';
@@ -25,12 +26,6 @@ type OrchestrationClaims = {
 function isLegacyOrchestrationRunner(version: string | null | undefined): boolean {
   return LEGACY_ORCHESTRATION_RUNNER_VERSION.test(version ?? '');
 }
-
-const LIVE_ORCHESTRATOR_STATUSES: RunStatus[] = [
-  RunStatus.RUNNING,
-  RunStatus.AWAITING_INPUT,
-  RunStatus.INTERRUPTED,
-];
 
 /**
  * Authorizes runner-token calls made on behalf of an in-session orchestrator.
@@ -105,7 +100,7 @@ export class RunnerOrchestrationAuthorizer {
         assignedRunnerId: runner.id,
         deletedAt: null,
         cancelRequestedAt: null,
-        status: { in: LIVE_ORCHESTRATOR_STATUSES },
+        status: { in: OPEN_SESSION_STATUSES },
         agent: { enableOrchestration: true, deletedAt: null },
       },
       select: { id: true },

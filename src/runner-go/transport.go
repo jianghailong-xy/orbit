@@ -227,7 +227,10 @@ func retryIdempotent(ctx context.Context, op func(context.Context) error) error 
 		case <-timer.C:
 		case <-ctx.Done():
 			if !timer.Stop() {
-				<-timer.C
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			return ctx.Err()
 		}

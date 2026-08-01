@@ -143,7 +143,7 @@ test('the rollout bridge is off by default and never applies to credential-capab
   );
 });
 
-test('assert verifies the credential before applying the live-session database predicate', async () => {
+test('assert verifies the credential before applying the open-session database predicate, including PENDING', async () => {
   const { authorizer, events, verifyCalls, lookups } = makeAuthorizer();
   assert.equal(await authorizer.assert(RUNNER, SESSION_ID, CREDENTIAL), SESSION_ID);
   assert.deepEqual(events, ['verify', 'database']);
@@ -161,7 +161,12 @@ test('assert verifies the credential before applying the live-session database p
       deletedAt: null,
       cancelRequestedAt: null,
       status: {
-        in: [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
+        in: [
+          RunStatus.PENDING,
+          RunStatus.RUNNING,
+          RunStatus.AWAITING_INPUT,
+          RunStatus.INTERRUPTED,
+        ],
       },
       agent: { enableOrchestration: true, deletedAt: null },
     },

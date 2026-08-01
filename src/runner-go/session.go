@@ -97,7 +97,7 @@ func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	}
 }
 
-type turnCompleter func(context.Context, TurnCompleteRequest) error
+type turnCompleter func(TurnCompleteRequest) error
 type turnPermitWaiter func(context.Context) bool
 
 // contextUntilEither is used by control-plane handshakes that must survive a
@@ -113,6 +113,32 @@ func contextUntilEither(ctx, stop context.Context) (context.Context, context.Can
 	}
 	stopAfter := context.AfterFunc(stop, cancel)
 	return merged, func() {
+		stopAfter()
+		cancel()
+	}
+}
+
+// contextWithStopGrace stays live during the runner's graceful drain, then
+// cancels any acknowledgement still retrying when that finite budget expires.
+// Before shutdown it has no deadline, so a transient outage cannot lose an ack.
+func contextWithStopGrace(ctx, stop context.Context, grace time.Duration) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	graceful, cancel := context.WithCancel(ctx)
+	if stop == nil {
+		return graceful, cancel
+	}
+	stopAfter := context.AfterFunc(stop, func() {
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			cancel()
+		case <-graceful.Done():
+		}
+	})
+	return graceful, func() {
 		stopAfter()
 		cancel()
 	}
@@ -216,16 +242,21 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
 	status := stCancelled
+	// A normal ack retries for as long as the session lives. During runner
+	// shutdown it gets the same finite drain budget as the provider process, so a
+	// dead control plane cannot keep shutdown blocked forever.
+	turnAckCtx, cancelTurnAcks := contextWithStopGrace(ctx, shutdownCtx, shutdownDrainTimeout)
+	defer cancelTurnAcks()
 	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
-	completeTurn := func(ackCtx context.Context, req TurnCompleteRequest) error {
+	completeTurn := func(req TurnCompleteRequest) error {
 		// Capture before the network round-trip. Once the server commits
 		// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 		// response returns; generation matching prevents this old ack from
 		// releasing the new claim's permit.
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(ackCtx, sessionID, req)
+		next, err := t.turnComplete(turnAckCtx, sessionID, req)
 		if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}

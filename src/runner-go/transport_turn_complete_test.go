@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestTurnCompleteReturnsAuthoritativeSessionStatus(t *testing.T) {
@@ -31,7 +34,7 @@ func TestTurnCompleteReturnsAuthoritativeSessionStatus(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			got, err := NewTransport(srv.URL, "token").turnComplete("s1", TurnCompleteRequest{TurnID: "t1"})
+			got, err := NewTransport(srv.URL, "token").turnComplete(context.Background(), "s1", TurnCompleteRequest{TurnID: "t1"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -45,9 +48,10 @@ func TestTurnCompleteReturnsAuthoritativeSessionStatus(t *testing.T) {
 func TestTurnCompleteRetriesLostCommittedResponse(t *testing.T) {
 	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if requests.Add(1) == 1 {
+		if requests.Add(1) <= 3 {
 			// Model: the idempotent DB transaction committed, then the connection
-			// vanished before its authoritative status reached the runner.
+			// vanished before its authoritative status reached the runner. Lose
+			// several responses to prove this is not a fixed retry-count policy.
 			hj, ok := w.(http.Hijacker)
 			if !ok {
 				t.Fatal("test server does not support hijacking")
@@ -67,15 +71,128 @@ func TestTurnCompleteRetriesLostCommittedResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	got, err := NewTransport(srv.URL, "token").turnComplete("s1", TurnCompleteRequest{TurnID: "t1"})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := NewTransport(srv.URL, "token").turnComplete(ctx, "s1", TurnCompleteRequest{TurnID: "t1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != stAwaitingInput {
 		t.Fatalf("status after retry = %q, want %q", got, stAwaitingInput)
 	}
-	if got := requests.Load(); got != 2 {
-		t.Fatalf("request count = %d, want one retry", got)
+	if got := requests.Load(); got != 4 {
+		t.Fatalf("request count = %d, want three retries", got)
+	}
+}
+
+func TestTurnCompleteStopsRetryingWhenContextIsCancelled(t *testing.T) {
+	requestStarted := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestStarted <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewTransport(srv.URL, "token").turnComplete(ctx, "s1", TurnCompleteRequest{TurnID: "t1"})
+		done <- err
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn-complete request did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("turnComplete error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("turnComplete did not stop after context cancellation")
+	}
+}
+
+func TestStableTurnAckContextOutlivesProviderCancellation(t *testing.T) {
+	attempts := make(chan struct{}, 8)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts <- struct{}{}
+		http.Error(w, "temporary failure", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	sessionCtx, cancelSession := context.WithCancel(context.Background())
+	defer cancelSession()
+	shutdownCtx, beginShutdown := context.WithCancel(context.Background())
+	turnAckCtx, cancelTurnAck := contextWithStopGrace(sessionCtx, shutdownCtx, 25*time.Millisecond)
+	defer cancelTurnAck()
+
+	// A provider process generation has a shorter lifetime than its session ACK.
+	// Cancelling it must not affect the stable ACK context.
+	_, cancelProvider := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewTransport(srv.URL, "token").turnComplete(turnAckCtx, "s1", TurnCompleteRequest{TurnID: "t1"})
+		done <- err
+	}()
+
+	select {
+	case <-attempts:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first turn-complete attempt did not start")
+	}
+	cancelProvider()
+	select {
+	case <-turnAckCtx.Done():
+		t.Fatal("provider cancellation stopped the stable turn ACK context")
+	default:
+	}
+	select {
+	case <-attempts:
+		// A retry after provider cancellation proves the ACK stayed alive.
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn-complete did not retry after provider cancellation")
+	}
+
+	beginShutdown()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("turnComplete error = %v, want context.Canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("turn-complete did not stop after the ACK shutdown grace elapsed")
+	}
+}
+
+func TestRetryReleaseTurnLeasesCallsEndpointUntilSuccess(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/sessions/s1/release-leases" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if requests.Add(1) < 3 {
+			http.Error(w, "temporary failure", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	transport := NewTransport(srv.URL, "token")
+	err := retryReleaseTurnLeases(ctx, func(attemptCtx context.Context) error {
+		return transport.releaseTurnLeases(attemptCtx, "s1")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := requests.Load(); got != 3 {
+		t.Fatalf("release-leases request count = %d, want 3", got)
 	}
 }
 
