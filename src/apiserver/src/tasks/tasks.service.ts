@@ -49,6 +49,10 @@ const RECONCILE_INTERVAL_MS = 60_000;
 const TASK_ID_QUERY_CHUNK = 5_000;
 const DEFAULT_TASK_PAGE_SIZE = 100;
 const MAX_TASK_PAGE_SIZE = 200;
+const DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH = 8;
+const MAX_DEPENDENCY_GRAPH_MAX_DEPTH = 32;
+const DEFAULT_DEPENDENCY_GRAPH_MAX_NODES = 100;
+const MAX_DEPENDENCY_GRAPH_MAX_NODES = 500;
 
 export interface ListTasksPageQuery {
   cursor?: string;
@@ -57,6 +61,20 @@ export interface ListTasksPageQuery {
   listId?: string;
   assigneeId?: string;
   q?: string;
+}
+
+export interface DependencyGraphQuery {
+  direction?: string;
+  maxDepth?: string | number;
+  maxNodes?: string | number;
+}
+
+export interface DependencyGraphNode {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  autoRunWhenReady: boolean;
+  depth: number;
 }
 
 interface TaskPageCursor {
@@ -79,6 +97,20 @@ function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
   } catch {
     throw new BadRequestException('invalid task cursor');
   }
+}
+
+function dependencyGraphLimit(
+  value: string | number | undefined,
+  fallback: number,
+  name: 'maxDepth' | 'maxNodes',
+  maximum: number,
+): number {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
+    throw new BadRequestException(`${name} must be an integer from 1 to ${maximum}`);
+  }
+  return parsed;
 }
 
 @Injectable()
@@ -429,6 +461,149 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // is only meaningful when nothing is running yet.
       queued: queued.has(t.id) && !running.has(t.id),
     }));
+  }
+
+  /**
+   * Return the focus task and its transitive prerequisites as a bounded DAG. Each
+   * breadth-first layer is fetched in one query, so query count grows with graph depth,
+   * never with node count. Edges are exposed in execution order (prerequisite ->
+   * dependent), the inverse of TaskDependency's stored `taskId depends on
+   * dependsOnTaskId` representation.
+   */
+  async dependencyGraph(
+    ownerId: string,
+    focusTaskId: string,
+    query: DependencyGraphQuery = {},
+  ) {
+    if (!UUID_RE.test(focusTaskId)) throw new NotFoundException('task not found');
+    const direction = query.direction ?? 'upstream';
+    if (direction !== 'upstream') {
+      throw new BadRequestException('direction must be upstream');
+    }
+    const maxDepth = dependencyGraphLimit(
+      query.maxDepth,
+      DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH,
+      'maxDepth',
+      MAX_DEPENDENCY_GRAPH_MAX_DEPTH,
+    );
+    const maxNodes = dependencyGraphLimit(
+      query.maxNodes,
+      DEFAULT_DEPENDENCY_GRAPH_MAX_NODES,
+      'maxNodes',
+      MAX_DEPENDENCY_GRAPH_MAX_NODES,
+    );
+
+    const focus = await this.prisma.task.findFirst({
+      where: { id: focusTaskId, ownerId },
+      select: { id: true, title: true, status: true, autoRunWhenReady: true },
+    });
+    if (!focus) throw new NotFoundException('task not found');
+
+    const nodes = new Map<string, DependencyGraphNode>([
+      [
+        focus.id,
+        {
+          ...focus,
+          status: focus.status as unknown as TaskStatus,
+          depth: 0,
+        },
+      ],
+    ]);
+    const edges = new Map<string, { sourceTaskId: string; targetTaskId: string }>();
+    let frontier = [focus.id];
+    let traversedDepth = 0;
+    let deepestDepth = 0;
+    let truncated = false;
+
+    while (frontier.length > 0 && traversedDepth < maxDepth) {
+      const nextDepth = traversedDepth + 1;
+      const rows = await this.prisma.taskDependency.findMany({
+        where: {
+          taskId: { in: frontier },
+          task: { ownerId },
+          dependsOnTask: { ownerId },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          taskId: true,
+          dependsOnTaskId: true,
+          dependsOnTask: {
+            select: { id: true, title: true, status: true, autoRunWhenReady: true },
+          },
+        },
+      });
+      const next = new Set<string>();
+      for (const row of rows) {
+        let prerequisite = nodes.get(row.dependsOnTaskId);
+        if (!prerequisite) {
+          if (nodes.size >= maxNodes) {
+            truncated = true;
+            continue;
+          }
+          prerequisite = {
+            ...row.dependsOnTask,
+            status: row.dependsOnTask.status as unknown as TaskStatus,
+            depth: nextDepth,
+          };
+          nodes.set(prerequisite.id, prerequisite);
+          next.add(prerequisite.id);
+          deepestDepth = nextDepth;
+        }
+        const edge = {
+          sourceTaskId: row.dependsOnTaskId,
+          targetTaskId: row.taskId,
+        };
+        edges.set(`${edge.sourceTaskId}:${edge.targetTaskId}`, edge);
+      }
+      frontier = [...next];
+      traversedDepth = nextDepth;
+    }
+
+    // Reaching the requested depth is only truncation when those boundary nodes really
+    // have further prerequisites. Leaf nodes exactly on the boundary still form a
+    // complete response.
+    if (!truncated && frontier.length > 0 && traversedDepth === maxDepth) {
+      const hiddenEdgeCount = await this.prisma.taskDependency.count({
+        where: {
+          taskId: { in: frontier },
+          task: { ownerId },
+          dependsOnTask: { ownerId },
+        },
+      });
+      truncated = hiddenEdgeCount > 0;
+    }
+
+    const baseNodes = [...nodes.values()];
+    const [withRun, dependencyStates] = await Promise.all([
+      this.withRunning(ownerId, baseNodes),
+      this.dependencyStatesFor(baseNodes.map((node) => node.id)),
+    ]);
+    const graphNodes = withRun.map((node) => ({
+      ...node,
+      dependencyState: dependencyStates.get(node.id) ?? 'NONE',
+    }));
+    const upstreamNodes = graphNodes.filter((node) => node.id !== focusTaskId);
+    const done = upstreamNodes.filter((node) => node.status === TaskStatus.DONE).length;
+    const failed = upstreamNodes.filter(
+      (node) => node.status === TaskStatus.FAILED || node.status === TaskStatus.CANCELLED,
+    ).length;
+
+    return {
+      focusTaskId,
+      direction,
+      nodes: graphNodes,
+      edges: [...edges.values()],
+      counts: {
+        upstream: upstreamNodes.length,
+        total: graphNodes.length,
+        done,
+        remaining: upstreamNodes.length - done - failed,
+        failed,
+      },
+      maxDepth: deepestDepth,
+      truncated,
+      limits: { maxDepth, maxNodes },
+    };
   }
 
   async get(ownerId: string, id: string) {

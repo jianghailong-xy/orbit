@@ -2,7 +2,6 @@ import {
   CaretDownOutlined,
   CaretUpOutlined,
   DeleteOutlined,
-  LoadingOutlined,
   LockOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
@@ -29,6 +28,7 @@ import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
+import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
@@ -72,57 +72,6 @@ const compareBy = (a: any, b: any, field: string): number => {
       return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
   }
 };
-
-// Lifecycle label → pill class + text. Status is encoded three ways (text + shape + color)
-// so it reads without relying on color alone: done = green dot, 进行中 = blue square,
-// 待办 = hollow ring, 失败 = red dot, 已取消 = muted ring.
-const STATUS_PILL: Record<string, { cls: string; label: string }> = {
-  DONE: { cls: 'done', label: 'Done' },
-  IN_PROGRESS: { cls: 'ongoing', label: 'In progress' },
-  OPEN: { cls: 'todo', label: 'Open' },
-  FAILED: { cls: 'failed', label: 'Failed' },
-  CANCELLED: { cls: 'cancelled', label: 'Cancelled' },
-};
-
-// One status pill per row: the agent-maintained lifecycle (`status`) overlaid with the live
-// session state (`running`/`queued` — a RUNNING or PENDING session exists, the ground truth
-// the `status` label can lag behind).
-//   - running → blue spinner pill "运行中": "executing now" outranks the lifecycle label.
-//   - queued (a PENDING session, nothing running yet) → a gently fading "排队中" pill.
-//   - neither → the plain lifecycle pill.
-function StatusPill({
-  status,
-  running,
-  queued,
-}: {
-  status: string;
-  running?: boolean;
-  queued?: boolean;
-}) {
-  if (running) {
-    return (
-      <span className="status-pill running">
-        <LoadingOutlined spin />
-        Running
-      </span>
-    );
-  }
-  if (queued) {
-    return (
-      <span className="status-pill queued">
-        <span className="status-dot" />
-        Queued
-      </span>
-    );
-  }
-  const s = STATUS_PILL[status] ?? { cls: 'todo', label: status };
-  return (
-    <span className={`status-pill ${s.cls}`}>
-      <span className="status-dot" />
-      {s.label}
-    </span>
-  );
-}
 
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
 // panel and batch-action modals. The task-list routes ("/tasks", "/lists/:key")
@@ -590,7 +539,7 @@ export function TaskListView() {
           />
         </div>
         <div className="task-status-cell">
-          <StatusPill status={r.status} running={r.running} queued={r.queued} />
+          <TaskStatusPill status={r.status} running={r.running} queued={r.queued} />
         </div>
         <div className="task-title-cell">
           <span className="task-title" title={r.title}>

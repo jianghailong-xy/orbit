@@ -152,6 +152,72 @@ func TestTaskCLIUpdateAcceptsLeadingIDThenFlags(t *testing.T) {
 	}
 }
 
+func TestTaskCLIUpdateReplacesOrClearsDependencies(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{
+		"update", "task-1", "--depends-on", "dep-1,dep-2", "--depends-on", "dep-2,dep-3", "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTaskCLI([]string{"update", "task-1", "--clear-dependencies", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bodies) != 2 {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	deps, ok := bodies[0]["dependsOnTaskIds"].([]interface{})
+	if !ok || len(deps) != 3 || deps[0] != "dep-1" || deps[1] != "dep-2" || deps[2] != "dep-3" {
+		t.Fatalf("replacement dependencies = %#v", bodies[0]["dependsOnTaskIds"])
+	}
+	cleared, ok := bodies[1]["dependsOnTaskIds"].([]interface{})
+	if !ok || len(cleared) != 0 {
+		t.Fatalf("cleared dependencies = %#v", bodies[1]["dependsOnTaskIds"])
+	}
+}
+
+func TestTaskCLIUpdateDependencyFlagsAreExplicitAndExclusive(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"update", "task-1", "--depends-on", ""}, want: "--depends-on cannot be empty"},
+		{args: []string{"update", "task-1", "--depends-on", "dep-1", "--clear-dependencies"}, want: "cannot be used together"},
+	} {
+		var out bytes.Buffer
+		err := cmdTaskCLI(tc.args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("cmdTaskCLI(%v) error = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+}
+
+func TestTaskCLIUpdateCapabilityAdvertisesDependencyReplacement(t *testing.T) {
+	doc := buildCLICapabilities(orbitCLIExecutable())
+	for _, capability := range doc.Capabilities {
+		if capability.ID != "task_update" {
+			continue
+		}
+		args := strings.Join(capability.Arguments, " ")
+		if !strings.Contains(args, "--depends-on") || !strings.Contains(args, "--clear-dependencies") {
+			t.Fatalf("task_update arguments = %#v", capability.Arguments)
+		}
+		return
+	}
+	t.Fatal("task_update capability missing")
+}
+
 func TestTaskCLIUsesCurrentTaskFallback(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

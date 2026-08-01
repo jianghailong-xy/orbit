@@ -653,7 +653,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_dependency_graph",
-			"description": "Read the complete multi-level dependency DAG connected to a task before changing its ordering. Returns task nodes and directed dependency edges across transitive prerequisites and downstream dependents; taskId defaults to the current task.",
+			"description": "Read the multi-level upstream dependency DAG for a task before changing its ordering. Returns the focus task, its transitive prerequisites, and directed prerequisite-to-dependent edges; taskId defaults to the current task. The server bounds traversal and reports when the result is truncated.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{

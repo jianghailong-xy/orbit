@@ -30,3 +30,45 @@ test('executeTask is exposed as POST tasks/:id/execute', () => {
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'tasks/:id/execute');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
 });
+
+test('dependency graph and edge edits stay owner-scoped through TasksService', async () => {
+  const calls: Array<{ method: string; args: string[] }> = [];
+  const tasks = {
+    dependencyGraph: async (...args: string[]) => {
+      calls.push({ method: 'dependencyGraph', args });
+      return { focusTaskId: args[1] };
+    },
+    addDependency: async (...args: string[]) => {
+      calls.push({ method: 'addDependency', args });
+      return { added: true };
+    },
+    removeDependency: async (...args: string[]) => {
+      calls.push({ method: 'removeDependency', args });
+      return { removed: true };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never);
+
+  await controller.getTaskDependencyGraph(RUNNER, 'task-1');
+  await controller.addTaskDependency(RUNNER, 'task-1', { dependsOnTaskId: 'task-0' });
+  await controller.removeTaskDependency(RUNNER, 'task-1', 'task-0');
+
+  assert.deepEqual(calls, [
+    { method: 'dependencyGraph', args: ['owner-1', 'task-1'] },
+    { method: 'addDependency', args: ['owner-1', 'task-1', 'task-0'] },
+    { method: 'removeDependency', args: ['owner-1', 'task-1', 'task-0'] },
+  ]);
+});
+
+test('runner dependency routes expose bounded read and granular writes', () => {
+  const routes: Array<[keyof RunnerTasksController, string, RequestMethod]> = [
+    ['getTaskDependencyGraph', 'tasks/:id/dependency-graph', RequestMethod.GET],
+    ['addTaskDependency', 'tasks/:id/dependencies', RequestMethod.POST],
+    ['removeTaskDependency', 'tasks/:id/dependencies/:dependsOnTaskId', RequestMethod.DELETE],
+  ];
+  for (const [name, path, method] of routes) {
+    const handler = RunnerTasksController.prototype[name];
+    assert.equal(Reflect.getMetadata(PATH_METADATA, handler), path);
+    assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), method);
+  }
+});

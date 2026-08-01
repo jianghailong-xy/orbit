@@ -64,6 +64,72 @@ func TestMCPTaskStartIsPartOfTaskTools(t *testing.T) {
 	}
 }
 
+func TestMCPTaskDependencyToolsArePartOfBaseTaskTools(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, name := range []string{"task_dependency_graph", "task_dependency_add", "task_dependency_remove"} {
+		if !hasMCPTool(tools, name) {
+			t.Fatalf("%s missing from the base task tools", name)
+		}
+	}
+	for _, name := range []string{"task_dependency_add", "task_dependency_remove"} {
+		props := mcpToolProps(tools, name)
+		dep, _ := props["dependsOnTaskId"].(map[string]interface{})
+		if dep["type"] != "string" {
+			t.Fatalf("%s dependsOnTaskId schema = %#v", name, props["dependsOnTaskId"])
+		}
+	}
+}
+
+func TestMCPTaskDependencyToolsUseBoundedGraphAndGranularEdgeEndpoints(t *testing.T) {
+	type request struct {
+		method string
+		path   string
+		body   map[string]interface{}
+	}
+	var requests []request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		req := request{method: r.Method, path: r.URL.Path}
+		if r.Body != nil && r.ContentLength != 0 {
+			_ = json.NewDecoder(r.Body).Decode(&req.body)
+		}
+		requests = append(requests, req)
+		_, _ = w.Write([]byte(`{"focusTaskId":"focus","nodes":[],"edges":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "focus", t: NewTransport(srv.URL, "tok")}
+	calls := []struct {
+		name string
+		args map[string]interface{}
+	}{
+		{name: "task_dependency_graph", args: map[string]interface{}{}},
+		{name: "task_dependency_add", args: map[string]interface{}{"dependsOnTaskId": "prereq"}},
+		{name: "task_dependency_remove", args: map[string]interface{}{"taskId": "dependent", "dependsOnTaskId": "prereq"}},
+	}
+	for _, call := range calls {
+		if res := mcp.callTool(call.name, call.args); res["isError"] == true {
+			t.Fatalf("%s returned an error: %#v", call.name, res["content"])
+		}
+	}
+
+	want := []request{
+		{method: http.MethodGet, path: "/api/runner/tasks/focus/dependency-graph"},
+		{method: http.MethodPost, path: "/api/runner/tasks/focus/dependencies", body: map[string]interface{}{"dependsOnTaskId": "prereq"}},
+		{method: http.MethodDelete, path: "/api/runner/tasks/dependent/dependencies/prereq"},
+	}
+	if len(requests) != len(want) {
+		t.Fatalf("requests = %#v", requests)
+	}
+	for i := range want {
+		if requests[i].method != want[i].method || requests[i].path != want[i].path {
+			t.Fatalf("request %d = %#v, want %#v", i, requests[i], want[i])
+		}
+		if want[i].body != nil && requests[i].body["dependsOnTaskId"] != want[i].body["dependsOnTaskId"] {
+			t.Fatalf("request %d body = %#v, want %#v", i, requests[i].body, want[i].body)
+		}
+	}
+}
+
 func TestMCPTaskStartUsesCurrentTaskAndExecuteEndpoint(t *testing.T) {
 	var gotMethod, gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +202,20 @@ func TestMCPTaskIDsCannotEscapeTaskRoute(t *testing.T) {
 		content, _ := res["content"].([]map[string]interface{})
 		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
 			t.Fatalf("task_get(%q) result = %#v", id, res)
+		}
+	}
+}
+
+func TestMCPTaskDependencyIDsCannotEscapeTaskRoute(t *testing.T) {
+	mcp := &mcpServer{taskID: "task-1", t: NewTransport("http://127.0.0.1:1", "tok")}
+	for _, tool := range []string{"task_dependency_add", "task_dependency_remove"} {
+		res := mcp.callTool(tool, map[string]interface{}{"dependsOnTaskId": "../sessions"})
+		if res["isError"] != true {
+			t.Fatalf("%s unsafe prerequisite isError = %#v", tool, res["isError"])
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
+			t.Fatalf("%s unsafe prerequisite result = %#v", tool, res)
 		}
 	}
 }
