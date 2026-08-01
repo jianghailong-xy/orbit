@@ -38,7 +38,7 @@ export const openSessionSearch = (): void => {
  *  the sidebar explains itself instead of looking like a ghost. */
 export const scopeBadge = (hit: SessionSearchHit): string | null => {
   const filing = sessionFilingStateOf(hit);
-  return filing === 'TRASH' ? 'Trash' : filing === 'ARCHIVED' ? 'Archived' : null;
+  return filing === 'TRASH' ? 'Trash' : filing === 'ARCHIVED' ? 'Completed' : null;
 };
 
 /** What the hit matched on, when it isn't the title (which the row already shows). */
@@ -57,7 +57,7 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
  * The ⌘K session palette. Mounted once by the app shell, so it works from every route.
  *
  * It searches across everything the sidebar can't reach in one place: every agent, every runner,
- * and the Archived / Trash scopes as well as Open. With an empty query it lists
+ * and the Completed / Trash scopes as well as Open. With an empty query it lists
  * recents, which makes the same keystroke a fast session switcher.
  */
 export function SessionSearch() {

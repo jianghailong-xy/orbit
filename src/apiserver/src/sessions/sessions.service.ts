@@ -2182,7 +2182,9 @@ export class SessionsService {
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
       if (filing === 'archivedAt' && session.deletedAt != null) {
-        throw new ConflictException('a session in Trash must be restored before it can be archived');
+        throw new ConflictException(
+          'a session in Trash must be moved to Open before it can be completed',
+        );
       }
       const now = new Date();
       // Keep the first filing timestamp stable across retries. This matters especially

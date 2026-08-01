@@ -31,7 +31,7 @@ private func matchLabel(_ field: SessionSearchMatchField) -> String? {
 private func scopeBadge(_ hit: SessionSearchHit) -> String? {
     switch hit.effectiveFilingState {
     case .open, .unknown: return nil
-    case .archived: return "Archived"
+    case .archived: return "Completed"
     case .trash: return "Trash"
     }
 }

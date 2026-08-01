@@ -58,7 +58,7 @@ public enum SessionHeader {
     public static func filingWord(for s: Session) -> String {
         switch s.effectiveFilingState {
         case .open, .unknown: return "Open"
-        case .archived: return "Archived"
+        case .archived: return "Completed"
         case .trash: return "Trash"
         }
     }

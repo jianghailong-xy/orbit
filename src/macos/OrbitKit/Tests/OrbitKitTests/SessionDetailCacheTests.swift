@@ -22,7 +22,7 @@ final class SessionDetailCacheTests: XCTestCase {
 
         let resolved = cache.resolve(archived.id, preferring: [], [])
         XCTAssertEqual(resolved?.effectiveFilingState, .archived)
-        XCTAssertEqual(SessionHeader.subtitle(for: resolved), "Succeeded · Archived")
+        XCTAssertEqual(SessionHeader.subtitle(for: resolved), "Succeeded · Completed")
         XCTAssertEqual(resolved?.capabilities?.canResume, true)
         XCTAssertEqual(resolved?.capabilities?.canRestore, true)
     }
@@ -91,5 +91,19 @@ final class SessionDetailCacheTests: XCTestCase {
 
         cache.removeAll()
         XCTAssertNil(cache.resolve("two", preferring: []))
+    }
+
+    func testNotFoundInvalidationDropsOnlyTheAuthoritativeGhost() {
+        let capabilities = SessionCapabilities(canSend: false, canResume: false,
+                                               resumeBlockedReason: .trashed,
+                                               canArchive: false, canRestore: true)
+        var cache = SessionDetailCache()
+        cache.store(session("purged", filing: .trash, capabilities: capabilities))
+        cache.store(session("still-there", filing: .trash, capabilities: capabilities))
+
+        XCTAssertTrue(cache.invalidateNotFound("purged"))
+        XCTAssertNil(cache.resolve("purged", preferring: []))
+        XCTAssertNotNil(cache.resolve("still-there", preferring: []))
+        XCTAssertFalse(cache.invalidateNotFound("purged"), "a repeated 404 stays idempotent")
     }
 }

@@ -682,7 +682,7 @@ private struct AgentComposePush: View {
                 } else {
                     NewSessionView(agent: agent, registry: registry,
                                    defaultEffort: model.user?.preferences?.defaultEffort) { session in
-                        model.agents?.registerCreatedSession(session)
+                        model.registerCreatedAgentSession(session)
                         created = session
                         // Mark it the focused console so the shell starts its SSE stream — the
                         // page keeps `composingAgentSession` true, under which the normal focus

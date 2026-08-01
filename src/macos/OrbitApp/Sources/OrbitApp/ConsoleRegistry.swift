@@ -120,6 +120,18 @@ final class ConsoleRegistry {
         lru = LRUOrder(capacity: lru.capacity)
     }
 
+    /// Forget a session the server authoritatively says no longer exists (a cross-client purge).
+    /// Unlike normal LRU eviction this deliberately does not persist first: keeping that transcript
+    /// on disk would let a later route rehydrate a permanently deleted ghost.
+    func discardMissing(_ sessionID: String) {
+        models[sessionID]?.stopStreaming()
+        if streamingSessionID == sessionID { streamingSessionID = nil }
+        models[sessionID] = nil
+        savedSeq[sessionID] = nil
+        lru.remove(sessionID)
+        store.remove(sessionID: sessionID)
+    }
+
     // MARK: - internals
 
     private func makeModel(_ sessionID: String, agentID: String?) -> ConsoleModel {

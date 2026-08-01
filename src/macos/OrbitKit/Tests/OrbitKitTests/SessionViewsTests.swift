@@ -7,7 +7,7 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionView.open.queryValue, "active")
         XCTAssertEqual(SessionView.archived.queryValue, "archived")
         XCTAssertEqual(SessionView.trash.queryValue, "deleted")
-        XCTAssertEqual(SessionView.allCases.map(\.title), ["Open", "Archived", "Trash"])
+        XCTAssertEqual(SessionView.allCases.map(\.title), ["Open", "Completed", "Trash"])
     }
 
     /// The console switcher mirrors the web Agent console's views, in order.
@@ -15,13 +15,8 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertEqual(SessionView.pickerCases, [.open, .archived, .trash])
     }
 
-    func testQueuedArchiveRequiresEndConfirmationAndDisablesSafeFullSwipe() {
-        XCTAssertTrue(SessionArchivePresentation.requiresConfirmation(for: .queued))
-        XCTAssertEqual(SessionArchivePresentation.actionTitle(for: .queued), "End & Archive…")
-        XCTAssertTrue(SessionArchivePresentation.requiresConfirmation(for: .running))
-
-        XCTAssertFalse(SessionArchivePresentation.requiresConfirmation(for: .succeeded))
-        XCTAssertEqual(SessionArchivePresentation.actionTitle(for: .succeeded), "Archive")
+    func testCompletionUsesOneImmediateActionLabel() {
+        XCTAssertEqual(SessionCompletionPresentation.actionTitle, "Complete")
     }
 
     /// The list nests the agent — filtering must read `agent.id`, not the (absent) flat `agentId`.

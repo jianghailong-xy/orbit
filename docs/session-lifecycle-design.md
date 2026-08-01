@@ -28,7 +28,7 @@
 | `DORMANT` | 优雅结束,仍可能恢复 |
 | `ENDED` | 其他非活跃终态 |
 
-Archive、Restore 或 Move to Trash 都不应重写已经形成的运行结果。
+Complete、Move to Open 或 Move to Trash 都不应重写已经形成的运行结果。
 
 ### 2.2 `filingState`
 
@@ -37,10 +37,10 @@ Archive、Restore 或 Move to Trash 都不应重写已经形成的运行结果�
 | 值 | 列表 | 存储来源 |
 |---|---|---|
 | `OPEN` | Open | `archivedAt == null && deletedAt == null` |
-| `ARCHIVED` | Archived | `archivedAt != null && deletedAt == null` |
+| `ARCHIVED` | Completed | `archivedAt != null && deletedAt == null` |
 | `TRASH` | Trash | `deletedAt != null` |
 
-`deletedAt` 优先级高于 `archivedAt`,因此一条曾经 Archived 的记录移入 Trash 后
+`deletedAt` 优先级高于 `archivedAt`,因此一条曾经 Completed 的记录移入 Trash 后
 仍只属于 Trash。
 
 ### 2.3 Task state
@@ -54,9 +54,9 @@ Task 的 `OPEN / IN_PROGRESS / DONE / CANCELLED / FAILED` 不是 Session 的列�
 ## 3. 产品规则
 
 1. 运行成功不会自动归档。`Succeeded · Open` 是正常状态。
-2. 终态 Session 的 `Archive` 只改变 `filingState`。
-3. 活跃或排队中 Session 的动作显示为 `End & Archive…`,确认后结束运行并归档。
-4. Archived 中发送新消息会恢复原 Session,并自动移回 Open;客户端必须事先说明。
+2. `Complete` 只改变 `filingState`;若运行仍活跃,服务端同时结束当前运行。
+3. `Complete` 不弹二次确认,活跃、排队和终态 Session 使用同一个直接动作。
+4. Completed 中发送新消息会恢复原 Session,并自动移回 Open;客户端必须事先说明。
 5. Trash 中禁止直接发送/恢复运行,必须先 `Restore to Open`。
 6. `Move to Open` 只清除归档/删除时间,不伪造新的运行结果。
 7. Header 同时显示两个维度,例如 `Succeeded · Open · 3m ago`。
@@ -90,7 +90,7 @@ Archive/Delete 对活跃 Session 同时包含“记录结束意图”和“改�
 或发 realtime 事件。
 
 - Delete 先获锁后,Archive 必须因已在 Trash 而拒绝;
-- Archive 先获锁后,Delete 可继续将 Archived 移入 Trash;
+- Complete 先获锁后,Delete 可继续将 Completed 移入 Trash;
 - realtime 中的 `filingState` 从事务后真实状态产生,不能只根据请求动作猜测。
 
 ## 6. 线上兼容
@@ -99,7 +99,8 @@ Archive/Delete 对活跃 Session 同时包含“记录结束意图”和“改�
 `filingState` 在 API 边界统一派生,不需要新数据列。`status`、`runStatus`、
 `sessionState` 在滚动升级期间保留,但新 UI 不得再用 `sessionState=COMPLETED`
 推断归档位置。查询参数中的 `active / archived / deleted` 也作为兼容协议保留,
-客户端展示名称则为 Open / Archived / Trash。
+客户端展示名称则为 Open / Completed / Trash。`ARCHIVED` 和 `archive` 只保留为内部/
+兼容协议名,不作为产品文案展示。
 
 历史上已经写错的 `task_done + SUCCEEDED` 记录不自动批量回填。Task 可能在
 Session 真实成功后又被取消,仅根据当前 Task 状态回写会误伤历史;需要结合时间线

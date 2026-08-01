@@ -8,7 +8,7 @@ public enum SessionView: String, CaseIterable, Sendable, Identifiable {
     public var title: String {
         switch self {
         case .open:     return "Open"
-        case .archived: return "Archived"
+        case .archived: return "Completed"
         case .trash:    return "Trash"
         }
     }
@@ -26,15 +26,10 @@ public enum SessionView: String, CaseIterable, Sendable, Identifiable {
     public static let pickerCases: [SessionView] = [.open, .archived, .trash]
 }
 
-/// Shared archive affordance wording/safety for macOS and iOS rows.
-public enum SessionArchivePresentation {
-    public static func requiresConfirmation(for runState: SessionRunState) -> Bool {
-        runState.isLive
-    }
-
-    public static func actionTitle(for runState: SessionRunState) -> String {
-        requiresConfirmation(for: runState) ? "End & Archive…" : "Archive"
-    }
+/// Shared product wording for the server's archive operation. The transport and filing enum keep
+/// their `archive` / `ARCHIVED` names, while both native clients present it as Completed.
+public enum SessionCompletionPresentation {
+    public static let actionTitle = "Complete"
 }
 
 public enum SessionFilter {

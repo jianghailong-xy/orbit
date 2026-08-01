@@ -14,7 +14,6 @@ import {
   DisconnectOutlined,
   DownOutlined,
   EyeOutlined,
-  InboxOutlined,
   InfoCircleOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -392,7 +391,7 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
 type SessionView = 'active' | 'archived' | 'deleted';
 const SESSION_VIEWS: { value: SessionView; label: string }[] = [
   { value: 'active', label: 'Open' },
-  { value: 'archived', label: 'Archived' },
+  { value: 'archived', label: 'Completed' },
   { value: 'deleted', label: 'Trash' },
 ];
 
@@ -1011,7 +1010,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   });
   const [resizing, setResizing] = useState(false);
 
-  // The list is scoped by `view`. Keep Archived loaded while one of its transcripts is
+  // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions and runner
   // slot accounting live.
   const effectiveView = selectedId ? (view === 'archived' ? 'archived' : 'active') : view;
@@ -1038,7 +1037,7 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
-    // The Archived view is ordered by the server on archived_at (newest first) and
+    // The Completed view is ordered by the server on archived_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
     // archive reconciles via refetch, so the server order holds. Trust it verbatim.
@@ -1078,7 +1077,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
-      // A deep-linked/Archived ENDING row may already be absent from the Open list. Keep polling
+      // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
     },
@@ -1202,7 +1201,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // tag when the user switches grouping — both from the pure groupers shared in shape with
   // OrbitKit's, over the already console-sorted list. Pinning only applies in Open, and
   // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
-  // Note the Archived tab is server-ordered by archived_at while bucketing reads last activity,
+  // Note the Completed tab is server-ordered by archived_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they were filed — same as iOS.
   const sections = useMemo(
     () =>
@@ -1929,7 +1928,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       if (queuedItem) setQueued((q) => [...q, queuedItem]);
       else setIdle(false); // a turn is now starting
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      // Reviving clears the row's Archived filing server-side (see SessionsService.resume),
+      // Reviving clears the row's Completed filing server-side (see SessionsService.resume),
       // so refetch the detail too — otherwise the header ⋮ keeps offering Move to Open for a
       // session that's already back in Open.
       qc.invalidateQueries({ queryKey: ['session', id] });
@@ -2066,46 +2065,35 @@ export function AgentView({ runner }: { runner: Runner }) {
       leaveIfOpen(id);
       dropFromLists(id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(id, 'Archived');
+      showUndo(id, 'Completed');
     },
     onError: (e: Error) => message.error(e.message),
   });
-  const requestArchive = useCallback(
+  const requestComplete = useCallback(
     (session: any): void => {
       const source = selectedSession?.id === session.id ? selectedSession : session;
       if (!sessionCapabilityOf(source, 'canArchive', true)) {
-        message.info('This session cannot be archived right now.');
+        message.info('This session cannot be completed right now.');
         return;
       }
-      if (isSessionTerminal(source)) {
-        archiveMut.mutate(session.id);
-        return;
-      }
-      modal.confirm({
-        title: 'End & archive session?',
-        content:
-          'This ends the current run and moves the session to Archived. You can move it back to Open later.',
-        okText: 'End & Archive',
-        cancelText: 'Cancel',
-        onOk: () => archiveMut.mutate(session.id),
-      });
+      archiveMut.mutate(session.id);
     },
-    [archiveMut, message, modal, selectedSession],
+    [archiveMut, message, selectedSession],
   );
-  // ⌘/Ctrl+D archives the open session — the keyboard twin of the archive action on its row. Fires
+  // ⌘/Ctrl+D completes the open session — the keyboard twin of the action on its row. Fires
   // even while the composer is focused; preventDefault swallows the browser's bookmark
-  // shortcut. Only on the Open view; for a live session this opens the same end confirmation.
+  // shortcut. The endpoint handles ending a live run and filing it as Completed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
       if (!(e.metaKey || e.ctrlKey)) return;
       if (view !== 'active' || !selected || selectedFilingState !== 'OPEN') return;
       e.preventDefault();
-      requestArchive(selected);
+      requestComplete(selected);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [view, selected, selectedFilingState, requestArchive]);
+  }, [view, selected, selectedFilingState, requestComplete]);
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteSession(id),
     onSuccess: (_d, id) => {
@@ -2959,7 +2947,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
               chip row — both read as clutter in a narrow column, and Open is nearly always
               the answer. The trigger names the current view so a list scoped to
-              Archived/Trash always explains itself. (The native clients still tab.) */}
+              Completed/Trash always explains itself. (The native clients still tab.) */}
           <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
             <span
               className={`session-scope-menu${shownView !== 'active' || tagFilter || groupByTag ? ' on' : ''}`}
@@ -3002,7 +2990,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 : view === 'active'
                   ? 'No sessions yet.'
                   : view === 'archived'
-                    ? 'No archived sessions.'
+                    ? 'No completed sessions.'
                     : 'Trash is empty.'}
             </div>
           )}
@@ -3016,7 +3004,6 @@ export function AgentView({ runner }: { runner: Runner }) {
               </div>
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
-                const ended = isSessionTerminal(actionSession);
                 const canArchiveRow = sessionCapabilityOf(actionSession, 'canArchive', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
                 const restoreItem = {
@@ -3055,7 +3042,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                     : view === 'deleted'
                       ? [restoreItem, { type: 'divider' }, purgeItem]
                       : [restoreItem];
-                // Open and Archived rows open their transcript; only
+                // Open and Completed rows open their transcript; only
                 // Trash (deleted) rows stay closed.
                 const openable = view !== 'deleted';
                 const line = sessionLine(s, openable);
@@ -3151,26 +3138,30 @@ export function AgentView({ runner }: { runner: Runner }) {
                               </span>
                             </Tooltip>
                             <Tooltip
-                              title={
-                                canArchiveRow
-                                  ? ended
-                                    ? 'Archive'
-                                    : 'End & Archive…'
-                                  : 'Archive unavailable right now'
-                              }
+                              title={canArchiveRow ? 'Complete' : 'Complete unavailable right now'}
                               placement="top"
                               open={hoverTipOpen}
                             >
                               <span
-                                className={`session-kebab session-archive${canArchiveRow ? '' : ' disabled'}`}
+                                className={`session-kebab session-complete${canArchiveRow ? '' : ' disabled'}`}
+                                role="button"
+                                aria-label="Complete"
                                 aria-disabled={!canArchiveRow}
+                                tabIndex={canArchiveRow ? 0 : -1}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  requestArchive(s);
+                                  requestComplete(s);
+                                  setSwipeOpenId(null);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  requestComplete(s);
                                   setSwipeOpenId(null);
                                 }}
                               >
-                                <InboxOutlined />
+                                <CheckOutlined />
                               </span>
                             </Tooltip>
                           </>
@@ -3380,8 +3371,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                             ]
                           : []),
                         { type: 'divider' as const },
-                        // An Archived session is filed away, not gone — offer the same move
-                        // its row has in Archived, so it can return to Open in place.
+                        // A Completed session is filed away, not gone — offer the same move
+                        // its row has in Completed, so it can return to Open in place.
                         ...(selectedArchived
                           ? [
                               {
@@ -3400,10 +3391,10 @@ export function AgentView({ runner }: { runner: Runner }) {
                             ? [
                                 {
                                   key: 'archive',
-                                  icon: <InboxOutlined />,
-                                  label: live ? 'End & Archive…' : 'Archive',
+                                  icon: <CheckOutlined />,
+                                  label: 'Complete',
                                   disabled: !selectedCanArchive,
-                                  onClick: () => requestArchive(selected),
+                                  onClick: () => requestComplete(selected),
                                 },
                                 { type: 'divider' as const },
                               ]

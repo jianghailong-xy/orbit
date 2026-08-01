@@ -2832,7 +2832,7 @@ body {
     --row-bg: var(--bg-hover);
   }
 }
-/* Archived / trash rows are managed, not opened — no pointer affordance. */
+/* Completed / trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
 }
@@ -2955,20 +2955,20 @@ body {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Archive button: a bare glyph with no chip — the row's own hover/selected
+/* Complete button: a bare glyph with no chip — the row's own hover/selected
    highlight already frames it, so the action stays light and never clashes with
    the selected-row tint. Darkens slightly on direct hover for feedback. */
-.session-kebab.session-archive {
+.session-kebab.session-complete {
   background: transparent;
   color: var(--text-3);
   font-size: 16px;
 }
-.session-kebab.session-archive:hover {
+.session-kebab.session-complete:hover {
   background: transparent;
   color: var(--text-2);
 }
-.session-kebab.session-archive.disabled,
-.session-kebab.session-archive.disabled:hover {
+.session-kebab.session-complete.disabled,
+.session-kebab.session-complete.disabled:hover {
   color: var(--text-3);
   cursor: not-allowed;
   opacity: 0.45;
@@ -6965,7 +6965,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* "Archived" / "Trash": this hit is real but isn't in the Open list the sidebar is showing. */
+/* "Completed" / "Trash": this hit is real but isn't in the Open list the sidebar is showing. */
 .ssearch-badge {
   flex: none;
   padding: 0 6px;

@@ -96,7 +96,7 @@ describe('sessionFilingStateOf', () => {
 
   it('labels locations independently from the run outcome', () => {
     expect(sessionFilingLabel('OPEN')).toBe('Open');
-    expect(sessionFilingLabel('ARCHIVED')).toBe('Archived');
+    expect(sessionFilingLabel('ARCHIVED')).toBe('Completed');
     expect(sessionFilingLabel('TRASH')).toBe('Trash');
     expect(
       [
@@ -129,7 +129,7 @@ describe('session state predicates', () => {
 });
 
 describe('sessionEndedBanner', () => {
-  it('uses the run outcome while separately explaining an Archived resume', () => {
+  it('uses the run outcome while separately explaining a Completed resume', () => {
     expect(
       sessionEndedBanner(
         { runState: 'SUCCEEDED', filingState: 'ARCHIVED' },

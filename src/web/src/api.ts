@@ -434,8 +434,8 @@ export const commitSession = (sessionId: string) =>
 export const adoptSessionBranch = (sessionId: string) =>
   api<{ ok: true; branch: string }>(`/sessions/${sessionId}/adopt-branch`, { method: 'POST' });
 
-// Soft visibility actions for ended sessions. Archive hides a session into the
-// Archived view; delete moves it to the trash. Both keep all data; restore (which
+// Soft visibility actions for ended sessions. Complete files a session into the
+// Completed view; delete moves it to the trash. Both keep all data; restore (which
 // clears both) brings it back to the active list. Purge is the only hard delete: it
 // permanently removes a trashed session and all its data, irreversibly.
 export const archiveSession = (sessionId: string) =>

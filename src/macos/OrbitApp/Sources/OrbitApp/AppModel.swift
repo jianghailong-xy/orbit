@@ -503,8 +503,7 @@ final class AppModel {
             consoleRegistry?.peek(id)?.adoptServerSnapshot(resolved)
         } catch APIError.http(let status, _) where status == 404 {
             guard apiGeneration == generation, self.api === api else { return }
-            sessionDetails.remove(id)
-            dropIfOpen(id)
+            discardMissingSession(id)
         } catch APIError.unauthorized {
             guard apiGeneration == generation, self.api === api else { return }
             logout()
@@ -625,10 +624,17 @@ final class AppModel {
     /// arming the selection is what keeps the iPhone push from bouncing back to the "Select a session"
     /// empty state — see `AgentsModel.registerCreatedSession`.
     func openCreatedAgentSession(_ session: Session) {
-        sessionDetails.store(session)
-        agents?.registerCreatedSession(session)
+        registerCreatedAgentSession(session)
         composingAgentSession = false
         selectedAgentSessionID = session.id
+    }
+
+    /// Seed both Native session stores for a freshly created record. The compact compose page keeps
+    /// its console in place instead of selecting it, but still needs the detail fallback so a later
+    /// cross-client filing change / purge can be refreshed and evicted authoritatively.
+    func registerCreatedAgentSession(_ session: Session) {
+        sessionDetails.store(session)
+        agents?.registerCreatedSession(session)
     }
 
     /// ⌘N: open the draft composer for `currentAgentID`, navigating into the Agents section.
@@ -697,7 +703,7 @@ final class AppModel {
         openAgent(all[index].id)
     }
 
-    /// The session whose console fills the detail pane right now — the ⌘D ("Archive Session")
+    /// The session whose console fills the detail pane right now — the ⌘D ("Complete Session")
     /// target. In Agents it's the selected agent session (nil while drafting a new one). nil in
     /// every other section, which disables the command.
     var currentSessionID: String? {
@@ -712,12 +718,6 @@ final class AppModel {
     var canArchiveCurrentSession: Bool {
         guard let id = currentSessionID else { return false }
         return session(id: id)?.capabilities?.canArchive ?? true
-    }
-
-    private(set) var pendingCurrentArchiveSessionID: String?
-    var confirmingCurrentSessionArchive: Bool {
-        get { pendingCurrentArchiveSessionID != nil }
-        set { if !newValue { pendingCurrentArchiveSessionID = nil } }
     }
 
     /// iOS compact: true when the console currently pushed on the Agents stack was opened from a
@@ -749,40 +749,29 @@ final class AppModel {
         }
     }
 
-    /// ⌘D: archive the open session. Clears the selection so the console pane drops the archived
-    /// session, then refreshes Open.
+    /// ⌘D: complete the open session. The server ends a live run as part of the same archive
+    /// operation, so this is one immediate action for every run state. Clears the selection, then
+    /// refreshes Open.
     func archiveCurrentSession() {
         guard let id = currentSessionID else { return }
         guard canArchiveCurrentSession else {
-            errorText = "This session can't be archived right now."
+            errorText = "This session can't be completed right now."
             return
         }
-        // A fresh deep link may not have its row yet; fail safe and confirm when liveness is unknown.
-        guard let runState = session(id: id)?.effectiveRunState,
-              !SessionArchivePresentation.requiresConfirmation(for: runState) else {
-            pendingCurrentArchiveSessionID = id
-            return
-        }
-        performCurrentSessionArchive(id)
+        performCurrentSessionCompletion(id)
     }
 
-    func confirmCurrentSessionArchive() {
-        guard let id = pendingCurrentArchiveSessionID else { return }
-        pendingCurrentArchiveSessionID = nil
-        performCurrentSessionArchive(id)
-    }
-
-    private func performCurrentSessionArchive(_ id: String) {
+    private func performCurrentSessionCompletion(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canArchive != false else {
-            errorText = "This session can't be archived right now."
+            errorText = "This session can't be completed right now."
             return
         }
         Task { @MainActor in
             do {
                 try await api.archiveSession(id)
             } catch {
-                errorText = "Couldn't archive the session."
+                errorText = "Couldn't complete the session."
                 return
             }
             sessionDetails.remove(id)
@@ -795,6 +784,20 @@ final class AppModel {
     /// archived/deleted session can't linger in the detail view. Used by ⌘D and row actions.
     private func dropIfOpen(_ id: String) {
         if selectedAgentSessionID == id { selectedAgentSessionID = nil }
+        if recentsConsoleSessionID == id { recentsConsoleSessionID = nil }
+        if composedConsoleSessionID == id {
+            composedConsoleSessionID = nil
+            // The compact compose page owns its created console in local view state. Dismissing
+            // that page is the only way to ensure a remotely purged session is not still rendered.
+            composingAgentSession = false
+        }
+    }
+
+    /// Remove every local fallback for an authoritative detail 404, then close the ghost console.
+    private func discardMissingSession(_ id: String) {
+        sessionDetails.invalidateNotFound(id)
+        consoleRegistry?.discardMissing(id)
+        dropIfOpen(id)
     }
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
@@ -829,20 +832,20 @@ final class AppModel {
 
     func dismissUndo() { undoDismiss?.cancel(); sessionUndo = nil }
 
-    /// Archive a session, drop it from any open pane and offer Undo.
+    /// Complete a session, drop it from any open pane and offer Undo.
     func archiveSession(_ id: String) {
         guard let api else { return }
         guard session(id: id)?.capabilities?.canArchive != false else {
-            errorText = "This session can't be archived right now."
+            errorText = "This session can't be completed right now."
             return
         }
         Task { @MainActor in
             do { try await api.archiveSession(id) }
-            catch { errorText = "Couldn't archive the session."; return }
+            catch { errorText = "Couldn't complete the session."; return }
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            offerUndo("Archived", sessionID: id)
+            offerUndo("Completed", sessionID: id)
         }
     }
 
@@ -881,8 +884,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.purgeSession(id) }
             catch { errorText = "Couldn't delete the session permanently."; return }
-            sessionDetails.remove(id)
-            dropIfOpen(id)
+            discardMissingSession(id)
             await reloadSessionLists()
         }
     }
@@ -986,10 +988,12 @@ final class AppModel {
         // The Open snapshot is already control-plane refreshed. Everything else (including an old
         // detail-cache hit) gets an exact refresh so repeated search/deep-link navigation cannot
         // resurrect stale filing or capability state.
-        guard !sessions.contains(where: { $0.id == id }) else { return }
-        Task { @MainActor [weak self] in
-            guard let self, let api = self.api else { return }
-            let generation = self.apiGeneration
+        guard !sessions.contains(where: { $0.id == id }), let api else { return }
+        // Capture this instance synchronously. Reading `self.api` only after the Task starts could
+        // send an old route's id to a newly configured instance before the identity guard exists.
+        let generation = apiGeneration
+        Task { @MainActor [weak self, api] in
+            guard let self else { return }
             do {
                 let resolved = try await api.session(id)
                 // Logout / instance switch can finish while this cold lookup is in flight.
@@ -1003,8 +1007,7 @@ final class AppModel {
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
-                self.sessionDetails.remove(id)
-                self.dropIfOpen(id)
+                self.discardMissingSession(id)
             } catch APIError.unauthorized {
                 guard self.apiGeneration == generation, self.api === api else { return }
                 self.logout()

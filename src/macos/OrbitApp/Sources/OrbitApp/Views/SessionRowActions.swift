@@ -1,11 +1,11 @@
 import SwiftUI
 import OrbitKit
 
-// Row-level session actions for each agent's Open/Archived/Trash lists. Two surfaces,
+// Row-level session actions for each agent's Open/Completed/Trash lists. Two surfaces,
 // deliberately paired:
 //   • swipeActions — the iOS accelerator, mapped to the platform convention (NOT the first-draft
 //     request, which had them reversed):
-//       – leading  (swipe right) → the positive actions: Archive/Pin (Move to Open in Archived and
+//       – leading  (swipe right) → the positive actions: Complete/Pin (Move to Open in Completed and
 //         Trash)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
 //         stray full swipe can't fire it — the user must tap the revealed button.
@@ -20,7 +20,7 @@ private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
     let session: Session
     /// The tab this row is shown under; `nil` means an Open-list surface.
-    /// `.archived` and `.trash` swap the positive action from Archive to Move to Open; `.trash` also
+    /// `.archived` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
     /// swaps the destructive action from a soft-delete to an irreversible purge (behind a
     /// confirmation) and drops Pin — a trashed session isn't orderable.
     let scope: SessionView?
@@ -30,25 +30,18 @@ private struct SessionRowActions: ViewModifier {
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
-    /// Archiving an in-flight run also ends it, so require an explicit second step.
-    @State private var confirmArchive = false
-
-    private var isArchived: Bool { scope == .archived }
+    private var isCompleted: Bool { scope == .archived }
     private var isTrash: Bool { scope == .trash }
-    private var isOpen: Bool { scope == nil || scope == .open }
-    private var isLive: Bool {
-        isOpen && SessionArchivePresentation.requiresConfirmation(for: session.effectiveRunState)
-    }
     private var canArchive: Bool { session.capabilities?.canArchive ?? true }
     private var canRestore: Bool { session.capabilities?.canRestore ?? true }
     private var canPerformPositiveAction: Bool {
-        isArchived || isTrash ? canRestore : canArchive
+        isCompleted || isTrash ? canRestore : canArchive
     }
     private var isPinned: Bool { session.pinnedAt != nil }
 
     func body(content: Content) -> some View {
         content
-            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction && !isLive) {
+            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction) {
                 positiveButton
                 if !isTrash { pinButton }
             }
@@ -70,36 +63,23 @@ private struct SessionRowActions: ViewModifier {
             } message: {
                 Text("This session and its full transcript will be permanently deleted. This can't be undone.")
             }
-            .confirmationDialog("End and archive this session?", isPresented: $confirmArchive,
-                                titleVisibility: .visible) {
-                Button("End & Archive", role: .destructive) { model.archiveSession(session.id) }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This ends the current run and moves the session to Archived.")
-            }
     }
 
     @ViewBuilder private var positiveButton: some View {
-        if isArchived || isTrash {
+        if isCompleted || isTrash {
             Button { model.moveSessionToOpen(session.id) } label: {
                 Label("Move to Open", systemImage: "tray.and.arrow.up")
             }
             .tint(.blue)
             .disabled(!canRestore)
         } else {
-            Button { requestArchive() } label: {
-                Label(SessionArchivePresentation.actionTitle(for: session.effectiveRunState),
-                      systemImage: "archivebox")
+            Button { model.archiveSession(session.id) } label: {
+                Label(SessionCompletionPresentation.actionTitle,
+                      systemImage: "checkmark.circle")
             }
             .tint(.green)
             .disabled(!canArchive)
         }
-    }
-
-    private func requestArchive() {
-        guard canArchive else { return }
-        if isLive { confirmArchive = true }
-        else { model.archiveSession(session.id) }
     }
 
     private var pinButton: some View {
@@ -123,7 +103,7 @@ private struct SessionRowActions: ViewModifier {
 }
 
 extension View {
-    /// Attach the pin / archive-or-move-to-open / delete actions to a session row.
+    /// Attach the pin / complete-or-move-to-open / delete actions to a session row.
     /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
     func sessionRowActions(_ session: Session, scope: SessionView? = nil,
                            onTag: (() -> Void)? = nil) -> some View {
@@ -160,6 +140,6 @@ private struct SessionUndoToast: ViewModifier {
 }
 
 extension View {
-    /// Floats the "Archived / Deleted … Undo" toast above the shell. Attach once at a root shell.
+    /// Floats the "Completed / Deleted … Undo" toast above the shell. Attach once at a root shell.
     func sessionUndoToast() -> some View { modifier(SessionUndoToast()) }
 }

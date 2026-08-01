@@ -42,9 +42,9 @@ struct OrbitApp: App {
                     .keyboardShortcut("n", modifiers: .command)
                     .disabled(!model.signedIn || model.orderedAgents.isEmpty)
             }
-            // ⌘D → archive the open session. Disabled unless a session's console is showing.
+            // ⌘D → complete the open session. Disabled unless a session's console is showing.
             CommandGroup(after: .newItem) {
-                Button("Archive Session") { model.archiveCurrentSession() }
+                Button("Complete Session") { model.archiveCurrentSession() }
                     .keyboardShortcut("d", modifiers: .command)
                     .disabled(!model.signedIn || !model.canArchiveCurrentSession)
             }
@@ -115,7 +115,6 @@ struct OrbitApp: App {
 struct RootView: View {
     @Environment(AppModel.self) private var model
     var body: some View {
-        @Bindable var model = model
         Group {
             if model.signedIn {
                 MainView()
@@ -123,14 +122,6 @@ struct RootView: View {
             } else {
                 LoginView()
             }
-        }
-        .confirmationDialog("End and archive this session?",
-                            isPresented: $model.confirmingCurrentSessionArchive,
-                            titleVisibility: .visible) {
-            Button("End & Archive", role: .destructive) { model.confirmCurrentSessionArchive() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This ends the current run and moves the session to Archived.")
         }
     }
 }

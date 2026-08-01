@@ -53,7 +53,7 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
   FAILED: { label: 'Failed', tone: 'red' },
 };
 
-// A run's outcome badge is independent of whether its session is Open, Archived or in Trash.
+// A run's outcome badge is independent of whether its session is Open, Completed or in Trash.
 const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
   QUEUED: { label: PENDING_SLOT_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },

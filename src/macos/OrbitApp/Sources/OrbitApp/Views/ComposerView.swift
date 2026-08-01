@@ -65,7 +65,7 @@ struct ComposerView: View {
         console.replyContext != nil ? "Type your reply to Claude…" : "Message…"
     }
 
-    private var isArchivedSession: Bool {
+    private var isCompletedSession: Bool {
         app.session(id: console.sessionID)?.effectiveFilingState == .archived
     }
 
@@ -91,10 +91,10 @@ struct ComposerView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            if isArchivedSession {
+            if isCompletedSession {
                 HStack(spacing: 6) {
-                    Image(systemName: "archivebox").foregroundStyle(.secondary)
-                    Text("Archived · Sending a message will resume this session in Open.")
+                    Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
+                    Text("Completed · Sending a message will resume this session in Open.")
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }

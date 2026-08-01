@@ -46,6 +46,14 @@ public struct SessionDetailCache: Sendable {
         records[id] = nil
     }
 
+    /// Apply an authoritative 404 from `GET /sessions/:id`. Kept distinct from a local filing
+    /// mutation so callers and tests cannot accidentally treat a transient request failure as a
+    /// deletion. Returns whether a cold-detail fallback actually existed.
+    @discardableResult
+    public mutating func invalidateNotFound(_ id: String) -> Bool {
+        records.removeValue(forKey: id) != nil
+    }
+
     public mutating func removeAll() {
         records.removeAll()
     }

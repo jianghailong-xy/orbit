@@ -142,9 +142,9 @@ final class SessionHeaderTests: XCTestCase {
         XCTAssertEqual(SessionHeader.subtitle(for: session(.running)), "Running · Open")
     }
 
-    func testSubtitleShowsArchivedIndependentlyFromSucceeded() {
+    func testSubtitleShowsCompletedIndependentlyFromSucceeded() {
         let s = session(.succeeded, runState: .succeeded, filingState: .archived)
-        XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Archived")
+        XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Completed")
     }
 
     func testSubtitleNilWhenNoSession() {

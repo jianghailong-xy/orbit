@@ -63,7 +63,7 @@ describe('sessionTimeSections', () => {
   });
 
   it('buckets pinned by time when pinnedFirst is off', () => {
-    // Archived/Trash: a stale pinnedAt must NOT spawn a "Pinned" section.
+    // Completed/Trash: a stale pinnedAt must NOT spawn a "Pinned" section.
     const s = [session('pin', { lastTurnAt: at(2026, 7, 8, 9), pinnedAt: at(2026, 1, 1) })];
     expect(sessionTimeSections(s, { pinnedFirst: false, now: NOW }).map((x) => x.title)).toEqual([
       'Today',

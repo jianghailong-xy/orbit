@@ -147,7 +147,7 @@ export enum ControlEventType {
 `data` 载荷约定(够驱动列表/通知即可,**不塞 transcript 正文**):
 - `SESSION_CREATED` / `SESSION_UPDATED`(决议 Q2:**推完整精简摘要**,客户端无脑 upsert):
   `{ id, title, status, runStatus, sessionState, runState, filingState, capabilities?, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。`runStatus` 是 runner/进程原始态；`runState` 是用户可见的执行态/结果；`filingState` 是 `OPEN|ARCHIVED|TRASH`,唯一决定列表归属；`capabilities` 是服务端统一派生的发送/恢复/归档/还原权限(滚动升级期间可缺失)。`sessionState` 只为旧客户端兼容保留；`status` 仍是 `runStatus` 的兼容别名。**不做字段级 delta**(避免客户端做易错的字段合并)。
-- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, filingState, endReason }`。例如运行中的会话被用户 Archive 后，可以是 `runState=CANCELLED`、`filingState=ARCHIVED`；新客户端分别展示执行结果与所在位置。
+- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, filingState, endReason }`。例如运行中的会话被用户 Complete 后，可以是 `runState=CANCELLED`、`filingState=ARCHIVED`（产品文案为 Completed）；新客户端分别展示执行结果与所在位置。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
 - `BACKGROUND_TASK`:`{ name, status, exitCode? }`。

@@ -150,7 +150,7 @@ export function sessionFilingStateOf(
 }
 
 export const sessionFilingLabel = (state: SessionFilingState): string =>
-  state === 'ARCHIVED' ? 'Archived' : state === 'TRASH' ? 'Trash' : 'Open';
+  state === 'ARCHIVED' ? 'Completed' : state === 'TRASH' ? 'Trash' : 'Open';
 
 /**
  * @deprecated New UI should use sessionRunStateOf and sessionFilingStateOf separately.
