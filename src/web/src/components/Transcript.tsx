@@ -1065,7 +1065,7 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
     );
   }
   return (
-    <a {...rest} href={href} title={title}>
+    <a {...rest} href={href} title={title} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   );
