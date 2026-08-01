@@ -136,11 +136,16 @@ import {
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
-  sessionHoldsRunnerSlot,
   sessionRunStatusOf,
   sessionStateOf,
 } from '../lib/sessionState';
 import { hasOutlivingSessionWork, isSessionTurnActive } from '../lib/sessionActivity';
+import {
+  PENDING_SLOT_LABEL,
+  PENDING_SLOT_TITLE,
+  pendingSlotDescription,
+  runnerSlotUsage,
+} from '../lib/runnerSlots';
 
 interface RunEvent {
   seq: number;
@@ -525,7 +530,7 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
-  if (live && state === 'QUEUED') return { text: 'Queued', tone: 'queued' };
+  if (live && state === 'QUEUED') return { text: PENDING_SLOT_LABEL, tone: 'queued' };
   // Parked (AWAITING_INPUT) but still doing background work — a sub-agent and/or background
   // shells that outlive the turn — so it doesn't read as idle. A spawned sub-agent parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
@@ -553,7 +558,7 @@ export function statusLabel(session: any, legacyCompleted = false): string {
   if (state === 'DORMANT') return 'Dormant';
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
-  return 'Queued';
+  return PENDING_SLOT_LABEL; // PENDING
 }
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = done, red = real failure, grey =
@@ -633,9 +638,9 @@ export function StatusIcon({ session, completed }: { session: any; completed?: b
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
-  // PENDING — queued, not yet started
+  // PENDING — waiting for an active turn slot
   return (
-    <Tooltip title="Queued">
+    <Tooltip title={PENDING_SLOT_TITLE}>
       <ClockCircleOutlined style={{ color: 'var(--scrollbar-hover)', fontSize }} />
     </Tooltip>
   );
@@ -1333,15 +1338,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     setMode(PERMISSION_TO_MODE[pickedAgent.permissionMode ?? 'dontAsk'] ?? 'Default');
   }, [selectedId, pickedAgent?.id, pickedAgent?.permissionMode]);
 
-  // Slot accounting: a runner hosts at most maxConcurrent live sessions. When it's
-  // full, a newly created session sits PENDING instead of starting — surface that
-  // as an explicit concurrency wait rather than a silent "Starting…".
-  const liveSlots = useMemo(
-    () => sessions.filter(sessionHoldsRunnerSlot).length,
-    [sessions],
+  // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
+  // cold AWAITING_INPUT session remains open for replies without blocking another turn.
+  const slotUsage = useMemo(
+    () => runnerSlotUsage(sessions, runner.maxConcurrent),
+    [sessions, runner.maxConcurrent],
   );
-  const atCapacity = typeof runner.maxConcurrent === 'number' && liveSlots >= runner.maxConcurrent;
-  const queuedForSlot = !!selected && sessionStateOf(selected) === 'QUEUED' && atCapacity;
+  const activeSlots = slotUsage.active;
+  const slotWaitDescription = pendingSlotDescription(activeSlots, runner.maxConcurrent);
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -3268,14 +3272,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                     <span />
                     <span />
                   </div>
-                  <div className="chat-queued-title">
-                    {queuedForSlot ? 'Waiting for a free slot' : 'Starting session…'}
-                  </div>
-                  <div className="chat-queued-desc">
-                    {queuedForSlot
-                      ? `Runner at capacity (${liveSlots}/${runner.maxConcurrent}). This session starts as soon as a slot frees up.`
-                      : 'Your message is queued — the agent will pick it up in a moment.'}
-                  </div>
+                  <div className="chat-queued-title">{PENDING_SLOT_TITLE}</div>
+                  <div className="chat-queued-desc">{slotWaitDescription}</div>
                 </div>
               )}
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
@@ -3285,6 +3283,15 @@ export function AgentView({ runner }: { runner: Runner }) {
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {selected &&
+                !selectedDeleted &&
+                sessionStateOf(selected) === 'QUEUED' &&
+                events.length > 0 && (
+                <div className="chat-note chat-slot-wait">
+                  <span>{PENDING_SLOT_TITLE}</span>
+                  <span>{slotWaitDescription}</span>
+                </div>
+              )}
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}

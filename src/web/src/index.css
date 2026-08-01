@@ -4028,6 +4028,26 @@ body {
   max-width: 320px;
 }
 
+/* An existing conversation can return to PENDING while it waits to reacquire a turn
+   slot. Keep its transcript visible and append this compact status instead of replacing
+   the history with the full-height first-run state above. */
+.chat-slot-wait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 10px 4px 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  text-align: center;
+}
+.chat-slot-wait span:first-child {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
 /* A message queued behind the running turn: a dimmed user bubble with a withdraw
    action, shown until the runner picks it up (then it renders as a normal user turn). */
 .chat-queued {

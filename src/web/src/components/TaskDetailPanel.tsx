@@ -20,6 +20,7 @@ import {
   sessionStateOf,
   type SessionStateValue,
 } from '../lib/sessionState';
+import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
 import { TaskDependencyList } from './TaskDependencyList';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
@@ -48,7 +49,7 @@ const STATUS_META: Record<string, { label: string; tone: string }> = {
 // Authoritative user-facing SessionState -> a single run's badge. Raw runStatus remains
 // available for execution-only decisions such as detecting a genuinely successful run.
 const SESSION_STATE_META: Record<SessionStateValue, { label: string; tone: string }> = {
-  QUEUED: { label: 'Queued', tone: 'muted' },
+  QUEUED: { label: PENDING_SLOT_LABEL, tone: 'muted' },
   RUNNING: { label: 'Running', tone: 'blue' },
   COMPLETED: { label: 'Completed', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
