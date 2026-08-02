@@ -83,6 +83,11 @@ const MAX_DEPENDENCY_GRAPH_EXPANSION_BATCH_SIZE = 100;
 // cap here would leave its final node permanently unreachable.
 const MAX_DEPENDENCY_GRAPH_EXPANDED_NODES = 1_000;
 
+// Creating/resuming every session at once can exhaust the API request deadline on large batches.
+// This bounds control-plane initialization only; `batchMaxConcurrent` remains the authoritative,
+// independent limit for how many of those sessions the runners may execute at the same time.
+export const BATCH_EXECUTE_DISPATCH_CONCURRENCY = 12;
+
 export interface ListTasksPageQuery {
   cursor?: string;
   limit?: string | number;
@@ -2119,23 +2124,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // One id ties this batch's sessions together; the queue counts live siblings by it.
     const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
 
-    const results = await Promise.all(
-      runnable.map(async (t) => {
-        try {
-          const sessionId = await this.runAgentOnTask(
-            ownerId,
-            { id: t.id, title: t.title },
-            { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
-            this.buildExecutePrompt(t),
-            `执行任务：${t.title}`,
-            batch,
-          );
-          return { id: t.id, ok: true as const, sessionId };
-        } catch (e) {
-          this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
-          return { id: t.id, ok: false as const, error: e instanceof Error ? e.message : String(e) };
-        }
-      }),
+    const dispatch = async (t: (typeof runnable)[number]) => {
+      try {
+        const sessionId = await this.runAgentOnTask(
+          ownerId,
+          { id: t.id, title: t.title },
+          { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
+          this.buildExecutePrompt(t),
+          `执行任务：${t.title}`,
+          batch,
+        );
+        return { id: t.id, ok: true as const, sessionId };
+      } catch (e) {
+        this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
+        return { id: t.id, ok: false as const, error: e instanceof Error ? e.message : String(e) };
+      }
+    };
+    // A fixed worker pool avoids an unbounded Promise.all fan-out while preserving the runnable
+    // order in `results`, even when individual session initializations finish out of order.
+    const results = new Array<Awaited<ReturnType<typeof dispatch>>>(runnable.length);
+    let nextIndex = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = nextIndex++;
+        if (index >= runnable.length) return;
+        results[index] = await dispatch(runnable[index]);
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(BATCH_EXECUTE_DISPATCH_CONCURRENCY, runnable.length) },
+        () => worker(),
+      ),
     );
 
     return {

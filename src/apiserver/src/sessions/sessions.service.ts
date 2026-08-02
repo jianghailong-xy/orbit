@@ -35,7 +35,7 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
-import { beautifyTitle, generateNaming, titleFromPrompt } from './naming';
+import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
@@ -199,18 +199,17 @@ export class SessionsService {
     const attachmentIds = await this.assertScopableAttachments(ownerId, dto.attachmentIds);
     // PENDING so the assigned runner claims it and spawns the long-lived claude
     // process; it then awaits turns via the inbox.
-    // Title + per-session worktree branch. DeepSeek (when DEEPSEEK_API_KEY is set) returns a
-    // title in the user's own language plus an always-English branch slug; otherwise a
-    // deterministic slug fallback. Keep an
-    // explicit dto.title (task templates, user-typed) and only adopt DeepSeek's title for an
-    // otherwise-unnamed session; the branch always uses the best available slug. The runner
-    // runs claude in its own `git worktree` on this branch when the workDir is a git repo,
-    // then commits the work here for a manual merge — harmless for non-git/shared runs.
-    const naming = await generateNaming({ prompt: dto.prompt, title: dto.title });
-    // DeepSeek gave us nothing usable in the 4s creation window (slow/unreachable/error), so the
-    // title fell back to the raw prompt line. Retry off the hot path below, once the row exists.
-    const usedFallbackTitle = !dto.title && !naming.title;
-    const title = dto.title ?? naming.title ?? titleFromPrompt(dto.prompt);
+    // Persist a title and worktree branch synchronously. Naming is cosmetic and must never hold
+    // session creation (especially a large task batch) open on an external model. An explicit
+    // title is authoritative; otherwise the display title can be beautified in the bounded
+    // background queue below. The branch is fixed before the runner can claim the session and is
+    // never changed afterwards because a runner may already have created its git worktree.
+    // DTO is intentionally an interface, so normalize a runtime JSON null even though TypeScript
+    // callers only see string | undefined. Empty string remains an explicit caller choice.
+    const explicitTitle = dto.title ?? undefined;
+    const hasExplicitTitle = explicitTitle !== undefined;
+    const title = explicitTitle ?? titleFromPrompt(dto.prompt);
+    const branch = enableWorktree ? makeBranchName(title) : null;
     // provider is the identity stored on the row; runtime is which built-in CLI actually
     // drives it (a custom provider borrows Claude/Codex), and decides the pre-generated session-id
     // and effort normalization.
@@ -219,7 +218,7 @@ export class SessionsService {
     const session = await this.prisma.session.create({
       data: {
         title,
-        branch: enableWorktree ? naming.branch : null,
+        branch,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
@@ -268,29 +267,28 @@ export class SessionsService {
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
-    // Title fell back to the raw prompt line because DeepSeek missed the 4s creation window.
-    // Retry off the hot path (generous timeout + retries) and swap in a clean title when it
-    // lands — the branch is left as-is (the runner may already hold a worktree on it).
-    if (usedFallbackTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
+    // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
+    // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
+    if (!hasExplicitTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
     return withSessionState(session);
   }
 
   /**
-   * Background retry for a session whose title fell back to the raw prompt at creation (DeepSeek
-   * slow/unreachable in the 4s window). Re-asks DeepSeek with a generous timeout + retries, then
-   * swaps the title in — but only while it's still the exact fallback we wrote, so a user rename
-   * (or any concurrent change) is never clobbered. Re-publishes the session so live clients pick
-   * up the new title. Fire-and-forget: never awaited, swallows all errors.
+   * Background naming for a session that started with a prompt-derived title. The shared bounded
+   * queue prevents a create burst from fan-out calling DeepSeek. Swap the title only while it is
+   * still the exact fallback we wrote, so a user rename (or any concurrent change) is never
+   * clobbered. Re-publishes the session so live clients pick up the new title. Fire-and-forget:
+   * never awaited, swallows all errors.
    */
   private async beautifyTitleLater(sessionId: string, prompt: string, fallbackTitle: string): Promise<void> {
     try {
-      const title = await beautifyTitle({ prompt });
+      const title = await enqueueBeautifyTitle({ prompt });
       if (!title || title === fallbackTitle) return;
       const res = await this.prisma.session.updateMany({
         where: { id: sessionId, title: fallbackTitle },
         data: { title },
       });
-      if (res.count > 0) this.realtime.publishSessionCreated(sessionId);
+      if (res.count > 0) this.realtime.publishSessionUpdated(sessionId);
     } catch {
       // best-effort; the raw fallback title simply stays
     }

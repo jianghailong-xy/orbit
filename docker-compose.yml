@@ -38,8 +38,8 @@ services:
       PROVIDER_SECRET_KEY: "${PROVIDER_SECRET_KEY:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
-      # Optional: DeepSeek (OpenAI-compatible) for clean English session titles + worktree
-      # branch slugs. Unset → a deterministic slug fallback, no LLM call (see naming.ts).
+      # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
+      # session titles. Session creation and worktree branch generation never wait on it.
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-chat}"

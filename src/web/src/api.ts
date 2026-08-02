@@ -238,8 +238,8 @@ export const createInteractiveSession = (body: {
     body: {
       ...body,
       // Shell-launched sessions get a `$ …` title so they read as a command in the list. A
-      // normal session sends NO title, so the server names it (DeepSeek summary + raw-prompt
-      // fallback); sending the prompt as an explicit title here would suppress that naming.
+      // normal session sends NO title, so the server immediately uses a prompt-derived fallback
+      // and may improve it asynchronously; an explicit title would suppress that naming.
       title: body.shell ? `$ ${body.prompt.trim()}`.slice(0, 80) : undefined,
     },
   });
