@@ -241,7 +241,7 @@ body {
 /* Session-level results use Notification rather than Message: this is a compact card with the
    outcome + session title, optional diagnostic detail, and a real action button when reversible.
    AgentView measures the active pane header and writes the custom top value, so the first card
-   consistently begins 16px below the visible header on desktop, the mobile list, and the mobile
+   consistently begins 8px below the visible header on desktop, the mobile list, and the mobile
    conversation. Subsequent cards stack downward with an 8px gap. */
 .ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
   top: max(

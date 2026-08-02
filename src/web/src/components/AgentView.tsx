@@ -764,7 +764,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         const anchorBottom = bottoms.length > 0 ? Math.max(...bottoms) : 0;
         root.style.setProperty(
           '--session-lifecycle-toast-top',
-          `${Math.ceil(anchorBottom > 0 ? anchorBottom + 16 : 16)}px`,
+          `${Math.ceil(anchorBottom > 0 ? anchorBottom + 8 : 16)}px`,
         );
       });
     };
