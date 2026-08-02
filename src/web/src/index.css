@@ -238,8 +238,8 @@ body {
   min-width: 0;
 }
 
-/* Reversible session lifecycle actions use Notification rather than Message: this is a compact
-   two-line card (outcome + session title), with a native top-right stack and a real Undo button.
+/* Session-level results use Notification rather than Message: this is a compact card with the
+   outcome + session title, optional diagnostic detail, and a real action button when reversible.
    AgentView measures the active pane header and writes the custom top value, so the first card
    consistently begins 16px below the visible header on desktop, the mobile list, and the mobile
    conversation. Subsequent cards stack downward with an 8px gap. */
@@ -285,12 +285,38 @@ body {
   line-height: 1;
   text-align: center;
 }
-.session-lifecycle-toast--complete .session-lifecycle-toast-icon {
+.session-lifecycle-toast--success .session-lifecycle-toast-icon {
   color: var(--success-solid);
 }
-.session-lifecycle-toast--trash .session-lifecycle-toast-icon {
+.session-lifecycle-toast--neutral .session-lifecycle-toast-icon {
   color: var(--text-3);
   font-size: 20px;
+}
+.session-lifecycle-toast--info .session-lifecycle-toast-icon {
+  color: var(--brand);
+  font-size: 20px;
+}
+.session-lifecycle-toast--warning .session-lifecycle-toast-icon {
+  color: var(--warning-solid);
+  font-size: 20px;
+}
+.session-lifecycle-toast--error .session-lifecycle-toast-icon,
+.session-lifecycle-toast--danger .session-lifecycle-toast-icon {
+  color: var(--error-solid);
+  font-size: 20px;
+}
+.ant-notification
+  .ant-notification-notice-wrapper
+  > .session-lifecycle-toast--warning.ant-notification-notice {
+  border-color: var(--warning-border);
+}
+.ant-notification
+  .ant-notification-notice-wrapper
+  > .session-lifecycle-toast--error.ant-notification-notice,
+.ant-notification
+  .ant-notification-notice-wrapper
+  > .session-lifecycle-toast--danger.ant-notification-notice {
+  border-color: var(--error-border);
 }
 .session-lifecycle-toast
   .ant-notification-notice-with-icon
@@ -322,6 +348,21 @@ body {
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.session-lifecycle-toast-detail {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.session-lifecycle-toast:has(.session-lifecycle-toast-detail) .ant-notification-notice-icon {
+  top: 16px;
+  transform: none;
+}
+.session-lifecycle-toast--warning,
+.session-lifecycle-toast--error {
+  user-select: text;
 }
 .session-lifecycle-toast-undo {
   flex: none;

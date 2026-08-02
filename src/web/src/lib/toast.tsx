@@ -1,4 +1,14 @@
-import { CheckCircleFilled, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  BranchesOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  CloseOutlined,
+  DeleteOutlined,
+  ExclamationCircleFilled,
+  InfoCircleFilled,
+  SyncOutlined,
+  UndoOutlined,
+} from '@ant-design/icons';
 import { App as AntApp } from 'antd';
 import React, { useMemo } from 'react';
 import { titleFirstLine } from './title';
@@ -20,81 +30,144 @@ interface SessionActionToastOptions {
   onUndo: () => void;
 }
 
+type SessionNoticeTone = 'success' | 'neutral' | 'info' | 'warning' | 'error' | 'danger';
+type SessionNoticeIcon = 'check' | 'trash' | 'branch' | 'sync' | 'undo' | 'info';
+
+interface SessionNoticeOptions {
+  sessionId: string;
+  sessionTitle: string;
+  event: string;
+  headline: React.ReactNode;
+  detail?: React.ReactNode;
+  tone?: SessionNoticeTone;
+  icon?: SessionNoticeIcon;
+  duration?: number;
+  action?: {
+    label: string;
+    ariaLabel: string;
+    onClick: () => void;
+  };
+}
+
 export function useToast() {
   const { message, notification } = AntApp.useApp();
   return useMemo(
-    () => ({
-      ...message,
-      error: (content: React.ReactNode) => {
-        const key = `toast-err-${++errSeq}`;
-        return message.error({
-          key,
-          duration: 0,
-          content: (
-            <span className="toast-err">
-              <span className="toast-err-text">{content}</span>
-              <button
-                type="button"
-                className="toast-err-close"
-                aria-label="Dismiss"
-                onClick={() => message.destroy(key)}
-              >
-                <CloseOutlined />
-              </button>
-            </span>
-          ),
-        });
-      },
-      // Completing and trashing are reversible session-level actions, so they get a richer
-      // two-line card than the app's short messages: outcome first, the affected title second,
-      // and a real Undo button. Notification supplies the native top-right stack and horizontal
-      // entrance motion; AgentView keeps that stack anchored below whichever header is visible.
-      sessionAction: ({ sessionId, sessionTitle, action, onUndo }: SessionActionToastOptions) => {
-        const key = `undo-${sessionId}`;
+    () => {
+      // Entity-bearing results use a richer card than a short Message: result first, the
+      // affected session second, optional diagnostic detail third. Error/warning outcomes stay
+      // until dismissed; successful outcomes pause on hover and leave after eight seconds.
+      const sessionNotice = ({
+        sessionId,
+        sessionTitle,
+        event,
+        headline,
+        detail,
+        tone = 'success',
+        icon = 'check',
+        duration,
+        action,
+      }: SessionNoticeOptions): void => {
+        const key = `session-${event}-${sessionId}`;
         const title = titleFirstLine(sessionTitle) || 'Untitled session';
-        const completed = action === 'complete';
-        const status = completed ? 'Session completed' : 'Moved to Trash';
-        const undoLabel = completed
-          ? `Undo completing ${title}`
-          : `Undo moving ${title} to Trash`;
+        const persistent = tone === 'error' || tone === 'warning';
+        const iconNode = {
+          check: <CheckCircleFilled className="session-lifecycle-toast-icon" aria-hidden="true" />,
+          trash: <DeleteOutlined className="session-lifecycle-toast-icon" aria-hidden="true" />,
+          branch: <BranchesOutlined className="session-lifecycle-toast-icon" aria-hidden="true" />,
+          sync: <SyncOutlined className="session-lifecycle-toast-icon" aria-hidden="true" />,
+          undo: <UndoOutlined className="session-lifecycle-toast-icon" aria-hidden="true" />,
+          info: <InfoCircleFilled className="session-lifecycle-toast-icon" aria-hidden="true" />,
+        }[icon];
 
         notification.open({
           key,
-          className: `session-lifecycle-toast session-lifecycle-toast--${action}`,
-          icon: completed ? (
-            <CheckCircleFilled className="session-lifecycle-toast-icon" aria-hidden="true" />
-          ) : (
-            <DeleteOutlined className="session-lifecycle-toast-icon" aria-hidden="true" />
-          ),
+          className: `session-lifecycle-toast session-lifecycle-toast--${tone}`,
+          icon:
+            tone === 'error' ? (
+              <CloseCircleFilled className="session-lifecycle-toast-icon" aria-hidden="true" />
+            ) : tone === 'warning' ? (
+              <ExclamationCircleFilled className="session-lifecycle-toast-icon" aria-hidden="true" />
+            ) : (
+              iconNode
+            ),
           message: (
             <div className="session-lifecycle-toast-body">
               <div className="session-lifecycle-toast-copy">
-                <div className="session-lifecycle-toast-status">{status}</div>
+                <div className="session-lifecycle-toast-status">{headline}</div>
                 <div className="session-lifecycle-toast-title" title={title}>
                   {title}
                 </div>
+                {detail && <div className="session-lifecycle-toast-detail">{detail}</div>}
               </div>
-              <button
-                type="button"
-                className="session-lifecycle-toast-undo"
-                aria-label={undoLabel}
-                onClick={() => {
-                  notification.destroy(key);
-                  onUndo();
-                }}
-              >
-                Undo
-              </button>
+              {action && (
+                <button
+                  type="button"
+                  className="session-lifecycle-toast-undo"
+                  aria-label={action.ariaLabel}
+                  onClick={() => {
+                    notification.destroy(key);
+                    action.onClick();
+                  }}
+                >
+                  {action.label}
+                </button>
+              )}
             </div>
           ),
-          duration: 8,
+          duration: persistent ? 0 : (duration ?? 8),
           pauseOnHover: true,
-          closable: false,
+          closable: persistent,
           placement: 'topRight',
-          role: 'status',
+          role: persistent ? 'alert' : 'status',
         });
-      },
-    }),
+      };
+
+      return {
+        ...message,
+        error: (content: React.ReactNode) => {
+          const key = `toast-err-${++errSeq}`;
+          return message.error({
+            key,
+            duration: 0,
+            content: (
+              <span className="toast-err">
+                <span className="toast-err-text">{content}</span>
+                <button
+                  type="button"
+                  className="toast-err-close"
+                  aria-label="Dismiss"
+                  onClick={() => message.destroy(key)}
+                >
+                  <CloseOutlined />
+                </button>
+              </span>
+            ),
+          });
+        },
+        sessionNotice,
+        // Complete/Trash are the two reversible session results. Keep the convenience method
+        // so their Undo behavior stays identical while sharing the generic result-card surface.
+        sessionAction: ({ sessionId, sessionTitle, action, onUndo }: SessionActionToastOptions) => {
+          const completed = action === 'complete';
+          const title = titleFirstLine(sessionTitle) || 'Untitled session';
+          sessionNotice({
+            sessionId,
+            sessionTitle,
+            event: action,
+            headline: completed ? 'Session completed' : 'Moved to Trash',
+            tone: completed ? 'success' : 'neutral',
+            icon: completed ? 'check' : 'trash',
+            action: {
+              label: 'Undo',
+              ariaLabel: completed
+                ? `Undo completing ${title}`
+                : `Undo moving ${title} to Trash`,
+              onClick: onUndo,
+            },
+          });
+        },
+      };
+    },
     [message, notification],
   );
 }

@@ -30,7 +30,7 @@ import {
   ThunderboltOutlined,
   UndoOutlined,
 } from '@ant-design/icons';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
@@ -97,6 +97,7 @@ import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
 import {
   api,
+  ApiError,
   type ApprovalInfo,
   completeSession,
   cancelQueuedTurn,
@@ -191,6 +192,10 @@ interface SessionToastTarget {
   id: string;
   title: string;
 }
+
+type PendingSessionOperation =
+  | (SessionToastTarget & { token: number; kind: 'merge'; target?: string })
+  | (SessionToastTarget & { token: number; kind: 'commit' });
 
 // An attachment staged in the composer: uploaded to the control plane (POST /api/attachments)
 // the moment it's picked/pasted, then sent by id with the turn. `previewUrl` is a local
@@ -679,6 +684,12 @@ export function AgentView({ runner }: { runner: Runner }) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
+  // session id so their result continues polling even if the user opens another conversation.
+  const pendingOperationSeq = useRef(0);
+  const [pendingSessionOperations, setPendingSessionOperations] = useState<
+    Record<string, PendingSessionOperation>
+  >({});
   // The signed-in user, for the account-synced default effort (seeds a new session's Effort
   // pill; written on change below). Cached/deduped with the nav footer's `me`.
   const me = useQuery(meQuery());
@@ -1172,30 +1183,115 @@ export function AgentView({ runner }: { runner: Runner }) {
     : null;
   const selectedTrashed = selectedLifecycleState === 'TRASH';
   const selectedCompleted = selectedLifecycleState === 'COMPLETED';
-  // A merge's outcome lands asynchronously (≤1 heartbeat after the click) — but the only place
-  // it surfaces is the worktree status bar, and only if the user is still on this session with the
-  // file panel expanded. Toast the landing (success or the failure reason) the moment it flips off
-  // 'pending', so it's noticed even after they look away. Tracked per session id so switching to an
-  // already-failed session doesn't re-fire — only a real pending→result transition toasts.
-  const prevMergeRef = useRef<{ id: string; status: string | null } | null>(null);
+  // Keep an observer on every locally accepted Merge/Commit until its runner reports a terminal
+  // result. Unlike the selected-detail-only observer this survives switching conversations, and
+  // the operation token prevents a stale query result from finishing a newer retry for the same
+  // session. Pre-existing terminal statuses never toast: entries are added only after a click is
+  // accepted by the API in the mutations below.
+  const pendingOperations = useMemo(
+    () => Object.values(pendingSessionOperations),
+    [pendingSessionOperations],
+  );
+  const pendingOperationQueries = useQueries({
+    queries: pendingOperations.map((operation) => ({
+      ...sessionQuery(operation.id),
+      refetchInterval: 3000,
+    })),
+  });
+  const notifiedOperationTokens = useRef(new Set<number>());
   useEffect(() => {
-    const d = detailForSelected;
-    if (!d) return;
-    const prev = prevMergeRef.current;
-    const was = prev && prev.id === d.id ? prev.status : null;
-    prevMergeRef.current = { id: d.id, status: d.mergeStatus ?? null };
-    if (was !== 'pending' || !d.mergeStatus || d.mergeStatus === 'pending') return;
-    const target = d.mergeTarget || 'main';
-    if (d.mergeStatus === 'merged') {
-      message.success(`Merged into ${target} ✓`);
-    } else if (d.mergeStatus === 'conflict') {
-      message.error(
-        `Merge into ${target} hit a conflict — aborted, your branch is untouched. Resolve it from the status bar.`,
-      );
-    } else {
-      message.error(`Merge into ${target} failed: ${d.mergeError ?? 'see the status bar for details.'}`);
-    }
-  }, [detailForSelected, message]);
+    const finished: PendingSessionOperation[] = [];
+    pendingOperations.forEach((operation, index) => {
+      const query = pendingOperationQueries[index];
+      // A deleted session has no result left to report. Likewise, a successful detail response
+      // whose operation status was cleared means another action (for example Resume) superseded
+      // the request. Stop observing both cases instead of polling an orphan forever; transient
+      // fetch failures remain tracked and retry normally.
+      if (query?.isError && query.error instanceof ApiError && query.error.status === 404) {
+        finished.push(operation);
+        return;
+      }
+      const d = query?.data;
+      if (!d || d.id !== operation.id || notifiedOperationTokens.current.has(operation.token)) return;
+      const status = operation.kind === 'merge' ? d.mergeStatus : d.commitStatus;
+      if (!status) {
+        if (query.isSuccess && query.fetchStatus === 'idle') finished.push(operation);
+        return;
+      }
+      if (status === 'pending') return;
+
+      notifiedOperationTokens.current.add(operation.token);
+      finished.push(operation);
+      if (operation.kind === 'merge') {
+        const target = d.mergeTarget || operation.target || 'main';
+        if (status === 'merged') {
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: `Merged into ${target}`,
+            tone: 'success',
+            icon: 'check',
+          });
+        } else if (status === 'conflict') {
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: `Merge conflict in ${target}`,
+            detail: 'Merge aborted; your branch is unchanged. Resolve it from the status bar.',
+            tone: 'warning',
+          });
+        } else {
+          message.sessionNotice({
+            sessionId: operation.id,
+            sessionTitle: operation.title,
+            event: 'merge-result',
+            headline: `Merge into ${target} failed`,
+            detail: d.mergeError ?? 'See the status bar for details.',
+            tone: 'error',
+          });
+        }
+      } else if (status === 'committed') {
+        message.sessionNotice({
+          sessionId: operation.id,
+          sessionTitle: operation.title,
+          event: 'commit-result',
+          headline: 'Changes committed',
+          tone: 'success',
+          icon: 'check',
+        });
+      } else if (status === 'nochange') {
+        message.sessionNotice({
+          sessionId: operation.id,
+          sessionTitle: operation.title,
+          event: 'commit-result',
+          headline: 'No changes to commit',
+          tone: 'neutral',
+          icon: 'info',
+        });
+      } else {
+        message.sessionNotice({
+          sessionId: operation.id,
+          sessionTitle: operation.title,
+          event: 'commit-result',
+          headline: 'Commit failed',
+          detail: d.commitError ?? 'See the status bar for details.',
+          tone: 'error',
+        });
+      }
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    });
+
+    if (finished.length === 0) return;
+    setPendingSessionOperations((current) => {
+      const next = { ...current };
+      finished.forEach((operation) => {
+        if (next[operation.id]?.token === operation.token) delete next[operation.id];
+      });
+      return next;
+    });
+  }, [message, pendingOperationQueries, pendingOperations, qc]);
   const live = !!selectedSession && !selectedTrashed && isSessionLive(selectedSession);
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
@@ -2045,13 +2141,31 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // Lifecycle actions happen immediately and offer Undo; Complete also ends a live run.
   const restoreMut = useMutation({
-    mutationFn: (id: string) => restoreSession(id),
-    onSuccess: (_d, id) => {
+    mutationFn: (session: SessionToastTarget & { notify: boolean }) => restoreSession(session.id),
+    onSuccess: (_d, session) => {
       setView('open');
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      qc.invalidateQueries({ queryKey: ['session', id] });
+      qc.invalidateQueries({ queryKey: ['session', session.id] });
+      if (session.notify) {
+        message.sessionNotice({
+          sessionId: session.id,
+          sessionTitle: session.title,
+          event: 'restore',
+          headline: 'Moved to Open',
+          tone: 'info',
+          icon: 'undo',
+        });
+      }
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'restore-error',
+        headline: 'Could not move to Open',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   const requestRestore = useCallback(
     (session: any): void => {
@@ -2060,7 +2174,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         message.info('This session cannot be moved to Open right now.');
         return;
       }
-      restoreMut.mutate(session.id);
+      restoreMut.mutate({ id: session.id, title: session.title, notify: true });
     },
     [message, restoreMut, selectedSession],
   );
@@ -2069,7 +2183,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       sessionId: session.id,
       sessionTitle: session.title,
       action,
-      onUndo: () => restoreMut.mutate(session.id),
+      onUndo: () => restoreMut.mutate({ ...session, notify: false }),
     });
   };
   // Completing/trashing the Open session drops it from the Open list. Keep the
@@ -2108,7 +2222,15 @@ export function AgentView({ runner }: { runner: Runner }) {
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(session, 'complete');
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'complete-error',
+        headline: 'Could not complete session',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   const requestComplete = useCallback(
     (session: any): void => {
@@ -2148,21 +2270,44 @@ export function AgentView({ runner }: { runner: Runner }) {
       qc.invalidateQueries({ queryKey: ['sessions'] });
       showUndo(session, 'trash');
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'trash-error',
+        headline: 'Could not move to Trash',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   // Permanent delete (from Trash): unlike deleteMut there's no undo — the row and all its
   // data are gone — so it's always gated behind confirmPurge's modal.
   const purgeMut = useMutation({
-    mutationFn: (id: string) => purgeSession(id),
-    onSuccess: (_d, id) => {
-      leaveIfOpen(id);
-      dropFromLists(id);
+    mutationFn: (session: SessionToastTarget) => purgeSession(session.id),
+    onSuccess: (_d, session) => {
+      leaveIfOpen(session.id);
+      dropFromLists(session.id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      message.success('Permanently deleted');
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'purge',
+        headline: 'Session permanently deleted',
+        tone: 'danger',
+        icon: 'trash',
+      });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'purge-error',
+        headline: 'Permanent deletion failed',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
-  const confirmPurge = (id: string): void => {
+  const confirmPurge = (session: SessionToastTarget): void => {
     modal.confirm({
       title: 'Delete permanently?',
       content:
@@ -2170,7 +2315,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       okText: 'Delete permanently',
       okButtonProps: { danger: true },
       cancelText: 'Cancel',
-      onOk: () => purgeMut.mutate(id),
+      onOk: () => purgeMut.mutate(session),
     });
   };
   // Double-click the header title to rename. Optimistically patch the title into every
@@ -2258,12 +2403,30 @@ export function AgentView({ runner }: { runner: Runner }) {
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
   const mergeMut = useMutation({
-    mutationFn: (vars: { id: string; target?: string }) => mergeSessionToMain(vars.id, vars.target),
-    onSuccess: () => {
-      // No success toast: the status bar reflects the pending merge and its outcome.
-      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    mutationFn: (vars: SessionToastTarget & { target?: string }) =>
+      mergeSessionToMain(vars.id, vars.target),
+    onSuccess: (_d, vars) => {
+      qc.setQueryData<any>(['session', vars.id], (old: any) =>
+        old
+          ? { ...old, mergeStatus: 'pending', mergeTarget: vars.target ?? old.mergeTarget, mergeError: null }
+          : old,
+      );
+      const token = ++pendingOperationSeq.current;
+      setPendingSessionOperations((current) => ({
+        ...current,
+        [vars.id]: { ...vars, token, kind: 'merge' },
+      }));
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, vars) =>
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'merge-request-error',
+        headline: `Could not start merge${vars.target ? ` into ${vars.target}` : ''}`,
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   // Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
@@ -2271,7 +2434,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // merge then fast-forwards cleanly. resume() clears the stale mergeStatus, so the bar offers
   // "Merge to <target>" again once the agent finishes.
   const resolveMut = useMutation({
-    mutationFn: (vars: { id: string; branch: string; target: string }) =>
+    mutationFn: (vars: SessionToastTarget & { branch: string; target: string }) =>
       resumeSession(
         vars.id,
         'Rebase this branch onto the latest ' +
@@ -2288,37 +2451,80 @@ export function AgentView({ runner }: { runner: Runner }) {
           vars.target +
           ' cleanly from the status bar above the composer.',
       ),
-    onSuccess: () => {
-      message.success('Resuming the session to resolve the conflict…');
-      if (selectedId) {
-        qc.invalidateQueries({ queryKey: ['session', selectedId] });
-        qc.invalidateQueries({ queryKey: ['sessions'] });
-      }
+    onSuccess: (_d, vars) => {
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-conflict',
+        headline: 'Conflict resolution started',
+        tone: 'info',
+        icon: 'sync',
+      });
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, vars) =>
+      message.sessionNotice({
+        sessionId: vars.id,
+        sessionTitle: vars.title,
+        event: 'resolve-conflict-error',
+        headline: 'Could not start conflict resolution',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   // Commit a live session's uncommitted worktree changes onto its branch. Like merge it runs
   // on the runner (heartbeat round-trip) and the outcome lands on commitStatus/worktreeDirty;
   // committing is safe/local so it fires directly (no confirm). Invalidate detail so 'pending'
   // shows immediately and the poll above picks up the runner's outcome.
   const commitMut = useMutation({
-    mutationFn: (id: string) => commitSession(id),
-    onSuccess: () => {
-      // No success toast: the status bar reflects the pending commit and its outcome.
-      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    mutationFn: (session: SessionToastTarget) => commitSession(session.id),
+    onSuccess: (_d, session) => {
+      qc.setQueryData<any>(['session', session.id], (old: any) =>
+        old ? { ...old, commitStatus: 'pending', commitError: null } : old,
+      );
+      const token = ++pendingOperationSeq.current;
+      setPendingSessionOperations((current) => ({
+        ...current,
+        [session.id]: { ...session, token, kind: 'commit' },
+      }));
+      void qc.invalidateQueries({ queryKey: ['session', session.id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'commit-request-error',
+        headline: 'Could not start commit',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   // Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
   // session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
   // Pure server-side re-point; invalidate detail so the bar re-derives (divergence clears).
   const adoptMut = useMutation({
-    mutationFn: (id: string) => adoptSessionBranch(id),
-    onSuccess: (res) => {
-      message.success(`Now tracking ${res.branch}`);
-      if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
+    mutationFn: (session: SessionToastTarget) => adoptSessionBranch(session.id),
+    onSuccess: (res, session) => {
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'adopt-branch',
+        headline: `Now tracking ${res.branch}`,
+        tone: 'info',
+        icon: 'branch',
+      });
+      void qc.invalidateQueries({ queryKey: ['session', session.id] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, session) =>
+      message.sessionNotice({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        event: 'adopt-branch-error',
+        headline: 'Could not update tracked branch',
+        detail: e.message,
+        tone: 'error',
+      }),
   });
   // Change a LIVE session's model / mode between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
@@ -3094,7 +3300,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   danger: true,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
-                    confirmPurge(s.id);
+                    confirmPurge({ id: s.id, title: s.title });
                   },
                 };
                 const menuItems: MenuProps['items'] =
@@ -3391,7 +3597,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                           label: 'Delete permanently',
                           onClick: () => {
                             setHeaderMenuOpen(false);
-                            confirmPurge(selected.id);
+                            confirmPurge({ id: selected.id, title: selected.title });
                           },
                         },
                       ]
@@ -3640,7 +3846,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                         <span title="Restore unavailable right now">Restore unavailable</span>
                       )}
                       {' · '}
-                      <a onClick={() => confirmPurge(selected.id)}>Delete permanently</a>
+                      <a onClick={() => confirmPurge({ id: selected.id, title: selected.title })}>
+                        Delete permanently
+                      </a>
                     </div>
                   );
                 })()}
@@ -3763,24 +3971,46 @@ export function AgentView({ runner }: { runner: Runner }) {
           merging={mergeMut.isPending}
           onMergeToMain={
             selectedId && detailForSelected?.branch
-              ? (target?: string) => mergeMut.mutate({ id: selectedId, target })
+              ? (target?: string) =>
+                  mergeMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                    target,
+                  })
               : undefined
           }
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch
               ? (target: string) =>
-                  resolveMut.mutate({ id: selectedId, branch: detailForSelected.branch!, target })
+                  resolveMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                    branch: detailForSelected.branch!,
+                    target,
+                  })
               : undefined
           }
           committing={commitMut.isPending}
           onCommit={
             selectedId && detailForSelected?.branch
-              ? () => commitMut.mutate(selectedId)
+              ? () =>
+                  commitMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                  })
               : undefined
           }
           adopting={adoptMut.isPending}
-          onAdopt={selectedId ? () => adoptMut.mutate(selectedId) : undefined}
+          onAdopt={
+            selectedId
+              ? () =>
+                  adoptMut.mutate({
+                    id: selectedId,
+                    title: selectedSession?.title ?? 'Untitled session',
+                  })
+              : undefined
+          }
         />
         {/* Background processes the agent launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
