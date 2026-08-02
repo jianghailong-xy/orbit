@@ -6079,10 +6079,12 @@ body {
     height: var(--app-vh);
     transform: translateX(-100%);
     transition: transform 0.25s ease;
-    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.18);
   }
   .app-nav.open {
     transform: translateX(0);
+    /* A closed drawer sits exactly one drawer-width off-screen, so a persistent
+       shadow would still spill into the viewport as a grey strip. */
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.18);
   }
   .tp-resizer {
     display: none;
