@@ -72,7 +72,10 @@ if [ "$PULL_BASE" -eq 1 ]; then
   $DC up -d --wait
 else
   echo "==> Recreating changed services (apiserver applies DB migrations on boot)"
-  $DC up -d --wait apiserver web gateway
+  # All three app-layer services are named explicitly, so dependency traversal is unnecessary.
+  # Suppress it to keep Compose from recreating postgres when this checkout's relative bind-mount
+  # path differs from the deployment checkout (for example, when upgrading from a git worktree).
+  $DC up -d --wait --no-deps apiserver web gateway
 fi
 
 echo "==> Stack status"
