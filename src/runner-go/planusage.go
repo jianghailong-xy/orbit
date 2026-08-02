@@ -395,9 +395,18 @@ func parsePlanUsage(body []byte) (*PlanUsage, error) {
 }
 
 func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error) {
+	env := os.Environ()
+	cwd, _ := os.Getwd()
+	state, err := codexPlanUsageStateForEnv(env, cwd)
+	if err != nil {
+		return nil, err
+	}
+	if err := ensureSharedCodexStateReady(ctx, ctx, state, env); err != nil {
+		return nil, err
+	}
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	app, err := startCodexUsageAppServer(cctx)
+	app, err := startBareCodexAppServer(cctx, state.Dir, env, cwd)
 	if err != nil {
 		return nil, err
 	}
@@ -412,15 +421,12 @@ func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error
 	return parseCodexPlanUsage(result)
 }
 
-func startCodexUsageAppServer(ctx context.Context) (*codexAppServer, error) {
+func startBareCodexAppServer(ctx context.Context, stateDir string, env []string, cwd string) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	// Per-uid: hosts run one runner per user, and a 0700 state dir left by whichever
-	// runner started first would make `codex app-server` fail for all the others.
-	stateDir := filepath.Join(os.TempDir(), fmt.Sprintf("orbit-codex-usage-state-%d", os.Getuid()))
-	_ = os.MkdirAll(stateDir, 0o700)
 	args := []string{"app-server", "--stdio", "-c", fmt.Sprintf("sqlite_home=%q", stateDir)}
 	cmd := exec.CommandContext(procCtx, "codex", args...)
-	if cwd, err := os.Getwd(); err == nil {
+	cmd.Env = env
+	if cwd != "" {
 		cmd.Dir = cwd
 	}
 	stdin, err := cmd.StdinPipe()

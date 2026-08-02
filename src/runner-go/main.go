@@ -592,7 +592,7 @@ func cmdResume(args []string) {
 		// Cache it so future resumes are offline-capable.
 		_ = os.MkdirAll(sessionDir, 0o755)
 		if b, err := json.Marshal(meta); err == nil {
-			_ = os.WriteFile(metaPath, b, 0o644)
+			_ = writeFileAtomically(metaPath, b, 0o644)
 		}
 	}
 
@@ -605,16 +605,24 @@ func cmdResume(args []string) {
 	var cmd *exec.Cmd
 	switch strings.ToLower(strings.TrimSpace(meta.Provider)) {
 	case providerCodex:
+		state, err := codexStateForResume(sessionDir, meta)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "cannot resolve this Codex session's state:", err)
+			os.Exit(1)
+		}
 		sessionID := meta.RuntimeSessionID
 		if sessionID == "" {
 			sessionID = meta.SessionUUID
 		}
-		args := []string{"-s", "danger-full-access", "-a", "never"}
+		args := []string{"-c", fmt.Sprintf("sqlite_home=%q", state.Dir), "-s", "danger-full-access", "-a", "never"}
 		if meta.WorkDir != "" {
 			args = append(args, "-C", expandTilde(meta.WorkDir))
 		}
 		args = append(args, "resume", "--include-non-interactive", sessionID)
 		cmd = exec.Command("codex", args...)
+		if state.Shared {
+			cmd.Env = envWithValue(os.Environ(), "CODEX_HOME", state.CodexHome)
+		}
 	case providerKimi:
 		if meta.RuntimeSessionID == "" {
 			fmt.Fprintln(os.Stderr, "this Kimi session has no runtime session id yet")

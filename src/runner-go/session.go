@@ -65,11 +65,14 @@ func nextReqID() string {
 // sessionMeta is written to the scratch directory so `orbit resume` can find
 // the claude session UUID and work directory without querying the server.
 type sessionMeta struct {
-	Provider         string `json:"provider,omitempty"`
-	SessionUUID      string `json:"sessionUuid"`
-	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
-	WorkDir          string `json:"workDir"`
-	Title            string `json:"title"`
+	Provider            string `json:"provider,omitempty"`
+	SessionUUID         string `json:"sessionUuid"`
+	RuntimeSessionID    string `json:"runtimeSessionId,omitempty"`
+	CodexStateLayout    string `json:"codexStateLayout,omitempty"`
+	CodexStatePartition string `json:"codexStatePartition,omitempty"`
+	CodexStateHome      string `json:"codexStateHome,omitempty"`
+	WorkDir             string `json:"workDir"`
+	Title               string `json:"title"`
 }
 
 func runtimeProvider(job *ClaimedSession) string {
@@ -106,16 +109,65 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 }
 
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
+	writeSessionMetaWithCodexState(scratch, job, execDir, "", "", "")
+}
+
+func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir, layout, partition, codexHome string) {
+	// Generic writes happen before the provider starts and on cold claims. Preserve
+	// the Codex state scope learned by an earlier successful start so a resume never
+	// falls back from runner-shared state to a stale legacy session directory.
+	if layout == "" {
+		if existing := readSessionMeta(filepath.Join(scratch, "meta.json")); existing != nil {
+			layout = existing.CodexStateLayout
+			partition = existing.CodexStatePartition
+			codexHome = existing.CodexStateHome
+		}
+	}
 	meta := sessionMeta{
-		Provider:         runtimeProvider(job),
-		SessionUUID:      job.SessionUUID,
-		RuntimeSessionID: currentRuntimeSessionID(job),
-		WorkDir:          execDir,
-		Title:            job.Title,
+		Provider:            runtimeProvider(job),
+		SessionUUID:         job.SessionUUID,
+		RuntimeSessionID:    currentRuntimeSessionID(job),
+		CodexStateLayout:    layout,
+		CodexStatePartition: partition,
+		CodexStateHome:      codexHome,
+		WorkDir:             execDir,
+		Title:               job.Title,
 	}
 	if b, err := json.Marshal(meta); err == nil {
-		_ = os.WriteFile(filepath.Join(scratch, "meta.json"), b, 0o644)
+		_ = writeFileAtomically(filepath.Join(scratch, "meta.json"), b, 0o644)
 	}
+}
+
+func writeFileAtomically(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	ok := false
+	defer func() {
+		_ = tmp.Close()
+		if !ok {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(perm); err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	ok = true
+	return nil
 }
 
 type turnCompleter func(TurnCompleteRequest) error

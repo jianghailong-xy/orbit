@@ -403,7 +403,7 @@ func TestProviderProcessesDoNotReceiveSessionOrchestrationToken(t *testing.T) {
 
 	t.Run("codex app server", func(t *testing.T) {
 		job, capture, root := newJobAndFakeProvider(t, "codex")
-		app, err := startCodexAppServer(context.Background(), job, root, root, emit)
+		app, err := startCodexAppServer(context.Background(), job, root, root, envWithAgent(job.Agent.Env), emit)
 		if err != nil {
 			t.Fatal(err)
 		}

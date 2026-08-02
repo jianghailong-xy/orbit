@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RunStatus, TaskStatus } from '@prisma/client';
 import {
+  AgentProvider,
   RunEventType,
   SessionEndReason,
   SessionLifecycleState,
@@ -29,6 +30,10 @@ const OFFLINE_AFTER_MS = 90_000; // runner missed ~3 heartbeats
 // so it can't see the inbox 'end' or the heartbeat cancel. Force-finalize the intent.
 const CANCEL_GRACE_MS = 2 * 60_000;
 const DYNAMIC_RUNTIME_STARTUP_GRACE_MS = 2 * 60_000;
+// Codex may need to build the runner-wide SQLite index from a large local history
+// before it can report a runtime id. The runner owns a shorter, bounded startup
+// timeout; this is only the control-plane backstop for a live-but-wedged runner.
+const CODEX_SHARED_STATE_STARTUP_GRACE_MS = 25 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 
@@ -151,12 +156,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           s.providerBuiltin ?? s.agent?.providerBuiltin ?? true,
         );
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
+        const runtimeStartupGrace =
+          provider === AgentProvider.CODEX
+            ? CODEX_SHARED_STATE_STARTUP_GRACE_MS
+            : DYNAMIC_RUNTIME_STARTUP_GRACE_MS;
         if (
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
           !s.claudeSessionId &&
-          now - lastTurn > DYNAMIC_RUNTIME_STARTUP_GRACE_MS
+          now - lastTurn > runtimeStartupGrace
         ) {
           await this.forceFinalize(
             s.id,

@@ -82,6 +82,10 @@ func machineHome() string {
 func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 
+// codexStateRoot contains runner-wide Codex SQLite partitions. The effective
+// CODEX_HOME selects the partition; see resolveCodexStateDir.
+func codexStateRoot() string { return filepath.Join(machineHome(), "codex-state") }
+
 func loadConfig() *RunnerConfig {
 	// This is intentionally read-only. ORBIT_HOME is inherited by agent shells,
 	// so an agent-safe command must not chmod an arbitrary environment-selected

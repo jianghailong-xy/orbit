@@ -113,14 +113,49 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
 
-	app, err := startCodexAppServer(ctx, job, execDir, scratchDir, emit)
+	processEnv := envWithAgent(job.Agent.Env)
+	meta := readSessionMeta(filepath.Join(scratchDir, "meta.json"))
+	state, err := resolveCodexStateDir(scratchDir, job.RuntimeSessionID, meta, processEnv, execDir)
+	if err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to prepare codex state: " + err.Error()})
+		return stFailed, true, false
+	}
+	if state.Shared {
+		// Once selected, both the SQLite partition and the rollout/config source
+		// remain sticky. This prevents a later HOME change from backfilling a new
+		// account's history into the existing partition.
+		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
+	}
+	// Persist the layout before spawning. A pre-thread failure can leave a directory
+	// behind; the marker prevents a later resume from mistaking shared state for an
+	// old session-local runtime (or vice versa).
+	writeSessionMetaWithCodexState(scratchDir, job, execDir, state.Layout, state.Partition, state.CodexHome)
+	if state.Shared {
+		if err := ensureSharedCodexStateReady(ctx, shutdownCtx, state, processEnv); err != nil {
+			if ctx.Err() != nil || shutdownCtx.Err() != nil {
+				return stCancelled, true, false
+			}
+			emit(evError, map[string]interface{}{"message": "failed to initialize shared codex state: " + err.Error()})
+			return stFailed, true, false
+		}
+	}
+	app, err := startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn codex app-server: " + err.Error()})
 		return stFailed, true, false
 	}
 	defer app.close()
-
-	if err := app.initialize(ctx); err != nil {
+	// Shared state has already crossed the expensive backfill gate. Legacy and
+	// credential-isolated state may still need that work, so keep the same bounded
+	// long window instead of reintroducing the old two-minute interruption.
+	initTimeout := codexConnectionInitTimeout
+	if !state.Shared {
+		initTimeout = codexStateInitTimeout
+	}
+	initCtx, cancelInit := context.WithTimeout(ctx, initTimeout)
+	err = app.initialize(initCtx)
+	cancelInit()
+	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to initialize codex app-server: " + err.Error()})
 		return stFailed, true, false
 	}
@@ -139,7 +174,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		}
 	}
 	job.RuntimeSessionID = threadID
-	writeSessionMeta(scratchDir, job, execDir)
+	writeSessionMetaWithCodexState(scratchDir, job, execDir, state.Layout, state.Partition, state.CodexHome)
 	emit(evSystem, map[string]interface{}{"subtype": "init", "sessionId": threadID, "provider": providerCodex, "runtime": "app-server"})
 
 	var activeMu sync.Mutex
@@ -552,10 +587,8 @@ func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
 	return refs
 }
 
-func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scratchDir string, emit emitFn) (*codexAppServer, error) {
+func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stateDir string, processEnv []string, emit emitFn) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	stateDir := filepath.Join(scratchDir, "codex-state")
-	_ = os.MkdirAll(stateDir, 0o755)
 	exe, err := os.Executable()
 	if err != nil {
 		exe = ""
@@ -563,7 +596,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, scra
 	args := codexAppServerCommandArgs(job, stateDir, exe)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
 	cmd.Dir = execDir
-	cmd.Env = envWithAgent(job.Agent.Env)
+	cmd.Env = processEnv
 	cmd.Env = append(cmd.Env,
 		"ORBIT_SESSION_ID="+job.SessionID,
 		"ORBIT_AGENT_ID="+job.AgentID,
