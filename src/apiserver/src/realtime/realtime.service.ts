@@ -299,9 +299,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** A session left Open (moved to Completed or Trash). Terminal
-   *  RUN statuses are NOT signalled here — they already flow as STATUS → session.updated; and
-   *  a gracefully recycled session stays in Open, so recycling isn't an "ended"
-   *  either (see the design doc). */
+   *  RUN statuses are NOT signalled here — they already flow as STATUS → session.updated.
+   *  Ordinary graceful recycling stays in Open and does not use this signal; the task_done
+   *  path is the exception because a successful task execution is filed in Completed. */
   publishSessionLifecycleChanged(
     sessionId: string,
     status: RunStatus | string,

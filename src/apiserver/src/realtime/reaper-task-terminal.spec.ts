@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus, TaskStatus } from '@prisma/client';
-import { SessionEndReason } from '@orbit/shared';
+import { SessionEndReason, SessionLifecycleState } from '@orbit/shared';
 import { ReaperService } from './reaper.service';
 
-for (const [taskStatus, expectedReason] of [
-  [TaskStatus.DONE, SessionEndReason.TASK_DONE],
-  [TaskStatus.CANCELLED, SessionEndReason.TASK_CANCELLED],
+for (const [taskStatus, expectedReason, movesToCompleted, runnerStatus] of [
+  // A parked, completed task must move even if its runner went offline after the final turn.
+  [TaskStatus.DONE, SessionEndReason.TASK_DONE, true, 'OFFLINE'],
+  [TaskStatus.CANCELLED, SessionEndReason.TASK_CANCELLED, false, 'ONLINE'],
 ] as const) {
   test(`reaper records ${expectedReason} for a ${taskStatus} linked task`, async () => {
     const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -43,7 +44,7 @@ for (const [taskStatus, expectedReason] of [
             task: { status: taskStatus },
             agent: { provider: 'claude' },
             assignedRunner: {
-              status: 'ONLINE',
+              status: runnerStatus,
               lastHeartbeatAt: new Date(),
             },
           },
@@ -54,9 +55,21 @@ for (const [taskStatus, expectedReason] of [
     } as never;
     let cancelRequests = 0;
     let inboxWakes = 0;
+    const lifecycleChanges: Array<{
+      sessionId: string;
+      status: RunStatus;
+      endReason: SessionEndReason;
+      lifecycleState: SessionLifecycleState;
+    }> = [];
     const realtime = {
       requestCancel: () => cancelRequests++,
       notifyInbox: () => inboxWakes++,
+      publishSessionLifecycleChanged: (
+        publishedSessionId: string,
+        status: RunStatus,
+        endReason: SessionEndReason,
+        lifecycleState: SessionLifecycleState,
+      ) => lifecycleChanges.push({ sessionId: publishedSessionId, status, endReason, lifecycleState }),
     } as never;
     const service = new ReaperService(prisma, realtime);
 
@@ -66,5 +79,22 @@ for (const [taskStatus, expectedReason] of [
     assert.deepEqual((claimWhere?.task as { status: TaskStatus }).status, taskStatus);
     assert.equal(cancelRequests, 1);
     assert.equal(inboxWakes, 1);
+    if (movesToCompleted) {
+      assert.equal(claimWhere?.deletedAt, null);
+      assert.ok(claimData?.completedAt instanceof Date);
+      assert.equal(claimData.archivedAt, claimData.completedAt);
+      assert.deepEqual(lifecycleChanges, [
+        {
+          sessionId,
+          status: RunStatus.AWAITING_INPUT,
+          endReason: SessionEndReason.TASK_DONE,
+          lifecycleState: SessionLifecycleState.COMPLETED,
+        },
+      ]);
+    } else {
+      assert.equal('completedAt' in (claimData ?? {}), false);
+      assert.equal('archivedAt' in (claimData ?? {}), false);
+      assert.deepEqual(lifecycleChanges, []);
+    }
   });
 }

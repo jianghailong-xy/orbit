@@ -24,7 +24,7 @@ export enum RunStatus {
  */
 export enum SessionEndReason {
   IDLE = 'idle', // reaper recycled it after inactivity — resumable
-  TASK_DONE = 'task_done', // reaper recycled it because its task finished — resumable
+  TASK_DONE = 'task_done', // task finished successfully; execution Session moves to Completed
   TASK_CANCELLED = 'task_cancelled', // reaper recycled it because its task was cancelled
   ENDED = 'ended', // user ended the session — resumable
   COMPLETED = 'completed', // user moved it to Completed

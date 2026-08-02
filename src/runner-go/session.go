@@ -383,10 +383,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	// Finalize the session's worktree (when isolated): commit the work onto its branch and
 	// compute the diff, so the branch is usable for a manual merge even after the checkout
-	// is removed. Whether to drop the checkout is the SERVER's call (keepCheckout): any
-	// resumable end — idle-park, user-end, task-done, or cancel — keeps it so the session
-	// (and its untracked scratch) can be reopened; only Complete or Move to Trash
-	// removes it. The finalize commit doubles as a *park checkpoint* for a resumable end —
+	// is removed. Whether to drop the checkout is the SERVER's call (keepCheckout): Open
+	// resumable ends — idle-park, user-end, or cancel — keep it; Complete, Move to Trash,
+	// and a successfully completed task remove it. The finalize commit doubles as a *park
+	// checkpoint* for a resumable end —
 	// tagged for undo-on-resume rather than permanent.
 	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
 	if runtimeProvider(job) == providerClaude {

@@ -701,8 +701,8 @@ export interface RunFinalizeRequest {
 /**
  * Control plane → runner response for POST /runner/sessions/:id/finalize. `keepCheckout`
  * tells the runner whether to preserve the session's isolated worktree checkout: kept for
- * any resumable end (idle-park / user-end / task-done / cancel — the session can be
- * reopened), dropped only when the user completed or deleted the session.
+ * Open resumable ends (idle-park / user-end / cancel), dropped when the session was completed
+ * (including task-done) or deleted. A reopened Completed session can create a fresh checkout.
  */
 export interface RunFinalizeResponse {
   ok: boolean;

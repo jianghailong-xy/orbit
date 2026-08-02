@@ -4,6 +4,7 @@ import {
   AgentProvider,
   RunEventType,
   SessionEndReason,
+  SessionLifecycleState,
   TRASH_RETENTION_DAYS,
   gracefulEndStatus,
   isApiErrorText,
@@ -29,11 +30,6 @@ const CANCEL_GRACE_MS = 2 * 60_000;
 const CODEX_STARTUP_GRACE_MS = 2 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
-
-// A task in a terminal state has no work left, so its warm runtime may be recycled
-// immediately. Ordinary idle sessions are never ended here: the runner owns the 4h
-// warm-process TTL and the Session remains AWAITING_INPUT after that process exits.
-const TASK_TERMINAL: TaskStatus[] = [TaskStatus.DONE, TaskStatus.CANCELLED];
 
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
@@ -128,7 +124,15 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // cleanly even if the runner heartbeat has just gone stale. Once the grace
         // expires the branch above applies the intended (including graceful) outcome.
         if (cancelAt) continue;
-        if (offline) {
+        const taskEndReason =
+          s.task?.status === TaskStatus.DONE
+            ? SessionEndReason.TASK_DONE
+            : s.task?.status === TaskStatus.CANCELLED
+              ? SessionEndReason.TASK_CANCELLED
+              : null;
+        const shouldEndTerminalTask =
+          s.status === RunStatus.AWAITING_INPUT && taskEndReason !== null;
+        if (offline && !shouldEndTerminalTask) {
           // RUNNING is an active turn and cannot survive losing its runner. An idle
           // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;
           // its next message simply waits in PENDING until this runner is online.
@@ -184,14 +188,13 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
         }
         // A task-bound runtime has no more work once its task is terminal. This is a
-        // business completion, not idle expiry; ordinary AWAITING_INPUT sessions stay open.
-        const taskTerminal = !!s.task && TASK_TERMINAL.includes(s.task.status);
-        if (s.status === RunStatus.AWAITING_INPUT && !s.cancelRequestedAt && taskTerminal) {
-          const reason =
-            s.task?.status === TaskStatus.DONE
-              ? SessionEndReason.TASK_DONE
-              : SessionEndReason.TASK_CANCELLED;
-          await this.endParked(s.id, s.assignedRunnerId, reason);
+        // business completion, not idle expiry: DONE moves its execution session to
+        // Completed, while a cancelled task and ordinary AWAITING_INPUT sessions stay Open.
+        // Terminal tasks deliberately reach this point even with an offline runner: the
+        // durable end claim starts the cancel grace timer, whose later sweep can finalize
+        // without that runner. Ordinary parked sessions still returned above.
+        if (shouldEndTerminalTask) {
+          await this.endParked(s.id, s.assignedRunnerId, taskEndReason);
         }
       } catch (e) {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
@@ -277,7 +280,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Gracefully tear down a session parked at AWAITING_INPUT (inbox 'end' turn +
-   * cancel). Triggered only when the session's task is already terminal; ordinary
+   * cancel). Triggered only when the session's task is already terminal; a DONE task
+   * atomically files its execution session in Completed as part of the claim. Ordinary
    * process-idle expiry is runner-local and leaves the Session AWAITING_INPUT.
    */
   private async endParked(
@@ -293,6 +297,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // re-check mirrors sweep() — still parked and its task is terminal — so a turn
     // that arrived since the sweep read doesn't get cut off.
     const done = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const claimed = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -301,8 +306,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // Re-check the exact terminal outcome, not merely "some terminal state": a
           // stale sweep must never turn a cancelled task into task_done/SUCCEEDED.
           task: { status: taskStatus },
+          // Trash remains authoritative over Completed even for an anomalous live row.
+          ...(reason === SessionEndReason.TASK_DONE ? { deletedAt: null } : {}),
         },
-        data: { cancelRequestedAt: new Date(), endReason: reason },
+        data: {
+          cancelRequestedAt: now,
+          endReason: reason,
+          ...(reason === SessionEndReason.TASK_DONE
+            ? { completedAt: now, archivedAt: now }
+            : {}),
+        },
       });
       if (claimed.count === 0) return false;
       const last = await tx.conversationTurn.findFirst({
@@ -322,6 +335,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       return true;
     });
     if (!done) return;
+    if (reason === SessionEndReason.TASK_DONE) {
+      this.realtime.publishSessionLifecycleChanged(
+        sessionId,
+        RunStatus.AWAITING_INPUT,
+        reason,
+        SessionLifecycleState.COMPLETED,
+      );
+    }
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     this.realtime.notifyInbox(sessionId);
     this.log.log(`recycling parked session ${sessionId}`);

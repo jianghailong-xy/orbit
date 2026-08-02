@@ -52,12 +52,13 @@ Task 的 `OPEN / IN_PROGRESS / DONE / CANCELLED / FAILED` 既不是 Session 的
 `lifecycleState`,也不应在客户端覆盖 Session 的运行结果。两者只在 reaper 收口处有明确
 映射:
 
-- Task `DONE` → `endReason=task_done` → Session `runState=SUCCEEDED`;
+- Task `DONE` → `endReason=task_done` → Session `runState=SUCCEEDED`,并自动进入 Completed;
 - Task `CANCELLED` → `endReason=task_cancelled` → Session `runState=CANCELLED`。
 
 ## 3. 产品规则
 
-1. 运行成功不会自动 Complete。`Succeeded · Open` 是正常状态。
+1. 普通 Session 运行成功不会自动 Complete,`Succeeded · Open` 是正常状态;任务执行 Session
+   在对应 Task 进入 `DONE` 后自动进入 Completed。
 2. `Complete` 将 `lifecycleState` 改为 `COMPLETED`;若运行仍活跃,服务端同时结束当前运行。
 3. `Complete` 不弹二次确认,活跃、排队和终态 Session 使用同一个直接动作。
 4. Completed 中发送新消息会恢复原 Session,并自动移回 Open;客户端必须事先说明。
@@ -151,6 +152,6 @@ realtime 事件。
 `status / runStatus / sessionState` 同样暂时保留给旧客户端,但新客户端不得用
 `sessionState=COMPLETED` 推断列表归属。
 
-历史上已经写错的 `task_done + SUCCEEDED` 记录不自动批量移动到 Completed。Task 可能在
-Session 真实成功后又被取消,仅根据当前 Task 状态回写会误伤历史;需要结合时间线单独审计
-或定点修复。
+迁移 `0077_task_done_sessions_completed` 会把历史上仍在 Open 的
+`task_done + SUCCEEDED` Session 补入 Completed。迁移只依据 Session 自身已经落盘的运行
+结果和结束原因,不根据 Task 当前状态推断,因此 Task 后续状态变化不会改写这次执行的归属。

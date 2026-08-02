@@ -160,3 +160,29 @@ test('finalize honors task_cancelled and reclaims the task from the locked snaps
   assert.deepEqual(h.taskUpdateIds, ['current-task']);
   assert.deepEqual(h.publishedStatuses, [RunStatus.CANCELLED]);
 });
+
+test('finalize preserves a completed task run and releases its checkout', async () => {
+  const h = makeController({
+    id: SESSION_ID,
+    assignedRunnerId: RUNNER_ID,
+    status: RunStatus.AWAITING_INPUT,
+    taskId: 'current-task',
+    cancelRequestedAt: new Date('2026-08-01T10:00:00.000Z'),
+    endReason: SessionEndReason.TASK_DONE,
+    completedAt: new Date('2026-08-01T10:00:00.000Z'),
+    archivedAt: new Date('2026-08-01T10:00:00.000Z'),
+    deletedAt: null,
+  });
+
+  const response = await h.controller.finalize(
+    { id: RUNNER_ID },
+    SESSION_ID,
+    { status: SharedRunStatus.SUCCEEDED },
+  );
+
+  assert.deepEqual(response, { ok: true, keepCheckout: false });
+  assert.deepEqual(h.statusWrites, [RunStatus.SUCCEEDED]);
+  assert.deepEqual(h.taskCountIds, []);
+  assert.deepEqual(h.taskUpdateIds, []);
+  assert.deepEqual(h.publishedStatuses, [RunStatus.SUCCEEDED]);
+});
