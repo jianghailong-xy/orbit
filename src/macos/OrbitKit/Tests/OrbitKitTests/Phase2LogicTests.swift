@@ -273,13 +273,13 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertFalse(ComposerLogic.willQueue(authoritative: nil, reconciled: .cancelled))
     }
 
-    func testEffortLabelsAndWire() {
+    func testEffortLabelsAndRawValues() {
         XCTAssertEqual(Effort.allCases, [.default, .minimal, .low, .medium, .high, .xhigh, .max])
         XCTAssertEqual(Effort.allCases.map(\.label),
                        ["Default", "Minimal", "Low", "Medium", "High", "xHigh", "Max"])
-        XCTAssertNil(Effort.default.wire)              // Default omits --effort
-        XCTAssertEqual(Effort.max.wire, "max")
-        XCTAssertEqual(Effort.xhigh.rawValue, "xhigh") // wire/raw match the CLI value
+        XCTAssertEqual(Effort.default.rawValue, "")
+        XCTAssertEqual(Effort.max.rawValue, "max")
+        XCTAssertEqual(Effort.xhigh.rawValue, "xhigh")
     }
 
     func testPlanUsageRows() {
@@ -291,6 +291,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(u.rows.map(\.key), ["fiveHour", "sevenDayOpus"])
         XCTAssertEqual(u.rows.map(\.percent), [12, 92])
         XCTAssertEqual(u.primaryPercent, 12)           // binding window = 5-hour
+        XCTAssertNil(u.snapshot(for: "opencode"))      // never show Claude quota for OpenCode
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
                                sevenDaySonnet: nil, fetchedAt: nil).primaryPercent)
 
@@ -388,8 +389,9 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
-    /// Runtime-owned registries are isolated: Codex only keeps local Orbit commands, Kimi only
-    /// sees tagged Kimi entries, and Claude/custom providers accept legacy nil + Claude tags.
+    /// Runtime-owned registries are isolated: Codex and OpenCode only keep local Orbit commands,
+    /// Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil + Claude
+    /// tags.
     func testSlashForProvider() {
         let items = ComposerHostCommand.slashItems + [
             SlashCommandInfo(name: "commit", type: "command"),
@@ -397,6 +399,8 @@ final class Phase2LogicTests: XCTestCase {
             SlashCommandInfo(name: "deploy", type: "command", provider: "kimi"),
         ]
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
+                       ["status"])
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "opencode").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
                        ["status", "commit", "loop"])
@@ -522,10 +526,13 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(s.effort, "high")
         XCTAssertEqual(s.agent?.name, "claude")
 
-        // Reviving carries effort; Default ("") would omit it via Effort.wire == nil.
+        // Reviving carries effort, including an explicit empty string to clear a stale variant.
         let data = try JSONEncoder().encode(
             ResumeRequest(clientTurnId: "c1", content: "go", model: "m", permissionMode: "auto", effort: "max"))
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("\"effort\":\"max\""))
+        let cleared = try JSONEncoder().encode(
+            ResumeRequest(clientTurnId: "c2", content: "go", model: "m", effort: ""))
+        XCTAssertTrue(String(decoding: cleared, as: UTF8.self).contains("\"effort\":\"\""))
     }
 
     /// Reviving a dormant session must carry staged image ids so the server links them to the

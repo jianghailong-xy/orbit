@@ -21,7 +21,11 @@ export class ProvidersService {
    *  caller's own personal ones. Enabled only. */
   async listPublic(userId: string) {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { enabled: true, OR: [{ ownerId: null }, { ownerId: userId }] },
+      where: {
+        slug: { not: AgentProvider.OPENCODE },
+        enabled: true,
+        OR: [{ ownerId: null }, { ownerId: userId }],
+      },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: {
         slug: true,
@@ -42,7 +46,7 @@ export class ProvidersService {
    *  user's personal rows. Every field except the encrypted key (→ hasApiKey). */
   async listShared() {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId: null },
+      where: { ownerId: null, slug: { not: AgentProvider.OPENCODE } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
@@ -51,7 +55,7 @@ export class ProvidersService {
   /** The caller's personal (BYOK) providers, disabled ones included. */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId },
+      where: { ownerId, slug: { not: AgentProvider.OPENCODE } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
@@ -197,7 +201,9 @@ export class ProvidersService {
   }
 
   private async getScoped(ownerId: string | null, id: string) {
-    const row = await this.prisma.modelProvider.findFirst({ where: { id, ownerId } });
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { id, ownerId, slug: { not: AgentProvider.OPENCODE } },
+    });
     if (!row) throw new NotFoundException('provider not found');
     return row;
   }

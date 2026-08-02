@@ -6,7 +6,10 @@ import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
-function makeController(status: RunStatus = RunStatus.AWAITING_INPUT) {
+function makeController(
+  status: RunStatus = RunStatus.AWAITING_INPUT,
+  runtimeSessionId: string | null = 'runtime-1',
+) {
   const calls = { createMany: [] as any[], updateMany: [] as any[] };
   let published = 0;
   const tx = {
@@ -20,7 +23,7 @@ function makeController(status: RunStatus = RunStatus.AWAITING_INPUT) {
     session: {
       findUniqueOrThrow: async () => ({
         status,
-        runtimeSessionId: 'runtime-1',
+        runtimeSessionId,
       }),
       updateMany: async (args: any) => {
         calls.updateMany.push(args);
@@ -56,6 +59,34 @@ test('a reclaimed session init is persisted without advancing lastTurnAt', async
 
   assert.equal(calls.createMany.length, 1, 'the runtime handshake remains durable');
   assert.equal(calls.updateMany.length, 0, 'the old activity time remains unchanged');
+});
+
+test('an OpenCode init event persists the runtime id without counting as turn activity', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, null);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.SYSTEM,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: {
+          runtime: 'opencode-server',
+          subtype: 'init',
+          provider: 'opencode',
+          sessionId: 'opencode-runtime-1',
+        },
+      },
+    ],
+  });
+
+  assert.equal(calls.createMany.length, 1, 'the runtime handshake remains durable');
+  assert.deepEqual(calls.updateMany, [
+    {
+      where: { id: 'session-1', runtimeSessionId: null },
+      data: { runtimeSessionId: 'opencode-runtime-1' },
+    },
+  ]);
 });
 
 test('a durable turn event still advances lastTurnAt', async () => {

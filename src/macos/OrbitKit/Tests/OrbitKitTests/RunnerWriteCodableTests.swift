@@ -37,6 +37,20 @@ final class RunnerWriteCodableTests: XCTestCase {
         XCTAssertNil(r.runtimeDefaultModels)
     }
 
+    func testRunnerDecodesOpenCodeModelCatalog() throws {
+        let json = """
+        {"id":"r1","name":"box","modelCatalog":{"opencode":[
+          {"value":"anthropic/claude-sonnet-4","label":"Claude Sonnet 4",
+           "contextWindow":200000,"reasoningLevels":["low","high"]}
+        ]}}
+        """
+        let runner = try JSONDecoder().decode(Runner.self, from: Data(json.utf8))
+        let model = try XCTUnwrap(runner.modelCatalog?.opencode?.first)
+        XCTAssertEqual(model.value, "anthropic/claude-sonnet-4")
+        XCTAssertEqual(model.contextWindow, 200_000)
+        XCTAssertEqual(model.reasoningLevels, ["low", "high"])
+    }
+
     func testUpdateRunnerEncoding() throws {
         let clear = try jsonObject(UpdateRunnerRequest(displayName: ""))
         XCTAssertEqual(clear["displayName"] as? String, "")       // "" clears the alias (sent, not omitted)

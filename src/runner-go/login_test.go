@@ -315,3 +315,10 @@ func TestKimiLoginCleanExitIsSuccess(t *testing.T) {
 		t.Fatal("Kimi clean exit produced no login result")
 	}
 }
+
+func TestOpenCodeLoginNeverFallsBackToClaude(t *testing.T) {
+	flow := loginFlowFor(providerOpenCode)
+	if flow.engine != providerOpenCode || len(flow.argv) != 0 {
+		t.Fatalf("OpenCode flow = %+v", flow)
+	}
+}

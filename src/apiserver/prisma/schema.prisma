@@ -252,8 +252,8 @@ model Agent {
   id                  String    @id @default(uuid(7)) @db.Uuid
   name                String
   description         String?
-  // Which local coding runtime drives this agent: "claude", "codex", "kimi", or a configured
-  // ModelProvider slug that resolves to one of the configurable runtimes at dispatch.
+  // Which local coding runtime drives this agent: "claude", "codex", "kimi", "opencode", or a
+  // configured ModelProvider slug that resolves to a configurable runtime at dispatch.
   provider            String    @default("claude")
   // Disambiguates the newly reserved `kimi` wire id from a stale pre-0077 custom-provider
   // write during a rolling deployment. Old replicas omit this column and therefore write false.
@@ -356,7 +356,7 @@ model Session {
   batchMaxConcurrent   Int?      @map("batch_max_concurrent")
   // Runtime thread/session id, always owned by the runtime named in `provider`. Claude's is
   // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
-  // Codex/Kimi mint their own after process initialization, so it stays null until then.
+  // Codex/Kimi/OpenCode mint their own after process initialization, so it stays null then.
   runtimeSessionId     String?   @map("runtime_session_id")
   provider             String    @default("claude")
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a

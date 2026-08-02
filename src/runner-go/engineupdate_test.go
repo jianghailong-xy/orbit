@@ -58,6 +58,9 @@ func TestEngineSpecsUpdateCmd(t *testing.T) {
 	if got := specs[providerKimi].updateCmd; got != "" {
 		t.Fatalf("kimi updateCmd = %q, want the unattended installer fallback", got)
 	}
+	if got := specs[providerOpenCode].updateCmd; got != "opencode upgrade" {
+		t.Fatalf("opencode updateCmd = %q, want %q", got, "opencode upgrade")
+	}
 	// No other engine may rely on the installCmd fallback for its daily update.
 	for _, s := range engineSpecs {
 		if s.updateCmd == "" && s.bin != providerKimi {

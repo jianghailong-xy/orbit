@@ -14,7 +14,7 @@ final class ControlEventCodableTests: XCTestCase {
         {"type":"session.updated","sessionId":"s1","agentId":"a1","ts":"2026-07-05T00:00:00.000Z",
          "data":{"id":"s1","title":"Fix bug","status":"PENDING","runStatus":"RUNNING","sessionState":"RUNNING","runState":"RUNNING","lifecycleState":"OPEN",
                  "capabilities":{"canSend":false,"canResume":false,"resumeBlockedReason":"ENDING","canComplete":true,"canRestore":false},"agentId":"a1",
-                 "agent":{"id":"a1","name":"builder","model":"opus"},
+                 "agent":{"id":"a1","name":"builder","provider":"opencode","model":"openai/gpt-5","effort":"high"},
                  "pendingApprovals":2,"lastTurnAt":"2026-07-05T00:00:00.000Z"}}
         """)
         XCTAssertEqual(ev.type, .sessionUpdated)
@@ -36,6 +36,7 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(s.capabilities).canComplete)
         XCTAssertEqual(s.pendingApprovals, 2)
         XCTAssertEqual(s.agent?.name, "builder")
+        XCTAssertEqual(s.agent?.effort, "high")
         XCTAssertEqual(s.lastTurnAt, "2026-07-05T00:00:00.000Z")
     }
 

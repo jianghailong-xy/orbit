@@ -111,6 +111,11 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 // API key, and the CLI's local login is then irrelevant, so its "signed out" answer would
 // fail a session that works perfectly.
 func engineAuthPreflight(bin string, agentEnv map[string]string) string {
+	// OpenCode can use local providers that need no credential and provider-specific
+	// environment variables unknown to Orbit. Let the CLI decide at execution time.
+	if bin == providerOpenCode {
+		return ""
+	}
 	if hasInjectedCredentials(bin, agentEnv) {
 		return ""
 	}
@@ -138,6 +143,10 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 		// is config-file-only and must not suppress the local-login preflight. Use
 		// the same Agent-over-process layering as the Kimi child process itself.
 		return kimiUsesEnvModel(agentEnv)
+	case providerOpenCode:
+		// OpenCode resolves per-provider credentials itself, from its own auth store
+		// and provider-specific environment variables Orbit does not model.
+		return false
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {

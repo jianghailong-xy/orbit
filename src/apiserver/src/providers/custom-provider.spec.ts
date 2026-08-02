@@ -21,6 +21,7 @@ test('custom-provider', async (t) => {
     assert.equal(isBuiltinProvider('codex'), true);
     assert.equal(isBuiltinProvider('kimi'), true);
     assert.equal(isBuiltinProvider('kimi', false), false);
+    assert.equal(isBuiltinProvider('opencode'), true);
     assert.equal(isBuiltinProvider(null), true);
     assert.equal(isBuiltinProvider(undefined), true);
     assert.equal(isBuiltinProvider('deepseek'), false);
@@ -177,6 +178,21 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
   });
 
+  await t.test('built-in opencode: model and agent env pass through without a Claude token', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'opencode',
+      customRow: null,
+      sessionModel: 'anthropic/claude-sonnet-4-5',
+      agentModel: null,
+      agentEnv: { KEEP: '1' },
+      claudeOauthToken: 'sk-ant-oat-must-not-leak',
+    });
+    assert.equal(exec.provider, 'opencode');
+    assert.equal(exec.model, 'anthropic/claude-sonnet-4-5');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+    assert.deepEqual(exec.env, { KEEP: '1' });
+  });
+
   await t.test('preset-backed provider: a retired stored default yields to the catalogue', () => {
     // The row was created when Anthropic's preset defaulted to a model we no longer list; nothing
     // has been saved since, so only the preset link can keep dispatch off a dead model id.
@@ -276,8 +292,8 @@ test('custom-provider', async (t) => {
   });
 
   // The account-level subscription token supplies credentials for the BUILT-IN claude runtime
-  // on every runner; it must not leak into codex, and must not override a configured provider
-  // (which carries its own key) or an agent that hand-set the variable.
+  // on every runner; it must not leak into another built-in runtime, and must not override a
+  // configured provider (which carries its own key) or an agent that hand-set the variable.
   await t.test('subscription token: injected for built-in claude, alongside agent env', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'claude',

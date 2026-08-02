@@ -7,9 +7,11 @@ import { firstRuntimeCatalogModel, savedRuntimeDefaultModel } from '../common/ru
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
- * deployment; Claude/Codex predate the discriminator and remain unambiguous. */
+ * deployment; Claude/Codex predate the discriminator, and migration 0080 moves any pre-existing
+ * custom `opencode` row aside, so both remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
+  if (slug === AgentProvider.OPENCODE) return true;
   if (slug === AgentProvider.KIMI) return providerBuiltin;
   return false;
 }
@@ -45,7 +47,8 @@ function injectedEnv(row: ModelProviderRow): Record<string, string> {
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
  * the runner never learns its slug — it just receives a Claude/Codex job whose env points at
- * the provider's endpoint, so the runner needs no changes.
+ * the provider's endpoint, so the runner needs no changes. A built-in may also resolve
+ * directly to Kimi or OpenCode.
  *
  * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
  * deleted/disabled (a safe fallback to the claude default rather than a dispatch failure).
@@ -102,9 +105,11 @@ export function resolveProviderExec(args: {
   const provider =
     args.declaredProvider === AgentProvider.CODEX
       ? AgentProvider.CODEX
-      : args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false
-        ? AgentProvider.KIMI
-        : AgentProvider.CLAUDE;
+      : args.declaredProvider === AgentProvider.OPENCODE
+        ? AgentProvider.OPENCODE
+        : args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false
+          ? AgentProvider.KIMI
+          : AgentProvider.CLAUDE;
   const env =
     provider === AgentProvider.CLAUDE && claudeOauthToken
       ? { CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken, ...(agentEnv ?? {}) }

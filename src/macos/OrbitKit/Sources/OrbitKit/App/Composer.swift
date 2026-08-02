@@ -322,13 +322,14 @@ public enum ComposerSlash {
     }
 
     /// Restrict runtime-owned slash assets to the active runtime. Older runners omit `provider`
-    /// for Claude entries, so nil remains Claude-compatible. Codex has no slash registry and keeps
-    /// only Orbit's local commands; local commands are available under every provider.
+    /// for Claude entries, so nil remains Claude-compatible. Codex and OpenCode take slash-prefixed
+    /// text as runtime input and have no slash registry, so they keep only Orbit's local commands;
+    /// local commands are available under every provider.
     public static func forProvider(items: [SlashCommandInfo], provider: String?) -> [SlashCommandInfo] {
         items.filter { item in
             if item.type == "local" { return true }
             switch provider {
-            case "codex": return false
+            case "codex", "opencode": return false
             case "kimi":  return item.provider == "kimi"
             default:      return item.provider == nil || item.provider == "claude"
             }

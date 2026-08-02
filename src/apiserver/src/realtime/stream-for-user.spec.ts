@@ -34,7 +34,7 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
-  agent: { id: string; name: string | null; model: string | null } | null;
+  agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
 };
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
@@ -65,7 +65,7 @@ const rowA: Row = {
     lastHeartbeatAt: new Date(),
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
-  agent: { id: 'agentA', name: 'builder', model: 'opus' },
+  agent: { id: 'agentA', name: 'builder', model: 'opus', effort: 'high' },
 };
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
@@ -114,7 +114,12 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   });
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
-  assert.deepEqual(data.agent, { id: 'agentA', name: 'builder', model: 'opus' });
+  assert.deepEqual(data.agent, {
+    id: 'agentA',
+    name: 'builder',
+    model: 'opus',
+    effort: 'high',
+  });
 });
 
 test("another user's stream never sees the event", async () => {

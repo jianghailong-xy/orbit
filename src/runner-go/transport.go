@@ -70,6 +70,11 @@ func isLeaseOwnershipError(err error) bool {
 		isTransportHTTPStatus(err, http.StatusNotFound)
 }
 
+// Sent on claim/reclaim from the first release that safely understands OpenCode. The server uses
+// this positive capability advertisement instead of trusting a stale heartbeat version during a
+// rolling upgrade. Older control planes ignore the header.
+const runnerSupportedProviders = "claude,codex,opencode"
+
 func NewTransport(baseURL, token string) *Transport {
 	leaseOwner, err := newLeaseGeneration()
 	if err != nil {
@@ -117,6 +122,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
+	req.Header.Set("X-Orbit-Supported-Providers", runnerSupportedProviders)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 	}
@@ -434,7 +440,11 @@ func (t *Transport) artifactResult(sessionID string, b ArtifactResultRequest) er
 // diffResult pushes a freshly recomputed live worktree diff back to the server in response to
 // an inbox 'diff' refresh request (the web opened a file whose stored patch lagged).
 func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
-	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
+	return t.diffResultContext(nil, sessionID, b)
+}
+
+func (t *Transport) diffResultContext(ctx context.Context, sessionID string, b DiffResultRequest) error {
+	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
 }
 
 // fetchAttachment GETs one image's raw bytes (runner-scoped, by session+attachment id),

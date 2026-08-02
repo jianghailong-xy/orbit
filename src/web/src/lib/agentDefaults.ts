@@ -8,6 +8,7 @@ export const PROVIDER_OPTIONS = [
   { value: 'claude', label: 'Claude' },
   { value: 'codex', label: 'Codex' },
   { value: 'kimi', label: 'Kimi' },
+  { value: 'opencode', label: 'OpenCode' },
 ];
 
 type ModelOption = { value: string; label: string };
@@ -46,6 +47,7 @@ export const runtimeForProvider = (
   const value = provider;
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (value === AgentProvider.KIMI) return AgentProvider.KIMI;
+  if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   return AgentProvider.CLAUDE;
 };
 
@@ -60,6 +62,7 @@ export const providerIdentityResolved = (
   provider === AgentProvider.CLAUDE ||
   provider === AgentProvider.CODEX ||
   provider === AgentProvider.KIMI ||
+  provider === AgentProvider.OPENCODE ||
   configuredProvidersLoaded;
 
 /** Provider dropdown options: built-in runtimes followed by the configured providers. */
@@ -81,6 +84,12 @@ export const mergedProviderOptions = (
 export const KIMI_MODEL_OPTIONS = [
   { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
 ];
+
+// OpenCode owns model selection when no model is supplied: a new session resolves its
+// configured/default model, while a resumed session retains its current OpenCode model.
+// Concrete ids are runner-discovered because they include the underlying provider. Keep an
+// explicit empty option ahead of that catalog rather than guessing or borrowing Claude defaults.
+export const OPENCODE_MODEL_OPTIONS = [{ value: '', label: 'Managed by OpenCode' }];
 
 // Per-model context-window size (max input tokens), for the composer's context-usage gauge.
 // Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
@@ -133,6 +142,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: 'claude-opus-5',
   codex: 'gpt-5.6-sol',
   kimi: 'kimi-code/kimi-for-coding',
+  opencode: '',
 };
 
 export const modelOptionsForProvider = (
@@ -151,6 +161,12 @@ export const modelOptionsForProvider = (
     // Claude model namespace.
     return options;
   }
+  if (provider === 'opencode') {
+    return [
+      ...OPENCODE_MODEL_OPTIONS,
+      ...(catalogOptionsForProvider(provider, modelCatalog) ?? []),
+    ];
+  }
   return (
     catalogOptionsForProvider(provider, modelCatalog) ??
     (provider === AgentProvider.KIMI ? KIMI_MODEL_OPTIONS : [])
@@ -164,6 +180,10 @@ export const defaultModelForProvider = (
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string => {
   const custom = configuredProvider(provider, configured);
+  // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
+  if (!custom && provider === AgentProvider.OPENCODE) {
+    return runtimeDefaultModels?.[AgentProvider.OPENCODE] ?? '';
+  }
   // A configured provider owns a separate model space even though it borrows a built-in runtime
   // for execution. Never let the underlying Runtime's Claude/Codex default leak into that space.
   if (custom) {
@@ -187,6 +207,22 @@ export const defaultModelForProvider = (
     DEFAULT_MODEL
   );
 };
+
+/** Match the server's session dispatch precedence without treating OpenCode's empty sentinel as
+ * missing: a session override wins, then its owning agent, then the provider-managed default. */
+export const effectiveSessionModel = (
+  provider: string,
+  sessionModel?: string | null,
+  agentModel?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
+): string => sessionModel ?? agentModel ?? defaultModelForProvider(provider, modelCatalog, configured);
+
+/** Match the server's session dispatch precedence for reasoning effort. Empty is explicit. */
+export const effectiveSessionEffort = (
+  sessionEffort?: string | null,
+  agentEffort?: string | null,
+): string => sessionEffort ?? agentEffort ?? '';
 
 // Reasoning effort is provider-specific. Claude supports "max"; Codex's
 // Responses API effort values top out at "xhigh", with "minimal" also available.
@@ -215,21 +251,69 @@ export const KIMI_EFFORT_OPTIONS = [
   { value: 'max', label: 'Max' },
 ];
 
-export const effortOptionsForProvider = (provider?: string | null) =>
-  provider === 'codex'
-    ? CODEX_EFFORT_OPTIONS
-    : provider === 'kimi'
-      ? KIMI_EFFORT_OPTIONS
-      : CLAUDE_EFFORT_OPTIONS;
+// OpenCode variants are model-defined, so its picker follows the runner catalog. This generic
+// list is only the fallback for a model the runner-wide catalog does not report.
+export const OPENCODE_EFFORT_OPTIONS = [
+  { value: '', label: 'Default' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'xHigh' },
+  { value: 'max', label: 'Max' },
+];
 
-export const normalizeEffortForProvider = (provider: string | null | undefined, effort: string): string => {
-  if (provider === 'codex' && effort === 'max') return 'xhigh';
+const effortLabel = (level: string): string =>
+  level === 'xhigh' ? 'xHigh' : level.charAt(0).toUpperCase() + level.slice(1);
+
+export const effortOptionsForProvider = (
+  provider?: string | null,
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+) => {
+  if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
+  if (provider === 'kimi') return KIMI_EFFORT_OPTIONS;
+  if (provider !== 'opencode') return CLAUDE_EFFORT_OPTIONS;
+
+  const exactModel = modelCatalog?.opencode?.find((entry) => entry.value === model);
+  // A project-only model may be absent from the runner-wide catalog, so keep the generic
+  // fallback. An exact row with no variants is authoritative: that model supports Default only.
+  if (!exactModel) return OPENCODE_EFFORT_OPTIONS;
+  const unique = [...new Set((exactModel.reasoningLevels ?? []).filter(Boolean))];
+  return [
+    { value: '', label: 'Default' },
+    ...unique.map((level) => ({ value: level, label: effortLabel(level) })),
+  ];
+};
+
+export const normalizeEffortForProvider = (
+  provider: string | null | undefined,
+  effort: string,
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+): string => {
   if (provider === 'kimi') {
     if (effort === 'minimal') return 'low';
     if (effort === 'medium') return 'high';
     if (effort === 'xhigh') return 'max';
+    return effort;
   }
-  return effort;
+  const normalized = provider === 'codex' && effort === 'max' ? 'xhigh' : effort;
+
+  if (provider === 'opencode') {
+    const exactModel = modelCatalog?.opencode?.find((entry) => entry.value === model);
+    // The heartbeat catalog is deliberately global, so a project-only model may
+    // be absent. Preserve its variant only in that case; an exact row (including one
+    // with an empty variants object) is authoritative.
+    if (!exactModel) return normalized;
+    const levels = exactModel.reasoningLevels ?? [];
+    return normalized === '' || levels.includes(normalized) ? normalized : '';
+  }
+
+  const allowed = effortOptionsForProvider(provider, model, modelCatalog).some(
+    (option) => option.value === normalized,
+  );
+  return allowed ? normalized : '';
 };
 
 // The permission mode a new session of the agent starts in.
@@ -257,7 +341,8 @@ export const supportsAuto = (
   const runtime = runtimeForProvider(provider, configured);
   // Kimi exposes Auto as a runtime-wide mode, so locally configured model aliases support it too.
   // Codex has no Auto mode; Claude exposes it only for the known capable model families.
-  if (runtime === 'kimi') return true;
+  // Kimi and OpenCode expose Auto as a runtime-wide mode, independent of the chosen model.
+  if (runtime === 'kimi' || runtime === 'opencode') return true;
   if (runtime === 'codex') return false;
   return AUTO_CAPABLE_MODELS.has(model);
 };

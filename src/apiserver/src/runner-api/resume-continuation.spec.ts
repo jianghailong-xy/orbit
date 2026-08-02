@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-continuation';
+import {
+  RUNTIME_STARTED_EVENT_TYPES,
+  RUNTIME_STARTED_SYSTEM_SUBTYPE,
+  buildResumeContinuation,
+} from './resume-continuation';
 
 test('started-signal event types cover claude output kinds', () => {
-  assert.deepEqual([...CLAUDE_STARTED_EVENT_TYPES], ['assistant', 'thinking', 'tool_use']);
+  assert.deepEqual([...RUNTIME_STARTED_EVENT_TYPES], ['assistant', 'thinking', 'tool_use']);
+  assert.equal(RUNTIME_STARTED_SYSTEM_SUBTYPE, 'step_start');
 });
 
 test('the nudge tells claude to continue without repeating side effects', () => {

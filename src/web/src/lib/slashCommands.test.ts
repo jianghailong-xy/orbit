@@ -30,6 +30,14 @@ describe('slashCommands', () => {
     expect(slashCommandName('/')).toBe('');
   });
 
+  it('treats OpenCode slash input like Codex rather than Claude assets', () => {
+    expect(supportsRunnerSlashAssets('opencode')).toBe(false);
+    expect(supportsRunnerSlashAssets('codex')).toBe(false);
+    expect(supportsRunnerSlashAssets('claude')).toBe(true);
+    expect(slashAssetMatchesProvider(undefined, 'opencode')).toBe(false);
+    expect(slashAssetMatchesProvider('claude', 'opencode')).toBe(false);
+  });
+
   it('reads slash-led prose as text, not as a command', () => {
     expect(slashCommandName('/tmp/orbit-codex-usage-state 删掉吧')).toBeNull();
     expect(slashCommandName('/root/orbit')).toBeNull();

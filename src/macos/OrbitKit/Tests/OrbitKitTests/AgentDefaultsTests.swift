@@ -35,6 +35,9 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(kimi.map(\.id), ["kimi-code/kimi-for-coding"])
         XCTAssertEqual(kimi.map(\.name), ["Kimi for Coding"])
 
+        XCTAssertEqual(AgentDefaults.models(for: "opencode").map(\.id), [""])
+        XCTAssertEqual(AgentDefaults.models(for: "opencode").map(\.name), ["Managed by OpenCode"])
+
         // Unknown provider returns empty (no static list to fall back to).
         XCTAssertEqual(AgentDefaults.models(for: "gemini").map(\.id), [])
     }
@@ -43,6 +46,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.defaultModel(for: "codex"), "gpt-5.6-sol")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "claude"), "claude-opus-5")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "kimi"), "kimi-code/kimi-for-coding")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "opencode"), "")
         XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini"), AgentDefaults.defaultModelID)
     }
 
@@ -62,13 +66,14 @@ final class AgentDefaultsTests: XCTestCase {
                                     defaultReasoningLevel: nil, serviceTiers: nil)])
         XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol", catalog: catalog), "GPT-5.6-Sol")
         XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", catalog: catalog), "Opus 5")
+        XCTAssertEqual(AgentDefaults.friendlyName(""), "Managed by OpenCode")
         // Unknown ids (incl. non-current models like claude-opus-4-8) fall back to the raw string.
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")
     }
 
     func testProviderOptions() {
-        XCTAssertEqual(AgentDefaults.providers.map(\.id), ["claude", "codex", "kimi"])
-        XCTAssertEqual(AgentDefaults.providers.map(\.name), ["Claude", "Codex", "Kimi"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.id), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.name), ["Claude", "Codex", "Kimi", "OpenCode"])
     }
 
     func testEffortsForProvider() {
@@ -78,6 +83,8 @@ final class AgentDefaultsTests: XCTestCase {
                        [.default, .minimal, .low, .medium, .high, .xhigh])
         XCTAssertEqual(AgentDefaults.efforts(for: "kimi"),
                        [.default, .low, .high, .max])
+        XCTAssertEqual(AgentDefaults.efforts(for: "opencode"),
+                       [.default, .minimal, .low, .medium, .high, .xhigh, .max])
 
         // The whole point: neither provider is offered a value it rejects.
         XCTAssertFalse(AgentDefaults.efforts(for: "claude").contains(.minimal))
@@ -87,10 +94,9 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.efforts(for: "gemini"), AgentDefaults.efforts(for: "claude"))
     }
 
-    func testMinimalEffortLabelAndWire() {
+    func testMinimalEffortLabelAndRawValue() {
         XCTAssertEqual(Effort.minimal.rawValue, "minimal")
         XCTAssertEqual(Effort.minimal.label, "Minimal")
-        XCTAssertEqual(Effort.minimal.wire, "minimal")
     }
 
     func testEffortNormalizationForProvider() {
@@ -144,11 +150,11 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testMergedProviderOptions() {
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).map(\.id),
-                       ["claude", "codex", "kimi", "deepseek"])
+                       ["claude", "codex", "kimi", "opencode", "deepseek"])
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).last?.name, "DeepSeek")
         // No configured providers → the built-ins only, in their fixed order.
-        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex", "kimi"])
-        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex", "kimi"])
+        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex", "kimi", "opencode"])
     }
 
     func testModelsForConfiguredProvider() {
@@ -339,12 +345,85 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(catalog.models(for: "kimi")?.map(\.id), ["kimi-code/kimi-for-coding"])
         XCTAssertEqual(catalog.models(for: "kimi")?.map(\.name), ["Kimi for Coding"])
         XCTAssertEqual(catalog.contextWindow(for: "kimi-code/kimi-for-coding"), 262_144)
+
+    func testOpenCodeModelsComeFromRunnerCatalogAfterEmptyDefault() {
+        let catalog = RunnerModelCatalog(
+            opencode: [RunnerModelInfo(value: "anthropic/claude-sonnet-4",
+                                       label: "Claude Sonnet 4", priority: 1,
+                                       contextWindow: 200_000,
+                                       reasoningLevels: ["low", "high"],
+                                       defaultReasoningLevel: "high", serviceTiers: nil)])
+        XCTAssertEqual(AgentDefaults.models(for: "opencode", catalog: catalog).map(\.id),
+                       ["", "anthropic/claude-sonnet-4"])
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "opencode", catalog: catalog), "")
+        XCTAssertEqual(AgentDefaults.friendlyName("anthropic/claude-sonnet-4", catalog: catalog),
+                       "Claude Sonnet 4")
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "anthropic/claude-sonnet-4",
+                                                   catalog: catalog), 200_000)
+        XCTAssertEqual(AgentDefaults.efforts(for: "opencode",
+                                             model: "anthropic/claude-sonnet-4",
+                                             catalog: catalog), [.default, .low, .high])
+    }
+
+    func testOpenCodePreservesArbitraryCatalogVariants() {
+        let catalog = RunnerModelCatalog(
+            opencode: [RunnerModelInfo(value: "provider/model", label: "Model", priority: nil,
+                                       contextWindow: nil,
+                                       reasoningLevels: ["low", "ultra", "low", ""],
+                                       defaultReasoningLevel: nil, serviceTiers: nil)])
+        let ultra = Effort(rawValue: "ultra")!
+        XCTAssertEqual(AgentDefaults.efforts(for: "opencode", model: "provider/model",
+                                             catalog: catalog), [.default, .low, ultra])
+        XCTAssertEqual(ultra.label, "Ultra")
+        XCTAssertTrue(AgentDefaults.supportsEffort(ultra, for: "opencode",
+                                                   model: "provider/model", catalog: catalog))
+        XCTAssertFalse(AgentDefaults.supportsEffort(.max, for: "opencode",
+                                                    model: "provider/model", catalog: catalog))
+        XCTAssertTrue(AgentDefaults.supportsEffort(ultra, for: "opencode",
+                                                   model: "project/model", catalog: catalog))
+    }
+
+    func testOpenCodeKnownModelWithNoVariantsOffersDefaultOnly() {
+        let nilLevels = RunnerModelCatalog(
+            opencode: [RunnerModelInfo(value: "provider/plain", label: "Plain", priority: nil,
+                                       contextWindow: nil, reasoningLevels: nil,
+                                       defaultReasoningLevel: nil, serviceTiers: nil)])
+        let emptyLevels = RunnerModelCatalog(
+            opencode: [RunnerModelInfo(value: "provider/plain", label: "Plain", priority: nil,
+                                       contextWindow: nil, reasoningLevels: [],
+                                       defaultReasoningLevel: nil, serviceTiers: nil)])
+
+        for catalog in [nilLevels, emptyLevels] {
+            XCTAssertEqual(AgentDefaults.efforts(for: "opencode", model: "provider/plain",
+                                                 catalog: catalog), [.default])
+            XCTAssertFalse(AgentDefaults.supportsEffort(.high, for: "opencode",
+                                                        model: "provider/plain", catalog: catalog))
+            XCTAssertEqual(AgentDefaults.normalizedEffort(.high, for: "opencode",
+                                                          model: "provider/plain", catalog: catalog),
+                           .default)
+        }
+    }
+
+    func testOpenCodeUnknownProjectModelPreservesCustomVariant() {
+        let catalog = RunnerModelCatalog(
+            opencode: [RunnerModelInfo(value: "provider/global", label: "Global", priority: nil,
+                                       contextWindow: nil, reasoningLevels: [],
+                                       defaultReasoningLevel: nil, serviceTiers: nil)])
+        let ultra = Effort(rawValue: "ultra")!
+
+        XCTAssertEqual(AgentDefaults.efforts(for: "opencode", model: "project/only",
+                                             catalog: catalog), AgentDefaults.efforts(for: "opencode"))
+        XCTAssertTrue(AgentDefaults.supportsEffort(ultra, for: "opencode",
+                                                   model: "project/only", catalog: catalog))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(ultra, for: "opencode",
+                                                      model: "project/only", catalog: catalog), ultra)
     }
 
     func testProviderNameResolution() {
         XCTAssertEqual(AgentDefaults.providerName("claude", configured: [deepseek]), "Claude")
         XCTAssertEqual(AgentDefaults.providerName("codex", configured: nil), "Codex")
         XCTAssertEqual(AgentDefaults.providerName("kimi", configured: nil), "Kimi")
+        XCTAssertEqual(AgentDefaults.providerName("opencode", configured: nil), "OpenCode")
         XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: [deepseek]), "DeepSeek")
         // A removed/disabled provider's slug renders verbatim — never mislabels as Claude.
         XCTAssertEqual(AgentDefaults.providerName("deepseek", configured: []), "deepseek")

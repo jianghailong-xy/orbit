@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpException,
   HttpCode,
   NotFoundException,
   Param,
@@ -82,7 +83,11 @@ import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { CurrentRunner } from './current-runner.decorator';
 import { reclaimRuntimeIds } from './reclaim-runtime';
-import { CLAUDE_STARTED_EVENT_TYPES, buildResumeContinuation } from './resume-continuation';
+import {
+  RUNTIME_STARTED_EVENT_TYPES,
+  RUNTIME_STARTED_SYSTEM_SUBTYPE,
+  buildResumeContinuation,
+} from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { claudeOauthTokenFor } from '../providers/subscription-token';
 import { runtimeInitSessionId } from './runtime-init';
@@ -96,10 +101,16 @@ import {
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
+import {
+  OPENCODE_RUNNER_UPGRADE_ERROR,
+  advertisedRunnerProviders,
+  runnerAdvertisesProvider,
+} from './runner-provider-support';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
 const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
+const HTTP_UPGRADE_REQUIRED = 426;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -125,6 +136,9 @@ const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.
 // Keep this distinct from LIVE: /complete must never finalize a freshly queued PENDING turn.
 const OPEN = OPEN_SESSION_STATUSES;
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
+// Distinct from the named-capability header above: this one advertises which built-in
+// runtimes the runner binary can actually drive (runner 0.1.82+).
+const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
@@ -565,6 +579,48 @@ export class RunnerApiController {
     return { ok: true };
   }
 
+  /**
+   * Mark pending OpenCode work visibly before refusing a legacy runner. The conditional update
+   * repeats the scheduling predicates, so a capable claim/cancel racing this check can never have
+   * its now-live/ended row stamped with a stale upgrade error.
+   */
+  private async markOpenCodeUpgradeRequired(
+    runnerId: string,
+    candidates?: Array<{ id: string; error: string | null }>,
+  ): Promise<boolean> {
+    const pending =
+      candidates ??
+      (await this.prisma.session.findMany({
+        where: {
+          assignedRunnerId: runnerId,
+          status: RunStatus.PENDING,
+          provider: AgentProvider.OPENCODE,
+          cancelRequestedAt: null,
+        },
+        select: { id: true, error: true },
+      }));
+    if (pending.length === 0) return false;
+    const unmarked = pending
+      .filter((session) => session.error !== OPENCODE_RUNNER_UPGRADE_ERROR)
+      .map((session) => session.id);
+    if (unmarked.length > 0) {
+      const marked = await this.prisma.session.updateMany({
+        where: {
+          id: { in: unmarked },
+          assignedRunnerId: runnerId,
+          status: RunStatus.PENDING,
+          provider: AgentProvider.OPENCODE,
+          cancelRequestedAt: null,
+        },
+        data: { error: OPENCODE_RUNNER_UPGRADE_ERROR },
+      });
+      if (marked.count > 0) {
+        for (const id of unmarked) this.realtime.publishSessionCreated(id);
+      }
+    }
+    return true;
+  }
+
   // ── Interactive sessions (Route B) ──
 
   /** Long-poll: returns one claimed session, or null when nothing is available. */
@@ -573,9 +629,21 @@ export class RunnerApiController {
   async claim(
     @CurrentRunner() runner: { id: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ClaimedSession | null> {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
-    const job = await this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS, supportsTerminalHandoff);
+    const supportedProviders = advertisedRunnerProviders(providerHeader);
+    if (
+      !supportedProviders.includes(AgentProvider.OPENCODE) &&
+      (await this.markOpenCodeUpgradeRequired(runner.id))
+    ) {
+      throw new HttpException(OPENCODE_RUNNER_UPGRADE_ERROR, HTTP_UPGRADE_REQUIRED);
+    }
+    const job = await this.queue.claimSessionForRunner(
+      { id: runner.id, supportedProviders },
+      LONG_POLL_MS,
+      supportsTerminalHandoff,
+    );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
         job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
@@ -598,6 +666,7 @@ export class RunnerApiController {
   async reclaim(
     @CurrentRunner() runner: { id: string; ownerId: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
+    @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ReclaimResponse> {
     const supportsOrchestrationCredential = runnerSupportsCapability(
       capabilities,
@@ -614,6 +683,28 @@ export class RunnerApiController {
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
       },
     });
+    const openCodeSessions = sessions.filter(
+      (session) =>
+        (session.provider ?? session.agent?.provider ?? AgentProvider.CLAUDE) ===
+        AgentProvider.OPENCODE,
+    );
+    if (
+      openCodeSessions.length > 0 &&
+      !runnerAdvertisesProvider(providerHeader, AgentProvider.OPENCODE)
+    ) {
+      await this.markOpenCodeUpgradeRequired(
+        runner.id,
+        openCodeSessions
+          .filter(
+            (session) =>
+              session.status === RunStatus.PENDING && session.cancelRequestedAt == null,
+          )
+          .map((session) => ({ id: session.id, error: session.error })),
+      );
+      // Refuse the whole snapshot instead of omitting rows: an old runner garbage-collects every
+      // checkout absent from this response and would interpret a later OpenCode claim as Claude.
+      throw new HttpException(OPENCODE_RUNNER_UPGRADE_ERROR, HTTP_UPGRADE_REQUIRED);
+    }
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only write below is an
@@ -1239,7 +1330,16 @@ export class RunnerApiController {
         const started = await tx.runEvent.findFirst({
           where: {
             turnId: t.id,
-            type: { in: [...CLAUDE_STARTED_EVENT_TYPES] },
+            OR: [
+              { type: { in: [...RUNTIME_STARTED_EVENT_TYPES] } },
+              {
+                type: 'system',
+                payload: {
+                  path: ['subtype'],
+                  equals: RUNTIME_STARTED_SYSTEM_SUBTYPE,
+                },
+              },
+            ],
           },
           select: { id: true },
         });

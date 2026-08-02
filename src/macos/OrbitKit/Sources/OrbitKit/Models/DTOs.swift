@@ -392,7 +392,7 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let assignedRunnerId: String?
     public let model: String?
     public let permissionMode: String?
-    /// Claude effort level (low|medium|high|xhigh|max); nil omits the field (model default).
+    /// Provider-defined effort / variant value; nil omits the field and "" explicitly clears it.
     public let effort: String?
     /// Seed the first turn as a `!cmd` shell turn (run on the runner, bypassing claude) instead
     /// of a normal message; nil/false → a normal prompt.

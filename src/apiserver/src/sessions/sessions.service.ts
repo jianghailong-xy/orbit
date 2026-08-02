@@ -150,8 +150,8 @@ export class SessionsService {
     // the chosen agent's machine (agents belong to a runner) — picking an agent is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
-    // The session's provider identity: a built-in ("claude"/"codex") or a custom slug
-    // ("deepseek") inherited from the agent. Stored verbatim; the runtime is derived below.
+    // The session's provider identity: a built-in ("claude"/"codex"/"opencode") or a custom
+    // slug ("deepseek") inherited from the agent. Stored verbatim; runtime is derived below.
     let provider: string = AgentProvider.CLAUDE;
     let providerBuiltin = true;
     // Per-agent worktree toggle: default off. An agent with it turned off (the default)
@@ -235,7 +235,7 @@ export class SessionsService {
         provider,
         providerBuiltin,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
-        // Codex/Kimi create and return their own thread id after process initialization.
+        // Codex/Kimi/OpenCode create and return their own thread id after process init.
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
@@ -403,7 +403,8 @@ export class SessionsService {
         where: { id: agentId, ownerId, deletedAt: null },
         select: { effort: true },
       });
-      if (agent?.effort) return agent.effort;
+      // Empty is an explicit "use this model's default" choice, not a missing value.
+      if (agent && agent.effort !== null) return agent.effort;
     }
     const user = await this.prisma.user.findUnique({
       where: { id: ownerId },
@@ -916,6 +917,7 @@ export class SessionsService {
       agentId: string | null;
       agentName: string | null;
       agentModel: string | null;
+      agentEffort: string | null;
       runnerId: string | null;
       runnerName: string | null;
       runnerStatus: string | null;
@@ -962,6 +964,7 @@ export class SessionsService {
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
+        a.effort AS "agentEffort",
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
@@ -1008,7 +1011,9 @@ export class SessionsService {
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningSubagentCount: r.runningSubagentCount,
-        agent: r.agentId ? { id: r.agentId, name: r.agentName, model: r.agentModel } : null,
+        agent: r.agentId
+          ? { id: r.agentId, name: r.agentName, model: r.agentModel, effort: r.agentEffort }
+          : null,
         assignedRunnerId: r.runnerId,
         assignedRunner: r.runnerId
           ? {

@@ -48,9 +48,10 @@ func newLeaseGeneration() (string, error) {
 const mcpToolTimeoutMs = 2147483647
 
 const (
-	providerClaude = "claude"
-	providerCodex  = "codex"
-	providerKimi   = "kimi"
+	providerClaude   = "claude"
+	providerCodex    = "codex"
+	providerKimi     = "kimi"
+	providerOpenCode = "opencode"
 )
 
 var ctrlReqCounter int64
@@ -82,7 +83,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi:
+	case providerCodex, providerKimi, providerOpenCode:
 		return p
 	}
 	return providerClaude
@@ -940,6 +941,9 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	}
 	if provider == providerKimi {
 		return runKimiSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
+	}
+	if provider == providerOpenCode {
+		return runOpenCodeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
 	}
 	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
 }

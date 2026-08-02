@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { AuthErrorCtx, MD, type RunEvent, Transcript } from './Transcript';
@@ -56,5 +57,42 @@ describe('transcript Markdown links', () => {
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
+  });
+});
+
+describe('runtime authentication help', () => {
+  // The relay branch renders RunnerSignIn, which reads the query cache.
+  const card = (provider: string) =>
+    renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <AuthErrorCtx.Provider value={{ provider, runnerId: 'runner-1', runnerName: 'box' }}>
+          <Transcript events={[errorEvent(1, AUTH_FAILED)]} />
+        </AuthErrorCtx.Provider>
+      </QueryClientProvider>,
+    );
+
+  it("names OpenCode's command instead of a relay button that cannot drive its login", () => {
+    const html = card('opencode');
+
+    // Still a runner-local sign-in, not a Providers API key...
+    expect(html).toContain('Sign-in expired');
+    // ...but its login picks a provider interactively, so the relay is not offered.
+    expect(html).toContain('opencode auth login');
+    expect(html).not.toContain('rsi-');
+  });
+
+  it('keeps the browser relay for the runtimes that support it', () => {
+    const html = card('codex');
+
+    expect(html).toContain('Sign-in expired');
+    expect(html).toContain('rsi-');
+    expect(html).not.toContain('opencode auth login');
+  });
+
+  it('still routes a configured provider to its API key', () => {
+    const html = card('deepseek');
+
+    expect(html).toContain('Provider authentication failed');
+    expect(html).not.toContain('opencode auth login');
   });
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { AgentProvider } from '@orbit/shared';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -158,4 +159,37 @@ test('a concurrent Session model edit wins reclaim materialization', async () =>
   });
 
   assert.equal(result.sessions[0]?.agent.model, 'gpt-user-choice');
+});
+
+test('session meta preserves the OpenCode runtime provider', async () => {
+  const sessionId = '11111111-1111-4111-8111-111111111111';
+  const runnerId = '22222222-2222-4222-8222-222222222222';
+  const prisma = {
+    session: {
+      findUnique: async () => ({
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        provider: AgentProvider.OPENCODE,
+        runtimeSessionId: 'opencode-runtime-1',
+        claudeSessionId: null,
+        agentId: null,
+        title: 'OpenCode session',
+      }),
+    },
+  } as never;
+  const controller = new RunnerApiController(
+    prisma,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  assert.deepEqual(await controller.getSessionMeta({ id: runnerId }, sessionId), {
+    provider: AgentProvider.OPENCODE,
+    sessionUuid: 'opencode-runtime-1',
+    runtimeSessionId: 'opencode-runtime-1',
+    workDir: null,
+    title: 'OpenCode session',
+  });
 });

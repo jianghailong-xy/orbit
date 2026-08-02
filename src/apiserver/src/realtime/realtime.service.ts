@@ -582,7 +582,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         },
         agentId: true,
         lastTurnAt: true,
-        agent: { select: { id: true, name: true, model: true } },
+        agent: { select: { id: true, name: true, model: true, effort: true } },
       },
     });
     if (!s) return null;
@@ -607,7 +607,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       capabilities,
       agentId: s.agentId ?? null,
       agent: s.agent
-        ? { id: s.agent.id, name: s.agent.name ?? null, model: s.agent.model ?? null }
+        ? {
+            id: s.agent.id,
+            name: s.agent.name ?? null,
+            model: s.agent.model ?? null,
+            effort: s.agent.effort ?? null,
+          }
         : null,
       pendingApprovals,
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,

@@ -4,8 +4,8 @@ type EventLike = { type: string; payload?: unknown };
 
 /**
  * The runtime session id a runtime reports in its `system` init/resumed event, or
- * null if this batch carries none. Codex (unlike Claude, whose id is seeded at
- * session creation) only surfaces its runtime thread id here, so this is how the
+ * null if this batch carries none. Codex and OpenCode (unlike Claude, whose id is seeded
+ * at session creation) surface their runtime thread/session id here, so this is how the
  * server learns the runtime actually came up — letting the reaper's startup watchdog
  * distinguish a live-but-slow first turn from a runtime that never initialized.
  */

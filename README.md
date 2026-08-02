@@ -1,19 +1,19 @@
 # 🛰 Orbit
 
-An **AI-agent platform** for running **Claude Code** against your own infrastructure. Orbit
+An **AI-agent platform** for running **Claude Code, Codex, and OpenCode** against your own infrastructure. Orbit
 gives you **interactive, multi-turn agent sessions** *and* a **task queue** — but the agents
 don't run on the server. Instead, users register their own machines as **runners** (à la
-GitHub Actions self-hosted runners), and Claude Code runs *there*, where the ops tooling and
+GitHub Actions self-hosted runners), and the selected coding runtime runs *there*, where the ops tooling and
 credentials already live (`tea-cli`, HDFS clients, kubectl, …).
 
 ```
 React UI ──REST/SSE──▶ Control plane (NestJS + Postgres) ◀──outbound poll── Runner @ your machine
-  chat · approvals        sessions · tasks · queue · runs                    long-lived `claude`
+  chat · approvals        sessions · tasks · queue · runs                    local coding runtime
                           approvals · cost/token rollups                     in a git worktree
 ```
 
-A **session** is a single long-lived `claude` process on a runner, kept alive across turns:
-you chat with it live (SSE), approve tool calls in-flight, and it runs in an **isolated git
+A **session** is a supervised runtime conversation on a runner, kept resumable across turns:
+you chat with it live (SSE), approve supported tool calls in-flight, and it runs in an **isolated git
 worktree** so concurrent sessions never clobber each other's files. A **task** is a queued
 unit of work (optionally with dependencies and a task-list) that spawns such a session on a
 runner.
@@ -24,8 +24,8 @@ runner.
   Anthropic key.
 - **Runner** (`src/runner-go`) — a small static Go CLI (~6 MB, no runtime needed).
   `orbit register` enrolls a machine via browser approval; `orbit run` long-polls for
-  assigned work and drives Claude Code as a **long-lived process per session**
-  (`claude -p --input-format stream-json`), fed user turns over an inbox long-poll. Streams
+  assigned work and drives the agent's selected local runtime (Claude Code, Codex, or OpenCode),
+  feeding user turns over an inbox long-poll while preserving the runtime conversation. Streams
   normalized events + token/cost back to the control plane, runs each session in its own
   **git worktree**, drains gracefully on restart, and checks for control-plane updates at
   startup and periodically while running; a live update stops new claims and drains sessions
@@ -63,7 +63,8 @@ Highlights:
   (`default` / `acceptEdits` / `plan` / `auto` / `dontAsk` / `bypassPermissions`), paired
   with a scoped `allowedTools` allowlist (e.g. `Bash(tea-cli *)`). Tool calls that need a
   human decision surface as **live approval cards** in the UI (allow / deny, with optional
-  remember-rules) rather than blocking unattended.
+  remember-rules) rather than blocking unattended. OpenCode maps the same modes to guarded
+  non-interactive rules; its provider login remains a manual `opencode auth login` step.
 - **Cost/usage from the source** — runners report Claude Code's own `total_cost_usd` /
   `usage` per turn; the control plane aggregates these (see caveat below).
 
@@ -71,11 +72,11 @@ Highlights:
 
 - Node.js ≥ 20 (uses global `fetch`)
 - Docker (for local Postgres) — or any reachable PostgreSQL 16
-- On each runner machine: **Claude Code**, authenticated. Either log in interactively
-  (run `claude`, then `/login` — uses your Claude subscription), **or** set
-  `ANTHROPIC_API_KEY` (usage-based billing) / `CLAUDE_CODE_OAUTH_TOKEN` (subscription,
-  non-interactive). The runner drives `claude -p` either way; auth never leaves the runner
-  machine. `orbit run` preflights this at startup.
+- On each runner machine: the runtime selected by its agents — **Claude Code**, **Codex**, or
+  **OpenCode** — installed and authenticated. Use Claude's `/login` (or
+  `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`), `codex login`, or
+  `opencode auth login`, respectively. Credentials stay on the runner machine; `orbit doctor`
+  reports missing engines/auth and the registration flow can install missing engines with consent.
 
 ## Quickstart (development)
 
@@ -117,10 +118,9 @@ rebuild and recreate only the services that changed — the `upgrade` skill auto
 
 ### Run a runner (on the machine that should execute tasks)
 
-On a machine with Claude Code installed & authenticated (logged in via `/login`, or
-`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` set). Replace `orbit.example.com` with your
-deployment's origin (baked in at build time via `PUBLIC_ORIGIN`; the UI's **Add a runner**
-page prints these commands pre-filled for you):
+On a machine with the runtime(s) your agents will use installed and authenticated (see
+Prerequisites). Replace `orbit.example.com` with your deployment's origin (baked in at build time
+via `PUBLIC_ORIGIN`; the UI's **Add a runner** page prints these commands pre-filled for you):
 
 ```bash
 # install the static `orbit` binary (no Node needed) and register this machine —
@@ -160,10 +160,10 @@ orbit session send <session-id> --message "Please add a regression test" --json
 orbit session complete <session-id> --json
 ```
 
-Each Claude/Codex session receives a short discovery instruction pointing at the
+Each Claude/Codex/OpenCode session receives a short discovery instruction pointing at the
 resolved absolute binary path and `capabilities --json`. Claude receives approval-free
 rules for Task/TaskList and, only when enabled for that agent, Session action prefixes;
-Codex receives the same context without replacing project-level developer instructions.
+Codex and OpenCode receive the same context without replacing provider/project defaults.
 Native Orbit MCP tools remain the preferred path when available.
 
 Inside an Orbit task session, task commands may omit the task id and use
@@ -189,10 +189,9 @@ Orbit MCP tools when agent/session attribution matters.
 
 ## Cost & tokens
 
-Runners report Claude Code's `total_cost_usd` / `usage` per run; Orbit aggregates these for
-the dashboard. **These are client-side estimates** — reconcile against the
-[Anthropic Usage & Cost API](https://platform.claude.com/docs/en/build-with-claude/usage-cost-api)
-for authoritative billing.
+Runners report runtime cost/token usage when the engine exposes it; Orbit aggregates these for
+the dashboard. **These are client-side reports** — reconcile them against the underlying model
+provider's billing records for authoritative charges.
 
 ## Project layout
 

@@ -90,13 +90,13 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
 /**
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
- * `claude`/`codex`/`kimi` provider runs on the runner's own login (fix it on that machine), any
+ * provider runs on the runner's own runtime login (fix it on that machine), any
  * other slug is a configured API key (fix it in Providers). AgentView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
 export interface AuthErrorHelp {
-  /** Session's provider slug — 'claude' | 'codex' | 'kimi' | a configured provider. */
+  /** Session's provider slug — a built-in runtime or a configured provider. */
   provider: string;
   /** Runner display name, so the card names the machine to fix. */
   runnerName?: string;
@@ -511,7 +511,15 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
  * remedy is a sign-in on that machine rather than a key to fix in Providers.
  */
-const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi']);
+const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode']);
+
+/**
+ * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
+ * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
+ * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
+ * command to run instead of offering a button that cannot work.
+ */
+const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
@@ -530,7 +538,9 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi']);
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
-  const local = !!help && LOCAL_LOGIN.has(help.provider);
+  const provider = help?.provider;
+  const local = !!provider && LOCAL_LOGIN.has(provider);
+  const relayable = !!provider && RELAY_LOGIN.has(provider);
   return (
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
@@ -545,13 +555,20 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
-        help?.runnerId && (
-          <RunnerSignIn
-            runnerId={help.runnerId}
-            engine={help.provider as LoginEngine}
-            onDone={help.onRetry}
-            onUseApiKey={help.onUseApiKey}
-          />
+        relayable ? (
+          help?.runnerId && (
+            <RunnerSignIn
+              runnerId={help.runnerId}
+              engine={help.provider as LoginEngine}
+              onDone={help.onRetry}
+              onUseApiKey={help.onUseApiKey}
+            />
+          )
+        ) : (
+          <div className="chat-authfix-desc">
+            Run <code>opencode auth login</code> on that machine and choose the provider there —
+            OpenCode's sign-in is provider-specific, so it can't be driven from here.
+          </div>
         )
       ) : help ? (
         <>

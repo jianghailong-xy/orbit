@@ -76,6 +76,17 @@ struct ComposerView: View {
         }
     }
 
+    /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
+    /// is incompatible. This mirrors the model picker's preservation of non-catalog values.
+    private var effortMenuItems: [Effort] {
+        let options = AgentDefaults.efforts(for: console.provider, model: console.modelID,
+                                            catalog: console.modelCatalog)
+        let current = AgentDefaults.normalizedEffort(
+            console.effort, for: console.provider, model: console.modelID,
+            catalog: console.modelCatalog)
+        return options.contains(current) ? options : [current] + options
+    }
+
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
     private var showSlash: Bool {
         guard let t = console.slashToken else { return false }
@@ -270,12 +281,19 @@ struct ComposerView: View {
                 Menu {
                     ForEach(modelMenuItems) { m in
                         Button {
+                            // An OpenCode variant is model-defined: a model switch can strip it.
+                            let resetEffort = !AgentDefaults.supportsEffort(
+                                console.effort, for: console.provider, model: m.id,
+                                catalog: console.modelCatalog)
                             let clampedPermissionMode = console.selectModel(m.id)
                             let permissionMode = clampedPermissionMode
                                 ? console.permissionMode.rawValue
                                 : nil
+                            if resetEffort { console.effort = .default }
                             Task {
-                                await console.applyConfig(model: m.id, permissionMode: permissionMode)
+                                await console.applyConfig(
+                                    model: m.id, permissionMode: permissionMode,
+                                    effort: resetEffort ? Effort.default.rawValue : nil)
                             }
                         } label: {
                             menuItemLabel(m.name, selected: m.id == console.modelID)
@@ -293,7 +311,7 @@ struct ComposerView: View {
                 .disabled(!console.providerCapabilitiesResolved)
 
                 Menu {
-                    ForEach(AgentDefaults.efforts(for: console.provider)) { e in
+                    ForEach(effortMenuItems) { e in
                         Button {
                             console.effort = e
                             Task { await console.applyConfig(effort: e.rawValue) }
@@ -315,9 +333,11 @@ struct ComposerView: View {
 
                 // Context stays visible even before the first turn reports tokens — a New Session
                 // reads 0%. Rightmost pill, to the right of plan usage.
-                ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID,
-                                       modelCatalog: console.modelCatalog,
-                                       configured: console.configuredProviders)
+                if !(console.provider == "opencode" && console.modelID.isEmpty) {
+                    ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID,
+                                           modelCatalog: console.modelCatalog,
+                                           configured: console.configuredProviders)
+                }
             }
             // Footer pickers are tappable controls, not metadata — list-subtitle size on iOS (15pt)
             // for comfortable targets; macOS keeps the dense web-parity caption.

@@ -100,6 +100,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	if len(next.Claude) == 0 {
 		next.Claude = prev.Claude
 	}
+	if len(next.OpenCode) == 0 {
+		next.OpenCode = prev.OpenCode
+	}
 	return next
 }
 
@@ -457,11 +460,16 @@ func runLoop(cfg *RunnerConfig) bool {
 	var modelSnapshotMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
 	var hbRuntimeDefaultModels map[string]string
+	var modelCatalogRefreshMu sync.Mutex
 	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
 	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
 	// hourly in the background: model lineups change rarely, and the Claude fetch spawns a
 	// few `claude -p` processes, so there's no reason to run it often.
 	refreshModelCatalog := func() {
+		if !modelCatalogRefreshMu.TryLock() {
+			return
+		}
+		defer modelCatalogRefreshMu.Unlock()
 		catalog := &ModelCatalog{}
 		if codexCLIAvailable() {
 			if models, err := fetchCodexModelCatalog(loopCtx); err != nil {
@@ -477,8 +485,21 @@ func runLoop(cfg *RunnerConfig) bool {
 				catalog.Claude = models
 			}
 		}
+		if openCodeCLIAvailable() {
+			// A heartbeat catalog is runner-wide, while OpenCode project config is
+			// workDir-scoped. Report only globally available models from a neutral
+			// directory; unioning project catalogs would offer agent A a model that
+			// exists only in agent B's checkout. The empty-model picker sentinel still
+			// leaves selection to OpenCode; guarded modes use its global/current choice,
+			// while Auto/Bypass may also opt into project configuration.
+			if models, err := fetchGlobalOpenCodeModelCatalog(loopCtx); err != nil {
+				logln("opencode model catalog refresh failed:", err)
+			} else {
+				catalog.OpenCode = models
+			}
+		}
 		modelSnapshotMu.Lock()
-		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 {
+		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 || len(catalog.OpenCode) > 0 {
 			hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
 		}
 		modelSnapshotMu.Unlock()
@@ -524,7 +545,7 @@ func runLoop(cfg *RunnerConfig) bool {
 		}
 	}()
 
-	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
+	// Keep the machine's coding-engine CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
 	// Daily, best-effort, skips any engine with a live session (see engineUpdateLoop).
 	go engineUpdateLoop(loopCtx, residentProviderCount, doctorProxyVars(cfg.ServerURL))

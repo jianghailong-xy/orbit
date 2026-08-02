@@ -109,8 +109,8 @@ func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
 
 	// systemd gives services a minimal PATH and does not source the user's shell,
 	// so coding CLIs installed below the user's home aren't found. Bake in the
-	// user's login PATH at install time, mirroring the launchd path, plus
-	// ~/.local/bin where the official Claude and Kimi installers put their CLIs.
+	// user's login PATH at install time, mirroring the launchd path, plus the
+	// private bin dirs the official Claude/Kimi/OpenCode installers write to.
 	pathEnv := runnerEnginePath(u.HomeDir, userLoginPath(u, os.Getenv("PATH")))
 
 	unit := fmt.Sprintf(`[Unit]
@@ -289,9 +289,18 @@ func primaryGroup(u *user.User) string {
 // even when the directory does not exist yet. ~/.kimi-code/bin is deliberately
 // absent: Kimi manages helper rg/fd binaries there, not the kimi executable.
 func runnerEnginePath(home, path string) string {
-	dir := filepath.Join(home, ".local", "bin")
-	if !pathContains(path, dir) {
-		path = dir + ":" + path
+	if home == "" {
+		return path
+	}
+	// Keep ~/.local/bin first for compatibility with the existing Claude/Codex/Kimi
+	// resolution order; OpenCode's official installer uses its own private dir.
+	for _, dir := range []string{
+		filepath.Join(home, ".opencode", "bin"),
+		filepath.Join(home, ".local", "bin"),
+	} {
+		if !pathContains(path, dir) {
+			path = dir + ":" + path
+		}
 	}
 	return path
 }

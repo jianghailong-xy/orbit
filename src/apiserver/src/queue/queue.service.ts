@@ -9,6 +9,7 @@ import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
 } from '../common/runtime-provider';
+import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -42,7 +43,7 @@ export class QueueService {
   }
 
   async claimSessionForRunner(
-    runner: { id: string },
+    runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     waitMs = 0,
     supportsTerminalHandoff = false,
   ): Promise<ClaimedSession | null> {
@@ -57,9 +58,10 @@ export class QueueService {
   }
 
   private async trySessionClaim(
-    runner: { id: string },
+    runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     supportsTerminalHandoff: boolean,
   ): Promise<ClaimedSession | null> {
+    const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -79,9 +81,17 @@ export class QueueService {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
+        // Migration 0080 installs a database trigger so an older apiserver replica cannot
+        // claim OpenCode as Claude during a rolling control-plane deploy. This transaction-
+        // local capability is the positive signal that lets only the new, capable path pass.
+        await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true)`;
         return tx.$queryRaw<Array<{ id: string }>>`
         UPDATE "session" SET
           status = 'RUNNING',
+          error = CASE
+            WHEN error = ${OPENCODE_RUNNER_UPGRADE_ERROR} THEN NULL
+            ELSE error
+          END,
           "started_at" = COALESCE("started_at", now()),
           "last_turn_at" = now(),
           "updated_at" = now()
@@ -90,6 +100,13 @@ export class QueueService {
           WHERE s.status = 'PENDING'
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runner.id}::uuid
+            -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
+            -- capability advertisement so an upgraded server can never dispatch one of these
+            -- rows to a pre-0.1.82 process during a rolling release.
+            AND (
+              ${supportsOpenCode}
+              OR COALESCE(s.provider, 'claude') <> 'opencode'
+            )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
             -- A terminal revive uses a reserved predecessor owner until a runner

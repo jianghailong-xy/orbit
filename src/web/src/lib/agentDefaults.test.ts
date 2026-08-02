@@ -5,12 +5,16 @@ import {
   contextWindowFor,
   DEFAULT_CONTEXT_WINDOW,
   defaultModelForProvider,
+  effectiveSessionEffort,
+  effectiveSessionModel,
   effortOptionsForProvider,
   KIMI_MODEL_OPTIONS,
   mergedProviderOptions,
   modelOptionsForProvider,
   normalizeEffortForProvider,
+  OPENCODE_EFFORT_OPTIONS,
   providerIdentityResolved,
+  PROVIDER_OPTIONS,
   supportsAuto,
   type ConfiguredProvider,
 } from './agentDefaults';
@@ -136,6 +140,87 @@ describe('Runtime-reported default models', () => {
 
     expect(modelOptionsForProvider('custom-codex', null, configured)).toEqual([]);
     expect(defaultModelForProvider('custom-codex', null, configured)).toBe('gpt-5.6-sol');
+  });
+});
+
+describe('OpenCode defaults', () => {
+  const catalog: RunnerModelCatalog = {
+    opencode: [
+      {
+        value: 'anthropic/claude-sonnet-4',
+        label: 'Claude Sonnet 4',
+        contextWindow: 200_000,
+        reasoningLevels: ['low', 'high', 'ultra'],
+      },
+    ],
+  };
+
+  it('is a distinct runtime whose empty default never falls back to Claude', () => {
+    expect(PROVIDER_OPTIONS).toContainEqual({
+      value: 'opencode',
+      label: 'OpenCode',
+    });
+    expect(defaultModelForProvider('opencode', catalog)).toBe('');
+    expect(modelOptionsForProvider('opencode')).toEqual([{ value: '', label: 'Managed by OpenCode' }]);
+    expect(modelOptionsForProvider('opencode', catalog)).toEqual([
+      { value: '', label: 'Managed by OpenCode' },
+      { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+    ]);
+    expect(supportsAuto('', 'opencode')).toBe(true);
+    expect(supportsAuto('anthropic/claude-sonnet-4', 'opencode')).toBe(true);
+  });
+
+  it('resolves a null session model through its agent while preserving an explicit empty value', () => {
+    expect(effectiveSessionModel('opencode', null, 'anthropic/claude-sonnet-4', catalog)).toBe(
+      'anthropic/claude-sonnet-4',
+    );
+    expect(effectiveSessionModel('opencode', '', 'anthropic/claude-sonnet-4', catalog)).toBe('');
+  });
+
+  it('resolves a null session effort through its agent while preserving an explicit empty value', () => {
+    expect(effectiveSessionEffort(null, 'ultra')).toBe('ultra');
+    expect(effectiveSessionEffort('', 'ultra')).toBe('');
+  });
+
+  it('uses the selected catalog model reasoning variants and rejects stale values', () => {
+    expect(effortOptionsForProvider('opencode', 'anthropic/claude-sonnet-4', catalog)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' },
+      { value: 'ultra', label: 'Ultra' },
+    ]);
+    expect(normalizeEffortForProvider('opencode', 'ultra', 'anthropic/claude-sonnet-4', catalog)).toBe('ultra');
+    expect(normalizeEffortForProvider('opencode', 'max', 'anthropic/claude-sonnet-4', catalog)).toBe('');
+  });
+
+  it('offers every runner-supported fallback effort when a catalog model is unavailable', () => {
+    expect(effortOptionsForProvider('opencode', '', catalog)).toEqual(OPENCODE_EFFORT_OPTIONS);
+    expect(normalizeEffortForProvider('opencode', 'max', '', catalog)).toBe('max');
+    expect(normalizeEffortForProvider('opencode', 'project-custom', 'project/local-model', catalog)).toBe(
+      'project-custom',
+    );
+  });
+
+  it('treats an exact model with no variants as Default-only', () => {
+    const noVariants: RunnerModelCatalog = {
+      opencode: [
+        {
+          value: 'local/no-variants',
+          label: 'No variants',
+          reasoningLevels: [],
+        },
+      ],
+    };
+    expect(effortOptionsForProvider('opencode', 'local/no-variants', noVariants)).toEqual([
+      { value: '', label: 'Default' },
+    ]);
+    expect(normalizeEffortForProvider('opencode', 'high', 'local/no-variants', noVariants)).toBe('');
+  });
+
+  it('does not leak a dynamic OpenCode variant into another runtime', () => {
+    expect(normalizeEffortForProvider('claude', 'ultra', 'claude-opus-5', catalog)).toBe('');
+    expect(normalizeEffortForProvider('codex', 'ultra', 'gpt-5.6-sol', catalog)).toBe('');
+    expect(normalizeEffortForProvider('codex', 'max', 'gpt-5.6-sol', catalog)).toBe('xhigh');
   });
 });
 

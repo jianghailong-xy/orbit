@@ -73,6 +73,8 @@ import {
   contextWindowFor,
   DEFAULT_MODEL,
   defaultModelForProvider,
+  effectiveSessionEffort,
+  effectiveSessionModel,
   effortOptionsForProvider,
   modelOptionsForProvider,
   normalizeEffortForProvider,
@@ -1474,6 +1476,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     detailForSelected?.agent?.permissionMode ??
     agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
     'dontAsk';
+  const selectedAgentFromList = agentsForRunner.find((a) => a.id === selected?.agent?.id);
+  const effectiveSelectedModel = effectiveSessionModel(
+    shownProvider,
+    selected?.model,
+    detailForSelected?.agent?.model ?? selected?.agent?.model ?? selectedAgentFromList?.model,
+    runner.modelCatalog,
+    configuredProviders,
+  );
+  const effectiveSelectedEffort = effectiveSessionEffort(
+    selected?.effort,
+    detailForSelected?.agent?.effort ?? selected?.agent?.effort ?? selectedAgentFromList?.effort,
+  );
 
   // Same fallback chain as the permission mode above: a session that never stored a model of its
   // own runs the owning agent's model, so the picker must show that — not the provider default.
@@ -1598,8 +1612,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (selectedId) return;
     const provider = pickedAgent?.provider ?? 'claude';
     const candidate = pickedAgent?.effort ?? me.data?.preferences?.defaultEffort ?? '';
-    setEffort(normalizeEffortForProvider(provider, candidate));
-  }, [selectedId, pickedAgent?.provider, pickedAgent?.effort, me.data?.preferences?.defaultEffort]);
+    const selectedModel =
+      pickedAgent?.model ??
+      defaultModelForProvider(provider, runner.modelCatalog, configuredProviders);
+    setEffort(normalizeEffortForProvider(provider, candidate, selectedModel, runner.modelCatalog));
+  }, [
+    selectedId,
+    pickedAgent?.provider,
+    pickedAgent?.model,
+    pickedAgent?.effort,
+    me.data?.preferences?.defaultEffort,
+    runner.modelCatalog,
+  ]);
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
   // cold AWAITING_INPUT session remains open for replies without blocking another turn.
@@ -2059,11 +2083,17 @@ export function AgentView({ runner }: { runner: Runner }) {
           // runner runs the command, buffering its output for the next message.
           const provider =
             fresh.provider ?? selected.provider ?? detailForSelected?.provider ?? 'claude';
-          const wireEffort = normalizeEffortForProvider(provider, effort);
+          const wireEffort = normalizeEffortForProvider(
+            provider,
+            effort,
+            model,
+            runner.modelCatalog,
+          );
           const res = await resumeSession(
             selected.id,
             content,
-            { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort || undefined },
+            // Keep '' so choosing Default explicitly clears a stale stored variant.
+            { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort },
             attachmentIds,
             shell ? 'shell' : undefined,
           );
@@ -2723,7 +2753,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       permissionMode: shownMode,
       effort: shownEffort,
       contextTokens,
-      contextWindow: contextWindowFor(shownModel, runner.modelCatalog, configuredProviders),
+      contextWindow:
+        shownProvider === 'opencode' && shownModel === ''
+          ? undefined
+          : contextWindowFor(shownModel, runner.modelCatalog, configuredProviders),
       planUsageLabel: planRow?.label,
       planUsagePercent: planRow?.percent,
     });
@@ -3147,8 +3180,14 @@ export function AgentView({ runner }: { runner: Runner }) {
   const shownEffort: string = normalizeEffortForProvider(
     shownProvider,
     live ? effectiveEffort : effort,
+    shownModel,
+    runner.modelCatalog,
   );
-  const shownEffortOptions = effortOptionsForProvider(shownProvider);
+  const shownEffortOptions = effortOptionsForProvider(
+    shownProvider,
+    shownModel,
+    runner.modelCatalog,
+  );
   // Auto is offered only on models that support it (see supportsAuto); the option
   // is greyed out otherwise so an unsupported model can't pick a mode claude rejects.
   const autoOk =
@@ -4551,8 +4590,21 @@ export function AgentView({ runner }: { runner: Runner }) {
                   // would send a mode claude rejects — snap back to Default.
                   const drop =
                     shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders);
+                  // An OpenCode variant is model-defined: a model switch can strip it.
+                  const currentEffort = live ? effectiveEffort : effort;
+                  const nextEffort = normalizeEffortForProvider(
+                    shownProvider,
+                    currentEffort,
+                    v,
+                    runner.modelCatalog,
+                  );
+                  const resetEffort = nextEffort !== currentEffort;
                   if (live) {
-                    configMut.mutate({ model: v, ...(drop ? { permissionMode: 'default' } : {}) });
+                    configMut.mutate({
+                      model: v,
+                      ...(drop ? { permissionMode: 'default' } : {}),
+                      ...(resetEffort ? { effort: nextEffort } : {}),
+                    });
                   } else {
                     modelSeedState.current = dirtyContextSeed(modelContextKey);
                     setModel(v);
@@ -4560,6 +4612,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                       modeSeedState.current = dirtyContextSeed(modelContextKey);
                       setMode('Default');
                     }
+                    if (resetEffort) setEffort(nextEffort);
                   }
                 }}
                 options={shownModelOptions}
@@ -4576,7 +4629,12 @@ export function AgentView({ runner }: { runner: Runner }) {
                 suffixIcon={null}
                 value={shownEffort}
                 onChange={(v) => {
-                  const normalized = normalizeEffortForProvider(shownProvider, v);
+                  const normalized = normalizeEffortForProvider(
+                    shownProvider,
+                    v,
+                    shownModel,
+                    runner.modelCatalog,
+                  );
                   // Remember as the account default (replaces localStorage) so the next new
                   // session — here or on iOS/macOS — starts at this effort. Optimistically patch
                   // the cached `me` so the seed effect sees it, then persist best-effort.
@@ -4599,7 +4657,9 @@ export function AgentView({ runner }: { runner: Runner }) {
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
               0%. Rightmost pill, to the right of plan usage. */}
-          <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} configured={configuredProviders} />
+          {!(shownProvider === 'opencode' && shownModel === '') && (
+            <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} configured={configuredProviders} />
+          )}
         </div>
       </div>
       </div>

@@ -65,9 +65,10 @@ export function isLocalSlashCommand(name: string): boolean {
   return LOCAL_SLASH_ITEMS.some((it) => it.name.toLowerCase() === name.toLowerCase());
 }
 
-/** Codex alone lacks a runner slash registry; Kimi exposes commands and skills through ACP. */
+/** Codex and OpenCode take slash-prefixed text as an ordinary runtime prompt and have no
+ *  runner slash registry; Kimi exposes commands and skills through ACP. */
 export function supportsRunnerSlashAssets(provider?: string | null): boolean {
-  return provider !== 'codex';
+  return provider !== 'codex' && provider !== 'opencode';
 }
 
 /** Match one runner-owned slash asset to the active runtime. Untagged assets come
@@ -76,7 +77,7 @@ export function slashAssetMatchesProvider(
   assetProvider: string | null | undefined,
   activeProvider: string | null | undefined,
 ): boolean {
-  if (activeProvider === 'codex') return false;
+  if (activeProvider === 'codex' || activeProvider === 'opencode') return false;
   if (activeProvider === 'kimi') return assetProvider === 'kimi';
   return !assetProvider || assetProvider === 'claude';
 }

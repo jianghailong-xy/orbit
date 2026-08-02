@@ -9,7 +9,7 @@ type DeviceStartRequest struct {
 	Labels        []string `json:"labels"`
 	MaxConcurrent int      `json:"maxConcurrent"`
 	Version       string   `json:"version,omitempty"`
-	// Default project directory; agents (registered separately) run claude here.
+	// Default project directory; agents (registered separately) run their engine here.
 	WorkDir string `json:"workDir,omitempty"`
 }
 
@@ -34,7 +34,7 @@ type RegisterRequest struct {
 	Labels          []string `json:"labels"`
 	MaxConcurrent   int      `json:"maxConcurrent"`
 	Version         string   `json:"version,omitempty"`
-	// Default project directory; agents (registered separately) run claude here.
+	// Default project directory; agents (registered separately) run their engine here.
 	WorkDir string `json:"workDir,omitempty"`
 }
 
@@ -119,8 +119,9 @@ type SlashCommandInfo struct {
 }
 
 type ModelCatalog struct {
-	Codex  []ModelInfo `json:"codex,omitempty"`
-	Claude []ModelInfo `json:"claude,omitempty"`
+	Codex    []ModelInfo `json:"codex,omitempty"`
+	Claude   []ModelInfo `json:"claude,omitempty"`
+	OpenCode []ModelInfo `json:"opencode,omitempty"`
 }
 
 type ModelInfo struct {
@@ -294,7 +295,7 @@ type AgentExecConfig struct {
 	MaxTurns           *int                   `json:"maxTurns"`
 	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
 	McpConfig          map[string]interface{} `json:"mcpConfig"`
-	// Custom env vars injected into the claude process (cf. session.go cmd.Env).
+	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
 
@@ -305,7 +306,7 @@ type ClaimedSession struct {
 	Provider  string          `json:"provider,omitempty"`
 	Prompt    string          `json:"prompt"`
 	Agent     AgentExecConfig `json:"agent"`
-	// WorkDir is claude's cwd for this session, from the session's agent.
+	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`
 	RuntimeSessionID string `json:"runtimeSessionId,omitempty"`
@@ -362,7 +363,7 @@ type AttachmentCreateResponse struct {
 	ID string `json:"id"`
 }
 
-// RunInboxResponse is the next user turn to feed the live claude process.
+// RunInboxResponse is the next user turn to feed the live runtime.
 // TurnID == "" means nothing is available (mirrors the empty-runId claim convention).
 type RunInboxResponse struct {
 	TurnID  string `json:"turnId"`

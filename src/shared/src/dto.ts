@@ -41,13 +41,13 @@ export interface AgentExecConfig {
   allowedTools: string[];
   disallowedTools: string[];
   permissionMode: PermissionMode;
-  /** Provider reasoning effort. Claude supports max; Codex maps max to xhigh. */
+  /** Provider reasoning effort/variant. Claude supports max; Codex maps max to xhigh. */
   effort?: string;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
   mcpConfig?: Record<string, unknown>;
-  /** Custom environment variables injected into the claude process. */
+  /** Custom environment variables injected into the coding-engine process. */
   env?: Record<string, string>;
 }
 

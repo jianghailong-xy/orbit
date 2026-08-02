@@ -71,3 +71,26 @@ test('effort normalization maps stale provider levels onto each runtime vocabula
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'medium'), 'medium');
   assert.equal(normalizeEffortForProvider(AgentProvider.KIMI, null), undefined);
 });
+
+test('OpenCode preserves provider-defined variants; closed CLI enums reject leaked ones', () => {
+  assert.equal(normalizeEffortForProvider(AgentProvider.OPENCODE, 'ultra'), 'ultra');
+  assert.equal(
+    normalizeEffortForProvider(AgentProvider.OPENCODE, 'project-custom'),
+    'project-custom',
+  );
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'ultra'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'max'), 'max');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'minimal'), 'minimal');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, null), undefined);
+});
+
+test('OpenCode is a dynamically-initialized runtime whose Auto mode is never downgraded', () => {
+  assert.equal(normalizeRuntimeProvider(AgentProvider.OPENCODE), AgentProvider.OPENCODE);
+  assert.equal(initializesRuntimeDynamically(AgentProvider.OPENCODE), true);
+  // OpenCode owns model selection, so its Auto does not depend on a Claude model allow-list.
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.OPENCODE, '', PermissionMode.AUTO),
+    PermissionMode.AUTO,
+  );
+});

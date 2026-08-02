@@ -6,8 +6,12 @@ import { SessionsService } from './sessions.service';
 
 type SessionRow = { parentSessionId: string | null };
 
-function makeService(rows: Record<string, SessionRow>) {
+function makeService(
+  rows: Record<string, SessionRow>,
+  defaults?: { agentEffort?: string | null; accountEffort?: string },
+) {
   const createdFrom: string[] = [];
+  const createdDtos: Array<{ effort?: string }> = [];
   const prisma = {
     session: {
       findFirst: async ({ where }: { where: { id: string } }) =>
@@ -16,20 +20,29 @@ function makeService(rows: Record<string, SessionRow>) {
           : null,
       findUnique: async ({ where }: { where: { id: string } }) => rows[where.id] ?? null,
     },
-    user: { findUnique: async () => null },
-    agent: { findFirst: async () => null },
+    user: {
+      findUnique: async () =>
+        defaults?.accountEffort
+          ? { preferences: { defaultEffort: defaults.accountEffort } }
+          : null,
+    },
+    agent: {
+      findFirst: async () =>
+        defaults && 'agentEffort' in defaults ? { effort: defaults.agentEffort } : null,
+    },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
   // Keep this test focused on the orchestration guard; create() has its own persistence path.
   (service as unknown as { create: SessionsService['create'] }).create = (async (
     _ownerId: string,
-    _dto: unknown,
+    dto: unknown,
     opts: { parentSessionId?: string },
   ) => {
     createdFrom.push(opts.parentSessionId ?? '');
+    createdDtos.push(dto as { effort?: string });
     return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', agentId: null };
   }) as SessionsService['create'];
-  return { service, createdFrom };
+  return { service, createdFrom, createdDtos };
 }
 
 test('a root session may spawn a child at depth 1', async () => {
@@ -64,4 +77,18 @@ test('a session already at depth 2 cannot recurse further', async () => {
       error instanceof ForbiddenException && error.message === 'spawn depth limit (2) reached',
   );
   assert.deepEqual(createdFrom, []);
+});
+
+test('an explicit empty agent effort wins over the account default for a spawned session', async () => {
+  const { service, createdDtos } = makeService(
+    { root: { parentSessionId: null } },
+    { agentEffort: '', accountEffort: 'high' },
+  );
+
+  await service.spawnFromSession('owner', 'root', {
+    prompt: 'work',
+    agentId: 'agent-1',
+  });
+
+  assert.equal(createdDtos[0].effort, '');
 });

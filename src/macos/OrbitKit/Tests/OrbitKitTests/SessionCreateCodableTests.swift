@@ -26,4 +26,14 @@ final class SessionCreateCodableTests: XCTestCase {
         XCTAssertEqual(obj["effort"] as? String, "high")
         XCTAssertEqual(obj["shell"] as? Bool, true)
     }
+
+    /// OpenCode's empty model is an intentional sentinel, not an omitted override; its broad
+    /// fallback effort set must likewise reach the runner unchanged.
+    func testOpenCodeDefaultModelAndEffortPassThrough() throws {
+        let obj = try jsonObject(CreateSessionRequest(
+            prompt: "do it", agentId: "ag1", model: "", effort: "max"))
+        XCTAssertTrue(obj.keys.contains("model"))
+        XCTAssertEqual(obj["model"] as? String, "")
+        XCTAssertEqual(obj["effort"] as? String, "max")
+    }
 }

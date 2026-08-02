@@ -108,12 +108,14 @@ test('runner capability parsing accepts lists without accepting partial names', 
 
 test('claim forwards terminal-handoff negotiation to the queue', async () => {
   const capable = makeController({ claimed: null });
-  await capable.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1);
-  assert.deepEqual(capable.claimCalls, [[{ id: RUNNER.id }, 25_000, true]]);
+  await capable.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1, 'claude,codex,opencode');
+  assert.deepEqual(capable.claimCalls, [
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true],
+  ]);
 
   const legacy = makeController({ claimed: null });
   await legacy.controller.claim(RUNNER);
-  assert.deepEqual(legacy.claimCalls, [[{ id: RUNNER.id }, 25_000, false]]);
+  assert.deepEqual(legacy.claimCalls, [[{ id: RUNNER.id, supportedProviders: [] }, 25_000, false]]);
 });
 
 test('claim enables orchestration only when the runner negotiated credential v1', async () => {
@@ -123,7 +125,7 @@ test('claim enables orchestration only when the runner negotiated credential v1'
       allowOrchestration: true,
     },
   });
-  const enabledJob = await enabled.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1);
+  const enabledJob = await enabled.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1, 'claude,codex,opencode');
   assert.equal(enabledJob?.allowOrchestration, true);
   assert.equal(enabledJob?.orchestrationToken, 'credential-for-enabled-session');
   assert.deepEqual(enabled.issueCalls, [['runner-1', 'enabled-session']]);
@@ -148,13 +150,14 @@ test('claim enables orchestration only when the runner negotiated credential v1'
   const disabledJob = await disabled.controller.claim(
     RUNNER,
     SESSION_ORCHESTRATION_CREDENTIAL_V1,
+    'claude,codex,opencode',
   );
   assert.equal(disabledJob?.orchestrationToken, undefined);
   assert.deepEqual(disabled.issueCalls, []);
 
   const idle = makeController({ claimed: null });
   assert.equal(
-    await idle.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1),
+    await idle.controller.claim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1, 'claude,codex,opencode'),
     null,
   );
   assert.deepEqual(idle.issueCalls, []);

@@ -104,7 +104,7 @@ export class AgentsService {
   }
 
   async update(ownerId: string, id: string, dto: UpdateAgentDto) {
-    await this.get(ownerId, id);
+    const current = await this.get(ownerId, id);
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
     const data: Prisma.AgentUpdateInput = {

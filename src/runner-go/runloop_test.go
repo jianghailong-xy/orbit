@@ -134,8 +134,9 @@ func TestSelfUpdateSupervisorReexecsInsteadOfReusingStoppedRunLoop(t *testing.T)
 
 func TestCarryOverModelCatalog(t *testing.T) {
 	prev := &ModelCatalog{
-		Codex:  []ModelInfo{{Value: "gpt-5.6-sol", Label: "GPT-5.6-Sol", ContextWindow: 372_000}},
-		Claude: []ModelInfo{{Value: "claude-opus-5", Label: "Opus 5"}},
+		Codex:    []ModelInfo{{Value: "gpt-5.6-sol", Label: "GPT-5.6-Sol", ContextWindow: 372_000}},
+		Claude:   []ModelInfo{{Value: "claude-opus-5", Label: "Opus 5"}},
+		OpenCode: []ModelInfo{{Value: "opencode/big-pickle", Label: "opencode · Big Pickle"}},
 	}
 
 	// Claude refreshed, `codex debug models` failed → keep the last good Codex list rather than
@@ -148,6 +149,9 @@ func TestCarryOverModelCatalog(t *testing.T) {
 	}
 	if len(merged.Claude) != 1 || merged.Claude[0].Value != "claude-opus-6" {
 		t.Fatalf("Claude = %#v, want this round's list", merged.Claude)
+	}
+	if len(merged.OpenCode) != 1 || merged.OpenCode[0].Value != "opencode/big-pickle" {
+		t.Fatalf("OpenCode = %#v, want the previous list carried over", merged.OpenCode)
 	}
 
 	// A fresh Codex list always wins — carrying over must never pin a stale window.

@@ -21,8 +21,8 @@ export function reclaimRuntimeIds(input: ReclaimRuntimeInput): ReclaimRuntimeIds
     };
   }
 
-  // Codex and Kimi create their runtime thread after process initialization. If a runner
-  // restarts before that, reclaim with the Orbit session id and start a fresh thread.
+  // Codex, Kimi and OpenCode create their runtime thread after process initialization. If a
+  // runner restarts before that, reclaim with the Orbit session id and start a fresh thread.
   return {
     sessionUuid: runtimeSessionId ?? input.sessionId,
     runtimeSessionId,

@@ -143,6 +143,12 @@ func loginFlowFor(engine string) loginFlow {
 			successOnExit: true,
 		}
 	}
+	if engine == providerOpenCode {
+		// OpenCode authenticates its underlying provider/method, which the current
+		// browser relay DTO cannot express. Keep it explicit so it never falls through
+		// to (and accidentally launches) Claude's login flow.
+		return loginFlow{engine: providerOpenCode}
+	}
 	// Anything else (including the empty engine an older control plane sends) is claude.
 	return loginFlow{
 		engine: providerClaude,
@@ -205,6 +211,10 @@ func ptyCommand(ctx context.Context, argv ...string) *exec.Cmd {
 // to preempt whatever is still running, or they wait out the old CLI's timeout for nothing.
 func (r *loginRelay) start(attempt, engine string, report func(LoginResultRequest)) {
 	flow := loginFlowFor(engine)
+	if flow.engine == providerOpenCode {
+		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there"})
+		return
+	}
 	// Cheap pre-check for the heartbeat's redelivery of a start we are already running: the real
 	// decision is made under the lock below, this just keeps the probe that follows from running
 	// a subprocess every heartbeat for a sign-in that is already in flight.

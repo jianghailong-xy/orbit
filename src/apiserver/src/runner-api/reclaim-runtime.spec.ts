@@ -47,6 +47,28 @@ test('kimi sessions with a runtime id reclaim that runtime thread', () => {
   );
 });
 
+test('opencode sessions without a runtime id are reclaimable using the Orbit session id', () => {
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.OPENCODE,
+      sessionId: 'session-1',
+      runtimeSessionId: null,
+    }),
+    { sessionUuid: 'session-1', runtimeSessionId: undefined },
+  );
+});
+
+test('opencode sessions with a runtime id reclaim that runtime session', () => {
+  assert.deepEqual(
+    reclaimRuntimeIds({
+      provider: AgentProvider.OPENCODE,
+      sessionId: 'session-1',
+      runtimeSessionId: 'opencode-session-1',
+    }),
+    { sessionUuid: 'opencode-session-1', runtimeSessionId: 'opencode-session-1' },
+  );
+});
+
 test('claude sessions without a runtime id are not reclaimable', () => {
   assert.equal(
     reclaimRuntimeIds({

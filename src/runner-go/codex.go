@@ -201,15 +201,15 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 
 func applyRuntimeReload(job *ClaimedSession, content string) {
 	var cfg struct {
-		Model          string  `json:"model"`
+		Model          *string `json:"model"`
 		PermissionMode string  `json:"permissionMode"`
 		Effort         *string `json:"effort"`
 	}
 	if json.Unmarshal([]byte(content), &cfg) != nil {
 		return
 	}
-	if cfg.Model != "" {
-		job.Agent.Model = cfg.Model
+	if cfg.Model != nil {
+		job.Agent.Model = *cfg.Model
 	}
 	if cfg.PermissionMode != "" {
 		job.Agent.PermissionMode = cfg.PermissionMode

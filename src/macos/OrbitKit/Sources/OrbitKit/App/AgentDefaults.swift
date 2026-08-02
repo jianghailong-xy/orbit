@@ -27,21 +27,29 @@ public struct ModelSelectionRevision: Equatable, Sendable {
     public mutating func markUserEdit() { value &+= 1 }
 }
 
-/// Reasoning-effort levels offered in the composer, in the same order as web's EFFORT_OPTIONS.
-/// `.default` ("") omits `--effort` so the model picks its own.
-public enum Effort: String, CaseIterable, Sendable, Identifiable {
-    case `default` = ""
-    case minimal, low, medium, high, xhigh, max
+/// Reasoning-effort / OpenCode-variant value offered in the composer. OpenCode variants are
+/// model-defined and can add values without an Orbit release, so this is string-backed rather
+/// than a closed enum. `allCases` remains the common built-in superset used by static pickers.
+public struct Effort: RawRepresentable, CaseIterable, Hashable, Sendable, Identifiable {
+    public let rawValue: String
+
+    public init?(rawValue: String) { self.rawValue = rawValue }
+
+    public static let `default` = Effort(rawValue: "")!
+    public static let minimal = Effort(rawValue: "minimal")!
+    public static let low = Effort(rawValue: "low")!
+    public static let medium = Effort(rawValue: "medium")!
+    public static let high = Effort(rawValue: "high")!
+    public static let xhigh = Effort(rawValue: "xhigh")!
+    public static let max = Effort(rawValue: "max")!
+    public static let allCases: [Effort] = [.default, .minimal, .low, .medium, .high, .xhigh, .max]
+
     public var id: String { rawValue }
     public var label: String {
-        switch self {
-        case .default: return "Default"
-        case .xhigh:   return "xHigh"
-        default:       return rawValue.capitalized   // Minimal / Low / Medium / High / Max
-        }
+        if self == .default { return "Default" }
+        if self == .xhigh { return "xHigh" }
+        return rawValue.prefix(1).uppercased() + String(rawValue.dropFirst())
     }
-    /// Wire value for a turn/resume request: nil = omit the field (same as Default).
-    public var wire: String? { self == .default ? nil : rawValue }
 }
 
 public enum AgentDefaults {
@@ -50,6 +58,7 @@ public enum AgentDefaults {
         ProviderOption(id: "claude", name: "Claude"),
         ProviderOption(id: "codex", name: "Codex"),
         ProviderOption(id: "kimi", name: "Kimi"),
+        ProviderOption(id: "opencode", name: "OpenCode"),
     ]
 
     /// Provider-picker options with the control-plane–configured providers appended after the
@@ -80,19 +89,34 @@ public enum AgentDefaults {
         ModelOption(id: "kimi-code/kimi-for-coding", name: "Kimi for Coding"),
     ]
 
+    /// OpenCode chooses its own model when no `--model` value is supplied: a new session resolves
+    /// its configured/default model and a resumed session keeps its current OpenCode model.
+    /// Concrete ids are runner-discovered because they include the provider (`provider/model`).
+    public static let opencodeModels: [ModelOption] = [
+        ModelOption(id: "", name: "Managed by OpenCode"),
+    ]
+
     public static let defaultModelID = "claude-opus-5"
 
     /// The models a provider's pickers offer. Claude and Codex lists come exclusively from the
     /// runner catalog (Codex via `codex debug models`; Claude via `claude -p "/model <alias>"`).
     /// There is no static fallback for them — when the catalog is unavailable the picker is empty.
     /// An unknown provider string returns an empty array too, matching apiserver's
-    /// `agentProvider()`, so a stale value can't leak Claude-only options.
+    /// `agentProvider()`, so a stale value can't leak Claude-only options. OpenCode contributes
+    /// only its empty "managed by the runtime" sentinel ahead of the runner catalog.
     public static func models(for provider: String) -> [ModelOption] {
-        provider == "kimi" ? kimiModels : []
+        switch provider {
+        case "kimi":     return kimiModels
+        case "opencode": return opencodeModels
+        default:         return []
+        }
     }
 
     public static func models(for provider: String, catalog: RunnerModelCatalog?) -> [ModelOption] {
-        catalog?.models(for: provider) ?? models(for: provider)
+        if provider == "opencode" {
+            return opencodeModels + (catalog?.models(for: provider) ?? [])
+        }
+        return catalog?.models(for: provider) ?? models(for: provider)
     }
 
     /// As `models(for:catalog:)`, but a configured provider's own model list (from the control
@@ -115,8 +139,9 @@ public enum AgentDefaults {
     public static func defaultModel(for provider: String) -> String {
         switch provider {
         case "codex": return "gpt-5.6-sol"
-        case "kimi":  return "kimi-code/kimi-for-coding"
-        default:      return defaultModelID
+        case "kimi":     return "kimi-code/kimi-for-coding"
+        case "opencode": return ""
+        default:         return defaultModelID
         }
     }
 
@@ -201,13 +226,14 @@ public enum AgentDefaults {
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
     /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
-        kimiModels.first { $0.id == id }?.name ?? id
+        (kimiModels + opencodeModels).first { $0.id == id }?.name ?? id
     }
 
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
         (catalog?.models(for: "claude") ?? []).first { $0.id == id }?.name
             ?? (catalog?.models(for: "codex") ?? []).first { $0.id == id }?.name
             ?? (catalog?.models(for: "kimi") ?? []).first { $0.id == id }?.name
+            ?? (catalog?.models(for: "opencode") ?? []).first { $0.id == id }?.name
             ?? friendlyName(id)
     }
 
@@ -220,21 +246,27 @@ public enum AgentDefaults {
     }
 
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
-    /// tops out at `xhigh` and adds `minimal`; managed Kimi exposes low/high/max. Mirrors web. The
-    /// server and runner both coerce an illegal value, but a picker should never offer one.
+    /// tops out at `xhigh` and adds `minimal`; managed Kimi exposes low/high/max. OpenCode variants
+    /// are model-defined, so its static list is only a fallback while the catalog is unavailable.
+    /// Mirrors web. The server and runner both coerce an illegal value, but a picker should never
+    /// offer one.
     public static func efforts(for provider: String) -> [Effort] {
         switch provider {
-        case "codex": return [.default, .minimal, .low, .medium, .high, .xhigh]
-        case "kimi":  return [.default, .low, .high, .max]
-        default:      return [.default, .low, .medium, .high, .xhigh, .max]
+        case "codex":    return [.default, .minimal, .low, .medium, .high, .xhigh]
+        case "kimi":     return [.default, .low, .high, .max]
+        case "opencode": return [.default, .minimal, .low, .medium, .high, .xhigh, .max]
+        default:         return [.default, .low, .medium, .high, .xhigh, .max]
         }
     }
 
     /// Coerce a saved/account effort when it crosses into a runtime with a smaller effort
     /// vocabulary. Mirrors the API normalization so stale sessions and synced preferences render
-    /// the same value the runtime will actually receive.
+    /// the same value the runtime will actually receive. OpenCode keeps every value verbatim —
+    /// its vocabulary is model-defined and validated against the catalog below.
     public static func normalizeEffort(_ effort: Effort, for provider: String) -> Effort {
         switch provider {
+        case "opencode":
+            return effort
         case "codex":
             return effort == .max ? .xhigh : effort
         case "kimi":
@@ -247,6 +279,51 @@ public enum AgentDefaults {
         default:
             return effort
         }
+    }
+
+    /// OpenCode variants are model-specific. Preserve every runner-reported key verbatim so a new
+    /// runtime variant does not require a native-client release. An exact catalog row is
+    /// authoritative even when its variant list is empty; only a model absent from the global
+    /// heartbeat catalog falls back to the common list because it may be project-only.
+    public static func efforts(for provider: String, model: String,
+                               catalog: RunnerModelCatalog?) -> [Effort] {
+        guard provider == "opencode" else { return efforts(for: provider) }
+        guard let row = catalog?.modelInfo(for: provider, model: model) else {
+            return efforts(for: provider)
+        }
+        var result: [Effort] = [.default]
+        for raw in row.reasoningLevels ?? [] {
+            if let effort = Effort(rawValue: raw), effort != .default, !result.contains(effort) {
+                result.append(effort)
+            }
+        }
+        return result
+    }
+
+    /// Whether a stored/current value is valid for this provider-model pair. If an OpenCode model
+    /// is absent from the global catalog, retain the value: it may be a project-defined model and
+    /// variant. An exact row, including one with no variants, is authoritative.
+    public static func supportsEffort(_ effort: Effort, for provider: String, model: String,
+                                      catalog: RunnerModelCatalog?) -> Bool {
+        if effort == .default { return true }
+        if provider == "opencode" {
+            guard let row = catalog?.modelInfo(for: provider, model: model) else { return true }
+            return (row.reasoningLevels ?? []).contains(effort.rawValue)
+        }
+        return efforts(for: provider).contains(effort)
+    }
+
+    /// Clamp a stored/prefilled value to Default only when the provider/model data says it is
+    /// incompatible. Unknown OpenCode models deliberately preserve custom project variants.
+    public static func normalizedEffort(_ effort: Effort, for provider: String, model: String,
+                                        catalog: RunnerModelCatalog?) -> Effort {
+        if provider == "opencode" {
+            return supportsEffort(effort, for: provider, model: model, catalog: catalog)
+                ? effort : .default
+        }
+        // Closed vocabularies: map what maps (Codex max→xhigh, Kimi medium→high), clear the rest.
+        let mapped = normalizeEffort(effort, for: provider)
+        return efforts(for: provider).contains(mapped) ? mapped : .default
     }
 
     /// Per-model context-window size (max input tokens), for the composer's context-usage gauge.

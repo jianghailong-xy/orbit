@@ -90,7 +90,7 @@ export interface ControlSessionSummary {
   /** Server-derived actions; optional for rolling-version compatibility. */
   capabilities?: SessionCapabilities;
   agentId: string | null;
-  agent: { id: string; name: string | null; model: string | null } | null;
+  agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   pendingApprovals: number;
   lastTurnAt: string | null;
 }

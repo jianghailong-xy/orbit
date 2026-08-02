@@ -131,6 +131,40 @@ func TestKimiEngineSpec(t *testing.T) {
 	}
 }
 
+func TestProbeAuthOpenCodeDoesNotTreatZeroCredentialsAsSignedOut(t *testing.T) {
+	empty := writeFakeBin(t, t.TempDir(), providerOpenCode, `echo '0 credentials'`)
+	if got := probeAuth(providerOpenCode, empty); got != authUnknown {
+		t.Fatalf("zero credentials can still use local providers, got %v", got)
+	}
+	configured := writeFakeBin(t, t.TempDir(), providerOpenCode, `echo '2 credentials'`)
+	if got := probeAuth(providerOpenCode, configured); got != authYes {
+		t.Fatalf("configured credentials should be authYes, got %v", got)
+	}
+}
+
+func TestEngineInstallPathsIncludeOpenCode(t *testing.T) {
+	got := runnerEnginePath("/home/orbit", "/usr/bin")
+	if !strings.HasPrefix(got, "/home/orbit/.local/bin:/home/orbit/.opencode/bin:") {
+		t.Fatalf("engine PATH = %q", got)
+	}
+}
+
+func TestEngineInstallPathsExposeOpenCodeToExistingServiceProcess(t *testing.T) {
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".opencode", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFakeBin(t, binDir, providerOpenCode, `exit 0`)
+
+	// Model a service unit written before Orbit knew about OpenCode's official install path.
+	t.Setenv("PATH", "/usr/bin")
+	path := runnerEnginePath(home, os.Getenv("PATH"))
+	if _, ok := lookPathIn(providerOpenCode, path); !ok {
+		t.Fatalf("OpenCode under the official install dir is not executable through PATH %q", path)
+	}
+}
+
 func TestCheckEngineDetectsBinary(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "claude")

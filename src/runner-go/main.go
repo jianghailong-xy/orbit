@@ -40,9 +40,9 @@ Usage:
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
-  orbit doctor                      Check the Claude/Codex/Kimi CLIs, sign-in, and service PATH
-  orbit engine-update               Update the Claude/Codex/Kimi CLIs now (the daily check, on demand)
-  orbit resume [session-id]         Resume a session in this terminal via claude --resume
+  orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
+  orbit engine-update               Update the coding-engine CLIs now (the daily check, on demand)
+  orbit resume [session-id]         Resume a session in its coding runtime
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
   orbit session <command>           Orchestrate agent sessions (when enabled)
@@ -51,13 +51,14 @@ Usage:
 
 Run 'orbit <command> --help' for command-specific options.
 
-The runner drives the machine's local Claude Code, Codex, and Kimi Code logins;
-no provider API key is required for these built-in runtimes.
+The runner uses each coding engine's local configuration and credentials
+(Claude Code, Codex, Kimi Code, OpenCode). Run 'orbit doctor' for installation
+and sign-in guidance.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
   ORBIT_NO_SELFUPDATE      Disable startup and periodic runner auto-updates
-  ORBIT_NO_ENGINE_UPDATE   Disable the daily Claude/Codex/Kimi CLI update check
+  ORBIT_NO_ENGINE_UPDATE   Disable the daily coding-engine CLI update check
 `
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
@@ -81,7 +82,7 @@ Options:
   --force                  Re-register without confirming, even if this machine is already registered
   --no-service             Register only; don't install/start the background service
   --foreground             Register and run in the foreground now (implies --no-service)
-  --auto-install-engines   Let the runner install a missing Claude/Codex/Kimi CLI itself, the first
+  --auto-install-engines   Let the runner install a missing coding-engine CLI itself, the first
   --no-auto-install-engines  time a session needs one. Asked interactively when neither is
                            passed; an unattended register defaults to not installing.
   --proxy [<url>]          Use an HTTP proxy for claude on the runner so it can reach
@@ -119,7 +120,7 @@ Usage:
 Usage:
   orbit doctor
 
-Reports, for Claude Code, Codex, and Kimi Code, whether the CLI is installed, its version, a
+Reports, for Claude Code, Codex, Kimi Code, and OpenCode, whether the CLI is installed, its version, a
 best-effort sign-in check, and whether the background service's PATH can see it —
 with the exact install/sign-in command for anything that's missing. Exits non-zero
 when no engine is installed. Runs automatically at the end of 'orbit register'.
@@ -129,7 +130,7 @@ when no engine is installed. Runs automatically at the end of 'orbit register'.
 Usage:
   orbit resume [session-id]
 
-Resumes the given session by running 'claude --resume' in the session's
+Resumes the given session in its original coding runtime and
 original work directory. The session ID is the one shown in the web UI URL
 (e.g. /sessions/<id>). If omitted, lists sessions available on this machine.
 `,
@@ -183,6 +184,14 @@ func helpFor(cmd string) string {
 }
 
 func main() {
+	// Services installed by an older Orbit release have a baked PATH that predates one or more
+	// official per-user engine directories. Refresh the current process too: doctor/install may
+	// correctly find ~/.opencode/bin/opencode, and every later exec must see that same binary
+	// without requiring the user to reinstall the service first.
+	if home := userHome(); home != "" {
+		_ = os.Setenv("PATH", runnerEnginePath(home, os.Getenv("PATH")))
+	}
+
 	args := os.Args[1:]
 	cmd := ""
 	if len(args) > 0 {
@@ -629,6 +638,12 @@ func cmdResume(args []string) {
 			os.Exit(1)
 		}
 		cmd = exec.Command(providerKimi, "--resume", meta.RuntimeSessionID)
+	case providerOpenCode:
+		if meta.RuntimeSessionID == "" {
+			fmt.Fprintln(os.Stderr, "this OpenCode session has not been initialized yet")
+			os.Exit(1)
+		}
+		cmd = exec.Command(providerOpenCode, "--session", meta.RuntimeSessionID)
 	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}

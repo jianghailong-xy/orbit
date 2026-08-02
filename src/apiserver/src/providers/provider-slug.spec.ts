@@ -36,6 +36,7 @@ test('provider-slug', async (t) => {
     assert.equal(pickFreeSlug(slugBase('Claude'), []), 'claude-2');
     assert.equal(pickFreeSlug(slugBase('Codex'), []), 'codex-2');
     assert.equal(pickFreeSlug(slugBase('Kimi'), []), 'kimi-2');
+    assert.equal(pickFreeSlug(slugBase('OpenCode'), []), 'opencode-2');
     assert.equal(
       pickFreeSlug(KIMI_ORPHAN_PROVIDER_TOMBSTONE, []),
       `${KIMI_ORPHAN_PROVIDER_TOMBSTONE}-2`,

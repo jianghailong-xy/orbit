@@ -14,7 +14,7 @@ import (
 )
 
 // engineSpec describes one coding-CLI engine the runner can drive. The bin names
-// (claude/codex/kimi) match runtimeProvider's provider constants, so the runtime
+// (claude/codex/kimi/opencode) match runtimeProvider's provider constants, so the runtime
 // pre-flight can look them up directly.
 type engineSpec struct {
 	name       string   // display name, e.g. "Claude Code"
@@ -90,6 +90,15 @@ var engineSpecs = []engineSpec{
 		installAlt:    "npm install -g @moonshot-ai/kimi-code",
 		loginArgs:     []string{"login"},
 		loginHeadless: "kimi login",
+	},
+	{
+		name:          "OpenCode",
+		bin:           providerOpenCode,
+		installCmd:    "curl -fsSL https://opencode.ai/install | bash",
+		updateCmd:     "opencode upgrade",
+		installAlt:    "npm install -g opencode-ai",
+		loginArgs:     []string{"auth", "login"},
+		loginHeadless: "opencode auth login",
 	},
 }
 
@@ -216,6 +225,26 @@ func probeAuth(bin, binPath string) authState {
 		return authUnknown // couldn't even run it
 	case providerKimi:
 		return probeKimiACPAuth(ctx, binPath)
+	case providerOpenCode:
+		out, err := exec.CommandContext(ctx, binPath, "auth", "list").CombinedOutput()
+		if err != nil {
+			// A provider may be local/no-auth, and older OpenCode builds may not
+			// support this probe. Never turn either case into a startup blocker.
+			return authUnknown
+		}
+		// `opencode auth list` reports the number of stored/environment credentials.
+		// A successful but unfamiliar format stays unknown so local/no-auth providers
+		// are never rejected by a best-effort probe.
+		lower := strings.ToLower(string(out))
+		if strings.Contains(lower, "0 credentials") || strings.Contains(lower, "0 credential") {
+			// OpenCode also supports local and built-in providers that require no
+			// stored credential, so zero is not equivalent to signed out.
+			return authUnknown
+		}
+		if strings.Contains(lower, "credential") || strings.Contains(lower, "environment") {
+			return authYes
+		}
+		return authUnknown
 	}
 	return authUnknown
 }

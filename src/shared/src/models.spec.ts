@@ -9,6 +9,9 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.KIMI, 'kimi-code/kimi-for-coding')).toBe(
       'kimi-code/kimi-for-coding',
     );
+    expect(modelForProvider(AgentProvider.OPENCODE, 'anthropic/claude-sonnet-5')).toBe(
+      'anthropic/claude-sonnet-5',
+    );
   });
 
   it('falls back to the provider default when no override is given', () => {
@@ -16,6 +19,7 @@ describe('modelForProvider', () => {
     expect(modelForProvider(AgentProvider.CODEX, undefined)).toBe('gpt-5.6-sol');
     expect(modelForProvider(AgentProvider.CLAUDE, '')).toBe('claude-opus-5');
     expect(modelForProvider(AgentProvider.KIMI, undefined)).toBe('kimi-code/kimi-for-coding');
+    expect(modelForProvider(AgentProvider.OPENCODE, undefined)).toBe('');
   });
 
   it('coerces a Claude model on a Codex session to the Codex default (the reported bug)', () => {
@@ -44,5 +48,18 @@ describe('modelForProvider', () => {
   it('leaves an unknown/custom id untouched (e.g. an ANTHROPIC_MODEL endpoint override)', () => {
     expect(modelForProvider(AgentProvider.CLAUDE, 'my-proxy/llama-3')).toBe('my-proxy/llama-3');
     expect(modelForProvider(AgentProvider.CODEX, 'o4-preview')).toBe('o4-preview');
+  });
+
+  it('drops a stale bare model when an older client switches an agent to OpenCode', () => {
+    expect(modelForProvider(AgentProvider.OPENCODE, 'claude-opus-5')).toBe('');
+    expect(modelForProvider(AgentProvider.OPENCODE, 'gpt-5.6-sol')).toBe('');
+    expect(modelForProvider(AgentProvider.OPENCODE, 'anthropic/claude-sonnet-4')).toBe(
+      'anthropic/claude-sonnet-4',
+    );
+    // A namespaced id is opaque: OpenCode legitimately routes to any upstream provider,
+    // so the built-in prefix guards must not rewrite `kimi-code/…` here.
+    expect(modelForProvider(AgentProvider.OPENCODE, 'kimi-code/kimi-for-coding')).toBe(
+      'kimi-code/kimi-for-coding',
+    );
   });
 });

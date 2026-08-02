@@ -654,6 +654,10 @@ final class ConsoleModel {
                 permissionMode, for: modelID, provider: provider,
                 configured: configuredProviders)
         }
+        // OpenCode variants are model-defined, so this is the first point where a stored
+        // value can be validated against the runner catalog.
+        effort = AgentDefaults.normalizedEffort(
+            effort, for: provider, model: modelID, catalog: modelCatalog)
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
@@ -809,7 +813,7 @@ final class ConsoleModel {
                 composerText = ""
                 return
             }
-            if replyContext == nil, provider != "codex" {
+            if replyContext == nil, provider != "codex", provider != "opencode" {
                 if command.isEmpty {
                     statusMessage = "Pick a slash command before sending"
                     return
@@ -890,7 +894,10 @@ final class ConsoleModel {
                                          ResumeRequest(clientTurnId: clientTurnId, content: text,
                                                        kind: shell ? "shell" : "message",
                                                        model: modelID, permissionMode: permissionMode.rawValue,
-                                                       effort: effort.wire,
+                                                       // Resume config is authoritative. Keep the
+                                                       // empty string so Default clears a stale
+                                                       // server-side model variant.
+                                                       effort: effort.rawValue,
                                                        attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
                 // snapshot so the stream drives status again and a quick follow-up doesn't
@@ -916,7 +923,10 @@ final class ConsoleModel {
     }
 
     private func showStatusCommand() {
-        let window = AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog, configured: configuredProviders)
+        let window: Int? = provider == "opencode" && modelID.isEmpty
+            ? nil
+            : AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
+                                          configured: configuredProviders)
         let primary = planUsage?.rows.first
         let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App",
@@ -951,7 +961,7 @@ final class ConsoleModel {
         defer { sending = false }
         do {
             let session = try await api.createSession(CreateSessionRequest(
-                // Send the raw effort — "" (Default) included — not `.wire` (which omits Default):
+                // Send the raw effort — "" (Default) included:
                 // the pill is seeded from the agent's default, so an explicit Default must stick
                 // rather than fall back to the agent's effort server-side. Web parity (AgentView).
                 // Until a custom provider identity is resolved, this draft's visible model is only
@@ -1007,6 +1017,10 @@ final class ConsoleModel {
                 configured: configuredProviders)
         }
         await loadSlashItems()
+        // OpenCode variants are model-defined, so this is the first point where a stored
+        // value can be validated against the runner catalog.
+        effort = AgentDefaults.normalizedEffort(
+            effort, for: provider, model: modelID, catalog: modelCatalog)
     }
 
     func interrupt() async {

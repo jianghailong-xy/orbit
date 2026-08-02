@@ -15,6 +15,23 @@ test('extracts the runtime session id from a codex app-server init event', () =>
   );
 });
 
+test('extracts the runtime session id from the standard OpenCode init event', () => {
+  assert.equal(
+    runtimeInitSessionId([
+      {
+        type: RunEventType.SYSTEM,
+        payload: {
+          runtime: 'opencode-server',
+          subtype: 'init',
+          provider: 'opencode',
+          sessionId: 'opencode-runtime-1',
+        },
+      },
+    ]),
+    'opencode-runtime-1',
+  );
+});
+
 test('also matches a resumed event', () => {
   assert.equal(
     runtimeInitSessionId([{ type: RunEventType.SYSTEM, payload: { subtype: 'resumed', sessionId: 'rt-2' } }]),

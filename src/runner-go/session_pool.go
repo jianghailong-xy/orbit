@@ -8,7 +8,7 @@ import (
 
 // warmEngineTTL is how long an idle interactive engine is kept for a zero-startup
 // continuation. The Orbit session itself remains resumable after this expires; only
-// the local Claude/Codex process is recycled.
+// the local coding-runtime supervisor is recycled.
 const warmEngineTTL = 4 * time.Hour
 
 type poolTimer interface {
@@ -33,7 +33,7 @@ func (realPoolClock) AfterFunc(d time.Duration, f func()) poolTimer {
 // the control-plane status remains AWAITING_INPUT while both warm and cold.
 //
 // Every field below is protected by sessionPool.mu. engineGeneration identifies
-// one concrete Claude/Codex process so a late Wait from an evicted process cannot
+// one concrete runtime generation so a late Wait from an evicted process cannot
 // clear a replacement process that has already started.
 type liveSession struct {
 	id     string

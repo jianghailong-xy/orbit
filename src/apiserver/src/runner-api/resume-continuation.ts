@@ -1,10 +1,14 @@
 /**
- * run_event.type values that mean claude actually produced output for a turn — it received the
+ * run_event.type values that mean a runtime actually produced output for a turn — it received the
  * message and started working, so the message is part of the conversation a `claude --resume`
  * restores. Presence of any of these on a re-delivered message turn is the signal that it must
  * NOT be re-fed verbatim (see dequeueTurn / buildResumeContinuation).
  */
-export const CLAUDE_STARTED_EVENT_TYPES = ['assistant', 'thinking', 'tool_use'] as const;
+export const RUNTIME_STARTED_EVENT_TYPES = ['assistant', 'thinking', 'tool_use'] as const;
+
+// OpenCode's JSON stream reports tool_use only after the tool has completed. Its
+// turn-scoped step_start system event closes the side-effect replay window before that.
+export const RUNTIME_STARTED_SYSTEM_SUBTYPE = 'step_start';
 
 // Cap on how much of the interrupted message we quote back — enough to orient claude without
 // re-emphasizing a long instruction it should verify-then-continue rather than re-run.

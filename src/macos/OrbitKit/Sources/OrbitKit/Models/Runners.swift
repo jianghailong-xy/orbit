@@ -33,7 +33,7 @@ public struct SlashCommandInfo: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// One model option reported by a runner runtime. Codex entries come from `codex debug models`.
+/// One model option reported by a runner runtime. Codex and OpenCode discover these locally.
 public struct RunnerModelInfo: Codable, Equatable, Sendable, Identifiable {
     public let value: String
     public let label: String
@@ -50,28 +50,49 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public let claude: [RunnerModelInfo]?
     public let codex: [RunnerModelInfo]?
     public let kimi: [RunnerModelInfo]?
+    public let opencode: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
-                kimi: [RunnerModelInfo]? = nil) {
+                kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
+        self.opencode = opencode
     }
 
     public func models(for provider: String) -> [ModelOption]? {
         let rows: [RunnerModelInfo]?
         switch provider {
         case "codex": rows = codex
-        case "kimi":  rows = kimi
-        default:      rows = claude
+        case "kimi":     rows = kimi
+        case "opencode": rows = opencode
+        default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
         return rows.map { ModelOption(id: $0.value, name: $0.label) }
     }
 
     public func contextWindow(for id: String) -> Int? {
-        let all = (claude ?? []) + (codex ?? []) + (kimi ?? [])
+        let all = (claude ?? []) + (codex ?? []) + (kimi ?? []) + (opencode ?? [])
         return all.first { $0.value == id }?.contextWindow
+    }
+
+    /// The exact runtime-catalog row for a provider/model pair. Keeping row lookup separate from
+    /// `reasoningLevels` lets callers distinguish an unknown (possibly project-only) OpenCode model
+    /// from a known model whose authoritative variant list is empty.
+    public func modelInfo(for provider: String, model: String) -> RunnerModelInfo? {
+        let rows: [RunnerModelInfo]?
+        switch provider {
+        case "codex": rows = codex
+        case "opencode": rows = opencode
+        default: rows = claude
+        }
+        return rows?.first { $0.value == model }
+    }
+
+    public func reasoningLevels(for provider: String, model: String) -> [String]? {
+        guard provider == "opencode" else { return nil }
+        return modelInfo(for: provider, model: model)?.reasoningLevels
     }
 }
 
@@ -331,6 +352,9 @@ public extension PlanUsage {
     }
 
     func snapshot(for provider: String) -> PlanUsageSnapshot? {
+        // OpenCode may use any underlying provider and Orbit does not collect a
+        // provider-specific quota snapshot for it. Never mislabel Claude usage.
+        if provider == "opencode" { return nil }
         if provider == "codex" {
             if let codex { return codex }
             let flat = flatSnapshot

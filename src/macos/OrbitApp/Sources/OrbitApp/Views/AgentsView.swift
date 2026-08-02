@@ -458,8 +458,9 @@ struct NewSessionView: View {
         }
         // Seed the effort pill from the account default. Reactive on `defaultEffort` so a value
         // that lands after the draft was built (async `user` prime on a restored-token launch) is
-        // still adopted. Guarded on `.default` so it only fills an untouched pill — a manual pick
-        // (or one already seeded) is never clobbered. Mirrors web's me-preference seed effect.
+        // still adopted. Wait for the runner catalog first so an OpenCode model-specific variant
+        // cannot leak into a different model/runtime. An explicit agent effort — including "" —
+        // is authoritative and never falls through to this account preference (web parity).
         .task(id: defaultEffort) {
             if draft.effort == .default, let raw = defaultEffort, let e = Effort(rawValue: raw) {
                 draft.effort = AgentDefaults.normalizeEffort(e, for: draft.provider)
@@ -702,6 +703,12 @@ struct AgentFormContent: View {
     private var providerOptions: [ProviderOption] {
         AgentDefaults.providers(configured: agents.configuredProviders)
     }
+    private var effortOptions: [Effort] {
+        let options = AgentDefaults.efforts(for: provider, model: model, catalog: modelCatalog)
+        let current = AgentDefaults.normalizedEffort(
+            effort, for: provider, model: model, catalog: modelCatalog)
+        return options.contains(current) ? options : [current] + options
+    }
 
     /// Agents no longer store a model default. Resolve the model this Runtime will provide so the
     /// permission picker never offers Auto for an incompatible model.
@@ -732,7 +739,11 @@ struct AgentFormContent: View {
                         // Effort vocabularies still differ by runtime even though the default model
                         // itself now comes from the Runtime heartbeat.
                         effort = AgentDefaults.normalizeEffort(effort, for: new)
-                        if !AgentDefaults.efforts(for: new).contains(effort) { effort = .default }
+                        // OpenCode variants are model-defined, so a runtime switch has no catalog
+                        // row to validate the old value against — reset rather than carry it over.
+                        if new == "opencode" || !AgentDefaults.efforts(for: new).contains(effort) {
+                            effort = .default
+                        }
                         let nextModel = agents.effectiveDefaultModel(
                             for: new, runnerId: agent.runnerId)
                         mode = AgentDefaults.clampPermissionMode(
@@ -758,7 +769,9 @@ struct AgentFormContent: View {
                 // A new session with this agent seeds its reasoning effort from here (like
                 // permission mode); "Default" (the empty value) leaves it to the model's default.
                 Picker("Effort", selection: $effort) {
-                    ForEach(AgentDefaults.efforts(for: provider)) { Text($0.label).tag($0) }
+                    ForEach(effortOptions) {
+                        Text($0.label).tag($0)
+                    }
                 }
 
                 Toggle("Enabled", isOn: $enabled)

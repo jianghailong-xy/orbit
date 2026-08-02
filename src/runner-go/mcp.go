@@ -14,13 +14,13 @@ import (
 )
 
 // orbit mcp — a minimal Model Context Protocol server (JSON-RPC 2.0 over stdio,
-// pure stdlib) that lets an in-session Claude agent manage Orbit Tasks/TaskLists.
-// The runner injects it into each claude process via --mcp-config; claude speaks to
+// pure stdlib) that lets an in-session coding agent manage Orbit Tasks/TaskLists.
+// The runner injects it into each runtime's MCP config; the engine speaks to
 // it over stdin/stdout, so NOTHING may be printed to stdout except JSON-RPC frames —
 // all diagnostics go to stderr.
 
 // cmdMcp serves the MCP protocol until stdin closes. It reads the runner credential
-// from config.json (never from the env, so the token stays out of the claude process)
+// from config.json (never from the env, so the token stays out of the engine process)
 // and the session context from the env vars the runner injected at spawn.
 func cmdMcp() {
 	cfg := loadConfig()
@@ -880,7 +880,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
-					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | kimi | a configured provider slug. Defaults to claude."},
+					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | kimi | opencode | a configured provider slug. Defaults to claude."},
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
