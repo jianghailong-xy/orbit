@@ -10,7 +10,13 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateEnrollmentTokenDto, StartLoginDto, SubmitLoginCodeDto, UpdateRunnerDto } from './dto';
+import {
+  CreateEnrollmentTokenDto,
+  ReorderRunnersDto,
+  StartLoginDto,
+  SubmitLoginCodeDto,
+  UpdateRunnerDto,
+} from './dto';
 import { RunnersService } from './runners.service';
 
 @UseGuards(JwtAuthGuard)
@@ -21,6 +27,13 @@ export class RunnersController {
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.runners.listRunners(user.userId);
+  }
+
+  // Keep this static route before every `:id` route so Nest never interprets
+  // "reorder" as a runner id.
+  @Post('reorder')
+  reorder(@CurrentUser() user: AuthUser, @Body() dto: ReorderRunnersDto) {
+    return this.runners.reorderRunners(user.userId, dto.ids);
   }
 
   @Post('enrollment-tokens')

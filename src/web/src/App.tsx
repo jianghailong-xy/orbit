@@ -44,7 +44,10 @@ function LegacySessionRedirect() {
 function DefaultLanding() {
   const agents = useQuery(agentsQuery());
   const runners = useQuery(runnersQuery());
-  const first = agents.isSuccess ? firstOpenableAgent(agents.data) : undefined;
+  const first =
+    agents.isSuccess && runners.isFetched
+      ? firstOpenableAgent(agents.data, runners.data ?? [])
+      : undefined;
   if (first) return <Navigate to={`/agents/${encodeId(first.id)}`} replace />;
   if (!agents.isFetched || !runners.isFetched) {
     return (

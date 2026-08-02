@@ -43,7 +43,11 @@ export class RunnersService {
   async listRunners(ownerId: string) {
     const runners = await this.prisma.runner.findMany({
       where: { ownerId },
-      orderBy: { enrolledAt: 'desc' },
+      orderBy: [
+        { position: { sort: 'asc', nulls: 'last' } },
+        { enrolledAt: 'asc' },
+        { id: 'asc' },
+      ],
       select: {
         id: true,
         name: true,
@@ -55,6 +59,7 @@ export class RunnersService {
         version: true,
         lastHeartbeatAt: true,
         enrolledAt: true,
+        position: true,
         availableCommands: true,
         availableSkills: true,
         // Latest provider plan-usage snapshot; passed straight through to the UI (it
@@ -88,6 +93,50 @@ export class RunnersService {
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],
       skills: (availableSkills ?? []) as unknown as SlashCommandInfo[],
     }));
+  }
+
+  /**
+   * Persist one owner's runner order. Invalid, foreign, duplicate, and stale ids
+   * are ignored; owned runners omitted by a stale client retain their current
+   * relative order at the end of the submitted list.
+   */
+  async reorderRunners(ownerId: string, ids: string[]) {
+    const current = await this.prisma.runner.findMany({
+      where: { ownerId },
+      orderBy: [
+        { position: { sort: 'asc', nulls: 'last' } },
+        { enrolledAt: 'asc' },
+        { id: 'asc' },
+      ],
+      select: { id: true },
+    });
+    const ownedIds = new Set(current.map((runner) => runner.id));
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const id of ids) {
+      if (!ownedIds.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+    }
+    for (const { id } of current) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+    }
+
+    const ranked = ordered
+      .map((id, position) => ({ id, position }))
+      // Every concurrent reorder locks the same runner rows in the same order,
+      // preventing opposite drag requests from deadlocking one another.
+      .sort((left, right) =>
+        left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+      );
+    await this.prisma.$transaction(
+      ranked.map(({ id, position }) =>
+        this.prisma.runner.update({ where: { id }, data: { position } }),
+      ),
+    );
+    return this.listRunners(ownerId);
   }
 
   async createEnrollmentToken(ownerId: string, dto: CreateEnrollmentTokenDto) {

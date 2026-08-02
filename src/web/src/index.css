@@ -911,6 +911,7 @@ body {
   gap: 8px;
 }
 .runner-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -924,6 +925,41 @@ body {
 .runner-card:hover {
   border-color: var(--brand-border);
   box-shadow: 0 2px 8px rgba(51, 112, 255, 0.08);
+}
+.runner-card.dragging {
+  border-color: var(--brand-border);
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
+  opacity: 0.78;
+}
+.runner-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 28px;
+  margin-left: -5px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+  flex: none;
+}
+.runner-drag-handle:hover,
+.runner-drag-handle:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-2);
+  outline: none;
+}
+.runner-drag-handle:active {
+  cursor: grabbing;
+}
+.runner-drag-handle:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 .runner-dot {
   width: 9px;

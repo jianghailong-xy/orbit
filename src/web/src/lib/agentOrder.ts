@@ -1,7 +1,6 @@
-// Agent ordering, shared by the sidebar (⌘1‒9), the boot pre-warm, and the default landing so
-// that "the first agent" means the same thing everywhere. Custom drag order (`position`) first;
-// agents never dragged (position null) fall to the end, oldest-first by `createdAt` — mirroring
-// the server's ordering.
+// Base agent ordering within runner groups. Custom drag order (`position`) comes first; agents
+// never dragged (position null) fall to the end, oldest-first by `createdAt` — mirroring the
+// server. Callers then apply the persisted runner-group order where the flattened order matters.
 
 export interface OrderableAgent {
   id: string;
@@ -62,11 +61,47 @@ export function groupAgentsByRunner<T extends OrderableAgent>(agents: readonly T
   return groups;
 }
 
+export interface OrderableRunner {
+  id: string;
+}
+
+/**
+ * Apply the persisted runner order to already-grouped agents. Groups whose runner is no longer
+ * present follow the known runners in their existing order; host-level "Shared" stays last.
+ */
+export function orderAgentGroupsByRunners<T extends OrderableAgent>(
+  groups: readonly AgentGroup<T>[],
+  runners: readonly OrderableRunner[],
+): AgentGroup<T>[] {
+  const rank = new Map(runners.map((runner, index) => [runner.id, index]));
+  return groups
+    .map((group, index) => ({
+      group,
+      index,
+      rank: group.runnerId === null ? null : rank.get(group.runnerId),
+    }))
+    .sort((a, b) => {
+      if (a.rank === null) return b.rank === null ? a.index - b.index : 1;
+      if (b.rank === null) return -1;
+      if (a.rank !== undefined && b.rank !== undefined) return a.rank - b.rank;
+      if (a.rank !== undefined) return -1;
+      if (b.rank !== undefined) return 1;
+      return a.index - b.index;
+    })
+    .map(({ group }) => group);
+}
+
 /**
  * The agent the app lands on by default: the first (in sidebar order) that has a runner, so its
  * console can actually open. Config-only agents (no runner) are skipped — the same rule the
  * sidebar's `openAgent` uses.
  */
-export function firstOpenableAgent<T extends OrderableAgent>(agents: readonly T[]): T | undefined {
-  return orderAgents(agents).find((a) => agentRunnerId(a) != null);
+export function firstOpenableAgent<T extends OrderableAgent>(
+  agents: readonly T[],
+  runners: readonly OrderableRunner[] = [],
+): T | undefined {
+  const groups = groupAgentsByRunner(orderAgents(agents));
+  return orderAgentGroupsByRunners(groups, runners)
+    .flatMap((group) => group.agents)
+    .find((a) => agentRunnerId(a) != null);
 }

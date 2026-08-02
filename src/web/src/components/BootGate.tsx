@@ -102,7 +102,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // that agent; for the home route (which redirects to the first agent's console), the first
   // openable agent. A /sessions/<id> deep link resolves its runner above, so it skips this.
   const agents = useQuery({ ...agentsQuery(), enabled: warm && deep?.kind !== 'session' });
-  const homeFirst = deep ? undefined : firstOpenableAgent(agents.data ?? []);
+  const homeFirst = deep || !runners.isFetched
+    ? undefined
+    : firstOpenableAgent(agents.data ?? [], runners.data ?? []);
   const runnerId =
     deep?.kind === 'session'
       ? (sessionDetail.data?.assignedRunnerId ?? null)

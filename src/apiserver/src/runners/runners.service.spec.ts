@@ -1,0 +1,114 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { PrismaService } from '../prisma/prisma.service';
+import { RunnersService } from './runners.service';
+
+const RUNNER_ORDER = [
+  { id: 'runner-1', position: 0 },
+  { id: 'runner-2', position: 1 },
+  { id: 'runner-3', position: 2 },
+  { id: 'runner-4', position: 3 },
+];
+
+test('reorderRunners handles agentless runners, filters invalid ids, and appends omissions', async () => {
+  const positions = new Map(RUNNER_ORDER.map(({ id, position }) => [id, position]));
+  const findManyArgs: Array<Record<string, unknown>> = [];
+  const updates: Array<{ id: string; position: number }> = [];
+  const prisma = {
+    runner: {
+      findMany: async (args: Record<string, unknown>) => {
+        findManyArgs.push(args);
+        const ordered = [...RUNNER_ORDER].sort(
+          (a, b) => (positions.get(a.id) ?? 0) - (positions.get(b.id) ?? 0),
+        );
+        if ((args.select as Record<string, unknown>)?.name !== true) {
+          return ordered.map(({ id }) => ({ id }));
+        }
+        return ordered.map(({ id }) => ({
+          id,
+          name: id,
+          displayName: null,
+          hostname: null,
+          labels: [],
+          status: 'OFFLINE',
+          maxConcurrent: 1,
+          version: null,
+          lastHeartbeatAt: null,
+          enrolledAt: new Date('2026-01-01T00:00:00.000Z'),
+          position: positions.get(id),
+          availableCommands: null,
+          availableSkills: null,
+          planUsage: null,
+          modelCatalog: null,
+        }));
+      },
+      update: async (args: { where: { id: string }; data: { position: number } }) => {
+        updates.push({ id: args.where.id, position: args.data.position });
+        positions.set(args.where.id, args.data.position);
+        return { id: args.where.id, position: args.data.position };
+      },
+    },
+    session: {
+      groupBy: async () => [],
+    },
+    $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
+    // Deliberately no `agent` mock: runner ordering must not depend on querying agents.
+  } as unknown as PrismaService;
+
+  const result = await new RunnersService(prisma).reorderRunners('owner-1', [
+    'foreign-runner',
+    'runner-3',
+    'runner-3',
+    'stale-runner',
+    'runner-1',
+  ]);
+
+  assert.deepEqual(updates, [
+    { id: 'runner-1', position: 1 },
+    { id: 'runner-2', position: 2 },
+    { id: 'runner-3', position: 0 },
+    { id: 'runner-4', position: 3 },
+  ]);
+  assert.deepEqual(
+    updates.map(({ position }) => position).sort((a, b) => a - b),
+    [0, 1, 2, 3],
+  );
+  assert.deepEqual(
+    result.map(({ id }) => id),
+    ['runner-3', 'runner-1', 'runner-2', 'runner-4'],
+  );
+  assert.deepEqual(findManyArgs[0], {
+    where: { ownerId: 'owner-1' },
+    orderBy: [
+      { position: { sort: 'asc', nulls: 'last' } },
+      { enrolledAt: 'asc' },
+      { id: 'asc' },
+    ],
+    select: { id: true },
+  });
+  assert.deepEqual(findManyArgs[1], {
+    where: { ownerId: 'owner-1' },
+    orderBy: [
+      { position: { sort: 'asc', nulls: 'last' } },
+      { enrolledAt: 'asc' },
+      { id: 'asc' },
+    ],
+    select: {
+      id: true,
+      name: true,
+      displayName: true,
+      hostname: true,
+      labels: true,
+      status: true,
+      maxConcurrent: true,
+      version: true,
+      lastHeartbeatAt: true,
+      enrolledAt: true,
+      position: true,
+      availableCommands: true,
+      availableSkills: true,
+      planUsage: true,
+      modelCatalog: true,
+    },
+  });
+});

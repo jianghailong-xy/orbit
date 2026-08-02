@@ -151,6 +151,9 @@ model Runner {
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
   enrolledAt        DateTime     @default(now()) @map("enrolled_at")
+  // User-defined display order shared by the sidebar and Runners page. NULL keeps
+  // newly enrolled runners after explicitly positioned ones until the next reorder.
+  position          Int?         @map("position")
   // Slash commands / skills the runner discovered on its disk, reported via
   // heartbeat and surfaced to the web composer's `/` autocomplete. Arrays of
   // { name, description?, type? } (mirrors @orbit/shared SlashCommandInfo).

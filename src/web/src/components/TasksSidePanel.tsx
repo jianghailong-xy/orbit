@@ -21,7 +21,12 @@ import { api, clearToken, logoutSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
-import { orderAgents, groupAgentsByRunner, type AgentGroup } from '../lib/agentOrder';
+import {
+  groupAgentsByRunner,
+  orderAgentGroupsByRunners,
+  orderAgents,
+  type AgentGroup,
+} from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { sessionRunStatusOf } from '../lib/sessionState';
@@ -52,6 +57,8 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
+  // Persisted order of runner groups/cards; null until assigned by migration or a reorder.
+  position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
   // Extra fields returned by GET /runners, shown read-only on the runner detail page.
@@ -219,15 +226,34 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     window.addEventListener('mouseup', onUp);
   };
 
+  // Runners carry both their persisted display order and the computed `online` flag. Poll on the
+  // same 15s cadence as the Runners page so ordering and status stay in sync while the sidebar is up.
+  const runners = useQuery({
+    queryKey: ['runners'],
+    queryFn: () => api<Runner[]>('/runners'),
+    refetchInterval: 15_000,
+  });
+  const onlineRunnerIds = new Set((runners.data ?? []).filter((r) => r.online).map((r) => r.id));
+  // Runner id → display name (displayName || name), matching how the rest of the app labels a
+  // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
+  const runnerLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
+    return m;
+  }, [runners.data]);
+
   // The "Agents" list is the user's agent definitions (model + tools).
   const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
-  // Sidebar display order — shared with the boot pre-warm and the default landing so "the first
-  // agent" means the same thing everywhere. ⌘1‒9 (and ⌘N's fallback) map to this order.
+  // Base agent order; the runner-group order is applied below. Within each group, custom Agent
+  // positions still drive the rows before the flattened ⌘1‒9 order is calculated.
   const agentList = useMemo(() => orderAgents(agents.data ?? []), [agents.data]);
   // Agents grouped by their machine (runner), mirroring the iOS/macOS drawer: each runner is a
   // collapsible header and host-level agents sink to a "Shared" group. ⌘1‒9 index into the flattened
   // grouped order, so the shortcut number and the on-screen position stay in lockstep.
-  const agentGroups = useMemo(() => groupAgentsByRunner(agentList), [agentList]);
+  const agentGroups = useMemo(
+    () => orderAgentGroupsByRunners(groupAgentsByRunner(agentList), runners.data ?? []),
+    [agentList, runners.data],
+  );
   const orderedAgents = useMemo(() => agentGroups.flatMap((g) => g.agents), [agentGroups]);
   const agentOrderIndex = useMemo(
     () => new Map(orderedAgents.map((a, i) => [a.id, i])),
@@ -277,23 +303,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     }
     return { activeLists: active, completedLists: completed };
   }, [taskLists.data]);
-
-  // Runners carry the computed `online` flag (set when their heartbeat is fresh).
-  // An agent's dot turns green when its machine is online; poll on the same 15s
-  // cadence as the Runners page so the status stays live while the sidebar is up.
-  const runners = useQuery({
-    queryKey: ['runners'],
-    queryFn: () => api<Runner[]>('/runners'),
-    refetchInterval: 15_000,
-  });
-  const onlineRunnerIds = new Set((runners.data ?? []).filter((r) => r.online).map((r) => r.id));
-  // Runner id → display name (displayName || name), matching how the rest of the app labels a
-  // machine. Reuses the already-loaded ['runners'] cache, so the group headers cost no extra request.
-  const runnerLabels = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
-    return m;
-  }, [runners.data]);
 
   // Task count for the "No list" bucket. Ask the paged endpoint for one row plus the
   // aggregate instead of downloading every unlisted task into the sidebar.

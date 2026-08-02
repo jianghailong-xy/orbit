@@ -1,4 +1,15 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import type { LoginEngine } from '@orbit/shared';
 
 export class CreateEnrollmentTokenDto {
@@ -12,6 +23,12 @@ export class UpdateRunnerDto {
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
   // 1 (0 would stall the runner); 64 is a sanity ceiling against a fat-fingered value.
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+}
+
+// The requested runner order. The service filters this list against the caller's
+// current runners and appends omitted runners, so stale clients cannot drop rows.
+export class ReorderRunnersDto {
+  @IsArray() @IsString({ each: true }) @ArrayUnique() ids!: string[];
 }
 
 /** The authorization code the user pasted back from the hosted OAuth callback page. */

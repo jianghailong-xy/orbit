@@ -3,14 +3,32 @@ import {
   CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  HolderOutlined,
   KeyOutlined,
   MoreOutlined,
   PlusOutlined,
   RightOutlined,
 } from '@ant-design/icons';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } from 'antd';
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
@@ -41,6 +59,10 @@ export function RunnersPage() {
   const { modal } = AntdApp.useApp();
   const message = useToast();
   const qc = useQueryClient();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const runners = useQuery({
     queryKey: ['runners'],
@@ -82,6 +104,35 @@ export function RunnersPage() {
     onError: (e: Error) => message.error(e.message || 'Rotate failed'),
   });
 
+  const reorderMut = useMutation({
+    mutationFn: (ids: string[]) =>
+      api<Runner[]>('/runners/reorder', { method: 'POST', body: { ids } }),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: ['runners'] });
+      const previous = qc.getQueryData<Runner[]>(['runners']);
+      if (previous) {
+        const rank = new Map(ids.map((id, index) => [id, index]));
+        qc.setQueryData<Runner[]>(
+          ['runners'],
+          [...previous]
+            .sort(
+              (a, b) =>
+                (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+                (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+            )
+            .map((runner, position) => ({ ...runner, position })),
+        );
+      }
+      return { previous };
+    },
+    onError: (e: Error, _ids, context) => {
+      if (context?.previous) qc.setQueryData(['runners'], context.previous);
+      message.error(e.message || 'Reorder failed');
+    },
+    onSuccess: (data) => qc.setQueryData(['runners'], data),
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
+  });
+
   const submitRename = () => {
     if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
   };
@@ -96,6 +147,14 @@ export function RunnersPage() {
   };
 
   const open = (r: Runner) => navigate(`/runners/${encodeId(r.id)}`);
+
+  const onDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id || reorderMut.isPending) return;
+    const oldIndex = list.findIndex((runner) => runner.id === active.id);
+    const newIndex = list.findIndex((runner) => runner.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    reorderMut.mutate(arrayMove(list, oldIndex, newIndex).map((runner) => runner.id));
+  };
 
   const menu = (r: Runner): MenuProps['items'] => [
     {
@@ -168,69 +227,26 @@ export function RunnersPage() {
           <div style={{ marginTop: 16 }}>{registerBtn}</div>
         </div>
       ) : (
-        <div className="runners-list">
-          {list.map((r) => {
-            const state = !r.online ? 'offline' : r.status === 'DRAINING' ? 'draining' : 'online';
-            const dotColor =
-              state === 'online' ? 'var(--success-solid)' : state === 'draining' ? 'var(--warning-solid)' : 'var(--dot-idle)';
-            const stateLabel =
-              state === 'online' ? 'Online' : state === 'draining' ? 'Draining' : 'Offline';
-            const max = r.maxConcurrent ?? 0;
-            const active = r.activeSessions ?? 0;
-            const showUtil = state !== 'offline' && max > 0;
-            const tags = [r.hostname, r.labels?.length ? r.labels.join(', ') : null]
-              .filter(Boolean)
-              .join(' · ');
-            return (
-              <div
-                key={r.id}
-                className={`runner-card ${menuOpenId === r.id ? 'menu-open' : ''}`}
-                onClick={() => open(r)}
-              >
-                <span className="runner-dot" style={{ background: dotColor }} title={stateLabel} />
-                <div className="runner-meta">
-                  <div className="runner-name">{r.displayName || r.name}</div>
-                  <div className="runner-sub">
-                    {showUtil
-                      ? `${stateLabel} · ${active} / ${max} running`
-                      : r.lastHeartbeatAt
-                        ? `${stateLabel} · last seen ${fmtAgo(r.lastHeartbeatAt)}`
-                        : stateLabel}
-                  </div>
-                  {showUtil && (
-                    <div
-                      className={`runner-util ${active >= max ? 'full' : ''}`}
-                      title={`${active} of ${max} slots in use`}
-                    >
-                      <span
-                        className="runner-util-fill"
-                        style={{ width: `${Math.min(100, (active / max) * 100)}%` }}
-                      />
-                    </div>
-                  )}
-                  {tags && <div className="runner-tags">{tags}</div>}
-                </div>
-                {r.version && <span className="runner-version">{r.version}</span>}
-                <Dropdown
-                  trigger={['click']}
-                  placement="bottomRight"
-                  open={menuOpenId === r.id}
-                  onOpenChange={(o) => setMenuOpenId(o ? r.id : null)}
-                  menu={{ items: menu(r) }}
-                >
-                  <span
-                    className="runner-kebab"
-                    title="More actions"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreOutlined />
-                  </span>
-                </Dropdown>
-                <RightOutlined className="runner-chevron" />
-              </div>
-            );
-          })}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext
+            items={list.map((runner) => runner.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="runners-list">
+              {list.map((runner) => (
+                <SortableRunnerCard
+                  key={runner.id}
+                  runner={runner}
+                  menuItems={menu(runner)}
+                  menuOpen={menuOpenId === runner.id}
+                  dragDisabled={reorderMut.isPending}
+                  onOpen={() => open(runner)}
+                  onMenuOpenChange={(open) => setMenuOpenId(open ? runner.id : null)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <Modal
@@ -281,5 +297,113 @@ export function RunnersPage() {
         </Button>
       </Modal>
     </>
+  );
+}
+
+function SortableRunnerCard({
+  runner,
+  menuItems,
+  menuOpen,
+  dragDisabled,
+  onOpen,
+  onMenuOpenChange,
+}: {
+  runner: Runner;
+  menuItems: MenuProps['items'];
+  menuOpen: boolean;
+  dragDisabled: boolean;
+  onOpen: () => void;
+  onMenuOpenChange: (open: boolean) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setActivatorNodeRef,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: runner.id, disabled: dragDisabled });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 1 : undefined,
+  };
+  const state = !runner.online
+    ? 'offline'
+    : runner.status === 'DRAINING'
+      ? 'draining'
+      : 'online';
+  const dotColor =
+    state === 'online'
+      ? 'var(--success-solid)'
+      : state === 'draining'
+        ? 'var(--warning-solid)'
+        : 'var(--dot-idle)';
+  const stateLabel = state === 'online' ? 'Online' : state === 'draining' ? 'Draining' : 'Offline';
+  const max = runner.maxConcurrent ?? 0;
+  const active = runner.activeSessions ?? 0;
+  const showUtil = state !== 'offline' && max > 0;
+  const tags = [runner.hostname, runner.labels?.length ? runner.labels.join(', ') : null]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`runner-card ${menuOpen ? 'menu-open' : ''} ${isDragging ? 'dragging' : ''}`}
+      onClick={onOpen}
+    >
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        className="runner-drag-handle"
+        title="Drag to reorder"
+        aria-label={`Reorder ${runner.displayName || runner.name}`}
+        disabled={dragDisabled}
+        onClick={(event) => event.stopPropagation()}
+        {...attributes}
+        {...listeners}
+      >
+        <HolderOutlined />
+      </button>
+      <span className="runner-dot" style={{ background: dotColor }} title={stateLabel} />
+      <div className="runner-meta">
+        <div className="runner-name">{runner.displayName || runner.name}</div>
+        <div className="runner-sub">
+          {showUtil
+            ? `${stateLabel} · ${active} / ${max} running`
+            : runner.lastHeartbeatAt
+              ? `${stateLabel} · last seen ${fmtAgo(runner.lastHeartbeatAt)}`
+              : stateLabel}
+        </div>
+        {showUtil && (
+          <div
+            className={`runner-util ${active >= max ? 'full' : ''}`}
+            title={`${active} of ${max} slots in use`}
+          >
+            <span
+              className="runner-util-fill"
+              style={{ width: `${Math.min(100, (active / max) * 100)}%` }}
+            />
+          </div>
+        )}
+        {tags && <div className="runner-tags">{tags}</div>}
+      </div>
+      {runner.version && <span className="runner-version">{runner.version}</span>}
+      <Dropdown
+        trigger={['click']}
+        placement="bottomRight"
+        open={menuOpen}
+        onOpenChange={onMenuOpenChange}
+        menu={{ items: menuItems }}
+      >
+        <span className="runner-kebab" title="More actions" onClick={(e) => e.stopPropagation()}>
+          <MoreOutlined />
+        </span>
+      </Dropdown>
+      <RightOutlined className="runner-chevron" />
+    </div>
   );
 }
