@@ -348,7 +348,6 @@ private struct TaskListsDirectoryView: View {
         List {
             if normalizedQuery.isEmpty {
                 Section {
-                    scopeRow(.all, title: "All Tasks", count: nil, systemImage: "checklist")
                     scopeRow(.unlisted, title: "No List", count: tasks.unlistedCount,
                              systemImage: "tray")
                 }
