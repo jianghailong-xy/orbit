@@ -352,8 +352,9 @@ private struct NavigationDrawer: View {
     /// Guards the one-time seed of the selected agent's machine, so a later agent list reload doesn't
     /// re-open a group the user has since collapsed.
     @State private var didSeedExpansion = false
-    /// Completed task lists are intentionally collapsed by default, matching the Web sidebar.
-    @State private var completedTaskListsExpanded = false
+    /// The drawer is a quick switcher, not the full task-list directory. Four rows preserve room
+    /// for machines and Recents on a compact screen; the directory page owns the complete set.
+    private let taskListPreviewLimit = 4
 
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
@@ -455,6 +456,7 @@ private struct NavigationDrawer: View {
         return Button {
             if section == .tasks {
                 model.selectedTaskID = nil
+                model.taskListsDirectoryPresented = false
                 model.tasks?.selectScope(.all)
             }
             model.selectedSection = section
@@ -478,9 +480,10 @@ private struct NavigationDrawer: View {
 
     // MARK: Task lists
 
-    /// Web's task IA: No list is a peer destination, active named lists stay visible, and fully
-    /// completed lists fold into a separate disclosure. A generic All Tasks row is retained only
-    /// as a fallback when there is no task navigation data (and for older control planes).
+    /// Compact task IA: No list remains a peer destination, while named lists are capped to a
+    /// four-row quick-switch preview. The current list is kept visible even when it falls
+    /// outside the newest four; every list (including completed ones) lives on the searchable
+    /// directory page reached by View All. A generic Tasks row remains as the empty-data fallback.
     @ViewBuilder
     private var taskRows: some View {
         if let tasks = model.tasks {
@@ -489,29 +492,14 @@ private struct NavigationDrawer: View {
                              systemImage: "tray")
             }
 
-            if !tasks.activeLists.isEmpty {
-                drawerGroupLabel("Task List", count: tasks.activeLists.count)
-                ForEach(tasks.activeLists) { list in taskListRow(list, completed: false) }
-            }
-
-            if !tasks.completedLists.isEmpty {
-                Button { completedTaskListsExpanded.toggle() } label: {
-                    pill(selected: false) {
-                        HStack(spacing: 8) {
-                            Text("Completed").font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text("\(tasks.completedLists.count)")
-                                .font(.orbitMeta).foregroundStyle(.secondary)
-                            Image(systemName: completedTaskListsExpanded ? "chevron.down" : "chevron.right")
-                                .font(.orbitMeta).foregroundStyle(.tertiary)
-                            Spacer(minLength: 0)
-                        }
-                    }
+            if !tasks.lists.isEmpty {
+                let preview = taskListPreview(tasks)
+                drawerGroupLabel("Task Lists", count: tasks.lists.count)
+                ForEach(preview) { list in
+                    taskListRow(list, completed: TaskListLogic.listIsCompleted(list))
                 }
-                .buttonStyle(.plain)
-                .drawerRow()
-                if completedTaskListsExpanded {
-                    ForEach(tasks.completedLists) { list in taskListRow(list, completed: true) }
+                if tasks.lists.count > preview.count {
+                    allTaskListsRow
                 }
             }
 
@@ -519,6 +507,37 @@ private struct NavigationDrawer: View {
                 sectionRow(.tasks)
             }
         }
+    }
+
+    /// Preserve recency (the server returns newest first), but replace the last preview slot with
+    /// the selected list when needed so reopening the drawer never hides your current context.
+    private func taskListPreview(_ tasks: TasksModel) -> [TaskListSummary] {
+        let active = tasks.activeLists
+        var preview = Array(active.prefix(taskListPreviewLimit))
+        guard case .list(let selectedID) = tasks.scope,
+              let selected = tasks.lists.first(where: { $0.id == selectedID }),
+              !preview.contains(where: { $0.id == selectedID }) else { return preview }
+        if preview.count == taskListPreviewLimit { preview.removeLast() }
+        preview.append(selected)
+        return preview
+    }
+
+    private var allTaskListsRow: some View {
+        Button { openTaskListsDirectory() } label: {
+            pill(selected: model.taskListsDirectoryPresented, indent: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "ellipsis").frame(width: 8)
+                        .foregroundStyle(.secondary)
+                    Text("View All Lists").foregroundStyle(.primary)
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.forward")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
     }
 
     private func drawerGroupLabel(_ title: String, count: Int) -> some View {
@@ -583,8 +602,16 @@ private struct NavigationDrawer: View {
 
     private func openTaskScope(_ scope: TaskScope) {
         model.selectedTaskID = nil
+        model.taskListsDirectoryPresented = false
         model.tasks?.selectScope(scope)
         model.selectedSection = .tasks
+        close()
+    }
+
+    private func openTaskListsDirectory() {
+        model.selectedTaskID = nil
+        model.selectedSection = .tasks
+        model.taskListsDirectoryPresented = true
         close()
     }
 

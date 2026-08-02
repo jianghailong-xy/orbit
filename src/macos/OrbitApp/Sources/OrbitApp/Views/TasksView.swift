@@ -25,6 +25,11 @@ struct TasksListView: View {
             }
             .navigationTitle(tasks.scopeTitle)
             .searchable(text: $tasks.searchText, prompt: "Search tasks")
+            #if os(iOS)
+            .navigationDestination(isPresented: $model.taskListsDirectoryPresented) {
+                TaskListsDirectoryView(tasks: tasks)
+            }
+            #endif
             .task { await navigationRefreshLoop(tasks) }
             .task(id: tasks.queryKey) { await listRefreshLoop(tasks) }
             .confirmationDialog("Delete this task?", isPresented: deletePresented,
@@ -330,6 +335,141 @@ struct TasksListView: View {
         }
     }
 }
+
+#if os(iOS)
+/// The complete task-list directory lives one level deeper than the drawer. This keeps the drawer
+/// useful as a quick switcher while giving large workspaces a native searchable, grouped surface.
+private struct TaskListsDirectoryView: View {
+    @Environment(AppModel.self) private var model
+    let tasks: TasksModel
+    @State private var query = ""
+
+    var body: some View {
+        List {
+            if normalizedQuery.isEmpty {
+                Section {
+                    scopeRow(.all, title: "All Tasks", count: nil, systemImage: "checklist")
+                    scopeRow(.unlisted, title: "No List", count: tasks.unlistedCount,
+                             systemImage: "tray")
+                }
+            }
+
+            if !matchingActiveLists.isEmpty {
+                Section("Active") {
+                    ForEach(matchingActiveLists) { list in listRow(list, completed: false) }
+                }
+            }
+
+            if !matchingCompletedLists.isEmpty {
+                Section("Completed") {
+                    ForEach(matchingCompletedLists) { list in listRow(list, completed: true) }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("Task Lists")
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $query, prompt: "Search lists")
+        .refreshable { await tasks.loadNavigation() }
+        .overlay {
+            if !normalizedQuery.isEmpty
+                && matchingActiveLists.isEmpty
+                && matchingCompletedLists.isEmpty {
+                ContentUnavailableView(
+                    "No Matching Lists",
+                    systemImage: "magnifyingglass",
+                    description: Text("No task list matches “\(normalizedQuery)”.")
+                )
+            }
+        }
+        .task {
+            if tasks.lists.isEmpty { await tasks.loadNavigation() }
+        }
+    }
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var matchingActiveLists: [TaskListSummary] {
+        matching(tasks.activeLists)
+    }
+
+    private var matchingCompletedLists: [TaskListSummary] {
+        matching(tasks.completedLists)
+    }
+
+    private func matching(_ lists: [TaskListSummary]) -> [TaskListSummary] {
+        guard !normalizedQuery.isEmpty else { return lists }
+        return lists.filter { $0.title.localizedCaseInsensitiveContains(normalizedQuery) }
+    }
+
+    private func scopeRow(_ scope: TaskScope, title: String, count: Int?,
+                          systemImage: String) -> some View {
+        Button { open(scope) } label: {
+            HStack(spacing: 12) {
+                Label(title, systemImage: systemImage)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                if let count {
+                    Text("\(count)").font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                if tasks.scope == scope {
+                    Image(systemName: "checkmark")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func listRow(_ list: TaskListSummary, completed: Bool) -> some View {
+        let running = (list.runningTasks ?? 0) > 0
+        let selected = tasks.scope == .list(list.id)
+        return Button { open(.list(list.id)) } label: {
+            HStack(spacing: 12) {
+                Group {
+                    if running {
+                        ProgressView().controlSize(.mini).tint(.blue)
+                    } else {
+                        Image(systemName: completed ? "checkmark.circle.fill" : "circle.fill")
+                            .font(.orbitMeta)
+                            .foregroundStyle(completed ? Color.green : Color.secondary.opacity(0.5))
+                    }
+                }
+                .frame(width: 20)
+
+                Text(list.title)
+                    .lineLimit(1)
+                    .foregroundStyle(completed ? .secondary : .primary)
+                Spacer(minLength: 8)
+                Text("\(list.taskCount)")
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue("\(list.taskCount) tasks"
+                            + (running ? ", running" : completed ? ", completed" : ""))
+    }
+
+    private func open(_ scope: TaskScope) {
+        model.selectedTaskID = nil
+        tasks.selectScope(scope)
+        model.taskListsDirectoryPresented = false
+    }
+}
+#endif
 
 private struct TaskProgressSummary: View {
     let overview: TaskOverview

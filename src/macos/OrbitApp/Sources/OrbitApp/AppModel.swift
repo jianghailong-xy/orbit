@@ -34,8 +34,11 @@ final class AppModel {
     // list loads — see `loadAgentsThenLand`.
     var selectedSection: AppSection = .agents {
         // Switching sections tears down the other stacks (compact renders one at a time); drop the
-        // in-Settings Runners push so Settings reads as "at root" again when you return to it.
-        didSet { if selectedSection != .settings { settingsShowingRunners = false } }
+        // section-specific pushes so each section reads as "at root" again when you return to it.
+        didSet {
+            if selectedSection != .settings { settingsShowingRunners = false }
+            if selectedSection != .tasks { taskListsDirectoryPresented = false }
+        }
     }
     /// Latches the one-shot default-landing resolution so it runs only after the first agent-list
     /// load, and never overrides a later user/deep-link choice.
@@ -49,6 +52,10 @@ final class AppModel {
         }
     }
     var selectedRunnerID: String?
+    /// iOS only: whether Tasks has pushed the searchable directory of every named task list.
+    /// The drawer shows only a compact preview; this state also tells the shell to leave the
+    /// leading edge to the system back-swipe while the directory page is visible.
+    var taskListsDirectoryPresented = false
     /// iOS only: whether Settings has pushed its Runners sub-page (Runners was moved off the drawer
     /// rail into Settings). Drives the `.settings` branch of `sectionAtRoot` so the pushed runner
     /// pages yield the screen edge to the system back-swipe.
@@ -755,7 +762,7 @@ final class AppModel {
     /// edge for the system back-swipe.
     var sectionAtRoot: Bool {
         switch selectedSection {
-        case .tasks:   return selectedTaskID == nil
+        case .tasks:   return selectedTaskID == nil && !taskListsDirectoryPresented
         // The compose page (composing) is pushed too, not just a selected session's console — so the
         // agents stack is at root only when neither is up, leaving the edge to the system back-swipe.
         case .agents:  return selectedAgentSessionID == nil && !composingAgentSession
@@ -994,6 +1001,7 @@ final class AppModel {
         case .task(let id):
             // A deep link or dependency jump may target a task outside the currently selected
             // named list. Aggregate scope guarantees the row and detail can resolve together.
+            taskListsDirectoryPresented = false
             tasks?.selectScope(.all)
             tasks?.filter = .all
             tasks?.searchText = ""

@@ -201,7 +201,8 @@ final class TasksModel {
     }
 
     /// Navigation data is independent from the open list query: task-list summaries feed the
-    /// Active/Completed drawer groups, while a one-row page supplies the No-list aggregate count.
+    /// drawer preview and searchable Active/Completed directory, while a one-row page supplies
+    /// the No-list aggregate count.
     func loadNavigation() async {
         navigationGeneration &+= 1
         let generation = navigationGeneration
