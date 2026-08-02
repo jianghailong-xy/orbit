@@ -179,6 +179,10 @@ export interface RunnerModelInfo {
 /** Models a runner says its local runtimes can use. Keys are provider ids. */
 export type RunnerModelCatalog = Partial<Record<AgentProvider, RunnerModelInfo[]>>;
 
+/** Effective default model reported by each built-in runtime on one runner heartbeat. This is
+ *  read-only capability state; user selections are persisted on Session instead. */
+export type RuntimeDefaultModels = Partial<Record<AgentProvider, string>>;
+
 /** One rate-limit window from a provider quota snapshot. Claude reports named
  *  5-hour / weekly windows; Codex reports primary / secondary windows. */
 export interface PlanUsageWindow {
@@ -263,6 +267,9 @@ export interface RunnerHeartbeatRequest {
   planUsage?: PlanUsage;
   /** Runtime model catalog reported by this runner. Absent on older runners. */
   modelCatalog?: RunnerModelCatalog;
+  /** Effective defaults reported by local runtimes. Absent on older runners; an explicit empty
+   *  object means no runtime currently exposes a default and replaces the previous snapshot. */
+  runtimeDefaultModels?: RuntimeDefaultModels;
   /** Live worktree state for each session supervised by this runner, including an
    *  AWAITING_INPUT session whose runtime is warm or has gone cold. Absent from older
    *  runners (the bar then waits for the first turn-complete as before). */

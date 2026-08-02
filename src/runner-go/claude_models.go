@@ -3,7 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -48,9 +52,17 @@ func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 func resolveClaudeModelName(ctx context.Context, alias string) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	// `/model` is a client-side slash command (no LLM call, no token cost); it just echoes the
-	// resolved model for the (ephemeral) `-p` session.
-	out, err := exec.CommandContext(cctx, "claude", "-p", "/model "+alias).CombinedOutput()
+	// Recent Claude Code versions resolve `/model` client-side. Any unsupported/failed invocation
+	// is treated as a catalog refresh failure, leaving the runner's previous catalog untouched.
+	out, err := exec.CommandContext(
+		cctx,
+		"claude",
+		"-p",
+		"--no-session-persistence",
+		"--setting-sources",
+		"user",
+		"/model "+alias,
+	).CombinedOutput()
 	if err != nil {
 		return "", err
 	}
@@ -67,6 +79,42 @@ func parseSetModelName(out []byte) string {
 		return ""
 	}
 	return strings.TrimSpace(string(m[1]))
+}
+
+// fetchClaudeDefaultModel reads Claude Code's user-owned setting instead of launching a probe
+// session. Besides avoiding hooks/plugins/MCP side effects, this preserves exact CLI-accepted
+// aliases such as `opus[1m]`, `opusplan`, `best`, and gateway-specific model ids.
+func fetchClaudeDefaultModel() (string, error) {
+	if model := strings.TrimSpace(os.Getenv("ANTHROPIC_MODEL")); model != "" {
+		return model, nil
+	}
+	dir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR"))
+	if dir == "" {
+		if home := userHome(); home != "" {
+			dir = filepath.Join(home, ".claude")
+		}
+	}
+	if dir == "" {
+		return "", nil
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var settings struct {
+		Model string            `json:"model"`
+		Env   map[string]string `json:"env"`
+	}
+	if err := json.Unmarshal(b, &settings); err != nil {
+		return "", err
+	}
+	if model := strings.TrimSpace(settings.Env["ANTHROPIC_MODEL"]); model != "" {
+		return model, nil
+	}
+	return strings.TrimSpace(settings.Model), nil
 }
 
 // claudeModelID derives the api model id from a friendly name, matching Anthropic's id scheme:

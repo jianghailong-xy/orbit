@@ -9,6 +9,7 @@ final class RunnerWriteCodableTests: XCTestCase {
         let json = """
         {"id":"r1","name":"wikova","displayName":"Wikova","status":"ONLINE","online":true,
          "version":"0.1.34","maxConcurrent":8,
+         "runtimeDefaultModels":{"claude":"claude-opus-5","codex":"gpt-5.6-sol"},
          "skills":[{"name":"deep-research","description":"fan-out research","type":"skill","agentId":"a1"}],
          "commands":[{"name":"commit","description":"smart commit","type":"command","provider":"kimi"}]}
         """
@@ -19,6 +20,8 @@ final class RunnerWriteCodableTests: XCTestCase {
         XCTAssertEqual(r.skills?.first?.agentId, "a1")            // project-scoped
         XCTAssertNil(r.commands?.first?.agentId)                  // host-level
         XCTAssertEqual(r.commands?.first?.name, "commit")
+        XCTAssertEqual(r.runtimeDefaultModels?["claude"], "claude-opus-5")
+        XCTAssertEqual(r.runtimeDefaultModels?["codex"], "gpt-5.6-sol")
         XCTAssertNil(r.skills?.first?.provider)                   // legacy Claude payload
         XCTAssertEqual(r.commands?.first?.provider, "kimi")
         // Identity is stable & distinguishes provider plus host/agent scope.
@@ -31,6 +34,7 @@ final class RunnerWriteCodableTests: XCTestCase {
         let r = try JSONDecoder().decode(Runner.self, from: Data(#"{"id":"r1","name":"box"}"#.utf8))
         XCTAssertNil(r.skills)
         XCTAssertNil(r.displayName)
+        XCTAssertNil(r.runtimeDefaultModels)
     }
 
     func testUpdateRunnerEncoding() throws {

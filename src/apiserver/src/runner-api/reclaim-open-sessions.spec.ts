@@ -38,9 +38,11 @@ test('runner restart reclaims every open session so cold checkouts remain protec
   });
 });
 
-test('reclaim is a read-only snapshot with lifecycle status and the expected lease owner', async () => {
+test('reclaim preserves lease state and snapshots an inherited runtime model once', async () => {
   const sessionId = '11111111-1111-4111-8111-111111111111';
   let transactionCalls = 0;
+  let storedModel: string | null = null;
+  const modelWrites: string[] = [];
   const prisma = {
     session: {
       findMany: async () => [
@@ -50,7 +52,7 @@ test('reclaim is a read-only snapshot with lifecycle status and the expected lea
           status: RunStatus.AWAITING_INPUT,
           provider: 'codex',
           providerBuiltin: true,
-          model: null,
+          model: storedModel,
           permissionMode: null,
           effort: null,
           title: 'idle session',
@@ -62,14 +64,25 @@ test('reclaim is a read-only snapshot with lifecycle status and the expected lea
           agentId: null,
           taskId: null,
           agent: null,
+          assignedRunner: {
+            runtimeDefaultModels: { codex: 'gpt-runtime-default' },
+            modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+          },
         },
       ],
+      findUniqueOrThrow: async () => ({ model: storedModel }),
     },
     user: { findUnique: async () => null },
     runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
     $transaction: async () => {
       transactionCalls += 1;
       throw new Error('reclaim must not mutate lease state');
+    },
+    $executeRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (storedModel !== null) return 0;
+      storedModel = values[0] as string;
+      modelWrites.push(storedModel);
+      return 1;
     },
   } as never;
   const controller = new RunnerApiController(
@@ -92,6 +105,59 @@ test('reclaim is a read-only snapshot with lifecycle status and the expected lea
   assert.equal(first.sessions[0]?.sessionId, sessionId);
   assert.equal(first.sessions[0]?.status, RunStatus.AWAITING_INPUT);
   assert.equal(first.sessions[0]?.leaseOwner, LEASE_OWNER);
+  assert.equal(first.sessions[0]?.agent.model, 'gpt-runtime-default');
   assert.deepEqual(delayedRetry, first);
   assert.equal(transactionCalls, 0);
+  assert.deepEqual(modelWrites, ['gpt-runtime-default']);
+});
+
+test('a concurrent Session model edit wins reclaim materialization', async () => {
+  const sessionId = '11111111-1111-4111-8111-111111111111';
+  const prisma = {
+    session: {
+      findMany: async () => [
+        {
+          id: sessionId,
+          ownerId: '22222222-2222-4222-8222-222222222222',
+          status: RunStatus.AWAITING_INPUT,
+          provider: 'codex',
+          providerBuiltin: true,
+          model: null,
+          permissionMode: null,
+          effort: null,
+          title: 'edited session',
+          runtimeSessionId: null,
+          claudeSessionId: null,
+          inboxLeaseOwner: LEASE_OWNER,
+          branch: null,
+          mergeTarget: null,
+          agentId: null,
+          taskId: null,
+          agent: null,
+          assignedRunner: {
+            runtimeDefaultModels: { codex: 'gpt-runtime-default' },
+            modelCatalog: null,
+          },
+        },
+      ],
+      findUniqueOrThrow: async () => ({ model: 'gpt-user-choice' }),
+    },
+    user: { findUnique: async () => null },
+    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    $executeRaw: async () => 0,
+  } as never;
+  const controller = new RunnerApiController(
+    prisma,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  const result = await controller.reclaim({
+    id: '33333333-3333-4333-8333-333333333333',
+    ownerId: '22222222-2222-4222-8222-222222222222',
+  });
+
+  assert.equal(result.sessions[0]?.agent.model, 'gpt-user-choice');
 });

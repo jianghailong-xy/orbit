@@ -328,6 +328,8 @@ func TestKimiWriterQueuesPromptAndCancelWithoutBlockingMainLoop(t *testing.T) {
 }
 
 func TestKimiUsesEnvModelRequiresCompleteOverride(t *testing.T) {
+	t.Setenv("KIMI_MODEL_NAME", "")
+	t.Setenv("KIMI_MODEL_API_KEY", "")
 	if !kimiUsesEnvModel(map[string]string{
 		"KIMI_MODEL_NAME": "kimi-for-coding", "KIMI_MODEL_API_KEY": "sk-test",
 	}) {
@@ -335,6 +337,31 @@ func TestKimiUsesEnvModelRequiresCompleteOverride(t *testing.T) {
 	}
 	if kimiUsesEnvModel(map[string]string{"KIMI_MODEL_API_KEY": "sk-test"}) {
 		t.Fatal("API key alone must not activate Kimi's environment model")
+	}
+}
+
+func TestKimiUsesEnvModelLayersAgentEnvironmentOverProcess(t *testing.T) {
+	t.Setenv("KIMI_MODEL_NAME", "process-model")
+	t.Setenv("KIMI_MODEL_API_KEY", "process-key")
+	if !kimiUsesEnvModel(nil) {
+		t.Fatal("complete process environment override was not inherited")
+	}
+	if !kimiUsesEnvModel(map[string]string{"KIMI_MODEL_NAME": "agent-model"}) {
+		t.Fatal("agent model should inherit the process API key")
+	}
+	if kimiUsesEnvModel(map[string]string{"KIMI_MODEL_API_KEY": ""}) {
+		t.Fatal("an explicit empty Agent API key must shadow the process value")
+	}
+	if kimiUsesEnvModel(map[string]string{"KIMI_MODEL_NAME": ""}) {
+		t.Fatal("an explicit empty Agent model must shadow the process value")
+	}
+
+	t.Setenv("KIMI_MODEL_NAME", "")
+	t.Setenv("KIMI_MODEL_API_KEY", "")
+	if !kimiUsesEnvModel(map[string]string{
+		"KIMI_MODEL_NAME": "agent-model", "KIMI_MODEL_API_KEY": "agent-key",
+	}) {
+		t.Fatal("complete Agent environment override was not recognized")
 	}
 }
 

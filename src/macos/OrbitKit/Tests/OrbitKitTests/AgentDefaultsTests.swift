@@ -83,6 +83,29 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "deepseek"), .medium)
     }
 
+    func testAutoPermissionModeCapabilityAndClamp() {
+        XCTAssertTrue(AgentDefaults.supportsAuto("claude-opus-5"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("claude-fable-5"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("claude-sonnet-5"))
+        XCTAssertTrue(AgentDefaults.supportsAuto(
+            "kimi-code/kimi-for-coding", provider: "kimi"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("local-kimi-alias", provider: "kimi"))
+        XCTAssertFalse(AgentDefaults.supportsAuto("claude-haiku-4-5"))
+        XCTAssertFalse(AgentDefaults.supportsAuto("gpt-5.6-sol"))
+        XCTAssertFalse(AgentDefaults.supportsAuto("custom-model"))
+
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-haiku-4-5"),
+                       .default)
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol"), .default)
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5"), .auto)
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(.plan, for: "gpt-5.6-sol"), .plan)
+
+        let configured = [ConfiguredProvider(
+            slug: "local-kimi", label: "Local Kimi", runtime: "kimi")]
+        XCTAssertFalse(AgentDefaults.supportsAuto(
+            "any-alias", provider: "local-kimi", configured: configured))
+    }
+
     // MARK: configured providers (control-plane custom slugs — GET /api/providers)
 
     private let deepseek = ConfiguredProvider(
@@ -113,10 +136,11 @@ final class AgentDefaultsTests: XCTestCase {
         // An unconfigured slug keeps the existing fallback (Claude, never an empty menu).
         XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: nil, configured: [deepseek]).map(\.id),
                        AgentDefaults.claudeModels.map(\.id))
-        // A configured provider with no usable models falls back too rather than emptying the menu.
+        // A configured provider with no usable models stays empty; the composer inserts only its
+        // effective fallback instead of leaking the Claude picker into this model space.
         let empty = ConfiguredProvider(slug: "hollow", label: "Hollow")
-        XCTAssertEqual(AgentDefaults.models(for: "hollow", catalog: nil, configured: [empty]).map(\.id),
-                       AgentDefaults.claudeModels.map(\.id))
+        XCTAssertEqual(AgentDefaults.models(
+            for: "hollow", catalog: nil, configured: [empty]).map(\.id), [])
     }
 
     func testDefaultModelForConfiguredProvider() {
@@ -130,6 +154,112 @@ final class AgentDefaultsTests: XCTestCase {
         // Not configured at all → identical to the existing catalog overload's fallback.
         XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: nil, configured: []),
                        AgentDefaults.defaultModel(for: "deepseek", catalog: nil))
+
+        // An empty custom model space inherits only the static default of the runtime it borrows;
+        // resolving its unknown slug directly would incorrectly fall back to Claude.
+        let codexBacked = ConfiguredProvider(slug: "internal-codex", label: "Internal Codex",
+                                             runtime: "codex", models: [], defaultModel: nil)
+        XCTAssertEqual(AgentDefaults.defaultModel(
+            for: "internal-codex", catalog: nil, configured: [codexBacked]), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "internal-codex", catalog: nil, configured: [codexBacked],
+            runtimeDefaults: ["codex": "runner-codex-default"]), "gpt-5.6-sol")
+    }
+
+    func testEffectiveDefaultModelUsesRuntimeThenCatalogThenStatic() {
+        let catalog = RunnerModelCatalog(
+            claude: [RunnerModelInfo(value: "claude-fable-5", label: "Fable 5", priority: nil,
+                                     contextWindow: nil, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)],
+            codex: nil)
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "claude", catalog: catalog, configured: nil,
+            runtimeDefaults: ["claude": "claude-sonnet-5"]),
+            "claude-sonnet-5")
+        // No directly reported default falls through to the Runtime catalog.
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "claude", catalog: catalog, configured: nil,
+            runtimeDefaults: [:]),
+            "claude-fable-5")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "kimi", catalog: nil, configured: nil,
+            runtimeDefaults: [:]),
+            "kimi-code/kimi-for-coding")
+    }
+
+    func testEffectiveDefaultModelKeepsConfiguredProviderInItsOwnModelSpace() {
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "claude", catalog: nil, configured: nil,
+            runtimeDefaults: nil),
+            "claude-opus-5")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "deepseek", catalog: nil, configured: [deepseek],
+            runtimeDefaults: nil),
+            "deepseek-v4-pro")
+        // A configured provider owns its own default even if the borrowed Claude runtime reports
+        // another one.
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "deepseek", catalog: nil, configured: [deepseek],
+            runtimeDefaults: ["claude": "claude-opus-5"]),
+            "deepseek-v4-pro")
+    }
+
+    func testEffectiveDefaultModelNormalizesUnknownProviderBeforeRuntimeLookup() {
+        let catalog = RunnerModelCatalog(
+            claude: [RunnerModelInfo(value: "claude-fable-5", label: "Fable 5", priority: nil,
+                                     contextWindow: nil, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)],
+            codex: nil)
+
+        // A disabled custom Provider falls back through the Claude Runtime. A stale/forged entry
+        // under its old slug is ignored rather than becoming a fourth heartbeat namespace.
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "retired-provider", catalog: catalog, configured: [],
+            runtimeDefaults: [
+                "retired-provider": "wrong-custom-default",
+                "claude": "runtime-claude-default",
+            ]), "runtime-claude-default")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "retired-provider", catalog: catalog, configured: [], runtimeDefaults: [:]),
+            "claude-fable-5")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "retired-provider", catalog: nil, configured: [], runtimeDefaults: [:]),
+            "claude-opus-5")
+
+        // An enabled configured Provider still owns its declared model space.
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "deepseek", catalog: catalog, configured: [deepseek],
+            runtimeDefaults: ["claude": "runtime-claude-default"]),
+            "deepseek-v4-pro")
+    }
+
+    func testRefreshedDefaultModelPreservesAnUnavailableSnapshot() {
+        XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
+            currentModel: "cached-runtime-default", for: "claude", catalog: nil, configured: nil,
+            runtimeDefaults: nil, runnerSnapshotLoaded: false, configuredProvidersLoaded: false),
+            "cached-runtime-default")
+        XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
+            currentModel: "cached-runtime-default", for: "claude", catalog: nil, configured: nil,
+            runtimeDefaults: nil, runnerSnapshotLoaded: true, configuredProvidersLoaded: false),
+            "claude-opus-5")
+        XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
+            currentModel: "cached-custom-default", for: "deepseek", catalog: nil, configured: nil,
+            runtimeDefaults: [:], runnerSnapshotLoaded: true, configuredProvidersLoaded: false),
+            "cached-custom-default")
+        XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
+            currentModel: "wrong-claude-seed", for: "deepseek", catalog: nil,
+            configured: [deepseek], runtimeDefaults: nil, runnerSnapshotLoaded: false,
+            configuredProvidersLoaded: true),
+            "deepseek-v4-pro")
+    }
+
+    func testModelSelectionRevisionStaysDirtyAfterReturningToInitialValue() {
+        var revision = ModelSelectionRevision()
+        XCTAssertTrue(revision.isPristine)
+        revision.markUserEdit() // pick another model
+        revision.markUserEdit() // pick the original model again
+        XCTAssertFalse(revision.isPristine)
+        XCTAssertEqual(revision.value, 2)
     }
 
     func testFriendlyNameFromConfiguredProvider() {

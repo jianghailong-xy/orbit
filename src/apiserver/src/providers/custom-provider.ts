@@ -1,6 +1,7 @@
 import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
 import { presetDefaultModel } from './preset-overlay';
+import { firstRuntimeCatalogModel, savedRuntimeDefaultModel } from '../common/runtime-model';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
@@ -55,23 +56,38 @@ export function resolveProviderExec(args: {
   declaredProviderBuiltin?: boolean;
   customRow: ModelProviderRow | null;
   sessionModel?: string | null;
+  /** True for Sessions created under Runtime-default semantics. False marks a model-less row
+   * written by an old API replica during the 0079 rolling deployment. Defaults to true for
+   * non-persisted/direct callers. */
+  usesRuntimeDefaultModel?: boolean;
+  /** Effective default reported by built-in runtimes on the assigned runner. Ignored for a custom
+   * provider, whose ModelProvider row remains authoritative. */
+  runtimeDefaultModels?: unknown;
+  /**
+   * Legacy per-Agent pin. New clients never write this field, but a model-less Session created
+   * or claimed by an old API replica must keep the pre-0079 model through a rolling deployment.
+   * The claim path immediately snapshots this fallback onto Session.model.
+   */
   agentModel?: string | null;
+  /** Runtime-reported catalog on the assigned runner; its first model is the final dynamic
+   * fallback before the shared static default. Ignored for configured providers. */
+  modelCatalog?: unknown;
   agentEnv?: Record<string, string> | null;
   /** The session owner's decrypted Claude subscription token, if they configured one. Applies
    *  only to the built-in claude runtime — a configured provider carries its own credentials. */
   claudeOauthToken?: string | null;
 }): { provider: AgentProvider; model: string; env?: Record<string, string> } {
   const { customRow, sessionModel, agentModel, agentEnv, claudeOauthToken } = args;
+  const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = runtimeOf(customRow);
     return {
       provider: runtime,
       // A custom provider's model space is its own; never coerce it through the claude/gpt
-      // prefix guard. Prefer an explicit session/agent pick, else the provider's default — which
-      // a preset-backed row takes from the catalogue, so a retired model id can't outlive it here.
+      // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
+      // by old replicas; current clients put their choice directly on Session.model.
       model:
-        sessionModel ||
-        agentModel ||
+        firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
         presetDefaultModel(customRow) ||
         DEFAULT_MODEL_BY_PROVIDER[runtime],
       // Provider env wins over any user-set agent env (e.g. a hand-typed ANTHROPIC_BASE_URL).
@@ -93,9 +109,41 @@ export function resolveProviderExec(args: {
     provider === AgentProvider.CLAUDE && claudeOauthToken
       ? { CLAUDE_CODE_OAUTH_TOKEN: claudeOauthToken, ...(agentEnv ?? {}) }
       : (agentEnv ?? undefined);
+  const explicitSessionModel = firstNonBlank(sessionModel);
+  // An explicit per-session selection retains the historical safety behavior: a clearly
+  // cross-provider id is coerced straight to the static provider default. During a rolling
+  // deployment, old replicas can still create a model-less Session that expects Agent.model;
+  // preserve that one-time inheritance ahead of new Runtime defaults. Queue claim snapshots it
+  // onto Session.model, and current Agent create/update paths never write a new pin.
+  const legacyAgentModel = legacyInheritance ? firstNonBlank(agentModel) : undefined;
+  const inheritedModel = legacyInheritance
+    ? modelForProvider(provider, legacyAgentModel)
+    : firstCompatibleModel(
+        provider,
+        savedRuntimeDefaultModel(args.runtimeDefaultModels, provider),
+        firstRuntimeCatalogModel(args.modelCatalog, provider),
+      );
   return {
     provider,
-    model: modelForProvider(provider, sessionModel ?? agentModel),
+    model: modelForProvider(provider, explicitSessionModel ?? inheritedModel),
     env,
   };
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function firstCompatibleModel(
+  provider: AgentProvider,
+  ...values: Array<string | null | undefined>
+): string | undefined {
+  for (const value of values) {
+    const model = firstNonBlank(value);
+    if (model && modelForProvider(provider, model) === model) return model;
+  }
+  return undefined;
 }

@@ -1,4 +1,13 @@
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, PermissionMode } from '@orbit/shared';
+
+// Keep this conservative Claude allow-list aligned with the clients. Claude Code rejects Auto
+// for unsupported models (notably Haiku). Kimi's Auto is a runtime-wide mode and therefore does
+// not depend on the configured default-model alias; Codex does not expose Auto at all.
+const AUTO_CAPABLE_CLAUDE_MODELS = new Set([
+  'claude-opus-5',
+  'claude-fable-5',
+  'claude-sonnet-5',
+]);
 
 /**
  * Turn a persisted provider identity into a built-in runner runtime.
@@ -18,6 +27,21 @@ export function normalizeRuntimeProvider(
 /** Runtimes that learn their durable conversation id only after process initialization. */
 export function initializesRuntimeDynamically(provider?: string | null): boolean {
   return provider === AgentProvider.CODEX || provider === AgentProvider.KIMI;
+}
+
+/** Prevent a runner from receiving a model/permission combination its built-in CLI rejects. */
+export function normalizeBuiltinPermissionMode(
+  provider: AgentProvider,
+  model: string,
+  permissionMode: PermissionMode,
+): PermissionMode {
+  if (permissionMode !== PermissionMode.AUTO || provider === AgentProvider.KIMI) {
+    return permissionMode;
+  }
+  if (provider === AgentProvider.CODEX || !AUTO_CAPABLE_CLAUDE_MODELS.has(model)) {
+    return PermissionMode.DEFAULT;
+  }
+  return permissionMode;
 }
 
 /**

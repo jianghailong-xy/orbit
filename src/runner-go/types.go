@@ -62,6 +62,10 @@ type HeartbeatRequest struct {
 	PlanUsage *PlanUsage `json:"planUsage,omitempty"`
 	// Runtime model catalog for picker UIs. Nil on old runners / unavailable runtimes.
 	ModelCatalog *ModelCatalog `json:"modelCatalog,omitempty"`
+	// Effective default selected by each runtime on this machine. A non-nil empty map is sent as
+	// `{}` so the control plane can retire a previously reported default and fall back to the
+	// runtime catalog; nil is used only before the first probe completes.
+	RuntimeDefaultModels map[string]string `json:"runtimeDefaultModels"`
 	// Sessions carries each running session's live worktree diff so the web status bar
 	// appears mid-turn, not just at turn-complete. Empty when no isolated session runs.
 	Sessions []SessionLiveState `json:"sessions,omitempty"`

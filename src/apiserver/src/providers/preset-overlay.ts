@@ -15,7 +15,7 @@ function governing(row: PresetBackedRow) {
 }
 
 /**
- * The model a session dispatches with when neither it nor its agent picked one.
+ * The model a configured-provider session dispatches with when it has no explicit model.
  *
  * A following row keeps whatever default it stored as long as the preset still offers it — an
  * admin who pinned Sonnet keeps Sonnet — but a stored id the catalogue has dropped (a retired

@@ -1,6 +1,6 @@
 import { AgentProvider } from './enums';
 
-/** The model each provider falls back to when neither the session nor its agent pins one.
+/** The model each provider falls back to when neither the session nor its Runtime supplies one.
  *  Mirrors the clients' defaults (web `lib/agentDefaults` DEFAULT_MODEL_BY_PROVIDER, Swift
  *  `AgentDefaults.defaultModel(for:)`). Kept here so the server has a single source of truth. */
 export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
@@ -11,7 +11,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
 
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
  *
- *  A per-session or per-agent override normally wins, but a model whose id clearly belongs to a
+ *  A per-session or Runtime-derived value normally wins, but a model whose id clearly belongs to a
  *  *different* provider is coerced to the provider's default. A `claude-*` id on a Codex session
  *  used to reach the runner verbatim, which then ran `codex -m claude-opus-4-8` — the ChatGPT
  *  backend rejects that with a 400 ("model is not supported when using Codex with a ChatGPT

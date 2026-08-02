@@ -135,9 +135,9 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 	case providerKimi:
 		// Kimi only activates its environment-backed provider when both the
 		// model-name switch and API key are present. Conventional KIMI_API_KEY
-		// is config-file-only and must not suppress the local-login preflight.
-		return strings.TrimSpace(agentEnv["KIMI_MODEL_NAME"]) != "" &&
-			strings.TrimSpace(agentEnv["KIMI_MODEL_API_KEY"]) != ""
+		// is config-file-only and must not suppress the local-login preflight. Use
+		// the same Agent-over-process layering as the Kimi child process itself.
+		return kimiUsesEnvModel(agentEnv)
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {

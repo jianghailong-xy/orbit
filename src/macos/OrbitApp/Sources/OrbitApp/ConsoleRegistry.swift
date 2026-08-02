@@ -63,9 +63,14 @@ final class ConsoleRegistry {
     /// and its `send()` calls `createSession`, reporting the result via `onCreated` so the caller can
     /// open the live console. Shares the instance attachment cache so a pasted image previews
     /// instantly once that console opens. Not added to `models` — there's no sessionID to key it by.
-    func draftModel(for agent: Agent, onCreated: @escaping (Session) -> Void) -> ConsoleModel {
-        let model = ConsoleModel(draftFor: agent, baseURL: baseURL, tokenStore: tokenStore,
-                                 attachments: attachments)
+    func draftModel(for agent: Agent, defaultModel: String,
+                    configuredProviders: [ConfiguredProvider] = [],
+                    configuredProvidersLoaded: Bool = false,
+                    onCreated: @escaping (Session) -> Void) -> ConsoleModel {
+        let model = ConsoleModel(draftFor: agent, defaultModel: defaultModel,
+                                 configuredProviders: configuredProviders,
+                                 configuredProvidersLoaded: configuredProvidersLoaded,
+                                 baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
         return model
     }

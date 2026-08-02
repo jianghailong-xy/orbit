@@ -6,7 +6,7 @@ import OrbitKit
 
 // MARK: - Settings
 
-/// Single-pane settings: account info, the three preference defaults (theme / model / permission),
+/// Single-pane settings: account info, theme/default permission preferences,
 /// and change-password. Lives in the middle column; the detail stays a neutral hint.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
@@ -15,7 +15,6 @@ struct SettingsView: View {
     #endif
 
     @State private var theme = "system"
-    @State private var defaultModel = AgentDefaults.defaultModelID
     @State private var permMode: PermissionMode = .default
     @State private var loaded = false
 
@@ -62,9 +61,6 @@ struct SettingsView: View {
                     Text("Light").tag("light")
                     Text("Dark").tag("dark")
                 }
-                Picker("Default model", selection: $defaultModel) {
-                    ForEach(AgentDefaults.claudeModels) { Text($0.name).tag($0.id) }
-                }
                 Picker("Default permission", selection: $permMode) {
                     ForEach(AgentDefaults.permissionModes, id: \.self) { Text(AgentDefaults.label($0)).tag($0) }
                 }
@@ -73,7 +69,7 @@ struct SettingsView: View {
                 Button("Save preferences") {
                     Task {
                         await model.savePreferences(UpdatePreferencesRequest(
-                            theme: theme, defaultModel: defaultModel, defaultPermissionMode: permMode.rawValue))
+                            theme: theme, defaultPermissionMode: permMode.rawValue))
                     }
                 }
                 #endif
@@ -113,7 +109,6 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         #if os(iOS)
         .onChange(of: theme) { autosavePreferences() }
-        .onChange(of: defaultModel) { autosavePreferences() }
         .onChange(of: permMode) { autosavePreferences() }
         #endif
         .onAppear {
@@ -121,7 +116,6 @@ struct SettingsView: View {
             loaded = true
             let p = model.user?.preferences
             theme = p?.theme ?? "system"
-            defaultModel = p?.defaultModel ?? AgentDefaults.defaultModelID
             permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "default") ?? .default
         }
     }
@@ -134,12 +128,11 @@ struct SettingsView: View {
     private func autosavePreferences() {
         let p = model.user?.preferences
         guard (p?.theme ?? "system") != theme
-            || (p?.defaultModel ?? AgentDefaults.defaultModelID) != defaultModel
             || (p?.defaultPermissionMode ?? PermissionMode.default.rawValue) != permMode.rawValue
         else { return }
         Task {
             await model.savePreferences(UpdatePreferencesRequest(
-                theme: theme, defaultModel: defaultModel, defaultPermissionMode: permMode.rawValue))
+                theme: theme, defaultPermissionMode: permMode.rawValue))
         }
     }
     #endif

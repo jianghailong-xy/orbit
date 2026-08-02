@@ -4,7 +4,10 @@ import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { claudeOauthTokenFor } from '../providers/subscription-token';
-import { normalizeEffortForProvider } from '../common/runtime-provider';
+import {
+  normalizeBuiltinPermissionMode,
+  normalizeEffortForProvider,
+} from '../common/runtime-provider';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -105,7 +108,10 @@ export class QueueService {
   private async buildSession(sessionId: string): Promise<ClaimedSession> {
     const session = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
-      include: { agent: true },
+      include: {
+        agent: true,
+        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+      },
     });
     // Resume only when the runtime actually established its conversation — i.e. the
     // session has at least one completed turn (numTurns > 0). A first spawn that
@@ -118,13 +124,22 @@ export class QueueService {
     // could take seq=1 and make this path mistake the follow-up for the opening prompt.
     await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
-      const turnCount = await tx.conversationTurn.count({ where: { sessionId: session.id } });
-      if (turnCount > 0) return;
+      const seedClientTurnId = `initial-${session.id}`;
+      const existingSeed = await tx.conversationTurn.findUnique({
+        where: {
+          sessionId_clientTurnId: {
+            sessionId: session.id,
+            clientTurnId: seedClientTurnId,
+          },
+        },
+        select: { id: true },
+      });
+      if (existingSeed) return;
       const turn = await tx.conversationTurn.create({
         data: {
           sessionId: session.id,
           seq: 1,
-          clientTurnId: `initial-${session.id}`,
+          clientTurnId: seedClientTurnId,
           kind: 'message',
           content: session.prompt,
           status: 'PENDING',
@@ -148,21 +163,55 @@ export class QueueService {
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership
     // scope: a personal (BYOK) provider resolves only for its owner's sessions — otherwise a
     // user could burn another tenant's key by naming their slug.
-    const customRow = isBuiltinProvider(declared, session.providerBuiltin)
+    const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
+    const customRow = declaredIsBuiltin
       ? null
       : await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         });
-    const exec = resolveProviderExec({
-      declaredProvider: declared,
-      declaredProviderBuiltin: session.providerBuiltin,
-      customRow,
-      sessionModel: session.model,
-      agentModel: agent?.model,
-      agentEnv: agent?.env as Record<string, string> | null,
-      claudeOauthToken: await claudeOauthTokenFor(this.prisma, session.ownerId),
-    });
+    const claudeOauthToken = await claudeOauthTokenFor(this.prisma, session.ownerId);
+    const resolveExec = (sessionModel: string | null) =>
+      resolveProviderExec({
+        declaredProvider: declared,
+        declaredProviderBuiltin: session.providerBuiltin,
+        customRow,
+        sessionModel,
+        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
+        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
+        agentModel: agent?.model,
+        modelCatalog: session.assignedRunner?.modelCatalog,
+        agentEnv: agent?.env as Record<string, string> | null,
+        claudeOauthToken,
+      });
+    let exec = resolveExec(session.model);
+    // Snapshot an inherited default on the session at its first claim. Later Runtime heartbeat
+    // changes must not silently switch an already-established conversation on reclaim/resume.
+    if (session.model === null || session.model.trim() === '') {
+      // A user may PATCH an explicit session model after this snapshot was read. Match every form
+      // the resolver treats as unset, but keep the predicate in the UPDATE so materialization is a
+      // compare-and-set instead of overwriting that concurrent choice.
+      const materialized = await this.prisma.$executeRaw`
+        UPDATE "session"
+        SET "model" = ${exec.model}
+        WHERE "id" = ${session.id}::uuid
+          AND ("model" IS NULL OR btrim("model") = '')
+      `;
+      if (materialized === 0) {
+        // A concurrent Session config PATCH won the CAS. Dispatch must use that explicit choice,
+        // not the stale Runtime/legacy default resolved from the pre-PATCH snapshot. Re-resolving
+        // also retains the built-in cross-provider safety coercion.
+        const winner = await this.prisma.session.findUniqueOrThrow({
+          where: { id: session.id },
+          select: { model: true },
+        });
+        exec = resolveExec(winner.model);
+      }
+    }
     const provider = exec.provider;
+    const permissionMode =
+      (session.permissionMode as PermissionMode) ??
+      (agent?.permissionMode as PermissionMode) ??
+      PermissionMode.DONT_ASK;
     const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
     const sessionUuid =
       provider === AgentProvider.CLAUDE
@@ -197,18 +246,17 @@ export class QueueService {
       allowOrchestration: agent?.enableOrchestration ?? false,
       agent: {
         provider,
-        // Resolved above: a per-session/agent override (coerced for built-ins so the runner
-        // never execs `codex -m claude-*`), or a custom provider's own model.
+        // Resolved above: a per-session override, Runtime default/catalog value (coerced for
+        // built-ins so the runner never execs `codex -m claude-*`), or ModelProvider default.
         model: exec.model,
         appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
-        permissionMode:
-          (session.permissionMode as PermissionMode) ??
-          (agent?.permissionMode as PermissionMode) ??
-          PermissionMode.DONT_ASK,
-        // Per-session effort wins; else the agent's default effort (like model/mode above).
+        // Configured providers still borrow one of these runtimes, so the same runtime-level
+        // guard applies to API/MCP/old-client input as it does to built-in identities.
+        permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
+        // Per-session effort wins; otherwise use the agent's effort setting.
         effort: normalizeEffortForProvider(provider, session.effort ?? agent?.effort),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,

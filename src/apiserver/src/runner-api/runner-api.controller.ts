@@ -67,7 +67,11 @@ import {
 } from '@orbit/shared';
 import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
-import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
+import {
+  normalizeBuiltinPermissionMode,
+  normalizeEffortForProvider,
+  normalizeRuntimeProvider,
+} from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, UploadedFile } from '../attachments/attachments.media';
 import { PrismaService } from '../prisma/prisma.service';
@@ -86,6 +90,7 @@ import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent } from '../common/system-noise';
+import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -359,6 +364,12 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Runtime-owned default snapshot. Omission means an older runner and preserves the
+        // previous value; an explicit {} clears stale values so catalog/static fallback applies.
+        runtimeDefaultModels:
+          dto?.runtimeDefaultModels == null
+            ? undefined
+            : (sanitizeRuntimeDefaultModels(dto.runtimeDefaultModels) as Prisma.InputJsonValue),
       },
     });
     // A cold supervisor never polls /inbox, so endpoint-level 409 fencing alone
@@ -578,11 +589,15 @@ export class RunnerApiController {
     );
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
-      include: { agent: true },
+      include: {
+        agent: true,
+        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+      },
     });
-    // This endpoint is deliberately read-only. The runner takes each row over with an
-    // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed reclaim
-    // request can never retire a generation activated from a newer response.
+    // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
+    // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
+    // cannot retire a generation activated from a newer response. The only write below is an
+    // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again.
     const out: ReclaimSession[] = [];
     for (const s of sessions) {
       const agent = s.agent;
@@ -590,7 +605,8 @@ export class RunnerApiController {
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions.
-      const customRow = isBuiltinProvider(declared, s.providerBuiltin)
+      const declaredIsBuiltin = isBuiltinProvider(declared, s.providerBuiltin);
+      const customRow = declaredIsBuiltin
         ? null
         : await this.prisma.modelProvider.findFirst({
             where: {
@@ -598,16 +614,41 @@ export class RunnerApiController {
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
           });
-      const exec = resolveProviderExec({
-        declaredProvider: declared,
-        declaredProviderBuiltin: s.providerBuiltin,
-        customRow,
-        sessionModel: s.model,
-        agentModel: agent?.model,
-        agentEnv: agent?.env as Record<string, string> | null,
-        claudeOauthToken: await claudeOauthTokenFor(this.prisma, s.ownerId),
-      });
+      const claudeOauthToken = await claudeOauthTokenFor(this.prisma, s.ownerId);
+      const resolveExec = (sessionModel: string | null) =>
+        resolveProviderExec({
+          declaredProvider: declared,
+          declaredProviderBuiltin: s.providerBuiltin,
+          customRow,
+          sessionModel,
+          usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
+          runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
+          agentModel: agent?.model,
+          modelCatalog: s.assignedRunner?.modelCatalog,
+          agentEnv: agent?.env as Record<string, string> | null,
+          claudeOauthToken,
+        });
+      let exec = resolveExec(s.model);
+      if (s.model === null || s.model.trim() === '') {
+        const materialized = await this.prisma.$executeRaw`
+          UPDATE "session"
+          SET "model" = ${exec.model}
+          WHERE "id" = ${s.id}::uuid
+            AND ("model" IS NULL OR btrim("model") = '')
+        `;
+        if (materialized === 0) {
+          // A simultaneous Session config edit owns the value. Return that winner to the runner
+          // rather than the stale inherited default from the reclaim snapshot.
+          const winner = await this.prisma.session.findUniqueOrThrow({
+            where: { id: s.id },
+            select: { model: true },
+          });
+          exec = resolveExec(winner.model);
+        }
+      }
       const provider = exec.provider;
+      const permissionMode =
+        (s.permissionMode as PermissionMode) ?? (agent?.permissionMode as PermissionMode) ?? PermissionMode.DONT_ASK;
       const runtime = reclaimRuntimeIds({
         provider,
         sessionId: s.id,
@@ -619,9 +660,8 @@ export class RunnerApiController {
         where: { sessionId: s.id },
         _max: { seq: true },
       });
-      // Per-session override wins over the agent, then a server default — so a
-      // resumed process keeps the model/permission-mode/tools it was created with; a
-      // cross-provider model id is coerced so a reclaim never resumes `codex -m claude-*`.
+      // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
+      // keeps the model it was created with; cross-provider ids are still coerced safely.
       const agentCfg: AgentExecConfig = {
         provider,
         model: exec.model,
@@ -629,9 +669,8 @@ export class RunnerApiController {
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
-        permissionMode:
-          (s.permissionMode as PermissionMode) ?? (agent?.permissionMode as PermissionMode) ?? PermissionMode.DONT_ASK,
-        // Per-session effort wins; else the agent's default effort (like model/mode above).
+        permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
+        // Per-session effort wins; otherwise use the agent's effort setting.
         effort: normalizeEffortForProvider(provider, s.effort ?? agent?.effort),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,

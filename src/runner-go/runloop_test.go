@@ -15,6 +15,15 @@ import (
 	"time"
 )
 
+func TestRuntimeModelRefreshCadence(t *testing.T) {
+	if got := time.Duration(runtimeDefaultRefreshHeartbeatTicks) * heartbeatInterval; got != 5*time.Minute {
+		t.Fatalf("runtime default refresh cadence = %s, want 5m", got)
+	}
+	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != time.Hour {
+		t.Fatalf("model catalog refresh cadence = %s, want 1h", got)
+	}
+}
+
 func TestWaitForRunLoopStopUpdate(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()

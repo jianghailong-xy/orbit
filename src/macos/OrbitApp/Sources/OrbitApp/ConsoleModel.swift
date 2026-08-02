@@ -64,9 +64,8 @@ struct LocalStatusCard: Identifiable, Equatable, Sendable {
 final class ConsoleModel {
     let sessionID: String
     /// The owning agent's id. Seeded at init (always for a draft; when threaded through `focus`
-    /// for a live console) and re-adopted from the session payload in `loadContext`, so even a
-    /// console restored from disk without one can still write a model pick back to its agent
-    /// (ComposerView's model picker → `AppModel.rememberDefaultModel`).
+    /// for a live console) and re-adopted from the session payload in `loadContext`; it scopes
+    /// project commands/skills and session actions even for a console restored from disk.
     private(set) var agentID: String?
     /// Non-nil when this is a draft (pre-session) console backing the "new session" composer: it
     /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
@@ -106,6 +105,9 @@ final class ConsoleModel {
     // composer
     var composerText = ""
     var modelID = AgentDefaults.defaultModelID
+    /// Async context refreshes may replace only a pristine seed. This explicit revision catches a
+    /// user who picks away and then returns to the same model, which a string comparison misses.
+    private var modelSelectionRevision = ModelSelectionRevision()
     var permissionMode: PermissionMode = .default
     var effort: Effort = .default
     private(set) var pendingAttachments: [PendingAttachment] = []
@@ -128,6 +130,11 @@ final class ConsoleModel {
     /// merge them in. Loaded with the footer context; left empty by an older server without
     /// the endpoint.
     private(set) var configuredProviders: [ConfiguredProvider] = []
+    private var configuredProvidersLoaded = false
+
+    var providerCapabilitiesResolved: Bool {
+        AgentDefaults.isBuiltInProvider(provider) || configuredProvidersLoaded
+    }
 
     // `/` command & skill autocomplete (the `+` menu opens it scoped). `slashItems` is the
     // runner-reported set already narrowed to host-level + this session's agent (see loadSlashItems).
@@ -180,10 +187,13 @@ final class ConsoleModel {
 
     /// Draft (pre-session) console backing the "new session" composer. There's no session yet, so it
     /// runs no stream; the first `send()` calls `createSession` for `agent` and hands the new session
-    /// to `onSessionCreated`, after which the caller opens its live console. The model/permission
-    /// pills are seeded from the agent's saved config — web parity: leaving them at "Default" would
-    /// make the server treat that as an explicit override and ignore the agent's configured mode.
-    init(draftFor agent: Agent, baseURL: URL, tokenStore: TokenStore, attachments: AttachmentImageStore) {
+    /// to `onSessionCreated`, after which the caller opens its live console. The model pill is
+    /// seeded from the owning runner's Runtime heartbeat; permission and effort remain agent/account
+    /// settings.
+    init(draftFor agent: Agent, defaultModel: String,
+         configuredProviders: [ConfiguredProvider] = [],
+         configuredProvidersLoaded: Bool = false, baseURL: URL, tokenStore: TokenStore,
+         attachments: AttachmentImageStore) {
         self.sessionID = ""
         self.agentID = agent.id
         self.draftAgent = agent
@@ -199,11 +209,15 @@ final class ConsoleModel {
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
         self.agentName = agent.name
         self.provider = agent.provider ?? "claude"
-        // The agent's configured model is authoritative — it may belong to any provider. Clamping
-        // it to the Claude list used to seed a Codex draft with claude-opus-4-8, which the runner
-        // then ran as `codex -m claude-opus-4-8`.
-        self.modelID = agent.model ?? AgentDefaults.defaultModel(for: provider)
-        self.permissionMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
+        self.configuredProviders = configuredProviders
+        self.configuredProvidersLoaded = configuredProvidersLoaded
+        self.modelID = defaultModel
+        let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
+        self.permissionMode = providerCapabilitiesResolved
+            ? AgentDefaults.clampPermissionMode(
+                savedMode, for: defaultModel, provider: provider,
+                configured: configuredProviders)
+            : savedMode
         // Seed the effort pill from the agent's default too (web parity), so a new session shows —
         // and starts at — the agent's configured effort unless the user overrides it.
         if let ef = agent.effort, let e = Effort(rawValue: ef) {
@@ -580,10 +594,16 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         agentName = s.agent?.name
         // Adopt the owning agent's id too (a console opened by session id may have been created
-        // without one), so a model pick here can be written back to the agent as its new default.
+        // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
         provider = s.provider ?? s.agent?.provider ?? "claude"
-        modelID = s.model ?? s.agent?.model ?? AgentDefaults.defaultModel(for: provider)
+
+        // A historical Session.model is authoritative and can be adopted immediately. If the user
+        // already touched the picker while the session request was in flight, their explicit value
+        // wins and no later context request may replace it.
+        if modelSelectionRevision.isPristine {
+            modelID = s.model ?? AgentDefaults.defaultModel(for: provider)
+        }
         // A stored mode is adopted verbatim; a session with no stored mode falls back to
         // `dontAsk` (web's `permissionMode ?? 'dontAsk'`), never the hardcoded `.default`.
         if let pm = s.permissionMode { permissionMode = PermissionMode(rawValue: pm) ?? .default }
@@ -593,25 +613,53 @@ final class ConsoleModel {
         } else {
             effort = .default
         }
+        let live = ComposerLogic.isLive(status: s.effectiveRunStatus)
+        // When the session already stores a model, this is a complete server baseline before the
+        // slower optional Runner/provider reads. A manual pick can now PATCH against it safely.
+        if live, s.model != nil, modelSelectionRevision.isPristine {
+            syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
+        }
+
+        // Plan usage + Runtime model/default data ride the GET /runners list. A request failure is
+        // merely unavailable data and must retain the model already on screen.
+        var sessionRunner: Runner?
+        var runnerSnapshotLoaded = false
+        if let rid = s.assignedRunnerId, let rows = try? await api.runners() {
+            if let r = rows.first(where: { $0.id == rid }) {
+                sessionRunner = r
+                runnerSnapshotLoaded = true
+                planUsage = r.planUsage?.snapshot(for: provider)
+                modelCatalog = r.modelCatalog
+            } else {
+                planUsage = nil
+                modelCatalog = nil
+            }
+        }
+        // Configured providers own a separate model space/default. Best-effort: a transient failure
+        // keeps the last good list, and built-in runtimes still resolve from the runner/static data.
+        if let providers = try? await api.providers() {
+            configuredProviders = providers
+            configuredProvidersLoaded = true
+        }
+        if s.model == nil, modelSelectionRevision.isPristine {
+            modelID = AgentDefaults.refreshedDefaultModel(
+                currentModel: modelID, for: provider, catalog: modelCatalog,
+                configured: configuredProviders,
+                runtimeDefaults: sessionRunner?.runtimeDefaultModels,
+                runnerSnapshotLoaded: runnerSnapshotLoaded,
+                configuredProvidersLoaded: configuredProvidersLoaded)
+        }
+        if providerCapabilitiesResolved {
+            permissionMode = AgentDefaults.clampPermissionMode(
+                permissionMode, for: modelID, provider: provider,
+                configured: configuredProviders)
+        }
         // A LIVE session pushes later pill edits to the server (PATCH /config); record the
         // adopted values so `applyConfig` can distinguish a real user edit from this adopt.
         // A terminal session isn't live, so its pills stay local until the next resume.
-        if ComposerLogic.isLive(status: s.effectiveRunStatus) {
+        if live, modelSelectionRevision.isPristine {
             syncedConfig = (modelID, permissionMode.rawValue, effort.rawValue)
         }
-        // Plan usage rides the GET /runners list (there's no per-runner detail endpoint —
-        // the web reads it the same way), so fetch the list and pick this session's runner.
-        if let rid = s.assignedRunnerId,
-           let r = (try? await api.runners())?.first(where: { $0.id == rid }) {
-            planUsage = r.planUsage?.snapshot(for: provider)
-            modelCatalog = r.modelCatalog
-        } else {
-            planUsage = nil
-            modelCatalog = nil
-        }
-        // Configured providers for the model menu/pill + context gauge. Best-effort like plan
-        // usage; a transient failure keeps the last good list.
-        if let providers = try? await api.providers() { configuredProviders = providers }
     }
 
     /// Adopt a fresh list/detail snapshot too. The app's control-plane-driven list refresh carries
@@ -636,6 +684,46 @@ final class ConsoleModel {
 
     func refreshCapabilities() async { _ = await refreshServerStatus() }
 
+    /// Record an explicit picker action separately from the selected string. Async context loads
+    /// must never overwrite it, even when the user returns to the same value they started with.
+    @discardableResult
+    func selectModel(_ model: String) -> Bool {
+        modelID = model
+        modelSelectionRevision.markUserEdit()
+        let clamped = providerCapabilitiesResolved
+            ? AgentDefaults.clampPermissionMode(
+                permissionMode, for: model, provider: provider,
+                configured: configuredProviders)
+            : permissionMode
+        let changedPermissionMode = clamped != permissionMode
+        permissionMode = clamped
+        return changedPermissionMode
+    }
+
+    /// Keep an already-constructed draft in sync with AgentsModel's later provider/runner fetch.
+    /// SwiftUI preserves the draft's @State across parent updates, so constructor snapshots alone
+    /// are insufficient. An unresolved custom slug retains its placeholder seed; once the provider
+    /// list is authoritative, a pristine picker adopts the real provider default and capabilities.
+    func adoptDraftProviderContext(_ providers: [ConfiguredProvider], loaded: Bool,
+                                   defaultModel: String) {
+        guard isDraft else { return }
+        // Successful provider discovery is last-good state. A slower parent request that is still
+        // pending (or failed) must not erase a snapshot this draft already fetched itself.
+        if loaded {
+            configuredProviders = providers
+            configuredProvidersLoaded = true
+        }
+        if modelSelectionRevision.isPristine,
+           AgentDefaults.isBuiltInProvider(provider) || loaded {
+            modelID = defaultModel
+        }
+        if providerCapabilitiesResolved {
+            permissionMode = AgentDefaults.clampPermissionMode(
+                permissionMode, for: modelID, provider: provider,
+                configured: configuredProviders)
+        }
+    }
+
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
     /// like web's configMut); on a terminal/draft session the local value is kept and carried
     /// by the next resume. Pass only the field that changed (effort uses its raw value so
@@ -650,9 +738,12 @@ final class ConsoleModel {
         do {
             try await api.updateConfig(sessionID: sessionID,
                 ConfigUpdateRequest(model: model, permissionMode: permissionMode, effort: effort))
-            if let s = syncedConfig {
-                syncedConfig = (model ?? s.model, permissionMode ?? s.permissionMode, effort ?? s.effort)
-            }
+            let baseline = syncedConfig ?? (model: modelID,
+                                             permissionMode: self.permissionMode.rawValue,
+                                             effort: self.effort.rawValue)
+            syncedConfig = (model ?? baseline.model,
+                            permissionMode ?? baseline.permissionMode,
+                            effort ?? baseline.effort)
         } catch {
             statusMessage = "Couldn't apply change — \(error)"
         }
@@ -854,7 +945,11 @@ final class ConsoleModel {
                 // Send the raw effort — "" (Default) included — not `.wire` (which omits Default):
                 // the pill is seeded from the agent's default, so an explicit Default must stick
                 // rather than fall back to the agent's effort server-side. Web parity (AgentView).
-                prompt: text, agentId: agent.id, model: modelID,
+                // Until a custom provider identity is resolved, this draft's visible model is only
+                // a placeholder. Omit it so the server applies the configured provider's own
+                // default instead of persisting a guessed Claude model.
+                prompt: text, agentId: agent.id,
+                model: providerCapabilitiesResolved ? modelID : nil,
                 permissionMode: permissionMode.rawValue, effort: effort.rawValue,
                 shell: shell ? true : nil,
                 attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
@@ -869,26 +964,40 @@ final class ConsoleModel {
     /// Draft footer/slash seed (no stream): load the `/` command + skill set for the agent and,
     /// best-effort, the agent's runner plan usage — mirrors the live `run()`.
     func prepareDraft() async {
+        // Refresh model context first so a newly reported Runtime default settles before optional
+        // slash discovery. The draft already has AgentsModel's cached seed, so failure keeps it.
+        var runtimeDefaults: [String: String]?
+        var runnerSnapshotLoaded = false
+        if let rid = draftAgent?.runnerId, let rows = try? await api.runners() {
+            if let r = rows.first(where: { $0.id == rid }) {
+                planUsage = r.planUsage?.snapshot(for: provider)
+                modelCatalog = r.modelCatalog
+                runtimeDefaults = r.runtimeDefaultModels
+                runnerSnapshotLoaded = true
+            } else {
+                planUsage = nil
+                modelCatalog = nil
+            }
+        }
+        if let providers = try? await api.providers() {
+            configuredProviders = providers
+            configuredProvidersLoaded = true
+        }
+        // AgentsModel resolves the seed from its cached runner snapshot so the composer is correct
+        // immediately. Re-resolve only while no explicit picker action has ever occurred.
+        if draftAgent != nil, modelSelectionRevision.isPristine {
+            modelID = AgentDefaults.refreshedDefaultModel(
+                currentModel: modelID, for: provider, catalog: modelCatalog,
+                configured: configuredProviders, runtimeDefaults: runtimeDefaults,
+                runnerSnapshotLoaded: runnerSnapshotLoaded,
+                configuredProvidersLoaded: configuredProvidersLoaded)
+        }
+        if providerCapabilitiesResolved {
+            permissionMode = AgentDefaults.clampPermissionMode(
+                permissionMode, for: modelID, provider: provider,
+                configured: configuredProviders)
+        }
         await loadSlashItems()
-        if let rid = draftAgent?.runnerId,
-           let r = (try? await api.runners())?.first(where: { $0.id == rid }) {
-            planUsage = r.planUsage?.snapshot(for: provider)
-            modelCatalog = r.modelCatalog
-        } else {
-            planUsage = nil
-            modelCatalog = nil
-        }
-        if let providers = try? await api.providers() { configuredProviders = providers }
-        // The init seeded a model-less agent's draft with the static default — before the
-        // configured list/catalog were known. Re-seed it now so a configured provider's draft
-        // starts at that provider's default model (web parity: AgentView's model seed calls
-        // defaultModelForProvider with `configured`). Guarded on "still the untouched static
-        // default" so a model the user already picked is never clobbered.
-        if let agent = draftAgent, agent.model == nil,
-           modelID == AgentDefaults.defaultModel(for: provider) {
-            modelID = AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
-                                                 configured: configuredProviders)
-        }
     }
 
     func interrupt() async {

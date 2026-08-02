@@ -22,7 +22,7 @@ import {
   Tag,
   type MenuProps,
 } from 'antd';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { PlanUsage } from '@orbit/shared';
 import { api } from '../api';
@@ -32,14 +32,12 @@ import type { Runner } from '../components/TasksSidePanel';
 import { planUsageRows, planUsageSnapshots } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import {
-  AUTO_CAPABLE_MODELS,
-  DEFAULT_MODEL,
   DEFAULT_PERMISSION_MODE,
   defaultModelForProvider,
   MODE_OPTIONS,
   mergedProviderOptions,
-  modelOptionsForProvider,
   effortOptionsForProvider,
+  supportsAuto,
 } from '../lib/agentDefaults';
 
 interface Agent {
@@ -47,7 +45,6 @@ interface Agent {
   name: string;
   appendSystemPrompt?: string | null;
   provider?: string;
-  model?: string;
   permissionMode?: string;
   effort?: string | null;
   workDir?: string | null;
@@ -127,9 +124,10 @@ export function RunnerDetailPage() {
 
   const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
   const agents = (agentsQ.data ?? []).filter((a) => a.runnerId === runnerId);
-  // Configured providers (custom slugs) merged into the Runtime/Model pickers below alongside
-  // the built-in claude/codex; each brings its own model list.
-  const configuredProviders = useQuery(providersQuery()).data ?? [];
+  // Configured providers (custom slugs) are merged into the Runtime picker; their model metadata
+  // is used only to validate the Runtime-owned default against permission capabilities.
+  const configuredProvidersQuery = useQuery(providersQuery());
+  const configuredProviders = configuredProvidersQuery.data ?? [];
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -171,7 +169,6 @@ export function RunnerDetailPage() {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
   const [fProvider, setFProvider] = useState('claude');
-  const [fModel, setFModel] = useState(DEFAULT_MODEL);
   const [fMode, setFMode] = useState('auto');
   const [fEffort, setFEffort] = useState('');
   const [fAppend, setFAppend] = useState('');
@@ -180,24 +177,53 @@ export function RunnerDetailPage() {
   const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
-  // New agents start from the user's saved defaults (Settings → Agent defaults),
-  // falling back to the app defaults. Auto needs an auto-capable model, so a saved
-  // Auto + non-auto model degrades to Default (the same rule onModelChange applies).
+  // Permission mode remains an account-level new-agent default. Model is deliberately absent:
+  // it is reported by the selected Runtime and may be overridden on an individual Session.
   const me = useQuery(meQuery());
-  const prefModel = me.data?.preferences?.defaultModel ?? DEFAULT_MODEL;
-  let prefMode = me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
-  if (prefMode === 'auto' && !AUTO_CAPABLE_MODELS.has(prefModel)) prefMode = 'default';
+  const prefMode = me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
 
-  // Pick a model; if it can't run Auto, fall back the default mode off Auto.
-  const onModelChange = (m: string) => {
-    setFModel(m);
-    if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(m)) setFMode('default');
-  };
+  const formDefaultModel = defaultModelForProvider(
+    fProvider,
+    runner?.modelCatalog,
+    configuredProviders,
+    runner?.runtimeDefaultModels,
+  );
+  const formProviderResolved =
+    fProvider === 'claude' ||
+    fProvider === 'codex' ||
+    fProvider === 'kimi' ||
+    configuredProvidersQuery.data !== undefined;
+  // A Runtime heartbeat can change its effective default while the form is open. Never leave Auto
+  // selected once that default becomes a model that cannot run it.
+  useEffect(() => {
+    if (
+      formOpen &&
+      fMode === 'auto' &&
+      formProviderResolved &&
+      !supportsAuto(formDefaultModel, fProvider, configuredProviders)
+    ) {
+      setFMode('default');
+    }
+  }, [
+    configuredProviders,
+    formDefaultModel,
+    formOpen,
+    formProviderResolved,
+    fMode,
+    fProvider,
+  ]);
+
   const onProviderChange = (provider: string) => {
     setFProvider(provider);
-    const nextModel = defaultModelForProvider(provider, runner?.modelCatalog, configuredProviders);
-    setFModel(nextModel);
-    if (fMode === 'auto' && !AUTO_CAPABLE_MODELS.has(nextModel)) setFMode('default');
+    const nextModel = defaultModelForProvider(
+      provider,
+      runner?.modelCatalog,
+      configuredProviders,
+      runner?.runtimeDefaultModels,
+    );
+    if (fMode === 'auto' && !supportsAuto(nextModel, provider, configuredProviders)) {
+      setFMode('default');
+    }
     // Effort levels differ per provider (codex has 'minimal', not 'max'); reset to Default so the
     // Select never shows a value absent from the new provider's options.
     setFEffort('');
@@ -208,7 +234,6 @@ export function RunnerDetailPage() {
       const body = {
         name: fName.trim(),
         provider: fProvider,
-        model: fModel,
         permissionMode: fMode,
         // Sent even when '' (Default) so picking Default clears a previously-set effort.
         effort: fEffort,
@@ -241,8 +266,17 @@ export function RunnerDetailPage() {
     setEditing(null);
     setFName('');
     setFProvider('claude');
-    setFModel(prefModel);
-    setFMode(prefMode);
+    const claudeDefault = defaultModelForProvider(
+      'claude',
+      runner?.modelCatalog,
+      configuredProviders,
+      runner?.runtimeDefaultModels,
+    );
+    setFMode(
+      prefMode === 'auto' && !supportsAuto(claudeDefault, 'claude', configuredProviders)
+        ? 'default'
+        : prefMode,
+    );
     setFEffort('');
     setFAppend('');
     setFWorkDir('');
@@ -255,9 +289,6 @@ export function RunnerDetailPage() {
     setEditing(a);
     setFName(a.name);
     setFProvider(a.provider ?? 'claude');
-    setFModel(
-      a.model ?? defaultModelForProvider(a.provider ?? 'claude', runner?.modelCatalog, configuredProviders),
-    );
     setFMode(a.permissionMode ?? 'dontAsk');
     setFEffort(a.effort ?? '');
     setFAppend(a.appendSystemPrompt ?? '');
@@ -302,21 +333,15 @@ export function RunnerDetailPage() {
           />
         </div>
         <div className="rd-form-field">
-          <div className="rd-form-label">Model</div>
-          <Select
-            value={fModel}
-            onChange={onModelChange}
-            options={modelOptionsForProvider(fProvider, runner?.modelCatalog, configuredProviders)}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div className="rd-form-field">
           <div className="rd-form-label">Permission mode</div>
           <Select
             value={fMode}
             onChange={setFMode}
             options={MODE_OPTIONS.filter(
-              (o) => o.value !== 'auto' || AUTO_CAPABLE_MODELS.has(fModel),
+              (o) =>
+                o.value !== 'auto' ||
+                !formProviderResolved ||
+                supportsAuto(formDefaultModel, fProvider, configuredProviders),
             )}
             style={{ width: '100%' }}
           />
@@ -420,9 +445,12 @@ export function RunnerDetailPage() {
   // One agent row — shown on its own, or kept as the header above the in-place
   // editor. While this row is being edited, the pencil toggles the editor closed.
   const agentRow = (a: Agent) => {
-    // When an agent overrides the endpoint/model via env (e.g. a DeepSeek-compatible
-    // base URL), the static `model` field is stale — show the effective model instead.
-    const effectiveModel = a.env?.ANTHROPIC_MODEL || a.model || DEFAULT_MODEL;
+    const effectiveModel = defaultModelForProvider(
+      a.provider ?? 'claude',
+      runner?.modelCatalog,
+      configuredProviders,
+      runner?.runtimeDefaultModels,
+    );
     // A configured provider shows its own label; fall back to the raw slug if it's since been
     // removed/disabled (so the row never silently mislabels it as Claude).
     const providerLabel =

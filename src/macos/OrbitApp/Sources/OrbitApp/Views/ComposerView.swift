@@ -46,13 +46,34 @@ struct ComposerView: View {
     // its items in reverse. Feed the list reversed on iOS so it reads top-to-bottom (Opus → Haiku)
     // exactly like the web composer. macOS drops the menu down, so keep the source order there.
     private var modelMenuItems: [ModelOption] {
-        let models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
+        if !console.providerCapabilitiesResolved {
+            return [ModelOption(
+                id: console.modelID,
+                name: console.isDraft ? "Runtime default" : console.modelID)]
+        }
+        var models = AgentDefaults.models(for: console.provider, catalog: console.modelCatalog,
                                           configured: console.configuredProviders)
+        // A Runtime may report a valid default that has not appeared in its catalog yet. Preserve
+        // it as a selectable row so choosing another model does not make the original unreachable.
+        if !models.contains(where: { $0.id == console.modelID }) {
+            models.insert(ModelOption(
+                id: console.modelID,
+                name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                                                  configured: console.configuredProviders)), at: 0)
+        }
         #if os(iOS)
         return Array(models.reversed())
         #else
         return models
         #endif
+    }
+
+    private var permissionModeMenuItems: [PermissionMode] {
+        AgentDefaults.permissionModes.filter {
+            $0 != .auto || !console.providerCapabilitiesResolved || AgentDefaults.supportsAuto(
+                console.modelID, provider: console.provider,
+                configured: console.configuredProviders)
+        }
     }
 
     // Show the `/` hint menu while the cursor sits on a `/token` that hasn't been Escape-dismissed.
@@ -224,7 +245,7 @@ struct ComposerView: View {
             // values back doesn't echo a redundant PATCH.
             HStack(spacing: 10) {
                 Menu {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) { mode in
+                    ForEach(permissionModeMenuItems, id: \.self) { mode in
                         Button {
                             console.permissionMode = mode
                             Task { await console.applyConfig(permissionMode: mode.rawValue) }
@@ -249,24 +270,27 @@ struct ComposerView: View {
                 Menu {
                     ForEach(modelMenuItems) { m in
                         Button {
-                            console.modelID = m.id
-                            Task { await console.applyConfig(model: m.id) }
-                            // Remember this as the owning agent's default so the next new session
-                            // (here or on another device) seeds it — the per-agent port of the
-                            // effort write below. `applyConfig` handles this session's own model;
-                            // this updates the agent the session belongs to.
-                            if let aid = console.agentID {
-                                app.rememberDefaultModel(agentID: aid, model: m.id)
+                            let clampedPermissionMode = console.selectModel(m.id)
+                            let permissionMode = clampedPermissionMode
+                                ? console.permissionMode.rawValue
+                                : nil
+                            Task {
+                                await console.applyConfig(model: m.id, permissionMode: permissionMode)
                             }
                         } label: {
                             menuItemLabel(m.name, selected: m.id == console.modelID)
                         }
                     }
                 } label: {
-                    menuLabel(AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
-                                                         configured: console.configuredProviders))
+                    menuLabel(
+                        !console.providerCapabilitiesResolved && console.isDraft
+                            ? "Runtime default"
+                            : AgentDefaults.friendlyName(
+                                console.modelID, catalog: console.modelCatalog,
+                                configured: console.configuredProviders))
                 }
                 .footerMenuChrome()
+                .disabled(!console.providerCapabilitiesResolved)
 
                 Menu {
                     ForEach(AgentDefaults.efforts(for: console.provider)) { e in

@@ -26,7 +26,6 @@ type OrchestratorAgentInput = {
   name?: string;
   description?: string;
   provider?: string;
-  model?: string;
   systemPrompt?: string;
   appendSystemPrompt?: string;
   workDir?: string;
@@ -43,7 +42,6 @@ type OrchestratorAgentRecord = Pick<
   | 'name'
   | 'description'
   | 'provider'
-  | 'model'
   | 'workDir'
   | 'runnerId'
   | 'enableWorktree'
@@ -128,7 +126,6 @@ export class RunnerAgentsController {
       name: agent.name,
       description: agent.description,
       provider: agent.provider,
-      model: agent.model,
       workDir: agent.workDir,
       runnerId: agent.runnerId,
       enableWorktree: agent.enableWorktree,
@@ -170,7 +167,6 @@ export class RunnerAgentsController {
       name,
       description: this.optionalString(input, 'description'),
       provider: this.optionalString(input, 'provider'),
-      model: this.optionalString(input, 'model'),
       systemPrompt: this.optionalString(input, 'systemPrompt'),
       appendSystemPrompt: this.optionalString(input, 'appendSystemPrompt'),
       workDir: this.optionalString(input, 'workDir'),

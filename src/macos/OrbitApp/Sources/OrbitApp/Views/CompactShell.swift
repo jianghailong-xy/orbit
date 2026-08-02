@@ -833,6 +833,9 @@ private struct AgentComposePush: View {
                     ConsoleView(sessionID: created.id, agentID: id, registry: registry)
                 } else {
                     NewSessionView(agent: agent, registry: registry,
+                                   defaultModel: agents.effectiveDefaultModel(for: agent),
+                                   configuredProviders: agents.configuredProviders,
+                                   configuredProvidersLoaded: agents.configuredProvidersLoaded,
                                    defaultEffort: model.user?.preferences?.defaultEffort) { session in
                         model.registerCreatedAgentSession(session)
                         created = session
@@ -842,8 +845,8 @@ private struct AgentComposePush: View {
                         model.composedConsoleSessionID = session.id
                     }
                     .navigationTitle(agent.name)
-                    // Rebuild the draft when the hero switcher changes the agent (draftModel is per-agent).
-                    .id(agent.id)
+                    // Rebuild for in-place Agent execution-default changes as well as switching.
+                    .id(newSessionDraftIdentity(agent))
                 }
             } else {
                 ContentUnavailableView("Select an agent", systemImage: "person.2")

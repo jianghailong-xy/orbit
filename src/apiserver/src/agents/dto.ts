@@ -22,6 +22,7 @@ export class CreateAgentDto {
   // Kept a plain string (not @IsIn a fixed enum) so custom providers pass; an unknown slug
   // simply falls back to the claude runtime at dispatch (resolveProviderExec).
   @IsOptional() @IsString() provider?: string;
+  /** @deprecated Accepted for old clients, but runtime defaults are no longer stored per agent. */
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
@@ -55,6 +56,7 @@ export class UpdateAgentDto {
   @IsOptional() @IsString() @MinLength(1) name?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() provider?: string;
+  /** @deprecated Accepted for old clients, but ignored by agent updates. */
   @IsOptional() @IsString() model?: string;
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;

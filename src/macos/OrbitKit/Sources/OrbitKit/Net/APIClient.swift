@@ -264,7 +264,7 @@ public final class APIClient: @unchecked Sendable {
     public func removeTaskDependency(taskID: String, dependsOnTaskID: String) async throws { try await deleteRaw("tasks/\(taskID)/dependencies/\(dependsOnTaskID)") }
 
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
-    /// (no key/baseUrl). Merged into the composer/agent-editor pickers alongside claude/codex.
+    /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
 
     public func runners() async throws -> [Runner] { try await get("runners") }

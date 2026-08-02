@@ -1,7 +1,7 @@
 import Foundation
 
-// Pure logic for the Agents page: grouping by runner and the "effective model" display. UI-free
-// so it's unit-tested; the SwiftUI list renders `grouped` and shows `effectiveModel` per row.
+// Pure logic for the Agents page's runner grouping. UI-free so it is unit-tested; the SwiftUI
+// list renders `grouped` and gets new-session model defaults from the owning runner instead.
 
 public struct AgentGroup: Equatable, Sendable, Identifiable {
     public let runnerId: String?
@@ -33,13 +33,5 @@ public enum AgentListLogic {
     /// This is the order ⌘1…⌘9 index into, so it stays in lockstep with what `grouped` renders.
     public static func ordered(_ agents: [Agent]) -> [Agent] {
         grouped(agents).flatMap(\.agents)
-    }
-
-    /// The model an agent actually runs: an `ANTHROPIC_MODEL` env override wins over the static
-    /// `model` field (an agent can point at a DeepSeek-compatible endpoint via env), then the app
-    /// default. Mirrors web RunnerDetailPage's `effectiveModel`.
-    public static func effectiveModel(model: String?, env: [String: String]?) -> String {
-        if let override = env?["ANTHROPIC_MODEL"], !override.isEmpty { return override }
-        return model ?? AgentDefaults.defaultModelID
     }
 }

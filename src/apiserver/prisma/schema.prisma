@@ -164,6 +164,10 @@ model Runner {
   planUsage         Json?        @map("plan_usage")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?        @map("model_catalog")
+  // Effective default reported by each built-in runtime on this machine. Heartbeat-owned cache,
+  // kept separate from modelCatalog because availability and selected-default are independent.
+  // Shape: { "claude": "claude-opus-5", "codex": "gpt-5.6-sol", ... }.
+  runtimeDefaultModels Json?     @map("runtime_default_models")
 
   // Browser-less sign-in relay for this machine's built-in runtime CLI. The runner drives the CLI
   // on its own machine while the user approves in their own browser, so a machine with no
@@ -254,7 +258,10 @@ model Agent {
   // Disambiguates the newly reserved `kimi` wire id from a stale pre-0077 custom-provider
   // write during a rolling deployment. Old replicas omit this column and therefore write false.
   providerBuiltin     Boolean   @default(false) @map("provider_builtin")
-  model               String    @default("claude-sonnet-4-6")
+  // Legacy per-agent model pin. New sessions resolve from their Runtime/ModelProvider; migration
+  // 0079 copied old pins into existing sessions. Temporarily retained as a rolling-deploy bridge
+  // for model-less sessions written by old replicas; first claim snapshots it onto Session.model.
+  model               String?
   appendSystemPrompt  String?   @map("append_system_prompt")
   systemPrompt        String?   @map("system_prompt")
   allowedTools        Json      @default("[]") @map("allowed_tools")
@@ -363,7 +370,13 @@ model Session {
   // Stable UUID of the runner process authorized to activate new generations. Process takeover
   // is an expected-owner CAS, so a delayed request from a superseded process cannot regain control.
   inboxLeaseOwner      String?   @map("inbox_lease_owner") @db.Uuid
-  model                String? // per-session override; null -> agent -> server default
+  // Explicit/snapshotted model. Null uses the rolling legacy Agent bridge when present, otherwise
+  // the runner Runtime/catalog default; first claim materializes whichever value was inherited.
+  model                String?
+  // New code sets this explicitly on create. The false database default identifies a model-less
+  // Session written by an old replica after migration 0079, whose pre-0079 static/Agent fallback
+  // must be preserved until first claim snapshots it.
+  usesRuntimeDefaultModel Boolean @default(false) @map("uses_runtime_default_model")
   permissionMode       String?   @map("permission_mode")
   // Claude effort level (low|medium|high|xhigh|max); null omits --effort so claude
   // uses the model's default.

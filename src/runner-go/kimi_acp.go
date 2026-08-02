@@ -733,8 +733,8 @@ func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, 
 }
 
 func kimiUsesEnvModel(env map[string]string) bool {
-	return strings.TrimSpace(env["KIMI_MODEL_NAME"]) != "" &&
-		strings.TrimSpace(env["KIMI_MODEL_API_KEY"]) != ""
+	return envValueWithAgentOverride(env, "KIMI_MODEL_NAME") != "" &&
+		envValueWithAgentOverride(env, "KIMI_MODEL_API_KEY") != ""
 }
 
 func kimiMCPServers(agent AgentExecConfig, orbitExe string) []map[string]interface{} {

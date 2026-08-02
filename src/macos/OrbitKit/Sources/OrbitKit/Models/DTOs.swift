@@ -53,7 +53,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let model: String?
     public let permissionMode: String?
     /// The agent's default reasoning effort ('' = model default, else low/medium/high/xhigh/max).
-    /// A new session seeds its effort from this (like model/permissionMode) — see the composer.
+    /// A new session seeds its effort from this — see the composer.
     public let effort: String?
     public let workDir: String?
     // The rest back the detail / edit form; all optional so a list payload (which may omit
@@ -89,6 +89,8 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let lastHeartbeatAt: String?
     public let planUsage: PlanUsage?
     public let modelCatalog: RunnerModelCatalog?
+    /// Effective defaults reported by the local runtimes on the latest runner heartbeat.
+    public let runtimeDefaultModels: [String: String]?
 }
 
 /// Why an ended session cannot currently be resumed on its original runner. Unknown values stay

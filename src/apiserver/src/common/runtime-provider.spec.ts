@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, PermissionMode } from '@orbit/shared';
 import {
   initializesRuntimeDynamically,
+  normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
   normalizeRuntimeProvider,
 } from './runtime-provider';
@@ -18,6 +19,41 @@ test('normalizeRuntimeProvider preserves every built-in runtime and safely defau
   );
   assert.equal(normalizeRuntimeProvider('removed-provider'), AgentProvider.CLAUDE);
   assert.equal(normalizeRuntimeProvider(null), AgentProvider.CLAUDE);
+});
+
+test('unsupported built-in models safely downgrade Auto permission mode', () => {
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-haiku-4-5-20251001',
+      PermissionMode.AUTO,
+    ),
+    PermissionMode.DEFAULT,
+  );
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CODEX, 'claude-opus-5', PermissionMode.AUTO),
+    PermissionMode.DEFAULT,
+  );
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5',
+      PermissionMode.AUTO,
+    ),
+    PermissionMode.AUTO,
+  );
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-haiku-4-5-20251001',
+      PermissionMode.PLAN,
+    ),
+    PermissionMode.PLAN,
+  );
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.KIMI, 'company/kimi-alias', PermissionMode.AUTO),
+    PermissionMode.AUTO,
+  );
 });
 
 test('Codex and Kimi initialize their runtime id dynamically; Claude does not', () => {

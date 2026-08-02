@@ -83,7 +83,6 @@ test('list forwards the session credential to the orchestration authorizer', asy
       name: 'agent',
       description: 'safe description',
       provider: 'codex',
-      model: 'gpt-safe',
       workDir: '/work/repo',
       runnerId: 'r1',
       enableWorktree: true,
@@ -183,7 +182,7 @@ test('rejects a non-string env value — the runner decodes env as map[string]st
 test('an omitted env leaves the stored map untouched', async () => {
   const { controller, seen } = makeController();
   await controller.updateAgent(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
-    model: 'claude-opus-5',
+    name: 'renamed',
   });
   assert.equal(seen.update?.env, undefined);
 });

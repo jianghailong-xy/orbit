@@ -504,7 +504,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("name is required", true)
 		}
 		body := map[string]interface{}{"name": name}
-		copyIfPresent(body, args, "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "description", "provider", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -520,7 +520,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("agentId is required", true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "name", "description", "provider", "model", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "name", "description", "provider", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -871,7 +871,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_list",
-				"description": "List this owner's agents (id, name, provider, model, workDir, runner). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"description": "List this owner's agents (id, name, runtime provider, workDir, runner). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
 				"inputSchema": obj(map[string]interface{}{}),
 			},
 			map[string]interface{}{
@@ -881,7 +881,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"name":               str,
 					"description":        str,
 					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | kimi | a configured provider slug. Defaults to claude."},
-					"model":              str,
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
@@ -894,13 +893,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, model, system prompt, workDir, etc.). Cannot change the orchestration permission (human-only, web UI).",
+				"description": "Update an existing agent's fields (name, runtime provider, system prompt, workDir, etc.). Cannot change the orchestration permission (human-only, web UI).",
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,
 					"description":        str,
 					"provider":           str,
-					"model":              str,
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            str,

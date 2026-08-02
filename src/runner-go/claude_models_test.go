@@ -11,7 +11,18 @@ func TestFetchClaudeModelCatalogMatchesClaudeCodePicker(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "claude")
 	script := `#!/bin/sh
-case "$2" in
+prompt=""
+no_persistence=0
+user_settings=0
+previous=""
+for arg in "$@"; do
+  [ "$arg" = "--no-session-persistence" ] && no_persistence=1
+  [ "$previous" = "--setting-sources" ] && [ "$arg" = "user" ] && user_settings=1
+  case "$arg" in /model*) prompt="$arg" ;; esac
+  previous="$arg"
+done
+[ "$no_persistence" = 1 ] && [ "$user_settings" = 1 ] || exit 3
+case "$prompt" in
   "/model opus") echo "Set model to Opus 5 for this session only" ;;
   "/model fable") echo "Set model to Fable 5 for this session only" ;;
   "/model sonnet") echo "Set model to Sonnet 5 for this session only" ;;
@@ -63,6 +74,48 @@ func TestParseSetModelName(t *testing.T) {
 		if got := parseSetModelName([]byte(in)); got != want {
 			t.Errorf("parseSetModelName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestFetchClaudeDefaultModelPreservesExactUserAlias(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	t.Setenv("ANTHROPIC_MODEL", "")
+	if err := os.WriteFile(
+		filepath.Join(dir, "settings.json"),
+		[]byte(`{"model":"opus[1m]"}`),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	model, err := fetchClaudeDefaultModel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model != "opus[1m]" {
+		t.Fatalf("model = %q, want opus[1m]", model)
+	}
+}
+
+func TestFetchClaudeDefaultModelHonorsEnvironmentPriority(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	t.Setenv("ANTHROPIC_MODEL", "gateway-exact-id")
+	if err := os.WriteFile(
+		filepath.Join(dir, "settings.json"),
+		[]byte(`{"model":"opusplan"}`),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	model, err := fetchClaudeDefaultModel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model != "gateway-exact-id" {
+		t.Fatalf("model = %q, want gateway-exact-id", model)
 	}
 }
 

@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER } from '@orbit/shared';
+import { AgentProvider } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
 
@@ -36,12 +36,9 @@ export class AgentsService {
         description: dto.description,
         provider,
         providerBuiltin: Object.values(AgentProvider).includes(provider as AgentProvider),
-        // Built-in providers resolve a default model here; a custom provider's default lives on
-        // its ModelProvider row, so the client sends an explicit model (claude's as a last resort).
-        model:
-          dto.model ??
-          DEFAULT_MODEL_BY_PROVIDER[provider as AgentProvider] ??
-          DEFAULT_MODEL_BY_PROVIDER[AgentProvider.CLAUDE],
+        // Runtime defaults are reported through the bound Runner. Keep the nullable column only for
+        // old-client reads of agents created before migration 0079; never seed it from dto.model.
+        model: null,
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         allowedTools: Array.from(
@@ -113,7 +110,6 @@ export class AgentsService {
     const data: Prisma.AgentUpdateInput = {
       name: dto.name,
       description: dto.description,
-      model: dto.model,
       appendSystemPrompt: dto.appendSystemPrompt,
       systemPrompt: dto.systemPrompt,
       permissionMode: dto.permissionMode,

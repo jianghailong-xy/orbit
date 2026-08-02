@@ -13,7 +13,7 @@ export interface CreateSessionDto {
   agentId?: string;
   /** Optional parent work item this session runs under. */
   taskId?: string;
-  /** Per-session overrides; null falls back to the agent, then a server default. */
+  /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;
   permissionMode?: string;
   /** Provider reasoning effort; '' / omitted → model default. Codex maps max to xhigh. */

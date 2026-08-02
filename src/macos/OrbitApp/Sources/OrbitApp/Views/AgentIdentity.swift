@@ -52,13 +52,14 @@ struct AgentAvatar: View {
     }
 }
 
-/// Agent picker opened from the new-session hero. Lists every agent (drawer order) with its model,
+/// Agent picker opened from the new-session hero. Lists every agent (drawer order) with its runtime,
 /// marks the current one, and reports a pick back to the caller — which switches the composing agent.
 /// A flat list (not runner-grouped) keeps it light; the caller owns the switch so this view needs no
 /// environment (which doesn't always propagate into a sheet).
 struct AgentSwitchSheet: View {
     let agents: [Agent]
     let currentID: String
+    let configuredProviders: [ConfiguredProvider]
     let onSelect: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -76,10 +77,9 @@ struct AgentSwitchSheet: View {
                         AgentAvatar(provider: agent.provider, size: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(agent.name).foregroundStyle(.primary).lineLimit(1)
-                            if let model = agent.model, !model.isEmpty {
-                                Text(AgentDefaults.friendlyName(model))
-                                    .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                            }
+                            Text(AgentDefaults.providerName(
+                                agent.provider ?? "claude", configured: configuredProviders))
+                                .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 8)
                         if agent.id == currentID {

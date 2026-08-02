@@ -50,6 +50,95 @@ test('custom-provider', async (t) => {
     assert.deepEqual(exec.env, { FOO: 'bar' });
   });
 
+  await t.test('built-in resolution follows session > legacy bridge > runtime > catalog > static', () => {
+    const base = {
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      runtimeDefaultModels: { codex: 'gpt-runtime' },
+      agentModel: null,
+      modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+    };
+    assert.equal(resolveProviderExec({ ...base, sessionModel: 'gpt-session' }).model, 'gpt-session');
+    assert.equal(resolveProviderExec({ ...base, sessionModel: null }).model, 'gpt-runtime');
+    assert.equal(
+      resolveProviderExec({
+        ...base,
+        sessionModel: null,
+        agentModel: 'gpt-legacy-agent',
+        usesRuntimeDefaultModel: false,
+      }).model,
+      'gpt-legacy-agent',
+    );
+    assert.equal(
+      resolveProviderExec({ ...base, sessionModel: null, runtimeDefaultModels: {} }).model,
+      'gpt-catalog',
+    );
+    assert.equal(
+      resolveProviderExec({
+        ...base,
+        sessionModel: null,
+        runtimeDefaultModels: {},
+        agentModel: 'gpt-legacy-agent',
+        usesRuntimeDefaultModel: false,
+      }).model,
+      'gpt-legacy-agent',
+    );
+    assert.equal(
+      resolveProviderExec({
+        ...base,
+        sessionModel: null,
+        runtimeDefaultModels: {},
+        agentModel: null,
+        modelCatalog: {},
+      }).model,
+      'gpt-5.6-sol',
+    );
+  });
+
+  await t.test('cross-runtime defaults are skipped and a legacy pin keeps old safety coercion', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      sessionModel: null,
+      runtimeDefaultModels: { codex: 'claude-opus-5' },
+      agentModel: null,
+      modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+    });
+    assert.equal(exec.model, 'gpt-catalog');
+
+    const legacy = resolveProviderExec({
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      sessionModel: null,
+      runtimeDefaultModels: { codex: 'gpt-runtime' },
+      agentModel: 'claude-opus-5',
+      usesRuntimeDefaultModel: false,
+    });
+    assert.equal(legacy.model, 'gpt-5.6-sol');
+
+    // Explicit session values keep the old coercion contract instead of silently choosing a
+    // different catalog entry than the user asked for.
+    const explicit = resolveProviderExec({
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      sessionModel: 'claude-opus-5',
+      modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+    });
+    assert.equal(explicit.model, 'gpt-5.6-sol');
+  });
+
+  await t.test('configured providers ignore runner runtime/catalog defaults', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      runtimeDefaultModels: { claude: 'claude-opus-5' },
+      agentModel: null,
+      modelCatalog: { claude: [{ value: 'claude-sonnet-5', label: 'Sonnet' }] },
+    });
+    assert.equal(exec.model, 'deepseek-chat');
+  });
+
   await t.test('built-in codex: a stale claude-* model is coerced to the codex default', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'codex',
@@ -108,16 +197,17 @@ test('custom-provider', async (t) => {
     assert.equal(picked.model, 'claude-haiku-4-5-20251001');
   });
 
-  await t.test('custom provider: borrows claude, injects anthropic env, keeps its own model', () => {
+  await t.test('custom provider preserves a legacy Agent pin until claim materializes it', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row(),
-      sessionModel: null,
-      agentModel: null,
+      sessionModel: '  \t ',
+      agentModel: 'hidden-legacy-agent-model',
+      usesRuntimeDefaultModel: false,
       agentEnv: { KEEP: '1' },
     });
     assert.equal(exec.provider, 'claude'); // runner-facing runtime
-    assert.equal(exec.model, 'deepseek-chat'); // provider default
+    assert.equal(exec.model, 'hidden-legacy-agent-model');
     assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'sk-ds');
     assert.equal(exec.env?.KEEP, '1'); // agent env preserved
@@ -146,17 +236,43 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'realkey');
   });
 
-  await t.test('a disabled custom row falls back to the claude runtime with no injected env', () => {
+  await t.test('a disabled custom row preserves its legacy Agent pin during rolling deploy', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row({ enabled: false }),
       sessionModel: null,
       agentModel: 'claude-opus-4-8',
+      usesRuntimeDefaultModel: false,
+      runtimeDefaultModels: { claude: 'claude-sonnet-5' },
       agentEnv: { A: '1' },
     });
     assert.equal(exec.provider, 'claude');
     assert.equal(exec.model, 'claude-opus-4-8');
     assert.deepEqual(exec.env, { A: '1' });
+  });
+
+  await t.test('new model-less sessions ignore legacy Agent pins and use Runtime defaults', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      sessionModel: null,
+      usesRuntimeDefaultModel: true,
+      agentModel: 'gpt-legacy-agent',
+      runtimeDefaultModels: { codex: 'gpt-runtime' },
+    });
+    assert.equal(exec.model, 'gpt-runtime');
+  });
+
+  await t.test('old-replica model-less sessions retain the old static fallback without an Agent', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: AgentProvider.CODEX,
+      customRow: null,
+      sessionModel: null,
+      usesRuntimeDefaultModel: false,
+      agentModel: null,
+      runtimeDefaultModels: { codex: 'gpt-runtime' },
+    });
+    assert.equal(exec.model, 'gpt-5.6-sol');
   });
 
   // The account-level subscription token supplies credentials for the BUILT-IN claude runtime

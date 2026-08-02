@@ -8,18 +8,19 @@ import OrbitKit
 //                       Open/Completed/Trash scope switcher (principal), a New-session button
 //                       (leading), and a gear that opens the agent's Settings sheet (trailing)
 //   • detail column  → the live console for the session picked in the content column
-// Grouping + effective-model logic come from the verified OrbitKit `AgentListLogic`; pickers reuse
+// Grouping comes from the verified OrbitKit `AgentListLogic`; Runtime/model pickers reuse
 // `AgentDefaults`. SwiftUI here is parse-checked only — verify on a Mac.
 //
 // IA note: the web edits agents *inside* the Runner detail page (an agent belongs to a runner);
 // this surfaces a flatter Agents nav whose items are the agents themselves.
 
-/// A row for an agent in the sidebar disclosure: name (+ disabled pill) over model · workDir.
+/// A row for an agent in the sidebar disclosure: name (+ disabled pill) over runtime · workDir.
 /// `shortcutIndex`, when set (the first nine agents), shows a faint "⌘N" hint for the switch
 /// shortcut so it's learnable.
 struct AgentRowView: View {
     let agent: Agent
     var shortcutIndex: Int? = nil
+    var configuredProviders: [ConfiguredProvider] = []
     var body: some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
@@ -31,7 +32,7 @@ struct AgentRowView: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
-                Text(AgentDefaults.friendlyName(AgentListLogic.effectiveModel(model: agent.model, env: agent.env))
+                Text(AgentDefaults.providerName(agent.provider ?? "claude", configured: configuredProviders)
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -297,6 +298,13 @@ struct AgentSettingsSheet: View {
 
 /// Detail (right) column for the Agents section: the live console for the session selected in the
 /// content column — mirroring how Open renders ConsoleView in its detail pane.
+func newSessionDraftIdentity(_ agent: Agent) -> String {
+    [
+        agent.id, agent.provider ?? "claude", agent.permissionMode ?? "dontAsk",
+        agent.effort ?? "", agent.runnerId ?? "host",
+    ].joined(separator: "|")
+}
+
 struct AgentConsoleDetail: View {
     @Environment(AppModel.self) private var app
     var body: some View {
@@ -305,11 +313,15 @@ struct AgentConsoleDetail: View {
             // Draft compose state: the same ComposerView a live console uses, but its send creates a
             // new session, after which we open that session's console.
             NewSessionView(agent: agent, registry: registry,
+                           defaultModel: agents.effectiveDefaultModel(for: agent),
+                           configuredProviders: agents.configuredProviders,
+                           configuredProvidersLoaded: agents.configuredProvidersLoaded,
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
             }
-            // Rebuild the draft when the hero switcher changes the agent (draftModel is per-agent).
-            .id(agent.id)
+            // Rebuild when settings change the selected Agent's execution identity/defaults too;
+            // @State would otherwise retain the old provider after an in-place Agent edit.
+            .id(newSessionDraftIdentity(agent))
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
             // A just-created session isn't in the Open list yet, so fall back to the agent
@@ -330,6 +342,12 @@ struct AgentConsoleDetail: View {
 /// model/permission/effort footer — instead of the simplified field it used to carry.
 struct NewSessionView: View {
     let agent: Agent
+    /// Runtime-reported default resolved before this draft is constructed.
+    let defaultModel: String
+    /// Already-loaded configured-provider identities, needed to resolve the Runtime capability of
+    /// a custom model alias before the draft's first asynchronous refresh.
+    let configuredProviders: [ConfiguredProvider]
+    let configuredProvidersLoaded: Bool
     /// The account's synced default reasoning effort (`user.preferences.defaultEffort`), used to
     /// seed the effort pill so a value picked on web/another device carries here. Optional because
     /// a restored-token launch primes `user` asynchronously — the seed below reacts to it arriving.
@@ -338,11 +356,20 @@ struct NewSessionView: View {
     @Environment(AppModel.self) private var app
     @State private var showSwitcher = false
 
-    init(agent: Agent, registry: ConsoleRegistry, defaultEffort: String? = nil,
+    init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
+         configuredProviders: [ConfiguredProvider] = [],
+         configuredProvidersLoaded: Bool = false,
+         defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
+        self.defaultModel = defaultModel
+        self.configuredProviders = configuredProviders
+        self.configuredProvidersLoaded = configuredProvidersLoaded
         self.defaultEffort = defaultEffort
-        _draft = State(initialValue: registry.draftModel(for: agent, onCreated: onCreated))
+        _draft = State(initialValue: registry.draftModel(
+            for: agent, defaultModel: defaultModel,
+            configuredProviders: configuredProviders,
+            configuredProvidersLoaded: configuredProvidersLoaded, onCreated: onCreated))
     }
 
     var body: some View {
@@ -407,6 +434,21 @@ struct NewSessionView: View {
             ComposerView(console: draft, autoFocus: true)
         }
         .task { await draft.prepareDraft() }
+        // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
+        // best-effort provider/runner requests. Push those later snapshots into the draft so a
+        // custom provider adopts its real default even if the draft's own request failed.
+        .onChange(of: configuredProviders, initial: true) { _, providers in
+            draft.adoptDraftProviderContext(
+                providers, loaded: configuredProvidersLoaded, defaultModel: defaultModel)
+        }
+        .onChange(of: configuredProvidersLoaded, initial: true) { _, loaded in
+            draft.adoptDraftProviderContext(
+                configuredProviders, loaded: loaded, defaultModel: defaultModel)
+        }
+        .onChange(of: defaultModel, initial: true) { _, model in
+            draft.adoptDraftProviderContext(
+                configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
+        }
         // Seed the effort pill from the account default. Reactive on `defaultEffort` so a value
         // that lands after the draft was built (async `user` prime on a restored-token launch) is
         // still adopted. Guarded on `.default` so it only fills an untouched pill — a manual pick
@@ -417,7 +459,8 @@ struct NewSessionView: View {
             }
         }
         .sheet(isPresented: $showSwitcher) {
-            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id) { id in
+            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
+                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
                 app.composeWithAgent(id)
             }
         }
@@ -426,8 +469,11 @@ struct NewSessionView: View {
     /// "New session · <model> · <effort>" — surfaces the config the draft will start with (mirrors
     /// the composer footer) so the model/effort are visible up front, not just the agent name.
     private var heroSubtitle: String {
-        var parts = ["New session", AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
-                                                               configured: draft.configuredProviders)]
+        let model = draft.providerCapabilitiesResolved
+            ? AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
+                                         configured: draft.configuredProviders)
+            : "Runtime default"
+        var parts = ["New session", model]
         if draft.effort != .default { parts.append(draft.effort.label) }
         return parts.joined(separator: " · ")
     }
@@ -620,7 +666,7 @@ private struct SpinnerGlyph: View {
     }
 }
 
-/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, model, permission
+/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, runtime, permission
 /// mode, Instructions (appendSystemPrompt), working directory, enabled. Empty Instructions /
 /// workDir omit the key (no change) — matching the web, which sends `undefined` when blank.
 struct AgentFormContent: View {
@@ -630,7 +676,6 @@ struct AgentFormContent: View {
 
     @State private var name = ""
     @State private var provider = "claude"
-    @State private var model = ""
     @State private var mode: PermissionMode = .dontAsk
     @State private var effort: Effort = .default
     @State private var instructions = ""
@@ -638,13 +683,26 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var confirmingDelete = false
 
-    private var modelCatalog: RunnerModelCatalog? { agents.modelCatalog(for: agent.runnerId) }
-    private var modelOptions: [ModelOption] {
-        AgentDefaults.models(for: provider, catalog: modelCatalog, configured: agents.configuredProviders)
-    }
     /// Runtime options: the built-ins plus the control-plane–configured providers.
     private var providerOptions: [ProviderOption] {
         AgentDefaults.providers(configured: agents.configuredProviders)
+    }
+
+    /// Agents no longer store a model default. Resolve the model this Runtime will provide so the
+    /// permission picker never offers Auto for an incompatible model.
+    private var effectiveModel: String {
+        agents.effectiveDefaultModel(for: provider, runnerId: agent.runnerId)
+    }
+
+    private var permissionModeOptions: [PermissionMode] {
+        AgentDefaults.permissionModes.filter {
+            $0 != .auto || !providerResolved || AgentDefaults.supportsAuto(
+                effectiveModel, provider: provider, configured: agents.configuredProviders)
+        }
+    }
+
+    private var providerResolved: Bool {
+        AgentDefaults.isBuiltInProvider(provider) || agents.configuredProvidersLoaded
     }
 
     var body: some View {
@@ -652,25 +710,23 @@ struct AgentFormContent: View {
             Section {
                 TextField("Name", text: $name, prompt: Text("e.g. tea-cli builder"))
 
-                // The reset lives in the Binding's setter, not `.onChange`: `.onChange` also fires
-                // when `prefill()` seeds `provider` programmatically, which would clobber the
-                // agent's saved model on open (web's onProviderChange is user-interaction only).
                 Picker("Runtime", selection: Binding(
                     get: { provider },
                     set: { new in
-                        // A model or effort from the old runtime is meaningless (and rejected)
-                        // under the new one — reset to that provider's default rather than PATCH
-                        // a bad value.
                         provider = new
-                        model = AgentDefaults.defaultModel(for: new, catalog: modelCatalog,
-                                                           configured: agents.configuredProviders)
+                        // Effort vocabularies still differ by runtime even though the default model
+                        // itself now comes from the Runtime heartbeat.
                         effort = AgentDefaults.normalizeEffort(effort, for: new)
                         if !AgentDefaults.efforts(for: new).contains(effort) { effort = .default }
+                        let nextModel = agents.effectiveDefaultModel(
+                            for: new, runnerId: agent.runnerId)
+                        mode = AgentDefaults.clampPermissionMode(
+                            mode, for: nextModel, provider: new,
+                            configured: agents.configuredProviders)
                     }
                 )) {
                     // Surface a saved provider missing from the list (a removed/disabled configured
-                    // provider) as its raw slug so the picker still shows the current value rather
-                    // than going blank — same pattern as the Model picker below.
+                    // provider) as its raw slug so the picker still shows the current value.
                     if !providerOptions.contains(where: { $0.id == provider }) {
                         Text(AgentDefaults.providerName(provider, configured: agents.configuredProviders))
                             .tag(provider)
@@ -678,22 +734,13 @@ struct AgentFormContent: View {
                     ForEach(providerOptions) { Text($0.name).tag($0.id) }
                 }
 
-                Picker("Model", selection: $model) {
-                    // Surface a non-standard saved model (e.g. an env-overridden endpoint) so the
-                    // picker still shows the current value rather than going blank.
-                    if !modelOptions.contains(where: { $0.id == model }) {
-                        Text(model.isEmpty ? "—" : model).tag(model)
-                    }
-                    ForEach(modelOptions) { Text($0.name).tag($0.id) }
-                }
-
                 Picker("Permission mode", selection: $mode) {
-                    ForEach(AgentDefaults.permissionModes, id: \.self) {
+                    ForEach(permissionModeOptions, id: \.self) {
                         Text(AgentDefaults.label($0)).tag($0)
                     }
                 }
 
-                // A new session with this agent seeds its reasoning effort from here (like model /
+                // A new session with this agent seeds its reasoning effort from here (like
                 // permission mode); "Default" (the empty value) leaves it to the model's default.
                 Picker("Effort", selection: $effort) {
                     ForEach(AgentDefaults.efforts(for: provider)) { Text($0.label).tag($0) }
@@ -731,6 +778,19 @@ struct AgentFormContent: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: prefill)
+        .onChange(of: effectiveModel) { _, model in
+            if providerResolved {
+                mode = AgentDefaults.clampPermissionMode(
+                    mode, for: model, provider: provider, configured: agents.configuredProviders)
+            }
+        }
+        .onChange(of: agents.configuredProvidersLoaded) { _, loaded in
+            if loaded {
+                mode = AgentDefaults.clampPermissionMode(
+                    mode, for: effectiveModel, provider: provider,
+                    configured: agents.configuredProviders)
+            }
+        }
         // Cancel/Done pair (the iOS editing-sheet idiom, e.g. Contacts): "Done" commits the working
         // copy and closes, "Cancel" discards and closes — a discoverable exit that also works on
         // macOS, where the sheet has no swipe-to-dismiss (Cancel binds to Esc, Done to Return). Done
@@ -762,9 +822,12 @@ struct AgentFormContent: View {
     private func prefill() {
         name = agent.name
         provider = agent.provider ?? "claude"
-        model = agent.model ?? AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
-                                                          configured: agents.configuredProviders)
-        mode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
+        let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
+        mode = providerResolved
+            ? AgentDefaults.clampPermissionMode(
+                savedMode, for: effectiveModel, provider: provider,
+                configured: agents.configuredProviders)
+            : savedMode
         effort = prefilledEffort
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
@@ -781,8 +844,6 @@ struct AgentFormContent: View {
     private var isDirty: Bool {
         name != agent.name
         || provider != (agent.provider ?? "claude")
-        || model != (agent.model ?? AgentDefaults.defaultModel(for: agent.provider ?? "claude", catalog: modelCatalog,
-                                                               configured: agents.configuredProviders))
         || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
         || effort != prefilledEffort
         || instructions != (agent.appendSystemPrompt ?? "")
@@ -803,7 +864,6 @@ struct AgentFormContent: View {
         let req = UpdateAgentRequest(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             provider: provider,
-            model: model,
             appendSystemPrompt: instructions.isEmpty ? nil : instructions,
             permissionMode: mode.rawValue,
             // Always send the raw value ("" for Default) so picking Default actually clears a

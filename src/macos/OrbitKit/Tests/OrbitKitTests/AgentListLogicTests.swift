@@ -32,13 +32,4 @@ final class AgentListLogicTests: XCTestCase {
         XCTAssertEqual(AgentListLogic.ordered(agents).map(\.id), ["1", "4", "3", "2"])
         XCTAssertEqual(AgentListLogic.ordered([]).map(\.id), [])
     }
-
-    func testEffectiveModelEnvOverrideWins() {
-        XCTAssertEqual(
-            AgentListLogic.effectiveModel(model: "claude-opus-4-8", env: ["ANTHROPIC_MODEL": "deepseek-chat"]),
-            "deepseek-chat")
-        XCTAssertEqual(AgentListLogic.effectiveModel(model: "claude-sonnet-4-6", env: nil), "claude-sonnet-4-6")
-        XCTAssertEqual(AgentListLogic.effectiveModel(model: nil, env: ["ANTHROPIC_MODEL": ""]),
-                       AgentDefaults.defaultModelID)   // empty override ignored → default
-    }
 }

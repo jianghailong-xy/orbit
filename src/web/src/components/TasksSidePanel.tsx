@@ -16,7 +16,12 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Avatar, Dropdown } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
-import type { PlanUsage, RunnerModelCatalog, SlashCommandInfo } from '@orbit/shared';
+import type {
+  PlanUsage,
+  RunnerModelCatalog,
+  RuntimeDefaultModels,
+  SlashCommandInfo,
+} from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
@@ -75,6 +80,8 @@ export interface Runner {
   planUsage?: PlanUsage | null;
   // Runtime model catalog reported by the runner.
   modelCatalog?: RunnerModelCatalog | null;
+  // Effective default model reported by each built-in runtime on this runner.
+  runtimeDefaultModels?: RuntimeDefaultModels;
 }
 
 interface Agent {

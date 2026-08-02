@@ -134,6 +134,8 @@ func TestAsAuthErrorRescuesCodex401(t *testing.T) {
 }
 
 func TestEngineAuthPreflightSkipsInjectedCredentials(t *testing.T) {
+	t.Setenv("KIMI_MODEL_NAME", "")
+	t.Setenv("KIMI_MODEL_API_KEY", "")
 	// A configured provider brings its own key; the CLI's local login is irrelevant then,
 	// and its "signed out" answer would fail a session that works perfectly.
 	if !hasInjectedCredentials(providerCodex, map[string]string{"OPENAI_BASE_URL": "https://x/v1"}) {
@@ -165,6 +167,15 @@ func TestEngineAuthPreflightSkipsInjectedCredentials(t *testing.T) {
 	// With a key present the probe never runs, so even a signed-out machine passes.
 	if msg := engineAuthPreflight(providerCodex, map[string]string{"OPENAI_API_KEY": "sk-x"}); msg != "" {
 		t.Errorf("preflight must not block an API-key session: %q", msg)
+	}
+
+	t.Setenv("KIMI_MODEL_NAME", "process-model")
+	t.Setenv("KIMI_MODEL_API_KEY", "process-key")
+	if !hasInjectedCredentials(providerKimi, nil) {
+		t.Error("kimi: process KIMI_MODEL_* should count as injected credentials")
+	}
+	if hasInjectedCredentials(providerKimi, map[string]string{"KIMI_MODEL_API_KEY": ""}) {
+		t.Error("kimi: an explicit empty Agent key should disable the process override")
 	}
 }
 

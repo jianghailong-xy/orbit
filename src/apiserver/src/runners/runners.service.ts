@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { LoginEngine, RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
+import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
@@ -67,6 +68,9 @@ export class RunnersService {
         planUsage: true,
         // Runtime model catalog reported by the runner (Codex model picker source).
         modelCatalog: true,
+        // Runtime defaults reported by the runner heartbeat. This is capability state, not a
+        // user-editable Runner setting.
+        runtimeDefaultModels: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -85,8 +89,10 @@ export class RunnersService {
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const staleBefore = Date.now() - OFFLINE_AFTER_MS;
-    return runners.map(({ availableCommands, availableSkills, ...r }) => ({
+    return runners.map(({ availableCommands, availableSkills, runtimeDefaultModels, ...r }) => ({
       ...r,
+      // Never expose null or malformed JSON: clients can always index this as a provider map.
+      runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).

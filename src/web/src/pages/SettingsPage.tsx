@@ -5,13 +5,7 @@ import { api } from '../api';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
-import {
-  CLAUDE_MODEL_OPTIONS,
-  MODE_OPTIONS,
-  AUTO_CAPABLE_MODELS,
-  DEFAULT_MODEL,
-  DEFAULT_PERMISSION_MODE,
-} from '../lib/agentDefaults';
+import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/agentDefaults';
 
 // One labelled row: title + hint on the left, the control on the right.
 function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
@@ -34,8 +28,8 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
   );
 }
 
-// Personal preferences. Appearance is account-synced via the theme context; the
-// "Agent defaults" pre-fill the runner's new-agent form and persist per account.
+// Personal preferences. Appearance is account-synced via the theme context; the permission
+// default pre-fills the runner's new-agent form and persists per account.
 export function SettingsPage() {
   const message = useToast();
   const qc = useQueryClient();
@@ -43,7 +37,6 @@ export function SettingsPage() {
   const me = useQuery(meQuery());
   const prefs: UserPreferences = me.data?.preferences ?? {};
 
-  const defaultModel = prefs.defaultModel ?? DEFAULT_MODEL;
   const defaultMode = prefs.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
 
   const save = useMutation({
@@ -55,18 +48,6 @@ export function SettingsPage() {
     },
     onError: (e: Error) => message.error(e.message || 'Failed to save'),
   });
-
-  // Auto mode needs a recent model; if the chosen default model can't run Auto, drop
-  // the default mode off Auto in the same patch (mirrors the new-agent form).
-  const onModelChange = (m: string) => {
-    const patch: UserPreferences = { defaultModel: m };
-    if (defaultMode === 'auto' && !AUTO_CAPABLE_MODELS.has(m)) patch.defaultPermissionMode = 'default';
-    save.mutate(patch);
-  };
-
-  const modeOptions = MODE_OPTIONS.filter(
-    (o) => o.value !== 'auto' || AUTO_CAPABLE_MODELS.has(defaultModel),
-  );
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
@@ -87,20 +68,11 @@ export function SettingsPage() {
       </Card>
 
       <Card title="Agent defaults">
-        <Field label="Default model" hint="Pre-selected when you create a new agent.">
-          <Select
-            style={{ width: 200 }}
-            value={defaultModel}
-            options={CLAUDE_MODEL_OPTIONS}
-            onChange={onModelChange}
-            loading={save.isPending}
-          />
-        </Field>
         <Field label="Default permission mode" hint="The mode a new agent starts in.">
           <Select
             style={{ width: 200 }}
             value={defaultMode}
-            options={modeOptions}
+            options={MODE_OPTIONS}
             onChange={(v) => save.mutate({ defaultPermissionMode: v })}
             loading={save.isPending}
           />

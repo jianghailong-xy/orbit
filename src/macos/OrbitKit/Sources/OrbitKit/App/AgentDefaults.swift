@@ -6,11 +6,25 @@ import Foundation
 public struct ModelOption: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
 }
 
 public struct ProviderOption: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+}
+
+/// Tracks whether a model value has ever been selected explicitly by the user. Async runner and
+/// provider refreshes may replace an initial seed only while this remains pristine; comparing the
+/// model strings is insufficient because a user can pick away and then return to the seed.
+public struct ModelSelectionRevision: Equatable, Sendable {
+    public private(set) var value: UInt = 0
+    public init() {}
+    public var isPristine: Bool { value == 0 }
+    public mutating func markUserEdit() { value &+= 1 }
 }
 
 /// Reasoning-effort levels offered in the composer, in the same order as web's EFFORT_OPTIONS.
@@ -107,12 +121,15 @@ public enum AgentDefaults {
             let options = custom.models
                 .filter { !$0.value.isEmpty && !$0.label.isEmpty }
                 .map { ModelOption(id: $0.value, name: $0.label) }
-            if !options.isEmpty { return options }
+            // Keep an empty custom model space empty. The composer inserts the effective fallback
+            // as its sole row; falling through would leak Claude models into custom Codex.
+            return options
         }
         return models(for: provider, catalog: catalog)
     }
 
-    /// Seed model for a provider when the agent has none. Mirrors web's DEFAULT_MODEL_BY_PROVIDER.
+    /// Static fallback when neither Runtime default nor catalog is available. Mirrors web's
+    /// DEFAULT_MODEL_BY_PROVIDER.
     public static func defaultModel(for provider: String) -> String {
         switch provider {
         case "codex": return "gpt-5.6-sol"
@@ -126,14 +143,77 @@ public enum AgentDefaults {
     }
 
     /// As `defaultModel(for:catalog:)`, preferring a configured provider's declared default,
-    /// then its first model. Mirrors web's defaultModelForProvider.
+    /// then its first model, then the static default of the runtime it borrows. Mirrors web's
+    /// defaultModelForProvider.
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
-        if let def = configuredProvider(provider, in: configured)?.defaultModel, !def.isEmpty {
-            return def
+        if let custom = configuredProvider(provider, in: configured) {
+            if let def = custom.defaultModel, !def.isEmpty { return def }
+            if let first = custom.models.first(where: { !$0.value.isEmpty && !$0.label.isEmpty }) {
+                return first.value
+            }
+            return defaultModel(for: custom.runtime == "codex" ? "codex" : "claude")
         }
-        return models(for: provider, catalog: catalog, configured: configured).first?.id
-            ?? defaultModel(for: provider)
+        return models(for: provider, catalog: catalog).first?.id ?? defaultModel(for: provider)
+    }
+
+    /// Resolve the model a brand-new session should start with. A configured provider owns its
+    /// separate model space/default. For built-in runtimes, the heartbeat-reported effective
+    /// default wins, then the runner catalog's first model, then the static fallback.
+    public static func effectiveDefaultModel(for provider: String, catalog: RunnerModelCatalog?,
+                                             configured: [ConfiguredProvider]?,
+                                             runtimeDefaults: [String: String]?) -> String {
+        if configuredProvider(provider, in: configured) != nil {
+            return defaultModel(for: provider, catalog: catalog, configured: configured)
+        }
+        // A removed/disabled custom identity executes through the historical Claude fallback.
+        // Normalize it before consulting heartbeat/catalog data; an unknown slug must never mint
+        // a separate Runtime-default namespace or bypass Claude's reported default.
+        let runtime = providers.contains(where: { $0.id == provider }) ? provider : "claude"
+        if let saved = runtimeDefaults?[runtime], !saved.isEmpty { return saved }
+        return defaultModel(for: runtime, catalog: catalog, configured: configured)
+    }
+
+    /// Resolve a persisted built-in/configured provider identity to the local runtime that
+    /// executes it. Missing configured providers retain the server's historical Claude fallback.
+    public static func runtime(for provider: String,
+                               configured: [ConfiguredProvider]? = nil) -> String {
+        if let custom = configuredProvider(provider, in: configured) {
+            // Configured providers currently borrow only Claude or Codex. Invalid legacy values
+            // use the same safe Claude fallback as the backend.
+            return custom.runtime == "codex" ? "codex" : "claude"
+        }
+        let value = provider
+        return value == "codex" || value == "kimi" ? value : "claude"
+    }
+
+    public static func isBuiltInProvider(_ provider: String) -> Bool {
+        providers.contains { $0.id == provider }
+    }
+
+    /// Re-resolve an already-rendered seed from freshly fetched Runtime data. A failed runner read
+    /// keeps the current value. Likewise, an unavailable providers response cannot safely replace
+    /// a custom provider's cached seed with the built-in Claude fallback.
+    public static func refreshedDefaultModel(currentModel: String, for provider: String,
+                                             catalog: RunnerModelCatalog?,
+                                             configured: [ConfiguredProvider]?,
+                                             runtimeDefaults: [String: String]?,
+                                             runnerSnapshotLoaded: Bool,
+                                             configuredProvidersLoaded: Bool) -> String {
+        let isBuiltIn = providers.contains { $0.id == provider }
+        // A configured provider owns its default and does not depend on runner heartbeat data.
+        if configuredProvidersLoaded,
+           configuredProvider(provider, in: configured) != nil {
+            return defaultModel(for: provider, catalog: catalog, configured: configured)
+        }
+        guard runnerSnapshotLoaded else { return currentModel }
+        if !isBuiltIn, configuredProvider(provider, in: configured) == nil,
+           !configuredProvidersLoaded {
+            return currentModel
+        }
+        return effectiveDefaultModel(
+            for: provider, catalog: catalog, configured: configured,
+            runtimeDefaults: runtimeDefaults)
     }
 
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
@@ -223,6 +303,33 @@ public enum AgentDefaults {
     }
 
     public static let permissionModes = PermissionMode.allCases
+
+    /// Claude's Auto mode is model-specific. Codex does not expose it, while Kimi exposes Auto as
+    /// a runtime-wide permission mode (including arbitrary locally configured model aliases).
+    public static let autoCapableModels: Set<String> = [
+        "claude-opus-5",
+        "claude-fable-5",
+        "claude-sonnet-5",
+        "kimi-code/kimi-for-coding",
+    ]
+
+    public static func supportsAuto(_ model: String, provider: String = "claude",
+                                    configured: [ConfiguredProvider]? = nil) -> Bool {
+        switch runtime(for: provider, configured: configured) {
+        case "kimi":  return true
+        case "codex": return false
+        default:      return autoCapableModels.contains(model)
+        }
+    }
+
+    /// Prevent the UI from carrying a model/mode pair that the runtime will reject. The backend
+    /// applies the same normalization as a final safety net.
+    public static func clampPermissionMode(_ mode: PermissionMode,
+                                           for model: String, provider: String = "claude",
+                                           configured: [ConfiguredProvider]? = nil) -> PermissionMode {
+        mode == .auto && !supportsAuto(model, provider: provider, configured: configured)
+            ? .default : mode
+    }
 
     public static func label(_ mode: PermissionMode) -> String {
         switch mode {

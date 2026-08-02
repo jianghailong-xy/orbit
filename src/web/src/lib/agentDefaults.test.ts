@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import {
   CLAUDE_MODEL_OPTIONS,
+  clampPermissionModeForModel,
   contextWindowFor,
   DEFAULT_CONTEXT_WINDOW,
   defaultModelForProvider,
@@ -10,6 +11,7 @@ import {
   mergedProviderOptions,
   modelOptionsForProvider,
   normalizeEffortForProvider,
+  providerIdentityResolved,
   supportsAuto,
   type ConfiguredProvider,
 } from './agentDefaults';
@@ -23,7 +25,13 @@ describe('Claude model options', () => {
       { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
     ]);
     expect(contextWindowFor('claude-fable-5')).toBe(1_000_000);
-    expect(supportsAuto('claude-fable-5')).toBe(true);
+    expect(supportsAuto('claude-fable-5', 'claude')).toBe(true);
+  });
+
+  it('clamps Auto when the effective Runtime default cannot run it', () => {
+    expect(clampPermissionModeForModel('auto', 'claude-haiku-4-5', 'claude')).toBe('default');
+    expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude')).toBe('auto');
+    expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', 'claude')).toBe('plan');
   });
 });
 
@@ -36,7 +44,8 @@ describe('Kimi runtime defaults', () => {
     expect(modelOptionsForProvider('kimi')).toEqual(KIMI_MODEL_OPTIONS);
     expect(defaultModelForProvider('kimi')).toBe('kimi-code/kimi-for-coding');
     expect(contextWindowFor('kimi-code/kimi-for-coding')).toBe(262_144);
-    expect(supportsAuto('kimi-code/kimi-for-coding')).toBe(true);
+    expect(supportsAuto('kimi-code/kimi-for-coding', 'kimi')).toBe(true);
+    expect(supportsAuto('local-kimi-alias', 'kimi')).toBe(true);
   });
 
   it('offers Kimi efforts without Codex-only minimal', () => {
@@ -51,6 +60,83 @@ describe('Kimi runtime defaults', () => {
     expect(normalizeEffortForProvider('kimi', 'medium')).toBe('high');
     expect(normalizeEffortForProvider('kimi', 'xhigh')).toBe('max');
     expect(normalizeEffortForProvider('kimi', 'high')).toBe('high');
+  });
+});
+
+describe('Runtime-reported default models', () => {
+  it('defers unknown provider model capabilities until the provider list is authoritative', () => {
+    expect(providerIdentityResolved('claude', false)).toBe(true);
+    expect(providerIdentityResolved('kimi', false)).toBe(true);
+    expect(providerIdentityResolved('custom-codex', false)).toBe(false);
+    expect(providerIdentityResolved('custom-codex', true)).toBe(true);
+  });
+
+  it('prefers the reported Runtime value over the first runner catalog model', () => {
+    const catalog: RunnerModelCatalog = {
+      claude: [{ value: 'claude-sonnet-5', label: 'Sonnet 5' }],
+    };
+
+    expect(
+      defaultModelForProvider('claude', catalog, undefined, {
+        claude: 'claude-opus-5',
+      }),
+    ).toBe('claude-opus-5');
+  });
+
+  it('uses the catalog first item, then the static fallback, when no default is reported', () => {
+    const catalog: RunnerModelCatalog = {
+      codex: [{ value: 'gpt-catalog-first', label: 'Catalog First' }],
+    };
+
+    expect(defaultModelForProvider('codex', catalog, undefined, {})).toBe('gpt-catalog-first');
+    expect(defaultModelForProvider('codex', null, undefined, {})).toBe('gpt-5.6-sol');
+  });
+
+  it('keeps a configured provider in its own model space', () => {
+    const configured: ConfiguredProvider[] = [
+      {
+        slug: 'deepseek',
+        label: 'DeepSeek',
+        runtime: 'claude',
+        models: [{ value: 'deepseek-v4', label: 'DeepSeek V4' }],
+        defaultModel: 'deepseek-v4',
+      },
+    ];
+
+    expect(
+      defaultModelForProvider('deepseek', null, configured, { claude: 'claude-sonnet-5' }),
+    ).toBe('deepseek-v4');
+  });
+
+  it('normalizes a removed provider to the Claude Runtime before reading its default', () => {
+    const catalog: RunnerModelCatalog = {
+      claude: [{ value: 'claude-catalog', label: 'Claude Catalog' }],
+    };
+
+    expect(
+      defaultModelForProvider('removed-provider', catalog, [], {
+        claude: 'claude-runtime-default',
+      }),
+    ).toBe('claude-runtime-default');
+  });
+
+  it('uses only supported configured runtimes when deciding whether Auto is available', () => {
+    const configured: ConfiguredProvider[] = [
+      { slug: 'local-kimi', label: 'Local Kimi', runtime: 'kimi', models: [] },
+      { slug: 'local-codex', label: 'Local Codex', runtime: 'codex', models: [] },
+    ];
+
+    expect(supportsAuto('any-local-alias', 'local-kimi', configured)).toBe(false);
+    expect(supportsAuto('claude-opus-5', 'local-codex', configured)).toBe(false);
+  });
+
+  it('does not leak Claude picker rows into an empty custom model space', () => {
+    const configured: ConfiguredProvider[] = [
+      { slug: 'custom-codex', label: 'Custom Codex', runtime: 'codex', models: [] },
+    ];
+
+    expect(modelOptionsForProvider('custom-codex', null, configured)).toEqual([]);
+    expect(defaultModelForProvider('custom-codex', null, configured)).toBe('gpt-5.6-sol');
   });
 });
 

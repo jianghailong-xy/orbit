@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	heartbeatInterval       = 30 * time.Second
-	selfUpdateCheckInterval = 10 * time.Minute
+	heartbeatInterval                   = 30 * time.Second
+	selfUpdateCheckInterval             = 10 * time.Minute
+	runtimeDefaultRefreshHeartbeatTicks = 10  // ~5 minutes
+	modelCatalogRefreshHeartbeatTicks   = 120 // ~60 minutes
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up
@@ -355,15 +357,15 @@ func runLoop(cfg *RunnerConfig) bool {
 	codexIdle := func() bool { return providerConfigured(providerCodex) }
 	go codexUsageProbe.run(loopCtx, codexActive, codexIdle)
 
-	// Runtime model catalogs, reported by the runtimes themselves. Codex ships new
-	// model slugs in its local catalog, so cache `codex debug models` and let the UI
-	// follow the runner instead of a hardcoded web/mobile list.
-	var modelCatalogMu sync.Mutex
+	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
+	// change rarely and are expensive to discover; defaults are cheap config reads that users may
+	// change deliberately, so the heartbeat loop refreshes the two snapshots at different rates.
+	var modelSnapshotMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
-	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
-	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
-	// hourly (see the heartbeat loop): model lineups change rarely, and the Claude fetch spawns a
-	// few `claude -p` processes, so there's no reason to run it often.
+	var hbRuntimeDefaultModels map[string]string
+	// Let the UI follow the runner's own CLIs (Codex `codex debug models` and Claude's local
+	// `/model`) instead of a hardcoded web/mobile list. Refreshed hourly: the Claude fetch spawns a
+	// few `claude -p` processes, while model lineups themselves change rarely.
 	refreshModelCatalog := func() {
 		catalog := &ModelCatalog{}
 		if codexCLIAvailable() {
@@ -380,14 +382,28 @@ func runLoop(cfg *RunnerConfig) bool {
 				catalog.Claude = models
 			}
 		}
-		if len(catalog.Codex) == 0 && len(catalog.Claude) == 0 {
-			return // nothing fetched this round — leave the last good catalog in place
+		modelSnapshotMu.Lock()
+		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 {
+			hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
 		}
-		modelCatalogMu.Lock()
-		hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
-		modelCatalogMu.Unlock()
+		modelSnapshotMu.Unlock()
+	}
+	// Runtime defaults come from user-owned config/environment only, so refresh them more often
+	// without paying the catalog's process-spawn cost. Probe errors remain visible in logs, while
+	// mergeRuntimeDefaultModels applies the null/empty/last-good heartbeat semantics.
+	refreshRuntimeDefaults := func() {
+		results := probeRuntimeDefaultModels()
+		for _, result := range results {
+			if result.err != nil {
+				logln(result.runtime, "default model refresh failed:", result.err)
+			}
+		}
+		modelSnapshotMu.Lock()
+		hbRuntimeDefaultModels = mergeRuntimeDefaultModels(hbRuntimeDefaultModels, results)
+		modelSnapshotMu.Unlock()
 	}
 	go refreshModelCatalog()
+	go refreshRuntimeDefaults()
 
 	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
@@ -426,14 +442,15 @@ func runLoop(cfg *RunnerConfig) bool {
 				return
 			case <-ticker.C:
 				cycles++
-				if cycles%10 == 0 { // re-scan assets every ~5 min
+				if cycles%runtimeDefaultRefreshHeartbeatTicks == 0 { // defaults + slash assets
+					go refreshRuntimeDefaults()
 					refreshRunnerAgents()
 					c, s := slashAssetsForHeartbeat(assetRoots())
 					assetMu.Lock()
 					hbCommands, hbSkills = c, s
 					assetMu.Unlock()
 				}
-				if cycles%120 == 0 { // model catalog (Codex + Claude) every ~60 min
+				if cycles%modelCatalogRefreshHeartbeatTicks == 0 { // Codex + Claude catalog
 					go refreshModelCatalog()
 				}
 				cancels, jobs := pool.snapshot()
@@ -453,9 +470,10 @@ func runLoop(cfg *RunnerConfig) bool {
 				assetMu.Lock()
 				cmds, skills := hbCommands, hbSkills
 				assetMu.Unlock()
-				modelCatalogMu.Lock()
+				modelSnapshotMu.Lock()
 				modelCatalog := hbModelCatalog
-				modelCatalogMu.Unlock()
+				runtimeDefaultModels := hbRuntimeDefaultModels
+				modelSnapshotMu.Unlock()
 				// Live worktree diff per running session, so the web's status bar appears
 				// mid-turn instead of only after a turn completes. Computed outside the lock
 				// (git can be slow); a just-finalized session is filtered server-side by status.
@@ -479,9 +497,10 @@ func runLoop(cfg *RunnerConfig) bool {
 					Status: "ONLINE", IdleCapacity: idle, Version: version,
 					LeaseOwner: t.leaseOwner, SupervisedSessionIDs: supervisedSessionIDs,
 					Commands: cmds, Skills: skills,
-					PlanUsage:    combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
-					ModelCatalog: modelCatalog,
-					Sessions:     liveSessions,
+					PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
+					ModelCatalog:         modelCatalog,
+					RuntimeDefaultModels: runtimeDefaultModels,
+					Sessions:             liveSessions,
 				})
 				if err != nil {
 					logln("heartbeat failed:", err)

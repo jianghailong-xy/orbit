@@ -15,10 +15,15 @@ final class AgentsModel {
     private(set) var runnerOnline: [String: Bool] = [:]
     /// runnerId → runtime model catalog, reported by that runner.
     private(set) var runnerModelCatalog: [String: RunnerModelCatalog] = [:]
+    /// runnerId → runtime → the effective default reported by the latest heartbeat.
+    private(set) var runnerRuntimeDefaultModels: [String: [String: String]] = [:]
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime), merged into
-    /// the agent editor's Runtime/Model pickers alongside claude/codex. Loaded with the agent list;
-    /// left empty by an older server without the endpoint.
+    /// the agent editor's Runtime picker and composer model picker alongside claude/codex. Loaded
+    /// with the agent list; left empty by an older server without the endpoint.
     private(set) var configuredProviders: [ConfiguredProvider] = []
+    /// Distinguishes an authoritative empty provider list from a request that has not succeeded.
+    /// Unknown slugs must not be irreversibly treated as removed before this becomes true.
+    private(set) var configuredProvidersLoaded = false
     private(set) var loading = false
     var errorText: String?
 
@@ -55,6 +60,22 @@ final class AgentsModel {
         return runnerModelCatalog[id]
     }
 
+    /// The default used to seed a new-session draft. Configured providers keep their own model
+    /// space/default; built-in providers use the owning runner's Runtime heartbeat snapshot.
+    func effectiveDefaultModel(for agent: Agent) -> String {
+        return effectiveDefaultModel(for: agent.provider ?? "claude", runnerId: agent.runnerId)
+    }
+
+    /// The same resolver for an in-progress Agent edit, whose Runtime may differ from the saved
+    /// Agent. This keeps model-dependent controls (notably Auto permission mode) aligned with the
+    /// model that new Sessions will actually inherit.
+    func effectiveDefaultModel(for provider: String, runnerId: String?) -> String {
+        let catalog = modelCatalog(for: runnerId)
+        return AgentDefaults.effectiveDefaultModel(
+            for: provider, catalog: catalog, configured: configuredProviders,
+            runtimeDefaults: runnerId.flatMap { runnerRuntimeDefaultModels[$0] })
+    }
+
     func agent(_ id: String) -> Agent? { items.first { $0.id == id } }
 
     func load() async {
@@ -71,10 +92,16 @@ final class AgentsModel {
                 runnerModelCatalog = Dictionary(
                     runners.compactMap { r in r.modelCatalog.map { (r.id, $0) } },
                     uniquingKeysWith: { a, _ in a })
+                runnerRuntimeDefaultModels = Dictionary(
+                    runners.compactMap { r in r.runtimeDefaultModels.map { (r.id, $0) } },
+                    uniquingKeysWith: { a, _ in a })
             }
             // Best-effort too: a transient failure keeps the last good list rather than blanking
             // the pickers (mirrors the runners fetch above).
-            if let providers = try? await api.providers() { configuredProviders = providers }
+            if let providers = try? await api.providers() {
+                configuredProviders = providers
+                configuredProvidersLoaded = true
+            }
         } catch { errorText = friendly(error) }
     }
 

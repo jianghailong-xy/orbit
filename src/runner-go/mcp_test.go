@@ -380,6 +380,9 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		if props["enableOrchestration"] != nil {
 			t.Fatalf("%s must not expose enableOrchestration", name)
 		}
+		if props["model"] != nil {
+			t.Fatalf("%s must not expose the retired per-agent model", name)
+		}
 	}
 
 	var gotPath string
@@ -395,6 +398,7 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 	args := map[string]interface{}{
 		"name":               "child",
 		"agentId":            "a1",
+		"model":              "gpt-retired-agent-default",
 		"env":                map[string]interface{}{"FOO": "bar"},
 		"permissionMode":     "acceptEdits",
 		"defaultMergeTarget": "develop",
@@ -419,6 +423,9 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		}
 		if gotBody["defaultMergeTarget"] != "develop" {
 			t.Fatalf("%s body defaultMergeTarget = %#v", name, gotBody["defaultMergeTarget"])
+		}
+		if _, ok := gotBody["model"]; ok {
+			t.Fatalf("%s forwarded retired per-agent model: %#v", name, gotBody["model"])
 		}
 	}
 }

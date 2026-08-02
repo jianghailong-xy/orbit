@@ -33,6 +33,7 @@ function makeController(options: {
     runEvent: {
       aggregate: async () => ({ _max: { seq: 3 } }),
     },
+    $executeRaw: async () => 1,
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = {

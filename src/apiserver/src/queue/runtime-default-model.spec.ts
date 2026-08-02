@@ -1,0 +1,137 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { ClaimedSession } from '@orbit/shared';
+import type { PrismaService } from '../prisma/prisma.service';
+import { QueueService } from './queue.service';
+
+function harness(
+  sessionModel: string | null,
+  options: {
+    agentModel?: string | null;
+    casWinnerModel?: string;
+    usesRuntimeDefaultModel?: boolean;
+  } = {},
+) {
+  const modelWrites: string[] = [];
+  const materializeQueries: string[] = [];
+  let winnerReads = 0;
+  const session = {
+    id: '11111111-1111-4111-8111-111111111111',
+    ownerId: '22222222-2222-4222-8222-222222222222',
+    provider: 'codex',
+    providerBuiltin: true,
+    model: sessionModel,
+    usesRuntimeDefaultModel: options.usesRuntimeDefaultModel ?? true,
+    numTurns: 0,
+    title: 'runtime default test',
+    prompt: 'hello',
+    runtimeSessionId: null,
+    claudeSessionId: null,
+    inboxLeaseOwner: null,
+    branch: null,
+    mergeTarget: null,
+    agentId: '33333333-3333-4333-8333-333333333333',
+    taskId: null,
+    assignedRunner: {
+      runtimeDefaultModels: { codex: 'gpt-runtime-default' },
+      modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+    },
+    agent: {
+      provider: 'codex',
+      model: options.agentModel ?? null,
+      env: null,
+      workDir: null,
+      autoInitGit: false,
+      defaultMergeTarget: null,
+      enableOrchestration: false,
+      appendSystemPrompt: null,
+      systemPrompt: null,
+      allowedTools: [],
+      disallowedTools: [],
+      permissionMode: 'dontAsk',
+      effort: null,
+      maxTurns: null,
+      maxBudgetUsd: null,
+      mcpConfig: null,
+    },
+  };
+  const tx = {
+    $queryRaw: async () => [],
+    conversationTurn: { findUnique: async () => ({ id: 'seed-turn' }) },
+  };
+  const prisma = {
+    session: {
+      findUniqueOrThrow: async (args?: { select?: { model?: boolean } }) => {
+        if (args?.select?.model) {
+          winnerReads++;
+          return { model: options.casWinnerModel ?? session.model };
+        }
+        return session;
+      },
+    },
+    $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      materializeQueries.push(strings.join('?'));
+      assert.equal(values[1], session.id);
+      modelWrites.push(values[0] as string);
+      return options.casWinnerModel === undefined ? 1 : 0;
+    },
+    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
+    user: { findUnique: async () => null },
+  } as unknown as PrismaService;
+  return {
+    queue: new QueueService(prisma),
+    modelWrites,
+    materializeQueries,
+    winnerReads: () => winnerReads,
+  };
+}
+
+async function build(queue: QueueService): Promise<ClaimedSession> {
+  return (
+    queue as unknown as { buildSession(id: string): Promise<ClaimedSession> }
+  ).buildSession('11111111-1111-4111-8111-111111111111');
+}
+
+test('first claim uses the runner runtime default and materializes it on the session', async () => {
+  const { queue, modelWrites, materializeQueries } = harness(null);
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-runtime-default');
+  assert.deepEqual(modelWrites, ['gpt-runtime-default']);
+  assert.match(materializeQueries[0], /"model" IS NULL OR btrim\("model"\) = ''/);
+});
+
+test('a whitespace-only session model is also materialized on first claim', async () => {
+  const { queue, modelWrites, materializeQueries } = harness('  \t ');
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-runtime-default');
+  assert.deepEqual(modelWrites, ['gpt-runtime-default']);
+  assert.equal(materializeQueries.length, 1);
+});
+
+test('an explicit session model wins and is not rewritten during claim', async () => {
+  const { queue, modelWrites } = harness('gpt-session');
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-session');
+  assert.deepEqual(modelWrites, []);
+});
+
+test('a legacy Agent model is bridged once and materialized for rolling compatibility', async () => {
+  const { queue, modelWrites } = harness(null, {
+    agentModel: 'gpt-legacy-agent',
+    usesRuntimeDefaultModel: false,
+  });
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-legacy-agent');
+  assert.deepEqual(modelWrites, ['gpt-legacy-agent']);
+});
+
+test('a concurrent Session model PATCH wins a failed materialization CAS', async () => {
+  const { queue, modelWrites, winnerReads } = harness(null, {
+    casWinnerModel: 'gpt-user-choice',
+  });
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-user-choice');
+  assert.deepEqual(modelWrites, ['gpt-runtime-default']);
+  assert.equal(winnerReads(), 1);
+});

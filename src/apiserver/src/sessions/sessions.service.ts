@@ -21,6 +21,7 @@ import {
   type EventSearchResponse,
   FilePatch,
   MAX_PROMPT_CHARS,
+  PermissionMode,
   RunEventType,
   SessionEndReason,
   SessionFilingState,
@@ -39,7 +40,12 @@ import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming'
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
-import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
+import {
+  normalizeBuiltinPermissionMode,
+  normalizeEffortForProvider,
+  normalizeRuntimeProvider,
+} from '../common/runtime-provider';
+import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { truncatePayload } from './truncate-payload';
 import {
   deriveSessionCapabilities,
@@ -228,6 +234,9 @@ export class SessionsService {
         // Codex/Kimi create and return their own thread id after process initialization.
         claudeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
+        // Old replicas omit this post-0079 column and receive its false default. That lets claim
+        // distinguish their legacy null-model inheritance from new Runtime-default semantics.
+        usesRuntimeDefaultModel: true,
         permissionMode: dto.permissionMode ?? agentPermissionMode,
         effort: normalizeEffortForProvider(runtime, dto.effort),
         agentId: dto.agentId,
@@ -1675,15 +1684,23 @@ export class SessionsService {
    * follow-up onto one we must lay down the prompt as turn 1 first — otherwise the
    * follow-up would take seq 1 and the claim would skip seeding (turnCount > 0), dropping
    * the prompt. Uses the SAME fixed clientTurnId the claim uses, so whichever path runs
-   * first wins and the other no-ops (insertTurn is idempotent on clientTurnId). No-op once
-   * any turn exists (already seeded, or a re-claimed session with history).
+   * first wins and the other no-ops (insertTurn is idempotent on clientTurnId). Check that fixed
+   * id rather than an arbitrary turn count: a control turn must never masquerade as the prompt.
    */
   private async ensurePromptSeeded(
     tx: Prisma.TransactionClient,
     session: { id: string; prompt: string },
   ) {
-    const count = await tx.conversationTurn.count({ where: { sessionId: session.id } });
-    if (count > 0) return;
+    const existing = await tx.conversationTurn.findUnique({
+      where: {
+        sessionId_clientTurnId: {
+          sessionId: session.id,
+          clientTurnId: SessionsService.initialTurnClientId(session.id),
+        },
+      },
+      select: { id: true },
+    });
+    if (existing) return;
     const turn = await this.insertTurnLocked(tx, session.id, {
       kind: 'message',
       content: session.prompt,
@@ -2602,41 +2619,92 @@ export class SessionsService {
     if (dto.model === undefined && dto.permissionMode === undefined && dto.effort === undefined) {
       throw new BadRequestException('nothing to update');
     }
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (SessionsService.TERMINAL.includes(session.status)) {
-      throw new ConflictException('the session has ended');
-    }
-    const provider = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
-    const normalizedEffort =
-      dto.effort !== undefined ? normalizeEffortForProvider(provider, dto.effort) : undefined;
-    await this.prisma.session.update({
-      where: { id },
-      data: {
-        lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
-        ...(dto.model !== undefined ? { model: dto.model } : {}),
-        ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
-        ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
-      },
-    });
-    if (session.status !== RunStatus.PENDING) {
-      // Live session (RUNNING or AWAITING_INPUT): enqueue a reload. The lease holds it
-      // until the current turn (if any) finishes, then the runner re-spawns with the new
-      // flags. Carry only the changed fields; the runner overrides just those, keeping
-      // the rest of the running config. Multiple rapid changes queue + apply in order.
-      // effort is sent even when '' (clear to default) — undefined is omitted by
-      // JSON.stringify, so the runner sees the key only when it actually changed.
-      await this.insertTurn(id, {
+    const needsReload = await this.prisma.$transaction(async (tx) => {
+      // Serialize config patches with each other and with claim/end transitions. The effective
+      // model/mode pair must be derived from the latest row: two concurrent partial PATCHes must
+      // not restore each other's stale model or leave Auto paired with an unsupported model.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        include: {
+          agent: true,
+          assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        },
+      });
+      if (SessionsService.TERMINAL.includes(session.status)) {
+        throw new ConflictException('the session has ended');
+      }
+      const declared = session.provider ?? session.agent?.provider ?? null;
+      const customRow = isBuiltinProvider(declared, session.providerBuiltin)
+        ? null
+        : await tx.modelProvider.findFirst({
+            where: {
+              slug: declared!,
+              OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+            },
+          });
+      const exec = resolveProviderExec({
+        declaredProvider: declared,
+        declaredProviderBuiltin: session.providerBuiltin,
+        customRow,
+        sessionModel: dto.model ?? session.model,
+        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
+        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
+        agentModel: session.agent?.model,
+        modelCatalog: session.assignedRunner?.modelCatalog,
+        agentEnv: session.agent?.env as Record<string, string> | null,
+      });
+      const requestedPermissionMode =
+        (dto.permissionMode as PermissionMode | undefined) ??
+        (session.permissionMode as PermissionMode | null) ??
+        (session.agent?.permissionMode as PermissionMode | null) ??
+        PermissionMode.DONT_ASK;
+      const normalizedPermissionMode = normalizeBuiltinPermissionMode(
+        exec.provider,
+        exec.model,
+        requestedPermissionMode,
+      );
+      const normalizedEffort =
+        dto.effort !== undefined
+          ? normalizeEffortForProvider(exec.provider, dto.effort)
+          : undefined;
+      await tx.session.update({
+        where: { id },
+        data: {
+          lastTurnAt: new Date(), // reset the idle clock so the reaper won't tear down mid-reload
+          // Persist the complete effective pair. This snapshots inherited defaults and keeps DB,
+          // UI and the restarted runtime on the same provider-aware Auto normalization.
+          model: exec.model,
+          permissionMode: normalizedPermissionMode,
+          ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
+        },
+      });
+
+      if (session.status === RunStatus.PENDING) return false;
+      // A claim marks the row RUNNING before buildSession lazily seeds the opening prompt. A
+      // config PATCH in that small window must seed it first; otherwise reload would become the
+      // first turn and the claim path could mistake that control turn for the opening message.
+      if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
+      // Live session (RUNNING/AWAITING_INPUT/INTERRUPTED): enqueue the reload under this same row
+      // lock, so its payload is exactly the pair committed above. The inbox lease applies it
+      // between turns. `effort: undefined` is omitted by JSON.stringify when it did not change.
+      await this.insertTurnLocked(tx, id, {
         kind: 'reload',
         content: JSON.stringify({
-          model: dto.model,
-          permissionMode: dto.permissionMode,
+          model: exec.model,
+          permissionMode: normalizedPermissionMode,
           effort: normalizedEffort,
         }),
         clientTurnId: randomUUID(),
       });
-      this.realtime.notifyInbox(id);
-    }
+      return true;
+    });
+    if (needsReload) this.realtime.notifyInbox(id);
     return { ok: true };
   }
 

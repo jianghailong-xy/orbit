@@ -98,7 +98,8 @@ struct SectionSidebar: View {
                     Text(agents.runnerLabel(group.runnerId))
                         .font(.orbitLabel).foregroundStyle(.secondary)
                     ForEach(group.agents) { a in
-                        AgentRowView(agent: a, shortcutIndex: shortcutIndex[a.id])
+                        AgentRowView(agent: a, shortcutIndex: shortcutIndex[a.id],
+                                     configuredProviders: agents.configuredProviders)
                             .tag(SidebarSelection.agent(a.id))
                     }
                 }

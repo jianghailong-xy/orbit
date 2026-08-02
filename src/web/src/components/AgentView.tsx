@@ -69,12 +69,14 @@ import {
 } from '../lib/sessionGrouping';
 import {
   type ConfiguredProvider,
+  clampPermissionModeForModel,
   contextWindowFor,
   DEFAULT_MODEL,
   defaultModelForProvider,
   effortOptionsForProvider,
   modelOptionsForProvider,
   normalizeEffortForProvider,
+  providerIdentityResolved,
   supportsAuto,
 } from '../lib/agentDefaults';
 import {
@@ -92,6 +94,11 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { planUsageSnapshotForProvider } from '../lib/planUsage';
+import {
+  decideContextSeed,
+  dirtyContextSeed,
+  type ContextSeedState,
+} from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
@@ -696,7 +703,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
   // model list + context-window sizing when the open session/agent uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
-  const configuredProviders = useQuery(providersQuery()).data ?? [];
+  const configuredProvidersQuery = useQuery(providersQuery());
+  const configuredProviders = configuredProvidersQuery.data ?? [];
+  const configuredProvidersLoaded = configuredProvidersQuery.data !== undefined;
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
@@ -801,6 +810,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Default');
   const [model, setModel] = useState(DEFAULT_MODEL);
+  // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
+  // touched Model within the current draft/session context so a late default can fill an untouched
+  // picker without overwriting an explicit choice. Context changes deliberately reset dirty.
+  const modelSeedState = useRef<ContextSeedState>({
+    contextKey: '',
+    dirty: false,
+  });
+  const modeSeedState = useRef<ContextSeedState>({
+    contextKey: '',
+    dirty: false,
+  });
   // Seeded from the account default by the effect below once `me` loads (mirrors how Model/Mode
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
@@ -1454,7 +1474,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     () => (lockedAgentId ? (agentsForRunner.find((a) => a.id === lockedAgentId) ?? null) : null),
     [agentsForRunner, lockedAgentId],
   );
-  // The agent picked for a NEW session (a live session's agent/model are fixed).
+  // The agent picked for a NEW session. An existing session keeps its owning agent separately.
   const pickedAgent = useMemo(
     () => agentsForRunner.find((a) => a.id === agentId) ?? null,
     [agentsForRunner, agentId],
@@ -1480,6 +1500,10 @@ export function AgentView({ runner }: { runner: Runner }) {
         detailForSelected?.agent?.provider ??
         'claude')
     : (pickedAgent?.provider ?? 'claude');
+  const shownProviderCapabilitiesResolved = providerIdentityResolved(
+    shownProvider,
+    configuredProvidersLoaded,
+  );
   // Codex has no slash registry: its app-server takes the prompt verbatim (no expansion of
   // `~/.codex/prompts`, nothing in the protocol for it), so `/anything` is plain text there.
   // Claude's commands and skills are meaningless in that session — don't offer them, and
@@ -1497,24 +1521,22 @@ export function AgentView({ runner }: { runner: Runner }) {
     agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
     'dontAsk';
 
-  // Seed the Mode/Model/Effort pills from a non-live (resumable) session's stored
-  // config, so they show that session's real settings and an edit before a resume
-  // carries through (resume re-spawns claude with the new value). Keyed on the id +
-  // liveness, not the polled object, so the 4s refetch can't clobber a user's edit —
-  // the resolved mode joins them because it settles late on a cold deep-link (it needs
-  // the agent), and it's a value, so a poll returning the same config re-runs nothing.
+  const selectedModelDefault = selected
+    ? selected.model ??
+      defaultModelForProvider(
+        shownProvider,
+        runner.modelCatalog,
+        configuredProviders,
+        runner.runtimeDefaultModels,
+      )
+    : null;
+
+  // Seed Effort from a non-live (resumable) session's stored config. Keying on id + liveness,
+  // rather than the polled object, keeps the 4s refetch from clobbering a local edit.
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
     const owningAgent = agentsForRunner.find((a) => a.id === selected.agent?.id);
-    setModel(
-      selected.model ??
-        detailForSelected?.agent?.model ??
-        selected.agent?.model ??
-        owningAgent?.model ??
-        defaultModelForProvider(provider, runner.modelCatalog, configuredProviders),
-    );
-    setMode(PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default');
     setEffort(
       normalizeEffortForProvider(
         provider,
@@ -1522,19 +1544,92 @@ export function AgentView({ runner }: { runner: Runner }) {
       ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, live, effectivePermissionMode]);
+  }, [selected?.id, live]);
 
-  // Composing a fresh session (no session selected): seed the model from the
-  // picked agent's configured default (set on the Runner page). A selected
-  // session instead seeds from its own stored config (effect above).
+  const pickedModelDefault = pickedAgent
+    ? defaultModelForProvider(
+        pickedAgent.provider ?? 'claude',
+        runner.modelCatalog,
+        configuredProviders,
+        runner.runtimeDefaultModels,
+      )
+    : null;
+  const pickedProviderCapabilitiesResolved = providerIdentityResolved(
+    pickedAgent?.provider,
+    configuredProvidersLoaded,
+  );
+
+  const modelContextKey = selectedId
+    ? `session:${selectedId}`
+    : `draft:${runner.id}:${agentId ?? 'none'}`;
+  const modelSeed = selectedId ? (!live ? selectedModelDefault : null) : pickedModelDefault;
+
+  // A late Runtime catalog/configured-provider response may refine the seed for an untouched
+  // picker. Once the user chooses any model, ignore seed changes until the Agent/Session context
+  // changes. Dirty is explicit rather than inferred from value equality: choosing the same value
+  // is still an intentional choice.
   useEffect(() => {
-    if (selectedId || !pickedAgent) return;
-    setModel(
-      pickedAgent.model ??
-        defaultModelForProvider(pickedAgent.provider ?? 'claude', runner.modelCatalog, configuredProviders),
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, pickedAgent?.id, pickedAgent?.model, pickedAgent?.provider]);
+    const decision = decideContextSeed(modelSeedState.current, modelContextKey, !!modelSeed);
+    modelSeedState.current = decision.state;
+    if (decision.apply && modelSeed) setModel(modelSeed);
+  }, [modelContextKey, modelSeed]);
+
+  const pickedModeSeed = pickedAgent
+    ? PERMISSION_TO_MODE[
+        pickedProviderCapabilitiesResolved
+          ? clampPermissionModeForModel(
+              pickedAgent.permissionMode ?? 'dontAsk',
+              pickedModelDefault ?? DEFAULT_MODEL,
+              pickedAgent.provider,
+              configuredProviders,
+            )
+          : (pickedAgent.permissionMode ?? 'dontAsk')
+      ] ?? 'Default'
+    : null;
+  const modeSeed = selectedId
+    ? !live && selected
+      ? PERMISSION_TO_MODE[
+          shownProviderCapabilitiesResolved
+            ? clampPermissionModeForModel(
+                effectivePermissionMode,
+                selectedModelDefault ?? DEFAULT_MODEL,
+                shownProvider,
+                configuredProviders,
+              )
+            : effectivePermissionMode
+        ] ?? 'Default'
+      : null
+    : pickedModeSeed;
+
+  // Mode follows the same context/dirty invariant as Model. This matters when a configured
+  // provider resolves after the draft first renders: Auto may need to clamp to Default for its
+  // effective model, but that late result must not replace a Mode the user already picked.
+  useEffect(() => {
+    const decision = decideContextSeed(modeSeedState.current, modelContextKey, !!modeSeed);
+    modeSeedState.current = decision.state;
+    if (decision.apply && modeSeed) setMode(modeSeed);
+  }, [modelContextKey, modeSeed]);
+
+  // Model and Mode have independent dirty guards. If an untouched model is refined by a late
+  // Runtime heartbeat after the user explicitly chose Auto, correctness still wins: never keep
+  // an invalid pair merely because Mode is dirty.
+  useEffect(() => {
+    if (
+      !live &&
+      shownProviderCapabilitiesResolved &&
+      mode === 'Auto' &&
+      !supportsAuto(model, shownProvider, configuredProviders)
+    ) {
+      setMode('Default');
+    }
+  }, [
+    configuredProviders,
+    live,
+    mode,
+    model,
+    shownProvider,
+    shownProviderCapabilitiesResolved,
+  ]);
 
   // A fresh session seeds its effort with the most specific default available: the picked agent's
   // own effort (set on the Runner page) first, else the account-level default-effort preference
@@ -1547,15 +1642,6 @@ export function AgentView({ runner }: { runner: Runner }) {
     const candidate = pickedAgent?.effort ?? me.data?.preferences?.defaultEffort ?? '';
     setEffort(normalizeEffortForProvider(provider, candidate));
   }, [selectedId, pickedAgent?.provider, pickedAgent?.effort, me.data?.preferences?.defaultEffort]);
-
-  // Likewise seed the Mode pill from the picked agent's configured default. Without
-  // this the pill stays at the hardcoded 'Default', so a new session always sends
-  // permissionMode 'default' — which the server's session→agent fallback treats as
-  // an explicit choice, silently ignoring the agent's configured mode.
-  useEffect(() => {
-    if (selectedId || !pickedAgent) return;
-    setMode(PERMISSION_TO_MODE[pickedAgent.permissionMode ?? 'dontAsk'] ?? 'Default');
-  }, [selectedId, pickedAgent?.id, pickedAgent?.permissionMode]);
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
   // cold AWAITING_INPUT session remains open for replies without blocking another turn.
@@ -2030,12 +2116,37 @@ export function AgentView({ runner }: { runner: Runner }) {
       }
       const provider = pickedAgent?.provider ?? 'claude';
       const wireEffort = normalizeEffortForProvider(provider, effort);
+      const providerResolved = providerIdentityResolved(
+        provider,
+        configuredProvidersLoaded,
+      );
+      const modelWasEdited =
+        modelSeedState.current.contextKey === modelContextKey && modelSeedState.current.dirty;
+      const modeWasEdited =
+        modeSeedState.current.contextKey === modelContextKey && modeSeedState.current.dirty;
+      // Never turn an unresolved custom-provider slug into an explicit Claude model. If provider
+      // discovery is still pending/failed, omit the untouched override and let the server resolve
+      // the configured provider's own default. Once resolved, derive from the current seed rather
+      // than waiting for the post-render state effect to catch up.
+      const createModel =
+        providerResolved || selected?.model
+          ? modelWasEdited
+            ? model
+            : (selected ? selectedModelDefault : pickedModelDefault) ?? model
+          : undefined;
+      const createPermissionMode = selected
+        ? MODE_TO_PERMISSION[mode]
+        : modeWasEdited
+          ? MODE_TO_PERMISSION[mode]
+          : providerResolved
+            ? MODE_TO_PERMISSION[pickedModeSeed ?? mode]
+            : undefined;
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
         agentId,
-        model,
-        permissionMode: MODE_TO_PERMISSION[mode],
+        model: createModel,
+        permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the agent's
         // default, so the pill is authoritative — an explicit Default must stick, not fall back to
         // the agent's effort server-side (session.effort ?? agent.effort). Task runs omit it, so
@@ -2981,13 +3092,31 @@ export function AgentView({ runner }: { runner: Runner }) {
   const selectedAgent = agentsForRunner.find((a) => a.id === selected?.agent?.id);
   const effectiveModel =
     selected?.model ??
-    detailForSelected?.agent?.model ??
-    selected?.agent?.model ??
-    selectedAgent?.model ??
-    defaultModelForProvider(shownProvider, runner.modelCatalog, configuredProviders);
+    defaultModelForProvider(
+      shownProvider,
+      runner.modelCatalog,
+      configuredProviders,
+      runner.runtimeDefaultModels,
+    );
   const effectiveEffort =
     selected?.effort ?? detailForSelected?.agent?.effort ?? selectedAgent?.effort ?? '';
   const shownModel: string = live ? effectiveModel : model;
+  const catalogModelOptions = shownProviderCapabilitiesResolved
+    ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
+    : [];
+  // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
+  // that effective default/selectable session value visible in the picker instead of rendering a
+  // value the user cannot return to after trying another model.
+  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModel)
+    ? catalogModelOptions
+    : [
+        {
+          value: shownModel,
+          label:
+            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModel,
+        },
+        ...catalogModelOptions,
+      ];
   const shownPlanUsage = planUsageSnapshotForProvider(runner.planUsage, shownProvider);
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
@@ -3010,7 +3139,16 @@ export function AgentView({ runner }: { runner: Runner }) {
     [shownProvider, runner.name, runner.id, retryText, selectedTrashed, selectedMissing, sendMutate],
   );
   const shownMode: string = live
-    ? (PERMISSION_TO_MODE[effectivePermissionMode] ?? 'Default')
+    ? (PERMISSION_TO_MODE[
+        shownProviderCapabilitiesResolved
+          ? clampPermissionModeForModel(
+              effectivePermissionMode,
+              effectiveModel,
+              shownProvider,
+              configuredProviders,
+            )
+          : effectivePermissionMode
+      ] ?? 'Default')
     : mode;
   const shownEffort: string = normalizeEffortForProvider(
     shownProvider,
@@ -3019,7 +3157,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   const shownEffortOptions = effortOptionsForProvider(shownProvider);
   // Auto is offered only on models that support it (see supportsAuto); the option
   // is greyed out otherwise so an unsupported model can't pick a mode claude rejects.
-  const autoOk = supportsAuto(shownModel);
+  const autoOk =
+    !shownProviderCapabilitiesResolved ||
+    supportsAuto(shownModel, shownProvider, configuredProviders);
   // Model, Mode & Effort can be changed any time on a live session (the runner must be
   // online to act on it). A change made mid-turn doesn't abort the running turn: the
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
@@ -4364,9 +4504,14 @@ export function AgentView({ runner }: { runner: Runner }) {
                 variant="borderless"
                 suffixIcon={null}
                 value={shownMode}
-                onChange={(v) =>
-                  live ? configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] }) : setMode(v)
-                }
+                onChange={(v) => {
+                  if (live) {
+                    configMut.mutate({ permissionMode: MODE_TO_PERMISSION[v] });
+                  } else {
+                    modeSeedState.current = dirtyContextSeed(modelContextKey);
+                    setMode(v);
+                  }
+                }}
                 options={MODE_OPTIONS.map((m) => ({
                   value: m,
                   // Carry the Auto-mode constraint on the greyed option itself, where it's
@@ -4387,7 +4532,14 @@ export function AgentView({ runner }: { runner: Runner }) {
               </span>
             </Tooltip>
           )}
-          <Tooltip title={configHint || 'Model'} open={hoverTipOpen}>
+          <Tooltip
+            title={
+              !shownProviderCapabilitiesResolved
+                ? 'Model will be resolved from the provider default'
+                : configHint || 'Model'
+            }
+            open={hoverTipOpen}
+          >
             <span className="composer-pill">
               <Select
                 size="small"
@@ -4397,30 +4549,21 @@ export function AgentView({ runner }: { runner: Runner }) {
                 onChange={(v) => {
                   // Switching to a model that can't do Auto while Auto is selected
                   // would send a mode claude rejects — snap back to Default.
-                  const drop = shownMode === 'Auto' && !supportsAuto(v);
+                  const drop =
+                    shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders);
                   if (live) {
                     configMut.mutate({ model: v, ...(drop ? { permissionMode: 'default' } : {}) });
                   } else {
+                    modelSeedState.current = dirtyContextSeed(modelContextKey);
                     setModel(v);
-                    if (drop) setMode('Default');
-                  }
-                  // Remember as the owning agent's default so the next new session — here or on
-                  // iOS/macOS — seeds this model (the per-agent port of the effort write below; a
-                  // model is provider-specific, so it lives on the agent, not account prefs).
-                  // Optimistically patch the cached agents list so the draft seed effect and other
-                  // views see it, then persist best-effort.
-                  const writeAgentId = live ? selected?.agent?.id : agentId;
-                  if (writeAgentId) {
-                    qc.setQueryData<any[]>(agentsQuery().queryKey, (prev) =>
-                      prev?.map((a) => (a.id === writeAgentId ? { ...a, model: v } : a)) ?? prev,
-                    );
-                    void api(`/agents/${writeAgentId}`, { method: 'PATCH', body: { model: v } }).catch(
-                      () => {},
-                    );
+                    if (drop) {
+                      modeSeedState.current = dirtyContextSeed(modelContextKey);
+                      setMode('Default');
+                    }
                   }
                 }}
-                options={modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)}
-                disabled={!configEditable}
+                options={shownModelOptions}
+                disabled={!configEditable || !shownProviderCapabilitiesResolved}
                 popupMatchSelectWidth={false}
               />
             </span>
