@@ -103,6 +103,10 @@ const INBOX_LEASE_MS = 300_000;
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
+// entity-ID validation separate from the stricter runner-generated lease UUID
+// validation above so adding a UUID version cannot take the heartbeat offline.
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
@@ -128,6 +132,13 @@ function parseLeaseGeneration(value?: string): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
     throw new BadRequestException('leaseGeneration must be a UUID');
+  }
+  return value.toLowerCase();
+}
+
+function parseSupervisedSessionId(value: string): string {
+  if (!SESSION_ID_RE.test(value)) {
+    throw new BadRequestException('supervised session IDs must be UUIDs');
   }
   return value.toLowerCase();
 }
@@ -330,11 +341,7 @@ export class RunnerApiController {
     const supervisedSessionIds = heartbeatLeaseOwner
       ? [
           ...new Set(
-            (dto?.supervisedSessionIds ?? []).map((id) => {
-              const parsed = parseLeaseGeneration(id);
-              if (!parsed) throw new BadRequestException('supervised session IDs must be UUIDs');
-              return parsed;
-            }),
+            (dto?.supervisedSessionIds ?? []).map((id) => parseSupervisedSessionId(id)),
           ),
         ]
       : [];

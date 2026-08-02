@@ -6,7 +6,7 @@ import { RunnerApiController } from './runner-api.controller';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER = '22222222-2222-4222-8222-222222222222';
-const SESSION_A = '33333333-3333-4333-8333-333333333333';
+const SESSION_A = '019fc086-c7c7-7c92-8215-778ad8a6280a';
 const SESSION_B = '44444444-4444-4444-8444-444444444444';
 
 function harness(matchingIds: string[] = []) {
@@ -49,7 +49,7 @@ test('heartbeat cancels supervised sessions not owned by this process', async ()
       status: RunnerStatus.ONLINE,
       idleCapacity: 1,
       leaseOwner: OWNER,
-      supervisedSessionIds: [SESSION_B, SESSION_A, SESSION_B],
+      supervisedSessionIds: [SESSION_B, SESSION_A.toUpperCase(), SESSION_A, SESSION_B],
     },
   );
 
@@ -88,7 +88,7 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
   assert.equal((h.updateManyWhere[0] as { inboxLeaseOwner?: string }).inboxLeaseOwner, OWNER);
 });
 
-test('legacy heartbeat omits the owner fence and malformed modern identities fail closed', async () => {
+test('legacy heartbeat omits the owner fence', async () => {
   const legacy = harness();
   await legacy.controller.heartbeat(
     { id: RUNNER_ID, version: null },
@@ -99,7 +99,9 @@ test('legacy heartbeat omits the owner fence and malformed modern identities fai
     },
   );
   assert.equal(legacy.findManyWhere.length, 0);
+});
 
+test('heartbeat rejects malformed or unsupported lease owner identities', async () => {
   const malformed = harness();
   await assert.rejects(
     malformed.controller.heartbeat(
@@ -112,5 +114,34 @@ test('legacy heartbeat omits the owner fence and malformed modern identities fai
       },
     ),
     BadRequestException,
+  );
+
+  await assert.rejects(
+    malformed.controller.heartbeat(
+      { id: RUNNER_ID, version: null },
+      {
+        status: RunnerStatus.ONLINE,
+        idleCapacity: 1,
+        leaseOwner: SESSION_A,
+        supervisedSessionIds: [SESSION_A],
+      },
+    ),
+    BadRequestException,
+  );
+});
+
+test('heartbeat rejects malformed supervised session IDs', async () => {
+  const malformed = harness();
+  await assert.rejects(
+    malformed.controller.heartbeat(
+      { id: RUNNER_ID, version: null },
+      {
+        status: RunnerStatus.ONLINE,
+        idleCapacity: 1,
+        leaseOwner: OWNER,
+        supervisedSessionIds: ['not-a-session-uuid'],
+      },
+    ),
+    /supervised session IDs must be UUIDs/,
   );
 });

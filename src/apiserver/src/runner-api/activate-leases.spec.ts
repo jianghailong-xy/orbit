@@ -12,6 +12,7 @@ const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const GENERATION = '33333333-3333-4333-8333-333333333333';
 const OTHER_GENERATION = '44444444-4444-4444-8444-444444444444';
 const LEASE_OWNER = '55555555-5555-4555-8555-555555555555';
+const UUID_V7 = '019fc086-c7c7-7c92-8215-778ad8a6280a';
 
 function sql(call: unknown[] | undefined): string {
   return ((call?.[0] as readonly string[] | undefined) ?? []).join('?');
@@ -159,8 +160,10 @@ test('activate-leases rejects a non-owner and malformed or missing identities', 
   for (const malformedRequest of [
     { leaseGeneration: '', leaseOwner: LEASE_OWNER },
     { leaseGeneration: 'not-a-uuid', leaseOwner: LEASE_OWNER },
+    { leaseGeneration: UUID_V7, leaseOwner: LEASE_OWNER },
     { leaseGeneration: GENERATION, leaseOwner: '' },
     { leaseGeneration: GENERATION, leaseOwner: 'not-a-uuid' },
+    { leaseGeneration: GENERATION, leaseOwner: UUID_V7 },
   ]) {
     const malformed = harness({ current: null });
     await assert.rejects(
