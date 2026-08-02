@@ -47,6 +47,7 @@ import { TaskStatusPill, taskStatusLabel } from './TaskStatusPill';
 
 const NODE_WIDTH = 204;
 const NODE_HEIGHT = 76;
+const MEASURED_NODE_DIMENSIONS = { width: NODE_WIDTH, height: NODE_HEIGHT } as const;
 const MIN_ZOOM = 0.25;
 const MAX_FIT_ZOOM = 1;
 const MIN_READABLE_ZOOM = 0.75;
@@ -121,7 +122,6 @@ interface DependencyNodeData extends Record<string, unknown> {
   isDirect: boolean;
   hasIncoming: boolean;
   hasOutgoing: boolean;
-  dimmed: boolean;
   vertical: boolean;
   removing: boolean;
   onOpenTask: (taskId: string) => void;
@@ -154,7 +154,7 @@ function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
   const label = taskStatusLabel(data.task.status, data.task.running, data.task.queued);
   return (
     <div
-      className={`tdg-node state-${state}${data.isFocus ? ' is-focus' : ''}${data.dimmed ? ' is-dimmed' : ''}`}
+      className={`tdg-node state-${state}${data.isFocus ? ' is-focus' : ''}`}
       onMouseEnter={() => data.onHighlight(data.task.id)}
       onMouseLeave={() => data.onHighlight(null)}
     >
@@ -252,17 +252,14 @@ const NODE_TYPES = {
 /** Highlight the shortest weak (direction-agnostic) path to the focused task. In a `both`
  * snapshot a hovered node may be downstream or lateral, so walking only outgoing edges would
  * never reach the focus. Edge arrows still retain their prerequisite -> dependent direction. */
-function pathBetweenNodeAndFocus(
+export function pathBetweenNodeAndFocus(
   graph: NormalizedTaskDependencyGraph,
   startId: string | null,
 ): { nodeIds: Set<string>; edgeKeys: Set<string> } | null {
   if (!startId || !graph.nodeById.has(startId)) return null;
-  if (startId === graph.focusTaskId) {
-    return {
-      nodeIds: new Set(graph.nodeById.keys()),
-      edgeKeys: new Set(graph.edges.map(taskDependencyEdgeKey)),
-    };
-  }
+  // The current task is already visually anchored. Highlighting every edge when it is hovered
+  // causes a full-canvas flash without revealing any additional relationship.
+  if (startId === graph.focusTaskId) return null;
 
   const visited = new Set<string>([startId]);
   const previous = new Map<string, { from: string; edgeKey: string }>();
@@ -356,6 +353,9 @@ export function buildDependencyFlowElements(
       id: task.id,
       type: 'taskDependency',
       position: positions.get(task.id) ?? { x: 0, y: 0 },
+      // Hover presentation rebuilds the controlled node objects. Preserve their known fixed
+      // dimensions so React Flow does not hide and re-measure every node on each update.
+      measured: MEASURED_NODE_DIMENSIONS,
       sourcePosition: vertical ? Position.Bottom : Position.Right,
       targetPosition: vertical ? Position.Top : Position.Left,
       draggable: false,
@@ -368,7 +368,6 @@ export function buildDependencyFlowElements(
         isDirect: directPrerequisiteIds.has(task.id),
         hasIncoming: (graph.incomingByTaskId.get(task.id)?.length ?? 0) > 0,
         hasOutgoing: (graph.outgoingByTaskId.get(task.id)?.length ?? 0) > 0,
-        dimmed: !!highlighted && !highlighted.nodeIds.has(task.id),
         vertical,
         removing: removingTaskId === task.id,
         onOpenTask,
@@ -382,6 +381,7 @@ export function buildDependencyFlowElements(
     id: aggregate.id,
     type: 'taskDependencyAggregate',
     position: positions.get(aggregate.id) ?? { x: 0, y: 0 },
+    measured: MEASURED_NODE_DIMENSIONS,
     sourcePosition: vertical ? Position.Bottom : Position.Right,
     targetPosition: vertical ? Position.Top : Position.Left,
     draggable: false,
@@ -401,20 +401,21 @@ export function buildDependencyFlowElements(
     const key = taskDependencyEdgeKey(edge);
     const state = getTaskDependencyEdgeState(graph, edge);
     const highlightedEdge = !!highlighted?.edgeKeys.has(key);
-    const dimmed = !!highlighted && !highlightedEdge;
     const stroke = EDGE_COLORS[state];
     return {
       id: key,
       source: edge.sourceTaskId,
       target: edge.targetTaskId,
       type: 'smoothstep',
-      animated: state === 'active' && !dimmed,
+      // Hover emphasis must not restart running-edge animation or change the brightness of the
+      // rest of the graph; only the relevant path becomes thicker below.
+      animated: state === 'active',
       focusable: false,
       selectable: false,
       style: {
         stroke,
         strokeWidth: highlightedEdge ? 2.5 : directPrerequisiteIds.has(edge.sourceTaskId) && edge.targetTaskId === graph.focusTaskId ? 2 : 1.5,
-        opacity: dimmed ? 0.16 : state === 'complete' ? 0.55 : 0.9,
+        opacity: state === 'complete' ? 0.55 : 0.9,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,

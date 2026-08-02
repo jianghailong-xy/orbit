@@ -5561,7 +5561,7 @@ body {
   border-radius: 9px;
   background: var(--bg-raised);
   box-shadow: 0 2px 7px rgba(31, 35, 41, 0.08);
-  transition: opacity 0.12s, border-color 0.12s, box-shadow 0.12s;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
 .tdg-node:hover,
 .tdg-node:focus-within {
@@ -5574,9 +5574,6 @@ body {
 }
 .tdg-node.state-failed:not(.is-focus) {
   border-color: var(--error-border);
-}
-.tdg-node.is-dimmed {
-  opacity: 0.3;
 }
 .tdg-node-main {
   display: flex;

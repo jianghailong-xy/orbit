@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeTaskDependencyGraph,
   taskDependencyBranchKey,
+  taskDependencyEdgeKey,
   type TaskDependencyBranchAggregate,
 } from '../lib/taskDependencyGraph';
 import {
   buildDependencyFlowElements,
   dependencyGraphNodeIsVisible,
+  pathBetweenNodeAndFocus,
   viewportForFocusedDependencyGraph,
 } from './TaskDependencyGraph';
 
@@ -102,5 +104,96 @@ describe('TaskDependencyGraph', () => {
     expect(nodes.filter((node) => node.type === 'taskDependency')).toHaveLength(2);
     expect(nodes.filter((node) => node.type === 'taskDependencyAggregate')).toHaveLength(1);
     expect(nodes.every((node) => node.style?.pointerEvents === 'all')).toBe(true);
+  });
+
+  it('keeps controlled nodes measured across hover presentation updates', () => {
+    const positions = new Map([
+      ['prerequisite', { x: 0, y: 0 }],
+      ['dependent', { x: 0, y: 100 }],
+      [branchKey, { x: 0, y: 200 }],
+    ]);
+    const build = (highlighted: Parameters<typeof buildDependencyFlowElements>[5]) =>
+      buildDependencyFlowElements(
+        graph,
+        [aggregate],
+        positions,
+        true,
+        new Set(),
+        highlighted,
+        () => undefined,
+        undefined,
+        null,
+        () => undefined,
+        () => undefined,
+        null,
+      );
+
+    const idle = build(null);
+    const hovered = build({
+      nodeIds: new Set(['prerequisite', 'dependent']),
+      edgeKeys: new Set(graph.edges.map(taskDependencyEdgeKey)),
+    });
+
+    for (const node of [...idle.nodes, ...hovered.nodes]) {
+      expect(node.measured).toEqual({ width: 204, height: 76 });
+    }
+  });
+
+  it('emphasizes a hovered path without dimming or restarting the rest of the graph', () => {
+    const forkGraph = normalizeTaskDependencyGraph({
+      focusTaskId: 'focus',
+      nodes: [
+        { id: 'focus', title: 'Current task', status: 'OPEN' },
+        { id: 'hovered', title: 'Hovered prerequisite', status: 'IN_PROGRESS', running: true },
+        { id: 'unrelated', title: 'Other prerequisite', status: 'IN_PROGRESS', running: true },
+      ],
+      edges: [
+        { sourceTaskId: 'hovered', targetTaskId: 'focus' },
+        { sourceTaskId: 'unrelated', targetTaskId: 'focus' },
+      ],
+    });
+    const positions = new Map([
+      ['focus', { x: 300, y: 0 }],
+      ['hovered', { x: 0, y: 0 }],
+      ['unrelated', { x: 0, y: 100 }],
+    ]);
+    const build = (highlighted: Parameters<typeof buildDependencyFlowElements>[5]) =>
+      buildDependencyFlowElements(
+        forkGraph,
+        [],
+        positions,
+        false,
+        new Set(['hovered', 'unrelated']),
+        highlighted,
+        () => undefined,
+        undefined,
+        null,
+        () => undefined,
+        () => undefined,
+        null,
+      );
+    const highlightedEdgeKey = taskDependencyEdgeKey({
+      sourceTaskId: 'hovered',
+      targetTaskId: 'focus',
+    });
+    const idle = build(null);
+    expect(pathBetweenNodeAndFocus(forkGraph, forkGraph.focusTaskId)).toBeNull();
+    const hovered = build({
+      nodeIds: new Set(['hovered', 'focus']),
+      edgeKeys: new Set([highlightedEdgeKey]),
+    });
+    const idleEdges = new Map(idle.edges.map((edge) => [edge.id, edge]));
+
+    for (const node of hovered.nodes.filter((node) => node.type === 'taskDependency')) {
+      expect(node.data).not.toHaveProperty('dimmed');
+    }
+    for (const edge of hovered.edges) {
+      const idleEdge = idleEdges.get(edge.id);
+      expect(edge.animated).toBe(idleEdge?.animated);
+      expect(edge.style?.opacity).toBe(idleEdge?.style?.opacity);
+      expect(edge.style?.strokeWidth).toBe(
+        edge.id === highlightedEdgeKey ? 2.5 : idleEdge?.style?.strokeWidth,
+      );
+    }
   });
 });
