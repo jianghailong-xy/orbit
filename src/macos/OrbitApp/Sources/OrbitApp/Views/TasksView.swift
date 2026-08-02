@@ -13,10 +13,14 @@ struct TasksListView: View {
         if let tasks = model.tasks {
             @Bindable var tasks = tasks
             VStack(spacing: 0) {
+                #if !os(iOS)
                 if tasks.overview.total > 0 { TaskProgressSummary(overview: tasks.overview) }
+                #endif
                 if let error = tasks.errorText { errorBanner(error, tasks: tasks) }
+                #if !os(iOS)
                 toolbar(tasks)
                 Divider()
+                #endif
                 taskList(tasks, selection: $model.selectedTaskID)
             }
             .navigationTitle(tasks.scopeTitle)
@@ -41,6 +45,78 @@ struct TasksListView: View {
             } message: {
                 Text("This can't be undone. Existing run sessions are kept.")
             }
+            #if os(iOS)
+            .toolbar {
+                // Match the compact Sessions list: keep the content surface for rows and move
+                // secondary controls into small, familiar navigation-bar menus. A long list name
+                // can now never compete with the status and sort controls for horizontal space.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Section("Status") {
+                            ForEach(tasks.availableFilters) { filter in
+                                Button { tasks.filter = filter } label: {
+                                    if tasks.filter == filter {
+                                        Label("\(filter.title) (\(tasks.overview.count(for: filter)))",
+                                              systemImage: "checkmark")
+                                    } else {
+                                        Text("\(filter.title) (\(tasks.overview.count(for: filter)))")
+                                    }
+                                }
+                            }
+                        }
+
+                        Menu {
+                            scopeButton(.all, title: "All tasks", tasks: tasks)
+                            if tasks.unlistedCount > 0 || tasks.scope == .unlisted {
+                                scopeButton(.unlisted, title: "No list (\(tasks.unlistedCount))", tasks: tasks)
+                            }
+                            if !tasks.activeLists.isEmpty {
+                                Section("Lists") {
+                                    ForEach(tasks.activeLists) { list in
+                                        scopeButton(.list(list.id),
+                                                    title: "\(list.title) (\(list.taskCount))", tasks: tasks)
+                                    }
+                                }
+                            }
+                            if !tasks.completedLists.isEmpty {
+                                Section("Completed lists") {
+                                    ForEach(tasks.completedLists) { list in
+                                        scopeButton(.list(list.id),
+                                                    title: "\(list.title) (\(list.taskCount))", tasks: tasks)
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label("List: \(tasks.scopeTitle)", systemImage: "list.bullet")
+                        }
+                    } label: {
+                        Image(systemName: compactFilterIcon(tasks))
+                    }
+                    .accessibilityLabel("Task filters, \(tasks.scopeTitle), \(tasks.filter.title)")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Section("Sort by") {
+                            ForEach(TaskSort.allCases) { sort in
+                                Button { tasks.sort = sort } label: {
+                                    if tasks.sort == sort { Label(sort.title, systemImage: "checkmark") }
+                                    else { Text(sort.title) }
+                                }
+                            }
+                        }
+                        Button { tasks.descending.toggle() } label: {
+                            Label(tasks.descending ? "Descending" : "Ascending",
+                                  systemImage: tasks.descending ? "arrow.down" : "arrow.up")
+                        }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
+                    }
+                    .accessibilityLabel("Sort by \(tasks.sort.title), "
+                                        + (tasks.descending ? "descending" : "ascending"))
+                }
+            }
+            #endif
         } else {
             ProgressView()
         }
@@ -62,6 +138,24 @@ struct TasksListView: View {
             }
         )
     }
+
+    #if os(iOS)
+    private func compactFilterIcon(_ tasks: TasksModel) -> String {
+        tasks.scope == .all && tasks.filter == .runnable
+            ? "line.3.horizontal.decrease"
+            : "line.3.horizontal.decrease.circle.fill"
+    }
+
+    private func scopeButton(_ scope: TaskScope, title: String, tasks: TasksModel) -> some View {
+        Button {
+            model.selectedTaskID = nil
+            tasks.selectScope(scope)
+        } label: {
+            if tasks.scope == scope { Label(title, systemImage: "checkmark") }
+            else { Text(title) }
+        }
+    }
+    #endif
 
     @ViewBuilder
     private func toolbar(_ tasks: TasksModel) -> some View {
@@ -108,6 +202,15 @@ struct TasksListView: View {
 
     private func taskList(_ tasks: TasksModel, selection: Binding<String?>) -> some View {
         List(selection: selection) {
+            #if os(iOS)
+            // The progress overview scrolls with the content instead of permanently consuming
+            // vertical space. Zero row insets let its own 12pt padding line up with the list rows.
+            if tasks.overview.total > 0 {
+                TaskProgressSummary(overview: tasks.overview)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
+            #endif
             ForEach(tasks.visible) { task in
                 TaskRowView(task: task)
                     .tag(task.id)
@@ -140,6 +243,11 @@ struct TasksListView: View {
             }
         }
         .orbitRevealSurface()
+        #if os(iOS)
+        // Sessions use a calm, full-width plain list on iPhone. Tasks now share that surface
+        // instead of inheriting inset-grouped cards from the split-view environment.
+        .listStyle(.plain)
+        #endif
         .overlay { emptyOverlay(tasks) }
     }
 
@@ -254,6 +362,9 @@ struct TaskRowView: View {
     let task: TaskItem
 
     var body: some View {
+        #if os(iOS)
+        compactRow
+        #else
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -283,7 +394,52 @@ struct TaskRowView: View {
             }
         }
         .padding(.vertical, 3)
+        #endif
     }
+
+    #if os(iOS)
+    /// The same two-line rhythm as the compact Session row: identity and recency on top,
+    /// state and owner below. Keeping titles to one line makes a long batch of similarly named
+    /// tasks much faster to scan while the detail screen remains the place for the full title.
+    private var compactRow: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(task.title).lineLimit(1)
+                if TaskListLogic.isBlocked(task) {
+                    Image(systemName: "lock.fill")
+                        .font(.orbitMeta)
+                        .foregroundStyle(task.dependencyState == "BLOCKED_FAILED" ? .red : .secondary)
+                }
+                Spacer(minLength: 8)
+                if let relativeTime {
+                    Text(relativeTime)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 7) {
+                TaskStatusPill(pill: TaskListLogic.pill(task))
+                Text(task.assignee?.name ?? "Unassigned")
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let count = task.commentCount, count > 0 {
+                    Label("\(count)", systemImage: "text.bubble")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var relativeTime: String? {
+        guard let timestamp = task.updatedAt ?? task.createdAt else { return nil }
+        return RelativeTime.format(timestamp)
+    }
+    #endif
 }
 
 /// Shape + color + text makes status readable without relying on color alone.
