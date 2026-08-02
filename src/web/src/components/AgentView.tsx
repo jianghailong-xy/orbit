@@ -135,6 +135,7 @@ import type { PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
+import { titleFirstLine } from '../lib/title';
 import { setSessionTags } from '../lib/sessionTags';
 import {
   isSessionLive,
@@ -185,6 +186,11 @@ interface QueuedTurn {
 interface LocalStatusCard {
   id: string;
   rows: LocalStatusRow[];
+}
+
+interface SessionToastTarget {
+  id: string;
+  title: string;
 }
 
 // An attachment staged in the composer: uploaded to the control plane (POST /api/attachments)
@@ -2011,20 +2017,23 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     [message, restoreMut, selectedSession],
   );
-  const showUndo = (id: string, label: string): void => {
-    const key = `undo-${id}`;
+  const showUndo = (session: SessionToastTarget, label: string): void => {
+    const key = `undo-${session.id}`;
+    const title = titleFirstLine(session.title) || 'Session';
     message.open({
       key,
       type: 'success',
       content: (
         <span className="toast-action">
-          <span className="toast-action-text">{label}</span>
+          <span className="toast-action-text">
+            {label}: {title}
+          </span>
           <button
             type="button"
             className="toast-action-btn"
             onClick={() => {
               message.destroy(key);
-              restoreMut.mutate(id);
+              restoreMut.mutate(session.id);
             }}
           >
             Undo
@@ -2063,12 +2072,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     );
   };
   const completeMut = useMutation({
-    mutationFn: (id: string) => completeSession(id),
-    onSuccess: (_d, id) => {
-      leaveIfOpen(id);
-      dropFromLists(id);
+    mutationFn: (session: SessionToastTarget) => completeSession(session.id),
+    onSuccess: (_d, session) => {
+      leaveIfOpen(session.id);
+      dropFromLists(session.id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(id, 'Completed');
+      showUndo(session, 'Completed');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -2079,7 +2088,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         message.info('This session cannot be completed right now.');
         return;
       }
-      completeMut.mutate(session.id);
+      completeMut.mutate({ id: session.id, title: session.title });
     },
     [completeMut, message, selectedSession],
   );
@@ -2103,12 +2112,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [selected, selectedSession, selectedLifecycleState, requestComplete]);
   const deleteMut = useMutation({
-    mutationFn: (id: string) => deleteSession(id),
-    onSuccess: (_d, id) => {
-      leaveIfOpen(id);
-      dropFromLists(id);
+    mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
+    onSuccess: (_d, session) => {
+      leaveIfOpen(session.id);
+      dropFromLists(session.id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(id, 'Deleted');
+      showUndo(session, 'Deleted');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -3046,7 +3055,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   danger: true,
                   onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
                     domEvent.stopPropagation();
-                    deleteMut.mutate(s.id);
+                    deleteMut.mutate({ id: s.id, title: s.title });
                   },
                 };
                 const purgeItem = {
@@ -3442,7 +3451,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                           label: 'Delete',
                           onClick: () => {
                             setHeaderMenuOpen(false);
-                            deleteMut.mutate(selected.id);
+                            deleteMut.mutate({ id: selected.id, title: selected.title });
                           },
                         },
                       ],
