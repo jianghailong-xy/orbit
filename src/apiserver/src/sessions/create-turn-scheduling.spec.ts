@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { SessionsService } from './sessions.service';
 
-function makeService(initialStatus: RunStatus, opts: { existing?: boolean } = {}) {
+function makeService(
+  initialStatus: RunStatus,
+  opts: { existing?: boolean; sessionOverrides?: Record<string, unknown> } = {},
+) {
   const session = {
     id: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
@@ -11,8 +15,16 @@ function makeService(initialStatus: RunStatus, opts: { existing?: boolean } = {}
     cancelRequestedAt: null,
     prompt: 'opening prompt',
     numTurns: 1,
+    mergeStatus: null,
+    mergeOperationId: null,
+    mergeOperationOwner: null,
+    commitStatus: null,
+    commitOperationId: null,
+    commitOperationOwner: null,
+    ...opts.sessionOverrides,
   };
   const statusWrites: RunStatus[] = [];
+  const updateWrites: Array<{ data: Record<string, unknown> }> = [];
   let queueWakes = 0;
   let inboxWakes = 0;
   let attachmentValidations = 0;
@@ -29,9 +41,10 @@ function makeService(initialStatus: RunStatus, opts: { existing?: boolean } = {}
     $queryRaw: async () => [{ id: session.id }],
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
-      update: async ({ data }: { data: { status: RunStatus } }) => {
-        statusWrites.push(data.status);
-        session.status = data.status;
+      update: async (write: { data: Record<string, unknown> }) => {
+        updateWrites.push(write);
+        statusWrites.push(write.data.status as RunStatus);
+        session.status = write.data.status as RunStatus;
         return { ...session };
       },
     },
@@ -58,6 +71,7 @@ function makeService(initialStatus: RunStatus, opts: { existing?: boolean } = {}
     service: new SessionsService(prisma, queue, realtime),
     session,
     statusWrites,
+    updateWrites,
     wakes: () => ({ queue: queueWakes, inbox: inboxWakes }),
     attachmentValidations: () => attachmentValidations,
   };
@@ -102,3 +116,120 @@ test('an idempotent retry returns its linked turn before revalidating attachment
   assert.deepEqual(h.statusWrites, []);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
 });
+
+for (const tc of [
+  {
+    name: 'merge',
+    sessionOverrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: '55555555-5555-4555-8555-555555555555',
+    },
+  },
+  {
+    name: 'commit',
+    sessionOverrides: {
+      commitStatus: 'pending',
+      commitOperationId: '66666666-6666-4666-8666-666666666666',
+      commitOperationOwner: '55555555-5555-4555-8555-555555555555',
+    },
+  },
+] as const) {
+  test(`a new turn cannot overlap a runner-claimed ${tc.name}`, async () => {
+    const h = makeService(RunStatus.AWAITING_INPUT, {
+      sessionOverrides: tc.sessionOverrides,
+    });
+
+    await assert.rejects(
+      () =>
+        h.service.createTurn(h.session.ownerId, h.session.id, {
+          clientTurnId: 'client-1',
+          content: 'follow up',
+        }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === 'wait for the pending worktree operation to finish',
+    );
+
+    assert.deepEqual(h.statusWrites, []);
+    assert.equal(h.attachmentValidations(), 0);
+    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    sessionOverrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'commit',
+    sessionOverrides: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+  },
+] as const) {
+  test(`a new turn treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
+    const h = makeService(RunStatus.AWAITING_INPUT, {
+      sessionOverrides: tc.sessionOverrides,
+    });
+
+    await assert.rejects(
+      () =>
+        h.service.createTurn(h.session.ownerId, h.session.id, {
+          clientTurnId: 'client-1',
+          content: 'follow up',
+        }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === 'wait for the pending worktree operation to finish',
+    );
+
+    assert.deepEqual(h.updateWrites, []);
+    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    sessionOverrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: null,
+    },
+    fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
+  },
+  {
+    name: 'commit',
+    sessionOverrides: {
+      commitStatus: 'pending',
+      commitOperationId: '66666666-6666-4666-8666-666666666666',
+      commitOperationOwner: null,
+    },
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+  },
+] as const) {
+  test(`a new turn may supersede a modern unclaimed ${tc.name}`, async () => {
+    const h = makeService(RunStatus.AWAITING_INPUT, {
+      sessionOverrides: tc.sessionOverrides,
+    });
+
+    await h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+    });
+
+    assert.equal(h.updateWrites.length, 1);
+    for (const field of tc.fields) {
+      assert.equal(h.updateWrites[0]?.data[field], null, `${field} was not cleared`);
+    }
+    assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
+  });
+}

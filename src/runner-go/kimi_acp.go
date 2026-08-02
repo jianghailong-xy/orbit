@@ -533,7 +533,7 @@ func (a *kimiACPClient) close() {
 	a.cancelPermissions()
 	a.cancel()
 	_ = a.stdin.Close()
-	_ = a.cmd.Wait()
+	_ = waitSessionProcessTree(a.cmd)
 	a.closeDone()
 	a.wg.Wait()
 }
@@ -541,6 +541,7 @@ func (a *kimiACPClient) close() {
 func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) (*kimiACPClient, error) {
 	procCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(procCtx, providerKimi, "acp")
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
 	cmd.Env = append(cmd.Env,

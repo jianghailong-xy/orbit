@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { RunnerApiController } from './runner-api.controller';
+import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
+import { RunnerApiController, SESSION_TERMINAL_HANDOFF_V1 } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -19,6 +20,7 @@ function harness(
   currentGeneration: string | null,
   owned = true,
   status: RunStatus = RunStatus.AWAITING_INPUT,
+  operationState: Record<string, unknown> = {},
 ) {
   const executeCalls: unknown[][] = [];
   let queryCalls = 0;
@@ -33,6 +35,13 @@ function harness(
               inboxLeaseGeneration: currentGeneration,
               inboxLeaseOwner: currentOwner,
               status,
+              mergeStatus: null,
+              mergeOperationId: null,
+              mergeOperationOwner: null,
+              commitStatus: null,
+              commitOperationId: null,
+              commitOperationOwner: null,
+              ...operationState,
             },
           ]
         : [];
@@ -110,6 +119,34 @@ test('takeover is idempotent for the process that already owns the session', asy
   assert.equal(h.notified(), SESSION_ID);
 });
 
+test('terminal-resume sentinel takeover requires the handoff capability', async () => {
+  const handoffOwner = newTerminalResumeHandoffOwner();
+  const legacy = harness(handoffOwner, GENERATION, true, RunStatus.RUNNING);
+  await assert.rejects(
+    legacy.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+      leaseOwner: NEW_OWNER,
+      expectedLeaseOwner: handoffOwner,
+    }),
+    ConflictException,
+  );
+  assert.equal(legacy.executeCalls.length, 0);
+
+  const capable = harness(handoffOwner, GENERATION, true, RunStatus.RUNNING);
+  assert.deepEqual(
+    await capable.controller.takeoverLeases(
+      { id: RUNNER_ID },
+      SESSION_ID,
+      {
+        leaseOwner: NEW_OWNER,
+        expectedLeaseOwner: handoffOwner,
+      },
+      SESSION_TERMINAL_HANDOFF_V1,
+    ),
+    { ok: true, status: RunStatus.RUNNING },
+  );
+  assert.equal(capable.executeCalls.length, 3);
+});
+
 test('a delayed predecessor takeover cannot overwrite a newer process owner', async () => {
   const h = harness(NEW_OWNER, GENERATION);
 
@@ -124,6 +161,130 @@ test('a delayed predecessor takeover cannot overwrite a newer process owner', as
   assert.equal(h.executeCalls.length, 0);
   assert.equal(h.notified(), undefined);
 });
+
+for (const tc of [
+  {
+    name: 'merge',
+    operationState: {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: '66666666-6666-4666-8666-666666666666',
+    },
+  },
+  {
+    name: 'commit',
+    operationState: {
+      commitStatus: 'pending',
+      commitOperationId: '66666666-6666-4666-8666-666666666666',
+      commitOperationOwner: '66666666-6666-4666-8666-666666666666',
+    },
+  },
+] as const) {
+  test(`takeover cannot rotate the process owner during a claimed ${tc.name}`, async () => {
+    const h = harness(
+      OLD_OWNER,
+      GENERATION,
+      true,
+      RunStatus.AWAITING_INPUT,
+      tc.operationState,
+    );
+
+    await assert.rejects(
+      () =>
+        h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+          leaseOwner: NEW_OWNER,
+          expectedLeaseOwner: OLD_OWNER,
+        }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === 'wait for the pending worktree operation to finish',
+    );
+
+    assert.equal(h.executeCalls.length, 0);
+    assert.equal(h.notified(), undefined);
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    operationState: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'commit',
+    operationState: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+  },
+] as const) {
+  test(`takeover treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
+    const h = harness(
+      OLD_OWNER,
+      GENERATION,
+      true,
+      RunStatus.AWAITING_INPUT,
+      tc.operationState,
+    );
+
+    await assert.rejects(
+      () =>
+        h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+          leaseOwner: NEW_OWNER,
+          expectedLeaseOwner: OLD_OWNER,
+        }),
+      ConflictException,
+    );
+
+    assert.equal(h.executeCalls.length, 0);
+    assert.equal(h.notified(), undefined);
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    operationState: {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'commit',
+    operationState: {
+      commitStatus: 'pending',
+      commitOperationId: '66666666-6666-4666-8666-666666666666',
+      commitOperationOwner: null,
+    },
+  },
+] as const) {
+  test(`takeover may rotate past a modern unclaimed ${tc.name}`, async () => {
+    const h = harness(
+      OLD_OWNER,
+      GENERATION,
+      true,
+      RunStatus.AWAITING_INPUT,
+      tc.operationState,
+    );
+
+    assert.deepEqual(
+      await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+        leaseOwner: NEW_OWNER,
+        expectedLeaseOwner: OLD_OWNER,
+      }),
+      { ok: true, status: RunStatus.AWAITING_INPUT },
+    );
+
+    assert.equal(h.executeCalls.length, 3);
+    assert.equal(h.notified(), SESSION_ID);
+  });
+}
 
 test('takeover refuses a row that became terminal after the reclaim snapshot', async () => {
   for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {

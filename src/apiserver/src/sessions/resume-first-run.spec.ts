@@ -24,11 +24,16 @@ function makeService(
     assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now },
     provider: 'codex',
     mergeStatus: null,
+    mergeOperationId: null,
+    mergeOperationOwner: null,
     commitStatus: null,
+    commitOperationId: null,
+    commitOperationOwner: null,
     ...overrides,
   };
   const updates: unknown[] = [];
   let notified = 0;
+  let retired = 0;
   const sessionDelegate = {
     findFirst: async () => session,
     findUniqueOrThrow: async () => session,
@@ -48,6 +53,10 @@ function makeService(
     $transaction: async (fn: (tx: unknown) => unknown) =>
       fn({
         $queryRaw: async () => [{ id: session.id }],
+        $executeRaw: async () => {
+          retired++;
+          return 1;
+        },
         session: sessionDelegate,
         conversationTurn: conversationTurnDelegate,
       }),
@@ -58,20 +67,28 @@ function makeService(
     },
   } as never;
   const service = new SessionsService(prisma, queue, {} as never);
-  return { service, updates, notified: () => notified };
+  return { service, updates, notified: () => notified, retired: () => retired };
 }
 
 const retry = { clientTurnId: 'retry-1', content: 'send after signing in' };
 
 test('a claimed zero-turn Codex session can restart after sign-in without a runtime id', async () => {
-  const { service, updates, notified } = makeService();
+  const { service, updates, notified, retired } = makeService();
 
   const accepted = await service.resume('owner-1', 'session-1', retry);
 
   assert.equal(accepted.turnId, 'retry-turn');
   assert.equal(accepted.seq, 2);
   assert.equal(notified(), 1);
-  assert.equal((updates[0] as { data: { status: RunStatus } }).data.status, RunStatus.PENDING);
+  assert.equal(retired(), 1);
+  const reviveData = (updates[0] as {
+    data: { status: RunStatus; inboxLeaseOwner: string };
+  }).data;
+  assert.equal(reviveData.status, RunStatus.PENDING);
+  assert.match(
+    reviveData.inboxLeaseOwner,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
 });
 
 test('a session that was never claimed still cannot restart', async () => {
@@ -120,7 +137,7 @@ test('a graceful terminal cancel remains resumable despite historical cancelRequ
 
 test('a lost resume response can retry its clientTurnId after the session became PENDING', async () => {
   const existingTurn = { id: 'already-queued-turn', seq: 7 };
-  const { service, updates, notified } = makeService(
+  const { service, updates, notified, retired } = makeService(
     { status: RunStatus.PENDING },
     existingTurn,
   );
@@ -129,5 +146,109 @@ test('a lost resume response can retry its clientTurnId after the session became
 
   assert.deepEqual(accepted, { turnId: existingTurn.id, seq: existingTurn.seq });
   assert.equal(updates.length, 0);
+  assert.equal(retired(), 0);
   assert.equal(notified(), 1);
 });
+
+for (const tc of [
+  {
+    name: 'merge',
+    overrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: '11111111-1111-4111-8111-111111111111',
+      mergeOperationOwner: '22222222-2222-4222-8222-222222222222',
+    },
+  },
+  {
+    name: 'commit',
+    overrides: {
+      commitStatus: 'pending',
+      commitOperationId: '11111111-1111-4111-8111-111111111111',
+      commitOperationOwner: '22222222-2222-4222-8222-222222222222',
+    },
+  },
+] as const) {
+  test(`terminal resume cannot supersede a runner-claimed ${tc.name}`, async () => {
+    const { service, updates, notified, retired } = makeService(tc.overrides);
+
+    await assert.rejects(
+      () => service.resume('owner-1', 'session-1', retry),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === 'wait for the pending worktree operation to finish',
+    );
+
+    assert.deepEqual(updates, []);
+    assert.equal(retired(), 0);
+    assert.equal(notified(), 0);
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    overrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'commit',
+    overrides: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+  },
+] as const) {
+  test(`terminal resume treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
+    const { service, updates, notified, retired } = makeService(tc.overrides);
+
+    await assert.rejects(
+      () => service.resume('owner-1', 'session-1', retry),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === 'wait for the pending worktree operation to finish',
+    );
+
+    assert.deepEqual(updates, []);
+    assert.equal(retired(), 0);
+    assert.equal(notified(), 0);
+  });
+}
+
+for (const tc of [
+  {
+    name: 'merge',
+    overrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: '11111111-1111-4111-8111-111111111111',
+      mergeOperationOwner: null,
+    },
+    fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
+  },
+  {
+    name: 'commit',
+    overrides: {
+      commitStatus: 'pending',
+      commitOperationId: '11111111-1111-4111-8111-111111111111',
+      commitOperationOwner: null,
+    },
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+  },
+] as const) {
+  test(`terminal resume may supersede a modern unclaimed ${tc.name}`, async () => {
+    const { service, updates, notified, retired } = makeService(tc.overrides);
+
+    await service.resume('owner-1', 'session-1', retry);
+
+    assert.equal(updates.length, 1);
+    const data = (updates[0] as { data: Record<string, unknown> }).data;
+    for (const field of tc.fields) {
+      assert.equal(data[field], null, `${field} was not cleared`);
+    }
+    assert.equal(retired(), 1);
+    assert.equal(notified(), 1);
+  });
+}

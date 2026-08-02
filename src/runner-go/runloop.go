@@ -161,6 +161,7 @@ func reclaimMissingSessions(
 	ctx context.Context,
 	t *Transport,
 	knownStates func() map[string]bool,
+	prepareTakeover func(*ClaimedSession) error,
 ) ([]reclaimedStart, error) {
 	delay := 250 * time.Millisecond
 	for ctx.Err() == nil {
@@ -195,7 +196,11 @@ func reclaimMissingSessions(
 			}
 			lastID = r.SessionID
 			knownActive, locallyKnown := localStates[r.SessionID]
-			if knownActive {
+			// A rotated owner marks a fresh terminal-revive epoch. Even if the old
+			// local supervisor still looks active, it cannot represent this RUNNING
+			// claim and must be drained before takeover.
+			ownerChanged := !strings.EqualFold(r.LeaseOwner, t.leaseOwner)
+			if knownActive && !ownerChanged {
 				continue
 			}
 			// Only a RUNNING (or legacy RUNNING-only) reclaim can represent a
@@ -205,6 +210,11 @@ func reclaimMissingSessions(
 				continue
 			}
 			job := claimedSessionFromReclaim(r)
+			if prepareTakeover != nil {
+				if prepareErr := prepareTakeover(job); prepareErr != nil {
+					return nil, prepareErr
+				}
+			}
 			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
 			if takeoverErr != nil {
 				// 409 means another process advanced the snapshot owner; 403 means
@@ -237,6 +247,61 @@ func reclaimMissingSessions(
 		}
 	}
 	return nil, ctx.Err()
+}
+
+// A terminal revive rotates the Session owner before it can be claimed. If this
+// process still has the predecessor supervisor, drain it while that rotated owner
+// fences every old write, then let takeover restore the process owner. Waiting for
+// full cleanup prevents two epochs sharing a credential file or worktree.
+func prepareLocalSupervisorTakeover(
+	ctx context.Context,
+	pool *sessionPool,
+	job *ClaimedSession,
+	processOwner string,
+) error {
+	if job == nil {
+		return nil
+	}
+	// Close manual Commit/Merge admission before inspecting the supervisor.
+	// This also covers a completed session with no supervisor: a heartbeat op
+	// that linearized first must finish before setupWorktree/takeover begins.
+	operationDone := pool.fenceWorktreeOperations(job.SessionID)
+	var done <-chan struct{}
+	if strings.EqualFold(job.LeaseOwner, processOwner) {
+		// Normally this is a warm reuse. If a heartbeat already began detaching
+		// the advertised epoch, however, join that cleanup instead of reviving it.
+		done, _ = pool.detachingDone(job.SessionID)
+	} else {
+		done, _ = pool.detachForTakeover(job.SessionID)
+	}
+	for _, barrier := range []<-chan struct{}{operationDone, done} {
+		if barrier == nil {
+			continue
+		}
+		select {
+		case <-barrier:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+// Modern manual-worktree commands are bound to this exact runner process.
+// A fieldless pair is accepted only for a command decoded from an older control
+// plane during runner-first rollout; a partial pair always fails closed.
+func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) bool {
+	if operationID == "" && leaseOwner == "" {
+		return true
+	}
+	return operationID != "" && leaseOwner != "" && strings.EqualFold(leaseOwner, processOwner)
+}
+
+type manualWorktreeOperationKey struct {
+	kind        string
+	sessionID   string
+	operationID string
+	leaseOwner  string
 }
 
 // runLoop returns true only when it drained because a newer runner release was
@@ -480,6 +545,8 @@ func runLoop(cfg *RunnerConfig) bool {
 		var mergeMu sync.Mutex
 		mergingNow := map[string]bool{}
 		committingNow := map[string]bool{}
+		mergeOutcomes := map[manualWorktreeOperationKey]mergeOutcome{}
+		commitOutcomes := map[manualWorktreeOperationKey]commitOutcome{}
 		artifactNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
@@ -499,7 +566,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			modelCatalog := hbModelCatalog
 			runtimeDefaultModels := hbRuntimeDefaultModels
 			modelSnapshotMu.Unlock()
-			resp, cancels, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
+			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", IdleCapacity: idle, Version: version,
 				LeaseOwner: t.leaseOwner,
 				Commands:   cmds, Skills: skills,
@@ -519,14 +586,19 @@ func runLoop(cfg *RunnerConfig) bool {
 					logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 				}
 			}
-			for _, id := range resp.CancelSessionIDs {
-				if c, ok := cancels[id]; ok {
-					c()
+			// Process ownership loss first. A terminal row can appear in both lists;
+			// marking its exact advertised epoch detaching before a durable cancel
+			// makes that overlap take the no-finalize path.
+			for _, id := range resp.LeaseLostSessionIDs {
+				if snapshot, ok := supervisors[id]; ok {
+					if _, detached := pool.detachExpectedForTakeover(snapshot.supervisor); detached {
+						logln("detaching supervisor after lease ownership changed:", id)
+					}
 				}
 			}
-			for _, id := range resp.LeaseLostSessionIDs {
-				if pool.detachCold(id) {
-					logln("detached cold supervisor after lease ownership changed:", id)
+			for _, id := range resp.CancelSessionIDs {
+				if snapshot, ok := supervisors[id]; ok && snapshot.cancel != nil {
+					snapshot.cancel()
 				}
 			}
 			if loopCtx.Err() != nil {
@@ -537,6 +609,11 @@ func runLoop(cfg *RunnerConfig) bool {
 			// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
 			// never stalls the heartbeat that keeps the reaper off our sessions.
 			for _, m := range resp.MergeRequests {
+				if !manualWorktreeCommandAllowed(m.OperationID, m.LeaseOwner, t.leaseOwner) {
+					logln("ignoring unfenced merge command for", m.SessionID)
+					continue
+				}
+				snapshot := supervisors[m.SessionID]
 				mergeMu.Lock()
 				busy := mergingNow[m.SessionID]
 				if !busy {
@@ -547,26 +624,77 @@ func runLoop(cfg *RunnerConfig) bool {
 					continue
 				}
 				heartbeatOps.Add(1)
-				go func(req MergeCommand) {
+				go func(req MergeCommand, advertised heartbeatSupervisorSnapshot) {
 					defer heartbeatOps.Done()
-					res := mergeToMain(req)
-					// Record where this session's work went, so a later "already merged"
-					// check (after a resume clears mergeStatus) looks at that branch and
-					// not at main.
-					rememberMergeTarget(req.SessionID, req.TargetBranch)
+					defer func() {
+						mergeMu.Lock()
+						delete(mergingNow, req.SessionID)
+						mergeMu.Unlock()
+					}()
+					key := manualWorktreeOperationKey{
+						kind: "merge", sessionID: req.SessionID,
+						operationID: req.OperationID, leaseOwner: req.LeaseOwner,
+					}
+					mergeMu.Lock()
+					res, cached := mergeOutcomes[key]
+					mergeMu.Unlock()
+					if !cached {
+						release, admitted := pool.beginHeartbeatWorktreeOperation(
+							req.SessionID,
+							advertised.supervisor,
+							advertised.permitGeneration,
+							false,
+						)
+						if !admitted {
+							// The server already claimed this exact epoch before returning
+							// the heartbeat. Close it explicitly; a silent drop would leave
+							// Resume permanently blocked on its operation owner.
+							res = mergeOutcome{
+								Status:  "error",
+								Message: "merge was superseded before local execution",
+							}
+						} else {
+							res = mergeToMain(req)
+							// Record where this session's work went before opening the gate.
+							rememberMergeTarget(req.SessionID, req.TargetBranch)
+							release()
+						}
+						if req.OperationID != "" {
+							mergeMu.Lock()
+							for old := range mergeOutcomes {
+								if old.sessionID == req.SessionID && old != key {
+									delete(mergeOutcomes, old)
+								}
+							}
+							mergeOutcomes[key] = res
+							mergeMu.Unlock()
+						}
+					}
 					if err := t.mergeResult(req.SessionID, MergeResultRequest{
+						OperationID: req.OperationID, LeaseOwner: req.LeaseOwner,
 						Status: res.Status, MergedSha: res.MergedSha, SourceSha: res.SourceSha, Message: res.Message,
 					}); err != nil {
 						logln("merge-result POST failed for", req.SessionID+":", err)
+						if !isRetryableTransportError(err) {
+							mergeMu.Lock()
+							delete(mergeOutcomes, key)
+							mergeMu.Unlock()
+						}
+					} else {
+						mergeMu.Lock()
+						delete(mergeOutcomes, key)
+						mergeMu.Unlock()
 					}
-					mergeMu.Lock()
-					delete(mergingNow, req.SessionID)
-					mergeMu.Unlock()
-				}(m)
+				}(m, snapshot)
 			}
 			// Honor "commit" requests: commit each live session's uncommitted worktree
 			// changes onto its branch (guarded against redelivery, in its own goroutine).
 			for _, c := range resp.CommitRequests {
+				if !manualWorktreeCommandAllowed(c.OperationID, c.LeaseOwner, t.leaseOwner) {
+					logln("ignoring unfenced commit command for", c.SessionID)
+					continue
+				}
+				snapshot := supervisors[c.SessionID]
 				mergeMu.Lock()
 				busy := committingNow[c.SessionID]
 				if !busy {
@@ -577,18 +705,63 @@ func runLoop(cfg *RunnerConfig) bool {
 					continue
 				}
 				heartbeatOps.Add(1)
-				go func(req CommitCommand) {
+				go func(req CommitCommand, advertised heartbeatSupervisorSnapshot) {
 					defer heartbeatOps.Done()
-					res := commitWorktree(req)
+					defer func() {
+						mergeMu.Lock()
+						delete(committingNow, req.SessionID)
+						mergeMu.Unlock()
+					}()
+					key := manualWorktreeOperationKey{
+						kind: "commit", sessionID: req.SessionID,
+						operationID: req.OperationID, leaseOwner: req.LeaseOwner,
+					}
+					mergeMu.Lock()
+					res, cached := commitOutcomes[key]
+					mergeMu.Unlock()
+					if !cached {
+						release, admitted := pool.beginHeartbeatWorktreeOperation(
+							req.SessionID,
+							advertised.supervisor,
+							advertised.permitGeneration,
+							true,
+						)
+						if !admitted {
+							res = commitOutcome{
+								Status:  "error",
+								Message: "commit was superseded before local execution",
+							}
+						} else {
+							res = commitWorktree(req)
+							release()
+						}
+						if req.OperationID != "" {
+							mergeMu.Lock()
+							for old := range commitOutcomes {
+								if old.sessionID == req.SessionID && old != key {
+									delete(commitOutcomes, old)
+								}
+							}
+							commitOutcomes[key] = res
+							mergeMu.Unlock()
+						}
+					}
 					if err := t.commitResult(req.SessionID, CommitResultRequest{
+						OperationID: req.OperationID, LeaseOwner: req.LeaseOwner,
 						Status: res.Status, Message: res.Message,
 					}); err != nil {
 						logln("commit-result POST failed for", req.SessionID+":", err)
+						if !isRetryableTransportError(err) {
+							mergeMu.Lock()
+							delete(commitOutcomes, key)
+							mergeMu.Unlock()
+						}
+					} else {
+						mergeMu.Lock()
+						delete(commitOutcomes, key)
+						mergeMu.Unlock()
 					}
-					mergeMu.Lock()
-					delete(committingNow, req.SessionID)
-					mergeMu.Unlock()
-				}(c)
+				}(c, snapshot)
 			}
 			for _, a := range resp.ArtifactRequests {
 				mergeMu.Lock()
@@ -636,25 +809,44 @@ func runLoop(cfg *RunnerConfig) bool {
 	takeoverSession := func(job *ClaimedSession) (string, error) {
 		return takeoverClaimedSession(loopCtx, t, job)
 	}
+	prepareTakeover := func(job *ClaimedSession) error {
+		return prepareLocalSupervisorTakeover(loopCtx, pool, job, t.leaseOwner)
+	}
 
 	// startSession creates a lightweight supervisor for a newly-known session, or
 	// activates an existing warm/cold supervisor when a new turn claim arrives.
 	// A supervisor that was silently engine-evicted remains registered cold; its
 	// next claim wakes it without creating a duplicate supervisor.
 	startSession := func(job *ClaimedSession, initiallyActive bool) {
-		// Keep the signed proof out of the provider environment. New MCP/CLI calls read
-		// this private file for every operation, so a refreshed proof becomes visible
-		// without respawning Claude/Codex. A storage failure safely disables discovery
-		// for this process; the control plane remains the authorization boundary.
-		if err := stageOrchestrationCredential(job); err != nil {
-			logln("cannot stage orchestration credential for", job.SessionID+":", err)
-			job.AllowOrchestration = false
-		}
-		if initiallyActive {
-			if _, ok := pool.activate(job); ok {
-				return // warm reuse, or wake a cold supervisor for transparent resume
+		stageCredential := func() {
+			// Keep the signed proof out of the provider environment. New MCP/CLI calls read
+			// this private file for every operation, so a refreshed proof becomes visible
+			// without respawning Claude/Codex. A storage failure safely disables discovery
+			// for this process; the control plane remains the authorization boundary.
+			if err := stageOrchestrationCredential(job); err != nil {
+				logln("cannot stage orchestration credential for", job.SessionID+":", err)
+				job.AllowOrchestration = false
 			}
 		}
+		if initiallyActive {
+			if _, ok := pool.activatePrepared(job, stageCredential); ok {
+				return // warm reuse, or wake a cold supervisor for transparent resume
+			}
+			// A lease-loss heartbeat can start detaching a cold supervisor in the
+			// narrow interval after the claim's prepare step. Join its exact cleanup
+			// before staging resources or registering the replacement epoch.
+			if err := prepareTakeover(job); err != nil {
+				logln("local supervisor activation barrier failed for", job.SessionID+":", err)
+				loopCancel()
+				return
+			}
+			if _, ok := pool.activatePrepared(job, stageCredential); ok {
+				return
+			}
+		}
+		// No predecessor remains. Stage before registering/waking the new supervisor;
+		// stale heartbeat responses are pointer-bound and cannot remove this credential.
+		stageCredential()
 		// Per-session git worktree isolation: when the agent's workDir is a git repo, run
 		// claude in its own checkout on job.Branch instead of the shared dir. Falls back to
 		// the shared dir (recording why on job.IsolationStatus) for non-git workDirs.
@@ -684,8 +876,8 @@ func runLoop(cfg *RunnerConfig) bool {
 				if err := removeOrchestrationCredential(j.SessionID); err != nil {
 					logln("cannot remove orchestration credential for", j.SessionID+":", err)
 				}
-				pool.remove(live)
 				forgetMergeTarget(j.SessionID)
+				pool.finish(live)
 			}()
 
 			// An OPEN reclaim can contain many idle sessions. Keep those supervisors
@@ -693,6 +885,9 @@ func runLoop(cfg *RunnerConfig) bool {
 			// ticker, background tailer, and transcript watcher per cold session.
 			if !activeAtRegister && !pool.waitActive(live, jobCtx, loopCtx) {
 				if loopCtx.Err() != nil || jobCtx.Err() == nil {
+					return
+				}
+				if pool.isDetaching(live) {
 					return
 				}
 				// A real cancel of a never-activated cold supervisor still needs the
@@ -711,7 +906,7 @@ func runLoop(cfg *RunnerConfig) bool {
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
 	reclaimed := false
-	pendingStarts, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+	pendingStarts, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
 		loopCancel()
@@ -766,7 +961,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			// The claim transaction may have committed before its response was lost.
 			// Reclaim all runner-owned rows and attach any authoritative RUNNING row
 			// missing from the local pool before issuing another claim.
-			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
 					logln("ambiguous claim reconciliation failed; stopping runner:", recoverErr)
@@ -791,6 +986,11 @@ func runLoop(cfg *RunnerConfig) bool {
 			startSession(job, true)
 			continue
 		}
+		if prepareErr := prepareTakeover(job); prepareErr != nil {
+			logln("local supervisor takeover drain failed for", job.SessionID+":", prepareErr)
+			loopCancel()
+			break
+		}
 		status, err := takeoverSession(job)
 		if err != nil {
 			if loopCtx.Err() != nil {
@@ -803,7 +1003,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				loopCancel()
 				break
 			}
-			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates)
+			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
 					logln("claim lease reconciliation failed for", job.SessionID+":", recoverErr)

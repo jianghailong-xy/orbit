@@ -4,27 +4,32 @@ import { RunStatus } from '@prisma/client';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
-function makeController(pendingExecutable: number) {
+function makeController(pendingExecutable: number, taskId: string | null = null) {
   const sessionId = '11111111-1111-4111-8111-111111111111';
   const runnerId = '22222222-2222-4222-8222-222222222222';
   const session: {
     id: string;
     assignedRunnerId: string;
     status: RunStatus;
-    taskId: null;
+    taskId: string | null;
     cancelRequestedAt: null;
   } = {
     id: sessionId,
     assignedRunnerId: runnerId,
     status: RunStatus.RUNNING,
-    taskId: null,
+    taskId,
     cancelRequestedAt: null,
   };
   const statusWrites: RunStatus[] = [];
   let inboxWakes = 0;
   let queueWakes = 0;
+  let retireCalls = 0;
   const tx = {
     $queryRaw: async () => [{ id: sessionId, leaseOwnerMatches: true }],
+    $executeRaw: async () => {
+      retireCalls++;
+      return 1;
+    },
     conversationTurn: {
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
@@ -41,6 +46,11 @@ function makeController(pendingExecutable: number) {
         session.status = data.status;
         return { count: 1 };
       },
+      count: async () => 0,
+    },
+    task: {
+      updateMany: async () => ({ count: 1 }),
+      findUnique: async () => null,
     },
   };
   const prisma = {
@@ -59,6 +69,7 @@ function makeController(pendingExecutable: number) {
     statusWrites,
     inboxWakes: () => inboxWakes,
     queueWakes: () => queueWakes,
+    retireCalls: () => retireCalls,
   };
 }
 
@@ -88,4 +99,19 @@ test('turn completion retains RUNNING while a follow-up can reuse the held slot'
   assert.deepEqual(h.statusWrites, [RunStatus.RUNNING]);
   assert.equal(h.inboxWakes(), 1);
   assert.equal(h.queueWakes(), 0);
+});
+
+test('a failed task turn retires its inbox generation in the terminal transaction', async () => {
+  const h = makeController(0, '33333333-3333-4333-8333-333333333333');
+
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    result: 'provider failed',
+  });
+
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.deepEqual(h.statusWrites, [RunStatus.FAILED]);
+  assert.equal(h.retireCalls(), 1);
+  assert.equal(h.inboxWakes(), 0);
 });

@@ -27,6 +27,7 @@ import { Observable, Subject, filter, map, mergeMap } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -656,20 +657,67 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
    * workDir comes from the session's agent; the runner resolves the repo root from it.
    */
-  async drainMergeRequests(runnerId: string): Promise<MergeCommand[]> {
+  async drainMergeRequests(runnerId: string, leaseOwner: string): Promise<MergeCommand[]> {
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, mergeStatus: 'pending', branch: { not: null } },
-      select: { id: true, branch: true, mergeTarget: true, agent: { select: { workDir: true } } },
+      where: {
+        assignedRunnerId: runnerId,
+        mergeStatus: 'pending',
+        mergeOperationId: { not: null },
+        branch: { not: null },
+        AND: [
+          {
+            OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: leaseOwner }],
+          },
+          {
+            // Open sessions remain tied to their current supervisor process.
+            // Terminal sessions have no supervisor and may be claimed directly
+            // by this runner's current heartbeat process.
+            OR: [
+              { status: { notIn: OPEN_SESSION_STATUSES } },
+              { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        branch: true,
+        mergeTarget: true,
+        mergeOperationId: true,
+        mergeOperationOwner: true,
+        status: true,
+        agent: { select: { workDir: true } },
+      },
     });
-    return sessions
-      .filter((s) => s.branch && s.agent?.workDir)
-      .map((s) => ({
-        sessionId: s.id,
-        branch: s.branch!,
-        workDir: s.agent!.workDir!,
-        // Null mergeTarget → omit it so the runner auto-detects main/master (original behavior).
-        ...(s.mergeTarget ? { targetBranch: s.mergeTarget } : {}),
-      }));
+    const claimed = await Promise.all(
+      sessions
+        .filter((s) => s.branch && s.agent?.workDir && s.mergeOperationId)
+        .map(async (s): Promise<MergeCommand | null> => {
+          const claim = await this.prisma.session.updateMany({
+            where: {
+              id: s.id,
+              assignedRunnerId: runnerId,
+              mergeStatus: 'pending',
+              mergeOperationId: s.mergeOperationId,
+              OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: leaseOwner }],
+              ...(OPEN_SESSION_STATUSES.includes(s.status)
+                ? { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner }
+                : { status: { notIn: OPEN_SESSION_STATUSES } }),
+            },
+            data: { mergeOperationOwner: leaseOwner },
+          });
+          if (claim.count === 0) return null;
+          return {
+            sessionId: s.id,
+            operationId: s.mergeOperationId!,
+            leaseOwner,
+            branch: s.branch!,
+            workDir: s.agent!.workDir!,
+            ...(s.mergeTarget ? { targetBranch: s.mergeTarget } : {}),
+          };
+        }),
+    );
+    return claimed.filter((command): command is MergeCommand => command !== null);
   }
 
   /**
@@ -678,12 +726,72 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * heartbeat until the runner reports an outcome that flips commitStatus off 'pending'. The
    * runner locates the per-session checkout from the session id; branch is for logging.
    */
-  async drainCommitRequests(runnerId: string): Promise<CommitCommand[]> {
+  async drainCommitRequests(runnerId: string, leaseOwner: string): Promise<CommitCommand[]> {
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runnerId, commitStatus: 'pending', branch: { not: null } },
-      select: { id: true, branch: true },
+      where: {
+        assignedRunnerId: runnerId,
+        commitStatus: 'pending',
+        commitOperationId: { not: null },
+        branch: { not: null },
+        OR: [
+          {
+            inboxLeaseOwner: leaseOwner,
+            status: RunStatus.AWAITING_INPUT,
+            cancelRequestedAt: null,
+            runningSubagents: { isEmpty: true },
+            runningBgShells: { isEmpty: true },
+            OR: [{ commitOperationOwner: null }, { commitOperationOwner: leaseOwner }],
+          },
+          {
+            // A finalized row may still need the same process to retry a
+            // cached receipt. Never claim an unowned terminal commit: its
+            // checkout may already have been finalized or removed.
+            status: { notIn: OPEN_SESSION_STATUSES },
+            commitOperationOwner: leaseOwner,
+          },
+        ],
+      },
+      select: { id: true, branch: true, commitOperationId: true, status: true },
     });
-    return sessions.filter((s) => s.branch).map((s) => ({ sessionId: s.id, branch: s.branch! }));
+    const claimed = await Promise.all(
+      sessions
+        .filter((s) => s.branch && s.commitOperationId)
+        .map(async (s): Promise<CommitCommand | null> => {
+          const claim = await this.prisma.session.updateMany({
+            where: {
+              id: s.id,
+              assignedRunnerId: runnerId,
+              commitStatus: 'pending',
+              commitOperationId: s.commitOperationId,
+              ...(OPEN_SESSION_STATUSES.includes(s.status)
+                ? {
+                    inboxLeaseOwner: leaseOwner,
+                    status: RunStatus.AWAITING_INPUT,
+                    cancelRequestedAt: null,
+                    runningSubagents: { isEmpty: true },
+                    runningBgShells: { isEmpty: true },
+                    OR: [
+                      { commitOperationOwner: null },
+                      { commitOperationOwner: leaseOwner },
+                    ],
+                  }
+                : {
+                    status: { notIn: OPEN_SESSION_STATUSES },
+                    commitOperationOwner: leaseOwner,
+                  }),
+            },
+            data: { commitOperationOwner: leaseOwner },
+          });
+          if (claim.count === 0) return null;
+          return {
+            sessionId: s.id,
+            operationId: s.commitOperationId!,
+            leaseOwner,
+            branch: s.branch!,
+          };
+        }),
+    );
+    return claimed.filter((command): command is CommitCommand => command !== null);
   }
 
   async drainArtifactRequests(runnerId: string): Promise<ArtifactCommand[]> {

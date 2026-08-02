@@ -172,19 +172,19 @@ func collectHeartbeatSessionStates(ctx context.Context, targets []heartbeatTelem
 // heartbeatSessionSnapshot keeps lease supervision over every local supervisor,
 // while worktree telemetry is restricted to active turns and read from cache.
 func heartbeatSessionSnapshot(pool *sessionPool, telemetry *heartbeatTelemetryProbe) (
-	map[string]context.CancelFunc,
+	map[string]heartbeatSupervisorSnapshot,
 	[]string,
 	[]SessionLiveState,
 	[]heartbeatTelemetryTarget,
 ) {
-	cancels, activeTargets := pool.heartbeatSnapshot()
-	ids := make([]string, 0, len(cancels))
-	for id := range cancels {
+	supervisors, activeTargets := pool.heartbeatSnapshot()
+	ids := make([]string, 0, len(supervisors))
+	for id := range supervisors {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	live := telemetry.snapshotFor(activeTargets)
-	return cancels, ids, live, activeTargets
+	return supervisors, ids, live, activeTargets
 }
 
 type heartbeatSendFunc func(HeartbeatRequest) (*HeartbeatResponse, error)
@@ -197,13 +197,13 @@ func sendHeartbeatCycle(
 	telemetry *heartbeatTelemetryProbe,
 	request HeartbeatRequest,
 	send heartbeatSendFunc,
-) (*HeartbeatResponse, map[string]context.CancelFunc, error) {
-	cancels, supervised, sessions, targets := heartbeatSessionSnapshot(pool, telemetry)
+) (*HeartbeatResponse, map[string]heartbeatSupervisorSnapshot, error) {
+	supervisors, supervised, sessions, targets := heartbeatSessionSnapshot(pool, telemetry)
 	request.SupervisedSessionIDs = supervised
 	request.Sessions = sessions
 	response, err := send(request)
 	telemetry.trigger(targets)
-	return response, cancels, err
+	return response, supervisors, err
 }
 
 // runHeartbeatTicks makes cadence deterministic in tests. Production passes a

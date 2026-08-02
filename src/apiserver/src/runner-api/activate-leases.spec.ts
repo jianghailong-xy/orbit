@@ -5,6 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { RunStatus } from '@prisma/client';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -23,6 +24,7 @@ interface HarnessOptions {
   owned?: boolean;
   currentRetired?: boolean;
   candidateRetired?: boolean;
+  status?: RunStatus;
 }
 
 function harness({
@@ -30,6 +32,7 @@ function harness({
   owned = true,
   currentRetired = false,
   candidateRetired = false,
+  status = RunStatus.AWAITING_INPUT,
 }: HarnessOptions) {
   const queryCalls: unknown[][] = [];
   const executeCalls: unknown[][] = [];
@@ -43,6 +46,7 @@ function harness({
               id: SESSION_ID,
               inboxLeaseGeneration: current,
               inboxLeaseOwner: LEASE_OWNER,
+              status,
             }]
           : [];
       }
@@ -114,6 +118,19 @@ test('activate-leases cannot replace a still-active generation', async () => {
     ConflictException,
   );
   assert.equal(h.executeCalls.length, 0);
+});
+
+test('a delayed activate cannot install a generation after the session became terminal', async () => {
+  for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
+    const h = harness({ current: null, status });
+
+    await assert.rejects(
+      h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
+      ConflictException,
+    );
+    assert.equal(h.queryCalls.length, 1);
+    assert.equal(h.executeCalls.length, 0);
+  }
 });
 
 test('a superseded runner process cannot activate even against a retired generation', async () => {

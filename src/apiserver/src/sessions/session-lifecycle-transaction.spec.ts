@@ -81,6 +81,7 @@ test('complete atomically persists live end intent and completedAt before side e
 test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   let updateData: Record<string, unknown> | undefined;
   let drained = 0;
+  let retired = 0;
   let publishedStatus: RunStatus | undefined;
   let publishedLifecycleState: SessionLifecycleState | undefined;
   const session = {
@@ -94,6 +95,10 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   };
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID }],
+    $executeRaw: async () => {
+      retired++;
+      return 1;
+    },
     session: {
       findUniqueOrThrow: async () => session,
       update: async ({ data }: { data: Record<string, unknown> }) => {
@@ -131,6 +136,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
   assert.equal(updateData?.endReason, SessionEndReason.DELETED);
   assert.ok(updateData?.deletedAt instanceof Date);
   assert.equal(drained, 1);
+  assert.equal(retired, 1);
   assert.equal(publishedStatus, RunStatus.CANCELLED);
   assert.equal(publishedLifecycleState, SessionLifecycleState.TRASH);
 });

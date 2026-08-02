@@ -455,6 +455,12 @@ model Session {
   mergeStatus          String?   @map("merge_status")
   mergeError           String?   @map("merge_error")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
+  // Fresh for every queued attempt. Runner results must echo this UUID, so a
+  // delayed result from an attempt cleared by Resume cannot complete a later one.
+  mergeOperationId     String?   @map("merge_operation_id") @db.Uuid
+  // Claimed once by a capable heartbeat process. Same-owner redelivery is
+  // idempotent; another process cannot steal a possibly executing git mutation.
+  mergeOperationOwner  String?   @map("merge_operation_owner") @db.Uuid
   mergedAt             DateTime? @map("merged_at")
   // The exact source-branch tip that a successful Orbit merge replayed. Unlike patch-id,
   // this remains authoritative when rebasing onto the target adapts overlapping changes and
@@ -493,6 +499,9 @@ model Session {
   commitStatus         String?   @map("commit_status")
   commitError          String?   @map("commit_error")
   commitRequestedAt    DateTime? @map("commit_requested_at")
+  // Same ABA fence as mergeOperationId, for heartbeat-delivered commits.
+  commitOperationId    String?   @map("commit_operation_id") @db.Uuid
+  commitOperationOwner String?   @map("commit_operation_owner") @db.Uuid
   // Product lifecycle: completedAt moves an Open session to Completed; deletedAt moves
   // it to Trash. Both retain all data and restore clears them. archivedAt is a temporary
   // rolling-deploy compatibility mirror maintained by migration 0076's database trigger.

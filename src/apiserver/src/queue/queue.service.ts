@@ -40,10 +40,14 @@ export class QueueService {
     });
   }
 
-  async claimSessionForRunner(runner: { id: string }, waitMs = 0): Promise<ClaimedSession | null> {
+  async claimSessionForRunner(
+    runner: { id: string },
+    waitMs = 0,
+    supportsTerminalHandoff = false,
+  ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner);
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
@@ -51,7 +55,10 @@ export class QueueService {
     }
   }
 
-  private async trySessionClaim(runner: { id: string }): Promise<ClaimedSession | null> {
+  private async trySessionClaim(
+    runner: { id: string },
+    supportsTerminalHandoff: boolean,
+  ): Promise<ClaimedSession | null> {
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -77,6 +84,13 @@ export class QueueService {
             AND s."assigned_runner_id" = ${runner.id}::uuid
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
+            -- A terminal revive uses a reserved predecessor owner until a runner
+            -- explicitly capable of local supervisor handoff claims it. Older
+            -- runners stay online but leave this row queued for an upgrade.
+            AND (
+              ${supportsTerminalHandoff}::boolean
+              OR substring(s."inbox_lease_owner"::text, 15, 1) IS DISTINCT FROM '5'
+            )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
             AND (

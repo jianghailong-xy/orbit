@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import {
   RunnerApiController,
   SESSION_ORCHESTRATION_CREDENTIAL_V1,
+  SESSION_TERMINAL_HANDOFF_V1,
   runnerSupportsCapability,
 } from './runner-api.controller';
 
@@ -16,6 +18,7 @@ function makeController(options: {
   const issueCalls: Array<[string, string]> = [];
   const reissueCalls: Array<[typeof RUNNER, string]> = [];
   const reclaimLookups: Array<Record<string, unknown>> = [];
+  const claimCalls: unknown[][] = [];
   const tx = {
     $queryRaw: async () => [],
     $executeRaw: async () => 0,
@@ -37,7 +40,10 @@ function makeController(options: {
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   };
   const queue = {
-    claimSessionForRunner: async () => options.claimed ?? null,
+    claimSessionForRunner: async (...args: unknown[]) => {
+      claimCalls.push(args);
+      return options.claimed ?? null;
+    },
   };
   const orchestration = {
     issue: async (runnerId: string, sessionId: string) => {
@@ -61,6 +67,7 @@ function makeController(options: {
     issueCalls,
     reissueCalls,
     reclaimLookups,
+    claimCalls,
   };
 }
 
@@ -90,6 +97,23 @@ test('runner capability parsing accepts lists without accepting partial names', 
     runnerSupportsCapability(undefined, SESSION_ORCHESTRATION_CREDENTIAL_V1),
     false,
   );
+  assert.equal(
+    runnerSupportsCapability(
+      `${SESSION_ORCHESTRATION_CREDENTIAL_V1},${SESSION_TERMINAL_HANDOFF_V1}`,
+      SESSION_TERMINAL_HANDOFF_V1,
+    ),
+    true,
+  );
+});
+
+test('claim forwards terminal-handoff negotiation to the queue', async () => {
+  const capable = makeController({ claimed: null });
+  await capable.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1);
+  assert.deepEqual(capable.claimCalls, [[{ id: RUNNER.id }, 25_000, true]]);
+
+  const legacy = makeController({ claimed: null });
+  await legacy.controller.claim(RUNNER);
+  assert.deepEqual(legacy.claimCalls, [[{ id: RUNNER.id }, 25_000, false]]);
 });
 
 test('claim enables orchestration only when the runner negotiated credential v1', async () => {
@@ -196,7 +220,10 @@ test('reclaim enables orchestration only when capability and every live guard ma
     ],
   });
 
-  const result = await controller.reclaim(RUNNER, SESSION_ORCHESTRATION_CREDENTIAL_V1);
+  const result = await controller.reclaim(
+    RUNNER,
+    `${SESSION_ORCHESTRATION_CREDENTIAL_V1},${SESSION_TERMINAL_HANDOFF_V1}`,
+  );
   const enabled = result.sessions.find((item) => item.sessionId === 'enabled-session');
   const disabled = result.sessions.find((item) => item.sessionId === 'disabled-session');
   assert.equal(enabled?.allowOrchestration, true);
@@ -224,9 +251,18 @@ test('reclaim enables orchestration only when capability and every live guard ma
   ]);
 
   const legacy = makeController({
-    reclaimed: [session('legacy-enabled-session', true)],
+    reclaimed: [
+      session('legacy-enabled-session', true),
+      session('handoff-session', true, {
+        inboxLeaseOwner: newTerminalResumeHandoffOwner(),
+      }),
+    ],
   });
   const legacyResult = await legacy.controller.reclaim(RUNNER);
+  assert.deepEqual(
+    legacyResult.sessions.map((item) => item.sessionId),
+    ['legacy-enabled-session'],
+  );
   assert.equal(legacyResult.sessions[0]?.allowOrchestration, false);
   assert.equal(legacyResult.sessions[0]?.orchestrationToken, undefined);
   assert.deepEqual(legacy.issueCalls, []);

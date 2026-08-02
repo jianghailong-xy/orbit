@@ -42,6 +42,7 @@ type codexAppServer struct {
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
 	stdin  io.WriteCloser
+	ioWg   sync.WaitGroup
 
 	writeMu sync.Mutex
 	mu      sync.Mutex
@@ -144,7 +145,17 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evError, map[string]interface{}{"message": "failed to spawn codex app-server: " + err.Error()})
 		return stFailed, true, false
 	}
-	defer app.close()
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	var asyncWg sync.WaitGroup
+	defer func() {
+		// Stop attachment preparation and RPC helpers first, then close the process
+		// so every pending request/notification unblocks. No worker that can emit or
+		// complete a turn may outlive this provider generation.
+		cancelWorkers()
+		app.close()
+		asyncWg.Wait()
+	}()
+
 	// Shared state has already crossed the expensive backfill gate. Legacy and
 	// credential-isolated state may still need that work, so keep the same bounded
 	// long window instead of reintroducing the old two-minute interruption.
@@ -245,7 +256,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			BranchSha:        effectiveBranchSha(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
 			WorktreeBranch:   currentBranch(job.WT),
-		}); err != nil {
+		}, workerCtx); err != nil {
 			logln("turn-complete failed for", job.SessionID+":", err)
 		}
 		finishCodexAppTurnFinalize(&activeMu, &active, a)
@@ -257,8 +268,10 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if codexTurnID == "" {
 			return
 		}
+		asyncWg.Add(1)
 		go func(turnID string) {
-			reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer asyncWg.Done()
+			reqCtx, cancel := context.WithTimeout(workerCtx, 10*time.Second)
 			defer cancel()
 			if _, err := app.request(reqCtx, "turn/interrupt", map[string]interface{}{"threadId": threadID, "turnId": turnID}); err != nil {
 				logln("codex turn/interrupt failed for", job.SessionID+":", err)
@@ -279,12 +292,12 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		sendInterrupt(markCodexAppTurnStarted(&activeMu, &active, orbitTurnID, codexTurnID))
 	}
 
-	notificationsDone := make(chan struct{})
+	asyncWg.Add(1)
 	go func() {
-		defer close(notificationsDone)
+		defer asyncWg.Done()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-workerCtx.Done():
 				return
 			case <-app.done:
 				return
@@ -292,21 +305,23 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
-					return rewriteLocalMarkdownImages(ctx, t, job.SessionID, text, []string{execDir, upDir})
+					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir})
 				}, onRateLimits)
 			}
 		}
 	}()
 
-	pollCtx, pollCancel := context.WithCancel(ctx)
+	pollCtx, pollCancel := context.WithCancel(workerCtx)
 	defer pollCancel()
+	asyncWg.Add(1)
 	go func() {
+		defer asyncWg.Done()
 		select {
 		case <-app.done:
 			pollCancel()
 		case <-shutdownCtx.Done():
 			pollCancel()
-		case <-ctx.Done():
+		case <-workerCtx.Done():
 		}
 	}()
 
@@ -333,8 +348,13 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 		respCopy := *resp
 		shellCtx := append([]string(nil), pendingShellCtx...)
+		asyncWg.Add(1)
 		go func() {
-			prepared := prepareCodexTurn(ctx, t, job, &respCopy, shellCtx)
+			defer asyncWg.Done()
+			prepared := prepareCodexTurn(workerCtx, t, job, &respCopy, shellCtx)
+			if workerCtx.Err() != nil {
+				return
+			}
 
 			ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, respCopy.TurnID)
 			if !ok {
@@ -345,8 +365,13 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				return
 			}
 
-			codexTurnID, err := app.startTurn(ctx, threadID, job, execDir, upDir, respCopy.TurnID, prepared.Prompt, prepared.ImagePaths)
+			codexTurnID, err := app.startTurn(workerCtx, threadID, job, execDir, upDir, respCopy.TurnID, prepared.Prompt, prepared.ImagePaths)
 			if err != nil {
+				// Cleanup cancellation is a resumable detach, not a failed turn. In
+				// particular, never synthesize FAILED after a shutdown drain timeout.
+				if workerCtx.Err() != nil {
+					return
+				}
 				activeMu.Lock()
 				same := active != nil && active.orbitTurnID == respCopy.TurnID
 				interrupted := same && active.interruptRequested
@@ -595,6 +620,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	}
 	args := codexAppServerCommandArgs(job, stateDir, exe)
 	cmd := exec.CommandContext(procCtx, "codex", args...)
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = processEnv
 	cmd.Env = append(cmd.Env,
@@ -632,8 +658,13 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		cancel()
 		return nil, err
 	}
-	go app.readLoop(stdout)
+	app.ioWg.Add(2)
 	go func() {
+		defer app.ioWg.Done()
+		app.readLoop(stdout)
+	}()
+	go func() {
+		defer app.ioWg.Done()
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
@@ -1099,7 +1130,10 @@ func (a *codexAppServer) closeDone() {
 func (a *codexAppServer) close() {
 	a.cancel()
 	_ = a.stdin.Close()
-	_ = a.cmd.Wait()
+	_ = waitSessionProcessTree(a.cmd)
+	// Join both raw pipe readers here. The owning provider then joins the
+	// notification/start workers they feed before it reaches the final flush.
+	a.ioWg.Wait()
 	a.closeDone()
 }
 

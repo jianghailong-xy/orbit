@@ -27,9 +27,10 @@ func runShellTurn(ctx context.Context, execDir, command string, emit emitFn, tur
 	cctx, cancel := context.WithTimeout(ctx, shellTurnTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, "bash", "-lc", command)
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(env)
-	out, err := cmd.CombinedOutput()
+	out, err := combinedOutputSessionProcessTree(cmd)
 	exit := 0
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {

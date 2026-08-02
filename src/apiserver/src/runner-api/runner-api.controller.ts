@@ -91,6 +91,11 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent } from '../common/system-noise';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import {
+  isTerminalResumeHandoffOwner,
+  pendingWorktreeOperationMayBeExecuting,
+  retireSessionInboxGeneration,
+} from '../common/session-inbox-fence';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -113,6 +118,7 @@ const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-
 // validation above so adding a UUID version cannot take the heartbeat offline.
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
+const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
 // PENDING is also open/resumable. In the active-turn model it can briefly coexist with
 // a still-warm runtime (a new message arrived after the prior turn released its slot), so
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
@@ -120,6 +126,8 @@ const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatu
 const OPEN = OPEN_SESSION_STATUSES;
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
+export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
+export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
 
 export function runnerSupportsCapability(
   header: string | string[] | undefined,
@@ -133,10 +141,10 @@ export function runnerSupportsCapability(
   );
 }
 
-function parseLeaseGeneration(value?: string): string | null {
+function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
-    throw new BadRequestException('leaseGeneration must be a UUID');
+    throw new BadRequestException(`${field} must be a UUID`);
   }
   return value.toLowerCase();
 }
@@ -338,8 +346,10 @@ export class RunnerApiController {
   async heartbeat(
     @CurrentRunner() runner: { id: string; version: string | null },
     @Body() dto: RunnerHeartbeatRequest,
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
       throw new BadRequestException('too many supervised session IDs');
     }
@@ -445,8 +455,13 @@ export class RunnerApiController {
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
-      mergeRequests = await this.realtime.drainMergeRequests(runner.id);
-      commitRequests = await this.realtime.drainCommitRequests(runner.id);
+      // Manual git mutations are fail-closed during rolling upgrades. A capable
+      // runner must advertise its process owner; older binaries leave requests
+      // pending until upgraded instead of executing an unfenced operation.
+      if (supportsWorktreeOps && heartbeatLeaseOwner) {
+        mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
+        commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
+      }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
       loginRequest = await this.drainLoginRequest(runner.id);
     } catch {
@@ -559,7 +574,8 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<ClaimedSession | null> {
-    const job = await this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS);
+    const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
+    const job = await this.queue.claimSessionForRunner({ id: runner.id }, LONG_POLL_MS, supportsTerminalHandoff);
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
         job.orchestrationToken = await this.orchestration.issue(runner.id, job.sessionId);
@@ -587,6 +603,10 @@ export class RunnerApiController {
       capabilities,
       SESSION_ORCHESTRATION_CREDENTIAL_V1,
     );
+    const supportsTerminalHandoff = runnerSupportsCapability(
+      capabilities,
+      SESSION_TERMINAL_HANDOFF_V1,
+    );
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
@@ -600,6 +620,9 @@ export class RunnerApiController {
     // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again.
     const out: ReclaimSession[] = [];
     for (const s of sessions) {
+      if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
+        continue;
+      }
       const agent = s.agent;
       const declared = s.provider ?? agent?.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
@@ -725,6 +748,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id') sessionId: string,
     @Body() dto: TakeoverTurnLeasesRequest,
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<TakeoverTurnLeasesResponse> {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
@@ -736,10 +760,22 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          mergeStatus: string | null;
+          mergeOperationId: string | null;
+          mergeOperationOwner: string | null;
+          commitStatus: string | null;
+          commitOperationId: string | null;
+          commitOperationOwner: string | null;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "merge_status" AS "mergeStatus",
+               "merge_operation_id" AS "mergeOperationId",
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "commit_status" AS "commitStatus",
+               "commit_operation_id" AS "commitOperationId",
+               "commit_operation_owner" AS "commitOperationOwner"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -751,7 +787,30 @@ export class RunnerApiController {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
+      if (
+        isTerminalResumeHandoffOwner(currentOwner) &&
+        !runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1)
+      ) {
+        throw new ConflictException('runner does not support terminal session handoff');
+      }
       if (currentOwner === leaseOwner) return owned[0].status;
+      if (
+        pendingWorktreeOperationMayBeExecuting(
+          owned[0].mergeStatus,
+          owned[0].mergeOperationId,
+          owned[0].mergeOperationOwner,
+        ) ||
+        pendingWorktreeOperationMayBeExecuting(
+          owned[0].commitStatus,
+          owned[0].commitOperationId,
+          owned[0].commitOperationOwner,
+        )
+      ) {
+        // A different process may still be mutating this checkout/repository.
+        // Claimed modern operations and ambiguous legacy NULL/NULL attempts are
+        // deliberately fail-closed; never rotate their supervisor owner.
+        throw new ConflictException('wait for the pending worktree operation to finish');
+      }
       if (currentOwner !== expectedLeaseOwner) {
         throw new ConflictException('inbox lease owner changed; refresh the session snapshot');
       }
@@ -803,16 +862,20 @@ export class RunnerApiController {
           id: string;
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
+          status: RunStatus;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner"
+               "inbox_lease_owner" AS "inboxLeaseOwner", status
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
       `;
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
+      }
+      if (!OPEN.includes(owned[0].status)) {
+        throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseOwner !== leaseOwner) {
         throw new ConflictException('this runner process does not own inbox activation');
@@ -1054,13 +1117,28 @@ export class RunnerApiController {
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
-      const owned = await tx.$queryRaw<Array<{ id: string; inboxLeaseGeneration: string | null }>>`
-        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration" FROM "session"
+      const owned = await tx.$queryRaw<
+        Array<{
+          id: string;
+          inboxLeaseGeneration: string | null;
+          inboxLeaseOwner: string | null;
+          status: RunStatus;
+        }>
+      >`
+        SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
+               "inbox_lease_owner" AS "inboxLeaseOwner", status
+        FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
       `;
       if (owned.length === 0) {
         throw new ForbiddenException('session does not belong to this runner');
+      }
+      // Check lifecycle before generation compatibility. In particular, a legacy
+      // NULL poller must receive the same terminal 409 as a modern engine instead
+      // of taking the historical empty-poll path forever.
+      if (!OPEN.includes(owned[0].status)) {
+        throw new ConflictException('session is no longer open');
       }
       if (owned[0].inboxLeaseGeneration !== leaseGeneration) {
         // A modern poller carries a concrete generation. Once takeover/activation has
@@ -1078,6 +1156,7 @@ export class RunnerApiController {
           FROM "inbox_lease_generation"
           WHERE "generation" = ${leaseGeneration}::uuid
             AND "session_id" = ${sessionId}::uuid
+            AND "lease_owner" IS NOT DISTINCT FROM ${owned[0].inboxLeaseOwner}::uuid
             AND "retired_at" IS NULL
         `;
         if (active.length === 0) {
@@ -1319,6 +1398,8 @@ export class RunnerApiController {
             },
             data: {
               mergeStatus: null,
+              mergeOperationId: null,
+              mergeOperationOwner: null,
               mergeError: null,
               mergedSourceSha: null,
             },
@@ -1412,6 +1493,9 @@ export class RunnerApiController {
           failTask,
         };
       }
+      if (failTask) {
+        await retireSessionInboxGeneration(tx, sessionId);
+      }
       // Per-file unified diffs to the side table (never on the session row, so the detail/
       // list payload stays small) — fetched on demand when the user opens a file's diff.
       if (dto.changedDiff !== undefined) {
@@ -1504,6 +1588,13 @@ export class RunnerApiController {
         where: { id: sessionId },
         select: { status: true, runtimeSessionId: true },
       });
+      // The owner fence alone is insufficient when the same runner process
+      // survives a control-plane terminal transition. Reject before every event-
+      // derived write, including empty and streaming-only batches. The runner drains
+      // a task-failure tail through a bounded send barrier before terminalizing it.
+      if (!OPEN.includes(session.status)) {
+        throw new ConflictException('session is no longer open');
+      }
       if (durable.length > 0) {
         await tx.runEvent.createMany({
           data: durable.map((e) => ({
@@ -1743,8 +1834,6 @@ export class RunnerApiController {
     @Body() dto: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED];
-
     // Finalize in ONE row-locked transaction. Complete/remove/reaper also write this row,
     // so the locked re-read is the only snapshot allowed to decide the final status and
     // checkout lifetime. The process fence is evaluated from that same locked snapshot,
@@ -1813,6 +1902,7 @@ export class RunnerApiController {
         },
       });
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout };
+      await retireSessionInboxGeneration(tx, sessionId);
       // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
       // off the session payload, fetched on demand when a file's diff is opened.
       if (dto.changedDiff !== undefined) {
@@ -1911,34 +2001,73 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: SessionMergeResultRequest,
   ) {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    if (dto?.status !== 'merged' && dto?.status !== 'conflict' && dto?.status !== 'error') {
+      throw new BadRequestException('invalid merge result status');
+    }
+    const operationId = parseLeaseGeneration(dto?.operationId, 'operationId');
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
+    if (!!operationId !== !!leaseOwner) {
+      throw new BadRequestException('operationId and leaseOwner must be provided together');
+    }
     const merged = dto.status === 'merged';
-    // Only accept the outcome while the merge is still pending. The MergeCommand runs async on
-    // the runner and is redelivered each heartbeat, so its result can land after a "Resolve in
-    // session" resume has already cleared mergeStatus to null — an unconditional write would
-    // re-stamp the stale conflict/error and wedge the bar back on "Resolve in session" after
-    // the conflict was actually resolved. updateMany no-ops (count 0) when no longer pending.
-    await this.prisma.session.updateMany({
-      where: { id: sessionId, mergeStatus: 'pending' },
-      data: {
-        mergeStatus: dto.status,
-        mergeError: merged ? null : (dto.message ?? null),
-        mergedAt: merged ? new Date() : null,
-        // A successful merge is authoritative even when ancestry/patch-id heuristics cannot
-        // recognize its conflict-adapted replay. Legacy runners omit sourceSha; explicitly clear
-        // any older marker so it can never be mistaken for this merge attempt.
-        ...(merged
-          ? {
-              branchMerged: true,
-              mergedSourceSha: dto.sourceSha ?? null,
-            }
-          : {}),
-        // On a successful merge, advance the recorded fork point to the merge tip (the runner's
-        // own git base-ref self-heals to the same commit on its next diff, so this keeps the DB
-        // record in step). Later commits then form a fresh delta against the merged base rather
-        // than re-counting the just-merged work. Only when the runner reported the new tip.
-        ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<
+        Array<{
+          status: RunStatus;
+          inboxLeaseOwner: string | null;
+          mergeStatus: string | null;
+          mergeOperationId: string | null;
+          mergeOperationOwner: string | null;
+        }>
+      >`
+        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+               "merge_status" AS "mergeStatus",
+               "merge_operation_id" AS "mergeOperationId",
+               "merge_operation_owner" AS "mergeOperationOwner"
+        FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      const current = locked[0];
+      // A terminal merge has no live supervisor and is claimed by the operation owner.
+      // An open merge additionally remains fenced to the current Session owner.
+      const legacyAttempt =
+        !operationId &&
+        !leaseOwner &&
+        current.mergeStatus === 'pending' &&
+        current.mergeOperationId === null &&
+        current.mergeOperationOwner === null;
+      const modernAttempt =
+        !!operationId &&
+        !!leaseOwner &&
+        current.mergeStatus === 'pending' &&
+        current.mergeOperationId === operationId &&
+        current.mergeOperationOwner === leaseOwner &&
+        (!OPEN.includes(current.status) || current.inboxLeaseOwner === leaseOwner);
+      if (!legacyAttempt && !modernAttempt) {
+        throw new ConflictException('merge operation is no longer current');
+      }
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          mergeStatus: dto.status,
+          mergeError: merged ? null : (dto.message ?? null),
+          mergedAt: merged ? new Date() : null,
+          // A successful merge is authoritative even when ancestry/patch-id heuristics cannot
+          // recognize its conflict-adapted replay.
+          ...(merged
+            ? {
+                branchMerged: true,
+                mergedSourceSha: dto.sourceSha ?? null,
+              }
+            : {}),
+          // On a successful merge, advance the recorded fork point to the merge tip.
+          ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
+        },
+      });
     });
     return { ok: true };
   }
@@ -1954,17 +2083,66 @@ export class RunnerApiController {
     @Param('id') sessionId: string,
     @Body() dto: SessionCommitResultRequest,
   ) {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    if (dto?.status !== 'committed' && dto?.status !== 'nochange' && dto?.status !== 'error') {
+      throw new BadRequestException('invalid commit result status');
+    }
+    const operationId = parseLeaseGeneration(dto?.operationId, 'operationId');
+    const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
+    if (!!operationId !== !!leaseOwner) {
+      throw new BadRequestException('operationId and leaseOwner must be provided together');
+    }
     const clean = dto.status === 'committed' || dto.status === 'nochange';
-    // Same staleness guard as mergeResult: a resume clears commitStatus to null, and an
-    // in-flight commit-result landing afterward must not re-stamp it. No-ops when not pending.
-    await this.prisma.session.updateMany({
-      where: { id: sessionId, commitStatus: 'pending' },
-      data: {
-        commitStatus: dto.status,
-        commitError: dto.status === 'error' ? (dto.message ?? null) : null,
-        ...(clean ? { worktreeDirty: false } : {}),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<
+        Array<{
+          status: RunStatus;
+          inboxLeaseOwner: string | null;
+          commitStatus: string | null;
+          commitOperationId: string | null;
+          commitOperationOwner: string | null;
+        }>
+      >`
+        SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
+               "commit_status" AS "commitStatus",
+               "commit_operation_id" AS "commitOperationId",
+               "commit_operation_owner" AS "commitOperationOwner"
+        FROM "session"
+        WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
+        FOR UPDATE
+      `;
+      if (locked.length === 0) {
+        throw new ForbiddenException('session does not belong to this runner');
+      }
+      const current = locked[0];
+      const legacyAttempt =
+        !operationId &&
+        !leaseOwner &&
+        current.status === RunStatus.AWAITING_INPUT &&
+        current.commitStatus === 'pending' &&
+        current.commitOperationId === null &&
+        current.commitOperationOwner === null;
+      const modernAttempt =
+        !!operationId &&
+        !!leaseOwner &&
+        current.commitStatus === 'pending' &&
+        current.commitOperationId === operationId &&
+        current.commitOperationOwner === leaseOwner &&
+        // The command was admitted while idle. Lifecycle terminalization may win
+        // before its receipt POST; accept that exact process/epoch so Resume can
+        // safely wait for completion instead of stranding a claimed operation.
+        (TERMINAL.includes(current.status) ||
+          (current.status === RunStatus.AWAITING_INPUT && current.inboxLeaseOwner === leaseOwner));
+      if (!legacyAttempt && !modernAttempt) {
+        throw new ConflictException('commit operation is no longer current');
+      }
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          commitStatus: dto.status,
+          commitError: dto.status === 'error' ? (dto.message ?? null) : null,
+          ...(clean ? { worktreeDirty: false } : {}),
+        },
+      });
     });
     return { ok: true };
   }
@@ -2115,7 +2293,11 @@ export class RunnerApiController {
         mergeStatus: 'merged',
         ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
       },
-      select: { mergedSourceSha: true },
+      select: {
+        mergedSourceSha: true,
+        mergeOperationId: true,
+        mergeOperationOwner: true,
+      },
     });
     if (!merged) return false;
     if (merged.mergedSourceSha && (!branchSha || merged.mergedSourceSha === branchSha)) {
@@ -2128,11 +2310,20 @@ export class RunnerApiController {
         assignedRunnerId: runnerId,
         status: { in: OPEN },
         mergeStatus: 'merged',
-        // Fence a racing fresh merge-result: clear only the exact marker we just read.
+        // Fence a racing fresh merge-result: the source tip may be identical
+        // across attempts, so bind the cleanup to the exact operation receipt too.
         mergedSourceSha: merged.mergedSourceSha,
+        mergeOperationId: merged.mergeOperationId,
+        mergeOperationOwner: merged.mergeOperationOwner,
         ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
       },
-      data: { mergeStatus: null, mergeError: null, mergedSourceSha: null },
+      data: {
+        mergeStatus: null,
+        mergeOperationId: null,
+        mergeOperationOwner: null,
+        mergeError: null,
+        mergedSourceSha: null,
+      },
     });
     return false;
   }

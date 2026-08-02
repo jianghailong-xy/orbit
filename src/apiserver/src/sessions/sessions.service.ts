@@ -46,6 +46,11 @@ import {
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import {
+  newTerminalResumeHandoffOwner,
+  pendingWorktreeOperationMayBeExecuting,
+  retireSessionInboxGeneration,
+} from '../common/session-inbox-fence';
 import { truncatePayload } from './truncate-payload';
 import {
   deriveSessionCapabilities,
@@ -1818,7 +1823,7 @@ export class SessionsService {
   }
 
   /** Enqueue a user message for a live or still-queued (PENDING) session. */
-  async createTurn(ownerId: string, id: string, dto: SessionTurnDto) {
+  async createTurn(ownerId: string, id: string, dto: SessionTurnDto, opts?: { clearSettledWorktreeState?: boolean }) {
     assertPromptSize(dto.content, 'message');
     await this.getSendable(ownerId, id); // fast ownership/lifecycle validation
     const queued = await this.prisma.$transaction(async (tx) => {
@@ -1847,6 +1852,24 @@ export class SessionsService {
           wakeInbox: session.status === RunStatus.RUNNING,
         };
       }
+      // Heartbeat delivery is the server-side linearization point for manual git
+      // mutations. A modern UUID-bearing unclaimed request may be superseded by
+      // this turn. Claimed attempts and ambiguous legacy NULL/NULL attempts must
+      // finish (or be operationally reconciled) so Git cannot overlap the turn.
+      if (
+        pendingWorktreeOperationMayBeExecuting(
+          session.mergeStatus,
+          session.mergeOperationId,
+          session.mergeOperationOwner,
+        ) ||
+        pendingWorktreeOperationMayBeExecuting(
+          session.commitStatus,
+          session.commitOperationId,
+          session.commitOperationOwner,
+        )
+      ) {
+        throw new ConflictException('wait for the pending worktree operation to finish');
+      }
       // Check attachments only after the idempotency lookup: on a retry of a successful
       // request they are already linked to this same turn and must not make the retry fail.
       // For a genuinely new request validation still precedes the turn insert.
@@ -1864,7 +1887,48 @@ export class SessionsService {
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
-        data: { status: nextStatus, lastTurnAt: new Date() },
+        data: {
+          status: nextStatus,
+          lastTurnAt: new Date(),
+          ...(session.mergeStatus === 'pending'
+            ? {
+                mergeStatus: null,
+                mergeOperationId: null,
+                mergeOperationOwner: null,
+                mergeError: null,
+              }
+            : {}),
+          ...(session.commitStatus === 'pending'
+            ? {
+                commitStatus: null,
+                commitOperationId: null,
+                commitOperationOwner: null,
+                commitError: null,
+              }
+            : {}),
+          // "Resolve in session" uses the live-session resume route. Clear its
+          // settled receipt in this same row-locked update, never from the stale
+          // fast-read snapshot: a newly queued/claimed epoch must win instead.
+          ...(opts?.clearSettledWorktreeState && session.mergeStatus && session.mergeStatus !== 'pending'
+            ? {
+                mergeStatus: null,
+                mergeOperationId: null,
+                mergeOperationOwner: null,
+                mergeError: null,
+                mergedAt: null,
+                mergedSourceSha: null,
+                branchMerged: null,
+              }
+            : {}),
+          ...(opts?.clearSettledWorktreeState && session.commitStatus && session.commitStatus !== 'pending'
+            ? {
+                commitStatus: null,
+                commitOperationId: null,
+                commitOperationOwner: null,
+                commitError: null,
+              }
+            : {}),
+        },
       });
       return {
         turn,
@@ -2029,35 +2093,56 @@ export class SessionsService {
    * from the dropdown re-records main).
    */
   async mergeToMain(ownerId: string, id: string, targetBranch?: string) {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (session.isolationStatus !== 'worktree' || !session.branch) {
-      throw new BadRequestException('session has no worktree branch to merge');
-    }
-    if (!session.assignedRunnerId) {
-      throw new ConflictException('no runner is associated with this session');
-    }
     const target = targetBranch?.trim() || null;
-    if (target && target === session.branch) {
-      throw new BadRequestException("can't merge a branch into itself");
-    }
-    if (session.mergeStatus === 'pending') return { ok: true };
-    await this.prisma.session.update({
-      where: { id },
-      data: {
-        mergeStatus: 'pending',
-        mergeTarget: target,
-        mergeRequestedAt: new Date(),
-        mergeError: null,
-        mergedAt: null,
-        mergedSourceSha: null,
-        branchMerged: null,
-      },
+    const agentId = await this.prisma.$transaction(async (tx) => {
+      // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
+      // all linearize on this row. An old click therefore cannot create a fresh
+      // operation after the session has already entered a new turn epoch.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (session.isolationStatus !== 'worktree' || !session.branch) {
+        throw new BadRequestException('session has no worktree branch to merge');
+      }
+      if (!session.assignedRunnerId) {
+        throw new ConflictException('no runner is associated with this session');
+      }
+      if (target && target === session.branch) {
+        throw new BadRequestException("can't merge a branch into itself");
+      }
+      if (session.mergeStatus === 'pending') return null;
+      if (session.commitStatus === 'pending') {
+        throw new ConflictException('wait for the pending worktree commit to finish');
+      }
+      if (
+        !SessionsService.TERMINAL.includes(session.status) &&
+        (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt)
+      ) {
+        throw new ConflictException('wait for the current turn to finish before merging');
+      }
+      await tx.session.update({
+        where: { id },
+        data: {
+          mergeStatus: 'pending',
+          mergeTarget: target,
+          mergeRequestedAt: new Date(),
+          mergeOperationId: randomUUID(),
+          mergeOperationOwner: null,
+          mergeError: null,
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        },
+      });
+      return session.agentId;
     });
     // Remember an explicitly chosen target on the agent so every session of it defaults there.
-    if (target && session.agentId) {
+    if (target && agentId) {
       await this.prisma.agent.update({
-        where: { id: session.agentId },
+        where: { id: agentId },
         data: { defaultMergeTarget: target },
       });
     }
@@ -2095,6 +2180,9 @@ export class SessionsService {
       throw new ConflictException('no runner is associated with this session');
     }
     if (session.commitStatus === 'pending') return { ok: true };
+    if (session.mergeStatus === 'pending') {
+      throw new ConflictException('wait for the pending branch merge to finish');
+    }
 
     // Close the read→write race with a turn starting (or background work being recorded)
     // after the checks above. A plain update would still queue a commit against the now-active
@@ -2107,8 +2195,16 @@ export class SessionsService {
         cancelRequestedAt: null,
         runningSubagents: { isEmpty: true },
         runningBgShells: { isEmpty: true },
+        commitStatus: session.commitStatus,
+        mergeStatus: session.mergeStatus,
       },
-      data: { commitStatus: 'pending', commitRequestedAt: new Date(), commitError: null },
+      data: {
+        commitStatus: 'pending',
+        commitRequestedAt: new Date(),
+        commitOperationId: randomUUID(),
+        commitOperationOwner: null,
+        commitError: null,
+      },
     });
     if (queued.count === 0) {
       // A concurrent identical request may have won the compare-and-set. Keep the endpoint
@@ -2122,6 +2218,9 @@ export class SessionsService {
         current.runningBgShells.length === 0
       ) {
         return { ok: true };
+      }
+      if (current?.mergeStatus === 'pending') {
+        throw new ConflictException('wait for the pending branch merge to finish');
       }
       throw new ConflictException(
         'the session is no longer idle — wait for its current work to finish',
@@ -2143,34 +2242,55 @@ export class SessionsService {
    * and merge verdict are cleared so the runner's next report re-derives them for the new branch.
    */
   async adoptWorktreeBranch(ownerId: string, id: string) {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
-    if (!session) throw new NotFoundException('session not found');
-    if (session.isolationStatus !== 'worktree') {
-      throw new BadRequestException('session has no worktree to adopt a branch from');
-    }
-    const target = session.worktreeBranch?.trim();
-    if (!target) {
-      throw new ConflictException('the runner has not reported the worktree branch yet');
-    }
-    if (target === session.branch) {
-      throw new BadRequestException('the worktree is already on the tracked branch');
-    }
-    await this.prisma.session.update({
-      where: { id },
-      data: {
-        branch: target,
-        // The adopted branch has its own fork point + merge state: clear the stale ones (they
-        // described the old branch) so the runner's next report — computed on this HEAD — re-derives
-        // the diff base and the "in main" verdict afresh.
-        baseSha: null,
-        mergeStatus: null,
-        mergeError: null,
-        mergedAt: null,
-        mergedSourceSha: null,
-        branchMerged: null,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      if (session.isolationStatus !== 'worktree') {
+        throw new BadRequestException('session has no worktree to adopt a branch from');
+      }
+      if (
+        pendingWorktreeOperationMayBeExecuting(
+          session.mergeStatus,
+          session.mergeOperationId,
+          session.mergeOperationOwner,
+        ) ||
+        pendingWorktreeOperationMayBeExecuting(
+          session.commitStatus,
+          session.commitOperationId,
+          session.commitOperationOwner,
+        )
+      ) {
+        throw new ConflictException('wait for the pending worktree operation to finish');
+      }
+      const target = session.worktreeBranch?.trim();
+      if (!target) {
+        throw new ConflictException('the runner has not reported the worktree branch yet');
+      }
+      if (target === session.branch) {
+        throw new BadRequestException('the worktree is already on the tracked branch');
+      }
+      await tx.session.update({
+        where: { id },
+        data: {
+          branch: target,
+          // The adopted branch has its own fork point + merge state: clear the stale ones (they
+          // described the old branch) so the runner's next report re-derives the diff base.
+          baseSha: null,
+          mergeStatus: null,
+          mergeOperationId: null,
+          mergeOperationOwner: null,
+          mergeError: null,
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        },
+      });
+      return { ok: true, branch: target };
     });
-    return { ok: true, branch: target };
   }
 
   /**
@@ -2289,6 +2409,7 @@ export class SessionsService {
             finishedAt: now,
           },
         });
+        await retireSessionInboxGeneration(tx, sessionId);
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: now },
@@ -2440,29 +2561,12 @@ export class SessionsService {
     // while the session is still AWAITING_INPUT, and its whole point is to clear the failed
     // merge so the bar offers Merge afresh once the agent rebases. The revive path below does
     // that for ended sessions (mergeStatus: null); mirror it here, since createTurn doesn't.
-    // Only a *settled* outcome is stale — leave an in-flight 'pending' for its runner-api
-    // *-result to land (those writes are guarded on status === 'pending', so clearing it here
-    // would silently drop the result).
+    // Only a *settled* outcome is stale. createTurn performs that cleanup under
+    // its Session row lock so it cannot erase an operation queued after this fast read.
     if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
-      const clear: Prisma.SessionUpdateInput = {};
-      if (session.mergeStatus && session.mergeStatus !== 'pending') {
-        clear.mergeStatus = null;
-        clear.mergeError = null;
-        clear.mergedAt = null;
-        clear.mergedSourceSha = null;
-        // The rebase/new work this resume kicks off invalidates the runner's last is-ancestor
-        // verdict too — a stale true would keep the bar on "✓ In main" while the user is adding
-        // work. null (not false) so the bar falls back until the runner's next fresh report.
-        clear.branchMerged = null;
-      }
-      if (session.commitStatus && session.commitStatus !== 'pending') {
-        clear.commitStatus = null;
-        clear.commitError = null;
-      }
-      if (Object.keys(clear).length > 0) {
-        await this.prisma.session.update({ where: { id }, data: clear });
-      }
-      return this.createTurn(ownerId, id, dto);
+      return this.createTurn(ownerId, id, dto, {
+        clearSettledWorktreeState: true,
+      });
     }
     if (
       initialCapabilities.resumeBlockedReason &&
@@ -2515,6 +2619,20 @@ export class SessionsService {
       if (capabilities.resumeBlockedReason) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
+      if (
+        pendingWorktreeOperationMayBeExecuting(
+          current.mergeStatus,
+          current.mergeOperationId,
+          current.mergeOperationOwner,
+        ) ||
+        pendingWorktreeOperationMayBeExecuting(
+          current.commitStatus,
+          current.commitOperationId,
+          current.commitOperationOwner,
+        )
+      ) {
+        throw new ConflictException('wait for the pending worktree operation to finish');
+      }
 
       // Validate image refs only for a new turn. On retry, attachments are already linked
       // to the existing turn and must not invalidate the idempotent response.
@@ -2524,6 +2642,10 @@ export class SessionsService {
         dto.attachmentIds,
         tx,
       );
+      // Self-heal terminal rows produced before generation retirement was deployed
+      // (or by an older replica during a rolling upgrade). Otherwise a same-process
+      // takeover returns early and the fresh engine cannot replace that active marker.
+      await retireSessionInboxGeneration(tx, id);
       const turn = await this.insertTurnLocked(tx, id, {
         kind: dto.kind === 'shell' ? 'shell' : 'message',
         content: dto.content,
@@ -2541,6 +2663,11 @@ export class SessionsService {
         where: { id },
         data: {
           status: RunStatus.PENDING,
+          // A terminal revive starts a fresh runner-supervisor epoch. Keep the
+          // reserved handoff owner in the claim snapshot until a capable runner
+          // drains any predecessor and restores its process owner. Owner-fenced
+          // inbox/events/ack/finalize writes stay closed throughout that drain.
+          inboxLeaseOwner: newTerminalResumeHandoffOwner(),
           cancelRequestedAt: null,
           endReason: null,
           finishedAt: null,
@@ -2548,11 +2675,15 @@ export class SessionsService {
           result: null,
           lastTurnAt: new Date(),
           mergeStatus: null,
+          mergeOperationId: null,
+          mergeOperationOwner: null,
           mergeError: null,
           mergedAt: null,
           mergedSourceSha: null,
           branchMerged: null,
           commitStatus: null,
+          commitOperationId: null,
+          commitOperationOwner: null,
           commitError: null,
           // A resumable Completed session moves back to Open. Trash was rejected above.
           completedAt: null,

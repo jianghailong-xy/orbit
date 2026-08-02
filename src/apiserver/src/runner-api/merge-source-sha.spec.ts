@@ -7,6 +7,9 @@ import { RunnerApiController } from './runner-api.controller';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 const LEASE_OWNER = '33333333-3333-4333-8333-333333333333';
+const OPERATION_ID = '44444444-4444-4444-8444-444444444444';
+const NEW_LEASE_OWNER = '55555555-5555-4555-8555-555555555555';
+const NEW_OPERATION_ID = '66666666-6666-4666-8666-666666666666';
 const SOURCE_SHA = 'a'.repeat(40);
 const TARGET_SHA = 'b'.repeat(40);
 const NEW_SOURCE_SHA = 'c'.repeat(40);
@@ -23,24 +26,34 @@ function controller(prisma: unknown) {
 
 test('merge result persists the exact source tip and marks the branch merged', async () => {
   const writes: Array<{ where: unknown; data: Record<string, unknown> }> = [];
-  const prisma = {
+  const tx = {
+    $queryRaw: async () => [
+      {
+        status: RunStatus.SUCCEEDED,
+        inboxLeaseOwner: null,
+        mergeStatus: 'pending',
+        mergeOperationId: OPERATION_ID,
+        mergeOperationOwner: LEASE_OWNER,
+      },
+    ],
     session: {
-      findUnique: async () => ({ assignedRunnerId: RUNNER_ID }),
-      updateMany: async (write: (typeof writes)[number]) => {
+      update: async (write: (typeof writes)[number]) => {
         writes.push(write);
-        return { count: 1 };
       },
     },
   };
+  const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) };
 
   await controller(prisma).mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: OPERATION_ID,
+    leaseOwner: LEASE_OWNER,
     status: 'merged',
     mergedSha: TARGET_SHA,
     sourceSha: SOURCE_SHA,
   });
 
   assert.equal(writes.length, 1);
-  assert.deepEqual(writes[0].where, { id: SESSION_ID, mergeStatus: 'pending' });
+  assert.deepEqual(writes[0].where, { id: SESSION_ID });
   assert.equal(writes[0].data.mergeStatus, 'merged');
   assert.equal(writes[0].data.baseSha, TARGET_SHA);
   assert.equal(writes[0].data.mergedSourceSha, SOURCE_SHA);
@@ -63,9 +76,13 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
           update: async () => ({ maxConcurrent: 1 }),
         },
         session: {
-          findFirst: async ({ where }: { where: Record<string, unknown> }) => {
-            reads.push(where);
-            return { mergedSourceSha: SOURCE_SHA };
+          findFirst: async (args: Record<string, unknown>) => {
+            reads.push(args);
+            return {
+              mergedSourceSha: SOURCE_SHA,
+              mergeOperationId: OPERATION_ID,
+              mergeOperationOwner: LEASE_OWNER,
+            };
           },
           updateMany: async (write: (typeof writes)[number]) => {
             writes.push(write);
@@ -94,11 +111,18 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
 
       assert.deepEqual(reads, [
         {
-          id: SESSION_ID,
-          assignedRunnerId: RUNNER_ID,
-          status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
-          mergeStatus: 'merged',
-          inboxLeaseOwner: LEASE_OWNER,
+          where: {
+            id: SESSION_ID,
+            assignedRunnerId: RUNNER_ID,
+            status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+            mergeStatus: 'merged',
+            inboxLeaseOwner: LEASE_OWNER,
+          },
+          select: {
+            mergedSourceSha: true,
+            mergeOperationId: true,
+            mergeOperationOwner: true,
+          },
         },
       ]);
       assert.equal(writes.length, 1);
@@ -115,7 +139,11 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
   }
 });
 
-function diffHarness(mergedSourceSha: string | null) {
+function diffHarness(
+  mergedSourceSha: string | null,
+  mergeOperationId: string | null = mergedSourceSha ? OPERATION_ID : null,
+  mergeOperationOwner: string | null = mergedSourceSha ? LEASE_OWNER : null,
+) {
   const writes: Array<{
     where: Record<string, unknown>;
     data: Record<string, unknown>;
@@ -123,7 +151,11 @@ function diffHarness(mergedSourceSha: string | null) {
   const prisma = {
     session: {
       findUnique: async () => ({ assignedRunnerId: RUNNER_ID }),
-      findFirst: async () => ({ mergedSourceSha }),
+      findFirst: async () => ({
+        mergedSourceSha,
+        mergeOperationId,
+        mergeOperationOwner,
+      }),
       updateMany: async (write: (typeof writes)[number]) => {
         writes.push(write);
         return { count: 1 };
@@ -187,13 +219,85 @@ test('a changed source tip retires the previous merged state', async () => {
     status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
     mergeStatus: 'merged',
     mergedSourceSha: SOURCE_SHA,
+    mergeOperationId: OPERATION_ID,
+    mergeOperationOwner: LEASE_OWNER,
   });
   assert.deepEqual(h.writes[0].data, {
     mergeStatus: null,
+    mergeOperationId: null,
+    mergeOperationOwner: null,
     mergeError: null,
     mergedSourceSha: null,
   });
   assert.equal(h.writes[1].data.branchMerged, false);
+});
+
+test('a stale reconcile cannot clear a newer merge attempt with the same source SHA', async () => {
+  const current: {
+    mergeStatus: string | null;
+    mergedSourceSha: string | null;
+    mergeOperationId: string | null;
+    mergeOperationOwner: string | null;
+  } = {
+    mergeStatus: 'merged',
+    mergedSourceSha: SOURCE_SHA,
+    mergeOperationId: NEW_OPERATION_ID,
+    mergeOperationOwner: NEW_LEASE_OWNER,
+  };
+  const writes: Array<{
+    where: Record<string, unknown>;
+    data: Record<string, unknown>;
+  }> = [];
+  const prisma = {
+    session: {
+      findUnique: async () => ({ assignedRunnerId: RUNNER_ID }),
+      // The reconcile read happened before a newer attempt settled to the same source tip.
+      findFirst: async () => ({
+        mergedSourceSha: SOURCE_SHA,
+        mergeOperationId: OPERATION_ID,
+        mergeOperationOwner: LEASE_OWNER,
+      }),
+      updateMany: async (write: (typeof writes)[number]) => {
+        writes.push(write);
+        if (write.data.mergeStatus !== null) return { count: 1 };
+        const matchesCurrentEpoch =
+          write.where.mergeStatus === current.mergeStatus &&
+          write.where.mergedSourceSha === current.mergedSourceSha &&
+          write.where.mergeOperationId === current.mergeOperationId &&
+          write.where.mergeOperationOwner === current.mergeOperationOwner;
+        if (matchesCurrentEpoch) {
+          current.mergeStatus = null;
+          current.mergedSourceSha = null;
+          current.mergeOperationId = null;
+          current.mergeOperationOwner = null;
+        }
+        return { count: matchesCurrentEpoch ? 1 : 0 };
+      },
+    },
+    sessionDiff: { upsert: async () => undefined },
+  };
+
+  await controller(prisma).diffResult({ id: RUNNER_ID }, SESSION_ID, {
+    branchMerged: false,
+    branchSha: NEW_SOURCE_SHA,
+  });
+
+  assert.deepEqual(writes[0].where, {
+    id: SESSION_ID,
+    assignedRunnerId: RUNNER_ID,
+    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    mergeStatus: 'merged',
+    mergedSourceSha: SOURCE_SHA,
+    mergeOperationId: OPERATION_ID,
+    mergeOperationOwner: LEASE_OWNER,
+  });
+  assert.deepEqual(current, {
+    mergeStatus: 'merged',
+    mergedSourceSha: SOURCE_SHA,
+    mergeOperationId: NEW_OPERATION_ID,
+    mergeOperationOwner: NEW_LEASE_OWNER,
+  });
+  assert.equal(writes[1].data.branchMerged, false);
 });
 
 function turnHarness(branchSha?: string) {

@@ -338,6 +338,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 	args := codexExecCommandArgs(job, execDir, upDir, imagePaths, exe)
 
 	cmd := exec.CommandContext(ctx, "codex", args...)
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
 	cmd.Env = append(cmd.Env,
@@ -400,7 +401,7 @@ func runCodexTurn(ctx context.Context, job *ClaimedSession, execDir, prompt stri
 		}
 		handleCodexEvent(msg, emit, &result, &lastAssistant)
 	}
-	waitErr := cmd.Wait()
+	waitErr := waitSessionProcessTree(cmd)
 	wg.Wait()
 	if ctx.Err() != nil {
 		result.Status = stCancelled

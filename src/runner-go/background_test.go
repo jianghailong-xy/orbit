@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-	"time"
 )
 
 // jsonlLine builds a transcript entry whose user-message content is `content`, matching the
@@ -131,18 +131,43 @@ func TestScanTranscriptPartialLine(t *testing.T) {
 	}
 }
 
+func TestScanTranscriptBoundsHugeIrrelevantLinesAndContinues(t *testing.T) {
+	emit, got := bgCollector()
+	bg := newBgTailer(context.Background(), emit)
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	huge := strings.Repeat("x", transcriptRelevantLineCap+transcriptReadBuffer) + "\n"
+	content := huge + jsonlLine(t, taskNotif("a", "toolu_A", "completed"))
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	off := bg.scanTranscript(path, 0)
+	if off != int64(len(content)) {
+		t.Fatalf("scan offset = %d, want %d", off, len(content))
+	}
+	if len(*got) != 1 || (*got)[0] != "toolu_A|completed" {
+		t.Fatalf("notification after huge line = %v", *got)
+	}
+}
+
+func TestReadCappedReturnsOnlyTheFileTail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "output")
+	prefix := strings.Repeat("p", bgTailCap)
+	tail := strings.Repeat("t", bgTailCap)
+	if err := os.WriteFile(path, []byte(prefix+tail), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readCapped(path); got != tail {
+		t.Fatalf("tail length/content mismatch: got %d bytes", len(got))
+	}
+}
+
 // watchJSONL must return once the session run ends (stopAll), not leak a goroutine.
 func TestWatchJSONLStopsOnStopAll(t *testing.T) {
 	emit, _ := bgCollector()
 	bg := newBgTailer(context.Background(), emit)
-	done := make(chan struct{})
-	go func() { bg.watchJSONL("no-such-session-uuid"); close(done) }()
+	bg.startTranscriptWatcher("no-such-session-uuid")
 	bg.stopAll()
-	select {
-	case <-done:
-	case <-time.After(bgPollInterval + time.Second):
-		t.Fatal("watchJSONL did not stop after stopAll")
-	}
 }
 
 func TestUserTextFromJSONL(t *testing.T) {

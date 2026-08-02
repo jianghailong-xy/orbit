@@ -24,6 +24,7 @@ const (
 	leaseActivationTimeout    = 20 * time.Second
 	finalLeaseReleaseTimeout  = 10 * time.Second
 	eventFlushShutdownGrace   = 20 * time.Second
+	terminalEventFlushTimeout = 5 * time.Second
 	finalizeRunShutdownGrace  = 20 * time.Second
 	shutdownSupervisorTimeout = shutdownDrainTimeout + 2*finalLeaseReleaseTimeout + eventFlushShutdownGrace + finalizeRunShutdownGrace + 10*time.Second
 )
@@ -170,9 +171,60 @@ func writeFileAtomically(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-type turnCompleter func(TurnCompleteRequest) error
+// The optional context bounds provider-owned asynchronous completion workers.
+// Synchronous provider paths omit it and retain the session-wide retry budget.
+type turnCompleter func(TurnCompleteRequest, ...context.Context) error
 type turnPermitWaiter func(context.Context) bool
 type leaseLossHandler func(error)
+
+type terminalTurnAck struct {
+	request          TurnCompleteRequest
+	permitGeneration uint64
+}
+
+// terminalTurnAckHandoff transfers one failed-task completion from a provider
+// generation to its session supervisor. A task has only one active turn, so a
+// different pending turn is an invariant violation and is rejected fail-closed.
+type terminalTurnAckHandoff struct {
+	mu      sync.Mutex
+	pending *terminalTurnAck
+}
+
+func (h *terminalTurnAckHandoff) store(req TurnCompleteRequest, permitGeneration uint64) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pending != nil {
+		return h.pending.request.TurnID == req.TurnID && h.pending.permitGeneration == permitGeneration
+	}
+	h.pending = &terminalTurnAck{request: req, permitGeneration: permitGeneration}
+	return true
+}
+
+func (h *terminalTurnAckHandoff) load() (terminalTurnAck, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pending == nil {
+		return terminalTurnAck{}, false
+	}
+	return *h.pending, true
+}
+
+func (h *terminalTurnAckHandoff) clear(turnID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pending != nil && h.pending.request.TurnID == turnID {
+		h.pending = nil
+	}
+}
+
+func terminalTurnCompleteStatus(status string) bool {
+	switch status {
+	case stSucceeded, stFailed, stCancelled:
+		return true
+	default:
+		return false
+	}
+}
 
 // contextUntilEither is used by control-plane handshakes that must survive a
 // provider process exit, but must still stop promptly when either the session is
@@ -244,6 +296,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			cancelOwnership()
 		}
 	}
+	// A revived claim with a rotated owner drains this supervisor before takeover.
+	// Reuse the ownership-loss path so provider teardown can never finalize the
+	// newly reopened control-plane Session.
+	localDetach := func() {
+		markOwnershipLost(fmt.Errorf("local supervisor epoch was superseded"))
+	}
+	if pool.installDetach(live, localDetach) {
+		localDetach()
+	}
 	eventCtx, cancelEventCtx := contextWithStopGrace(
 		ownershipCtx,
 		shutdownCtx,
@@ -273,42 +334,54 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 
 	var bufMu sync.Mutex
 	var buf []RunEvent
-	flush := func() {
-		bufMu.Lock()
-		if len(buf) == 0 {
-			bufMu.Unlock()
-			return
-		}
-		events := buf
-		buf = nil
-		bufMu.Unlock()
-		err := retryIdempotentWhile(eventCtx, func(attemptCtx context.Context) error {
-			return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
-		}, isRetryableTransportError)
-		if isLeaseOwnershipError(err) {
-			markOwnershipLost(err)
-			return
-		}
-		if err != nil {
-			// Keep the batch available to the final flush. Requests are seq-idempotent, so
-			// restoring after a lost committed response is safe and avoids dropping the tail.
+	emissionGate := &eventEmissionGate{}
+	flushGate := newEventFlushGate()
+	flushWithContext := func(ctx context.Context) error {
+		return flushGate.run(ctx, func(flushCtx context.Context) error {
 			bufMu.Lock()
-			buf = append(events, buf...)
+			if len(buf) == 0 {
+				bufMu.Unlock()
+				return nil
+			}
+			events := buf
+			buf = nil
 			bufMu.Unlock()
+			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
+				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
+			}, isRetryableTransportError)
+			if isLeaseOwnershipError(err) {
+				markOwnershipLost(err)
+				return err
+			}
+			if err != nil {
+				// Keep the batch available to the final flush. Requests are seq-idempotent, so
+				// restoring after a lost committed response is safe and avoids dropping the tail.
+				bufMu.Lock()
+				buf = append(events, buf...)
+				bufMu.Unlock()
+			}
+			return err
+		})
+	}
+	periodicEventCtx, cancelPeriodicEvents := context.WithCancel(eventCtx)
+	flushPeriodic := func() {
+		if err := flushWithContext(periodicEventCtx); err != nil && periodicEventCtx.Err() == nil && !isLeaseOwnershipError(err) {
 			logln("event flush failed for", sessionID+":", err)
 		}
 	}
 	emit := func(eventType string, payload map[string]interface{}) {
-		seqMu.Lock()
-		s := seq
-		seq++
-		seqMu.Unlock()
-		curTurnMu.Lock()
-		tid := curTurn
-		curTurnMu.Unlock()
-		bufMu.Lock()
-		buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: tid, Payload: payload})
-		bufMu.Unlock()
+		emissionGate.run(func() {
+			seqMu.Lock()
+			s := seq
+			seq++
+			seqMu.Unlock()
+			curTurnMu.Lock()
+			tid := curTurn
+			curTurnMu.Unlock()
+			bufMu.Lock()
+			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: tid, Payload: payload})
+			bufMu.Unlock()
+		})
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
@@ -327,10 +400,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			case <-stopFlush:
 				return
 			case <-tk.C:
-				flush()
+				flushPeriodic()
 			}
 		}
 	}()
+	var stopFlushOnce sync.Once
+	stopEventFlusher := func() {
+		stopFlushOnce.Do(func() {
+			close(stopFlush)
+			// Interrupt a periodic retry before waiting for its goroutine. Its
+			// batch is restored under bufMu, then the caller performs one final
+			// send with its own terminal/shutdown context.
+			cancelPeriodicEvents()
+			flushWg.Wait()
+		})
+	}
+	defer stopEventFlusher()
 
 	// Watches background-shell output files for live output and turns Claude's
 	// <task-notification> messages into durable completion events. Shared across respawns;
@@ -342,7 +427,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// that finishes between turns still clears from the "Background processes" tray. (Claude
 	// only — Codex has no such transcript; the glob would simply never match.)
 	if runtimeProvider(job) == providerClaude {
-		go bg.watchJSONL(job.SessionUUID)
+		bg.startTranscriptWatcher(job.SessionUUID)
 	}
 
 	logln(fmt.Sprintf("> interactive run %s — %s", job.SessionID, job.Title))
@@ -352,20 +437,79 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// dead control plane cannot keep shutdown blocked forever.
 	turnAckCtx, cancelTurnAcks := contextWithStopGrace(sessionCtx, shutdownCtx, shutdownDrainTimeout)
 	defer cancelTurnAcks()
+	var pendingTerminalAck terminalTurnAckHandoff
+	type engineStopHandle struct{ cancel context.CancelFunc }
+	var engineStopMu sync.Mutex
+	var currentEngine *engineStopHandle
+	stopCurrentEngine := func() bool {
+		engineStopMu.Lock()
+		handle := currentEngine
+		engineStopMu.Unlock()
+		if handle == nil || handle.cancel == nil {
+			return false
+		}
+		handle.cancel()
+		return true
+	}
 	// A turn ack is the active-permit handoff point. The server keeps RUNNING when
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
-	completeTurn := func(req TurnCompleteRequest) error {
+	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		completionCtx := turnAckCtx
+		cancelCompletion := func() {}
+		failedTask := req.Status == stFailed && job.TaskID != ""
+		var providerCtx context.Context
+		// A provider's asynchronous finalizer must not keep its generation alive
+		// after cleanup begins.
+		if len(providerContexts) > 0 && providerContexts[0] != nil {
+			providerCtx = providerContexts[0]
+			completionCtx, cancelCompletion = contextUntilEither(turnAckCtx, providerCtx)
+		}
+		defer cancelCompletion()
+		// A failed task turn terminalizes the Session in /turn-complete. Its provider
+		// stage only seals admission and attempts a bounded early flush; the supervisor
+		// performs the reliable drain and terminal acknowledgement after all emitters join.
+		if failedTask {
+			// Close event admission before asking the provider generation to exit. A
+			// bounded early flush reduces latency; the supervisor performs the stable,
+			// session-scoped drain after every provider/background emitter has joined.
+			emissionGate.seal()
+			stopEventFlusher()
+			flushCtx, cancelFlush := context.WithTimeout(completionCtx, terminalEventFlushTimeout)
+			flushErr := flushWithContext(flushCtx)
+			cancelFlush()
+			if isLeaseOwnershipError(flushErr) {
+				markOwnershipLost(flushErr)
+				stopCurrentEngine()
+				return flushErr
+			}
+			if flushErr != nil {
+				logln("pre-terminal event flush failed for", sessionID+":", flushErr)
+			}
+			permitGeneration := pool.permitGeneration(live)
+			if permitGeneration == 0 || !pendingTerminalAck.store(req, permitGeneration) {
+				stopCurrentEngine()
+				return fmt.Errorf("failed-task turn completion lost its exact local permit")
+			}
+			if !stopCurrentEngine() {
+				pendingTerminalAck.clear(req.TurnID)
+				return fmt.Errorf("failed-task turn completion has no provider generation to stop")
+			}
+			logln("failed-task turn completion handed to session supervisor for", sessionID)
+			return nil
+		}
 		// Capture before the network round-trip. Once the server commits
 		// AWAITING_INPUT, a new send/claim may reach pool.activate before this
 		// response returns; generation matching prevents this old ack from
 		// releasing the new claim's permit.
 		permitGeneration := pool.permitGeneration(live)
-		next, err := t.turnComplete(turnAckCtx, sessionID, req)
+		next, err := t.turnComplete(completionCtx, sessionID, req)
 		if isLeaseOwnershipError(err) {
 			markOwnershipLost(err)
 		}
-		if err == nil && !retainsTurnPermit(next) {
+		if err == nil && terminalTurnCompleteStatus(next) {
+			stopCurrentEngine()
+		} else if err == nil && !retainsTurnPermit(next) {
 			pool.park(live, permitGeneration)
 		}
 		return err
@@ -382,6 +526,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	firstSpawn := !job.Reclaimed && !job.Resume
 	lastClaimJob := job
 	respawns := 0
+	terminalTaskAckSettled := false
 	leaseResetGeneration := ""
 	retirePendingGeneration := func() error {
 		if leaseResetGeneration == "" {
@@ -472,10 +617,53 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			break
 		}
 		engineCtx, engineCancel := context.WithCancel(sessionCtx)
+		engineHandle := &engineStopHandle{cancel: engineCancel}
+		engineStopMu.Lock()
+		currentEngine = engineHandle
+		engineStopMu.Unlock()
 		if pool.engineStarted(live, engineGeneration, engineCancel) {
 			engineCancel() // timer/LRU won while this engine was being reserved
 		}
 		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, leaseGeneration, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, markOwnershipLost)
+		engineStopMu.Lock()
+		if currentEngine == engineHandle {
+			currentEngine = nil
+		}
+		engineStopMu.Unlock()
+		// A failed task is deliberately not acknowledged by its provider generation.
+		// That process and every provider worker are joined now. Stop runner-owned
+		// background work too, perform one stable event drain, then settle the exact
+		// request before releasing the inbox generation or allowing a replacement.
+		var terminalAckErr error
+		terminalAckStatus := ""
+		if ack, ok := pendingTerminalAck.load(); ok {
+			bg.stopAll()
+			if pool.permitGeneration(live) != ack.permitGeneration {
+				terminalAckErr = fmt.Errorf("failed-task terminal ack crossed its local permit generation")
+				localDetach()
+			} else if flushErr := flushWithContext(turnAckCtx); flushErr != nil {
+				terminalAckErr = flushErr
+				if isLeaseOwnershipError(flushErr) {
+					markOwnershipLost(flushErr)
+				}
+			} else {
+				terminalAckStatus, terminalAckErr = t.turnComplete(turnAckCtx, sessionID, ack.request)
+				if isLeaseOwnershipError(terminalAckErr) {
+					markOwnershipLost(terminalAckErr)
+				}
+				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) {
+					terminalAckErr = fmt.Errorf("failed-task turn-complete returned non-terminal status %q", terminalAckStatus)
+				}
+				if terminalAckErr == nil {
+					terminalTaskAckSettled = true
+					status = terminalAckStatus
+					pendingTerminalAck.clear(ack.request.TurnID)
+					// Every terminal lifecycle transaction retires the generation; do not
+					// issue a redundant release against an already-terminal Session.
+					leaseResetGeneration = ""
+				}
+			}
+		}
 		engineCancel()
 		evicted := pool.engineStopped(live, engineGeneration)
 		// Retire before any cold wait, branch handling, or crash backoff. The HTTP inbox
@@ -486,6 +674,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			if sessionCtx.Err() == nil && shutdownCtx.Err() == nil {
 				status = stFailed
 			}
+			break
+		}
+		if terminalAckErr != nil {
+			if !isLeaseOwnershipError(terminalAckErr) {
+				logln("supervisor failed-task turn-complete failed for", sessionID+":", terminalAckErr)
+			}
+			if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
+				status = stCancelled
+			} else {
+				status = stFailed
+			}
+			break
+		}
+		if terminalTaskAckSettled {
 			break
 		}
 		firstSpawn = false
@@ -539,20 +741,36 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln(fmt.Sprintf("interactive run %s — %s exited unexpectedly; resuming (attempt %d)", job.SessionID, runtimeProvider(job), respawns))
 		time.Sleep(time.Duration(respawns) * time.Second)
 	}
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && !terminalTaskAckSettled {
 		status = stCancelled
 	}
+	// Stop and join runner-owned background work before the final event drain and
+	// before any git snapshot/commit/removal. Otherwise a `!cmd &` can write the
+	// checkout after finalizeWorktree reported it clean (or after it was removed).
+	bg.stopAll()
+	// Provider and background emitters are joined above. Seal as the final local
+	// backstop, then drain the now-stable buffer before any server finalization.
+	emissionGate.seal()
+	stopEventFlusher()
 	if leaseResetGeneration != "" {
 		if err := retirePendingGeneration(); err != nil {
 			logln("final inbox lease release failed for", sessionID+":", err)
 		}
 	}
 
-	close(stopFlush)
-	flushWg.Wait()
-	flush()
+	if err := flushWithContext(eventCtx); err != nil && !isLeaseOwnershipError(err) {
+		logln("final event flush failed for", sessionID+":", err)
+	}
 	if ownershipLost.Load() {
 		logln(fmt.Sprintf("⏏ interactive run %s — detached after lease ownership changed", job.SessionID))
+		return
+	}
+	if terminalTaskAckSettled {
+		// /turn-complete already committed the terminal lifecycle and retired its
+		// inbox generation. Terminal takeover is intentionally forbidden, so do not
+		// reinterpret its expected 409 as ownership loss or run stale finalization.
+		// The wrapper keeps the local permit/worktree fence until pool.finish.
+		logln(fmt.Sprintf("■ interactive run %s — failed task terminal acknowledgement settled", job.SessionID))
 		return
 	}
 
@@ -564,7 +782,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln(fmt.Sprintf("⏸ interactive run %s — detached for shutdown (resumable)", job.SessionID))
 		return
 	}
-	finalizeCtx, cancelFinalize := contextWithStopGrace(context.Background(), shutdownCtx, finalizeRunShutdownGrace)
+	// Ownership loss must also abort a confirmation/finalize retry already in
+	// progress. ownershipCtx deliberately ignores an ordinary UI cancel, so normal
+	// terminal cleanup still gets its independent finalization budget.
+	finalizeCtx, cancelFinalize := contextWithStopGrace(ownershipCtx, shutdownCtx, finalizeRunShutdownGrace)
 	defer cancelFinalize()
 	// Check the process fence before touching the shared git worktree. /finalize checks it
 	// again transactionally, but computing its payload can itself commit a park checkpoint.
@@ -579,6 +800,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	if confirmErr != nil {
 		logln("run ownership confirmation failed for", job.SessionID+":", confirmErr)
+		return
+	}
+	if ownershipLost.Load() || !pool.beginFinalization(finalizeCtx, live) {
+		logln(fmt.Sprintf("⏏ interactive run %s — detached before local worktree finalization", job.SessionID))
 		return
 	}
 
@@ -810,6 +1035,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	pollCtx, pollCancel := context.WithCancel(procCtx)
 	defer pollCancel()
 	cmd := exec.CommandContext(procCtx, "claude", args...)
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	// Start from the runner's own env, then layer the agent's custom env vars on top.
 	cmd.Env = envWithAgent(job.Agent.Env)
@@ -831,7 +1057,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
 
+	var stderrWg sync.WaitGroup
+	stderrWg.Add(1)
 	go func() {
+		defer stderrWg.Done()
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
@@ -1230,7 +1459,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 		}
 	}
-	_ = cmd.Wait()
+	_ = waitSessionProcessTree(cmd)
+	// stderr is an event source too. Join it before the provider generation
+	// returns, otherwise it can append after the supervisor's final flush.
+	stderrWg.Wait()
 	procCancel()
 	<-pollDone
 

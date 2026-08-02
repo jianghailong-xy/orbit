@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -41,8 +42,10 @@ var (
 )
 
 const (
-	bgPollInterval = 2 * time.Second
-	bgTailCap      = 16 * 1024 // emit at most the last 16 KB of a (possibly huge) output file
+	bgPollInterval            = 2 * time.Second
+	bgTailCap                 = 16 * 1024 // emit at most the last 16 KB of a (possibly huge) output file
+	transcriptReadBuffer      = 64 * 1024
+	transcriptRelevantLineCap = 1024 * 1024
 )
 
 type bgTailer struct {
@@ -50,8 +53,12 @@ type bgTailer struct {
 	cancel context.CancelFunc // cancels ctx (invoked by stopAll on session teardown)
 	emit   emitFn
 	mu     sync.Mutex
-	live   map[string]context.CancelFunc // toolUseId → stop its tail
-	seen   map[string]bool               // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
+	wg     sync.WaitGroup
+	// stopping is protected by mu and closes the WaitGroup registration gate.
+	// stopAll sets it before Wait, so no goroutine can Add concurrently with Wait.
+	stopping bool
+	live     map[string]context.CancelFunc // toolUseId → stop its tail
+	seen     map[string]bool               // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
 }
 
 func newBgTailer(ctx context.Context, emit emitFn) *bgTailer {
@@ -96,13 +103,36 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 // (file the runner owns).
 func (b *bgTailer) startTail(toolUseID, shellID, path string) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	if b.stopping {
+		b.mu.Unlock()
+		return
+	}
 	if _, ok := b.live[toolUseID]; ok {
+		b.mu.Unlock()
 		return
 	}
 	ctx, cancel := context.WithCancel(b.ctx)
 	b.live[toolUseID] = cancel
-	go b.tail(ctx, toolUseID, shellID, path)
+	b.wg.Add(1)
+	b.mu.Unlock()
+	go func() {
+		defer b.wg.Done()
+		b.tail(ctx, toolUseID, shellID, path)
+	}()
+}
+
+func (b *bgTailer) startTranscriptWatcher(sessionUUID string) {
+	b.mu.Lock()
+	if b.stopping {
+		b.mu.Unlock()
+		return
+	}
+	b.wg.Add(1)
+	b.mu.Unlock()
+	go func() {
+		defer b.wg.Done()
+		b.watchJSONL(sessionUUID)
+	}()
 }
 
 // startUserShell runs a user `!cmd &` shell in the background: it spawns the process with its
@@ -110,6 +140,21 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string) {
 // (the runner owns the process, so completion + exit code are exact — no notification needed).
 // Bound to the session context, so the process is killed when the session ends.
 func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPath string, env map[string]string) error {
+	// Reserve the waiter before doing any slow setup. stopAll closes this
+	// registration gate under the same mutex before it starts waiting.
+	b.mu.Lock()
+	if b.stopping {
+		b.mu.Unlock()
+		return context.Canceled
+	}
+	b.wg.Add(1)
+	b.mu.Unlock()
+	waiterStarted := false
+	defer func() {
+		if !waiterStarted {
+			b.wg.Done()
+		}
+	}()
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return err
 	}
@@ -118,6 +163,7 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 		return err
 	}
 	cmd := exec.CommandContext(b.ctx, "bash", "-lc", command)
+	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(env)
 	cmd.Stdout = f
@@ -127,8 +173,10 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 		return err
 	}
 	b.startTail(toolUseID, shellID, outputPath)
+	waiterStarted = true
 	go func() {
-		werr := cmd.Wait()
+		defer b.wg.Done()
+		werr := waitSessionProcessTree(cmd)
 		f.Close()
 		b.stop(toolUseID) // stop the live tail
 		if b.ctx.Err() != nil {
@@ -162,15 +210,21 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 
 // readCapped reads a file, returning at most the last bgTailCap bytes ("" on any error).
 func readCapped(path string) string {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return ""
 	}
-	s := string(data)
-	if len(s) > bgTailCap {
-		s = s[len(s)-bgTailCap:]
+	defer f.Close()
+	if info, statErr := f.Stat(); statErr == nil && info.Size() > bgTailCap {
+		if _, err := f.Seek(info.Size()-bgTailCap, io.SeekStart); err != nil {
+			return ""
+		}
 	}
-	return s
+	data, err := io.ReadAll(io.LimitReader(f, bgTailCap))
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // stop ends the tail for a completed/failed/killed background task.
@@ -183,9 +237,12 @@ func (b *bgTailer) stop(toolUseID string) {
 	}
 }
 
-// stopAll ends every tail and the transcript watcher — called when the session run ends.
+// stopAll ends and joins every tail, transcript watcher, and runner-owned
+// background shell. Returning is the supervisor handoff barrier: no old epoch
+// goroutine may emit or retain the worktree after it completes.
 func (b *bgTailer) stopAll() {
 	b.mu.Lock()
+	b.stopping = true
 	for id, cancel := range b.live {
 		cancel()
 		delete(b.live, id)
@@ -194,6 +251,7 @@ func (b *bgTailer) stopAll() {
 	if b.cancel != nil {
 		b.cancel() // ends watchJSONL (and anything else bound to b.ctx)
 	}
+	b.wg.Wait()
 }
 
 func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID, path string) {
@@ -201,13 +259,9 @@ func (b *bgTailer) tail(ctx context.Context, toolUseID, shellID, path string) {
 	defer tk.Stop()
 	var last string
 	read := func() {
-		data, err := os.ReadFile(path)
-		if err != nil {
+		s := readCapped(path)
+		if s == "" {
 			return // file not there yet / transient — try again next tick
-		}
-		s := string(data)
-		if len(s) > bgTailCap {
-			s = s[len(s)-bgTailCap:]
 		}
 		if s == last {
 			return // unchanged — don't spam an identical snapshot
@@ -323,16 +377,48 @@ func (b *bgTailer) scanTranscript(path string, offset int64) int64 {
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return offset
 	}
-	r := bufio.NewReader(f)
+	r := bufio.NewReaderSize(f, transcriptReadBuffer)
+	completeOffset := offset
+	var line []byte
+	var lineBytes int64
+	truncated := false
 	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			break // EOF: `line` is a partial trailing entry — leave offset before it for next tick
+		select {
+		case <-b.ctx.Done():
+			return completeOffset
+		default:
 		}
-		offset += int64(len(line))
-		b.notificationFromLine(line)
+		fragment, readErr := r.ReadSlice('\n')
+		lineBytes += int64(len(fragment))
+		if !truncated {
+			remaining := transcriptRelevantLineCap - len(line)
+			if remaining > 0 {
+				if len(fragment) <= remaining {
+					line = append(line, fragment...)
+				} else {
+					line = append(line, fragment[:remaining]...)
+					truncated = true
+				}
+			} else {
+				truncated = true
+			}
+		}
+		switch {
+		case readErr == nil:
+			completeOffset += lineBytes
+			if !truncated {
+				b.notificationFromLine(string(line))
+			}
+			line = line[:0]
+			lineBytes = 0
+			truncated = false
+		case errors.Is(readErr, bufio.ErrBufferFull):
+			continue
+		default:
+			// EOF leaves a partial trailing entry unconsumed for the next tick.
+			return completeOffset
+		}
 	}
-	return offset
 }
 
 // notificationFromLine emits a background_task if the JSONL entry is a user message carrying a

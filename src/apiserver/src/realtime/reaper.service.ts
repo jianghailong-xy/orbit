@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { normalizeRuntimeProvider } from '../common/runtime-provider';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
+import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
@@ -264,6 +265,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         },
       });
       if (res.count === 0) return false;
+      await retireSessionInboxGeneration(tx, sessionId);
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },

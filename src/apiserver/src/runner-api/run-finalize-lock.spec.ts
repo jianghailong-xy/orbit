@@ -35,10 +35,15 @@ function makeController(current: LockedSnapshot) {
   const taskCountIds: string[] = [];
   const taskUpdateIds: string[] = [];
   const publishedStatuses: RunStatus[] = [];
+  let retireCalls = 0;
   const tx = {
     $queryRaw: async () => {
       order.push('lock');
       return [{ id: SESSION_ID, leaseOwnerMatches: true }];
+    },
+    $executeRaw: async () => {
+      retireCalls++;
+      return 1;
     },
     session: {
       findUniqueOrThrow: async () => {
@@ -81,6 +86,7 @@ function makeController(current: LockedSnapshot) {
     taskCountIds,
     taskUpdateIds,
     publishedStatuses,
+    retireCalls: () => retireCalls,
   };
 }
 
@@ -118,6 +124,7 @@ for (const lifecycleChange of [
     assert.deepEqual(response, { ok: true, keepCheckout: false });
     assert.deepEqual(h.order.slice(0, 3), ['lock', 'read', 'update']);
     assert.deepEqual(h.statusWrites, [RunStatus.CANCELLED]);
+    assert.equal(h.retireCalls(), 1);
     assert.deepEqual(h.publishedStatuses, [RunStatus.CANCELLED]);
   });
 }
@@ -141,6 +148,7 @@ test('finalize honors task_cancelled and reclaims the task from the locked snaps
 
   assert.deepEqual(response, { ok: true, keepCheckout: true });
   assert.deepEqual(h.statusWrites, [RunStatus.CANCELLED]);
+  assert.equal(h.retireCalls(), 1);
   assert.deepEqual(h.taskCountIds, ['current-task']);
   assert.deepEqual(h.taskUpdateIds, ['current-task']);
   assert.deepEqual(h.publishedStatuses, [RunStatus.CANCELLED]);
@@ -167,6 +175,7 @@ test('finalize preserves a completed task run and releases its checkout', async 
 
   assert.deepEqual(response, { ok: true, keepCheckout: false });
   assert.deepEqual(h.statusWrites, [RunStatus.SUCCEEDED]);
+  assert.equal(h.retireCalls(), 1);
   assert.deepEqual(h.taskCountIds, []);
   assert.deepEqual(h.taskUpdateIds, []);
   assert.deepEqual(h.publishedStatuses, [RunStatus.SUCCEEDED]);

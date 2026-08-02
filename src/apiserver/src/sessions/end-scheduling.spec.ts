@@ -20,8 +20,13 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   let drained = 0;
   let cancelRequests = 0;
   let inboxWakes = 0;
+  let retired = 0;
   const tx = {
     $queryRaw: async () => [{ id }],
+    $executeRaw: async () => {
+      retired++;
+      return 1;
+    },
     session: {
       findUniqueOrThrow: async () => lockedRead,
       update: async ({ data }: { data: Record<string, unknown> }) => {
@@ -50,6 +55,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
   assert.equal(statusWrite?.status, RunStatus.CANCELLED);
   assert.equal(statusWrite?.endReason, SessionEndReason.ENDED);
   assert.equal(drained, 1);
+  assert.equal(retired, 1);
   assert.equal(cancelRequests, 1);
   assert.equal(inboxWakes, 1);
 });

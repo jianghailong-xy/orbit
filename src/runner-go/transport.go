@@ -21,6 +21,9 @@ import (
 const (
 	runnerCapabilitiesHeader         = "X-Orbit-Runner-Capabilities"
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
+	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
+	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
+	runnerCapabilitiesV1             = sessionOrchestrationCredentialV1 + "," + sessionTerminalHandoffV1 + "," + sessionWorktreeOpsV1
 	orchestrationCredentialMissing   = "ORCHESTRATION_CREDENTIAL_MISSING"
 	orchestrationCredentialInvalid   = "ORCHESTRATION_CREDENTIAL_INVALID"
 )
@@ -113,7 +116,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 		return err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set(runnerCapabilitiesHeader, sessionOrchestrationCredentialV1)
+	req.Header.Set(runnerCapabilitiesHeader, runnerCapabilitiesV1)
 	if t.token != "" {
 		req.Header.Set("authorization", "Bearer "+t.token)
 	}

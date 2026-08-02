@@ -136,8 +136,8 @@ type ModelInfo struct {
 type HeartbeatResponse struct {
 	CancelSessionIDs []string `json:"cancelSessionIds"`
 	// LeaseLostSessionIDs is process-fence loss, not durable user cancellation.
-	// Cold supervisors detach locally; active/warm engines converge through their
-	// owner-fenced inbox/event/ack calls.
+	// The runner detaches the exact supervisor epoch advertised by this heartbeat;
+	// a delayed response cannot cancel a replacement with the same session id.
 	LeaseLostSessionIDs []string `json:"leaseLostSessionIds,omitempty"`
 	// Server-authoritative max-concurrent (the editable DB value). 0 from an older
 	// control plane that doesn't send it — the runner keeps its current value then.
@@ -189,9 +189,11 @@ type LoginResultRequest struct {
 // a target branch on this runner's local repo. WorkDir is the session agent's dir; the
 // runner resolves the repo root from it.
 type MergeCommand struct {
-	SessionID string `json:"sessionId"`
-	Branch    string `json:"branch"`
-	WorkDir   string `json:"workDir"`
+	SessionID   string `json:"sessionId"`
+	OperationID string `json:"operationId"`
+	LeaseOwner  string `json:"leaseOwner"`
+	Branch      string `json:"branch"`
+	WorkDir     string `json:"workDir"`
 	// TargetBranch is the branch to merge INTO. Empty → auto-detect main, else master (the
 	// original behavior); set when the user picked a target from the status bar's dropdown.
 	TargetBranch string `json:"targetBranch,omitempty"`
@@ -200,8 +202,10 @@ type MergeCommand struct {
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a
 // MergeCommand, POSTed back so the UI status bar can show merged ✓ / conflict / error.
 type MergeResultRequest struct {
-	Status    string `json:"status"` // "merged" | "conflict" | "error"
-	MergedSha string `json:"mergedSha,omitempty"`
+	OperationID string `json:"operationId,omitempty"`
+	LeaseOwner  string `json:"leaseOwner,omitempty"`
+	Status      string `json:"status"` // "merged" | "conflict" | "error"
+	MergedSha   string `json:"mergedSha,omitempty"`
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
@@ -212,8 +216,10 @@ type MergeResultRequest struct {
 // worktree changes onto its branch. The runner locates the checkout from SessionID (its
 // per-session worktree dir); Branch is for logging.
 type CommitCommand struct {
-	SessionID string `json:"sessionId"`
-	Branch    string `json:"branch"`
+	SessionID   string `json:"sessionId"`
+	OperationID string `json:"operationId"`
+	LeaseOwner  string `json:"leaseOwner"`
+	Branch      string `json:"branch"`
 }
 
 type ArtifactCommand struct {
@@ -232,8 +238,10 @@ type ArtifactResultRequest struct {
 // CommitResultRequest mirrors @orbit/shared SessionCommitResultRequest: the outcome of a
 // CommitCommand, POSTed back so the UI status bar can flip from Commit to Merge.
 type CommitResultRequest struct {
-	Status  string `json:"status"` // "committed" | "nochange" | "error"
-	Message string `json:"message,omitempty"`
+	OperationID string `json:"operationId,omitempty"`
+	LeaseOwner  string `json:"leaseOwner,omitempty"`
+	Status      string `json:"status"` // "committed" | "nochange" | "error"
+	Message     string `json:"message,omitempty"`
 }
 
 // DiffResultRequest mirrors @orbit/shared SessionDiffResultRequest: a freshly recomputed live

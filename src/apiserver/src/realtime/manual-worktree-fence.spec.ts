@@ -1,0 +1,334 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { RunStatus } from '@orbit/shared';
+import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { RealtimeService } from './realtime.service';
+
+const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
+const SESSION_ID = '22222222-2222-4222-8222-222222222222';
+const OLD_OWNER = '33333333-3333-4333-8333-333333333333';
+const NEW_OWNER = '44444444-4444-4444-8444-444444444444';
+const OPERATION_ID = '55555555-5555-4555-8555-555555555555';
+
+function service(prisma: unknown) {
+  return new RealtimeService(prisma as never, {} as never);
+}
+
+test('a terminal merge is claimed by the heartbeat owner with an operation CAS', async () => {
+  const reads: unknown[] = [];
+  const writes: unknown[] = [];
+  const prisma = {
+    session: {
+      findMany: async (args: unknown) => {
+        reads.push(args);
+        return [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            mergeTarget: 'main',
+            mergeOperationId: OPERATION_ID,
+            mergeOperationOwner: null,
+            status: RunStatus.SUCCEEDED,
+            agent: { workDir: '/repo' },
+          },
+        ];
+      },
+      updateMany: async (args: unknown) => {
+        writes.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+
+  const commands = await service(prisma).drainMergeRequests(RUNNER_ID, NEW_OWNER);
+
+  assert.deepEqual(commands, [
+    {
+      sessionId: SESSION_ID,
+      operationId: OPERATION_ID,
+      leaseOwner: NEW_OWNER,
+      branch: 'orbit/session',
+      workDir: '/repo',
+      targetBranch: 'main',
+    },
+  ]);
+  assert.deepEqual(reads, [
+    {
+      where: {
+        assignedRunnerId: RUNNER_ID,
+        mergeStatus: 'pending',
+        mergeOperationId: { not: null },
+        branch: { not: null },
+        AND: [
+          {
+            OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: NEW_OWNER }],
+          },
+          {
+            OR: [
+              { status: { notIn: OPEN_SESSION_STATUSES } },
+              {
+                status: { in: OPEN_SESSION_STATUSES },
+                inboxLeaseOwner: NEW_OWNER,
+              },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        branch: true,
+        mergeTarget: true,
+        mergeOperationId: true,
+        mergeOperationOwner: true,
+        status: true,
+        agent: { select: { workDir: true } },
+      },
+    },
+  ]);
+  assert.deepEqual(writes, [
+    {
+      where: {
+        id: SESSION_ID,
+        assignedRunnerId: RUNNER_ID,
+        mergeStatus: 'pending',
+        mergeOperationId: OPERATION_ID,
+        OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: NEW_OWNER }],
+        status: { notIn: OPEN_SESSION_STATUSES },
+      },
+      data: { mergeOperationOwner: NEW_OWNER },
+    },
+  ]);
+});
+
+test('merge claim redelivers only to the same owner and loses cleanly to another owner', async (t) => {
+  await t.test('same owner redelivery', async () => {
+    const writes: unknown[] = [];
+    const prisma = {
+      session: {
+        findMany: async () => [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            mergeTarget: null,
+            mergeOperationId: OPERATION_ID,
+            mergeOperationOwner: OLD_OWNER,
+            status: RunStatus.AWAITING_INPUT,
+            agent: { workDir: '/repo' },
+          },
+        ],
+        updateMany: async (args: unknown) => {
+          writes.push(args);
+          return { count: 1 };
+        },
+      },
+    };
+
+    const commands = await service(prisma).drainMergeRequests(RUNNER_ID, OLD_OWNER);
+
+    assert.equal(commands.length, 1);
+    assert.equal(commands[0]?.leaseOwner, OLD_OWNER);
+    assert.deepEqual(writes, [
+      {
+        where: {
+          id: SESSION_ID,
+          assignedRunnerId: RUNNER_ID,
+          mergeStatus: 'pending',
+          mergeOperationId: OPERATION_ID,
+          OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: OLD_OWNER }],
+          status: { in: OPEN_SESSION_STATUSES },
+          inboxLeaseOwner: OLD_OWNER,
+        },
+        data: { mergeOperationOwner: OLD_OWNER },
+      },
+    ]);
+  });
+
+  await t.test('new owner cannot dispatch a row won by the old owner after selection', async () => {
+    const prisma = {
+      session: {
+        findMany: async () => [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            mergeTarget: null,
+            mergeOperationId: OPERATION_ID,
+            mergeOperationOwner: null,
+            status: RunStatus.SUCCEEDED,
+            agent: { workDir: '/repo' },
+          },
+        ],
+        // Simulates OLD_OWNER winning between findMany and updateMany.
+        updateMany: async () => ({ count: 0 }),
+      },
+    };
+
+    assert.deepEqual(await service(prisma).drainMergeRequests(RUNNER_ID, NEW_OWNER), []);
+  });
+});
+
+test('commit claim repeats every idle and process-owner guard in its CAS', async () => {
+  const reads: unknown[] = [];
+  const writes: unknown[] = [];
+  const prisma = {
+    session: {
+      findMany: async (args: unknown) => {
+        reads.push(args);
+        return [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            commitOperationId: OPERATION_ID,
+            status: RunStatus.AWAITING_INPUT,
+          },
+        ];
+      },
+      updateMany: async (args: unknown) => {
+        writes.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+
+  const commands = await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER);
+
+  assert.deepEqual(commands, [
+    {
+      sessionId: SESSION_ID,
+      operationId: OPERATION_ID,
+      leaseOwner: NEW_OWNER,
+      branch: 'orbit/session',
+    },
+  ]);
+  const idleBranch = {
+    inboxLeaseOwner: NEW_OWNER,
+    status: RunStatus.AWAITING_INPUT,
+    cancelRequestedAt: null,
+    runningSubagents: { isEmpty: true },
+    runningBgShells: { isEmpty: true },
+    OR: [{ commitOperationOwner: null }, { commitOperationOwner: NEW_OWNER }],
+  };
+  const commonWhere = {
+    assignedRunnerId: RUNNER_ID,
+    commitStatus: 'pending',
+    commitOperationId: { not: null },
+    branch: { not: null },
+  };
+  assert.deepEqual(reads, [
+    {
+      where: {
+        ...commonWhere,
+        OR: [
+          idleBranch,
+          {
+            status: { notIn: OPEN_SESSION_STATUSES },
+            commitOperationOwner: NEW_OWNER,
+          },
+        ],
+      },
+      select: { id: true, branch: true, commitOperationId: true, status: true },
+    },
+  ]);
+  assert.deepEqual(writes, [
+    {
+      where: {
+        id: SESSION_ID,
+        assignedRunnerId: RUNNER_ID,
+        commitStatus: 'pending',
+        commitOperationId: OPERATION_ID,
+        ...idleBranch,
+      },
+      data: { commitOperationOwner: NEW_OWNER },
+    },
+  ]);
+});
+
+test('commit is not dispatched when the idle-state CAS loses', async () => {
+  const prisma = {
+    session: {
+      findMany: async () => [
+        {
+          id: SESSION_ID,
+          branch: 'orbit/session',
+          commitOperationId: OPERATION_ID,
+          status: RunStatus.AWAITING_INPUT,
+        },
+      ],
+      updateMany: async () => ({ count: 0 }),
+    },
+  };
+
+  assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+});
+
+test('terminal commit is redelivered only to its exact operation owner', async (t) => {
+  await t.test('same owner receives a cached receipt retry', async () => {
+    const writes: unknown[] = [];
+    const prisma = {
+      session: {
+        findMany: async () => [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            commitOperationId: OPERATION_ID,
+            status: RunStatus.SUCCEEDED,
+          },
+        ],
+        updateMany: async (args: unknown) => {
+          writes.push(args);
+          return { count: 1 };
+        },
+      },
+    };
+
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), [
+      {
+        sessionId: SESSION_ID,
+        operationId: OPERATION_ID,
+        leaseOwner: NEW_OWNER,
+        branch: 'orbit/session',
+      },
+    ]);
+    assert.deepEqual(writes, [
+      {
+        where: {
+          id: SESSION_ID,
+          assignedRunnerId: RUNNER_ID,
+          commitStatus: 'pending',
+          commitOperationId: OPERATION_ID,
+          status: { notIn: OPEN_SESSION_STATUSES },
+          commitOperationOwner: NEW_OWNER,
+        },
+        data: { commitOperationOwner: NEW_OWNER },
+      },
+    ]);
+  });
+
+  await t.test('unowned terminal receipt cannot be claimed', async () => {
+    const writes: unknown[] = [];
+    const prisma = {
+      session: {
+        // Simulates a row changing to unowned after selection; the terminal CAS
+        // must still require self instead of accepting NULL.
+        findMany: async () => [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            commitOperationId: OPERATION_ID,
+            status: RunStatus.FAILED,
+          },
+        ],
+        updateMany: async (args: unknown) => {
+          writes.push(args);
+          return { count: 0 };
+        },
+      },
+    };
+
+    assert.deepEqual(await service(prisma).drainCommitRequests(RUNNER_ID, NEW_OWNER), []);
+    assert.deepEqual(
+      (writes[0] as { where: Record<string, unknown> }).where.commitOperationOwner,
+      NEW_OWNER,
+    );
+    assert.equal((writes[0] as { where: Record<string, unknown> }).where.OR, undefined);
+  });
+});

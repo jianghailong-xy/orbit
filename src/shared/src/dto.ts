@@ -389,6 +389,10 @@ export interface RunnerLoginState {
 /** Control plane → runner: merge one session's worktree branch into a target branch. */
 export interface MergeCommand {
   sessionId: string;
+  /** Unique queued attempt; echoed by the runner result to prevent ABA. */
+  operationId: string;
+  /** Runner-process owner authorized to execute this attempt. */
+  leaseOwner: string;
   /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
   branch: string;
   /** The session agent's workDir; the runner resolves the repo root from it. */
@@ -404,6 +408,10 @@ export interface MergeCommand {
  *  dir); `branch` is for logging only. */
 export interface CommitCommand {
   sessionId: string;
+  /** Unique queued attempt; echoed by the runner result to prevent ABA. */
+  operationId: string;
+  /** Runner-process owner authorized to execute this attempt. */
+  leaseOwner: string;
   /** The session's worktree branch, e.g. orbit/<slug>-<hash>. */
   branch: string;
 }
@@ -793,6 +801,9 @@ export interface WorktreesRemovableResponse {
  * carries git's stderr / the precondition for the UI.
  */
 export interface SessionMergeResultRequest {
+  /** Absent only for an in-flight command issued by a pre-fence control plane. */
+  operationId?: string;
+  leaseOwner?: string;
   status: 'merged' | 'conflict' | 'error';
   mergedSha?: string;
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
@@ -807,6 +818,9 @@ export interface SessionMergeResultRequest {
  * means the commit failed (no worktree, git error). `message` carries git's stderr.
  */
 export interface SessionCommitResultRequest {
+  /** Absent only for an in-flight command issued by a pre-fence control plane. */
+  operationId?: string;
+  leaseOwner?: string;
   status: 'committed' | 'nochange' | 'error';
   message?: string;
 }

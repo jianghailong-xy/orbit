@@ -195,7 +195,7 @@ func TestOrchestrationTransportReadsCredentialDynamically(t *testing.T) {
 	var gotTokens []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotTokens = append(gotTokens, r.Header.Get("X-Orbit-Session-Token"))
-		if got := r.Header.Get(runnerCapabilitiesHeader); got != sessionOrchestrationCredentialV1 {
+		if got := r.Header.Get(runnerCapabilitiesHeader); got != runnerCapabilitiesV1 {
 			t.Errorf("runner capability header = %q", got)
 		}
 		_, _ = w.Write([]byte(`[]`))
@@ -225,7 +225,7 @@ func TestOrchestrationTransportRefreshesAndRetriesOnce(t *testing.T) {
 	orchestrationRequests := 0
 	refreshRequests := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get(runnerCapabilitiesHeader); got != sessionOrchestrationCredentialV1 {
+		if got := r.Header.Get(runnerCapabilitiesHeader); got != runnerCapabilitiesV1 {
 			t.Errorf("runner capability header = %q", got)
 		}
 		switch r.URL.Path {
@@ -390,7 +390,7 @@ func TestTransportSendsRunnerCapabilityHeader(t *testing.T) {
 	if _, err := NewTransport(srv.URL, "runner-token").me(); err != nil {
 		t.Fatal(err)
 	}
-	if got != sessionOrchestrationCredentialV1 {
-		t.Fatalf("runner capability header = %q, want %q", got, sessionOrchestrationCredentialV1)
+	if got != runnerCapabilitiesV1 {
+		t.Fatalf("runner capability header = %q, want %q", got, runnerCapabilitiesV1)
 	}
 }
