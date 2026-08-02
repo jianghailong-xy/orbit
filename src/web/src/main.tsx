@@ -25,7 +25,8 @@ const queryClient = new QueryClient({
 // the card itself paints 8px lower (the notice wrapper's padding), so it starts at 112px —
 // clear of the tallest headers we render: the conversation header with a task back-link above
 // the title (105px) and the mobile "Orbit" top bar plus session-list head (100px), both
-// measured with the toast live. Applies to every toast — they all go through lib/toast.
+// measured with the toast live. Session lifecycle notifications use a separately measured
+// header anchor (see AgentView) because their first card needs to sit closer to each layout.
 const TOAST_TOP = 104;
 
 // Feeds AntD the matching theme for the resolved light/dark mode; custom CSS is
@@ -34,7 +35,9 @@ function ThemedConfig({ children }: { children: React.ReactNode }) {
   const { resolved } = useThemeMode();
   return (
     <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}>
-      <AntApp message={{ top: TOAST_TOP }}>{children}</AntApp>
+      <AntApp message={{ top: TOAST_TOP }} notification={{ placement: 'topRight', stack: false }}>
+        {children}
+      </AntApp>
     </ConfigProvider>
   );
 }

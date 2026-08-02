@@ -135,7 +135,6 @@ import type { PlanUsageSnapshot } from '@orbit/shared';
 import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
-import { titleFirstLine } from '../lib/title';
 import { setSessionTags } from '../lib/sessionTags';
 import {
   isSessionLive,
@@ -718,6 +717,54 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
   // choices (the auto-open redirect, the in-pane back button) key off this.
   const isMobile = useIsMobile();
+  // Lifecycle notifications belong just below the header of the pane the action came from.
+  // Both headers stay mounted on desktop, while CSS swaps them on mobile, so measure the
+  // visible one(s) instead of relying on a fixed offset that only fits one layout.
+  const sessionListHeaderRef = useRef<HTMLDivElement>(null);
+  const conversationHeaderRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    let frame = 0;
+
+    const updateToastTop = (): void => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const viewportWidth = window.innerWidth;
+        const toastWidth = Math.min(360, Math.max(0, viewportWidth - 32));
+        const toastLeft = viewportWidth - toastWidth - 16;
+        const appTopbar = document.querySelector<HTMLElement>('.app-topbar');
+        const anchors = [sessionListHeaderRef.current, conversationHeaderRef.current, appTopbar];
+        const bottoms = anchors.flatMap((anchor) => {
+          if (!anchor || anchor.getClientRects().length === 0) return [];
+          const rect = anchor.getBoundingClientRect();
+          const visible = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+          const meetsToastColumn = rect.right > toastLeft && rect.left < viewportWidth;
+          return visible && meetsToastColumn ? [rect.bottom] : [];
+        });
+        const anchorBottom = bottoms.length > 0 ? Math.max(...bottoms) : 0;
+        root.style.setProperty(
+          '--session-lifecycle-toast-top',
+          `${Math.ceil(anchorBottom > 0 ? anchorBottom + 16 : 16)}px`,
+        );
+      });
+    };
+
+    const anchors = [
+      sessionListHeaderRef.current,
+      conversationHeaderRef.current,
+      document.querySelector<HTMLElement>('.app-topbar'),
+    ].filter((anchor): anchor is HTMLElement => anchor !== null);
+    const resizeObserver = new ResizeObserver(updateToastTop);
+    anchors.forEach((anchor) => resizeObserver.observe(anchor));
+    window.addEventListener('resize', updateToastTop);
+    updateToastTop();
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateToastTop);
+    };
+  }, [composingRoute, isMobile, selectedId]);
   // Installed-PWA / standalone is the only mode where ⌘N actually reaches the page
   // (a normal tab hands it to the browser). Gate the on-button shortcut hint on it.
   const isStandalone = useMediaQuery('(display-mode: standalone)');
@@ -2017,30 +2064,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     },
     [message, restoreMut, selectedSession],
   );
-  const showUndo = (session: SessionToastTarget, label: string): void => {
-    const key = `undo-${session.id}`;
-    const title = titleFirstLine(session.title) || 'Session';
-    message.open({
-      key,
-      type: 'success',
-      content: (
-        <span className="toast-action">
-          <span className="toast-action-text">
-            {label}: {title}
-          </span>
-          <button
-            type="button"
-            className="toast-action-btn"
-            onClick={() => {
-              message.destroy(key);
-              restoreMut.mutate(session.id);
-            }}
-          >
-            Undo
-          </button>
-        </span>
-      ),
-      duration: 4,
+  const showUndo = (session: SessionToastTarget, action: 'complete' | 'trash'): void => {
+    message.sessionAction({
+      sessionId: session.id,
+      sessionTitle: session.title,
+      action,
+      onUndo: () => restoreMut.mutate(session.id),
     });
   };
   // Completing/trashing the Open session drops it from the Open list. Keep the
@@ -2077,7 +2106,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       leaveIfOpen(session.id);
       dropFromLists(session.id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(session, 'Completed');
+      showUndo(session, 'complete');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -2117,7 +2146,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       leaveIfOpen(session.id);
       dropFromLists(session.id);
       qc.invalidateQueries({ queryKey: ['sessions'] });
-      showUndo(session, 'Deleted');
+      showUndo(session, 'trash');
     },
     onError: (e: Error) => message.error(e.message),
   });
@@ -2973,7 +3002,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   return (
     <div className={`agent-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
       <aside className="session-col" style={{ width: colWidth }}>
-        <div className="session-col-head">
+        <div className="session-col-head" ref={sessionListHeaderRef}>
           <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
           <span className="session-col-title">{headAgentName}</span>
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
@@ -3244,7 +3273,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
-        <div className="agent-header">
+        <div className="agent-header" ref={conversationHeaderRef}>
           {isMobile && (
             <button
               type="button"

@@ -224,7 +224,6 @@ body {
      in below. */
   pointer-events: none !important;
 }
-.ant-message-notice-content:has(.toast-action),
 .ant-message-notice-content:has(.toast-err) {
   pointer-events: auto !important;
 }
@@ -233,44 +232,191 @@ body {
 }
 /* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
    AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
-   so trailing actions would have nothing to push against; let that span fill the card instead. */
-.ant-message-custom-content > span:has(> .toast-err, > .toast-action) {
+   so the trailing close action needs that span to fill the card. */
+.ant-message-custom-content > span:has(> .toast-err) {
   flex: 1;
   min-width: 0;
 }
-/* Action toast: keep the message and its real button visually separate, with the action pinned
-   to the trailing edge and a comfortable hit target instead of an inline link. */
-.toast-action {
+
+/* Reversible session lifecycle actions use Notification rather than Message: this is a compact
+   two-line card (outcome + session title), with a native top-right stack and a real Undo button.
+   AgentView measures the active pane header and writes the custom top value, so the first card
+   consistently begins 16px below the visible header on desktop, the mobile list, and the mobile
+   conversation. Subsequent cards stack downward with an 8px gap. */
+.ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
+  top: max(
+    var(--session-lifecycle-toast-top, 16px),
+    calc(env(safe-area-inset-top, 0px) + 16px)
+  ) !important;
+  margin-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+}
+.ant-notification.ant-notification-topRight
+  .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
+}
+.ant-notification
+  .ant-notification-notice-wrapper
+  > .session-lifecycle-toast.ant-notification-notice {
+  box-sizing: border-box;
+  width: 360px;
+  max-width: calc(
+    100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)
+  );
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: transparent;
+}
+.session-lifecycle-toast .ant-notification-notice-content,
+.session-lifecycle-toast .ant-notification-notice-with-icon,
+.session-lifecycle-toast .ant-notification-notice-message {
+  min-width: 0;
+}
+.session-lifecycle-toast .ant-notification-notice-icon {
+  inset-inline-start: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  font-size: 24px;
+  line-height: 1;
+  text-align: center;
+}
+.session-lifecycle-toast--complete .session-lifecycle-toast-icon {
+  color: var(--success-solid);
+}
+.session-lifecycle-toast--trash .session-lifecycle-toast-icon {
+  color: var(--text-3);
+  font-size: 20px;
+}
+.session-lifecycle-toast
+  .ant-notification-notice-with-icon
+  .ant-notification-notice-message {
+  margin-inline-start: 36px;
+  font-size: inherit;
+  line-height: inherit;
+}
+.session-lifecycle-toast-body {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 38px;
 }
-.toast-action-text {
+.session-lifecycle-toast-copy {
+  flex: 1;
   min-width: 0;
 }
-.toast-action-btn {
+.session-lifecycle-toast-status {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.session-lifecycle-toast-title {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-lifecycle-toast-undo {
   flex: none;
-  margin: -4px -4px -4px auto;
-  padding: 4px 8px;
+  min-width: 52px;
+  min-height: 36px;
+  margin-left: auto;
+  padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--brand);
-  font: inherit;
+  font-family: inherit;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 22px;
+  line-height: 20px;
   cursor: pointer;
 }
-.toast-action-btn:hover {
+.session-lifecycle-toast-undo:hover {
   background: var(--brand-tint);
 }
-.toast-action-btn:active {
+.session-lifecycle-toast-undo:active {
   background: var(--brand-tint-hover);
 }
-.toast-action-btn:focus-visible {
+.session-lifecycle-toast-undo:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
+:root[data-theme='dark']
+  .ant-notification.ant-notification-topRight
+  .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* AntD's top-right Notification already enters horizontally. Tighten that full-card travel to
+   a subtle 16px so it feels anchored to the header rather than flying in from off-screen. */
+@keyframes session-lifecycle-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(16px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+.ant-notification.ant-notification-topRight
+  .ant-notification-notice-wrapper.ant-notification-fade-enter.ant-notification-fade-enter-active:has(
+    > .session-lifecycle-toast
+  ),
+.ant-notification.ant-notification-topRight
+  .ant-notification-notice-wrapper.ant-notification-fade-appear.ant-notification-fade-appear-active:has(
+    > .session-lifecycle-toast
+  ) {
+  animation-name: session-lifecycle-toast-enter !important;
+  animation-duration: 180ms !important;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+@media (max-width: 600px) {
+  .ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
+    right: max(16px, env(safe-area-inset-right, 0px)) !important;
+    left: max(16px, env(safe-area-inset-left, 0px)) !important;
+    width: auto;
+    margin-right: 0 !important;
+  }
+  .ant-notification
+    .ant-notification-notice-wrapper
+    > .session-lifecycle-toast.ant-notification-notice {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .session-lifecycle-toast-undo {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ant-notification.ant-notification-topRight
+    .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
+    transition: none !important;
+  }
+  .ant-notification.ant-notification-topRight
+    .ant-notification-notice-wrapper.ant-notification-fade-enter:has(> .session-lifecycle-toast),
+  .ant-notification.ant-notification-topRight
+    .ant-notification-notice-wrapper.ant-notification-fade-appear:has(> .session-lifecycle-toast),
+  .ant-notification.ant-notification-topRight
+    .ant-notification-notice-wrapper.ant-notification-fade-leave:has(> .session-lifecycle-toast) {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+}
+
 /* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
    × instead of centred against the whole block. (0,3,0) to outrank AntD's own align-items. */
 .ant-message-notice-content:has(.toast-err) .ant-message-custom-content {
