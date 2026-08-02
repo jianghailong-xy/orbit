@@ -33,6 +33,44 @@ type Worktree struct {
 	BaseSha string // commit Branch forked from (workDir HEAD at claim)
 	RepoDir string // the git repo root, for `git -C RepoDir worktree ...`
 	Session string // session id (names the checkout dir + base ref)
+
+	// BaseSha can be healed while a turn is being finalized. Heartbeat telemetry
+	// snapshots it concurrently, so keep that one mutable field synchronized.
+	baseMu sync.RWMutex
+}
+
+func (wt *Worktree) baseSha() string {
+	if wt == nil {
+		return ""
+	}
+	wt.baseMu.RLock()
+	defer wt.baseMu.RUnlock()
+	return wt.BaseSha
+}
+
+func (wt *Worktree) setBaseSha(baseSha string) {
+	if wt == nil {
+		return
+	}
+	wt.baseMu.Lock()
+	wt.BaseSha = baseSha
+	wt.baseMu.Unlock()
+}
+
+// heartbeatCopy returns an immutable worktree DTO for one best-effort telemetry
+// scan. Copy fields explicitly: copying a Worktree after its mutex has been used
+// would copy lock state, and reading BaseSha without the lock would race finalization.
+func (wt *Worktree) heartbeatCopy() *Worktree {
+	if wt == nil {
+		return nil
+	}
+	return &Worktree{
+		Path:    wt.Path,
+		Branch:  wt.Branch,
+		BaseSha: wt.baseSha(),
+		RepoDir: wt.RepoDir,
+		Session: wt.Session,
+	}
 }
 
 // git runs `git -C dir <args...>` and returns trimmed stdout. On a non-zero exit the
@@ -42,6 +80,41 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// gitCtx is reserved for bounded, best-effort probes such as heartbeat telemetry.
+// Mutating worktree operations deliberately keep using git(): a repository commit,
+// rebase, or push may legitimately take longer than a telemetry budget.
+func gitCtx(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	// A clean/LFS filter may inherit Git's output pipe. Bound Wait even if that
+	// descendant survives the direct Git process cancellation.
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+type worktreeGitOps struct {
+	run            func(string, ...string) (string, error)
+	runEnv         func(string, []string, ...string) (string, error)
+	ctx            context.Context
+	persistBaseRef bool
+}
+
+var unboundedWorktreeGitOps = worktreeGitOps{run: git, runEnv: gitEnv, persistBaseRef: true}
+
+func contextWorktreeGitOps(ctx context.Context) worktreeGitOps {
+	return worktreeGitOps{
+		ctx: ctx,
+		run: func(dir string, args ...string) (string, error) {
+			return gitCtx(ctx, dir, args...)
+		},
+		runEnv: func(dir string, env []string, args ...string) (string, error) {
+			return gitEnvCtx(ctx, dir, env, args...)
+		},
+	}
+}
+
+func (ops worktreeGitOps) cancelled() bool { return ops.ctx != nil && ops.ctx.Err() != nil }
+
 // isGitRepo reports whether dir is inside a git work tree.
 func isGitRepo(dir string) bool {
 	out, err := git(dir, "rev-parse", "--is-inside-work-tree")
@@ -49,7 +122,11 @@ func isGitRepo(dir string) bool {
 }
 
 func branchExists(repoRoot, branch string) bool {
-	_, err := git(repoRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return unboundedWorktreeGitOps.branchExists(repoRoot, branch)
+}
+
+func (ops worktreeGitOps) branchExists(repoRoot, branch string) bool {
+	_, err := ops.run(repoRoot, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
 	return err == nil
 }
 
@@ -57,7 +134,11 @@ func branchExists(repoRoot, branch string) bool {
 // status bar's "Merge to…" dropdown: every refs/heads/* except Orbit's own per-session branches
 // (orbit/*), which you merge FROM, never INTO. Best-effort — nil on any git error / empty repo.
 func listMergeTargets(repoRoot string) []string {
-	out, err := git(repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	return unboundedWorktreeGitOps.listMergeTargets(repoRoot)
+}
+
+func (ops worktreeGitOps) listMergeTargets(repoRoot string) []string {
+	out, err := ops.run(repoRoot, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	if err != nil || out == "" {
 		return nil
 	}
@@ -75,10 +156,14 @@ func listMergeTargets(repoRoot string) []string {
 // mergeTargetsForWT lists a worktree's repo branches usable as merge targets; nil for a nil
 // worktree (a shared-dir session — nothing to merge into).
 func mergeTargetsForWT(wt *Worktree) []string {
+	return unboundedWorktreeGitOps.mergeTargetsForWT(wt)
+}
+
+func (ops worktreeGitOps) mergeTargetsForWT(wt *Worktree) []string {
 	if wt == nil {
 		return nil
 	}
-	return listMergeTargets(wt.RepoDir)
+	return ops.listMergeTargets(wt.RepoDir)
 }
 
 // mergeTargetBySession records the branch each session's work is merged INTO, so
@@ -122,10 +207,14 @@ func mergeTargetFor(sessionID string) string {
 // -b` inside the worktree, moving the work onto a branch Orbit isn't tracking. Reported each
 // heartbeat as WorktreeBranch so the server can flag the divergence and offer "Adopt".
 func currentBranch(wt *Worktree) string {
+	return unboundedWorktreeGitOps.currentBranch(wt)
+}
+
+func (ops worktreeGitOps) currentBranch(wt *Worktree) string {
 	if wt == nil || wt.Path == "" {
 		return ""
 	}
-	b, err := git(wt.Path, "symbolic-ref", "--short", "HEAD")
+	b, err := ops.run(wt.Path, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
 		return ""
 	}
@@ -139,7 +228,11 @@ func currentBranch(wt *Worktree) string {
 // claim, which is exactly the "still shows ✓ In main / unmergeable" bug. Equal to wt.Branch in the
 // common case (no checkout), so it's a no-op there.
 func effectiveBranch(wt *Worktree) string {
-	if cur := currentBranch(wt); cur != "" {
+	return unboundedWorktreeGitOps.effectiveBranch(wt)
+}
+
+func (ops worktreeGitOps) effectiveBranch(wt *Worktree) string {
+	if cur := ops.currentBranch(wt); cur != "" {
 		return cur
 	}
 	if wt != nil {
@@ -153,14 +246,18 @@ func effectiveBranch(wt *Worktree) string {
 // an in-worktree checkout to a different branch. Empty means there is no isolated branch or git
 // could not resolve its tip; callers omit the optional wire field in that case.
 func effectiveBranchSha(wt *Worktree) string {
+	return unboundedWorktreeGitOps.effectiveBranchSha(wt)
+}
+
+func (ops worktreeGitOps) effectiveBranchSha(wt *Worktree) string {
 	if wt == nil || wt.RepoDir == "" {
 		return ""
 	}
-	branch := effectiveBranch(wt)
+	branch := ops.effectiveBranch(wt)
 	if branch == "" {
 		return ""
 	}
-	sha, err := git(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	sha, err := ops.run(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
 	if err != nil {
 		return ""
 	}
@@ -179,19 +276,23 @@ func effectiveBranchSha(wt *Worktree) string {
 // branch is the target, or git can't decide — a conservative default that keeps the actionable
 // Merge button.
 func branchMergedInto(wt *Worktree) bool {
+	return unboundedWorktreeGitOps.branchMergedInto(wt)
+}
+
+func (ops worktreeGitOps) branchMergedInto(wt *Worktree) bool {
 	if wt == nil {
 		return false
 	}
 	// Judge the branch the worktree is ACTUALLY on (effectiveBranch), not the frozen fork branch —
 	// so after an in-worktree `git checkout -b` the verdict tracks the new branch's work instead of
 	// the (often already-merged) branch Orbit forked at claim.
-	branch := effectiveBranch(wt)
+	branch := ops.effectiveBranch(wt)
 	if branch == "" {
 		return false
 	}
 	var target string
 	for _, b := range []string{mergeTargetFor(wt.Session), "main", "master"} {
-		if b != "" && branchExists(wt.RepoDir, b) {
+		if b != "" && ops.branchExists(wt.RepoDir, b) {
 			target = b
 			break
 		}
@@ -204,8 +305,8 @@ func branchMergedInto(wt *Worktree) bool {
 	// "merged" for a session that did no work. Require ≥1 commit past the fork before claiming
 	// the work landed; otherwise there was nothing to merge. (Genuinely merged branches keep
 	// their commits ahead of the old fork point, so they still count as ahead here.)
-	if wt.BaseSha != "" {
-		ahead, err := git(wt.RepoDir, "rev-list", "--count", wt.BaseSha+".."+branch)
+	if baseSha := wt.baseSha(); baseSha != "" {
+		ahead, err := ops.run(wt.RepoDir, "rev-list", "--count", baseSha+".."+branch)
 		if err == nil && strings.TrimSpace(ahead) == "0" {
 			return false
 		}
@@ -214,7 +315,7 @@ func branchMergedInto(wt *Worktree) bool {
 	// command-line `push origin HEAD:main`). `merge-base --is-ancestor A B` exits 0 when A is an
 	// ancestor of B, non-zero otherwise; git() returns a non-nil error for any non-zero exit, so
 	// err == nil ⇔ already merged.
-	if _, err := git(wt.RepoDir, "merge-base", "--is-ancestor", branch, target); err == nil {
+	if _, err := ops.run(wt.RepoDir, "merge-base", "--is-ancestor", branch, target); err == nil {
 		return true
 	}
 	// Slow path — the branch's work landed in the target under NEW commit hashes, so is-ancestor
@@ -225,7 +326,7 @@ func branchMergedInto(wt *Worktree) bool {
 	// commit accounted for ('-', none '+') ⇒ the work is in the target under a different identity —
 	// still merged. Any '+' (or a git error / empty output) stays conservatively false, keeping the
 	// actionable Merge button.
-	out, err := git(wt.RepoDir, "cherry", target, branch)
+	out, err := ops.run(wt.RepoDir, "cherry", target, branch)
 	if err != nil {
 		return false
 	}
@@ -326,18 +427,31 @@ func baseRefName(sessionID string) string { return "refs/orbit-base/" + sessionI
 // snaps to it — diffs then show only the new work. Healed values are re-persisted to the base
 // ref. Best-effort: on any git failure the persisted value is returned unchanged.
 func resolveBaseSha(repoRoot, sessionID, branch, persisted string) string {
-	tip, err := git(repoRoot, "rev-parse", "refs/heads/"+branch)
+	return unboundedWorktreeGitOps.resolveBaseSha(repoRoot, sessionID, branch, persisted)
+}
+
+func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted string) string {
+	tip, err := ops.run(repoRoot, "rev-parse", "refs/heads/"+branch)
+	if ops.cancelled() {
+		return persisted
+	}
 	if err != nil || tip == "" {
 		return persisted
 	}
-	mb, err := git(repoRoot, "merge-base", "HEAD", branch)
+	mb, err := ops.run(repoRoot, "merge-base", "HEAD", branch)
+	if ops.cancelled() {
+		return persisted
+	}
 	if err != nil || mb == "" {
 		return persisted
 	}
 	valid := false
 	if persisted != "" {
-		if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, branch); err == nil {
+		if _, err := ops.run(repoRoot, "merge-base", "--is-ancestor", persisted, branch); err == nil {
 			valid = true
+		}
+		if ops.cancelled() {
+			return persisted
 		}
 	}
 	if valid {
@@ -346,11 +460,17 @@ func resolveBaseSha(repoRoot, sessionID, branch, persisted string) string {
 		}
 		// Tighten a slack fork (rebase moved it forward); keep a fork the candidate can't see
 		// (forked off a non-HEAD branch — persisted is NOT an ancestor of the candidate).
-		if _, err := git(repoRoot, "merge-base", "--is-ancestor", persisted, mb); err != nil {
+		_, err := ops.run(repoRoot, "merge-base", "--is-ancestor", persisted, mb)
+		if ops.cancelled() {
+			return persisted
+		}
+		if err != nil {
 			return persisted
 		}
 	}
-	_, _ = git(repoRoot, "update-ref", baseRefName(sessionID), mb)
+	if ops.persistBaseRef {
+		_, _ = ops.run(repoRoot, "update-ref", baseRefName(sessionID), mb)
+	}
 	return mb
 }
 
@@ -358,13 +478,28 @@ func resolveBaseSha(repoRoot, sessionID, branch, persisted string) string {
 // leaves the recorded fork outside its history, mis-basing every diff until the next re-attach.
 // One is-ancestor check when healthy; self-healing (and ref-re-persisting) when not.
 func freshenBaseSha(wt *Worktree) {
-	if wt == nil || wt.BaseSha == "" || wt.Branch == "" {
-		return
+	_ = unboundedWorktreeGitOps.freshenBaseSha(wt)
+}
+
+func (ops worktreeGitOps) freshenBaseSha(wt *Worktree) string {
+	if wt == nil {
+		return ""
+	}
+	persisted := wt.baseSha()
+	if persisted == "" || wt.Branch == "" {
+		return persisted
 	}
 	// Resolve against the worktree's real HEAD (effectiveBranch): after an in-worktree checkout -b
 	// the diff should be based on the new branch's fork point, so it shows the new branch's delta
 	// rather than mis-basing on the branch Orbit forked at claim.
-	wt.BaseSha = resolveBaseSha(wt.RepoDir, wt.Session, effectiveBranch(wt), wt.BaseSha)
+	baseSha := ops.resolveBaseSha(wt.RepoDir, wt.Session, ops.effectiveBranch(wt), persisted)
+	if !ops.cancelled() {
+		// Bounded telemetry passes a private worktree copy: update it even though
+		// persistBaseRef is false so every later calculation in this scan uses the
+		// healed fork. Unbounded callers update the live Worktree as before.
+		wt.setBaseSha(baseSha)
+	}
+	return baseSha
 }
 
 func shortSha(sha string) string {
@@ -505,11 +640,12 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A mid-session rebase moved the fork point — re-base the final diff on the new one.
 	freshenBaseSha(wt)
-	if wt.BaseSha == "" {
+	baseSha := wt.baseSha()
+	if baseSha == "" {
 		return nil, nil
 	}
-	files := diffFiles(wt.Path, wt.BaseSha, "HEAD")
-	patchOut, _ := git(wt.Path, "diff", wt.BaseSha+"..HEAD")
+	files := diffFiles(wt.Path, baseSha, "HEAD")
+	patchOut, _ := git(wt.Path, "diff", baseSha+"..HEAD")
 	return files, buildFilePatches(files, splitPatch(patchOut))
 }
 
@@ -540,6 +676,14 @@ func gitEnv(dir string, env []string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+func gitEnvCtx(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = env
+	cmd.WaitDelay = 2 * time.Second
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
+}
+
 // diffFiles returns the per-file change summary for the committed `git diff base..head`.
 func diffFiles(dir, base, head string) []ChangedFile {
 	rng := base + ".." + head
@@ -564,7 +708,11 @@ func liveDiff(wt *Worktree) ([]ChangedFile, []FilePatch) {
 // (heavier) per-file patch text that would bloat the heartbeat payload — the diff *patches*
 // refresh at turn boundaries via liveDiff instead.
 func liveDiffStat(wt *Worktree) []ChangedFile {
-	files, _ := stagedLiveDiff(wt, false)
+	return unboundedWorktreeGitOps.liveDiffStat(wt)
+}
+
+func (ops worktreeGitOps) liveDiffStat(wt *Worktree) []ChangedFile {
+	files, _ := ops.stagedLiveDiff(wt, false)
 	return files
 }
 
@@ -574,9 +722,13 @@ func liveDiffStat(wt *Worktree) []ChangedFile {
 // using, and .gitignore is respected so node_modules/build output don't show. The index is
 // pre-seeded from base (read-tree) so a tracked-but-ignored file isn't misreported as deleted.
 func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
+	return unboundedWorktreeGitOps.stagedLiveDiff(wt, withPatch)
+}
+
+func (ops worktreeGitOps) stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 	// A mid-session rebase moved the fork point — heal before basing the live diff on it.
-	freshenBaseSha(wt)
-	if wt == nil || wt.BaseSha == "" {
+	baseSha := ops.freshenBaseSha(wt)
+	if wt == nil || baseSha == "" {
 		return nil, nil
 	}
 	tmp, err := os.CreateTemp("", "orbit-idx-*")
@@ -595,24 +747,24 @@ func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 	// `add -A` — which honors .gitignore for paths it sees as untracked — and reported as a
 	// phantom deletion vs base. Pre-loaded as tracked, it survives and `add -A` only layers
 	// the worktree's real changes on top.
-	if _, err := gitEnv(wt.Path, env, "read-tree", wt.BaseSha); err != nil {
+	if _, err := ops.runEnv(wt.Path, env, "read-tree", baseSha); err != nil {
 		return nil, nil
 	}
-	if _, err := gitEnv(wt.Path, env, "add", "-A"); err != nil {
+	if _, err := ops.runEnv(wt.Path, env, "add", "-A"); err != nil {
 		return nil, nil
 	}
-	numOut, err := gitEnv(wt.Path, env, "diff", "--cached", "--numstat", wt.BaseSha)
+	numOut, err := ops.runEnv(wt.Path, env, "diff", "--cached", "--numstat", baseSha)
 	if err != nil {
 		return nil, nil
 	}
-	statusOut, _ := gitEnv(wt.Path, env, "diff", "--cached", "--name-status", wt.BaseSha)
+	statusOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", "--name-status", baseSha)
 	files := parseNumstat(numOut, statusOut)
 	if !withPatch {
 		return files, nil
 	}
 	// Same staged index → the full patch matches the numstat exactly. Best-effort: a patch
 	// failure just leaves the file list without diffs, the status bar still works.
-	patchOut, _ := gitEnv(wt.Path, env, "diff", "--cached", wt.BaseSha)
+	patchOut, _ := ops.runEnv(wt.Path, env, "diff", "--cached", baseSha)
 	return files, buildFilePatches(files, splitPatch(patchOut))
 }
 
@@ -620,10 +772,14 @@ func stagedLiveDiff(wt *Worktree, withPatch bool) ([]ChangedFile, []FilePatch) {
 // or untracked, respecting .gitignore (`git status --porcelain` non-empty). Drives the
 // status bar's Commit-vs-Merge action. False for a nil/missing worktree.
 func worktreeIsDirty(wt *Worktree) bool {
+	return unboundedWorktreeGitOps.worktreeIsDirty(wt)
+}
+
+func (ops worktreeGitOps) worktreeIsDirty(wt *Worktree) bool {
 	if wt == nil {
 		return false
 	}
-	out, err := git(wt.Path, "status", "--porcelain")
+	out, err := ops.run(wt.Path, "status", "--porcelain")
 	return err == nil && out != ""
 }
 

@@ -297,8 +297,9 @@ func runLoop(cfg *RunnerConfig) bool {
 	}()
 
 	// Slash assets (commands/skills) discovered on this machine, surfaced to the web
-	// composer's `/` autocomplete. Scanned now and refreshed every ~5 min; the cached
-	// value rides each heartbeat. Roots = the runner's default dir (host-level) plus
+	// composer's `/` autocomplete. A background scan refreshes the cache every ~5 min;
+	// filesystem or control-plane latency must never delay runner liveness. Roots = the
+	// runner's default dir (host-level) plus
 	// each agent's workDir, tagged with the agent's id so the composer can scope the
 	// `/` menu to the session's agent (host-level assets show for every agent).
 	var runnerAgentsMu sync.Mutex
@@ -337,8 +338,27 @@ func runLoop(cfg *RunnerConfig) bool {
 		return roots
 	}
 	var assetMu sync.Mutex
-	refreshRunnerAgents()
-	hbCommands, hbSkills := slashAssetsForHeartbeat(assetRoots())
+	var hbCommands, hbSkills []SlashCommandInfo
+	refreshHeartbeatAssets := func() {
+		refreshRunnerAgents()
+		commands, skills := slashAssetsForHeartbeat(assetRoots())
+		assetMu.Lock()
+		hbCommands, hbSkills = commands, skills
+		assetMu.Unlock()
+	}
+	go func() {
+		refreshHeartbeatAssets()
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-loopCtx.Done():
+				return
+			case <-ticker.C:
+				refreshHeartbeatAssets()
+			}
+		}
+	}()
 
 	// Provider quota for this machine's logins, refreshed in the background so the
 	// heartbeat attaches the latest snapshot without ever blocking on external calls.
@@ -359,13 +379,14 @@ func runLoop(cfg *RunnerConfig) bool {
 
 	// Runtime model catalogs and effective defaults, reported by the runtimes themselves. Catalogs
 	// change rarely and are expensive to discover; defaults are cheap config reads that users may
-	// change deliberately, so the heartbeat loop refreshes the two snapshots at different rates.
+	// change deliberately, so independent background refreshers update the two cached snapshots.
 	var modelSnapshotMu sync.Mutex
 	var hbModelCatalog *ModelCatalog
 	var hbRuntimeDefaultModels map[string]string
-	// Let the UI follow the runner's own CLIs (Codex `codex debug models` and Claude's local
-	// `/model`) instead of a hardcoded web/mobile list. Refreshed hourly: the Claude fetch spawns a
-	// few `claude -p` processes, while model lineups themselves change rarely.
+	// Let the UI follow the runner's own CLIs (Codex `codex debug models`, Claude `claude -p
+	// "/model"`, which auto-track new releases) instead of a hardcoded web/mobile list. Refreshed
+	// hourly in the background: model lineups change rarely, and the Claude fetch spawns a
+	// few `claude -p` processes, so there's no reason to run it often.
 	refreshModelCatalog := func() {
 		catalog := &ModelCatalog{}
 		if codexCLIAvailable() {
@@ -402,8 +423,32 @@ func runLoop(cfg *RunnerConfig) bool {
 		hbRuntimeDefaultModels = mergeRuntimeDefaultModels(hbRuntimeDefaultModels, results)
 		modelSnapshotMu.Unlock()
 	}
-	go refreshModelCatalog()
-	go refreshRuntimeDefaults()
+	go func() {
+		refreshModelCatalog()
+		ticker := time.NewTicker(time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-loopCtx.Done():
+				return
+			case <-ticker.C:
+				refreshModelCatalog()
+			}
+		}
+	}()
+	go func() {
+		refreshRuntimeDefaults()
+		ticker := time.NewTicker(time.Duration(runtimeDefaultRefreshHeartbeatTicks) * heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-loopCtx.Done():
+				return
+			case <-ticker.C:
+				refreshRuntimeDefaults()
+			}
+		}
+	}()
 
 	// Keep the machine's Claude/Codex CLIs current: the runner execs whatever engine
 	// binary is on PATH, and the control plane pins new model slugs a stale CLI rejects.
@@ -413,6 +458,9 @@ func runLoop(cfg *RunnerConfig) bool {
 	// Engines are installed on demand rather than at register time; this is the consent
 	// that was collected there (see ensureEngine).
 	configureEngineInstall(cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
+
+	telemetry := newHeartbeatTelemetryProbe(heartbeatTelemetryTimeout, nil)
+	go telemetry.run(loopCtx)
 
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
@@ -426,7 +474,6 @@ func runLoop(cfg *RunnerConfig) bool {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
 		defer ticker.Stop()
-		cycles := 0
 		// Sessions whose "merge to main" / "commit" is in flight, so the at-least-once
 		// heartbeat redelivery doesn't kick off the same operation twice before its result
 		// is recorded.
@@ -436,195 +483,152 @@ func runLoop(cfg *RunnerConfig) bool {
 		artifactNow := map[string]bool{}
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
-		for {
-			select {
-			case <-hbStop:
+		runHeartbeatTicks(hbStop, ticker.C, func() {
+			idle := pool.maxConcurrent() - pool.activeCount()
+			if idle < 0 {
+				idle = 0
+			}
+			if loopCtx.Err() != nil {
+				idle = 0 // draining: keep heartbeating (so the reaper spares our sessions)
+				// but advertise no capacity so the server routes no new work here
+			}
+			assetMu.Lock()
+			cmds, skills := hbCommands, hbSkills
+			assetMu.Unlock()
+			modelSnapshotMu.Lock()
+			modelCatalog := hbModelCatalog
+			runtimeDefaultModels := hbRuntimeDefaultModels
+			modelSnapshotMu.Unlock()
+			resp, cancels, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
+				Status: "ONLINE", IdleCapacity: idle, Version: version,
+				LeaseOwner: t.leaseOwner,
+				Commands:   cmds, Skills: skills,
+				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
+				ModelCatalog:         modelCatalog,
+				RuntimeDefaultModels: runtimeDefaultModels,
+			}, t.heartbeat)
+			if err != nil {
+				logln("heartbeat failed:", err)
 				return
-			case <-ticker.C:
-				cycles++
-				if cycles%runtimeDefaultRefreshHeartbeatTicks == 0 { // defaults + slash assets
-					go refreshRuntimeDefaults()
-					refreshRunnerAgents()
-					c, s := slashAssetsForHeartbeat(assetRoots())
-					assetMu.Lock()
-					hbCommands, hbSkills = c, s
-					assetMu.Unlock()
-				}
-				if cycles%modelCatalogRefreshHeartbeatTicks == 0 { // Codex + Claude catalog
-					go refreshModelCatalog()
-				}
-				cancels, jobs := pool.snapshot()
-				supervisedSessionIDs := make([]string, 0, len(cancels))
-				for id := range cancels {
-					supervisedSessionIDs = append(supervisedSessionIDs, id)
-				}
-				sort.Strings(supervisedSessionIDs)
-				idle := pool.maxConcurrent() - pool.activeCount()
-				if idle < 0 {
-					idle = 0
-				}
-				if loopCtx.Err() != nil {
-					idle = 0 // draining: keep heartbeating (so the reaper spares our sessions)
-					// but advertise no capacity so the server routes no new work here
-				}
-				assetMu.Lock()
-				cmds, skills := hbCommands, hbSkills
-				assetMu.Unlock()
-				modelSnapshotMu.Lock()
-				modelCatalog := hbModelCatalog
-				runtimeDefaultModels := hbRuntimeDefaultModels
-				modelSnapshotMu.Unlock()
-				// Live worktree diff per running session, so the web's status bar appears
-				// mid-turn instead of only after a turn completes. Computed outside the lock
-				// (git can be slow); a just-finalized session is filtered server-side by status.
-				var liveSessions []SessionLiveState
-				for _, j := range jobs {
-					if j.IsolationStatus == "" {
-						continue
-					}
-					liveSessions = append(liveSessions, SessionLiveState{
-						SessionID:       j.SessionID,
-						IsolationStatus: j.IsolationStatus,
-						ChangedFiles:    liveDiffStat(j.WT),
-						BranchSha:       effectiveBranchSha(j.WT),
-						WorktreeDirty:   worktreeIsDirty(j.WT),
-						MergeTargets:    mergeTargetsForWT(j.WT),
-						BranchMerged:    branchMergedInto(j.WT),
-						WorktreeBranch:  currentBranch(j.WT),
-					})
-				}
-				resp, err := t.heartbeat(HeartbeatRequest{
-					Status: "ONLINE", IdleCapacity: idle, Version: version,
-					LeaseOwner: t.leaseOwner, SupervisedSessionIDs: supervisedSessionIDs,
-					Commands: cmds, Skills: skills,
-					PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
-					ModelCatalog:         modelCatalog,
-					RuntimeDefaultModels: runtimeDefaultModels,
-					Sessions:             liveSessions,
-				})
-				if err != nil {
-					logln("heartbeat failed:", err)
-					continue
-				}
-				// Adopt the control plane's authoritative max-concurrent (the editable DB
-				// value). 0 means an older server that doesn't report it — keep current.
-				if resp.MaxConcurrent > 0 {
-					if prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {
-						pool.setMax(resp.MaxConcurrent)
-						logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
-					}
-				}
-				for _, id := range resp.CancelSessionIDs {
-					if c, ok := cancels[id]; ok {
-						c()
-					}
-				}
-				for _, id := range resp.LeaseLostSessionIDs {
-					if pool.detachCold(id) {
-						logln("detached cold supervisor after lease ownership changed:", id)
-					}
-				}
-				if loopCtx.Err() != nil {
-					continue
-				}
-				// Honor "merge to main" requests: merge each session's branch into main on
-				// our local repo and report the outcome. Each runs once (guarded against the
-				// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
-				// never stalls the heartbeat that keeps the reaper off our sessions.
-				for _, m := range resp.MergeRequests {
-					mergeMu.Lock()
-					busy := mergingNow[m.SessionID]
-					if !busy {
-						mergingNow[m.SessionID] = true
-					}
-					mergeMu.Unlock()
-					if busy {
-						continue
-					}
-					heartbeatOps.Add(1)
-					go func(req MergeCommand) {
-						defer heartbeatOps.Done()
-						res := mergeToMain(req)
-						// Record where this session's work went, so a later "already merged"
-						// check (after a resume clears mergeStatus) looks at that branch and
-						// not at main.
-						rememberMergeTarget(req.SessionID, req.TargetBranch)
-						if err := t.mergeResult(req.SessionID, MergeResultRequest{
-							Status: res.Status, MergedSha: res.MergedSha, SourceSha: res.SourceSha, Message: res.Message,
-						}); err != nil {
-							logln("merge-result POST failed for", req.SessionID+":", err)
-						}
-						mergeMu.Lock()
-						delete(mergingNow, req.SessionID)
-						mergeMu.Unlock()
-					}(m)
-				}
-				// Honor "commit" requests: commit each live session's uncommitted worktree
-				// changes onto its branch (guarded against redelivery, in its own goroutine).
-				for _, c := range resp.CommitRequests {
-					mergeMu.Lock()
-					busy := committingNow[c.SessionID]
-					if !busy {
-						committingNow[c.SessionID] = true
-					}
-					mergeMu.Unlock()
-					if busy {
-						continue
-					}
-					heartbeatOps.Add(1)
-					go func(req CommitCommand) {
-						defer heartbeatOps.Done()
-						res := commitWorktree(req)
-						if err := t.commitResult(req.SessionID, CommitResultRequest{
-							Status: res.Status, Message: res.Message,
-						}); err != nil {
-							logln("commit-result POST failed for", req.SessionID+":", err)
-						}
-						mergeMu.Lock()
-						delete(committingNow, req.SessionID)
-						mergeMu.Unlock()
-					}(c)
-				}
-				for _, a := range resp.ArtifactRequests {
-					mergeMu.Lock()
-					busy := artifactNow[a.RequestID]
-					if !busy {
-						artifactNow[a.RequestID] = true
-					}
-					mergeMu.Unlock()
-					if busy {
-						continue
-					}
-					heartbeatOps.Add(1)
-					go func(req ArtifactCommand) {
-						defer heartbeatOps.Done()
-						res := uploadLegacyArtifact(loopCtx, t, req)
-						if err := t.artifactResult(req.SessionID, res); err != nil {
-							logln("artifact-result POST failed for", req.SessionID+":", err)
-						}
-						mergeMu.Lock()
-						delete(artifactNow, req.RequestID)
-						mergeMu.Unlock()
-					}(a)
-				}
-				// Drive the browser-less sign-in the user started from the web. Both actions are
-				// idempotent: the server redelivers each one until a status report moves it on,
-				// and the relay itself refuses to start a second CLI while one is running.
-				if lr := resp.LoginRequest; lr != nil {
-					report := func(res LoginResultRequest) {
-						if err := t.loginResult(res); err != nil {
-							logln("login-result POST failed:", err)
-						}
-					}
-					switch lr.Action {
-					case "start":
-						login.start(lr.Attempt, lr.Engine, report)
-					case "code":
-						login.submitCode(lr.Code, report)
-					}
+			}
+			// Adopt the control plane's authoritative max-concurrent (the editable DB
+			// value). 0 means an older server that doesn't report it — keep current.
+			if resp.MaxConcurrent > 0 {
+				if prev := pool.maxConcurrent(); prev != resp.MaxConcurrent {
+					pool.setMax(resp.MaxConcurrent)
+					logln(fmt.Sprintf("max-concurrent updated %d -> %d (from control plane)", prev, resp.MaxConcurrent))
 				}
 			}
-		}
+			for _, id := range resp.CancelSessionIDs {
+				if c, ok := cancels[id]; ok {
+					c()
+				}
+			}
+			for _, id := range resp.LeaseLostSessionIDs {
+				if pool.detachCold(id) {
+					logln("detached cold supervisor after lease ownership changed:", id)
+				}
+			}
+			if loopCtx.Err() != nil {
+				return
+			}
+			// Honor "merge to main" requests: merge each session's branch into main on
+			// our local repo and report the outcome. Each runs once (guarded against the
+			// heartbeat's at-least-once redelivery) in its own goroutine, so a slow merge
+			// never stalls the heartbeat that keeps the reaper off our sessions.
+			for _, m := range resp.MergeRequests {
+				mergeMu.Lock()
+				busy := mergingNow[m.SessionID]
+				if !busy {
+					mergingNow[m.SessionID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(req MergeCommand) {
+					defer heartbeatOps.Done()
+					res := mergeToMain(req)
+					// Record where this session's work went, so a later "already merged"
+					// check (after a resume clears mergeStatus) looks at that branch and
+					// not at main.
+					rememberMergeTarget(req.SessionID, req.TargetBranch)
+					if err := t.mergeResult(req.SessionID, MergeResultRequest{
+						Status: res.Status, MergedSha: res.MergedSha, SourceSha: res.SourceSha, Message: res.Message,
+					}); err != nil {
+						logln("merge-result POST failed for", req.SessionID+":", err)
+					}
+					mergeMu.Lock()
+					delete(mergingNow, req.SessionID)
+					mergeMu.Unlock()
+				}(m)
+			}
+			// Honor "commit" requests: commit each live session's uncommitted worktree
+			// changes onto its branch (guarded against redelivery, in its own goroutine).
+			for _, c := range resp.CommitRequests {
+				mergeMu.Lock()
+				busy := committingNow[c.SessionID]
+				if !busy {
+					committingNow[c.SessionID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(req CommitCommand) {
+					defer heartbeatOps.Done()
+					res := commitWorktree(req)
+					if err := t.commitResult(req.SessionID, CommitResultRequest{
+						Status: res.Status, Message: res.Message,
+					}); err != nil {
+						logln("commit-result POST failed for", req.SessionID+":", err)
+					}
+					mergeMu.Lock()
+					delete(committingNow, req.SessionID)
+					mergeMu.Unlock()
+				}(c)
+			}
+			for _, a := range resp.ArtifactRequests {
+				mergeMu.Lock()
+				busy := artifactNow[a.RequestID]
+				if !busy {
+					artifactNow[a.RequestID] = true
+				}
+				mergeMu.Unlock()
+				if busy {
+					continue
+				}
+				heartbeatOps.Add(1)
+				go func(req ArtifactCommand) {
+					defer heartbeatOps.Done()
+					res := uploadLegacyArtifact(loopCtx, t, req)
+					if err := t.artifactResult(req.SessionID, res); err != nil {
+						logln("artifact-result POST failed for", req.SessionID+":", err)
+					}
+					mergeMu.Lock()
+					delete(artifactNow, req.RequestID)
+					mergeMu.Unlock()
+				}(a)
+			}
+			// Drive the browser-less sign-in the user started from the web. Both actions are
+			// idempotent: the server redelivers each one until a status report moves it on,
+			// and the relay itself refuses to start a second CLI while one is running.
+			if lr := resp.LoginRequest; lr != nil {
+				report := func(res LoginResultRequest) {
+					if err := t.loginResult(res); err != nil {
+						logln("login-result POST failed:", err)
+					}
+				}
+				switch lr.Action {
+				case "start":
+					login.start(lr.Attempt, lr.Engine, report)
+				case "code":
+					login.submitCode(lr.Code, report)
+				}
+			}
+		})
 	}()
 
 	logln(fmt.Sprintf("runner %q online -> %s (max %d concurrent)", cfg.Name, cfg.ServerURL, cfg.MaxConcurrent))
@@ -839,6 +843,7 @@ func runLoop(cfg *RunnerConfig) bool {
 	}
 	close(hbStop)
 	<-hbDone
+	telemetry.wait()
 	login.stop()
 	heartbeatOps.Wait()
 	// A SIGTERM delivered after update discovery still means "stop", not

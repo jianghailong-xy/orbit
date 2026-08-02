@@ -595,7 +595,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	}
 	if job.WT != nil {
 		finalizeRequest.Branch = job.WT.Branch
-		finalizeRequest.BaseSha = job.WT.BaseSha
+		finalizeRequest.BaseSha = job.WT.baseSha()
 		// The worktree's ACTUAL HEAD branch (before finalize/removal) differs from the reported
 		// branch when the agent ran `git checkout -b` inside the checkout, so the server can flag
 		// it / offer Adopt.

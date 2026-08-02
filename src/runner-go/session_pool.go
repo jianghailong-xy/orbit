@@ -490,16 +490,27 @@ func (p *sessionPool) count() int {
 	return len(p.sessions)
 }
 
-func (p *sessionPool) snapshot() (map[string]context.CancelFunc, []*ClaimedSession) {
+// heartbeatSnapshot retains every supervisor in the control/lease snapshot, but
+// returns only active turns for live worktree telemetry. Cold and warm sessions
+// keep their lease without paying for a full Git scan every 30 seconds.
+func (p *sessionPool) heartbeatSnapshot() (map[string]context.CancelFunc, []heartbeatTelemetryTarget) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cancels := make(map[string]context.CancelFunc, len(p.sessions))
-	jobs := make([]*ClaimedSession, 0, len(p.sessions))
+	targets := make([]heartbeatTelemetryTarget, 0, p.activeCountLocked())
 	for id, s := range p.sessions {
 		cancels[id] = s.cancel
-		jobs = append(jobs, s.job)
+		if s.active && s.job != nil {
+			targets = append(targets, heartbeatTelemetryTarget{
+				supervisor:       s,
+				sessionID:        s.job.SessionID,
+				isolationStatus:  s.job.IsolationStatus,
+				worktree:         s.job.WT.heartbeatCopy(),
+				permitGeneration: s.permitGeneration,
+			})
+		}
 	}
-	return cancels, jobs
+	return cancels, targets
 }
 
 func (p *sessionPool) ids() map[string]bool {
