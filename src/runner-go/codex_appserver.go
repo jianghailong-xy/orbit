@@ -207,6 +207,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			ChangedFiles:     liveFiles,
 			ChangedDiff:      livePatches,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
 			WorktreeBranch:   currentBranch(job.WT),
 		}); err != nil {
@@ -435,6 +436,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: "started in background", Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
+					BranchSha:        effectiveBranchSha(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -446,6 +448,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					TurnID: resp.TurnID, Status: stSucceeded,
 					Result: fmt.Sprintf("exit %d", shExit), Subtype: "shell",
 					RuntimeSessionID: currentRuntimeSessionID(job),
+					BranchSha:        effectiveBranchSha(job.WT),
 				}); err != nil {
 					logln("shell turn-complete failed for", job.SessionID+":", err)
 				}
@@ -467,6 +470,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				ChangedFiles:   liveFiles,
 				ChangedDiff:    livePatches,
 				WorktreeDirty:  worktreeIsDirty(job.WT),
+				BranchSha:      effectiveBranchSha(job.WT),
 				BranchMerged:   branchMergedInto(job.WT),
 				WorktreeBranch: currentBranch(job.WT),
 			}); err != nil {

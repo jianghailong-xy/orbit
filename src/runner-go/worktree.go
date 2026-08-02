@@ -148,6 +148,25 @@ func effectiveBranch(wt *Worktree) string {
 	return ""
 }
 
+// effectiveBranchSha returns the current tip of effectiveBranch. Resolving the ref instead of
+// the worktree's HEAD preserves effectiveBranch's detached-HEAD fallback while still following
+// an in-worktree checkout to a different branch. Empty means there is no isolated branch or git
+// could not resolve its tip; callers omit the optional wire field in that case.
+func effectiveBranchSha(wt *Worktree) string {
+	if wt == nil || wt.RepoDir == "" {
+		return ""
+	}
+	branch := effectiveBranch(wt)
+	if branch == "" {
+		return ""
+	}
+	sha, err := git(wt.RepoDir, "rev-parse", "--verify", "refs/heads/"+branch)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(sha)
+}
+
 // branchMergedInto reports whether the worktree's branch has already landed in its merge target
 // (the session's remembered target, else main, else master), so the status bar shows a "✓ In
 // main" chip instead of a redundant Merge button. Two ways it can already be there: the branch
@@ -744,12 +763,14 @@ func removeWorktree(wt *Worktree) {
 // working tree / main ref.
 var mergeLock sync.Mutex
 
-// mergeOutcome is what mergeToMain reports: "merged" advanced main (MergedSha = new HEAD),
-// "conflict" means the merge was aborted cleanly, "error" means a precondition failed.
-// Message carries git's output / the failed precondition for the UI.
+// mergeOutcome is what mergeToMain reports: "merged" advanced main (MergedSha = new HEAD and
+// SourceSha = the immutable source tip that was replayed), "conflict" means the merge was aborted
+// cleanly, "error" means a precondition failed. Message carries git's output / the failed
+// precondition for the UI.
 type mergeOutcome struct {
 	Status    string
 	MergedSha string
+	SourceSha string
 	Message   string
 }
 
@@ -809,6 +830,13 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	if req.Branch == target {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("can't merge %q into itself", target)}
 	}
+	// Freeze the exact source version this request will merge. The session worktree may keep
+	// committing while the merge runs; staging the temp branch from this SHA makes SourceSha an
+	// honest receipt for the content that landed, rather than a moving branch name sampled later.
+	sourceSha, err := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+req.Branch)
+	if err != nil || sourceSha == "" {
+		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
+	}
 
 	// Bring the local target up to date with origin before deciding how to advance it (see the
 	// function comment): a target that lagged origin/<target> would replay the branch onto a stale
@@ -832,7 +860,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("%q is checked out in another worktree — merge it there or pick another branch", target)}
 	}
 
-	return rebaseFastForward(repoRoot, req.Branch, target, req.SessionID, ffAtRoot)
+	return rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot)
 }
 
 // rebaseFastForward replays source's commits onto target and advances target to the result by
@@ -848,7 +876,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, target, sessionID string, ffAtRoot bool) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool) mergeOutcome {
 	tmpBranch := "orbit/_rebase-" + sessionID
 	tmp := filepath.Join(worktreesDir(), "_rebase-"+sessionID)
 	// Clear any leftover from a crashed prior attempt before staging fresh.
@@ -858,7 +886,7 @@ func rebaseFastForward(repoRoot, source, target, sessionID string, ffAtRoot bool
 
 	// Temp branch = source's tip, checked out in the throwaway worktree. A fresh branch (not
 	// source) means the rebase here never moves the session's branch.
-	if _, err := git(repoRoot, "worktree", "add", "-b", tmpBranch, tmp, source); err != nil {
+	if _, err := git(repoRoot, "worktree", "add", "-b", tmpBranch, tmp, sourceSha); err != nil {
 		return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not stage rebase of %s: %s", source, gitStderr(err)), 1000)}
 	}
 	defer func() {
@@ -918,7 +946,7 @@ func rebaseFastForward(repoRoot, source, target, sessionID string, ffAtRoot bool
 
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
-	return mergeOutcome{Status: "merged", MergedSha: sha}
+	return mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
 }
 
 // mergePushAttempts bounds how many times a merge re-syncs and re-pushes when a concurrent push to

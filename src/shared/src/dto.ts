@@ -290,6 +290,9 @@ export interface SessionLiveState {
    *  place of a redundant Merge button. Always sent (false when not), so the server can clear a
    *  stale true; absent only from older runners (the bar keeps its mergeStatus behavior). */
   branchMerged?: boolean;
+  /** Exact tip SHA of the effective worktree branch. Lets the server distinguish a conservative
+   *  branchMerged=false from an actual post-merge commit. Absent from older runners. */
+  branchSha?: string;
   /** The worktree's ACTUAL current HEAD branch (git symbolic-ref). Normally equals the session's
    *  tracked `branch`; it differs when the agent ran `git checkout -b` inside the worktree, moving
    *  the work onto a branch Orbit isn't tracking. The server compares it to `session.branch` to
@@ -681,6 +684,8 @@ export interface TurnCompleteRequest {
    *  turn-end snapshot an idle session shows until its next turn, so a branch merged out-of-band
    *  is reflected here. Always sent (false when not); absent only from older runners. */
   branchMerged?: boolean;
+  /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
+  branchSha?: string;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }
@@ -783,6 +788,9 @@ export interface WorktreesRemovableResponse {
 export interface SessionMergeResultRequest {
   status: 'merged' | 'conflict' | 'error';
   mergedSha?: string;
+  /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
+   *  detect new commits without relying on ancestry or patch-id equivalence. */
+  sourceSha?: string;
   message?: string;
 }
 
@@ -810,6 +818,8 @@ export interface SessionDiffResultRequest {
   /** Whether the branch already landed in the default merge target (see SessionLiveState).
    *  Recomputed with the diff, so opening the diff drawer refreshes it for an idle session. */
   branchMerged?: boolean;
+  /** Exact tip SHA of the effective worktree branch (see SessionLiveState.branchSha). */
+  branchSha?: string;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
 }

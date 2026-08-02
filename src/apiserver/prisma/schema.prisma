@@ -440,6 +440,11 @@ model Session {
   mergeError           String?   @map("merge_error")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   mergedAt             DateTime? @map("merged_at")
+  // The exact source-branch tip that a successful Orbit merge replayed. Unlike patch-id,
+  // this remains authoritative when rebasing onto the target adapts overlapping changes and
+  // produces a non-equivalent patch. A later worktree report clears merged state only after
+  // its current branch tip differs from this SHA. Null for legacy merge results.
+  mergedSourceSha      String?   @map("merged_source_sha")
   // The branch the user chose to merge into (from the status bar's branch dropdown). Null
   // means the default — the runner auto-detects main, else master. Relayed to the runner in
   // the MergeCommand and shown on the merged ✓ chip.

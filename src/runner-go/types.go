@@ -73,6 +73,10 @@ type SessionLiveState struct {
 	SessionID       string        `json:"sessionId"`
 	IsolationStatus string        `json:"isolationStatus"`
 	ChangedFiles    []ChangedFile `json:"changedFiles"`
+	// BranchSha is the tip of the effective branch (the actual checked-out branch when one
+	// exists, otherwise the session's recorded branch). The server uses it to distinguish a
+	// branch that is unchanged since a successful merge from one that gained new commits.
+	BranchSha string `json:"branchSha,omitempty"`
 	// WorktreeDirty is the worktree's current `git status` (true → uncommitted changes). No
 	// omitempty: a clean worktree must report false so the server flips the bar to Merge,
 	// rather than dropping the field (which an older server reads as "not reported").
@@ -194,6 +198,9 @@ type MergeCommand struct {
 type MergeResultRequest struct {
 	Status    string `json:"status"` // "merged" | "conflict" | "error"
 	MergedSha string `json:"mergedSha,omitempty"`
+	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
+	// merge records exactly which version of the session branch landed in the target.
+	SourceSha string `json:"sourceSha,omitempty"`
 	Message   string `json:"message,omitempty"`
 }
 
@@ -232,6 +239,8 @@ type DiffResultRequest struct {
 	ChangedFiles  []ChangedFile `json:"changedFiles,omitempty"`
 	ChangedDiff   []FilePatch   `json:"changedDiff,omitempty"`
 	WorktreeDirty bool          `json:"worktreeDirty"`
+	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
+	BranchSha string `json:"branchSha,omitempty"`
 	// BranchMerged: the branch already landed in the default merge target (see SessionLiveState).
 	// Recomputed with the diff, so opening the drawer refreshes it for an idle session.
 	BranchMerged bool `json:"branchMerged"`
@@ -404,6 +413,8 @@ type TurnCompleteRequest struct {
 	// running diff) while the session is still going — not just at terminal /complete.
 	IsolationStatus string        `json:"isolationStatus,omitempty"`
 	ChangedFiles    []ChangedFile `json:"changedFiles,omitempty"`
+	// BranchSha is the tip of the effective branch (see SessionLiveState.BranchSha).
+	BranchSha string `json:"branchSha,omitempty"`
 	// Per-file unified diffs (capped) for the same uncommitted worktree state, so the web
 	// can open a file's diff on demand without a round-trip back to this runner.
 	ChangedDiff []FilePatch `json:"changedDiff,omitempty"`

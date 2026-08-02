@@ -2035,6 +2035,8 @@ export class SessionsService {
         mergeRequestedAt: new Date(),
         mergeError: null,
         mergedAt: null,
+        mergedSourceSha: null,
+        branchMerged: null,
       },
     });
     // Remember an explicitly chosen target on the agent so every session of it defaults there.
@@ -2149,6 +2151,7 @@ export class SessionsService {
         mergeStatus: null,
         mergeError: null,
         mergedAt: null,
+        mergedSourceSha: null,
         branchMerged: null,
       },
     });
@@ -2431,6 +2434,7 @@ export class SessionsService {
         clear.mergeStatus = null;
         clear.mergeError = null;
         clear.mergedAt = null;
+        clear.mergedSourceSha = null;
         // The rebase/new work this resume kicks off invalidates the runner's last is-ancestor
         // verdict too — a stale true would keep the bar on "✓ In main" while the user is adding
         // work. null (not false) so the bar falls back until the runner's next fresh report.
@@ -2531,6 +2535,7 @@ export class SessionsService {
           mergeStatus: null,
           mergeError: null,
           mergedAt: null,
+          mergedSourceSha: null,
           branchMerged: null,
           commitStatus: null,
           commitError: null,

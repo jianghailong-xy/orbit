@@ -468,6 +468,7 @@ func runLoop(cfg *RunnerConfig) bool {
 						SessionID:       j.SessionID,
 						IsolationStatus: j.IsolationStatus,
 						ChangedFiles:    liveDiffStat(j.WT),
+						BranchSha:       effectiveBranchSha(j.WT),
 						WorktreeDirty:   worktreeIsDirty(j.WT),
 						MergeTargets:    mergeTargetsForWT(j.WT),
 						BranchMerged:    branchMergedInto(j.WT),
@@ -530,7 +531,7 @@ func runLoop(cfg *RunnerConfig) bool {
 						// not at main.
 						rememberMergeTarget(req.SessionID, req.TargetBranch)
 						if err := t.mergeResult(req.SessionID, MergeResultRequest{
-							Status: res.Status, MergedSha: res.MergedSha, Message: res.Message,
+							Status: res.Status, MergedSha: res.MergedSha, SourceSha: res.SourceSha, Message: res.Message,
 						}); err != nil {
 							logln("merge-result POST failed for", req.SessionID+":", err)
 						}

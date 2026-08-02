@@ -178,8 +178,48 @@ func TestMergeToMainRebaseLinear(t *testing.T) {
 	if out.MergedSha == featBefore {
 		t.Errorf("rebased commit should have a new sha, got the original %s", featBefore)
 	}
+	if out.SourceSha != featBefore {
+		t.Errorf("SourceSha = %s, want pre-rebase source tip %s", out.SourceSha, featBefore)
+	}
 	if branchExists(repo, "orbit/_rebase-s1") {
 		t.Error("temp rebase branch should be cleaned up")
+	}
+}
+
+// TestMergeToMainRebaseAdaptsOverlappingPatch reproduces the false-negative that motivated the
+// merge source receipt. Main has already made half of one feature commit's changes, so rebase
+// cleanly drops that half and records only the remainder. The original and replayed commits then
+// have different patch IDs even though all feature content landed.
+func TestMergeToMainRebaseAdaptsOverlappingPatch(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	commitFile(t, repo, "base.txt", "one\nold-a\nthree\nfour\nfive\nsix\nseven\neight\nold-b\nten\n", "expand base")
+	baseSha := mustGit(t, repo, "rev-parse", "main")
+
+	mustGit(t, repo, "checkout", "-b", "orbit/overlap")
+	commitFile(t, repo, "base.txt", "one\nnew-a\nthree\nfour\nfive\nsix\nseven\neight\nnew-b\nten\n", "feature edits two lines")
+	sourceSha := mustGit(t, repo, "rev-parse", "orbit/overlap")
+
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "base.txt", "one\nnew-a\nthree\nfour\nfive\nsix\nseven\neight\nold-b\nten\n", "main makes half the feature change")
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/overlap", SessionID: "overlap"})
+	if out.Status != "merged" {
+		t.Fatalf("expected clean adapted merge, got %q (%s)", out.Status, out.Message)
+	}
+	if out.SourceSha != sourceSha {
+		t.Fatalf("SourceSha = %s, want original source tip %s", out.SourceSha, sourceSha)
+	}
+	if got := mustGit(t, repo, "show", "main:base.txt"); got != "one\nnew-a\nthree\nfour\nfive\nsix\nseven\neight\nnew-b\nten" {
+		t.Fatalf("main content = %q, want all feature changes", got)
+	}
+
+	wt := &Worktree{RepoDir: repo, Branch: "orbit/overlap", BaseSha: baseSha}
+	if branchMergedInto(wt) {
+		t.Fatal("adapted replay should reproduce the conservative ancestry/patch-id false-negative")
+	}
+	if cherry := mustGit(t, repo, "cherry", "main", "orbit/overlap"); !strings.HasPrefix(cherry, "+") {
+		t.Fatalf("test setup: original feature patch should be non-equivalent after adaptation, got %q", cherry)
 	}
 }
 
@@ -863,6 +903,10 @@ func TestBranchMergedInto_CheckoutBFollowsNewBranch(t *testing.T) {
 	if got := currentBranch(wt); got != "orbit/foo" {
 		t.Fatalf("worktree should be on orbit/foo, got %q", got)
 	}
+	originalTip := mustGit(t, repo, "rev-parse", "orbit/foo")
+	if got := effectiveBranchSha(wt); got != originalTip {
+		t.Fatalf("effective branch sha = %q, want tracked branch tip %q", got, originalTip)
+	}
 	if !branchMergedInto(wt) {
 		t.Error("baseline: merged branch on its own worktree should read as In main")
 	}
@@ -879,7 +923,23 @@ func TestBranchMergedInto_CheckoutBFollowsNewBranch(t *testing.T) {
 	if got := currentBranch(wt); got != "feature-2" {
 		t.Fatalf("worktree should be on feature-2, got %q", got)
 	}
+	newTip := mustGit(t, repo, "rev-parse", "feature-2")
+	if got := effectiveBranchSha(wt); got != newTip {
+		t.Fatalf("effective branch sha = %q, want newly checked-out branch tip %q", got, newTip)
+	}
+	if newTip == originalTip {
+		t.Fatal("test setup: new branch must advance past the original tip")
+	}
 	if branchMergedInto(wt) {
 		t.Error("after checkout -b to an unmerged branch, must NOT read as In main (surface the new branch)")
+	}
+}
+
+func TestEffectiveBranchShaMissingWorktree(t *testing.T) {
+	if got := effectiveBranchSha(nil); got != "" {
+		t.Fatalf("nil worktree sha = %q, want empty", got)
+	}
+	if got := effectiveBranchSha(&Worktree{}); got != "" {
+		t.Fatalf("empty worktree sha = %q, want empty", got)
 	}
 }

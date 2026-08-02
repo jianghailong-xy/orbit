@@ -1210,6 +1210,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			ChangedFiles:     liveFiles,
 			ChangedDiff:      livePatches,
 			WorktreeDirty:    worktreeIsDirty(job.WT),
+			BranchSha:        effectiveBranchSha(job.WT),
 			BranchMerged:     branchMergedInto(job.WT),
 			WorktreeBranch:   currentBranch(job.WT),
 		}); completeErr != nil {
@@ -1363,7 +1364,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 					runShellTurnBackground(bg, execDir, scratchDir, shellCommand, resp.TurnID, emit, job.Agent.Env)
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: "started in background", Subtype: "shell",
-						RuntimeSessionID: sessionID,
+						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -1373,7 +1374,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						fmt.Sprintf("<bash-input>%s</bash-input>\n<bash-stdout>%s</bash-stdout>", resp.Content, output))
 					if err := completeTurn(TurnCompleteRequest{
 						TurnID: resp.TurnID, Status: stSucceeded, Result: fmt.Sprintf("exit %d", exitCode), Subtype: "shell",
-						RuntimeSessionID: sessionID,
+						RuntimeSessionID: sessionID, BranchSha: effectiveBranchSha(job.WT),
 					}); err != nil {
 						logln("shell turn-complete failed for", job.SessionID+":", err)
 					}
@@ -1422,7 +1423,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				if err := t.diffResult(job.SessionID, DiffResultRequest{
 					ChangedFiles: liveFiles, ChangedDiff: livePatches,
 					WorktreeDirty: worktreeIsDirty(job.WT), BranchMerged: branchMergedInto(job.WT),
-					WorktreeBranch: currentBranch(job.WT),
+					BranchSha: effectiveBranchSha(job.WT), WorktreeBranch: currentBranch(job.WT),
 				}); err != nil {
 					logln("diff-result failed for", job.SessionID+":", err)
 				}

@@ -384,6 +384,13 @@ export class RunnerApiController {
       try {
         await Promise.all(
           dto.sessions.map(async (s) => {
+            const branchMerged = await this.reconcileReportedBranchMerged(
+              s.sessionId,
+              runner.id,
+              s.branchMerged,
+              s.branchSha,
+              heartbeatLeaseOwner ?? undefined,
+            );
             await this.prisma.session.updateMany({
               where: {
                 id: s.sessionId,
@@ -401,20 +408,12 @@ export class RunnerApiController {
                 ...(s.mergeTargets !== undefined ? { mergeTargets: s.mergeTargets } : {}),
                 // Whether the branch already landed in main → bar shows "✓ In main", not a
                 // redundant Merge button (older runners omit it → left untouched).
-                ...(s.branchMerged !== undefined ? { branchMerged: s.branchMerged } : {}),
+                ...(branchMerged !== undefined ? { branchMerged } : {}),
                 // The worktree's actual HEAD branch → the bar flags divergence from the tracked
                 // `branch` and offers Adopt (older runners omit it → left untouched).
                 ...(s.worktreeBranch !== undefined ? { worktreeBranch: s.worktreeBranch } : {}),
               },
             });
-            // New commits after an earlier merge: retire the stale "✓ Merged" so the bar
-            // offers Merge again for the new work.
-            await this.clearStaleMergedStatus(
-              s.sessionId,
-              runner.id,
-              s.branchMerged,
-              heartbeatLeaseOwner ?? undefined,
-            );
           }),
         );
       } catch {
@@ -1238,7 +1237,12 @@ export class RunnerApiController {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       const current = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
-        select: { status: true, taskId: true },
+        select: {
+          status: true,
+          taskId: true,
+          mergeStatus: true,
+          mergedSourceSha: true,
+        },
       });
       // A task run that failed mid-turn (e.g. an API/content-filter error the agent
       // couldn't recover from — the runner now reports such turns as FAILED) would
@@ -1249,15 +1253,31 @@ export class RunnerApiController {
       const failTask = dto.status === RunStatus.FAILED && !!current.taskId;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
-      if (dto.branchMerged === false) {
-        await tx.session.updateMany({
-          where: {
-            id: sessionId,
-            assignedRunnerId: runner.id,
-            mergeStatus: 'merged',
-          },
-          data: { mergeStatus: null, mergeError: null },
-        });
+      let branchMerged = dto.branchMerged;
+      if (dto.branchMerged === false && current.mergeStatus === 'merged') {
+        if (current.mergedSourceSha && (!dto.branchSha || current.mergedSourceSha === dto.branchSha)) {
+          // A rebase merge can produce a different patch-id from its source commit when it
+          // adapts overlapping target changes. The exact source tip proves this is still the
+          // branch snapshot that was merged, so keep the successful state authoritative. A
+          // missing report SHA is inconclusive (legacy runner or transient ref lookup failure),
+          // so it must not erase an exact marker captured by the successful merge.
+          branchMerged = true;
+        } else {
+          const mergedSourceSha = current.mergedSourceSha ?? null;
+          await tx.session.updateMany({
+            where: {
+              id: sessionId,
+              assignedRunnerId: runner.id,
+              mergeStatus: 'merged',
+              mergedSourceSha,
+            },
+            data: {
+              mergeStatus: null,
+              mergeError: null,
+              mergedSourceSha: null,
+            },
+          });
+        }
       }
       // Idempotent ack: only the first turn-complete for this turn applies.
       const ack = await tx.conversationTurn.updateMany({
@@ -1322,7 +1342,7 @@ export class RunnerApiController {
           ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
           // Whether the branch already landed in main — the turn-end snapshot an idle session
           // shows, so the bar offers "✓ In main" not a redundant Merge (older runners omit it).
-          ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
+          ...(branchMerged !== undefined ? { branchMerged } : {}),
           // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
@@ -1858,6 +1878,15 @@ export class RunnerApiController {
         mergeStatus: dto.status,
         mergeError: merged ? null : (dto.message ?? null),
         mergedAt: merged ? new Date() : null,
+        // A successful merge is authoritative even when ancestry/patch-id heuristics cannot
+        // recognize its conflict-adapted replay. Legacy runners omit sourceSha; explicitly clear
+        // any older marker so it can never be mistaken for this merge attempt.
+        ...(merged
+          ? {
+              branchMerged: true,
+              mergedSourceSha: dto.sourceSha ?? null,
+            }
+          : {}),
         // On a successful merge, advance the recorded fork point to the merge tip (the runner's
         // own git base-ref self-heals to the same commit on its next diff, so this keeps the DB
         // record in step). Later commits then form a fresh delta against the merged base rather
@@ -1908,6 +1937,12 @@ export class RunnerApiController {
     @Body() dto: SessionDiffResultRequest,
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
+    const branchMerged = await this.reconcileReportedBranchMerged(
+      sessionId,
+      runner.id,
+      dto.branchMerged,
+      dto.branchSha,
+    );
     const updated = await this.prisma.session.updateMany({
       where: {
         id: sessionId,
@@ -1923,7 +1958,7 @@ export class RunnerApiController {
         ...(dto.worktreeDirty !== undefined ? { worktreeDirty: dto.worktreeDirty } : {}),
         // Recomputed with the diff, so opening the drawer refreshes "✓ In main" for an idle
         // session merged out-of-band (older runners omit it → left untouched).
-        ...(dto.branchMerged !== undefined ? { branchMerged: dto.branchMerged } : {}),
+        ...(branchMerged !== undefined ? { branchMerged } : {}),
         // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
         ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
       },
@@ -1942,9 +1977,6 @@ export class RunnerApiController {
         },
       });
     }
-    // Opening the diff drawer recomputes branchMerged; new commits after an earlier merge
-    // retire the stale "✓ Merged" here too (see clearStaleMergedStatus).
-    await this.clearStaleMergedStatus(sessionId, runner.id, dto.branchMerged);
     return { ok: true };
   }
 
@@ -2013,33 +2045,49 @@ export class RunnerApiController {
     return session;
   }
 
-  /**
-   * A worktree report saying the branch is NOT in its merge target (branchMerged === false)
-   * means any earlier "✓ Merged" outcome is history — new commits landed on the branch since
-   * that merge. Clear the stale terminal 'merged' so the status bar offers Merge again: every
-   * client renders the chip from mergeStatus first (web MergeButton returns "✓ Merged" on
-   * status === 'merged' before ever looking at the live branchMerged verdict), so without this
-   * the bar stays stuck on "✓ Merged" and hides the button for the new work. Guarded on the
-   * current value: an in-flight merge ('pending') is never touched, a no-match write is free,
-   * and a stale-snapshot report racing a *fresh* merge result at worst blinks the chip for one
-   * report cycle (the next report carries branchMerged=true → "✓ In main"). mergedAt is kept —
-   * it remains true history of when that earlier merge landed.
+  /** Reconcile the runner's heuristic merged verdict with the exact source tip captured by a
+   * successful Orbit merge. `branchMerged=false` is deliberately conservative: ancestry and
+   * patch-id both fail when a rebase adapts overlapping target changes. If the reported branch
+   * SHA still equals mergedSourceSha, keep the successful merge authoritative and normalize the
+   * snapshot to true. A missing reported SHA is inconclusive and preserves a stored exact marker;
+   * only two present, different SHAs prove new commits landed. Legacy merge results without an
+   * exact marker retain the historical false-clears behavior.
    */
-  private async clearStaleMergedStatus(
+  private async reconcileReportedBranchMerged(
     sessionId: string,
     runnerId: string,
-    branchMerged?: boolean,
+    reported?: boolean,
+    branchSha?: string,
     leaseOwner?: string,
-  ): Promise<void> {
-    if (branchMerged !== false) return;
+  ): Promise<boolean | undefined> {
+    if (reported !== false) return reported;
+    const merged = await this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        status: { in: OPEN },
+        mergeStatus: 'merged',
+        ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
+      },
+      select: { mergedSourceSha: true },
+    });
+    if (!merged) return false;
+    if (merged.mergedSourceSha && (!branchSha || merged.mergedSourceSha === branchSha)) {
+      return true;
+    }
+
     await this.prisma.session.updateMany({
       where: {
         id: sessionId,
         assignedRunnerId: runnerId,
+        status: { in: OPEN },
         mergeStatus: 'merged',
+        // Fence a racing fresh merge-result: clear only the exact marker we just read.
+        mergedSourceSha: merged.mergedSourceSha,
         ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
       },
-      data: { mergeStatus: null, mergeError: null },
+      data: { mergeStatus: null, mergeError: null, mergedSourceSha: null },
     });
+    return false;
   }
 }
