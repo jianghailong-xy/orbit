@@ -32,38 +32,16 @@ import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
 import { canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from '../lib/taskFilters';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import {
+  compareTasksBy,
+  DEFAULT_TASK_SORT_DIRECTION,
+  DEFAULT_TASK_SORT_FIELD,
+  readTaskSort,
+  type TaskSortDirection,
+  type TaskSortField,
+  writeTaskSort,
+} from '../lib/taskSorting';
 import { useToast } from '../lib/toast';
-
-// Rank for the "状态" sort: 运行中 (executing now) ranks first, then 排队中 (waiting), then by
-// lifecycle, so ascending groups 运行中 above 排队中 above 已完成/已取消 (descending flips it).
-// running and queued get distinct ranks — they're different states, so the live task must not
-// be intermixed with the queue (the +1 keeps lifecycle ranks below both session overlays).
-const STATUS_ORDER: Record<string, number> = {
-  IN_PROGRESS: 1,
-  FAILED: 2,
-  OPEN: 3,
-  DONE: 4,
-  CANCELLED: 5,
-};
-const statusRank = (t: any): number =>
-  t.running ? 0 : t.queued ? 1 : (STATUS_ORDER[t.status] ?? 5) + 1;
-
-// Compare two tasks by the chosen field, ascending. Equal pairs return 0 so the caller's
-// stable sort preserves the incoming createdAt-desc order as a tiebreak.
-const compareBy = (a: any, b: any, field: string): number => {
-  switch (field) {
-    case 'status':
-      return statusRank(a) - statusRank(b);
-    case 'title':
-      // Numeric collation so "Unit 9" sorts before "Unit 73" (not lexicographically).
-      return (a.title ?? '').localeCompare(b.title ?? '', 'zh', { numeric: true });
-    case 'assignee':
-      return (a.assignee?.name ?? '').localeCompare(b.assignee?.name ?? '', 'zh');
-    case 'created':
-    default:
-      return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
-  }
-};
 
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
 // panel and batch-action modals. The task-list routes ("/tasks", "/lists/:key")
@@ -101,28 +79,20 @@ export function TaskListView() {
   // of the view state so it survives a refresh and is shareable.
   const query = searchParams.get('q') ?? '';
   const setQuery = (v: string) => setParam('q', v, '');
-  // Client-side sort over the visible rows; default 'created'/'desc' mirrors the backend's
-  // createdAt-desc ordering, so the initial view is unchanged. Column headers drive it:
-  // click cycles asc → desc → cleared (back to created). Field + direction are written in
+  // Client-side sort over the visible rows; status ascending is the default so live Running
+  // tasks stay at the top. Column headers drive it: click cycles asc → desc → cleared (back
+  // to the default status order). Field + direction are written in
   // one update so the two URL params never clobber each other.
-  const sortField = searchParams.get('sort') ?? 'created';
-  const sortDir: 'asc' | 'desc' = searchParams.get('dir') === 'asc' ? 'asc' : 'desc';
-  const setSort = (field: string, dir: 'asc' | 'desc') =>
+  const { field: sortField, direction: sortDir } = readTaskSort(searchParams);
+  const setSort = (field: TaskSortField, dir: TaskSortDirection) =>
     setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (field === 'created') next.delete('sort');
-        else next.set('sort', field);
-        if (dir === 'desc') next.delete('dir');
-        else next.set('dir', dir);
-        return next;
-      },
+      (prev) => writeTaskSort(prev, field, dir),
       { replace: true },
     );
-  const cycleSort = (field: string) => {
+  const cycleSort = (field: TaskSortField) => {
     if (sortField !== field) setSort(field, 'asc');
     else if (sortDir === 'asc') setSort(field, 'desc');
-    else setSort('created', 'desc');
+    else setSort(DEFAULT_TASK_SORT_FIELD, DEFAULT_TASK_SORT_DIRECTION);
   };
 
   // /lists/<base62> renders a single user list instead of all tasks: fetch that list
@@ -305,7 +275,7 @@ export function TaskListView() {
       ? visibleRows.filter((r: any) => (r.title ?? '').toLowerCase().includes(q))
       : visibleRows;
     const dir = sortDir === 'asc' ? 1 : -1;
-    return [...filtered].sort((a: any, b: any) => dir * compareBy(a, b, sortField));
+    return [...filtered].sort((a: any, b: any) => dir * compareTasksBy(a, b, sortField));
   }, [visibleRows, query, sortField, sortDir]);
 
   // The current view's full task set (before the status filter) — drives the progress
@@ -489,7 +459,7 @@ export function TaskListView() {
 
   // A clickable column header that drives the sort. Active header shows a caret for the
   // direction; clicking cycles asc → desc → cleared (handled by cycleSort).
-  const sortHead = (field: string, label: string) => {
+  const sortHead = (field: TaskSortField, label: string) => {
     const active = sortField === field;
     return (
       <div
