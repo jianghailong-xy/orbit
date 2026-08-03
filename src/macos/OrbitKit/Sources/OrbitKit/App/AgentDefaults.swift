@@ -229,12 +229,17 @@ public enum AgentDefaults {
         (kimiModels + opencodeModels).first { $0.id == id }?.name ?? id
     }
 
+    /// Written as a loop rather than one expression chaining `??` across four optional-chained
+    /// `(catalog?.models(for:) ?? []).first { … }?.name` lookups. That form sat right at the Swift
+    /// type-checker's limit — resolving the `??` overloads against the generic `first(where:)` and the
+    /// optional chains blows up combinatorially — and started failing every Swift job outright with
+    /// "unable to type-check this expression in reasonable time". Same provider order, same result.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
-        (catalog?.models(for: "claude") ?? []).first { $0.id == id }?.name
-            ?? (catalog?.models(for: "codex") ?? []).first { $0.id == id }?.name
-            ?? (catalog?.models(for: "kimi") ?? []).first { $0.id == id }?.name
-            ?? (catalog?.models(for: "opencode") ?? []).first { $0.id == id }?.name
-            ?? friendlyName(id)
+        for provider in ["claude", "codex", "kimi", "opencode"] {
+            let models: [ModelOption] = catalog?.models(for: provider) ?? []
+            if let name = models.first(where: { $0.id == id })?.name { return name }
+        }
+        return friendlyName(id)
     }
 
     /// As `friendlyName(_:catalog:)`, also checking the configured providers' model rows — a
