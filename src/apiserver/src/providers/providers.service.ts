@@ -7,6 +7,7 @@ import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
+import { AUTH_MODE_SUBSCRIPTION } from './subscription-token';
 
 @Injectable()
 export class ProvidersService {
@@ -262,49 +263,136 @@ export class ProvidersService {
     return { ...withPreset(rest), hasApiKey: !!apiKeyEnc };
   }
 
-  /** Whether this account has a Claude subscription token, and when it was last set. The token
-   *  itself is never returned — there is no read path for it outside dispatch. */
-  async getClaudeOauthToken(userId: string): Promise<ClaudeOauthTokenStatus> {
-    const row = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { claudeOauthTokenEnc: true, claudeOauthTokenSetAt: true },
+  /** This user's Claude accounts, newest last. The token is never returned — there is no read
+   *  path for it outside dispatch. */
+  async listSubscriptions(userId: string): Promise<SubscriptionAccountView[]> {
+    const rows = await this.prisma.modelProvider.findMany({
+      where: { ownerId: userId, authMode: AUTH_MODE_SUBSCRIPTION },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, slug: true, label: true, isDefault: true, enabled: true, createdAt: true },
     });
-    return {
-      configured: !!row?.claudeOauthTokenEnc,
-      setAt: row?.claudeOauthTokenSetAt?.toISOString() ?? null,
-    };
+    return rows.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      label: r.label,
+      isDefault: r.isDefault,
+      enabled: r.enabled,
+      setAt: r.createdAt.toISOString(),
+    }));
   }
 
   /**
-   * Store (or rotate) this account's Claude subscription token. `claude setup-token` prints it
-   * on a line of its own; users paste it with stray whitespace often enough that trimming here
-   * is worth more than rejecting it. We deliberately do NOT probe it: the subscription endpoint
-   * has no cheap unauthenticated-safe health call, and a wrong token already surfaces clearly as
-   * the sign-in card on the next turn.
+   * Store one Claude account. `claude setup-token` prints its token on a line of its own; users
+   * paste it with stray whitespace often enough that trimming here is worth more than rejecting
+   * it. We deliberately do NOT probe it: the subscription endpoint has no cheap
+   * unauthenticated-safe health call, and a wrong token already surfaces clearly as the sign-in
+   * card on the next turn.
+   *
+   * The label is the user's; the slug is derived from it and is what Agent.provider stores, so an
+   * account can be picked per agent exactly like an API-key provider. The row follows the
+   * anthropic preset, so it offers the current Claude models without anyone maintaining a list.
    */
-  async setClaudeOauthToken(userId: string, token: string): Promise<ClaudeOauthTokenStatus> {
-    const trimmed = token.trim();
-    if (!trimmed) throw new BadRequestException('Token is empty');
-    const row = await this.prisma.user.update({
-      where: { id: userId },
-      data: { claudeOauthTokenEnc: encryptSecret(trimmed), claudeOauthTokenSetAt: new Date() },
-      select: { claudeOauthTokenSetAt: true },
+  async createSubscription(userId: string, label: string, token: string) {
+    const trimmedToken = token.trim();
+    if (!trimmedToken) throw new BadRequestException('Token is empty');
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel) throw new BadRequestException('Name is empty');
+    const preset = providerPreset('anthropic');
+    // The first account an owner stores becomes the default; later ones never steal it.
+    const existing = await this.prisma.modelProvider.count({
+      where: { ownerId: userId, authMode: AUTH_MODE_SUBSCRIPTION },
     });
-    return { configured: true, setAt: row.claudeOauthTokenSetAt?.toISOString() ?? null };
+    const base = slugBase(trimmedLabel);
+    // Same lost-race retry as create(): two accounts named alike pick the same free slug, and the
+    // loser just re-picks rather than surfacing an error about an identifier nobody chose.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const row = await this.prisma.modelProvider.create({
+          data: {
+            slug: await this.freeSlug(base),
+            label: trimmedLabel,
+            runtime: AgentProvider.CLAUDE,
+            // Recorded for display only — a subscription row never injects an endpoint.
+            baseUrl: preset?.baseUrl ?? 'https://api.anthropic.com',
+            apiKeyEnc: encryptSecret(trimmedToken),
+            models: [] as unknown as Prisma.InputJsonValue,
+            presetSlug: 'anthropic',
+            followsPreset: true,
+            authMode: AUTH_MODE_SUBSCRIPTION,
+            isDefault: existing === 0,
+            ownerId: userId,
+          },
+        });
+        this.publishChanged(userId, row.id);
+        return this.desensitize(row);
+      } catch (e) {
+        const raced = e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+        if (!raced || attempt >= 4) throw e;
+      }
+    }
   }
 
-  /** Forget this account's token; sessions fall back to each runner's own local login. */
-  async clearClaudeOauthToken(userId: string): Promise<ClaudeOauthTokenStatus> {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { claudeOauthTokenEnc: null, claudeOauthTokenSetAt: null },
+  /**
+   * Make one account the owner's default. Clearing the others and setting this one has to be
+   * atomic, or a crash between the two leaves an owner with none (new agents would silently fall
+   * back to each runner's local login) or two (dispatch would pick arbitrarily).
+   */
+  async setDefaultSubscription(userId: string, id: string) {
+    await this.getSubscriptionScoped(userId, id);
+    await this.prisma.$transaction([
+      this.prisma.modelProvider.updateMany({
+        where: { ownerId: userId, authMode: AUTH_MODE_SUBSCRIPTION, isDefault: true },
+        data: { isDefault: false },
+      }),
+      this.prisma.modelProvider.update({ where: { id }, data: { isDefault: true } }),
+    ]);
+    this.publishChanged(userId, id);
+    return { ok: true };
+  }
+
+  /**
+   * Forget one account. Removing the default promotes the oldest survivor rather than leaving the
+   * owner without one — an owner with accounts should always have a default, and picking one for
+   * them beats silently falling back to each runner's local login.
+   *
+   * Agents pinned to this account keep a slug that no longer resolves, which resolveProviderExec
+   * already handles: an unresolvable slug degrades to the built-in claude runtime, so they land
+   * on the new default instead of failing to dispatch.
+   */
+  async removeSubscription(userId: string, id: string) {
+    const row = await this.getSubscriptionScoped(userId, id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.modelProvider.delete({ where: { id } });
+      if (!row.isDefault) return;
+      const next = await tx.modelProvider.findFirst({
+        where: { ownerId: userId, authMode: AUTH_MODE_SUBSCRIPTION },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (next) await tx.modelProvider.update({ where: { id: next.id }, data: { isDefault: true } });
     });
-    return { configured: false, setAt: null };
+    this.publishChanged(userId, id);
+    return { ok: true };
+  }
+
+  /** A subscription row owned by this user, or not-found. Keeps another user's id — and an
+   *  API-key row's id — from reaching the account routes. */
+  private async getSubscriptionScoped(userId: string, id: string) {
+    const row = await this.prisma.modelProvider.findFirst({
+      where: { id, ownerId: userId, authMode: AUTH_MODE_SUBSCRIPTION },
+      select: { id: true, isDefault: true },
+    });
+    if (!row) throw new NotFoundException('account not found');
+    return row;
   }
 }
 
-/** Browser-facing view of the account token: whether it exists, never what it is. */
-export interface ClaudeOauthTokenStatus {
-  configured: boolean;
-  setAt: string | null;
+/** Browser-facing view of one Claude account: everything but the token. */
+export interface SubscriptionAccountView {
+  id: string;
+  slug: string;
+  label: string;
+  isDefault: boolean;
+  enabled: boolean;
+  setAt: string;
 }

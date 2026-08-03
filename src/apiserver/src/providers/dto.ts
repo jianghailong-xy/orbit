@@ -1,4 +1,12 @@
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
 // `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, etc.). The runner
@@ -52,10 +60,11 @@ export class UpdateModelProviderDto {
 }
 
 /**
- * A Claude subscription token from `claude setup-token`, held per account and injected as
- * CLAUDE_CODE_OAUTH_TOKEN on every runner. Deliberately not a ModelProvider: it supplies
- * credentials without redirecting the endpoint, so it is account state, not a picker entry.
+ * One Claude account: a token from `claude setup-token`, plus the name to tell it apart from the
+ * user's other accounts. The label is required because the token carries no account identity —
+ * without it a second account is indistinguishable from the first in every picker and list.
  */
-export class SetClaudeOauthTokenDto {
+export class CreateSubscriptionAccountDto {
+  @IsString() @MinLength(1) @MaxLength(60) label!: string;
   @IsString() @MinLength(1) token!: string;
 }

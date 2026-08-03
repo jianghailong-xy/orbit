@@ -7357,10 +7357,54 @@ body {
   color: var(--text-3);
 }
 
-/* The stored-token summary on the subscription form. */
-.sub-stored {
-  font-size: 13px;
-  color: var(--text-2);
+/* The stored Claude subscription accounts, one row each. */
+.sub-accounts {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sub-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+}
+.sub-account + .sub-account {
+  border-top: 1px solid var(--border-subtle);
+}
+.sub-account .sa-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.sub-account .sa-meta {
+  margin-top: 1px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.sub-account .sa-actions {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+/* "Default" wherever an account claims it — the list row and the providers table. */
+.sub-account .sa-default,
+.row-default-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 500;
+}
+.row-default-tag {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .provider-empty {

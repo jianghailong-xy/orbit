@@ -9,7 +9,7 @@ import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/sh
 import {
   PROVIDERS_BASE,
   PROVIDERS_LIST_KEY,
-  subscriptionQuery,
+  subscriptionAccountsQuery,
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
@@ -113,18 +113,22 @@ type AuthMethod = 'subscription' | 'key';
  * exists to put in front of them, so it leads, and the form follows underneath.
  */
 function AnthropicConnect({ preset }: { preset: ProviderPreset }) {
-  const sub = useQuery(subscriptionQuery());
+  const subs = useQuery(subscriptionAccountsQuery());
+  const accounts = subs.data?.length ?? 0;
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
-  const keys = (providers.data ?? []).filter((p) => p.presetSlug === preset.slug).length;
+  // Accounts are Anthropic rows too, so they'd otherwise be counted as keys on the other card.
+  const keys = (providers.data ?? []).filter(
+    (p) => p.presetSlug === preset.slug && p.authMode !== 'subscription',
+  ).length;
   // The subscription leads: it's the cheaper path for anyone who already pays for a plan, and the
   // only one that fixes every runner at once.
   const [method, setMethod] = useState<AuthMethod>('subscription');
-  // Arriving on a token that's already stored (the list's subscription row links straight here)
-  // is a manage visit, not a connect one — so the heading drops the verb.
-  const managing = method === 'subscription' && (sub.data?.configured ?? false);
+  // Arriving on accounts that already exist (the list's subscription rows link straight here) is
+  // a manage visit, not a connect one — so the heading drops the verb.
+  const managing = method === 'subscription' && accounts > 0;
 
   return (
     <div className="provider-form">
@@ -160,7 +164,7 @@ function AnthropicConnect({ preset }: { preset: ProviderPreset }) {
                 machine needs its own <code>claude auth login</code>.
               </>
             }
-            state={sub.data?.configured ? 'Configured' : null}
+            state={accounts ? (accounts === 1 ? '1 account' : `${accounts} accounts`) : null}
           />
           <AuthChoice
             on={method === 'key'}

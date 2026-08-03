@@ -346,6 +346,75 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, 'agent-owned');
   });
 
+  // A named subscription account (authMode "subscription"): one Claude account picked per agent.
+  // Its secret is a setup-token, not an API key, so it must reach the runner as
+  // CLAUDE_CODE_OAUTH_TOKEN and must NOT redirect the endpoint the way an API-key row does.
+  await t.test('subscription account: injects the token and no endpoint', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'work-account',
+      customRow: row({
+        authMode: 'subscription',
+        apiKeyEnc: encryptSecret('sk-ant-oat-work'),
+        baseUrl: 'https://api.anthropic.com',
+        presetSlug: 'anthropic',
+        followsPreset: true,
+        defaultModel: null,
+      }),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+    });
+    assert.equal(exec.provider, 'claude');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, 'sk-ant-oat-work');
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, undefined);
+    assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, undefined);
+  });
+
+  // The escape hatch people used before accounts existed keeps working: for a credential-only
+  // row, agent env wins — the opposite of an API-key row, whose endpoint must not be overridable.
+  await t.test('subscription account: an agent that hand-set the variable still wins', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'work-account',
+      customRow: row({
+        authMode: 'subscription',
+        apiKeyEnc: encryptSecret('sk-ant-oat-work'),
+        defaultModel: null,
+      }),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { CLAUDE_CODE_OAUTH_TOKEN: 'agent-owned', KEEP: '1' },
+    });
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, 'agent-owned');
+    assert.equal(exec.env?.KEEP, '1');
+  });
+
+  await t.test('api-key provider still overrides a hand-typed endpoint', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { ANTHROPIC_BASE_URL: 'https://evil.example', KEEP: '1' },
+    });
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
+    assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'sk-ds');
+    assert.equal(exec.env?.KEEP, '1');
+  });
+
+  // A rotated encryption key must degrade to the runner's own login, never fail the dispatch.
+  await t.test('subscription account: an undecryptable token injects nothing', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'work-account',
+      customRow: row({ authMode: 'subscription', apiKeyEnc: 'not:valid:ciphertext', defaultModel: null }),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: { KEEP: '1' },
+    });
+    assert.equal(exec.provider, 'claude');
+    assert.equal(exec.env?.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+    assert.equal(exec.env?.KEEP, '1');
+  });
+
   await t.test('no token configured leaves the built-in claude env untouched', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'claude',

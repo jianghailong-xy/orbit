@@ -2,12 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import { api } from '../api';
-import {
-  PROVIDERS_BASE,
-  PROVIDERS_LIST_KEY,
-  subscriptionQuery,
-  type ProviderRow,
-} from '../lib/providerAdmin';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 
 // The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
@@ -79,12 +74,14 @@ export function ProviderTile({
 }
 
 /** What a tile says under the vendor name: its endpoint dialect until something is set up, then
- *  what that is. Anthropic can be both at once — a subscription and keys — and says so, since
- *  which one is in play is the whole reason its two forms share a tile. */
-function connectedLabel(runtime: string | undefined, count: number, subbed: boolean): string {
-  if (subbed) return count ? `Subscription · ${count} key${count === 1 ? '' : 's'}` : 'Subscription';
-  if (count === 0) return runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible';
-  return count === 1 ? 'Connected' : `Connected · ${count} keys`;
+ *  what that is. Anthropic can be both at once — subscription accounts and keys — and says so,
+ *  since which one is in play is the whole reason its two forms share a tile. */
+function connectedLabel(runtime: string | undefined, count: number, accounts: number): string {
+  const parts: string[] = [];
+  if (accounts) parts.push(accounts === 1 ? '1 account' : `${accounts} accounts`);
+  if (count) parts.push(count === 1 ? '1 key' : `${count} keys`);
+  if (parts.length) return parts.join(' · ');
+  return runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible';
 }
 
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
@@ -98,14 +95,17 @@ export function ProviderGallery() {
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
-  // The Claude subscription is authentication for the Anthropic tile too — the tile is the only
-  // way in to either — so it has to count towards that tile being marked connected.
-  const subscription = useQuery(subscriptionQuery());
   // How many of the user's providers each vendor accounts for. A row records the preset it was
   // created from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts
-  // towards Anthropic.
+  // towards Anthropic. Subscription accounts are Anthropic rows too, but they're counted apart:
+  // the tile says "2 accounts · 1 key" because those are different things to have.
   const connected = new Map<string, number>();
+  let accounts = 0;
   for (const p of providers.data ?? []) {
+    if (p.authMode === 'subscription') {
+      accounts += 1;
+      continue;
+    }
     if (p.presetSlug) connected.set(p.presetSlug, (connected.get(p.presetSlug) ?? 0) + 1);
   }
 
@@ -113,18 +113,18 @@ export function ProviderGallery() {
     <div className="provider-gallery">
       {PROVIDER_PRESETS.map((p) => {
         const count = connected.get(p.slug) ?? 0;
-        const subbed = p.slug === 'anthropic' && (subscription.data?.configured ?? false);
+        const tileAccounts = p.slug === 'anthropic' ? accounts : 0;
         return (
           <Link
             key={p.slug}
             to={`/providers/new/${p.slug}`}
-            className={`provider-card${count || subbed ? ' connected' : ''}`}
+            className={`provider-card${count || tileAccounts ? ' connected' : ''}`}
           >
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
                 no width — these names already fill it. */}
             <span className="pc-logo">
               <ProviderTile slug={p.slug} label={p.label} />
-              {(count > 0 || subbed) && (
+              {(count > 0 || tileAccounts > 0) && (
                 <span className="pc-check" aria-hidden="true">
                   ✓
                 </span>
@@ -132,7 +132,7 @@ export function ProviderGallery() {
             </span>
             <div style={{ minWidth: 0 }}>
               <div className="pc-name">{p.label}</div>
-              <div className="pc-sub">{connectedLabel(p.runtime, count, subbed)}</div>
+              <div className="pc-sub">{connectedLabel(p.runtime, count, tileAccounts)}</div>
             </div>
           </Link>
         );

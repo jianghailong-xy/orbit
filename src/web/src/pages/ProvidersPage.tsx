@@ -6,34 +6,21 @@ import { providersQuery } from '../lib/queries';
 import {
   PROVIDERS_BASE,
   PROVIDERS_LIST_KEY,
-  SUBSCRIPTION_PATH,
-  subscriptionQuery,
+  SUBSCRIPTIONS_BASE,
+  subscriptionAccountsQuery,
   type ProviderRow,
 } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { useToast } from '../lib/toast';
 
 /**
- * The Claude subscription as a row in this table. It isn't a provider — no endpoint of its own,
- * no model of its own in the pickers — but it *is* one of the account's Claude credentials, so it
- * belongs in the one list that answers "what have I set up, and how do I drop it?". Connecting it
- * lives behind the Anthropic tile with the API-key form, its only entry point.
+ * A Claude subscription account arrives in this list as an ordinary provider row — it *is* one,
+ * underneath — and only its auth mode tells it apart. It has no endpoint of its own and adds no
+ * model of its own, but it is one of this user's Claude credentials, so it belongs in the one list
+ * that answers "what have I set up, and how do I drop it?". Adding one lives behind the Anthropic
+ * tile with the API-key form, its only entry point.
  */
-const SUBSCRIPTION_ROW_ID = 'claude-subscription';
-
-const subscriptionRow = (): ProviderRow => ({
-  id: SUBSCRIPTION_ROW_ID,
-  slug: 'anthropic',
-  label: 'Claude subscription',
-  runtime: 'claude',
-  baseUrl: '',
-  models: [],
-  defaultModel: null,
-  presetSlug: 'anthropic',
-  followsPreset: false,
-  enabled: true,
-  hasApiKey: true,
-});
+const isSubscriptionRow = (p: ProviderRow) => p.authMode === 'subscription';
 
 /**
  * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
@@ -45,7 +32,6 @@ export function ProvidersPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
-  const subscription = useQuery(subscriptionQuery());
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
@@ -59,11 +45,14 @@ export function ProvidersPage() {
     onError: (e: Error) => message.error(e.message || 'Failed'),
   });
 
-  const clearSubscription = useMutation({
-    mutationFn: () => api(SUBSCRIPTION_PATH, { method: 'DELETE' }),
+  const dropAccount = useMutation({
+    mutationFn: (id: string) => api(`${SUBSCRIPTIONS_BASE}/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: subscriptionQuery().queryKey });
-      message.success('Token removed — runners fall back to their own login');
+      // An account is a provider row, so the pickers' catalog has to refresh with this list.
+      void qc.invalidateQueries({ queryKey: subscriptionAccountsQuery().queryKey });
+      void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
+      void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
+      message.success('Account removed');
     },
     onError: (e: Error) => message.error(e.message || 'Failed'),
   });
@@ -78,6 +67,8 @@ export function ProvidersPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
           <div style={{ fontWeight: 600 }}>{p.label}</div>
+          {/* Which account a new agent lands on isn't visible anywhere else in this list. */}
+          {isSubscriptionRow(p) && p.isDefault && <Tag className="row-default-tag">Default</Tag>}
         </div>
       ),
     },
@@ -93,7 +84,7 @@ export function ProvidersPage() {
       // The subscription has no endpoint to show — what matters about it is who pays, so it says
       // that instead, in prose rather than the monospace an endpoint gets.
       render: (u: string, p) =>
-        p.id === SUBSCRIPTION_ROW_ID ? (
+        isSubscriptionRow(p) ? (
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Your Claude plan · no API billing</span>
         ) : (
           <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>
@@ -110,16 +101,16 @@ export function ProvidersPage() {
       key: 'actions',
       align: 'right',
       render: (_, p) => {
-        const isSub = p.id === SUBSCRIPTION_ROW_ID;
+        const isSub = isSubscriptionRow(p);
         return (
           <Space>
             <Button size="small" onClick={() => navigate(isSub ? '/providers/subscription' : `/providers/${p.id}`)}>
               Edit
             </Button>
             <Popconfirm
-              title={isSub ? 'Remove the stored token?' : `Delete ${p.label}?`}
-              description={isSub ? "Sessions go back to using each runner's own login." : undefined}
-              onConfirm={() => (isSub ? clearSubscription.mutate() : deleteMut.mutate(p.id))}
+              title={isSub ? `Remove ${p.label}?` : `Delete ${p.label}?`}
+              description={isSub ? 'Agents on this account fall back to the default one.' : undefined}
+              onConfirm={() => (isSub ? dropAccount.mutate(p.id) : deleteMut.mutate(p.id))}
             >
               <Button size="small" danger>
                 {isSub ? 'Remove' : 'Delete'}
@@ -131,10 +122,11 @@ export function ProvidersPage() {
     },
   ];
 
-  // The subscription leads the list: it's the one credential here that isn't scoped to a single
-  // endpoint — it covers this user's claude sessions on every runner.
-  const rows = [...(subscription.data?.configured ? [subscriptionRow()] : []), ...(providers.data ?? [])];
-  const loading = providers.isLoading || subscription.isLoading;
+  // Subscription accounts lead the list: they're the credentials here that aren't scoped to a
+  // single endpoint — each covers this user's claude sessions on every runner.
+  const all = providers.data ?? [];
+  const rows = [...all.filter(isSubscriptionRow), ...all.filter((p) => !isSubscriptionRow(p))];
+  const loading = providers.isLoading;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>

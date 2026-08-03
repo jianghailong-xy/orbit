@@ -1,6 +1,7 @@
 import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
 import { presetDefaultModel } from './preset-overlay';
+import { AUTH_MODE_SUBSCRIPTION, decryptSubscriptionToken } from './subscription-token';
 import { firstRuntimeCatalogModel, savedRuntimeDefaultModel } from '../common/runtime-model';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
@@ -27,7 +28,13 @@ export interface ModelProviderRow {
   presetSlug?: string | null;
   followsPreset?: boolean;
   enabled: boolean;
+  /** "api_key" (default) or "subscription" — see the schema. Absent on rows read by older
+   *  callers, which predate subscription accounts and are all API-key rows. */
+  authMode?: string | null;
 }
+
+/** Whether this row is one Claude account rather than an endpoint + API key. */
+const isSubscription = (row: ModelProviderRow) => row.authMode === AUTH_MODE_SUBSCRIPTION;
 
 function runtimeOf(row: ModelProviderRow): AgentProvider {
   return row.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
@@ -84,6 +91,19 @@ export function resolveProviderExec(args: {
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = runtimeOf(customRow);
+    const subscription = isSubscription(customRow);
+    // A named subscription account: supply that account's credential and nothing else — the
+    // endpoint stays Anthropic's default, exactly as it is for the built-in claude runtime.
+    // A token that won't decrypt degrades to the runner's own login rather than failing dispatch
+    // (see decryptSubscriptionToken), which is why this can end up injecting nothing.
+    const accountToken = subscription
+      ? decryptSubscriptionToken(customRow.apiKeyEnc, 'named account')
+      : null;
+    const injected = subscription
+      ? accountToken
+        ? { CLAUDE_CODE_OAUTH_TOKEN: accountToken }
+        : {}
+      : injectedEnv(customRow);
     return {
       provider: runtime,
       // A custom provider's model space is its own; never coerce it through the claude/gpt
@@ -93,8 +113,14 @@ export function resolveProviderExec(args: {
         firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
         presetDefaultModel(customRow) ||
         DEFAULT_MODEL_BY_PROVIDER[runtime],
-      // Provider env wins over any user-set agent env (e.g. a hand-typed ANTHROPIC_BASE_URL).
-      env: { ...(agentEnv ?? {}), ...injectedEnv(customRow) },
+      // Which side wins differs by auth mode, on purpose. An API-key row owns the endpoint it
+      // points at, so its env overrides a hand-typed ANTHROPIC_BASE_URL that would silently
+      // send that key somewhere else. A subscription row only supplies a credential, so it
+      // keeps the precedence the built-in claude path has always had: a hand-set
+      // CLAUDE_CODE_OAUTH_TOKEN still wins, and the escape hatch people already use keeps working.
+      env: subscription
+        ? { ...injected, ...(agentEnv ?? {}) }
+        : { ...(agentEnv ?? {}), ...injected },
     };
   }
   // Built-in (or stale/disabled custom slug → treat as claude): the pre-existing behavior,

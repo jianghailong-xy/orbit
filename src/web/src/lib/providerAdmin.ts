@@ -28,6 +28,11 @@ export interface ProviderRow {
   followsPreset: boolean;
   enabled: boolean;
   hasApiKey: boolean;
+  /** "api_key" or "subscription" — a subscription row is one Claude account, holding a
+   *  `claude setup-token` instead of an API key. */
+  authMode?: string;
+  /** Subscription rows only: the account a new agent runs on. At most one per user. */
+  isDefault?: boolean;
 }
 
 /** The signed-in user's own (BYOK) provider list — the only one the UI manages. */
@@ -35,25 +40,29 @@ export const PROVIDERS_BASE = '/providers/mine';
 export const PROVIDERS_LIST_KEY = ['providers', 'mine'];
 
 /**
- * The account-level Claude subscription token (`claude setup-token`), injected as
- * CLAUDE_CODE_OAUTH_TOKEN into this user's claude sessions on EVERY runner.
+ * Claude subscription accounts. They're ModelProvider rows underneath — so they show up in the
+ * pickers and an agent can name one — but they're created and removed through their own routes,
+ * since an account needs only a name and a token where an API-key provider needs an endpoint and
+ * a model list.
  *
- * It authenticates the same vendor the `anthropic` preset does, which is why both live behind
- * the one Anthropic tile: the choice between them is a billing choice (plan quota vs per-token),
- * not a choice of vendor. It stays out of the provider table's own shape — it has no endpoint of
- * its own and adds no model to the pickers — so the list page renders it as a synthetic row.
- *
- * Write-only: the server never returns the token, only whether one is stored and when.
+ * The token is write-only: no route returns it, so a stored account surfaces only as its label
+ * and when it was added.
  */
-export interface SubscriptionStatus {
-  configured: boolean;
-  setAt: string | null;
+export interface SubscriptionAccount {
+  id: string;
+  slug: string;
+  /** The user's own label. The token carries no account identity, so this is the only way to
+   *  tell two accounts apart. */
+  label: string;
+  isDefault: boolean;
+  enabled: boolean;
+  setAt: string;
 }
 
-export const SUBSCRIPTION_PATH = '/providers/subscription';
+export const SUBSCRIPTIONS_BASE = '/providers/subscriptions';
 
-export const subscriptionQuery = () =>
+export const subscriptionAccountsQuery = () =>
   queryOptions({
-    queryKey: ['providers', 'subscription'] as const,
-    queryFn: () => api<SubscriptionStatus>(SUBSCRIPTION_PATH),
+    queryKey: ['providers', 'subscriptions'] as const,
+    queryFn: () => api<SubscriptionAccount[]>(SUBSCRIPTIONS_BASE),
   });

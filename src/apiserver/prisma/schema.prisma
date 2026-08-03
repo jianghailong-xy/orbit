@@ -69,12 +69,10 @@ model User {
   preferences           Json      @default("{}")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
   role                  String    @default("MEMBER")
-  // AES-256-GCM ciphertext ("iv:tag:ct") of a Claude subscription token from `claude
-  // setup-token`, injected as CLAUDE_CODE_OAUTH_TOKEN into this user's built-in-claude
-  // sessions on EVERY runner. NULL = not configured, and each runner falls back to whatever
-  // local `claude auth login` it has. Unlike a ModelProvider row this does not redirect the
-  // endpoint — it only supplies credentials — so it is account state, not a picker entry.
-  // Never selected into a browser-facing payload; the UI only ever learns whether it is set.
+  // DEPRECATED — superseded by ModelProvider rows with authMode "subscription", which hold one
+  // row per Claude account instead of one token per user. 0081 copied every stored token into
+  // such a row and nothing reads these two columns any more; they survive that migration only so
+  // it stays reversible, and a later migration drops them.
   claudeOauthTokenEnc   String?   @map("claude_oauth_token_enc")
   claudeOauthTokenSetAt DateTime? @map("claude_oauth_token_set_at")
 
@@ -908,9 +906,22 @@ model ModelProvider {
   // or "codex" (OpenAI-compatible). Kimi is first-class and cannot be borrowed here.
   runtime       String   @default("claude")
   baseUrl       String   @map("base_url")
-  // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Never
-  // selected into a browser-facing payload.
+  // AES-256-GCM ciphertext of this row's secret ("iv:tag:ct", each base64) — an API key for
+  // authMode "api_key", a `claude setup-token` for "subscription". Never selected into a
+  // browser-facing payload.
   apiKeyEnc     String   @map("api_key_enc")
+  // How this row authenticates, which decides what gets injected at dispatch:
+  //   "api_key"      → ANTHROPIC_BASE_URL + ANTHROPIC_AUTH_TOKEN (or the OpenAI pair)
+  //   "subscription" → CLAUDE_CODE_OAUTH_TOKEN alone; the endpoint stays Anthropic's default,
+  //                    so baseUrl is recorded for display but never injected.
+  // A subscription row is one Claude account: it runs on that plan's quota instead of per-token
+  // API billing, and several can coexist for one user (work vs personal). Only the claude runtime
+  // has one.
+  authMode      String   @default("api_key") @map("auth_mode")
+  // Subscription rows only: the account a session falls back on when its agent names no provider
+  // of its own. At most one per owner — enforced in setDefaultSubscription's transaction, since
+  // a partial unique index can't express "one true per owner" in Prisma's schema language.
+  isDefault     Boolean  @default(false) @map("is_default")
   // Picker model list: [{ value, label, contextWindow? }]. `value` is the runtime model id
   // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken
   // at write time; reads serve the preset's current list instead (see presetSlug).

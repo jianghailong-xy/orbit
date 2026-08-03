@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   CreateModelProviderDto,
-  SetClaudeOauthTokenDto,
+  CreateSubscriptionAccountDto,
   TestModelProviderDto,
   UpdateModelProviderDto,
 } from './dto';
@@ -51,22 +51,29 @@ export class ProvidersController {
     return this.providers.remove(user.userId, id);
   }
 
-  // Account-level Claude subscription token (`claude setup-token`), injected as
-  // CLAUDE_CODE_OAUTH_TOKEN on every runner this user dispatches to. Owner-scoped by
-  // construction — the userId comes from the JWT, never from the path — and the token is
-  // write-only: GET reports only whether one is set.
-  @Get('subscription')
-  getSubscription(@CurrentUser() user: AuthUser) {
-    return this.providers.getClaudeOauthToken(user.userId);
+  // Claude subscription accounts (`claude setup-token`), one row each. They're ModelProvider rows
+  // underneath — so they reach the pickers, and an agent can name one — but they're created and
+  // removed here rather than through /mine, since an account needs only a name and a token where
+  // an API-key provider needs an endpoint and a model list. Owner-scoped by construction: the
+  // userId comes from the JWT, never from the path. The token is write-only; no route returns it.
+  @Get('subscriptions')
+  listSubscriptions(@CurrentUser() user: AuthUser) {
+    return this.providers.listSubscriptions(user.userId);
   }
 
-  @Put('subscription')
-  setSubscription(@CurrentUser() user: AuthUser, @Body() dto: SetClaudeOauthTokenDto) {
-    return this.providers.setClaudeOauthToken(user.userId, dto.token);
+  @Post('subscriptions')
+  createSubscription(@CurrentUser() user: AuthUser, @Body() dto: CreateSubscriptionAccountDto) {
+    return this.providers.createSubscription(user.userId, dto.label, dto.token);
   }
 
-  @Delete('subscription')
-  clearSubscription(@CurrentUser() user: AuthUser) {
-    return this.providers.clearClaudeOauthToken(user.userId);
+  // The account a session falls back on when its agent names no provider of its own.
+  @Put('subscriptions/:id/default')
+  setDefaultSubscription(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.providers.setDefaultSubscription(user.userId, id);
+  }
+
+  @Delete('subscriptions/:id')
+  removeSubscription(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.providers.removeSubscription(user.userId, id);
   }
 }
