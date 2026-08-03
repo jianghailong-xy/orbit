@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isApiErrorText, isAsyncAgentLaunchAck, isAuthErrorText, toolResultText } from './events';
+import {
+  isApiErrorText,
+  isAsyncAgentLaunchAck,
+  isAuthErrorText,
+  isUsageLimitErrorText,
+  toolResultText,
+} from './events';
 
 describe('toolResultText', () => {
   it('passes a plain string through', () => {
@@ -69,5 +75,21 @@ describe('isAuthErrorText', () => {
   it('does not overlap with isApiErrorText', () => {
     expect(isApiErrorText('Failed to authenticate: OAuth session expired')).toBe(false);
     expect(isAuthErrorText('API Error: 500')).toBe(false);
+  });
+});
+
+describe('isUsageLimitErrorText', () => {
+  // Verbatim from a FAILED session's `error`, the Codex app-server wording.
+  const codex =
+    "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to " +
+    'purchase more credits or try again at Aug 9th, 2026 1:26 PM.';
+  it('flags a spent provider quota', () => {
+    expect(isUsageLimitErrorText(codex)).toBe(true);
+    expect(isUsageLimitErrorText(codex.toUpperCase())).toBe(true);
+  });
+  it('ignores failures that are about the run itself', () => {
+    expect(isUsageLimitErrorText('API Error: 500')).toBe(false);
+    expect(isUsageLimitErrorText('run failed')).toBe(false);
+    expect(isUsageLimitErrorText(null)).toBe(false);
   });
 });

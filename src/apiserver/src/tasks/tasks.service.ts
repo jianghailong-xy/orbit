@@ -9,7 +9,13 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
-import { RunEventType, TaskStatus } from '@orbit/shared';
+import {
+  planUsageBlockedUntil,
+  RunEventType,
+  TaskStatus,
+  USAGE_LIMIT_ERROR_MARKERS,
+  type PlanUsage,
+} from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -1833,7 +1839,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // idle AWAITING_INPUT/INTERRUPTED session every pass. Same set as reclaimStalledTask.
         sessions: { none: { status: { in: TASK_OCCUPYING } } },
       },
-      select: { id: true, ownerId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        assignee: { select: { provider: true, runnerId: true } },
+      },
     });
     if (candidates.length === 0) return;
     // Keep only those whose prerequisites are ALL DONE now (READY). BLOCKED /
@@ -1841,9 +1851,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const states = await this.dependencyStatesFor(candidates.map((t) => t.id));
     const ready = candidates.filter((t) => (states.get(t.id) ?? 'NONE') === 'READY');
     if (ready.length === 0) return;
+    // Two independent brakes. The quota gate comes first because it is the one that knows
+    // *when* work can resume, and it prevents the doomed run rather than reacting to it.
+    const quotaBlocked = await this.quotaBlockedRunners(ready);
     // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS).
     const heldOff = await this.autoRunHoldOff(ready.map((t) => t.id));
+    let quotaHeld = 0;
+    let resumesAt: Date | undefined;
     for (const t of ready) {
+      const blockedUntil = t.assignee?.runnerId
+        ? quotaBlocked.get(`${t.assignee.runnerId}:${t.assignee.provider}`)
+        : undefined;
+      if (blockedUntil) {
+        quotaHeld += 1;
+        if (!resumesAt || blockedUntil < resumesAt) resumesAt = blockedUntil;
+        continue;
+      }
       if (heldOff.has(t.id)) continue;
       try {
         await this.execute(t.ownerId, t.id);
@@ -1854,6 +1877,57 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    // One aggregate line per sweep, not one per task: a spent quota holds back whole fleets,
+    // and "why is nothing running" needs an answer somewhere.
+    if (quotaHeld > 0) {
+      this.logger.log(
+        `auto-run: ${quotaHeld} ready task(s) held — provider quota exhausted, earliest reset ${resumesAt?.toISOString()}`,
+      );
+    }
+  }
+
+  /**
+   * Of these tasks' assignees, which (runner, provider) pairs have an exhausted account quota
+   * right now — mapped to the moment it frees up. Dispatching against one is pointless: the
+   * run dies on arrival with the provider's own "usage limit" error, so the only effect is a
+   * failed session per sweep until the window resets (a weekly limit means days of them).
+   *
+   * Keyed per (runner, provider) because one runner can host agents on several runtimes and
+   * only some of their quotas may be spent. Runners whose snapshot reports no exhausted
+   * window — or reports one with no reset time — are simply absent: the failure backoff, not
+   * this gate, handles anything we cannot put a resume time on.
+   */
+  private async quotaBlockedRunners(
+    tasks: Array<{ assignee: { provider: string; runnerId: string | null } | null }>,
+  ): Promise<Map<string, Date>> {
+    const runnerIds = [
+      ...new Set(
+        tasks.map((t) => t.assignee?.runnerId).filter((id): id is string => typeof id === 'string'),
+      ),
+    ];
+    if (runnerIds.length === 0) return new Map();
+    const runners = await this.prisma.runner.findMany({
+      where: { id: { in: runnerIds } },
+      select: { id: true, planUsage: true },
+    });
+    const usageByRunner = new Map(
+      runners.map((r) => [r.id, r.planUsage as unknown as PlanUsage | null]),
+    );
+    const now = new Date();
+    const blocked = new Map<string, Date>();
+    for (const t of tasks) {
+      const assignee = t.assignee;
+      if (!assignee?.runnerId) continue;
+      const key = `${assignee.runnerId}:${assignee.provider}`;
+      if (blocked.has(key)) continue;
+      const until = planUsageBlockedUntil(
+        usageByRunner.get(assignee.runnerId),
+        assignee.provider,
+        now,
+      );
+      if (until) blocked.set(key, until);
+    }
+    return blocked;
   }
 
   /**
@@ -1863,6 +1937,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * session of the task is deliberate — a task that ever ran to completion is DONE, not a
    * reconciler candidate, so for an OPEN auto-run task these failures are its run history.
    * Tasks with no failed run are absent from the result and dispatch immediately.
+   *
+   * Runs killed by an exhausted provider quota are excluded: they carry no evidence that
+   * anything is wrong with the task, so letting them spend its budget would leave a fleet
+   * permanently un-runnable after one quota outage — exactly the tasks that should pick
+   * themselves back up once the window resets.
    */
   private async autoRunHoldOff(taskIds: string[]): Promise<Set<string>> {
     const held = new Set<string>();
@@ -1871,7 +1950,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const failures = await this.prisma.session.groupBy({
         by: ['taskId'],
-        where: { taskId: { in: ids }, status: RunStatus.FAILED },
+        where: {
+          taskId: { in: ids },
+          status: RunStatus.FAILED,
+          NOT: {
+            OR: USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
+              error: { contains: marker, mode: Prisma.QueryMode.insensitive },
+            })),
+          },
+        },
         _count: { _all: true },
         _max: { createdAt: true },
       });

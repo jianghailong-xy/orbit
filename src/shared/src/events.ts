@@ -69,6 +69,33 @@ export function isAuthErrorText(text: string | null | undefined): boolean {
 }
 
 /**
+ * Wording, in the provider's own words, that marks a run as killed by an exhausted account
+ * quota rather than by anything about the run itself. Only messages actually observed in the
+ * wild are listed (`session.error` on a FAILED run); add one when a new runtime's message
+ * shows up rather than guessing at its phrasing.
+ *
+ * Also used as a SQL `contains` filter, so keep every entry a plain lowercase substring.
+ */
+export const USAGE_LIMIT_ERROR_MARKERS = [
+  // Codex app-server: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/
+  // usage to purchase more credits or try again at Aug 9th, 2026 1:26 PM."
+  'hit your usage limit',
+];
+
+/**
+ * Was this run killed by the account's provider quota running out? Such a failure says
+ * nothing about the task — every retry fails identically until the quota window resets — so
+ * schedulers must not hold it against the task. Classifies a failure *after* the fact; the
+ * authoritative answer to "when can work resume" is the runner's own quota snapshot
+ * (`planUsageBlockedUntil`), which reports a machine-readable reset time.
+ */
+export function isUsageLimitErrorText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return USAGE_LIMIT_ERROR_MARKERS.some((marker) => lower.includes(marker));
+}
+
+/**
  * A tool_result payload's text, flattened. Claude Code delivers `content` as either a plain
  * string or an array of `{ type, text }` blocks; both collapse to one string here.
  */
