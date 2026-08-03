@@ -3484,6 +3484,14 @@ body {
 .composer-box:focus-within {
   border-color: var(--brand);
 }
+/* `!cmd` shell mode: the whole box reads as a command line, not a message box. Unlike the
+   focus ring above this holds whether or not the composer is focused — the mode is a property
+   of the draft, so clicking away and back must not make it look like an ordinary message
+   again. Listed after :focus-within (equal specificity) so it wins over the brand border. */
+.composer-box-shell,
+.composer-box-shell:focus-within {
+  border-color: var(--error);
+}
 /* Drop-to-upload hint: covers the whole session pane while files are dragged over it. Sits
    inset from the pane edges with a translucent scrim so the conversation still shows through. */
 .agent-dropzone {
@@ -3547,6 +3555,18 @@ body {
    send button, but narrow the width so the icon sits close to the text. */
 .composer-box .composer-attach-btn.ant-btn {
   width: 24px;
+}
+/* The `+` becomes a shell prompt while the draft is a `!cmd` — same 24px slot, so the
+   composer doesn't reflow on the mode switch. Clicking it leaves shell mode (see exitShell);
+   antd tints a text button's label on hover, so the colour is pinned through :hover too. */
+.composer-box .composer-shell-btn.ant-btn,
+.composer-box .composer-shell-btn.ant-btn:hover {
+  color: var(--error);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+}
+.composer-box .composer-shell-btn.ant-btn:hover {
+  background: var(--error-bg);
 }
 /* Trim the textarea's default ~11px left padding so the text hugs the + icon.
    `resize: none` because the composer has its own top drag handle (native corner grip

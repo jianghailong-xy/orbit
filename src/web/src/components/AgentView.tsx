@@ -3198,6 +3198,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // The exact inverse: drop the `!` so the draft goes back to being a message for the agent.
+  // This is what the `❯` replacing the `+` does in shell mode — a mode you can enter needs a
+  // way out that isn't "select the character and delete it". Leading whitespace goes too,
+  // since shellMode reads the trimmed text (`  !ls` is shell mode just as much as `!ls`).
+  const exitShell = (): void => {
+    setText((t) => t.replace(/^\s*!/, ''));
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -4365,7 +4373,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             </button>
           </div>
         )}
-        <div className="composer-box">
+        <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
               height — an empty/short composer has nothing worth resizing. */}
@@ -4448,8 +4456,12 @@ export function AgentView({ runner }: { runner: Runner }) {
               e.target.value = '';
             }}
           />
+          {/* In shell mode this stops being a menu: `trigger={[]}` makes the Dropdown an inert
+              wrapper so the button below acts on its own onClick (leave shell mode) instead of
+              opening the attachment menu. Nothing in that menu applies to a raw command anyway —
+              and a mode you can enter needs a visible way out. */}
           <Dropdown
-            trigger={['click']}
+            trigger={shellMode ? [] : ['click']}
             placement="topLeft"
             disabled={composerDisabled}
             menu={{
@@ -4501,12 +4513,16 @@ export function AgentView({ runner }: { runner: Runner }) {
             }}
           >
             <Button
-              className="composer-attach-btn"
+              className={shellMode ? 'composer-attach-btn composer-shell-btn' : 'composer-attach-btn'}
               type="text"
-              icon={<PlusOutlined />}
+              icon={shellMode ? undefined : <PlusOutlined />}
+              onClick={shellMode ? exitShell : undefined}
               disabled={composerDisabled}
-              aria-label="Add attachment"
-            />
+              aria-label={shellMode ? 'Leave shell mode' : 'Add attachment'}
+              title={shellMode ? 'Leave shell mode' : undefined}
+            >
+              {shellMode ? '❯' : null}
+            </Button>
           </Dropdown>
           <Input.TextArea
             ref={taRef}
