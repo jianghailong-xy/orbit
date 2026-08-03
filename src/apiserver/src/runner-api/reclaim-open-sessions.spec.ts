@@ -72,8 +72,7 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
       ],
       findUniqueOrThrow: async () => ({ model: storedModel }),
     },
-    // Dispatch resolves the owner's default Claude account here; none configured.
-    modelProvider: { findFirst: async () => null },
+    user: { findUnique: async () => null },
     runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
     $transaction: async () => {
       transactionCalls += 1;
@@ -142,8 +141,7 @@ test('a concurrent Session model edit wins reclaim materialization', async () =>
       ],
       findUniqueOrThrow: async () => ({ model: 'gpt-user-choice' }),
     },
-    // Dispatch resolves the owner's default Claude account here; none configured.
-    modelProvider: { findFirst: async () => null },
+    user: { findUnique: async () => null },
     runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
     $executeRaw: async () => 0,
   } as never;

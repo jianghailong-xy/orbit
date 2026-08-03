@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
-import { claudeOauthTokenFor } from '../providers/subscription-token';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
@@ -222,7 +221,6 @@ export class QueueService {
       : await this.prisma.modelProvider.findFirst({
           where: { slug: declared!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
         });
-    const claudeOauthToken = await claudeOauthTokenFor(this.prisma, session.ownerId);
     const resolveExec = (sessionModel: string | null) =>
       resolveProviderExec({
         declaredProvider: declared,
@@ -234,7 +232,6 @@ export class QueueService {
         agentModel: agent?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         agentEnv: agent?.env as Record<string, string> | null,
-        claudeOauthToken,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim. Later Runtime heartbeat

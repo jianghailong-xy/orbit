@@ -92,7 +92,6 @@ import {
   buildResumeContinuation,
 } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
-import { claudeOauthTokenFor } from '../providers/subscription-token';
 import { runtimeInitSessionId } from './runtime-init';
 import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -736,7 +735,6 @@ export class RunnerApiController {
               OR: [{ ownerId: null }, { ownerId: s.ownerId }],
             },
           });
-      const claudeOauthToken = await claudeOauthTokenFor(this.prisma, s.ownerId);
       const resolveExec = (sessionModel: string | null) =>
         resolveProviderExec({
           declaredProvider: declared,
@@ -748,7 +746,6 @@ export class RunnerApiController {
           agentModel: agent?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           agentEnv: agent?.env as Record<string, string> | null,
-          claudeOauthToken,
         });
       let exec = resolveExec(s.model);
       if (s.model === null || s.model.trim() === '') {

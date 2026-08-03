@@ -76,8 +76,7 @@ function harness(
     },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
     runEvent: { aggregate: async () => ({ _max: { seq: null } }) },
-    // Dispatch resolves the owner's default Claude account here; none configured.
-    modelProvider: { findFirst: async () => null },
+    user: { findUnique: async () => null },
   } as unknown as PrismaService;
   return {
     queue: new QueueService(prisma),

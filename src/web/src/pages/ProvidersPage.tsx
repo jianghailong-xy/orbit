@@ -3,24 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
-import {
-  PROVIDERS_BASE,
-  PROVIDERS_LIST_KEY,
-  SUBSCRIPTIONS_BASE,
-  subscriptionAccountsQuery,
-  type ProviderRow,
-} from '../lib/providerAdmin';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { useToast } from '../lib/toast';
-
-/**
- * A Claude subscription account arrives in this list as an ordinary provider row — it *is* one,
- * underneath — and only its auth mode tells it apart. It has no endpoint of its own and adds no
- * model of its own, but it is one of this user's Claude credentials, so it belongs in the one list
- * that answers "what have I set up, and how do I drop it?". Adding one lives behind the Anthropic
- * tile with the API-key form, its only entry point.
- */
-const isSubscriptionRow = (p: ProviderRow) => p.authMode === 'subscription';
 
 /**
  * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
@@ -45,18 +30,6 @@ export function ProvidersPage() {
     onError: (e: Error) => message.error(e.message || 'Failed'),
   });
 
-  const dropAccount = useMutation({
-    mutationFn: (id: string) => api(`${SUBSCRIPTIONS_BASE}/${id}`, { method: 'DELETE' }),
-    onSuccess: () => {
-      // An account is a provider row, so the pickers' catalog has to refresh with this list.
-      void qc.invalidateQueries({ queryKey: subscriptionAccountsQuery().queryKey });
-      void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
-      void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
-      message.success('Account removed');
-    },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
-  });
-
   const columns: TableColumnsType<ProviderRow> = [
     {
       title: 'Provider',
@@ -67,8 +40,6 @@ export function ProvidersPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
           <div style={{ fontWeight: 600 }}>{p.label}</div>
-          {/* Which account a new agent lands on isn't visible anywhere else in this list. */}
-          {isSubscriptionRow(p) && p.isDefault && <Tag className="row-default-tag">Default</Tag>}
         </div>
       ),
     },
@@ -81,14 +52,7 @@ export function ProvidersPage() {
       title: 'Endpoint',
       dataIndex: 'baseUrl',
       key: 'baseUrl',
-      // The subscription has no endpoint to show — what matters about it is who pays, so it says
-      // that instead, in prose rather than the monospace an endpoint gets.
-      render: (u: string, p) =>
-        isSubscriptionRow(p) ? (
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Your Claude plan · no API billing</span>
-        ) : (
-          <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>
-        ),
+      render: (u: string) => <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>,
     },
     {
       title: 'Enabled',
@@ -100,33 +64,20 @@ export function ProvidersPage() {
       title: '',
       key: 'actions',
       align: 'right',
-      render: (_, p) => {
-        const isSub = isSubscriptionRow(p);
-        return (
-          <Space>
-            <Button size="small" onClick={() => navigate(isSub ? '/providers/subscription' : `/providers/${p.id}`)}>
-              Edit
+      render: (_, p) => (
+        <Space>
+          <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
+            Edit
+          </Button>
+          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
+            <Button size="small" danger>
+              Delete
             </Button>
-            <Popconfirm
-              title={isSub ? `Remove ${p.label}?` : `Delete ${p.label}?`}
-              description={isSub ? 'Agents on this account fall back to the default one.' : undefined}
-              onConfirm={() => (isSub ? dropAccount.mutate(p.id) : deleteMut.mutate(p.id))}
-            >
-              <Button size="small" danger>
-                {isSub ? 'Remove' : 'Delete'}
-              </Button>
-            </Popconfirm>
-          </Space>
-        );
-      },
+          </Popconfirm>
+        </Space>
+      ),
     },
   ];
-
-  // Subscription accounts lead the list: they're the credentials here that aren't scoped to a
-  // single endpoint — each covers this user's claude sessions on every runner.
-  const all = providers.data ?? [];
-  const rows = [...all.filter(isSubscriptionRow), ...all.filter((p) => !isSubscriptionRow(p))];
-  const loading = providers.isLoading;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -144,7 +95,7 @@ export function ProvidersPage() {
         </Button>
       </div>
 
-      {loading ? (
+      {providers.isLoading ? (
         <Table
           rowKey="id"
           style={{ marginTop: 12 }}
@@ -153,7 +104,7 @@ export function ProvidersPage() {
           columns={columns}
           pagination={false}
         />
-      ) : rows.length === 0 ? (
+      ) : (providers.data?.length ?? 0) === 0 ? (
         <div className="provider-empty">
           <h3>Connect your first provider</h3>
           <p>Pick a provider and paste your API key — that's it.</p>
@@ -164,7 +115,7 @@ export function ProvidersPage() {
           <Table
             rowKey="id"
             style={{ marginTop: 12 }}
-            dataSource={rows}
+            dataSource={providers.data ?? []}
             columns={columns}
             pagination={false}
           />

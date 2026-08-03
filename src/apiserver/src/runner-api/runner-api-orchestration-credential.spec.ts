@@ -30,9 +30,8 @@ function makeController(options: {
         return options.reclaimed ?? [];
       },
     },
-    // Dispatch resolves the owner's default Claude account here; none configured.
-    modelProvider: {
-      findFirst: async () => null,
+    user: {
+      findUnique: async () => null,
     },
     runEvent: {
       aggregate: async () => ({ _max: { seq: 3 } }),

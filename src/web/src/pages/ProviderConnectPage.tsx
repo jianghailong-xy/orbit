@@ -6,14 +6,8 @@ import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
-import {
-  PROVIDERS_BASE,
-  PROVIDERS_LIST_KEY,
-  subscriptionAccountsQuery,
-  type ProviderRow,
-} from '../lib/providerAdmin';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
-import { ClaudeSubscriptionForm } from '../components/ClaudeSubscriptionForm';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -90,140 +84,14 @@ export function ProviderConnectPage() {
 
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
   if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
-  // Anthropic is the one vendor with two ways in — the account's Claude subscription, or an API
-  // key — so its tile leads to the choice rather than straight to the key form.
-  if (preset?.slug === 'anthropic') return <AnthropicConnect preset={preset} />;
   return <ProviderForm key={slug} preset={preset} />;
-}
-
-/** `/providers/subscription` — the deep link onto the subscription half of the Anthropic page,
- *  which is where the list page's subscription row goes to be managed. */
-export function ClaudeSubscriptionPage() {
-  return <AnthropicConnect preset={providerPreset('anthropic')!} />;
-}
-
-type AuthMethod = 'subscription' | 'key';
-
-/**
- * Connecting Anthropic: pick how to authenticate, then fill in that one.
- *
- * Both methods reach the same vendor, so they share one tile in the gallery and one page here —
- * what differs is who pays. The subscription spends the plan quota the user already has and
- * covers every runner at once; an API key is billed per token. That's the decision this page
- * exists to put in front of them, so it leads, and the form follows underneath.
- */
-function AnthropicConnect({ preset }: { preset: ProviderPreset }) {
-  const subs = useQuery(subscriptionAccountsQuery());
-  const accounts = subs.data?.length ?? 0;
-  const providers = useQuery({
-    queryKey: PROVIDERS_LIST_KEY,
-    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-  });
-  // Accounts are Anthropic rows too, so they'd otherwise be counted as keys on the other card.
-  const keys = (providers.data ?? []).filter(
-    (p) => p.presetSlug === preset.slug && p.authMode !== 'subscription',
-  ).length;
-  // The subscription leads: it's the cheaper path for anyone who already pays for a plan, and the
-  // only one that fixes every runner at once.
-  const [method, setMethod] = useState<AuthMethod>('subscription');
-  // Arriving on accounts that already exist (the list's subscription rows link straight here) is
-  // a manage visit, not a connect one — so the heading drops the verb.
-  const managing = method === 'subscription' && accounts > 0;
-
-  return (
-    <div className="provider-form">
-      <Link className="provider-back" to="/providers">
-        ‹ All providers
-      </Link>
-      <h1 className="page-title" style={{ marginTop: 8 }}>
-        {managing ? preset.label : `Connect ${preset.label}`}
-      </h1>
-
-      <div className="provider-idbar" style={{ marginBottom: 24 }}>
-        <ProviderTile slug={preset.slug} label={preset.label} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600 }}>{preset.label}</div>
-          <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Anthropic-compatible · {preset.models.length} models included
-          </div>
-        </div>
-      </div>
-
-      <section className="provider-step" style={{ marginTop: 0 }}>
-        <div className="ps-head">
-          <span className="ps-title">How do you want to authenticate?</span>
-        </div>
-        <div className="auth-methods">
-          <AuthChoice
-            on={method === 'subscription'}
-            onPick={() => setMethod('subscription')}
-            name="Claude subscription"
-            desc={
-              <>
-                Runs on your Claude plan's quota — no API billing. Every runner uses it, so no
-                machine needs its own <code>claude auth login</code>.
-              </>
-            }
-            state={accounts ? (accounts === 1 ? '1 account' : `${accounts} accounts`) : null}
-          />
-          <AuthChoice
-            on={method === 'key'}
-            onPick={() => setMethod('key')}
-            name="API key"
-            desc="Billed per token by Anthropic. Use a key from the Anthropic console."
-            state={keys ? (keys === 1 ? '1 connected' : `${keys} connected`) : null}
-          />
-        </div>
-      </section>
-
-      {method === 'subscription' ? <ClaudeSubscriptionForm /> : <ProviderForm preset={preset} embedded />}
-    </div>
-  );
-}
-
-/** One of the two authentication methods: a radio-ish card that says what it costs and whether
- *  it's already set up. */
-function AuthChoice({
-  on,
-  onPick,
-  name,
-  desc,
-  state,
-}: {
-  on: boolean;
-  onPick: () => void;
-  name: string;
-  desc: ReactNode;
-  state: string | null;
-}) {
-  return (
-    <button type="button" className={`auth-method${on ? ' on' : ''}`} onClick={onPick} aria-pressed={on}>
-      <div className="am-head">
-        <span className="am-radio" aria-hidden="true" />
-        <span className="am-name">{name}</span>
-        {state && <span className="am-state">{state}</span>}
-      </div>
-      <div className="am-desc">{desc}</div>
-    </button>
-  );
 }
 
 /**
  * The connect/edit form. Mounted fresh per vendor (or per edited row), so its fields seed from the
  * preset — or the stored row — once, at mount.
- *
- * `embedded` drops the page chrome (back link, title, identity bar) for a caller that already drew
- * it — AnthropicConnect, where this form is one of two choices under a shared heading.
  */
-function ProviderForm({
-  preset,
-  editing,
-  embedded,
-}: {
-  preset?: ProviderPreset;
-  editing?: ProviderRow;
-  embedded?: boolean;
-}) {
+function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: ProviderRow }) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -387,29 +255,25 @@ function ProviderForm({
       : null;
 
   return (
-    <div className={embedded ? undefined : 'provider-form'}>
-      {!embedded && (
-        <>
-          <Link className="provider-back" to={editing ? '/providers' : '/providers/new'}>
-            ‹ All providers
-          </Link>
-          <h1 className="page-title" style={{ marginTop: 8 }}>
-            {title}
-          </h1>
+    <div className="provider-form">
+      <Link className="provider-back" to={editing ? '/providers' : '/providers/new'}>
+        ‹ All providers
+      </Link>
+      <h1 className="page-title" style={{ marginTop: 8 }}>
+        {title}
+      </h1>
 
-          {identity && (
-            <div className="provider-idbar" style={{ marginBottom: 24 }}>
-              <ProviderTile slug={identity.slug} label={identity.label} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{identity.label}</div>
-                <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                  {identity.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'} ·{' '}
-                  {identity.count} model{identity.count === 1 ? '' : 's'} {identity.counted}
-                </div>
-              </div>
+      {identity && (
+        <div className="provider-idbar" style={{ marginBottom: 24 }}>
+          <ProviderTile slug={identity.slug} label={identity.label} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 600 }}>{identity.label}</div>
+            <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+              {identity.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'} ·{' '}
+              {identity.count} model{identity.count === 1 ? '' : 's'} {identity.counted}
             </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
 
       {/* A custom provider's dialect, endpoint and name are decisions only the user can make, so
