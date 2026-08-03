@@ -467,16 +467,12 @@ struct TranscriptView: View {
                 // mark, and `.secondary`-on-glass washed out against the transcript behind it.
                 .foregroundStyle(.primary)
                 .frame(width: 40, height: 40)
-                // A solid puck, not glass. The backdrop blur let transcript text ghost through the
-                // disc and dropped its contrast to near-nothing on a light transcript; the reference
-                // is an opaque surface whose edge is drawn by the shadow alone. The hairline ring is
-                // purely the dark-mode edge — there the disc and the backdrop are the same near-black
-                // and a black shadow can't separate them; at 8% it's imperceptible in light mode.
-                .background {
-                    Circle()
-                        .fill(Color.editorSurface)
-                        .overlay { Circle().strokeBorder(.primary.opacity(0.08), lineWidth: 0.5) }
-                }
+                // A solid puck, not glass, and borderless: the backdrop blur let transcript text ghost
+                // through the disc and dropped its contrast to near-nothing on a light transcript,
+                // where the reference is an opaque surface whose edge is drawn by the shadow alone.
+                // `floatingDiscSurface` is white here and a *raised* grey in dark mode — reusing the
+                // transcript's own near-black there would make the disc vanish into the backdrop.
+                .background { Circle().fill(Color.floatingDiscSurface) }
                 .overlay { Circle().fill(.primary.opacity(pressed ? 0.07 : 0)) }
                 // Wider and slightly deeper than before, since the shadow is now the only thing
                 // lifting an opaque white disc off an off-white transcript.
