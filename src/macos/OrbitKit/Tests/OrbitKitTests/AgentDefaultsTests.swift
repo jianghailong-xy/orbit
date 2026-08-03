@@ -345,6 +345,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(catalog.models(for: "kimi")?.map(\.id), ["kimi-code/kimi-for-coding"])
         XCTAssertEqual(catalog.models(for: "kimi")?.map(\.name), ["Kimi for Coding"])
         XCTAssertEqual(catalog.contextWindow(for: "kimi-code/kimi-for-coding"), 262_144)
+    }
 
     func testOpenCodeModelsComeFromRunnerCatalogAfterEmptyDefault() {
         let catalog = RunnerModelCatalog(
