@@ -61,6 +61,19 @@ function runnableTaskWhere(scope: Prisma.TaskWhereInput): Prisma.TaskWhereInput 
 // fired the moment a prerequisite reaches DONE — so a coarse cadence is enough.
 const RECONCILE_INTERVAL_MS = 60_000;
 
+// Brake on the reconciler's re-dispatch. A task it auto-runs can land straight back in
+// the candidate set: when a run dies before its agent ever moved the task to IN_PROGRESS,
+// reclaimStalledTask leaves the task OPEN (it only rewrites IN_PROGRESS), and the sweep
+// re-dispatches it a minute later. Nothing else stops that, so a failure the retry cannot
+// clear — a provider usage limit, a missing input file — becomes a once-a-minute respawn
+// loop that burns a session per attempt for as long as the failure lasts (days, for a
+// usage limit). Hold the task off for progressively longer after each failed run, then
+// stop auto-running it: past MAX_AUTO_RUN_FAILURES only an explicit trigger ("开始执行",
+// an @-mention, a prerequisite reaching DONE) starts it again. Indexed by failure count,
+// so entry [0] is the wait after the first failed run.
+export const AUTO_RUN_RETRY_BACKOFF_MS = [2 * 60_000, 8 * 60_000, 30 * 60_000, 120 * 60_000];
+export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
+
 // PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
 // that ceiling even when an owner has tens of thousands of tasks.
@@ -1826,8 +1839,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Keep only those whose prerequisites are ALL DONE now (READY). BLOCKED /
     // BLOCKED_FAILED are left for the normal flow / a human to resolve.
     const states = await this.dependencyStatesFor(candidates.map((t) => t.id));
-    for (const t of candidates) {
-      if ((states.get(t.id) ?? 'NONE') !== 'READY') continue;
+    const ready = candidates.filter((t) => (states.get(t.id) ?? 'NONE') === 'READY');
+    if (ready.length === 0) return;
+    // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS).
+    const heldOff = await this.autoRunHoldOff(ready.map((t) => t.id));
+    for (const t of ready) {
+      if (heldOff.has(t.id)) continue;
       try {
         await this.execute(t.ownerId, t.id);
         this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
@@ -1837,6 +1854,41 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+  }
+
+  /**
+   * Of `taskIds`, which must NOT be auto-run right now because their previous runs failed:
+   * either the task is still inside the backoff window for its failure count, or it has
+   * burned through MAX_AUTO_RUN_FAILURES and is left for a human. Counting every FAILED
+   * session of the task is deliberate — a task that ever ran to completion is DONE, not a
+   * reconciler candidate, so for an OPEN auto-run task these failures are its run history.
+   * Tasks with no failed run are absent from the result and dispatch immediately.
+   */
+  private async autoRunHoldOff(taskIds: string[]): Promise<Set<string>> {
+    const held = new Set<string>();
+    const uniqueIds = [...new Set(taskIds)];
+    for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
+      const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
+      const failures = await this.prisma.session.groupBy({
+        by: ['taskId'],
+        where: { taskId: { in: ids }, status: RunStatus.FAILED },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      });
+      const now = Date.now();
+      for (const row of failures) {
+        if (!row.taskId) continue;
+        const failed = row._count._all;
+        if (failed >= MAX_AUTO_RUN_FAILURES) {
+          held.add(row.taskId);
+          continue;
+        }
+        const lastFailedAt = row._max.createdAt?.getTime();
+        if (lastFailedAt === undefined) continue;
+        if (now - lastFailedAt < AUTO_RUN_RETRY_BACKOFF_MS[failed - 1]) held.add(row.taskId);
+      }
+    }
+    return held;
   }
 
   /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */
