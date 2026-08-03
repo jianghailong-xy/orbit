@@ -4,6 +4,7 @@ import {
   ArrowUpOutlined,
   BorderOutlined,
   CheckCircleFilled,
+  CheckCircleOutlined,
   CheckOutlined,
   ClockCircleOutlined,
   CloseCircleFilled,
@@ -147,6 +148,7 @@ import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import {
+  isRunCompletedByUser,
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
@@ -577,7 +579,7 @@ export function statusLabel(session: any): string {
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
   }
-  if (state === 'CANCELLED') return 'Cancelled';
+  if (state === 'CANCELLED') return isRunCompletedByUser(session) ? 'Completed' : 'Cancelled';
   if (state === 'DORMANT') return 'Dormant';
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
@@ -640,6 +642,15 @@ export function StatusIcon({ session }: { session: any }) {
     return (
       <Tooltip title="Dormant — send a message to resume">
         <PauseCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
+      </Tooltip>
+    );
+  // Filing a session into Completed lands here (CANCELLED + endReason 'completed'). Wrapping
+  // something up on purpose shouldn't wear the same "stopped" glyph as a batch-stop, so it gets a
+  // neutral check — grey, not green, because the run itself never reported success.
+  if (state === 'CANCELLED' && isRunCompletedByUser(session))
+    return (
+      <Tooltip title="Completed">
+        <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   if (state === 'CANCELLED' || state === 'INTERRUPTED') {
@@ -3349,12 +3360,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
+  const headRunWord = selected ? statusLabel(selectedSession ?? selected) : '';
+  const headLifecycleWord = selectedLifecycleState
+    ? sessionLifecycleLabel(selectedLifecycleState)
+    : null;
   const headSub = composing
     ? `${headAgentName} · New session`
     : selected
       ? [
-          statusLabel(selectedSession ?? selected),
-          selectedLifecycleState ? sessionLifecycleLabel(selectedLifecycleState) : null,
+          headRunWord,
+          // A session you filed reads "Completed" on both axes; say it once rather than twice.
+          headLifecycleWord === headRunWord ? null : headLifecycleWord,
           headTime,
         ]
           .filter(Boolean)

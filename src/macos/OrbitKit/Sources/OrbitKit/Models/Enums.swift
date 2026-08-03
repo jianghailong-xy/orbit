@@ -54,6 +54,14 @@ public enum SessionRunState: String, Codable, Sendable {
         }
     }
 
+    /// Filing a live session into Completed recycles its runtime, so the run settles `.cancelled`
+    /// with endReason 'completed' — the same raw pair a batch-stop produces. Presentation names and
+    /// draws that as Completed while the wire vocabulary stays unchanged. Mirrors the web
+    /// `isRunCompletedByUser`.
+    public func isCompletedByUser(endReason: String?) -> Bool {
+        self == .cancelled && (endReason ?? "").lowercased() == "completed"
+    }
+
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
     /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.

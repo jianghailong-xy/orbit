@@ -81,7 +81,8 @@ final class SessionHeaderTests: XCTestCase {
             (.dormant, "Dormant"),
             (.succeeded, "Succeeded"),
             (.failed, "Failed"),
-            (.cancelled, "Cancelled"),
+            // 'completed' is the filing reason these fixtures carry, so cancelled reads as Completed.
+            (.cancelled, "Completed"),
             (.interrupted, "Interrupted"),
             (.ended, "Ended"),
         ]
@@ -102,9 +103,17 @@ final class SessionHeaderTests: XCTestCase {
             .cancelled, runState: .failed, error: "runner offline")), "Disconnected")
     }
 
+    /// The raw CANCELLED still wins over the legacy mixed COMPLETED — it just reads as the filing
+    /// word "Completed" rather than "Succeeded", which is what the legacy field would have implied.
     func testRawRunStatusWinsOverLegacyMixedCompletedState() {
         let s = session(.succeeded, runStatus: .cancelled, sessionState: .completed,
                         endReason: "completed")
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Completed")
+    }
+
+    func testCancelledWithHardReasonStaysCancelled() {
+        let s = session(.cancelled, runState: .cancelled, lifecycleState: .completed,
+                        endReason: "cancelled")
         XCTAssertEqual(SessionHeader.statusWord(for: s), "Cancelled")
     }
 
@@ -145,6 +154,13 @@ final class SessionHeaderTests: XCTestCase {
     func testSubtitleShowsCompletedIndependentlyFromSucceeded() {
         let s = session(.succeeded, runState: .succeeded, lifecycleState: .completed)
         XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Completed")
+    }
+
+    /// Both axes say Completed for a filed session — collapse the repeat instead of stuttering.
+    func testSubtitleSaysCompletedOnce() {
+        let s = session(.cancelled, runState: .cancelled, lifecycleState: .completed,
+                        endReason: "completed")
+        XCTAssertEqual(SessionHeader.subtitle(for: s), "Completed")
     }
 
     func testSubtitleNilWhenNoSession() {

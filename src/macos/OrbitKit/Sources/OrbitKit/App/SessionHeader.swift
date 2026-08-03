@@ -31,7 +31,8 @@ public enum SessionHeader {
         case .failed:
             return (s.error ?? "").lowercased().contains("offline") ? "Disconnected" : "Failed"
         case .cancelled:
-            return "Cancelled"
+            return s.effectiveRunState.isCompletedByUser(endReason: s.endReason)
+                ? "Completed" : "Cancelled"
         case .dormant:
             return "Dormant"
         case .interrupted:
@@ -49,10 +50,12 @@ public enum SessionHeader {
         guard let s = session else { return nil }
         let word = statusWord(for: s)
         let lifecycle = lifecycleWord(for: s)
+        // A session you filed reads "Completed" on both axes; say it once rather than twice.
+        let head = word == lifecycle ? word : "\(word) · \(lifecycle)"
         if let ts = s.lastTurnAt ?? s.createdAt, let rel = RelativeTime.format(ts, now: now) {
-            return "\(word) · \(lifecycle) · \(rel)"
+            return "\(head) · \(rel)"
         }
-        return "\(word) · \(lifecycle)"
+        return head
     }
 
     public static func lifecycleWord(for s: Session) -> String {

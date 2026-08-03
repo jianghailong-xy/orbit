@@ -41,7 +41,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
-             error: s.error)
+             error: s.error,
+             endReason: s.endReason)
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -56,14 +57,17 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                                                status: status, endReason: endReason),
              pendingApprovals: pendingApprovals,
              runningBgCount: runningBgCount,
-             error: error)
+             error: error,
+             endReason: endReason)
     }
 
-    /// The shared presentation mapping for the orthogonal execution state.
+    /// The shared presentation mapping for the orthogonal execution state. `endReason` only ever
+    /// refines wording within a state — it never selects a different one (see `.cancelled`).
     public static func make(runState: SessionRunState,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
-                            error: String? = nil) -> SessionStatusGlyph {
+                            error: String? = nil,
+                            endReason: String? = nil) -> SessionStatusGlyph {
         switch runState {
         case .queued:
             return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
@@ -97,6 +101,12 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                          label: "Dormant — send a message to resume")
 
         case .cancelled:
+            // Filing a live session into Completed recycles its runtime, so it settles here with
+            // endReason 'completed'. That's a deliberate wrap-up, not a stop: it gets a check
+            // rather than the stop glyph — neutral, since the run never reported success itself.
+            if runState.isCompletedByUser(endReason: endReason) {
+                return .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Completed")
+            }
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled")
 
         case .interrupted:

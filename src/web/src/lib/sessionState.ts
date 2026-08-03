@@ -141,6 +141,16 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
   }
 }
 
+/**
+ * Filing a live session into Completed recycles its runtime, so the run settles CANCELLED with
+ * endReason 'completed' — the same raw pair a batch-stop produces. It's a deliberate wrap-up, not
+ * a stop, so the UI names and draws it as Completed. Kept out of {@link sessionRunStateOf} on
+ * purpose: the run states are a shared wire vocabulary, and this is presentation only.
+ */
+export const isRunCompletedByUser = (session: SessionStateSource): boolean =>
+  sessionRunStateOf(session) === 'CANCELLED' &&
+  (session.endReason ?? '').toLowerCase() === 'completed';
+
 export type SessionLifecycleView = 'open' | 'completed' | 'trash';
 type LegacySessionListView = 'active' | 'archived' | 'deleted';
 
@@ -222,7 +232,7 @@ export function sessionEndedBanner(
         : 'Session failed.';
       break;
     case 'CANCELLED':
-      base = 'Session cancelled.';
+      base = isRunCompletedByUser(session) ? 'Session completed.' : 'Session cancelled.';
       break;
     case 'INTERRUPTED':
       base = 'Session interrupted.';

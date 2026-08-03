@@ -77,6 +77,24 @@ final class SessionStatusGlyphTests: XCTestCase {
         }
     }
 
+    /// Filing a session settles the same CANCELLED status, so only the reason keeps it from
+    /// wearing the stop glyph. Neutral, not success: the run itself never reported one.
+    func testUserFiledCompleteReadsAsCompletedNotCancelled() {
+        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "completed",
+                                                     runState: .cancelled,
+                                                     lifecycleState: .completed))
+        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle"), tone: .neutral,
+                                label: "Completed"))
+    }
+
+    /// Deleting also settles CANCELLED, but a session in Trash was not wrapped up — it stays a stop.
+    func testDeletedKeepsTheStopGlyph() {
+        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "deleted",
+                                                     runState: .cancelled,
+                                                     lifecycleState: .trash))
+        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
+    }
+
     func testInterruptedWithoutReasonIsTerminal() {
         let g = SessionStatusGlyph.make(for: session(.interrupted))
         XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Interrupted"))
@@ -156,12 +174,14 @@ final class SessionStatusGlyphTests: XCTestCase {
                              label: "Disconnected — runner went offline"))
     }
 
+    /// The raw CANCELLED must win over the legacy mixed COMPLETED: a filed session reads as the
+    /// neutral "Completed", never as the green Succeeded the legacy field would imply.
     func testRawRunStatusWinsOverLegacyMixedCompletedState() {
         let s = session(.succeeded, endReason: "completed", runStatus: .cancelled,
                         sessionState: .completed)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
-                       .init(shape: .symbol("minus.circle"), tone: .neutral,
-                             label: "Cancelled"))
+                       .init(shape: .symbol("checkmark.circle"), tone: .neutral,
+                             label: "Completed"))
     }
 
     func testUnknownServerSessionStateDecodesAndUsesLegacyFallback() throws {

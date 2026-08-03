@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasAuthoritativeLifecycleState,
   hasAuthoritativeRunState,
+  isRunCompletedByUser,
   isSessionBusy,
   isSessionLive,
   isSessionTerminal,
@@ -138,6 +139,20 @@ describe('session state predicates', () => {
   });
 });
 
+describe('isRunCompletedByUser', () => {
+  it('separates a user-filed Completed run from every other cancelled run', () => {
+    expect(isRunCompletedByUser({ runState: 'CANCELLED', endReason: 'completed' })).toBe(true);
+    // Old servers that only send the raw pair resolve the same way.
+    expect(isRunCompletedByUser({ status: 'CANCELLED', endReason: 'completed' })).toBe(true);
+    for (const endReason of ['cancelled', 'task_cancelled', 'deleted']) {
+      expect(isRunCompletedByUser({ runState: 'CANCELLED', endReason })).toBe(false);
+    }
+    // Filing never rewrites a run that already reached its own outcome.
+    expect(isRunCompletedByUser({ runState: 'SUCCEEDED', endReason: 'completed' })).toBe(false);
+    expect(isRunCompletedByUser({ runState: 'DORMANT', endReason: 'idle' })).toBe(false);
+  });
+});
+
 describe('sessionEndedBanner', () => {
   it('uses the run outcome while separately explaining a Completed resume', () => {
     expect(
@@ -154,6 +169,16 @@ describe('sessionEndedBanner', () => {
         true,
       ),
     ).toBe('Session cancelled. Sending a message starts a new session.');
+  });
+
+  it('calls a filed session completed rather than cancelled', () => {
+    expect(
+      sessionEndedBanner(
+        { runState: 'CANCELLED', lifecycleState: 'COMPLETED', endReason: 'completed' },
+        true,
+        true,
+      ),
+    ).toBe('Session completed. Sending a message will resume this session in Open.');
   });
 
   it('uses the reason only to enrich dormant/ended copy', () => {

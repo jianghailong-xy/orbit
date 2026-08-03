@@ -140,7 +140,8 @@ struct SessionSearchRow: View {
     let query: String
 
     var body: some View {
-        let glyph = SessionStatusGlyph.make(runState: hit.effectiveRunState)
+        let glyph = SessionStatusGlyph.make(runState: hit.effectiveRunState,
+                                            endReason: hit.endReason)
         HStack(alignment: .top, spacing: 10) {
             StatusGlyphView(glyph: glyph)
             VStack(alignment: .leading, spacing: 2) {
