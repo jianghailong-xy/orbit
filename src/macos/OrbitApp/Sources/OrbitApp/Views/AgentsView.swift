@@ -704,9 +704,13 @@ struct AgentFormContent: View {
         AgentDefaults.providers(configured: agents.configuredProviders)
     }
     private var effortOptions: [Effort] {
-        let options = AgentDefaults.efforts(for: provider, model: model, catalog: modelCatalog)
+        // `model` / `modelCatalog` were dropped when agents stopped storing a model default; the
+        // Runtime-resolved `effectiveModel` and the runner's own catalog replace them (same pair the
+        // permission picker below already uses).
+        let catalog = agents.modelCatalog(for: agent.runnerId)
+        let options = AgentDefaults.efforts(for: provider, model: effectiveModel, catalog: catalog)
         let current = AgentDefaults.normalizedEffort(
-            effort, for: provider, model: model, catalog: modelCatalog)
+            effort, for: provider, model: effectiveModel, catalog: catalog)
         return options.contains(current) ? options : [current] + options
     }
 
