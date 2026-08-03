@@ -4566,15 +4566,19 @@ body {
   background: var(--brand-strong);
 }
 /* The message the retry would re-send, quoted. Clamped: it can be a whole pasted prompt, and
-   this is a label for the button under it, not a second copy of the conversation. */
+   this is a label for the button under it, not a second copy of the conversation. Panelled like
+   the sign-in box above it — on the card's warm background a quote rule alone left it reading as
+   more of the card's own prose, when it is the one thing here the user didn't write just now. */
 .chat-authfix-last {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
   margin-top: 10px;
-  padding-left: 10px;
-  border-left: 2px solid var(--warning-border);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
   color: var(--text-2);
   font-size: 12.5px;
   line-height: 1.5;
