@@ -11,6 +11,8 @@ import {
 } from '@ant-design/icons';
 import { App as AntApp } from 'antd';
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { encodeId } from './idCodec';
 import { titleFirstLine } from './title';
 
 // Every toast in the app goes through this instead of AntApp.useApp().message directly, so
@@ -51,6 +53,7 @@ interface SessionNoticeOptions {
 
 export function useToast() {
   const { message, notification } = AntApp.useApp();
+  const navigate = useNavigate();
   return useMemo(
     () => {
       // Entity-bearing results use a richer card than a short Message: result first, the
@@ -92,13 +95,28 @@ export function useToast() {
             ),
           message: (
             <div className="session-lifecycle-toast-body">
-              <div className="session-lifecycle-toast-copy">
+              {/* The card names a session, so it doubles as the way back to it — a result you
+                  want to act on is usually a result you want to look at. The copy block (not the
+                  whole card) carries the click so the × and Undo keep their own targets. */}
+              <button
+                type="button"
+                className="session-lifecycle-toast-copy"
+                aria-label={`Open ${title}`}
+                onClick={() => {
+                  // A card carrying a diagnostic is also one you select and paste (see the
+                  // `user-select` rule for error/warning tones). Releasing a drag counts as a
+                  // click, so treat one that ends on a selection as the selection, not a jump.
+                  if (window.getSelection()?.toString()) return;
+                  notification.destroy(key);
+                  navigate(`/sessions/${encodeId(sessionId)}`);
+                }}
+              >
                 <div className="session-lifecycle-toast-status">{headline}</div>
                 <div className="session-lifecycle-toast-title" title={title}>
                   {title}
                 </div>
                 {detail && <div className="session-lifecycle-toast-detail">{detail}</div>}
-              </div>
+              </button>
               {action && (
                 <button
                   type="button"
@@ -168,6 +186,6 @@ export function useToast() {
         },
       };
     },
-    [message, notification],
+    [message, notification, navigate],
   );
 }
