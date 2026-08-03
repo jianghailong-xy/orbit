@@ -3,10 +3,37 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
-import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+import {
+  PROVIDERS_BASE,
+  PROVIDERS_LIST_KEY,
+  SUBSCRIPTION_PATH,
+  subscriptionQuery,
+  type ProviderRow,
+} from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
-import { ClaudeSubscriptionCard } from '../components/ClaudeSubscriptionCard';
 import { useToast } from '../lib/toast';
+
+/**
+ * The Claude subscription as a row in this table. It isn't a provider — no endpoint of its own,
+ * no model of its own in the pickers — but it *is* one of the account's Claude credentials, so it
+ * belongs in the one list that answers "what have I set up, and how do I drop it?". Connecting it
+ * lives behind the Anthropic tile with the API-key form, its only entry point.
+ */
+const SUBSCRIPTION_ROW_ID = 'claude-subscription';
+
+const subscriptionRow = (): ProviderRow => ({
+  id: SUBSCRIPTION_ROW_ID,
+  slug: 'anthropic',
+  label: 'Claude subscription',
+  runtime: 'claude',
+  baseUrl: '',
+  models: [],
+  defaultModel: null,
+  presetSlug: 'anthropic',
+  followsPreset: false,
+  enabled: true,
+  hasApiKey: true,
+});
 
 /**
  * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
@@ -18,6 +45,7 @@ export function ProvidersPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
+  const subscription = useQuery(subscriptionQuery());
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api(`${PROVIDERS_BASE}/${id}`, { method: 'DELETE' }),
@@ -27,6 +55,15 @@ export function ProvidersPage() {
       void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
       message.success('Provider deleted');
+    },
+    onError: (e: Error) => message.error(e.message || 'Failed'),
+  });
+
+  const clearSubscription = useMutation({
+    mutationFn: () => api(SUBSCRIPTION_PATH, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: subscriptionQuery().queryKey });
+      message.success('Token removed — runners fall back to their own login');
     },
     onError: (e: Error) => message.error(e.message || 'Failed'),
   });
@@ -53,7 +90,14 @@ export function ProvidersPage() {
       title: 'Endpoint',
       dataIndex: 'baseUrl',
       key: 'baseUrl',
-      render: (u: string) => <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>,
+      // The subscription has no endpoint to show — what matters about it is who pays, so it says
+      // that instead, in prose rather than the monospace an endpoint gets.
+      render: (u: string, p) =>
+        p.id === SUBSCRIPTION_ROW_ID ? (
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Your Claude plan · no API billing</span>
+        ) : (
+          <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>
+        ),
     },
     {
       title: 'Enabled',
@@ -65,20 +109,32 @@ export function ProvidersPage() {
       title: '',
       key: 'actions',
       align: 'right',
-      render: (_, p) => (
-        <Space>
-          <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
-            Edit
-          </Button>
-          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
-            <Button size="small" danger>
-              Delete
+      render: (_, p) => {
+        const isSub = p.id === SUBSCRIPTION_ROW_ID;
+        return (
+          <Space>
+            <Button size="small" onClick={() => navigate(isSub ? '/providers/subscription' : `/providers/${p.id}`)}>
+              Edit
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title={isSub ? 'Remove the stored token?' : `Delete ${p.label}?`}
+              description={isSub ? "Sessions go back to using each runner's own login." : undefined}
+              onConfirm={() => (isSub ? clearSubscription.mutate() : deleteMut.mutate(p.id))}
+            >
+              <Button size="small" danger>
+                {isSub ? 'Remove' : 'Delete'}
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
+
+  // The subscription leads the list: it's the one credential here that isn't scoped to a single
+  // endpoint — it covers this user's claude sessions on every runner.
+  const rows = [...(subscription.data?.configured ? [subscriptionRow()] : []), ...(providers.data ?? [])];
+  const loading = providers.isLoading || subscription.isLoading;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -96,11 +152,7 @@ export function ProvidersPage() {
         </Button>
       </div>
 
-      {/* Above the BYOK list on purpose: an expired runner login is what sends people here, and
-          this is the one fix that covers every runner at once. */}
-      <ClaudeSubscriptionCard />
-
-      {providers.isLoading ? (
+      {loading ? (
         <Table
           rowKey="id"
           style={{ marginTop: 12 }}
@@ -109,7 +161,7 @@ export function ProvidersPage() {
           columns={columns}
           pagination={false}
         />
-      ) : (providers.data?.length ?? 0) === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="provider-empty">
           <h3>Connect your first provider</h3>
           <p>Pick a provider and paste your API key — that's it.</p>
@@ -120,7 +172,7 @@ export function ProvidersPage() {
           <Table
             rowKey="id"
             style={{ marginTop: 12 }}
-            dataSource={providers.data ?? []}
+            dataSource={rows}
             columns={columns}
             pagination={false}
           />

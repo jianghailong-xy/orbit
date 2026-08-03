@@ -2,7 +2,12 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import { api } from '../api';
-import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+import {
+  PROVIDERS_BASE,
+  PROVIDERS_LIST_KEY,
+  subscriptionQuery,
+  type ProviderRow,
+} from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 
 // The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
@@ -73,6 +78,15 @@ export function ProviderTile({
   );
 }
 
+/** What a tile says under the vendor name: its endpoint dialect until something is set up, then
+ *  what that is. Anthropic can be both at once — a subscription and keys — and says so, since
+ *  which one is in play is the whole reason its two forms share a tile. */
+function connectedLabel(runtime: string | undefined, count: number, subbed: boolean): string {
+  if (subbed) return count ? `Subscription · ${count} key${count === 1 ? '' : 's'}` : 'Subscription';
+  if (count === 0) return runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible';
+  return count === 1 ? 'Connected' : `Connected · ${count} keys`;
+}
+
 /** The vendor picker. Every card is a link into the connect page, so a vendor's onboarding is
  *  deep-linkable (/providers/new/anthropic) and the browser's back button works.
  *
@@ -84,6 +98,9 @@ export function ProviderGallery() {
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
+  // The Claude subscription is authentication for the Anthropic tile too — the tile is the only
+  // way in to either — so it has to count towards that tile being marked connected.
+  const subscription = useQuery(subscriptionQuery());
   // How many of the user's providers each vendor accounts for. A row records the preset it was
   // created from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts
   // towards Anthropic.
@@ -96,17 +113,18 @@ export function ProviderGallery() {
     <div className="provider-gallery">
       {PROVIDER_PRESETS.map((p) => {
         const count = connected.get(p.slug) ?? 0;
+        const subbed = p.slug === 'anthropic' && (subscription.data?.configured ?? false);
         return (
           <Link
             key={p.slug}
             to={`/providers/new/${p.slug}`}
-            className={`provider-card${count ? ' connected' : ''}`}
+            className={`provider-card${count || subbed ? ' connected' : ''}`}
           >
             {/* The check rides on the logo's corner rather than the row, so marking a card costs
                 no width — these names already fill it. */}
             <span className="pc-logo">
               <ProviderTile slug={p.slug} label={p.label} />
-              {count > 0 && (
+              {(count > 0 || subbed) && (
                 <span className="pc-check" aria-hidden="true">
                   ✓
                 </span>
@@ -114,15 +132,7 @@ export function ProviderGallery() {
             </span>
             <div style={{ minWidth: 0 }}>
               <div className="pc-name">{p.label}</div>
-              <div className="pc-sub">
-                {count === 0
-                  ? p.runtime === 'codex'
-                    ? 'OpenAI-compatible'
-                    : 'Anthropic-compatible'
-                  : count === 1
-                    ? 'Connected'
-                    : `Connected · ${count} keys`}
-              </div>
+              <div className="pc-sub">{connectedLabel(p.runtime, count, subbed)}</div>
             </div>
           </Link>
         );

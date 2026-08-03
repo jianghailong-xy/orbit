@@ -12,7 +12,11 @@ import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { ProvidersPage } from './pages/ProvidersPage';
-import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
+import {
+  ClaudeSubscriptionPage,
+  ProviderConnectPage,
+  ProviderPickPage,
+} from './pages/ProviderConnectPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -153,6 +157,16 @@ export function App() {
               element={
                 <DocView>
                   <ProviderConnectPage />
+                </DocView>
+              }
+            />
+            {/* Ahead of "providers/:id": the subscription is managed on the Anthropic page, not
+                as a provider row, and this is the link the list's subscription row follows. */}
+            <Route
+              path="providers/subscription"
+              element={
+                <DocView>
+                  <ClaudeSubscriptionPage />
                 </DocView>
               }
             />
