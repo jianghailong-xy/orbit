@@ -34,9 +34,13 @@ private struct ToastHost: ViewModifier {
                 if let toast = model.toast {
                     HStack(spacing: 12) {
                         // Leading, not centred: a centred label reads badly the moment it wraps
-                        // (web parity — `.ant-message-notice-content`).
+                        // (web parity — `.ant-message-notice-content`). The card spans the full
+                        // width (up to the cap below) rather than hugging its text, so the action
+                        // always sits at the trailing edge — one predictable target, wherever the
+                        // message length lands.
                         Text(toast.message)
                             .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         if toast.undoSessionID != nil {
                             Button("Undo") { model.undoSessionAction() }
                                 .font(.body.weight(.semibold))
@@ -44,9 +48,15 @@ private struct ToastHost: ViewModifier {
                     }
                     .padding(.horizontal, 18)
                     .padding(.vertical, 12)
-                    .background(.regularMaterial,
-                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+                    .background {
+                        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        shape.fill(.regularMaterial)
+                            // Hairline edge so the card still reads as a distinct surface where the
+                            // material lands on a same-toned background. `.primary` so it inverts
+                            // with the appearance instead of staying a dark line in dark mode.
+                            .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7))
+                            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+                    }
                     // Cap the card so a long message wraps into a compact block instead of stretching
                     // across an iPad/Mac window (web parity: the 560px notice cap).
                     .frame(maxWidth: 560)
