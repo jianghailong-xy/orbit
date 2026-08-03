@@ -210,7 +210,7 @@ test('session orchestration detail uses an explicit allowlist and never returns 
   assert.deepEqual(query.where, { id: TARGET_SESSION_ID, ownerId: 'owner-1' });
   assert.equal(query.select?.id, true);
   assert.equal(query.select?.lastAssistantText, true);
-  for (const field of ['shareToken', 'sharedAt', 'runtimeSessionId', 'claudeSessionId']) {
+  for (const field of ['shareToken', 'sharedAt', 'runtimeSessionId']) {
     assert.equal(query.select?.[field], undefined, `session detail exposed ${field}`);
   }
   const agent = query.select?.agent as { select?: Record<string, unknown> } | undefined;

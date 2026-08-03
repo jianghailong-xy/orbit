@@ -234,10 +234,9 @@ export class SessionsService {
         status: RunStatus.PENDING,
         provider,
         providerBuiltin,
-        runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
         // Codex/Kimi create and return their own thread id after process initialization.
-        claudeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
+        runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
@@ -925,7 +924,6 @@ export class SessionsService {
       taskTitle: string | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
-      claudeSessionId: string | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
@@ -939,7 +937,6 @@ export class SessionsService {
         s.end_reason      AS "endReason",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
-        s.claude_session_id AS "claudeSessionId",
         COALESCE(s.completed_at, s.archived_at) AS "completedAt",
         COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
         s.deleted_at      AS "deletedAt",
@@ -995,7 +992,6 @@ export class SessionsService {
         endReason: r.endReason,
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
-        claudeSessionId: r.claudeSessionId,
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
@@ -1056,23 +1052,17 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    // A session converted from a different provider (e.g. codex → claude) has
-    // numTurns > 0 from the prior provider but no claude/runtime session ids,
-    // so the capabilities payload says MISSING_CONTEXT and the UI blocks resume
-    // (it creates a new session instead). Fix it eagerly on read so every consumer
-    // — detail page, list, realtime stream — sees the session as resumable.
-    if (
-      session.provider === 'claude' &&
-      session.numTurns > 0 &&
-      !session.claudeSessionId &&
-      !session.runtimeSessionId
-    ) {
+    // A Claude row with turns but no runtime session id has no conversation to resume (it
+    // predates the column, or its id was minted by a different runtime), so the capabilities
+    // payload says MISSING_CONTEXT and the UI blocks resume (it creates a new session
+    // instead). Fix it eagerly on read so every consumer — detail page, list, realtime
+    // stream — sees the session as resumable.
+    if (session.provider === 'claude' && session.numTurns > 0 && !session.runtimeSessionId) {
       const sid = randomUUID();
       await this.prisma.session.update({
         where: { id },
-        data: { claudeSessionId: sid, runtimeSessionId: sid, numTurns: 0 },
+        data: { runtimeSessionId: sid, numTurns: 0 },
       });
-      session.claudeSessionId = sid;
       session.runtimeSessionId = sid;
       session.numTurns = 0;
     }
@@ -2581,24 +2571,17 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    // A session converted from a different provider (e.g. codex → claude) has
-    // numTurns > 0 from the prior provider but no claude/runtime session ids.
-    // That wedges the capabilities check: MISSING_CONTEXT blocks resume because
-    // the session appears to have lost its conversation. Generate fresh ids and
-    // reset numTurns so the runner does a first spawn (--session-id) instead of
-    // a doomed --resume, and the session is resumable from the UI.
-    if (
-      session.provider === 'claude' &&
-      session.numTurns > 0 &&
-      !session.claudeSessionId &&
-      !session.runtimeSessionId
-    ) {
+    // A Claude row with turns but no runtime session id has no conversation to resume. That
+    // wedges the capabilities check: MISSING_CONTEXT blocks resume because the session
+    // appears to have lost its conversation. Generate a fresh id and reset numTurns so the
+    // runner does a first spawn (--session-id) instead of a doomed --resume, and the session
+    // is resumable from the UI.
+    if (session.provider === 'claude' && session.numTurns > 0 && !session.runtimeSessionId) {
       const sid = randomUUID();
       await this.prisma.session.update({
         where: { id },
-        data: { claudeSessionId: sid, runtimeSessionId: sid, numTurns: 0 },
+        data: { runtimeSessionId: sid, numTurns: 0 },
       });
-      session.claudeSessionId = sid;
       session.runtimeSessionId = sid;
       session.numTurns = 0;
     }

@@ -26,7 +26,6 @@ function resumable(overrides: Record<string, unknown> = {}) {
     startedAt: new Date('2026-08-01T10:00:00.000Z'),
     numTurns: 1,
     runtimeSessionId: 'runtime-1',
-    claudeSessionId: null,
     assignedRunnerId: 'runner-1',
     assignedRunner: {
       id: 'runner-1',

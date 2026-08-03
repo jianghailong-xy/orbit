@@ -37,7 +37,6 @@ for (const [taskStatus, expectedReason, movesToCompleted, runnerStatus] of [
             status: RunStatus.AWAITING_INPUT,
             provider: 'claude',
             runtimeSessionId: 'runtime-1',
-            claudeSessionId: null,
             lastTurnAt: new Date(),
             cancelRequestedAt: null,
             endReason: null,

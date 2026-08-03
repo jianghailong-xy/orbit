@@ -177,7 +177,6 @@ test('reclaim enables orchestration only when capability and every live guard ma
     provider: 'codex',
     providerBuiltin: true,
     runtimeSessionId: `runtime-${id}`,
-    claudeSessionId: null,
     model: null,
     permissionMode: null,
     effort: null,

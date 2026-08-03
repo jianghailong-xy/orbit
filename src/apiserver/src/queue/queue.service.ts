@@ -248,33 +248,25 @@ export class QueueService {
       (session.permissionMode as PermissionMode) ??
       (agent?.permissionMode as PermissionMode) ??
       PermissionMode.DONT_ASK;
-    // Both session-id fields are NULL: either the session was converted from a different
-    // provider (e.g. codex → claude) or created before these fields existed. Generate a
-    // fresh UUID, persist it, reset numTurns so the runner does a first spawn
-    // (--session-id) instead of --resume (which would fail — Claude has no session file
-    // for the new id), and force resume=false so the runner doesn't try to pick up a
-    // non-existent conversation.
+    // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
+    // conversation the runtime could resume — it was created before the column existed, or
+    // its id was minted by a different runtime. Generate a fresh UUID, persist it, reset
+    // numTurns so the runner does a first spawn instead of --resume (which would fail —
+    // Claude has no session file for the new id), and force resume=false so the runner
+    // doesn't try to pick up a non-existent conversation.
     let resume = session.numTurns > 0;
-    if (
-      provider === AgentProvider.CLAUDE &&
-      !session.claudeSessionId &&
-      !session.runtimeSessionId
-    ) {
+    if (provider === AgentProvider.CLAUDE && !session.runtimeSessionId) {
       const id = randomUUID();
       await this.prisma.session.update({
         where: { id: session.id },
-        data: { claudeSessionId: id, runtimeSessionId: id, numTurns: 0 },
+        data: { runtimeSessionId: id, numTurns: 0 },
       });
-      session.claudeSessionId = id;
       session.runtimeSessionId = id;
       session.numTurns = 0;
       resume = false;
     }
-    const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
-    const sessionUuid =
-      provider === AgentProvider.CLAUDE
-        ? (session.claudeSessionId ?? runtimeSessionId ?? session.id)
-        : (runtimeSessionId ?? session.id);
+    const runtimeSessionId = session.runtimeSessionId ?? undefined;
+    const sessionUuid = runtimeSessionId ?? session.id;
     return {
       sessionId: session.id,
       provider,

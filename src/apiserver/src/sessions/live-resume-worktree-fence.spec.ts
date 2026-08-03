@@ -26,7 +26,6 @@ function makeService(
     numTurns: 1,
     prompt: 'opening prompt',
     runtimeSessionId: 'runtime-1',
-    claudeSessionId: null,
     assignedRunnerId: 'runner-1',
     assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now },
     provider: 'codex',

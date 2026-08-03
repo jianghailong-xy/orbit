@@ -16,7 +16,6 @@ function makeService(
     startedAt: now,
     numTurns: 0,
     runtimeSessionId: null,
-    claudeSessionId: null,
     assignedRunnerId: 'runner-1',
     cancelRequestedAt: null,
     archivedAt: null,

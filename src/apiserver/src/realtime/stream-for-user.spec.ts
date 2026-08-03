@@ -27,7 +27,6 @@ type Row = {
   startedAt: Date | null;
   numTurns: number;
   runtimeSessionId: string | null;
-  claudeSessionId: string | null;
   assignedRunnerId: string | null;
   assignedRunner: {
     id: string;
@@ -59,7 +58,6 @@ const rowA: Row = {
   startedAt: new Date('2026-06-26T00:00:00.000Z'),
   numTurns: 1,
   runtimeSessionId: 'runtime-1',
-  claudeSessionId: null,
   assignedRunnerId: 'runnerA',
   assignedRunner: {
     id: 'runnerA',

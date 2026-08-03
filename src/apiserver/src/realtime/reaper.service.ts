@@ -97,7 +97,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         provider: true,
         providerBuiltin: true,
         runtimeSessionId: true,
-        claudeSessionId: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
         endReason: true,
@@ -165,7 +164,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
-          !s.claudeSessionId &&
           now - lastTurn > runtimeStartupGrace
         ) {
           await this.forceFinalize(

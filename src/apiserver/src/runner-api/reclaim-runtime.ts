@@ -4,7 +4,6 @@ export interface ReclaimRuntimeInput {
   provider: AgentProvider;
   sessionId: string;
   runtimeSessionId?: string | null;
-  claudeSessionId?: string | null;
 }
 
 export interface ReclaimRuntimeIds {
@@ -13,11 +12,11 @@ export interface ReclaimRuntimeIds {
 }
 
 export function reclaimRuntimeIds(input: ReclaimRuntimeInput): ReclaimRuntimeIds | null {
-  const runtimeSessionId = input.runtimeSessionId ?? input.claudeSessionId ?? undefined;
+  const runtimeSessionId = input.runtimeSessionId ?? undefined;
   if (input.provider === AgentProvider.CLAUDE) {
     if (!runtimeSessionId) return null;
     return {
-      sessionUuid: input.claudeSessionId ?? runtimeSessionId,
+      sessionUuid: runtimeSessionId,
       runtimeSessionId,
     };
   }

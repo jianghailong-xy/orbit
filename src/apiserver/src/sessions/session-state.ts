@@ -30,7 +30,6 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
   startedAt: Date | string | null;
   numTurns: number;
   runtimeSessionId: string | null;
-  claudeSessionId: string | null;
   assignedRunnerId?: string | null;
   assignedRunner:
     | {
@@ -63,10 +62,7 @@ export function deriveSessionCapabilities(
     resumeBlockedReason = 'NOT_TERMINAL';
   } else if (session.startedAt == null) {
     resumeBlockedReason = 'NOT_STARTED';
-  } else if (
-    session.numTurns > 0 &&
-    !(session.runtimeSessionId ?? session.claudeSessionId)
-  ) {
+  } else if (session.numTurns > 0 && !session.runtimeSessionId) {
     resumeBlockedReason = 'MISSING_CONTEXT';
   } else if (!(session.assignedRunnerId ?? session.assignedRunner?.id)) {
     resumeBlockedReason = 'NO_RUNNER';

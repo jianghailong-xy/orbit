@@ -26,7 +26,6 @@ function harness(
     title: 'runtime default test',
     prompt: 'hello',
     runtimeSessionId: null,
-    claudeSessionId: null,
     inboxLeaseOwner: null,
     branch: null,
     mergeTarget: null,

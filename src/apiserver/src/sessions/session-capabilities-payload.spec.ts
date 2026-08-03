@@ -19,7 +19,6 @@ function sessionRow() {
     endReason: 'ended',
     cancelRequestedAt: NOW,
     runtimeSessionId: 'runtime-1',
-    claudeSessionId: null,
     completedAt: null,
     archivedAt: null,
     deletedAt: null,

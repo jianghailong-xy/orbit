@@ -354,11 +354,9 @@ model Session {
   // top of, the runner's own max_concurrent. null = not part of any batch (ungated).
   batchId              String?   @map("batch_id") @db.Uuid
   batchMaxConcurrent   Int?      @map("batch_max_concurrent")
-  // Pre-generated Claude session id: --session-id on first spawn, --resume on
-  // reclaim/respawn.
-  claudeSessionId      String?   @map("claude_session_id")
-  // Provider-neutral runtime thread/session id. For Claude rows this mirrors
-  // claudeSessionId; for Codex/Kimi it stores the id returned by the runtime.
+  // Runtime thread/session id, always owned by the runtime named in `provider`. Claude's is
+  // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
+  // Codex/Kimi mint their own after process initialization, so it stays null until then.
   runtimeSessionId     String?   @map("runtime_session_id")
   provider             String    @default("claude")
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a

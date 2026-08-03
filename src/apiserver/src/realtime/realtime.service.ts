@@ -576,7 +576,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         startedAt: true,
         numTurns: true,
         runtimeSessionId: true,
-        claudeSessionId: true,
         assignedRunnerId: true,
         assignedRunner: {
           select: { id: true, status: true, lastHeartbeatAt: true },

@@ -676,7 +676,6 @@ export class RunnerApiController {
         provider,
         sessionId: s.id,
         runtimeSessionId: s.runtimeSessionId,
-        claudeSessionId: s.claudeSessionId,
       });
       if (!runtime) continue;
       const agg = await this.prisma.runEvent.aggregate({
@@ -1889,7 +1888,8 @@ export class RunnerApiController {
           status: effectiveStatus,
           result: dto.result,
           error: dto.error,
-          claudeSessionId: dto.claudeSessionId ?? undefined,
+          // `claudeSessionId` is a legacy alias older runners still send; both name the same
+          // id, so it only serves as a fallback here and is never persisted on its own.
           runtimeSessionId: dto.runtimeSessionId ?? dto.claudeSessionId ?? undefined,
           finishedAt: new Date(),
           // Worktree isolation outcome reported by the runner: the branch it committed
@@ -2238,14 +2238,14 @@ export class RunnerApiController {
   }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
     const provider = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
-    const runtimeSessionId = session.runtimeSessionId ?? session.claudeSessionId ?? undefined;
+    const runtimeSessionId = session.runtimeSessionId ?? undefined;
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
     }
     const agent = session.agentId ? await this.prisma.agent.findUnique({ where: { id: session.agentId } }) : null;
     return {
       provider,
-      sessionUuid: provider === AgentProvider.CLAUDE ? (session.claudeSessionId ?? runtimeSessionId) : runtimeSessionId,
+      sessionUuid: runtimeSessionId,
       runtimeSessionId,
       workDir: agent?.workDir ?? null,
       title: session.title,

@@ -739,6 +739,8 @@ export interface RunFinalizeRequest {
   /** Claude Code result `subtype`. */
   subtype?: string;
   error?: string;
+  /** @deprecated Legacy alias for runtimeSessionId, still sent by older runners. Accepted only
+   *  as a fallback when runtimeSessionId is absent; never stored separately. */
   claudeSessionId?: string;
   runtimeSessionId?: string;
   numTurns?: number;
