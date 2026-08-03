@@ -493,62 +493,29 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
 }
 
 /**
- * Sign-in commands for the built-in providers, mirroring the runner's own `orbit doctor`
- * (engineSpecs in doctor.go): the interactive sign-in, plus the headless alternative for a
- * machine with no browser. Kept in step with doctor.go — the user may well run doctor next.
+ * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
+ * remedy is a sign-in on that machine rather than a key to fix in Providers.
  */
-const LOCAL_LOGIN: Record<string, { login: string; headless: ReactNode }> = {
-  claude: {
-    login: 'claude auth login',
-    headless: (
-      <>
-        Use <code>claude setup-token</code> and set the token in the runner's service env.
-      </>
-    ),
-  },
-  codex: {
-    login: 'codex login',
-    headless: (
-      <>
-        Run <code>codex login --device-auth</code> there — plain <code>codex login</code> waits on
-        a localhost callback that only that machine's own browser can reach.
-      </>
-    ),
-  },
-  kimi: {
-    login: 'kimi login',
-    headless: (
-      <>
-        Run <code>kimi login</code> there — it uses the same device-code flow without a local
-        callback.
-      </>
-    ),
-  },
-};
+const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi']);
 
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
  * ordinary assistant text ("Failed to authenticate: OAuth session expired…"), which reads like
  * the agent's own reply and tells the user nothing about what to do — so this card names the
- * machine, gives the exact command to run there, and offers to re-send once they're back in.
+ * machine, signs it back in from here, and offers to re-send once it is.
  *
  * Three shapes, because the remedy depends on where the credentials live (see AuthErrorHelp):
  * a built-in provider signs in on the runner itself, any other slug is a configured API key,
  * and with no context at all (shared/public page, static export) only the diagnosis is safe to
  * show — guessing a remedy there would send the reader to the wrong place.
+ *
+ * The command to run on the machine itself is deliberately not offered: signing in from here
+ * needs nothing on that box, and the cases it can't cover (a CLI too old to relay, no `script`)
+ * report themselves with the command to run — as does the runtime's own message above.
  */
 function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const help = useContext(AuthErrorCtx);
-  const [copied, setCopied] = useState(false);
-  const local = help ? LOCAL_LOGIN[help.provider] : undefined;
-  const copy = () => {
-    if (!local) return;
-    void copyText(local.login).then((ok) => {
-      if (!ok) return;
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    });
-  };
+  const local = !!help && LOCAL_LOGIN.has(help.provider);
   return (
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
@@ -563,33 +530,13 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
-        <>
-          {/* Signing in from here is the path that needs nothing on the runner but the CLI, so
-              it leads; the copy-paste command below stays as the fallback for when the relay
-              can't read a URL (an older CLI, no `script` on that box). */}
-          {help?.runnerId && (
-            <RunnerSignIn
-              runnerId={help.runnerId}
-              engine={help.provider as LoginEngine}
-              onDone={help.onRetry}
-            />
-          )}
-          <div className="chat-authfix-desc">
-            Or fix it on the machine itself — this runner signs in with its own account. Run:
-          </div>
-          <div className="chat-authfix-cmd">
-            <code>
-              <span className="chat-authfix-prompt">$</span>
-              {local.login}
-            </code>
-            <button className={`chat-authfix-copy ${copied ? 'copied' : ''}`} onClick={copy} type="button">
-              {copied ? <CheckOutlined /> : <CopyOutlined />}
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-          {/* The runner runs unattended, so a browser-less machine needs the token path instead. */}
-          <div className="chat-authfix-alt">No browser on that machine? {local.headless}</div>
-        </>
+        help?.runnerId && (
+          <RunnerSignIn
+            runnerId={help.runnerId}
+            engine={help.provider as LoginEngine}
+            onDone={help.onRetry}
+          />
+        )
       ) : help ? (
         <div className="chat-authfix-desc">
           The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
