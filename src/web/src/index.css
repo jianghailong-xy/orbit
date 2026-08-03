@@ -4415,12 +4415,11 @@ body {
   color: var(--text-2);
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
+/* No panel of its own: the card is already the container, and buttons are self-delimiting —
+   boxing them only drew a second frame inside the first. Quoted content still gets one
+   (.chat-authfix-last, .rsi-usercode): that is material to read, not an action to take. */
 .rsi {
   margin-top: 10px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-raised);
 }
 .rsi-row {
   display: flex;
@@ -4570,10 +4569,12 @@ body {
    the sign-in box above it — on the card's warm background a quote rule alone left it reading as
    more of the card's own prose, when it is the one thing here the user didn't write just now. */
 .chat-authfix-last {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
+  /* Shown whole: three clamped lines cut the message off mid-sentence, and a quote you can't
+     read to the end doesn't answer the question it is here for — "is this what gets re-sent?".
+     A tall ceiling with its own scroll keeps a pasted essay from swallowing the card, without
+     hiding the end of anything of ordinary length. */
+  max-height: 13em;
+  overflow-y: auto;
   margin-top: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
