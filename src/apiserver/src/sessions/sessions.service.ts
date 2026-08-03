@@ -2217,9 +2217,14 @@ export class SessionsService {
   /**
    * Queue a "commit this idle session's uncommitted worktree changes onto its branch" for the
    * runner that's hosting it. The checkout is only stable between turns: committing while the
-   * top-level turn, a sub-agent, or a background shell is still running can capture a half-built
-   * snapshot. `AWAITING_INPUT` plus empty background-work sets is therefore the authoritative
-   * server-side gate; the UI's disabled button is only a convenience, not the safety boundary.
+   * top-level turn or a sub-agent is still running can capture a half-built snapshot.
+   * `AWAITING_INPUT` plus an empty sub-agent set is therefore the authoritative server-side gate;
+   * the UI's disabled button is only a convenience, not the safety boundary.
+   *
+   * Running background shells (`runningBgShells`) are NOT part of the gate. Agents leave
+   * long-lived processes up — dev servers, watchers — which never exit, so their launch ids never
+   * clear and gating on them disabled Commit permanently for that session. A commit racing a
+   * background writer is re-committable; a permanently blocked one isn't.
    *
    * The runner picks the request up on its next heartbeat (≤30s), commits, and reports the
    * outcome back into `commitStatus`/`commitError` (clearing `worktreeDirty` on success, so the
@@ -2238,8 +2243,8 @@ export class SessionsService {
     if (session.status !== RunStatus.AWAITING_INPUT) {
       throw new ConflictException('wait for the current turn to finish before committing');
     }
-    if (session.runningSubagents.length > 0 || session.runningBgShells.length > 0) {
-      throw new ConflictException('wait for background work to finish before committing');
+    if (session.runningSubagents.length > 0) {
+      throw new ConflictException('wait for the running sub-agent to finish before committing');
     }
     if (!session.assignedRunnerId) {
       throw new ConflictException('no runner is associated with this session');
@@ -2259,7 +2264,6 @@ export class SessionsService {
         status: RunStatus.AWAITING_INPUT,
         cancelRequestedAt: null,
         runningSubagents: { isEmpty: true },
-        runningBgShells: { isEmpty: true },
         commitStatus: session.commitStatus,
         mergeStatus: session.mergeStatus,
       },
@@ -2279,8 +2283,7 @@ export class SessionsService {
         current?.commitStatus === 'pending' &&
         current.status === RunStatus.AWAITING_INPUT &&
         !current.cancelRequestedAt &&
-        current.runningSubagents.length === 0 &&
-        current.runningBgShells.length === 0
+        current.runningSubagents.length === 0
       ) {
         return { ok: true };
       }

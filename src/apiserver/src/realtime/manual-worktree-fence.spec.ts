@@ -199,12 +199,13 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
       branch: 'orbit/session',
     },
   ]);
+  // No runningBgShells guard: it mirrors the queueing gate, where a left-up dev server would
+  // otherwise keep the checkout "busy" for the rest of the session's life.
   const idleBranch = {
     inboxLeaseOwner: NEW_OWNER,
     status: RunStatus.AWAITING_INPUT,
     cancelRequestedAt: null,
     runningSubagents: { isEmpty: true },
-    runningBgShells: { isEmpty: true },
     OR: [{ commitOperationOwner: null }, { commitOperationOwner: NEW_OWNER }],
   };
   const commonWhere = {

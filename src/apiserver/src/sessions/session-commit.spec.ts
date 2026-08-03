@@ -53,14 +53,16 @@ test('commit queues atomically only while a session is truly idle', async () => 
       status: RunStatus;
       cancelRequestedAt: null;
       runningSubagents: { isEmpty: boolean };
-      runningBgShells: { isEmpty: boolean };
+      runningBgShells?: { isEmpty: boolean };
     };
     data: { commitStatus: string };
   };
   assert.equal(update.where.status, RunStatus.AWAITING_INPUT);
   assert.equal(update.where.cancelRequestedAt, null);
   assert.deepEqual(update.where.runningSubagents, { isEmpty: true });
-  assert.deepEqual(update.where.runningBgShells, { isEmpty: true });
+  // Background shells are not part of the compare-and-set: a left-up dev server never exits, so
+  // requiring an empty set here would make the commit unqueueable for the session's whole life.
+  assert.equal(update.where.runningBgShells, undefined);
   assert.equal(update.data.commitStatus, 'pending');
 });
 
@@ -86,22 +88,26 @@ test('commit rejects an interrupted session that is not at a settled turn bounda
   assert.deepEqual(updates, []);
 });
 
-for (const [name, activity] of [
-  ['sub-agent', { runningSubagents: ['agent-call-1'] }],
-  ['background shell', { runningBgShells: ['shell-call-1'] }],
-] as const) {
-  test(`commit rejects an AWAITING_INPUT session with a running ${name}`, async () => {
-    const { service, updates } = makeService(activity);
+test('commit rejects an AWAITING_INPUT session with a running sub-agent', async () => {
+  const { service, updates } = makeService({ runningSubagents: ['agent-call-1'] });
 
-    await assert.rejects(
-      () => service.commitWorktree('owner-1', 'session-1'),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === 'wait for background work to finish before committing',
-    );
-    assert.deepEqual(updates, []);
-  });
-}
+  await assert.rejects(
+    () => service.commitWorktree('owner-1', 'session-1'),
+    (error: unknown) =>
+      error instanceof ConflictException &&
+      error.message === 'wait for the running sub-agent to finish before committing',
+  );
+  assert.deepEqual(updates, []);
+});
+
+test('commit is allowed while a background shell is still up', async () => {
+  // A dev server or watcher the agent left running never sends a terminal notification, so its
+  // launch id stays in runningBgShells forever. Blocking on it made Commit permanently dead.
+  const { service, updates } = makeService({ runningBgShells: ['shell-call-1'] });
+
+  await assert.doesNotReject(() => service.commitWorktree('owner-1', 'session-1'));
+  assert.equal(updates.length, 1);
+});
 
 test('a lost idle-state compare-and-set is rejected', async () => {
   const { service } = makeService({}, 0);

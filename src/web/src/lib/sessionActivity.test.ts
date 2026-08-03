@@ -9,8 +9,13 @@ describe('session activity', () => {
     expect(isSessionTurnActive(session, true, true)).toBe(true);
   });
 
-  it('keeps a parked parent active while a background shell is still running', () => {
-    expect(isSessionTurnActive({ runningBgCount: 2 }, true, true)).toBe(true);
+  it('surfaces a background shell as outliving work without freezing the worktree', () => {
+    const session = { runningSubagentCount: 0, runningBgCount: 2 };
+
+    // Still "working" for the status line — but a left-up dev server never exits, so it must not
+    // hold the worktree gate (and Commit) closed for the rest of the session's life.
+    expect(hasOutlivingSessionWork(session)).toBe(true);
+    expect(isSessionTurnActive(session, true, true)).toBe(false);
   });
 
   it('uses the parent turn boundary when no work outlives it', () => {

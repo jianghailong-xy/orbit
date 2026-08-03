@@ -739,11 +739,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         branch: { not: null },
         OR: [
           {
+            // Same idle predicate the commit request was queued under (see
+            // SessionsService.commitWorktree): the parent turn and sub-agents write the
+            // checkout, background shells (dev servers, watchers) don't gate it.
             inboxLeaseOwner: leaseOwner,
             status: RunStatus.AWAITING_INPUT,
             cancelRequestedAt: null,
             runningSubagents: { isEmpty: true },
-            runningBgShells: { isEmpty: true },
             OR: [{ commitOperationOwner: null }, { commitOperationOwner: leaseOwner }],
           },
           {
@@ -773,7 +775,6 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                     status: RunStatus.AWAITING_INPUT,
                     cancelRequestedAt: null,
                     runningSubagents: { isEmpty: true },
-                    runningBgShells: { isEmpty: true },
                     OR: [
                       { commitOperationOwner: null },
                       { commitOperationOwner: leaseOwner },
