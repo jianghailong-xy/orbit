@@ -48,10 +48,14 @@ export function RunnerSignIn({
   runnerId,
   engine = 'claude',
   onDone,
+  onUseApiKey,
 }: {
   runnerId: string;
   engine?: LoginEngine;
   onDone?: () => void;
+  /** Take the other route out: a key on the account, good for every runner. Offered beside the
+   *  sign-in while it is still a choice — once one is under way the other is just noise. */
+  onUseApiKey?: () => void;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -272,18 +276,37 @@ export function RunnerSignIn({
     );
   }
 
-  // Idle, or a failed attempt the user can retry.
+  // Idle, or a failed attempt the user can retry. The two ways back in sit side by side here:
+  // signing in fixes this one machine with the account the user already pays for; a key fixes
+  // every runner at once but has to be issued and pasted. Neither is the obvious default, so
+  // they are shown as a choice, with the one that needs nothing new leading.
   return (
     <div className="rsi">
       {status === 'failed' && s?.message && <div className="rsi-warn">{s.message}</div>}
       {err && <div className="rsi-warn">{err.message}</div>}
-      <button className="rsi-btn" onClick={begin} disabled={start.isPending} type="button">
-        {start.isPending
-          ? 'Starting…'
-          : status === 'failed'
-            ? `Try signing in to ${ENGINE_NAME[engine]} again`
-            : `Sign in to ${ENGINE_NAME[engine]} from here`}
-      </button>
+      <div className="rsi-actions">
+        <button className="rsi-btn" onClick={begin} disabled={start.isPending} type="button">
+          {start.isPending
+            ? 'Starting…'
+            : status === 'failed'
+              ? `Try signing in to ${ENGINE_NAME[engine]} again`
+              : `Sign in to ${ENGINE_NAME[engine]}`}
+        </button>
+        {onUseApiKey && (
+          <button className="rsi-btn-alt" onClick={onUseApiKey} type="button">
+            Use an API key instead
+          </button>
+        )}
+      </div>
+      {onUseApiKey && (
+        // Both halves earn their words. "This runner" is the limit of a sign-in — the next
+        // machine to run this agent needs its own. And a key is not self-applying: it arrives
+        // as a provider whose models sit in the picker, so saying "account-wide" alone would
+        // leave the user staring at a saved key wondering why nothing changed.
+        <div className="rsi-hint">
+          Signing in fixes this runner. A key is account-wide — switch to its model to use it.
+        </div>
+      )}
     </div>
   );
 }

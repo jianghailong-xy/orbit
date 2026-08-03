@@ -106,6 +106,9 @@ export interface AuthErrorHelp {
   onRetry?: () => void;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
+  /** Open Providers — the other way back in, and the only one when the rejected credential is
+   *  a configured key rather than a login on the runner. */
+  onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
@@ -547,13 +550,21 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
             runnerId={help.runnerId}
             engine={help.provider as LoginEngine}
             onDone={help.onRetry}
+            onUseApiKey={help.onUseApiKey}
           />
         )
       ) : help ? (
-        <div className="chat-authfix-desc">
-          The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
-          send your message again.
-        </div>
+        <>
+          <div className="chat-authfix-desc">
+            The API key for <code>{help.provider}</code> was rejected. Update it in Providers, then
+            send your message again.
+          </div>
+          {help.onUseApiKey && (
+            <button className="chat-authfix-go" onClick={help.onUseApiKey} type="button">
+              Update the API key
+            </button>
+          )}
+        </>
       ) : null}
       {help?.onRetry && (
         <>

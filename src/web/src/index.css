@@ -4505,6 +4505,30 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+/* The two ways back in, side by side. They wrap rather than shrink: both labels name what they
+   do, and a card in a narrow column shouldn't turn either into an ellipsis. */
+.rsi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* The alternative route: same weight of decision, less weight of ink — it costs the user a key
+   they may not have yet, so it doesn't compete with the sign-in for the first click. */
+.rsi-btn-alt {
+  flex: none;
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+}
+.rsi-btn-alt:hover {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
 .rsi-link {
   margin-top: 8px;
   padding: 0;
@@ -4526,6 +4550,21 @@ body {
   font-size: 13px;
 }
 
+/* Takes a rejected configured key to the page that holds it. The runner-login shape has its own
+   pair of buttons (.rsi-actions); this shape has only the one route. */
+.chat-authfix-go {
+  margin-top: 10px;
+  padding: 5px 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-authfix-go:hover {
+  background: var(--brand-strong);
+}
 /* The message the retry would re-send, quoted. Clamped: it can be a whole pasted prompt, and
    this is a label for the button under it, not a second copy of the conversation. */
 .chat-authfix-last {

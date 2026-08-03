@@ -3115,10 +3115,22 @@ export function AgentView({ runner }: { runner: Runner }) {
           ? () => sendMutate({ content: retryText, images: [] })
           : undefined,
       retryText,
+      // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
+      // whose key the user actually holds.
+      onUseApiKey: () => navigate('/providers'),
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.
-    [shownProvider, runner.name, runner.id, retryText, selectedTrashed, selectedMissing, sendMutate],
+    [
+      shownProvider,
+      runner.name,
+      runner.id,
+      retryText,
+      selectedTrashed,
+      selectedMissing,
+      sendMutate,
+      navigate,
+    ],
   );
   const shownMode: string = live
     ? (PERMISSION_TO_MODE[
