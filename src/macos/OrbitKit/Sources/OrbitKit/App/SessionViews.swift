@@ -56,9 +56,13 @@ public enum SessionFilter {
     }
 
     /// Sessions belonging to one agent. The list payload nests the agent as `agent.id` (the flat
-    /// `agentId` is absent there), so filter on that. Server order (lastTurnAt desc) is preserved.
+    /// `agentId` is absent there), so that's the primary key; the flat field is the fallback because
+    /// `POST /sessions` answers with the reverse shape — a flat `agentId`, no nested agent — and that
+    /// record is registered straight into the loaded lists, where it would otherwise match no agent
+    /// and vanish from the list that just created it. Both are the same id (see `AppModel.agentID`).
+    /// Server order (lastTurnAt desc) is preserved.
     public static func forAgent(_ sessions: [Session], agentID: String) -> [Session] {
-        sessions.filter { $0.agent?.id == agentID }
+        sessions.filter { ($0.agent?.id ?? $0.agentId) == agentID }
     }
 
     /// Keep only sessions carrying the given tag — the list's tag filter chip. Order is preserved,

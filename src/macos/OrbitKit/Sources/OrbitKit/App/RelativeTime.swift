@@ -13,18 +13,39 @@ public enum RelativeTime {
         if diff < day  { return "\(Int(diff / hour))h ago" }
         if diff < week { return "\(Int(diff / day))d ago" }
         if diff < 4 * week { return "\(Int(diff / week))w ago" }
-        let fmt = DateFormatter()
-        fmt.dateFormat = "M/d"
-        return fmt.string(from: date)
+        return monthDay.string(from: date)
     }
+
+    // Formatters are built ONCE and reused. Each `ISO8601DateFormatter()` spins up an ICU date
+    // parser, which is orders of magnitude more expensive than the parse itself — and these sit on
+    // the app's hottest paths: the recency sort behind the drawer's Recents (which called this from
+    // inside a `sorted` comparator, so O(n log n) formatters per render), the session list's time
+    // bucketing, every row's relative time, and every transcript bubble's timestamp. Allocating per
+    // call was tens of milliseconds of main-thread work per list refresh with many open sessions.
+    //
+    // Sharing them is safe because each is fully configured here and never mutated afterwards — a
+    // Foundation formatter is only unsafe while being reconfigured. That's exactly why the two
+    // `formatOptions` variants are two instances: `parse` used to re-assign `formatOptions` on one
+    // formatter for its second attempt, which a shared instance must not do.
+    private static let iso8601Fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601Whole: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    private static let monthDay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
+    }()
 
     /// ISO-8601 from the runner — try with then without fractional seconds (some payloads omit it).
     /// Internal (not private) so recency sorting (`RecentsLogic`) parses timestamps the same way.
     static func parse(_ iso: String) -> Date? {
-        let parser = ISO8601DateFormatter()
-        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = parser.date(from: iso) { return d }
-        parser.formatOptions = [.withInternetDateTime]
-        return parser.date(from: iso)
+        iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
     }
 }

@@ -172,6 +172,22 @@ final class AgentsModel {
         await loadSessions(agentID: q.agentID, view: q.view)
     }
 
+    /// Adopt the app's shared Open snapshot for the list currently on screen.
+    ///
+    /// `loadSessions` fetches EVERY open session and narrows client-side (the endpoint has no
+    /// per-agent filter), which is exactly the payload `AppModel` already holds — so the pane's own
+    /// timer was re-requesting an identical response on a second, independent cadence. Feeding it
+    /// from there instead makes the pane as fresh as the control-plane stream (rows update the
+    /// moment an event lands, not up to 4s later) for none of the traffic.
+    ///
+    /// Open only: Completed / Trash are different queries with their own ordering and rows the Open
+    /// snapshot doesn't contain, so those keep fetching for themselves. A pane that hasn't loaded yet
+    /// (`lastSessionQuery == nil`) is left alone — its `.task` owns the first load.
+    func applyOpenSnapshot(_ all: [Session]) {
+        guard let q = lastSessionQuery, q.view == .open else { return }
+        agentSessions = SessionFilter.forAgent(all, agentID: q.agentID, view: q.view)
+    }
+
     private func friendly(_ error: Error) -> String {
         if case APIError.unauthorized = error { return "Session expired — sign in again." }
         return "Request failed — check your connection."

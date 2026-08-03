@@ -48,7 +48,11 @@ struct CompactShell: View {
                 // right to *reveal* it (ChatGPT-style), rather than sliding in alongside the content — so
                 // no `.offset` here. The leading-aligned ZStack seats it at [0, dw]; the content on top
                 // covers it when closed and uncovers it left-to-right as `x` grows.
-                NavigationDrawer(close: closeDrawer)
+                // `live` gates the drawer's animated cues (session spinners, running-list progress
+                // views). The drawer is never unmounted — it sits at the leading edge with the content
+                // card covering it — so those animations otherwise kept redrawing at the display rate
+                // while fully occluded, one per running session, for a rail nobody could see.
+                NavigationDrawer(close: closeDrawer, live: progress > 0)
                     .frame(width: dw)
 
                 // The soft shadow the sliding content casts onto the drawer — the ChatGPT sense of the
@@ -344,6 +348,10 @@ private enum DrawerMetrics {
 private struct NavigationDrawer: View {
     @Environment(AppModel.self) private var model
     let close: () -> Void
+    /// True once any part of the drawer is on screen (open, or peeking mid-drag). While false the rows
+    /// still render their static content — only the animated live cues are held back, so opening never
+    /// waits on anything. See the call site in `CompactShell`.
+    let live: Bool
     /// Which runner groups are expanded to reveal their agents. A lone group always shows; the group
     /// holding the current agent is seeded open once (see the `.onChange` below) so the drawer lands
     /// showing your context, but a tap can still collapse it. Persists across open/close because this
@@ -562,7 +570,7 @@ private struct NavigationDrawer: View {
         } label: {
             pill(selected: taskScopeSelected(.list(list.id)), indent: 12) {
                 HStack(spacing: 10) {
-                    if running {
+                    if running && live {
                         ProgressView().controlSize(.mini).tint(.blue)
                     } else {
                         Circle().fill(completed ? Color.green : Color.secondary.opacity(0.45))
@@ -655,7 +663,7 @@ private struct NavigationDrawer: View {
                         .lineLimit(1)
                         .foregroundStyle(.primary)
                     Spacer(minLength: 8)
-                    SessionLiveIndicator(session: s)
+                    if live { SessionLiveIndicator(session: s) }
                 }
             }
         }

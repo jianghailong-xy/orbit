@@ -11,11 +11,17 @@ public enum RecentsLogic {
     /// Recency key: `lastTurnAt` (the last turn) falling back to `updatedAt` then `createdAt`, so a
     /// freshly-queued session that has never run still sorts by when it was created. Parsed to a
     /// `Date` (not compared as raw strings) so mixed fractional-second precision can't misorder.
+    ///
+    /// The recency key is computed ONCE per session, then sorted (a decorate–sort–undecorate).
+    /// Reading it inside the comparator instead meant two timestamp parses per *comparison* —
+    /// O(n log n) parses for an O(n) amount of real work, on a path the drawer re-runs on every
+    /// session-list refresh. See `RelativeTime`'s shared formatters for the other half of that fix.
     public static func recent(_ sessions: [Session], limit: Int = 6) -> [Session] {
         sessions
-            .sorted { recency($0) > recency($1) }
+            .map { (key: recency($0), session: $0) }
+            .sorted { $0.key > $1.key }
             .prefix(max(0, limit))
-            .map { $0 }
+            .map { $0.session }
     }
 
     /// Seconds-since-reference of a session's last activity; a missing/unparseable timestamp sinks

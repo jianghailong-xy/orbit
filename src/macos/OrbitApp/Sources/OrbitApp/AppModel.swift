@@ -114,7 +114,12 @@ final class AppModel {
     /// unpaginated. Uncapped on purpose: the drawer's Recents List is lazy, so it renders rows as you
     /// scroll rather than stopping at a fixed count. Empty until the first `loadSessions` lands; kept
     /// live by the same control-plane stream that drives the list.
-    var recentSessions: [Session] { RecentsLogic.recent(sessions, limit: sessions.count) }
+    ///
+    /// Derived ONCE per applied snapshot (see `applySessionSnapshot`) rather than on every read: the
+    /// drawer stays mounted behind the content card, so it reads this on every body pass — and it is
+    /// a full recency sort of every open session, which as a computed property ran again for each of
+    /// those passes (and once more for `selectedSessionInRecents`).
+    private(set) var recentSessions: [Session] = []
 
     /// The compact drawer lists the open session twice when its runner group is expanded — once as the
     /// owning agent's row (`selectedAgentID`) and once as its Recents row (`selectedAgentSessionID`) —
@@ -134,10 +139,22 @@ final class AppModel {
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
     private var lastSnapshot: [Session]?
+    /// The last badge string written to the OS (dock tile / app icon). Both writes cross a process
+    /// boundary, so an unchanged snapshot skips them — `didWriteBadge` keeps the FIRST snapshot after
+    /// launch/sign-in writing even when it matches the initial value, since a badge set by a silent
+    /// push while the app was backgrounded has to be reconciled down. See docs/cross-platform-badge-sync.md.
+    private var lastBadge: String?
+    private var didWriteBadge = false
+    /// iOS: the "needs you" id set the delivered-notification reconcile last ran for. nil until the
+    /// first snapshot, so it always runs once; after that only a genuine change pays the round-trip.
+    private var lastNeedsYou: Set<String>?
     /// The always-on control-plane stream (GET /api/events) and whether it's currently live.
-    /// While live it owns list freshness (events trigger coalesced snapshot refreshes) and the
-    /// 4s poll tick skips its fetch; any gap — reconnect backoff, an older server without the
-    /// endpoint — falls back to polling automatically. See `runControlPlane`.
+    /// While live it owns list *latency*: a status / approval event updates its row in place the
+    /// moment it lands (see `apply`), and the events it can't apply that way trigger a coalesced
+    /// snapshot refresh. It does NOT own list *completeness* — the slim event payload carries no
+    /// preview line, tag, pin or background count — so the 4s tick keeps fetching underneath it as
+    /// the floor for those fields, and as the fallback for any gap (reconnect backoff, an older
+    /// server without the endpoint). See `runControlPlane` / `startPolling`.
     private var controlTask: Task<Void, Never>?
     private(set) var controlPlaneLive = false
     private var controlRefreshScheduled = false
@@ -290,11 +307,17 @@ final class AppModel {
         }
         signedIn = false
         sessions = []
+        recentSessions = []
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
         menuSummary = .empty
         updateDockBadge(nil)
+        // Clear the write-skip trackers so the next sign-in's first snapshot always reconciles the
+        // badge and delivered notifications, whatever the previous account left behind.
+        lastBadge = nil
+        didWriteBadge = false
+        lastNeedsYou = nil
     }
 
     /// Reset every navigation/selection field to the signed-out baseline. The ONE place they are
@@ -323,10 +346,18 @@ final class AppModel {
         #endif
     }
 
-    /// Keep Open fresh. The control-plane stream (below) is the primary source: while
-    /// it's live, its events drive coalesced refreshes and the 4s tick here skips its fetch. The
-    /// tick remains as the universal fallback — an older server without `/api/events`, or any
-    /// reconnect gap, degrades back to exactly the old polling behavior with no user action.
+    /// Keep Open fresh. The control-plane stream (below) is the primary source of *latency* — a
+    /// status or approval change lands on its row the moment the event arrives — but its payload is
+    /// a slim summary, so the fields only the list query returns (the preview line, tags, pin,
+    /// background count) still need a periodic snapshot. This tick is that floor, and it runs
+    /// whether or not the stream is live.
+    ///
+    /// It used to skip its fetch while the stream was connected, which made those fields ride on
+    /// event-driven refreshes instead — and because EVERY event triggered a full refetch, several
+    /// sessions running at once pinned the app to one whole-list fetch + re-render every 200ms.
+    /// Events now upsert their row in place (see `apply`), leaving this 4s tick as the only
+    /// unconditional whole-list fetch.
+    ///
     /// Each tick also checkpoints the focused console to disk regardless, so a crash/quit loses
     /// at most a few seconds of the open transcript.
     func startPolling() {
@@ -338,7 +369,7 @@ final class AppModel {
             // instead of the "Account" placeholder.
             if let self, self.user == nil { self.user = try? await self.api?.me() }
             while !Task.isCancelled {
-                if let self, !self.controlPlaneLive { await self.loadSessions() }
+                if let self { await self.loadSessions() }
                 if let self {
                     // The control stream has no purge event, and a Completed / Trash cold route is
                     // absent from Open by definition. Refresh only that one focused fallback so a
@@ -425,19 +456,75 @@ final class AppModel {
         controlPlaneLive = false
     }
 
-    /// Route one control event. Every event nudges the session list (that's the coalesced snapshot
-    /// refresh the stream was built for); the library events additionally reload the model that
-    /// owns them, because nothing else does — the agent list, notably, was otherwise fetched once
+    /// Route one control event to the cheapest thing that makes it visible.
+    ///
+    /// Originally every event — whatever it was about — nudged a full `GET /sessions` refresh. That
+    /// cost scales with how much is happening at once, so a handful of sessions running together
+    /// held the app at one whole-list fetch, decode and re-render per coalescing window, and an
+    /// agent filing a burst of tasks dragged the session list through it too.
+    ///
+    /// Two rules fix that. Library events only reload the model that owns them (mirroring web's
+    /// `groupsFor`), because nothing else does — the agent list, notably, was otherwise fetched once
     /// at launch, so an agent created elsewhere (a teammate's browser, an MCP `agent_create`) never
-    /// showed up until the app was relaunched.
+    /// showed up until the app was relaunched. And the two high-volume session families carry the
+    /// authoritative row state in their payload, so they're applied in place — this is the
+    /// field-level upsert `ControlSessionSummary` was shaped for (decision Q2). Anything else still
+    /// nudges the snapshot: either a row is leaving Open, or the field that changed isn't on the
+    /// event. The 4s tick in `startPolling` remains the floor for those slim-payload gaps.
     private func apply(_ ev: ControlEvent) {
         switch ev.type {
-        // Providers ride along: AgentsModel.load() fetches the provider catalog with the list.
-        case .agentChanged, .providerChanged: scheduleLibraryRefresh(.agents)
-        case .taskChanged, .taskListChanged:  scheduleLibraryRefresh(.tasks)
-        default: break
+        // Task/task-list nudges belong to the task models alone — they change no session row.
+        case .taskChanged, .taskListChanged:
+            scheduleLibraryRefresh(.tasks)
+        // An agent rename changes what session rows render, so the list follows here too (as web
+        // does). Providers ride along: AgentsModel.load() fetches the provider catalog with the list.
+        case .agentChanged, .providerChanged:
+            scheduleLibraryRefresh(.agents)
+            scheduleControlRefresh()
+        case .sessionCreated, .sessionUpdated:
+            if let summary = ev.payload(ControlSessionSummary.self),
+               mergeSessionSummary(summary) { return }
+            scheduleControlRefresh()
+        case .approvalRequested, .approvalResolved:
+            if let approval = ev.payload(ControlApproval.self),
+               mergePendingApprovals(sessionID: ev.sessionId, pending: approval.pendingApprovals) {
+                return
+            }
+            scheduleControlRefresh()
+        // session.ended (the row leaves Open), session.error / background.task (fields the payload
+        // doesn't carry), tag.changed, and anything a newer server adds.
+        default:
+            scheduleControlRefresh()
         }
-        scheduleControlRefresh()
+    }
+
+    /// Fold a `session.created` / `session.updated` summary into the row already on hand. Returns
+    /// false when only the list query can answer the change, and the caller should nudge a refresh:
+    ///   • the session left Open — the row has to disappear, which membership alone decides;
+    ///   • the row isn't loaded — a session created elsewhere can't be built from the slim summary
+    ///     (no preview line, tags, runner or background count), and prepending a half-populated row
+    ///     would render worse than the ~½s wait for the real snapshot.
+    private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
+        if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return false }
+        guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return false }
+        let merged = sessions[index].applying(summary)
+        guard merged != sessions[index] else { return true }   // nothing user-visible changed
+        var list = sessions
+        list[index] = merged
+        applySessionSnapshot(list)
+        return true
+    }
+
+    /// Same, for `approval.requested` / `approval.resolved` — the event carries the authoritative
+    /// pending count, which is all a row needs to switch between the spinner and the amber
+    /// needs-you cue (and to move the badge). False when the row isn't loaded.
+    private func mergePendingApprovals(sessionID: String, pending: Int) -> Bool {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return false }
+        guard sessions[index].pendingApprovals != pending else { return true }
+        var list = sessions
+        list[index] = list[index].settingPendingApprovals(pending)
+        applySessionSnapshot(list)
+        return true
     }
 
     /// The owner-level lists a control event can dirty, each backed by its own model.
@@ -463,12 +550,15 @@ final class AppModel {
     }
 
     /// Coalesce event-driven refreshes: a burst of control events (a turn ending fires STATUS +
-    /// TURN_END back-to-back) folds into one list fetch.
+    /// TURN_END back-to-back) folds into one list fetch. Only events `apply` can't upsert in place
+    /// reach here, and this is a whole-list fetch + re-render, so the window matches web's 500ms
+    /// rather than the old 200ms — with several sessions running, that alone was up to five
+    /// full refreshes a second.
     private func scheduleControlRefresh() {
         guard !controlRefreshScheduled else { return }
         controlRefreshScheduled = true
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 500_000_000)
             guard let self else { return }
             self.controlRefreshScheduled = false
             await self.loadSessions()
@@ -552,34 +642,67 @@ final class AppModel {
     func loadSessions() async {
         guard let api else { return }
         do {
-            let list = try await api.listSessions(view: .open)
-            // Notify on poll-to-poll transitions (skip the first load, which only primes). Skip the
-            // session whose console is on screen — its own stream already shows the change.
-            if let prev = lastSnapshot {
-                for event in SessionDelta.diff(previous: prev, current: list, focusedSessionID: focusedConsoleSessionID) {
-                    notifications.post(Notifications.content(for: event))
-                }
-            }
-            lastSnapshot = list
-            // Only cached cold-route records are reconciled; the Open list itself remains the
-            // primary store. If that row later leaves a loaded scope, its fallback is still the
-            // newest lifecycle/capability snapshot we observed rather than the original fetch.
-            sessionDetails.reconcile(with: list)
-            sessions = list
-            menuSummary = MenuBar.summary(from: list)
-            updateDockBadge(menuSummary.badge)
-            #if os(iOS)
-            // Foreground reconcile: drop delivered approval banners for sessions that no longer need
-            // a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
-            // cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
-            let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
-            NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains($0) })
-            #endif
+            applySessionSnapshot(try await api.listSessions(view: .open))
         } catch APIError.unauthorized {
             logout()
         } catch {
             // Transient — keep the last good list.
         }
+    }
+
+    /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,
+    /// so a fetched snapshot and an event-driven in-place upsert can never disagree about row shape,
+    /// grouping, badges or which transitions were notified. Everything here is deliberately cheap
+    /// enough to run on an event, which is what lets `apply` skip the fetch.
+    ///
+    /// `notify: false` is for a snapshot whose transitions the caller already accounted for (a local
+    /// purge), where the diff would otherwise post a bogus "finished" alert.
+    private func applySessionSnapshot(_ list: [Session], notify: Bool = true) {
+        // Notify on snapshot-to-snapshot transitions (skip the first load, which only primes). Skip
+        // the session whose console is on screen — its own stream already shows the change.
+        if notify, let prev = lastSnapshot {
+            for event in SessionDelta.diff(previous: prev, current: list,
+                                           focusedSessionID: focusedConsoleSessionID) {
+                notifications.post(Notifications.content(for: event))
+            }
+        }
+        lastSnapshot = list
+        // Only cached cold-route records are reconciled; the Open list itself remains the
+        // primary store. If that row later leaves a loaded scope, its fallback is still the
+        // newest lifecycle/capability snapshot we observed rather than the original fetch.
+        sessionDetails.reconcile(with: list)
+        // Observation invalidates observers on assignment, equal value or not, and these three
+        // drive the drawer + every session list — so an identical snapshot (most 4s ticks of an idle
+        // app) must not write them at all. The field-wise compare is far cheaper than the re-render
+        // it avoids. The badge / notification reconciles below deliberately stay outside this gate:
+        // they have their own first-run rules, and a launch whose first snapshot happens to match
+        // still has to reconcile whatever a silent push left on the icon.
+        if list != sessions {
+            sessions = list
+            recentSessions = RecentsLogic.recent(list, limit: list.count)
+            // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
+            // here instead of leaving it to fetch the identical payload on its own timer.
+            agents?.applyOpenSnapshot(list)
+        }
+        let summary = MenuBar.summary(from: list)
+        if summary != menuSummary { menuSummary = summary }
+        if !didWriteBadge || lastBadge != summary.badge {
+            didWriteBadge = true
+            lastBadge = summary.badge
+            updateDockBadge(summary.badge)
+        }
+        #if os(iOS)
+        // Foreground reconcile: drop delivered approval banners for sessions that no longer need
+        // a reply (e.g. handled on web/macOS), so Notification Center matches the badge — and to
+        // cover the case a silent push couldn't (a force-quit app). See docs/cross-platform-badge-sync.md.
+        // Gated on the id set actually changing: this is a cross-process round-trip, and most
+        // snapshots (a turn ticking along) don't move it at all.
+        let needsYou = Set(SessionGrouping.group(list).needsYou.map(\.id))
+        if needsYou != lastNeedsYou {
+            lastNeedsYou = needsYou
+            NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains($0) })
+        }
+        #endif
     }
 
     /// The agent a session runs as, for scoping the composer's `/` autocomplete. Cold Completed /
@@ -639,11 +762,19 @@ final class AppModel {
         selectedAgentSessionID = session.id
     }
 
-    /// Seed both Native session stores for a freshly created record. The compact compose page keeps
+    /// Seed every Native session store for a freshly created record. The compact compose page keeps
     /// its console in place instead of selecting it, but still needs the detail fallback so a later
     /// cross-client lifecycle change / purge can be refreshed and evicted authoritatively.
+    ///
+    /// The Open snapshot is seeded too — it's the source the drawer's Recents and the agent pane's
+    /// list are derived from, so a row missing here is a row those two would drop again the next
+    /// time any event applied a snapshot (the iPhone "Select a session" bounce `registerCreatedSession`
+    /// exists to prevent). `notify: false`: nothing transitioned, we just learned about a row.
     func registerCreatedAgentSession(_ session: Session) {
         sessionDetails.store(session)
+        if !sessions.contains(where: { $0.id == session.id }) {
+            applySessionSnapshot([session] + sessions, notify: false)
+        }
         agents?.registerCreatedSession(session)
     }
 
@@ -807,10 +938,10 @@ final class AppModel {
     private func discardMissingSession(_ id: String) {
         sessionDetails.invalidateNotFound(id)
         agents?.discardSession(id)
-        sessions = SessionFilter.removing(id, from: sessions)
-        if let lastSnapshot { self.lastSnapshot = SessionFilter.removing(id, from: lastSnapshot) }
-        menuSummary = MenuBar.summary(from: sessions)
-        updateDockBadge(menuSummary.badge)
+        // `notify: false` — a purge is not a run finishing, and the diff would otherwise read the
+        // row's disappearance as one. Going through the snapshot path from here is what keeps Recents,
+        // the agent list and the badge in step with the removal.
+        applySessionSnapshot(SessionFilter.removing(id, from: sessions), notify: false)
         consoleRegistry?.discardMissing(id)
         dropIfOpen(id)
     }

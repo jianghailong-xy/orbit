@@ -145,13 +145,20 @@ struct AgentPanes: View {
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
         .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
         #endif
-        // Reload when either the agent or the view changes (one key so a fast switch coalesces),
-        // then poll every 4s — the same cadence as Open — so external changes (new
-        // sessions, status transitions made from the web) show up without reopening the agent.
-        // The task is bound to this pane's lifetime: switching agent/view cancels and restarts it,
-        // and leaving the Sessions pane stops the poll.
+        // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
+        // external changes (new sessions, status transitions made from the web) show up without
+        // reopening the agent. The task is bound to this pane's lifetime: switching agent/view
+        // cancels and restarts it.
+        //
+        // Only Completed / Trash poll for themselves. Open is served by `AppModel`'s shared snapshot
+        // (`AgentsModel.applyOpenSnapshot`), which the control-plane stream updates per event and a
+        // 4s tick backstops — the same freshness this loop provided, minus a second full fetch of
+        // the identical payload on an independent timer. That duplicate mattered most exactly when
+        // the list was busiest: with several sessions running, the two cadences interleaved into a
+        // near-continuous stream of whole-list decodes and list diffs.
         .task(id: "\(agent.id)|\(view.rawValue)") {
             await agents.loadSessions(agentID: agent.id, view: view, reset: true)
+            guard view != .open else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 if Task.isCancelled { break }
@@ -653,8 +660,16 @@ struct SessionLiveIndicator: View {
 private struct SpinnerGlyph: View {
     let color: Color
     private let period: Double = 0.85   // seconds per rotation; the steady "normal" cadence
+    /// One of these exists per *running* session row — and a session list, plus the drawer's Recents
+    /// behind it, can show many at once. A bare `TimelineView(.animation)` redraws every one of them
+    /// at the display's full rate (120Hz on ProMotion), so the cost of the list scaled with how many
+    /// sessions were running, and it landed on the main thread exactly while scrolling. At 30Hz the
+    /// arc still turns ~12° per frame — indistinguishable from smooth for a 0.85s rotation — for a
+    /// quarter of the redraws. The angle stays a pure function of wall-clock time, so the rate has no
+    /// effect on how fast it appears to spin.
+    private let frameInterval: Double = 1.0 / 30.0
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: frameInterval)) { context in
             let angle = context.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: period) / period * 360
             Circle()

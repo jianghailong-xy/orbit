@@ -294,6 +294,7 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
 | **P4 心跳 + 看门狗(✅ 07-05)** | 服务端 20s keepalive(Nest @Sse 发不了 `:` 注释帧 → 改发 `{type:"ping"}` data 帧,客户端按类型丢弃、字节喂看门狗——效果等同) + OrbitKit 传输层字节看门狗(2× 间隔无字节 → 断开重连) | ControlStreamTests |
 | **P5 客户端接入(✅ 07-05,macOS+iOS 共享层)** | OrbitKit `ControlEvent.swift`+`URLSessionControlStream`;`AppModel` 常驻流:连上→快照重建+停轮询tick,断→回退 4s 轮询(老服务器兼容);通知复用 SessionDelta(upsert 前后快照 diff) | swift test;真机后台保活待验 |
 | P6 web 复用(可选) | EventSource 接入 + 放宽 refetch | 列表实时、轮询流量下降 |
+| **P7 事件级 upsert(✅ 2026-08-03,起因:iOS 并发 session 多时卡顿)** | P5 的"每个事件都 `loadSessions()`"让开销随并发运行数增长(事件比 200ms 合并窗口更密 → 常驻"全量拉取+全树重渲"):现在 `session.created/updated` + `approval.*` 按 payload 原地 upsert 行(OrbitKit `SessionUpsert.swift` 纯逻辑,决议 Q2 真正落地),library 事件只刷自己的模型(对齐 web `groupsFor`);摘要装不下的字段(preview 行 / tags / pin / runningBgCount)改由**常驻** 4s tick 兜底(不再"连上就停 tick"),剩下的 nudge 合并窗口 200→500ms;agent pane 的 Open 列表改吃同一份快照(`AgentsModel.applyOpenSnapshot`),删掉第二条全量轮询 | OrbitKit `swift test`(新增 `SessionUpsertTests`);iOS/macOS 编译门在 PR 跑;真机手感待 TestFlight |
 
 P1–P4 大多可在 Linux 上闭环(单测 + curl);P5 的运行时/后台行为需真机。
 
