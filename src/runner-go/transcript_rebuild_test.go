@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +26,47 @@ func TestClaudeProjectSlug(t *testing.T) {
 		if got := claudeProjectSlug(in); got != want {
 			t.Fatalf("slug(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Reproduces a production failure: the transcript vanished, the claude that was holding it wrote
+// a fresh one on exit containing only bookkeeping, and because a file now existed the rebuild
+// skipped itself — so `--resume` still died on "No conversation found with session ID" and the
+// turn failed. Existence is not the question; holding a conversation is.
+func TestShellTranscriptCountsAsMissing(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// Verbatim shape of the 655-byte file the dying claude left behind in production.
+	shell := write("shell.jsonl",
+		`{"type":"last-prompt","lastPrompt":"remember the passphrase","sessionId":"s"}`+"\n"+
+			`{"type":"ai-title","aiTitle":"memory test","sessionId":"s"}`+"\n")
+	if claudeTranscriptHasConversation(shell) {
+		t.Fatal("a transcript with no conversation must count as missing")
+	}
+	real := write("real.jsonl",
+		`{"type":"last-prompt","lastPrompt":"x","sessionId":"s"}`+"\n"+
+			`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`+"\n")
+	if !claudeTranscriptHasConversation(real) {
+		t.Fatal("a transcript holding a real turn must be left alone")
+	}
+	if claudeTranscriptHasConversation(write("empty.jsonl", "")) {
+		t.Fatal("an empty file is not a conversation")
+	}
+	if claudeTranscriptHasConversation(filepath.Join(dir, "absent.jsonl")) {
+		t.Fatal("a missing file is not a conversation")
+	}
+	// A line longer than the read buffer must not be mistaken for the end of the file.
+	long := write("long.jsonl",
+		`{"type":"ai-title","aiTitle":"`+strings.Repeat("z", transcriptReadBuffer*2)+`"}`+"\n"+
+			`{"type":"assistant","message":{"role":"assistant","content":[]}}`+"\n")
+	if !claudeTranscriptHasConversation(long) {
+		t.Fatal("a conversation record after an oversized line was missed")
 	}
 }
 

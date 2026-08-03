@@ -15,6 +15,7 @@ package main
 // model's context.
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -47,13 +48,17 @@ const (
 	// Per-tool-result cap. Claude's own tools truncate their output long before this; the cap
 	// only stops one pathological result from crowding out the rest of the replay.
 	transcriptToolResultMaxRunes = 20000
+	// How far into an existing transcript to look for a conversation record before calling it
+	// empty. A real one opens on a user turn within the first few lines; this is only a bound on
+	// how much bookkeeping a degenerate file can make us read.
+	transcriptConversationScanCap = 4 << 20
 )
 
 // ensureClaudeTranscript rebuilds the session's local Claude transcript when this machine does
 // not have it, so the caller's `--resume` finds a conversation. Best-effort throughout: on any
 // failure it logs and returns, leaving the spawn to fail exactly as it does today.
 func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) {
-	if findClaudeTranscript(job.SessionUUID) != "" {
+	if p := findClaudeTranscript(job.SessionUUID); p != "" && claudeTranscriptHasConversation(p) {
 		return
 	}
 	path, err := claudeTranscriptPath(execDir, job.SessionUUID)
@@ -118,6 +123,38 @@ func claudeTranscriptPath(cwd, sessionUUID string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(base, "projects", claudeProjectSlug(abs), sessionUUID+".jsonl"), nil
+}
+
+// claudeTranscriptHasConversation reports whether a transcript file holds an actual conversation.
+// The file merely existing is not enough, and assuming it was is how a rebuild silently skips the
+// case it exists for: a claude whose transcript disappeared under it rewrites one on exit holding
+// nothing but bookkeeping (`last-prompt`, `ai-title`), and `--resume` rejects that with the very
+// same "No conversation found with session ID" as a missing file. Verified in production.
+//
+// A file with SOME conversation is left alone: telling a truncated transcript from a complete one
+// would mean pulling the whole event log on every single resume, which is a different and far
+// rarer failure than this one.
+func claudeTranscriptHasConversation(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, transcriptReadBuffer)
+	for read := 0; read < transcriptConversationScanCap; {
+		line, err := r.ReadString('\n')
+		read += len(line)
+		var rec struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal([]byte(line), &rec) == nil && (rec.Type == "user" || rec.Type == "assistant") {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+	}
+	return false
 }
 
 func claudeProjectSlug(path string) string {
