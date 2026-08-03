@@ -37,10 +37,12 @@ Waiting for the sign-in link…</body>`;
  *    (Plain `codex login` can't be relayed at all: it serves its callback on localhost on the
  *    runner; Kimi's ordinary `kimi login` is already a device flow.)
  *
- * The URL only exists a second or two after the click that asked for it, by which point a
- * window.open() is outside the user gesture and gets blocked as a popup. So the click parks a
- * blank tab and the poll points it at the URL when it lands. The anchor stays either way: it is
- * the fallback when the browser blocked the tab, or the user closed it.
+ * Either way the URL is slow to arrive: the runner is told to start signing in on its next
+ * heartbeat, half a minute off at worst, and only then does the CLI print anything. By that point
+ * a window.open() is long outside the user gesture and gets blocked as a popup — so claude's
+ * click parks a tab on a holding page and the poll points it at the URL when it lands. The anchor
+ * stays either way: it is the fallback when the browser blocked the tab, or the user closed it,
+ * and it is all a device flow gets (see `begin`).
  */
 export function RunnerSignIn({
   runnerId,
@@ -101,11 +103,18 @@ export function RunnerSignIn({
     onSuccess: put,
   });
 
-  // Park a tab now, while the click is still a user gesture, and hand it the URL when the poll
-  // brings one back. A browser that blocked it leaves null here and the anchor takes over.
   const begin = () => {
-    tab.current = window.open('', '_blank');
-    tab.current?.document.write(WAITING_PAGE);
+    // Park a tab now, while the click is still a user gesture, and hand it the URL when the poll
+    // brings one back. A browser that blocked it leaves null here and the anchor takes over.
+    //
+    // Only claude's flow earns that: its page is usable the moment it exists. A device flow's is
+    // not — it asks for the one-time code that arrives *with* the URL and is shown on this card,
+    // so opening it first strands the user on a code prompt with no code, after half a minute
+    // watching a blank tab. Those wait here and open the page from the card instead.
+    if (engine === 'claude') {
+      tab.current = window.open('', '_blank');
+      tab.current?.document.write(WAITING_PAGE);
+    }
     start.mutate();
   };
 
@@ -175,7 +184,10 @@ export function RunnerSignIn({
         <div className="rsi-row">
           <LoadingOutlined /> Starting sign-in on the runner…
         </div>
-        <div className="rsi-hint">It'll show a link here as soon as the CLI prints one.</div>
+        <div className="rsi-hint">
+          The runner picks it up on its next check-in, so the link can take up to a minute to
+          show here.
+        </div>
         <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
           Cancel
         </button>

@@ -43,6 +43,8 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html).toContain('Sign in to Codex from here');
   });
 
+  // A device flow gets no auto-opened tab (its page is useless before the code exists), so the
+  // card itself has to carry both halves of what the user does next.
   it('still shows a sign-in that is actually under way', () => {
     const html = open(
       loginState({
@@ -54,5 +56,6 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     );
 
     expect(html).toContain('ZXHO-K06HC');
+    expect(html).toContain('href="https://auth.openai.com/codex/device"');
   });
 });
