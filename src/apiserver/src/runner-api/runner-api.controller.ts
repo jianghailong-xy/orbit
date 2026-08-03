@@ -89,7 +89,7 @@ import { runtimeInitSessionId } from './runtime-init';
 import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
-import { isNoiseSystemEvent } from '../common/system-noise';
+import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import {
   isTerminalResumeHandoffOwner,
@@ -2250,6 +2250,49 @@ export class RunnerApiController {
       workDir: agent?.workDir ?? null,
       title: session.title,
     };
+  }
+
+  /**
+   * The session's stored transcript, oldest-first, so a runner can rebuild the runtime's own
+   * local conversation file when it is gone — a machine that never ran this session, a wiped
+   * ~/.claude, a moved cwd (see transcript_rebuild.go). Without it `claude --resume` just says
+   * "No conversation found with session ID".
+   *
+   * Payloads come back WHOLE: unlike the clients' `/events/page`, a rebuilt transcript assembled
+   * from preview-truncated tool output would silently rewrite the agent's own history. Paged on
+   * `after` so a long session streams in bounded chunks.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Get('sessions/:id/events')
+  async sessionEvents(
+    @CurrentRunner() runner: { id: string },
+    @Param('id', Base62UuidPipe) sessionId: string,
+    @Query('after') after?: string,
+    @Query('limit') limit?: string,
+  ): Promise<{
+    events: { seq: number; type: string; payload: unknown; ts: Date }[];
+    hasMore: boolean;
+  }> {
+    await this.assertSessionOwnership(sessionId, runner.id);
+    const asInt = (s: string | undefined, fallback: number): number => {
+      const n = Number(s);
+      return s !== undefined && s !== '' && Number.isFinite(n) ? Math.trunc(n) : fallback;
+    };
+    const take = Math.min(Math.max(asInt(limit, 500), 1), 1000);
+    const afterSeq = asInt(after, 0);
+    const rows = await this.prisma.$queryRaw<
+      { seq: number; type: string; payload: unknown; ts: Date }[]
+    >`
+      SELECT seq, type, payload, created_at AS "ts"
+      FROM run_event
+      WHERE session_id = ${sessionId}::uuid
+        AND seq > ${afterSeq}
+        AND ${notNoiseSql}
+      ORDER BY seq ASC
+      LIMIT ${take + 1}
+    `; // one extra row: its presence means newer events remain
+    const hasMore = rows.length > take;
+    return { events: hasMore ? rows.slice(0, take) : rows, hasMore };
   }
 
   /**

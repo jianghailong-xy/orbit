@@ -594,6 +594,31 @@ func (t *Transport) sessionMeta(sessionID string) (*SessionMetaResponse, error) 
 	return &out, nil
 }
 
+// StoredEvent is one persisted run_event as the control plane hands it back for a
+// transcript rebuild — payloads untruncated, oldest-first.
+type StoredEvent struct {
+	Seq     int                    `json:"seq"`
+	Type    string                 `json:"type"`
+	Payload map[string]interface{} `json:"payload"`
+	Ts      time.Time              `json:"ts"`
+}
+
+type StoredEventsResponse struct {
+	Events  []StoredEvent `json:"events"`
+	HasMore bool          `json:"hasMore"`
+}
+
+// sessionEvents pulls one page of the session's stored transcript (seq > after). Used only by
+// the transcript rebuild, so the timeout is generous: pages carry whole tool payloads.
+func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, limit int) (*StoredEventsResponse, error) {
+	var out StoredEventsResponse
+	path := fmt.Sprintf("/runner/sessions/%s/events?after=%d&limit=%d", sessionID, after, limit)
+	if err := t.do(ctx, "GET", path, nil, &out, 60*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (t *Transport) listTasks() (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/tasks", nil, &out, taskOpTimeout)

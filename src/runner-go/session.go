@@ -1016,6 +1016,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	if firstSpawn {
 		args = append(args, "--session-id", job.SessionUUID)
 	} else {
+		// claude keeps the conversation in a local file keyed by cwd + session id, which this
+		// machine may simply not have: the session's first spawn on a different runner, a wiped
+		// ~/.claude, a moved worktree. Orbit still has every event, so rebuild the file instead
+		// of letting --resume fail with "No conversation found with session ID".
+		ensureClaudeTranscript(ctx, t, job, execDir, emit)
 		args = append(args, "--resume", job.SessionUUID)
 	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they

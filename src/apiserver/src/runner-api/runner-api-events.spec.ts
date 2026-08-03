@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
@@ -123,6 +123,57 @@ test('terminal sessions reject empty and streaming-only batches too', async () =
     assert.equal(calls.updateMany.length, 0);
     assert.equal(published(), 0);
   }
+});
+
+/** A controller wired only for the read path: session ownership plus one raw query. */
+function makeReaderController(rows: unknown[], assignedRunnerId = 'runner-1') {
+  const prisma = {
+    session: { findUnique: async () => ({ id: 'session-1', assignedRunnerId }) },
+    $queryRaw: async () => rows,
+  };
+  return new RunnerApiController(prisma as never, {} as never, {} as never, {} as never, {} as never);
+}
+
+test('the transcript read hands back whole payloads oldest-first', async () => {
+  const controller = makeReaderController([
+    { seq: 1, type: RunEventType.USER, payload: { text: 'hi' }, ts: new Date(0) },
+    { seq: 2, type: RunEventType.ASSISTANT, payload: { text: 'x'.repeat(5000) }, ts: new Date(0) },
+  ]);
+
+  const out = await controller.sessionEvents({ id: 'runner-1' }, 'session-1', '0', '10');
+
+  assert.equal(out.hasMore, false);
+  assert.deepEqual(
+    out.events.map((e) => e.seq),
+    [1, 2],
+  );
+  // A rebuilt transcript assembled from preview-sized tool bodies would rewrite the agent's
+  // own history, so this path must never truncate the way the clients' /events/page does.
+  assert.equal((out.events[1].payload as { text: string }).text.length, 5000);
+});
+
+test('the transcript read reports more without leaking the probe row', async () => {
+  const rows = Array.from({ length: 3 }, (_, i) => ({
+    seq: i + 1,
+    type: RunEventType.USER,
+    payload: {},
+    ts: new Date(0),
+  }));
+  const controller = makeReaderController(rows);
+
+  const out = await controller.sessionEvents({ id: 'runner-1' }, 'session-1', '0', '2');
+
+  assert.equal(out.hasMore, true, 'the extra row means older history remains');
+  assert.equal(out.events.length, 2, 'the probe row itself is not returned');
+});
+
+test('another runner cannot read a session transcript', async () => {
+  const controller = makeReaderController([], 'runner-2');
+
+  await assert.rejects(
+    controller.sessionEvents({ id: 'runner-1' }, 'session-1', undefined, undefined),
+    ForbiddenException,
+  );
 });
 
 test('a recent turn-attributed batch cannot bypass the terminal fence', async () => {
