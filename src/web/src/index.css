@@ -201,6 +201,16 @@ body {
   background: var(--scrollbar-hover);
 }
 
+/* Off-screen but still in the accessibility tree — the toast live region (see lib/toast.tsx). */
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  white-space: nowrap;
+}
+
 /* Toasts (AntD message): a top-right notification stack. The transcript is a growing content
    stream, so a centred overlay lands right on whatever you just scrolled to; parking the cards
    in the corner keeps the conversation column and the session title clear. AntD has no
@@ -215,21 +225,57 @@ body {
    this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice-wrapper …`, i.e.
    specificity (0,2,0)/(0,3,0) — nothing we can write flatly outranks them. The ones AntD
    leaves alone (width, the card's text-align, user-select) land without it. */
+/* Normally level with the notification stack's origin; when that stack has cards up, it parks
+   below them instead of underneath them — lib/toast.tsx measures it into --toast-stack-top
+   (0px when the stack is empty, so max() falls back to the normal top). */
 .ant-message {
-  top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+  top: max(calc(env(safe-area-inset-top, 0px) + 8px), var(--toast-stack-top, 0px)) !important;
+  transition: top 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ant-message-notice-wrapper {
   text-align: right !important;
-  padding-right: 16px !important;
+  padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
 }
+/* Same card as the lifecycle notification below — radius, padding, border, shadow and icon
+   metrics are shared, so two cards stacked in one corner read as one family rather than as two
+   systems that happen to overlap. AntD's own defaults for this surface are 8px radius,
+   9px/12px padding, a three-layer shadow and 16px icons. */
 .ant-message-notice-content {
   width: 360px;
   max-width: calc(100vw - 32px);
+  padding: 12px 16px !important;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px !important;
+  background: var(--bg-raised) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1) !important;
   text-align: start;
   /* Toasts don't take clicks — the card floats over the header's right edge and used to
      swallow them (it blocked the double-click-to-rename target). Interactive cards opt back
      in below. */
   pointer-events: none !important;
+}
+:root[data-theme='dark'] .ant-message-notice-content {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35) !important;
+}
+/* 20px glyph inset 16px, text at 52px — the lifecycle card's icon column, so the two surfaces
+   share a text edge. One palette too: AntD's message icons default to its own token colours,
+   which are a different red (#f54a45) and orange (#ff8800) from the semantic vars every other
+   status surface in the app resolves through. */
+.ant-message-custom-content > .anticon {
+  margin-inline-end: 16px !important;
+  font-size: 20px !important;
+}
+.ant-message-custom-content.ant-message-success > .anticon {
+  color: var(--success-solid) !important;
+}
+.ant-message-custom-content.ant-message-info > .anticon {
+  color: var(--brand) !important;
+}
+.ant-message-custom-content.ant-message-warning > .anticon {
+  color: var(--warning-solid) !important;
+}
+.ant-message-custom-content.ant-message-error > .anticon {
+  color: var(--error-solid) !important;
 }
 .ant-message-notice-content:has(.toast-err) {
   pointer-events: auto !important;
@@ -264,6 +310,8 @@ body {
   background: var(--bg-raised);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
 }
+/* Unlike the Message stack above, every card here takes clicks: the copy block opens the session
+   the card names (see lib/toast.tsx), so there is no such thing as an inert one. */
 .ant-notification
   .ant-notification-notice-wrapper
   > .session-lifecycle-toast.ant-notification-notice {
@@ -283,12 +331,15 @@ body {
 .session-lifecycle-toast .ant-notification-notice-message {
   min-width: 0;
 }
+/* One icon size for every tone, and the same 20px the Message toast uses — success used to
+   render at 24px against everyone else's 20px, so the same filled status circle came in two
+   weights depending on the outcome. (AntD sizes this one itself, hence !important.) */
 .session-lifecycle-toast .ant-notification-notice-icon {
   inset-inline-start: 16px;
   top: 50%;
   transform: translateY(-50%);
-  width: 24px;
-  font-size: 24px;
+  width: 20px;
+  font-size: 20px !important;
   line-height: 1;
   text-align: center;
 }
@@ -297,21 +348,21 @@ body {
 }
 .session-lifecycle-toast--neutral .session-lifecycle-toast-icon {
   color: var(--text-3);
-  font-size: 20px;
 }
 .session-lifecycle-toast--info .session-lifecycle-toast-icon {
   color: var(--brand);
-  font-size: 20px;
 }
 .session-lifecycle-toast--warning .session-lifecycle-toast-icon {
   color: var(--warning-solid);
-  font-size: 20px;
 }
 .session-lifecycle-toast--error .session-lifecycle-toast-icon,
 .session-lifecycle-toast--danger .session-lifecycle-toast-icon {
   color: var(--error-solid);
-  font-size: 20px;
 }
+/* A tinted border means the card waits for you: warning and error are the two tones that never
+   time out. `danger` keeps the red icon — it reports a destructive result — but not the border,
+   because it dismisses itself like any other confirmation, and a card that looks identical to
+   the one that stays put is the reason you stop trusting the border at all. */
 .ant-notification
   .ant-notification-notice-wrapper
   > .session-lifecycle-toast--warning.ant-notification-notice {
@@ -319,10 +370,7 @@ body {
 }
 .ant-notification
   .ant-notification-notice-wrapper
-  > .session-lifecycle-toast--error.ant-notification-notice,
-.ant-notification
-  .ant-notification-notice-wrapper
-  > .session-lifecycle-toast--danger.ant-notification-notice {
+  > .session-lifecycle-toast--error.ant-notification-notice {
   border-color: var(--error-border);
 }
 .session-lifecycle-toast
@@ -331,6 +379,11 @@ body {
   margin-inline-start: 36px;
   font-size: inherit;
   line-height: inherit;
+}
+/* AntD parks the × 24px in from the edge; pull it onto the card's own 16px content grid so it
+   lines up with the Message toast's ×. */
+.session-lifecycle-toast .ant-notification-notice-close {
+  inset-inline-end: 16px !important;
 }
 .session-lifecycle-toast-body {
   display: flex;
@@ -425,9 +478,11 @@ body {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
-/* AntD's top-right Notification already enters horizontally. Tighten that full-card travel to
-   a subtle 16px so it feels anchored to the header rather than flying in from off-screen. */
-@keyframes session-lifecycle-toast-enter {
+/* One entrance for both toast surfaces. AntD's top-right Notification already enters
+   horizontally — tightened here to a subtle 16px so it feels anchored to the header rather than
+   flying in from off-screen — while its Message drops in vertically. Cards that share a corner
+   shouldn't arrive from two different directions, so Message borrows this one. */
+@keyframes orbit-toast-enter {
   from {
     opacity: 0;
     transform: translate3d(16px, 0, 0);
@@ -444,8 +499,12 @@ body {
 .ant-notification.ant-notification-topRight
   .ant-notification-notice-wrapper.ant-notification-fade-appear.ant-notification-fade-appear-active:has(
     > .session-lifecycle-toast
-  ) {
-  animation-name: session-lifecycle-toast-enter !important;
+  ),
+.ant-message
+  .ant-message-notice-wrapper.ant-message-move-up-enter.ant-message-move-up-enter-active,
+.ant-message
+  .ant-message-notice-wrapper.ant-message-move-up-appear.ant-message-move-up-appear-active {
+  animation-name: orbit-toast-enter !important;
   animation-duration: 180ms !important;
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1) !important;
 }
@@ -481,9 +540,15 @@ body {
   .ant-notification.ant-notification-topRight
     .ant-notification-notice-wrapper.ant-notification-fade-appear:has(> .session-lifecycle-toast),
   .ant-notification.ant-notification-topRight
-    .ant-notification-notice-wrapper.ant-notification-fade-leave:has(> .session-lifecycle-toast) {
+    .ant-notification-notice-wrapper.ant-notification-fade-leave:has(> .session-lifecycle-toast),
+  .ant-message .ant-message-notice-wrapper.ant-message-move-up-enter,
+  .ant-message .ant-message-notice-wrapper.ant-message-move-up-appear,
+  .ant-message .ant-message-notice-wrapper.ant-message-move-up-leave {
     opacity: 1 !important;
     animation: none !important;
+  }
+  .ant-message {
+    transition: none;
   }
 }
 
@@ -503,11 +568,13 @@ body {
 .toast-err-close {
   flex: none;
   margin-left: auto;
-  padding: 0 2px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text-3);
-  font-size: 12px;
+  /* Same glyph and same 16px inset as the lifecycle card's × (see below) — dismissing a toast
+     shouldn't be a different-sized target depending on which surface it came from. */
+  font-size: 14px;
   line-height: 20px;
   cursor: pointer;
 }

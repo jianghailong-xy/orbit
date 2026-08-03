@@ -1000,7 +1000,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Completed", undoSessionID: id)
+            showToast("Session completed", undoSessionID: id)
         }
     }
 
@@ -1028,7 +1028,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Deleted", undoSessionID: id)
+            showToast("Moved to Trash", undoSessionID: id)
         }
     }
 
