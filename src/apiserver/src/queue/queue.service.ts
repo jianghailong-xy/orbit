@@ -7,7 +7,7 @@ import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-prov
 import { claudeOauthTokenFor } from '../providers/subscription-token';
 import {
   normalizeBuiltinPermissionMode,
-  normalizeEffortForProvider,
+  normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 
@@ -324,7 +324,15 @@ export class QueueService {
         // guard applies to API/MCP/old-client input as it does to built-in identities.
         permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
         // Per-session effort wins; otherwise use the agent's effort setting.
-        effort: normalizeEffortForProvider(provider, session.effort ?? agent?.effort),
+        // An OpenCode variant is model-defined, so it is only checkable once the assigned
+        // runner's catalog is known — an account default carried over from another runtime
+        // would otherwise reach the CLI as an unsupported `--variant`.
+        effort: normalizeEffortForRuntimeModel(
+          provider,
+          session.effort ?? agent?.effort,
+          exec.model,
+          session.assignedRunner?.modelCatalog,
+        ),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,

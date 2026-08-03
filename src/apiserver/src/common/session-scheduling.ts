@@ -15,6 +15,15 @@ export const OPEN_SESSION_STATUSES: RunStatus[] = [
   RunStatus.INTERRUPTED,
 ];
 
+/**
+ * PENDING -> RUNNING must go through QueueService.trySessionClaim.
+ *
+ * Migration 0080 installs a BEFORE UPDATE trigger on `session` that silently drops that exact
+ * transition for an OpenCode row unless the transaction set the `orbit.runner_supports_opencode`
+ * GUC — which only the claim path does. A second writer would therefore no-op without raising.
+ * Add new work-dispatch paths to the queue, not beside it.
+ */
+
 /** Queueing work onto an idle interactive session requires a fresh runner slot. */
 export function statusAfterTurnEnqueued(status: RunStatus): RunStatus {
   return status === RunStatus.AWAITING_INPUT || status === RunStatus.INTERRUPTED

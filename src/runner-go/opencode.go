@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -396,12 +397,23 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	if ctx.Err() != nil {
 		return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 	}
+	var escaping []string
 	if openCodeGuardedMode(job.Agent.PermissionMode) {
-		if err := validateOpenCodeWorkspaceSymlinks(execDir); err != nil {
+		var err error
+		if escaping, err = openCodeEscapingWorkspacePaths(execDir); err != nil {
 			message := "refusing unsafe OpenCode workspace: " + err.Error()
 			result.Status, result.Subtype, result.Error, result.Result = stFailed, "config_error", message, message
 			emit(evError, map[string]interface{}{"message": message})
 			return result
+		}
+		if len(escaping) > 0 {
+			// Denied below in the agent's permission map rather than failing the turn: a
+			// checkout may legitimately link a vendor dir (Orbit's own worktrees symlink
+			// node_modules), and refusing outright would make those sessions unusable.
+			emit(evSystem, map[string]interface{}{
+				"subtype": "workspace_symlinks_denied",
+				"paths":   escaping,
+			})
 		}
 	}
 	agentName, err := newOpenCodeAgentName()
@@ -411,7 +423,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		emit(evError, map[string]interface{}{"message": message})
 		return result
 	}
-	configContent, err := openCodeConfigContent(job, scratchDir, agentName)
+	configContent, err := openCodeConfigContent(job, scratchDir, agentName, escaping)
 	if err != nil {
 		result.Status, result.Subtype, result.Error, result.Result = stFailed, "config_error", err.Error(), err.Error()
 		emit(evError, map[string]interface{}{"message": err.Error()})
@@ -759,7 +771,7 @@ func newOpenCodeAgentName() (string, error) {
 	return "orbit" + hex.EncodeToString(entropy[:]), nil
 }
 
-func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string) (string, error) {
+func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, escapingPaths []string) (string, error) {
 	base := strings.TrimSpace(job.Agent.Env["OPENCODE_CONFIG_CONTENT"])
 	if base == "" {
 		base = strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_CONTENT"))
@@ -823,7 +835,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string) (s
 	permission := map[string]interface{}{}
 	orbitAgent["permission"] = permission
 	permission["todowrite"] = "deny"
-	applyOpenCodePermissions(permission, job.Agent)
+	applyOpenCodePermissions(permission, job.Agent, escapingPaths)
 
 	mcp := ensureObject(config, "mcp")
 	for name, raw := range job.Agent.McpConfig {
@@ -897,7 +909,7 @@ func ensureObject(parent map[string]interface{}, key string) map[string]interfac
 	return value
 }
 
-func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExecConfig) {
+func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExecConfig, escapingPaths []string) {
 	mode := strings.TrimSpace(agent.PermissionMode)
 	guarded := openCodeGuardedMode(mode)
 	if guarded {
@@ -979,6 +991,31 @@ func applyOpenCodePermissions(permission map[string]interface{}, agent AgentExec
 		// even for shell commands that could otherwise mutate the checkout.
 		permission["bash"] = "ask"
 	}
+
+	// A workspace symlink whose target resolves outside the checkout: OpenCode's lexical
+	// boundary check passes but the kernel walks out of the workspace. Deny those paths
+	// explicitly, last, so neither the mode baseline nor an AllowedTools entry reopens them.
+	// `edit` collapses Edit/Write/ApplyPatch, so it has to become a map wherever a plain
+	// decision would otherwise allow the whole tool (acceptEdits, and the ungated modes).
+	if guarded && len(escapingPaths) > 0 {
+		read := mapValue(permission["read"])
+		edit, ok := permission["edit"].(map[string]interface{})
+		if !ok {
+			edit = map[string]interface{}{}
+			if current := asString(permission["edit"]); current != "" {
+				edit["*"] = current
+			}
+			permission["edit"] = edit
+		}
+		for _, rel := range escapingPaths {
+			for _, pattern := range []string{rel, rel + "/**"} {
+				if read != nil {
+					read[pattern] = "deny"
+				}
+				edit[pattern] = "deny"
+			}
+		}
+	}
 }
 
 func openCodeGuardedMode(mode string) bool {
@@ -993,24 +1030,36 @@ func openCodeProjectConfigFlag(mode string) string {
 	return "0"
 }
 
-// validateOpenCodeWorkspaceSymlinks closes a gap in OpenCode's lexical
-// external-directory check: its read/edit tools follow symlinks after permission
-// evaluation. Guarded sessions therefore accept links only when their fully
-// resolved target remains inside the checkout. Dangling links fail closed because
-// a later edit could otherwise materialize their target outside the checkout.
-func validateOpenCodeWorkspaceSymlinks(root string) error {
+// openCodeEscapingWorkspacePaths closes a gap in OpenCode's lexical external-directory check:
+// its read/edit tools follow symlinks after permission evaluation, so a link whose resolved
+// target sits outside the checkout passes that check and then walks out of the workspace.
+//
+// It reports the workspace-relative paths to deny rather than failing the session: a checkout may
+// legitimately link a vendor directory to a shared location (Orbit's own worktrees symlink
+// node_modules back to the main repo), and refusing those outright would make every guarded
+// OpenCode session on such a checkout unusable. A dangling link is reported too — a later edit
+// could otherwise materialize its target outside the checkout.
+//
+// `.git` is skipped: it holds no agent-authored content, is never reachable through a tool the
+// permission map gates by path, and dominates the walk cost on a large repository. Note that
+// WalkDir does not follow symlinks, so a symlinked vendor tree costs a single entry here.
+func openCodeEscapingWorkspacePaths(root string) ([]string, error) {
 	absolute, err := filepath.Abs(root)
 	if err != nil {
-		return fmt.Errorf("resolve checkout: %w", err)
+		return nil, fmt.Errorf("resolve checkout: %w", err)
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(absolute)
 	if err != nil {
-		return fmt.Errorf("resolve checkout: %w", err)
+		return nil, fmt.Errorf("resolve checkout: %w", err)
 	}
 	resolvedRoot = filepath.Clean(resolvedRoot)
-	return filepath.WalkDir(resolvedRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+	var escaping []string
+	walkErr := filepath.WalkDir(resolvedRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return fmt.Errorf("inspect checkout: %w", walkErr)
+		}
+		if entry.IsDir() && entry.Name() == ".git" && path != resolvedRoot {
+			return fs.SkipDir
 		}
 		if entry.Type()&os.ModeSymlink == 0 {
 			return nil
@@ -1019,25 +1068,37 @@ func validateOpenCodeWorkspaceSymlinks(root string) error {
 		if relErr != nil {
 			rel = entry.Name()
 		}
+		rel = filepath.ToSlash(rel)
 		target, targetErr := filepath.EvalSymlinks(path)
 		if targetErr != nil {
-			return fmt.Errorf("workspace symlink %q cannot be resolved", rel)
+			// Dangling: nothing to compare against, so treat it as escaping.
+			escaping = append(escaping, rel)
+			return nil
 		}
 		target = filepath.Clean(target)
 		targetRel, targetRelErr := filepath.Rel(resolvedRoot, target)
 		if targetRelErr != nil || filepath.IsAbs(targetRel) || targetRel == ".." || strings.HasPrefix(targetRel, ".."+string(os.PathSeparator)) {
-			return fmt.Errorf("workspace symlink %q resolves outside the checkout", rel)
+			escaping = append(escaping, rel)
+			return nil
 		}
-		// A directory link placed deeper than its target can combine with `..`
-		// segments so OpenCode's lexical boundary check sees an in-workspace path
-		// while the kernel walks above the checkout after resolving the link.
-		if info, statErr := os.Stat(path); statErr != nil {
-			return fmt.Errorf("inspect workspace symlink %q: %w", rel, statErr)
-		} else if info.IsDir() && openCodePathDepth(targetRel) < openCodePathDepth(rel) {
-			return fmt.Errorf("workspace directory symlink %q can traverse outside the checkout", rel)
+		// A directory link placed deeper than its target can combine with `..` segments so
+		// OpenCode's lexical boundary check sees an in-workspace path while the kernel walks
+		// above the checkout after resolving the link.
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			escaping = append(escaping, rel)
+			return nil
+		}
+		if info.IsDir() && openCodePathDepth(filepath.ToSlash(targetRel)) < openCodePathDepth(rel) {
+			escaping = append(escaping, rel)
 		}
 		return nil
 	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	sort.Strings(escaping)
+	return escaping, nil
 }
 
 func openCodePathDepth(path string) int {
@@ -1045,7 +1106,7 @@ func openCodePathDepth(path string) int {
 		return 0
 	}
 	depth := 0
-	for _, part := range strings.Split(filepath.Clean(path), string(os.PathSeparator)) {
+	for _, part := range strings.Split(path, "/") {
 		if part != "" && part != "." {
 			depth++
 		}

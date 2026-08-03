@@ -34,3 +34,21 @@ export function firstRuntimeCatalogModel(value: unknown, runtime: AgentProvider)
   }
   return undefined;
 }
+
+/** The reasoning levels/variants a runner reports for one runtime model, or undefined when the
+ * heartbeat catalog has no exact row for it. The heartbeat catalog is deliberately runner-wide,
+ * so "no row" means "possibly project-scoped", not "unsupported". */
+export function runtimeCatalogReasoningLevels(
+  value: unknown,
+  runtime: AgentProvider,
+  model: string,
+): string[] | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const rows = (value as RunnerModelCatalog)[runtime];
+  if (!Array.isArray(rows)) return undefined;
+  const row = rows.find((entry) => entry && entry.value === model);
+  if (!row) return undefined;
+  return Array.isArray(row.reasoningLevels)
+    ? row.reasoningLevels.filter((level): level is string => typeof level === 'string')
+    : [];
+}

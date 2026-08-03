@@ -157,7 +157,7 @@ func TestOpenCodeConfigMergesPromptPermissionsAndMCP(t *testing.T) {
 			},
 		},
 	}
-	raw, err := openCodeConfigContent(job, scratch, "orbit-test")
+	raw, err := openCodeConfigContent(job, scratch, "orbit-test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestOpenCodeAutoModeRetainsConfiguredLSPAndFormatter(t *testing.T) {
 		Env: map[string]string{
 			"OPENCODE_CONFIG_CONTENT": `{"lsp":true,"formatter":true}`,
 		},
-	}}, t.TempDir(), "orbit-test")
+	}}, t.TempDir(), "orbit-test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestOpenCodeAutoModeRetainsConfiguredLSPAndFormatter(t *testing.T) {
 func TestOpenCodeConfigRejectsNullInlineConfig(t *testing.T) {
 	_, err := openCodeConfigContent(&ClaimedSession{Agent: AgentExecConfig{
 		Env: map[string]string{"OPENCODE_CONFIG_CONTENT": "null"},
-	}}, t.TempDir(), "orbit-test")
+	}}, t.TempDir(), "orbit-test", nil)
 	if err == nil || !strings.Contains(err.Error(), "expected a JSON object") {
 		t.Fatalf("error = %v", err)
 	}
@@ -287,7 +287,7 @@ func TestInstalledOpenCodeProjectAgentCannotOverrideRandomOrbitAgent(t *testing.
 			PermissionMode: "dontAsk",
 			AllowedTools:   []string{"Read"},
 		},
-	}, t.TempDir(), agentName)
+	}, t.TempDir(), agentName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,7 +545,7 @@ func TestOpenCodeDontAskDeniesByDefaultButKeepsExplicitAllows(t *testing.T) {
 		PermissionMode:  "dontAsk",
 		AllowedTools:    []string{"Read", "mcp__orbit__*"},
 		DisallowedTools: []string{"Bash"},
-	})
+	}, nil)
 	for key, want := range map[string]interface{}{
 		"*": "deny", "glob": "allow",
 		"list": "allow", "lsp": "deny", "todoread": "allow", "skill": "allow",
@@ -564,7 +564,7 @@ func TestOpenCodeDontAskDeniesByDefaultButKeepsExplicitAllows(t *testing.T) {
 
 func TestOpenCodeAcceptEditsAsksForEverythingElse(t *testing.T) {
 	permission := map[string]interface{}{}
-	applyOpenCodePermissions(permission, AgentExecConfig{PermissionMode: "acceptEdits"})
+	applyOpenCodePermissions(permission, AgentExecConfig{PermissionMode: "acceptEdits"}, nil)
 	for key, want := range map[string]interface{}{
 		"*": "ask", "glob": "allow",
 		"list": "allow", "lsp": "deny", "todoread": "allow", "skill": "allow",
@@ -590,7 +590,7 @@ func TestOpenCodeEditFamilyAliasesUseThePermissionOpenCodeChecks(t *testing.T) {
 	applyOpenCodePermissions(permission, AgentExecConfig{
 		PermissionMode:  "auto",
 		DisallowedTools: []string{"Write"},
-	})
+	}, nil)
 	if permission["edit"] != "deny" {
 		t.Fatalf("permission.edit = %#v, want deny", permission["edit"])
 	}
@@ -601,7 +601,7 @@ func TestOpenCodeDefaultModeGuardsMutationsButAllowsRepositoryInspection(t *test
 	applyOpenCodePermissions(permission, AgentExecConfig{
 		PermissionMode: "default",
 		AllowedTools:   []string{"Read"},
-	})
+	}, nil)
 	for key, want := range map[string]interface{}{
 		"*": "ask", "glob": "allow",
 		"list": "allow", "lsp": "deny", "todoread": "allow", "skill": "allow",
@@ -618,7 +618,7 @@ func TestOpenCodeDefaultModeGuardsMutationsButAllowsRepositoryInspection(t *test
 
 func TestOpenCodeDontAskKeepsSensitiveFilesDenied(t *testing.T) {
 	permission := map[string]interface{}{}
-	applyOpenCodePermissions(permission, AgentExecConfig{PermissionMode: "dontAsk"})
+	applyOpenCodePermissions(permission, AgentExecConfig{PermissionMode: "dontAsk"}, nil)
 	assertOpenCodeReadPolicy(t, permission, "deny")
 }
 
@@ -633,7 +633,7 @@ func TestOpenCodeMCPPermissionKeysMatchOfficialSanitizer(t *testing.T) {
 	applyOpenCodePermissions(permission, AgentExecConfig{
 		PermissionMode:  "auto",
 		DisallowedTools: []string{"mcp__docs.prod__Search/Now"},
-	})
+	}, nil)
 	if permission["docs_prod_Search_Now"] != "deny" {
 		t.Fatalf("sanitized MCP deny was not applied: %#v", permission)
 	}
@@ -645,7 +645,7 @@ func TestOpenCodeGuardedMCPResourcesFollowServerAllowAndDeny(t *testing.T) {
 		PermissionMode:  "default",
 		AllowedTools:    []string{"mcp__docs.prod__*"},
 		DisallowedTools: []string{"mcp__secret__*"},
-	})
+	}, nil)
 	read := mapValue(permission["read"])
 	for pattern, want := range map[string]interface{}{
 		"*": "allow", "mcp:*": "ask", "mcp:docs.prod:*": "allow", "mcp:secret:*": "deny",
@@ -656,7 +656,7 @@ func TestOpenCodeGuardedMCPResourcesFollowServerAllowAndDeny(t *testing.T) {
 	}
 }
 
-func TestValidateOpenCodeWorkspaceSymlinks(t *testing.T) {
+func TestOpenCodeEscapingWorkspacePaths(t *testing.T) {
 	t.Run("internal", func(t *testing.T) {
 		root := t.TempDir()
 		if err := os.Mkdir(filepath.Join(root, "data"), 0o700); err != nil {
@@ -668,8 +668,9 @@ func TestValidateOpenCodeWorkspaceSymlinks(t *testing.T) {
 		if err := os.Symlink(filepath.Join("data", "safe.txt"), filepath.Join(root, "link.txt")); err != nil {
 			t.Fatal(err)
 		}
-		if err := validateOpenCodeWorkspaceSymlinks(root); err != nil {
-			t.Fatalf("internal symlink rejected: %v", err)
+		got, err := openCodeEscapingWorkspacePaths(root)
+		if err != nil || len(got) != 0 {
+			t.Fatalf("internal symlink reported: %v %v", got, err)
 		}
 	})
 
@@ -678,8 +679,9 @@ func TestValidateOpenCodeWorkspaceSymlinks(t *testing.T) {
 		if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
 			t.Fatal(err)
 		}
-		if err := validateOpenCodeWorkspaceSymlinks(root); err == nil || !strings.Contains(err.Error(), "outside the checkout") {
-			t.Fatalf("external symlink error = %v", err)
+		got, err := openCodeEscapingWorkspacePaths(root)
+		if err != nil || len(got) != 1 || got[0] != "escape" {
+			t.Fatalf("external symlink = %v %v", got, err)
 		}
 	})
 
@@ -692,8 +694,9 @@ func TestValidateOpenCodeWorkspaceSymlinks(t *testing.T) {
 		if err := os.Symlink(root, filepath.Join(linkDir, "escape")); err != nil {
 			t.Fatal(err)
 		}
-		if err := validateOpenCodeWorkspaceSymlinks(root); err == nil || !strings.Contains(err.Error(), "can traverse outside") {
-			t.Fatalf("directory traversal symlink error = %v", err)
+		got, err := openCodeEscapingWorkspacePaths(root)
+		if err != nil || len(got) != 1 || got[0] != "a/b/escape" {
+			t.Fatalf("directory traversal symlink = %v %v", got, err)
 		}
 	})
 
@@ -702,28 +705,89 @@ func TestValidateOpenCodeWorkspaceSymlinks(t *testing.T) {
 		if err := os.Symlink("missing", filepath.Join(root, "dangling")); err != nil {
 			t.Fatal(err)
 		}
-		if err := validateOpenCodeWorkspaceSymlinks(root); err == nil || !strings.Contains(err.Error(), "cannot be resolved") {
-			t.Fatalf("dangling symlink error = %v", err)
+		got, err := openCodeEscapingWorkspacePaths(root)
+		if err != nil || len(got) != 1 || got[0] != "dangling" {
+			t.Fatalf("dangling symlink = %v %v", got, err)
+		}
+	})
+
+	t.Run("skips .git", func(t *testing.T) {
+		root, outside := t.TempDir(), t.TempDir()
+		if err := os.Mkdir(filepath.Join(root, ".git"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(outside, filepath.Join(root, ".git", "escape")); err != nil {
+			t.Fatal(err)
+		}
+		got, err := openCodeEscapingWorkspacePaths(root)
+		if err != nil || len(got) != 0 {
+			t.Fatalf("git metadata reported: %v %v", got, err)
 		}
 	})
 }
 
-func TestRunOpenCodeTurnGuardedModeRejectsEscapingSymlink(t *testing.T) {
+// A vendor directory symlinked to a shared location is an established Orbit worktree pattern:
+// the session must still run, with that path denied instead of the whole turn refused.
+func TestRunOpenCodeTurnGuardedModeDeniesEscapingSymlinkWithoutRefusingTheTurn(t *testing.T) {
 	root, outside := t.TempDir(), t.TempDir()
 	marker := filepath.Join(outside, "started")
-	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(root, "node_modules")); err != nil {
 		t.Fatal(err)
 	}
 	writeFakeBin(t, root, providerOpenCode, `printf started > "$STARTED_MARKER"`)
 	t.Setenv("PATH", root+":"+os.Getenv("PATH"))
-	result := runOpenCodeTurn(t.Context(), &ClaimedSession{Agent: AgentExecConfig{Env: map[string]string{
-		"STARTED_MARKER": marker,
-	}}}, root, root, "hello", nil, func(string, map[string]interface{}) {})
-	if result.Status != stFailed || result.Subtype != "config_error" || !strings.Contains(result.Error, "outside the checkout") {
-		t.Fatalf("result = %#v", result)
+	var denied []interface{}
+	result := runOpenCodeTurn(t.Context(), &ClaimedSession{Agent: AgentExecConfig{
+		PermissionMode: "dontAsk",
+		Env:            map[string]string{"STARTED_MARKER": marker},
+	}}, root, root, "hello", nil, func(kind string, payload map[string]interface{}) {
+		if payload["subtype"] == "workspace_symlinks_denied" {
+			denied, _ = payload["paths"].([]interface{})
+			if paths, ok := payload["paths"].([]string); ok {
+				for _, p := range paths {
+					denied = append(denied, p)
+				}
+			}
+		}
+	})
+	if result.Status == stFailed && result.Subtype == "config_error" {
+		t.Fatalf("turn refused instead of denying the path: %#v", result)
 	}
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("OpenCode started despite unsafe symlink: %v", err)
+	if len(denied) != 1 || denied[0] != "node_modules" {
+		t.Fatalf("denied paths = %#v", denied)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("OpenCode did not run: %v", err)
+	}
+}
+
+func TestOpenCodeEscapingPathsAreDeniedForReadAndEdit(t *testing.T) {
+	for _, mode := range []string{"dontAsk", "acceptEdits", "plan", "default"} {
+		t.Run(mode, func(t *testing.T) {
+			permission := map[string]interface{}{}
+			applyOpenCodePermissions(permission, AgentExecConfig{
+				PermissionMode: mode,
+				// An explicit allow must not reopen an escaping path.
+				AllowedTools: []string{"Read", "Edit"},
+			}, []string{"node_modules"})
+
+			read := mapValue(permission["read"])
+			if read == nil {
+				t.Fatal("permission.read is not a path map")
+			}
+			edit, ok := permission["edit"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("permission.edit = %#v, want a path map", permission["edit"])
+			}
+			for _, pattern := range []string{"node_modules", "node_modules/**"} {
+				if read[pattern] != "deny" {
+					t.Errorf("permission.read[%s] = %#v, want deny", pattern, read[pattern])
+				}
+				if edit[pattern] != "deny" {
+					t.Errorf("permission.edit[%s] = %#v, want deny", pattern, edit[pattern])
+				}
+			}
+		})
 	}
 }
 
@@ -734,7 +798,7 @@ func TestOpenCodeGuardedModesCannotDelegateToBroaderSubagents(t *testing.T) {
 			applyOpenCodePermissions(permission, AgentExecConfig{
 				PermissionMode: mode,
 				AllowedTools:   []string{"Task"},
-			})
+			}, nil)
 			if permission["task"] != "deny" {
 				t.Fatalf("permission.task = %#v, want deny", permission["task"])
 			}
@@ -750,7 +814,7 @@ func TestOpenCodeAutoModeCanDelegateToSubagents(t *testing.T) {
 	applyOpenCodePermissions(permission, AgentExecConfig{
 		PermissionMode: "auto",
 		AllowedTools:   []string{"Task"},
-	})
+	}, nil)
 	if permission["task"] != "allow" {
 		t.Fatalf("permission.task = %#v, want allow", permission["task"])
 	}

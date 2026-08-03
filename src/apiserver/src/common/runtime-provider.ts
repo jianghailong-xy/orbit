@@ -1,4 +1,5 @@
 import { AgentProvider, PermissionMode } from '@orbit/shared';
+import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Keep this conservative Claude allow-list aligned with the clients. Claude Code rejects Auto
 // for unsupported models (notably Haiku). Kimi's and OpenCode's Auto are runtime-wide modes and
@@ -81,4 +82,26 @@ export function normalizeEffortForProvider(
     return CODEX_EFFORTS.has(normalized) ? normalized : '';
   }
   return CLAUDE_EFFORTS.has(effort) ? effort : '';
+}
+
+/**
+ * The dispatch-time variant check, applied once the assigned runner's model catalog is known.
+ *
+ * OpenCode variants are model-defined, so `normalizeEffortForProvider` alone cannot police them:
+ * an account-level default picked in a Claude session (`max`) would otherwise reach the CLI as
+ * `--variant=max` and fail the turn. Mirrors the web picker's rule — an exact catalog row is
+ * authoritative even when it lists no variants, while a model the runner-wide catalog does not
+ * report may be project-scoped and keeps its value.
+ */
+export function normalizeEffortForRuntimeModel(
+  provider: AgentProvider,
+  effort: string | null | undefined,
+  model: string,
+  modelCatalog: unknown,
+): string | undefined {
+  const normalized = normalizeEffortForProvider(provider, effort);
+  if (provider !== AgentProvider.OPENCODE || !normalized) return normalized;
+  const levels = runtimeCatalogReasoningLevels(modelCatalog, provider, model);
+  if (levels === undefined) return normalized;
+  return levels.includes(normalized) ? normalized : '';
 }

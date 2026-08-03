@@ -52,13 +52,16 @@ INSERT INTO "model_provider" (
     CURRENT_TIMESTAMP
 );
 
+-- Pin only what the fence depends on: the row must stay deployment-owned (no owner), enabled
+-- (a disabled row makes an old replica fall back to Claude silently — the exact outcome this
+-- guards against), and hold the invalid ciphertext that makes an old replica fail loudly.
+-- Cosmetic columns are deliberately excluded so a future bulk UPDATE on this table still works.
 ALTER TABLE "model_provider"
     ADD CONSTRAINT "model_provider_builtin_opencode_guard_shape"
     CHECK (
         "slug" <> 'opencode'
         OR (
             "id" = '00000000-0000-7000-8000-000000000082'
-            AND "label" = '__orbit_builtin_opencode_guard__'
             AND "owner_id" IS NULL
             AND "enabled" = true
             AND "api_key_enc" = 'orbit-opencode-compatibility-guard'
@@ -74,12 +77,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER model_provider_builtin_opencode_guard
-BEFORE UPDATE OR DELETE ON "model_provider"
+-- Block only the two operations that would retire the fence — deleting the row or renaming it
+-- off the reserved slug. An UPDATE that leaves `slug = 'opencode'` still has to satisfy the CHECK
+-- above, so ordinary table-wide maintenance is not turned into a hard error by this trigger.
+CREATE TRIGGER model_provider_builtin_opencode_guard_delete
+BEFORE DELETE ON "model_provider"
 FOR EACH ROW
 WHEN (OLD."slug" = 'opencode')
 EXECUTE FUNCTION protect_builtin_opencode_provider_guard();
 
+CREATE TRIGGER model_provider_builtin_opencode_guard_rename
+BEFORE UPDATE ON "model_provider"
+FOR EACH ROW
+WHEN (OLD."slug" = 'opencode' AND NEW."slug" IS DISTINCT FROM 'opencode')
+EXECUTE FUNCTION protect_builtin_opencode_provider_guard();
+
+-- INVARIANT: after this migration, PENDING -> RUNNING on an OpenCode session is only legal from
+-- QueueService.trySessionClaim, which sets `orbit.runner_supports_opencode` in the same
+-- transaction. Any other code path making that transition is silently skipped by the trigger
+-- below (a BEFORE trigger returning NULL drops the row update without raising). See
+-- common/session-scheduling.ts, and opencode-migration-guard.spec.ts which pins these predicates.
+--
 -- A new apiserver can create OpenCode work while an older replica is still serving runner
 -- long-polls. Old claim SQL does not understand the provider and would otherwise dispatch it
 -- as Claude. New queue transactions set this custom GUC only after seeing a runner's positive

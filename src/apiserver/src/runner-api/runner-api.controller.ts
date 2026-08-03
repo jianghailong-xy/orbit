@@ -6,7 +6,6 @@ import {
   ForbiddenException,
   Get,
   Headers,
-  HttpException,
   HttpCode,
   NotFoundException,
   Param,
@@ -70,7 +69,7 @@ import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
-  normalizeEffortForProvider,
+  normalizeEffortForRuntimeModel,
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
@@ -110,7 +109,6 @@ import {
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
 const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
-const HTTP_UPGRADE_REQUIRED = 426;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -633,11 +631,11 @@ export class RunnerApiController {
   ): Promise<ClaimedSession | null> {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (
-      !supportedProviders.includes(AgentProvider.OPENCODE) &&
-      (await this.markOpenCodeUpgradeRequired(runner.id))
-    ) {
-      throw new HttpException(OPENCODE_RUNNER_UPGRADE_ERROR, HTTP_UPGRADE_REQUIRED);
+    if (!supportedProviders.includes(AgentProvider.OPENCODE)) {
+      // Explain the stall on the OpenCode rows themselves and then carry on: the claim SQL
+      // (plus migration 0080's trigger) already keeps them away from a legacy runner, so
+      // failing the request would only strand this runner's Claude/Codex work as well.
+      await this.markOpenCodeUpgradeRequired(runner.id);
     }
     const job = await this.queue.claimSessionForRunner(
       { id: runner.id, supportedProviders },
@@ -688,10 +686,10 @@ export class RunnerApiController {
         (session.provider ?? session.agent?.provider ?? AgentProvider.CLAUDE) ===
         AgentProvider.OPENCODE,
     );
-    if (
+    const legacyOpenCode =
       openCodeSessions.length > 0 &&
-      !runnerAdvertisesProvider(providerHeader, AgentProvider.OPENCODE)
-    ) {
+      !runnerAdvertisesProvider(providerHeader, AgentProvider.OPENCODE);
+    if (legacyOpenCode) {
       await this.markOpenCodeUpgradeRequired(
         runner.id,
         openCodeSessions
@@ -701,16 +699,20 @@ export class RunnerApiController {
           )
           .map((session) => ({ id: session.id, error: session.error })),
       );
-      // Refuse the whole snapshot instead of omitting rows: an old runner garbage-collects every
-      // checkout absent from this response and would interpret a later OpenCode claim as Claude.
-      throw new HttpException(OPENCODE_RUNNER_UPGRADE_ERROR, HTTP_UPGRADE_REQUIRED);
+      // Omit the rows rather than failing the request. A 426 is not retryable on the runner, so
+      // refusing here shuts the whole process down over one session it merely cannot drive. The
+      // checkouts stay safe: worktree GC asks `sessions/worktrees-removable`, which keeps every
+      // non-terminal session, and the claim SQL never hands an OpenCode row to a legacy runner.
     }
+    const reclaimable = legacyOpenCode
+      ? sessions.filter((session) => !openCodeSessions.includes(session))
+      : sessions;
     // Reclaim never mutates lifecycle/lease ownership. The runner takes each row over with an
     // expected-owner CAS after receiving the snapshot; therefore a timed-out, delayed request
     // cannot retire a generation activated from a newer response. The only write below is an
     // unset-only model snapshot, which prevents a rolling-upgrade session from drifting again.
     const out: ReclaimSession[] = [];
-    for (const s of sessions) {
+    for (const s of reclaimable) {
       if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
         continue;
       }
@@ -784,7 +786,14 @@ export class RunnerApiController {
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
         permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
         // Per-session effort wins; otherwise use the agent's effort setting.
-        effort: normalizeEffortForProvider(provider, s.effort ?? agent?.effort),
+        // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
+        // valid against the assigned runner's reported catalog for this model.
+        effort: normalizeEffortForRuntimeModel(
+          provider,
+          s.effort ?? agent?.effort,
+          exec.model,
+          s.assignedRunner?.modelCatalog,
+        ),
         maxTurns: agent?.maxTurns ?? undefined,
         maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
         mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
