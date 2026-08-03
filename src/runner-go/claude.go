@@ -40,11 +40,19 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 		if msg["subtype"] == "init" {
 			slashReg.learn(stringsFromJSON(msg["slash_commands"]), stringsFromJSON(msg["skills"]))
 		}
-		emit(evSystem, map[string]interface{}{
+		sys := map[string]interface{}{
 			"subtype":   msg["subtype"],
 			"model":     msg["model"],
 			"sessionId": msg["session_id"],
-		})
+		}
+		// A compaction boundary is the one system message carrying something worth storing: it
+		// marks where Claude dropped history, which a transcript rebuild has to replay around
+		// (transcript_rebuild.go). The wire spells these snake_case; the on-disk transcript
+		// spells the same fields camelCase, and the rest of Orbit is camelCase, so normalize here.
+		if md := msg["compact_metadata"]; md != nil {
+			sys["compactMetadata"] = md
+		}
+		emit(evSystem, sys)
 	case "assistant":
 		message, _ := msg["message"].(map[string]interface{})
 		content, _ := message["content"].([]interface{})
@@ -74,8 +82,19 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 		// A background-task lifecycle notification arrives as a user message whose content is
 		// a plain "<task-notification>…</task-notification>" string (not tool_result blocks) —
 		// turn it into a durable background_task event and stop that task's output tail.
-		if s, ok := message["content"].(string); ok && bgTaskFromNotification(s, emit, bg) {
-			break
+		if s, ok := message["content"].(string); ok {
+			if bgTaskFromNotification(s, emit, bg) {
+				break
+			}
+			// Claude's own compaction summary arrives the same way — a synthetic user message
+			// holding a plain string. It is the only record of what the dropped history said, so
+			// store it: a later rebuild replays this instead of paying to summarize that history
+			// again. Filed as a system event rather than a new event type because no client
+			// renders it and unknown system subtypes are already ignored everywhere.
+			if isCompactSummaryMessage(msg, s) {
+				emit(evSystem, map[string]interface{}{"subtype": "compact_summary", "text": s})
+				break
+			}
 		}
 		content, _ := message["content"].([]interface{})
 		for _, c := range content {
@@ -108,6 +127,18 @@ func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 			emit(evThinkingDelta, map[string]interface{}{"text": delta["thinking"]})
 		}
 	}
+}
+
+// compactSummaryMarker opens the summary Claude writes after compacting a conversation.
+const compactSummaryMarker = "This session is being continued from a previous conversation"
+
+// isCompactSummaryMessage reports whether a string-content user message is Claude's post-compaction
+// summary rather than a replayed user turn. `isSynthetic` alone would trust a flag we don't own for
+// a message that silently changes what the agent remembers; the marker alone would misread a user
+// who pastes that sentence. Both together is the conservative reading.
+func isCompactSummaryMessage(msg map[string]interface{}, content string) bool {
+	synthetic, _ := msg["isSynthetic"].(bool)
+	return synthetic && strings.HasPrefix(strings.TrimSpace(content), compactSummaryMarker)
 }
 
 // isAPIError reports whether a result/assistant text carries a Claude Code API error

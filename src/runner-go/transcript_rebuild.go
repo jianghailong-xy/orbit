@@ -66,16 +66,14 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 		logln("transcript rebuild: cannot fetch stored events:", err)
 		return
 	}
-	msgs := replayMessagesFromEvents(events)
+	msgs, storedSummary, storedCut := replayMessagesFromEvents(events)
 	if len(msgs) == 0 {
 		logln("transcript rebuild: no replayable history for session", job.SessionID)
 		return
 	}
-	cut := splitForReplay(msgs, transcriptReplayTokenBudget)
-	var summary string
-	if cut > 0 {
-		summary = summarizeReplayHead(ctx, msgs[:cut])
-	}
+	cut, summary := planReplay(msgs, storedSummary, storedCut, func(head []replayMessage) string {
+		return summarizeReplayHead(ctx, head)
+	})
 	data, err := renderTranscriptJSONL(msgs, cut, summary, job, execDir)
 	if err != nil {
 		logln("transcript rebuild: cannot render transcript:", err)
@@ -171,7 +169,11 @@ func newReplayMessage(role string, blocks []map[string]interface{}, ts time.Time
 	return replayMessage{role: role, blocks: blocks, ts: ts, tokens: len(b)/3 + 1}
 }
 
-// replayMessagesFromEvents turns Orbit's stored events into the message sequence to replay.
+// replayMessagesFromEvents turns Orbit's stored events into the message sequence to replay, plus
+// the most recent summary Claude itself wrote when it compacted this session and the index where
+// the history it replaced ends. That pair lets a rebuild reuse Claude's own summary instead of
+// paying to write a new one; it is empty for sessions recorded before the runner learned to store
+// it, and for sessions that never compacted.
 //
 // Thinking blocks are deliberately dropped: Orbit keeps their text but not the server-issued
 // `signature`, and they cost context without saying anything the assistant text and the tool
@@ -180,7 +182,7 @@ func newReplayMessage(role string, blocks []map[string]interface{}, ts time.Time
 // Tool pairing is repaired on the way through. The API rejects a tool_use with no matching
 // tool_result — which is exactly what a session killed mid-tool leaves behind — so an unanswered
 // call gets a synthetic result, and a result whose call never reached the log is dropped.
-func replayMessagesFromEvents(events []StoredEvent) []replayMessage {
+func replayMessagesFromEvents(events []StoredEvent) (msgs []replayMessage, storedSummary string, storedCut int) {
 	var out []replayMessage
 	called := map[string]bool{} // tool_use ids that made it into the replay
 	var pending []string        // emitted but not yet answered, in call order
@@ -206,6 +208,15 @@ func replayMessagesFromEvents(events []StoredEvent) []replayMessage {
 
 	for _, e := range events {
 		switch e.Type {
+		case evSystem:
+			// Claude compacted here: everything up to this point is what its summary replaced.
+			// A later compaction supersedes an earlier one, so the last one wins.
+			if e.Payload["subtype"] == "compact_summary" {
+				if text := strings.TrimSpace(asString(e.Payload["text"])); text != "" {
+					flushPending(e.Ts)
+					storedSummary, storedCut = text, len(out)
+				}
+			}
 		case evUser:
 			text := asString(e.Payload["text"])
 			if strings.TrimSpace(text) == "" {
@@ -260,13 +271,13 @@ func replayMessagesFromEvents(events []StoredEvent) []replayMessage {
 	}
 	// The conversation has to open on a real user turn — not on a tool_result whose call is
 	// behind the start — which is also the invariant splitForReplay relies on when it snaps a
-	// budget cut forward.
+	// budget cut forward. Trimming shifts every index, storedCut included.
 	for i, m := range out {
 		if isUserTurnStart(m) {
-			return out[i:]
+			return out[i:], storedSummary, max(0, storedCut-i)
 		}
 	}
-	return nil
+	return nil, "", 0
 }
 
 // toolResultText flattens a tool result to text. Content is usually already a string; the block
@@ -298,6 +309,28 @@ func removeString(xs []string, want string) []string {
 		}
 	}
 	return xs
+}
+
+// planReplay decides where the verbatim replay starts and what stands in for the history before
+// it. Claude's own compaction summary wins when the runner captured one and what follows it still
+// fits the budget: it costs nothing, and it is the very text the live session was running on.
+// Otherwise the budget picks the cut and `summarize` writes the stand-in — passed in so the
+// decision can be tested without spending a model call on it.
+func planReplay(msgs []replayMessage, storedSummary string, storedCut int, summarize func([]replayMessage) string) (int, string) {
+	if storedSummary != "" && storedCut > 0 && storedCut <= len(msgs) {
+		tail := 0
+		for _, m := range msgs[storedCut:] {
+			tail += m.tokens
+		}
+		if tail <= transcriptReplayTokenBudget {
+			return storedCut, storedSummary
+		}
+	}
+	cut := splitForReplay(msgs, transcriptReplayTokenBudget)
+	if cut == 0 {
+		return 0, ""
+	}
+	return cut, summarize(msgs[:cut])
 }
 
 // splitForReplay picks the first message to replay verbatim. It walks back from the newest until
@@ -412,12 +445,22 @@ func replayDigest(msgs []replayMessage, budget int) string {
 	return b.String()
 }
 
-// compactSummaryPreamble opens the summary record. Claude's own compaction says the session "ran
-// out of context"; this says what actually happened, since the agent reads it and a wrong
-// explanation of its own missing memory is worse than none.
-const compactSummaryPreamble = "This session is being continued from a previous conversation " +
+// rebuiltSummaryPreamble opens a summary this rebuild had to write itself. Claude's own compaction
+// says the session "ran out of context"; this says what actually happened, since the agent reads it
+// and a wrong explanation of its own missing memory is worse than none.
+const rebuiltSummaryPreamble = "This session is being continued from a previous conversation " +
 	"whose local transcript was no longer on this machine and has been reconstructed from Orbit's " +
 	"event archive. The summary below covers the earlier portion of the conversation.\n\nSummary:\n"
+
+// withCompactPreamble leaves a summary Claude wrote alone — it already opens with its own
+// explanation — and introduces one we generated.
+func withCompactPreamble(summary string) string {
+	s := strings.TrimSpace(summary)
+	if strings.HasPrefix(s, compactSummaryMarker) {
+		return s
+	}
+	return rebuiltSummaryPreamble + s
+}
 
 // renderTranscriptJSONL writes the replay as Claude Code's transcript format: one JSON record per
 // line, each pointing at its predecessor through parentUuid. When `cut` > 0 the records before it
@@ -476,7 +519,12 @@ func renderTranscriptJSONL(msgs []replayMessage, cut int, summary string, job *C
 			headTokens += m.tokens
 		}
 		boundaryID, summaryID := nextUUID(), nextUUID()
-		ts := msgs[cut].ts.UTC().Format(time.RFC3339Nano)
+		// cut == len(msgs) when the session compacted and then ended: a summary with no tail.
+		boundaryAt := msgs[len(msgs)-1]
+		if cut < len(msgs) {
+			boundaryAt = msgs[cut]
+		}
+		ts := boundaryAt.ts.UTC().Format(time.RFC3339Nano)
 		records = append(records, rec(map[string]interface{}{
 			"parentUuid":        nil, // cuts the chain: everything above stays out of context
 			"logicalParentUuid": parent,
@@ -503,7 +551,7 @@ func renderTranscriptJSONL(msgs []replayMessage, cut int, summary string, job *C
 			"timestamp":                 ts,
 			"message": map[string]interface{}{
 				"role":    "user",
-				"content": compactSummaryPreamble + strings.TrimSpace(summary),
+				"content": withCompactPreamble(summary),
 			},
 		}))
 		parent = summaryID

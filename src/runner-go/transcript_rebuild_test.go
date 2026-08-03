@@ -28,7 +28,7 @@ func TestClaudeProjectSlug(t *testing.T) {
 }
 
 func TestReplayMessagesFromEvents(t *testing.T) {
-	msgs := replayMessagesFromEvents([]StoredEvent{
+	msgs, _, _ := replayMessagesFromEvents([]StoredEvent{
 		// Leading assistant chatter has no user turn to answer — the replay must open on a user.
 		ev(1, evAssistant, map[string]interface{}{"text": "orphan opener"}),
 		ev(2, evUser, map[string]interface{}{"text": "list the files"}),
@@ -74,7 +74,7 @@ func TestReplayMessagesFromEvents(t *testing.T) {
 // tool_result: splitForReplay snaps budget cuts forward to a user turn and would have nowhere to
 // land, and the API rejects a conversation that doesn't open on a user message.
 func TestReplayOpensOnAUserTurn(t *testing.T) {
-	msgs := replayMessagesFromEvents([]StoredEvent{
+	msgs, _, _ := replayMessagesFromEvents([]StoredEvent{
 		ev(1, evToolUse, map[string]interface{}{"id": "t1", "name": "Bash", "input": map[string]interface{}{}}),
 		ev(2, evToolResult, map[string]interface{}{"toolUseId": "t1", "content": "done"}),
 		ev(3, evUser, map[string]interface{}{"text": "carry on"}),
@@ -84,7 +84,7 @@ func TestReplayOpensOnAUserTurn(t *testing.T) {
 		t.Fatalf("replay must open on the user turn, got %d messages starting %v", len(msgs), msgs[0].blocks)
 	}
 	// Nothing replayable at all is a rebuild that must not happen, not an empty transcript.
-	if got := replayMessagesFromEvents([]StoredEvent{
+	if got, _, _ := replayMessagesFromEvents([]StoredEvent{
 		ev(1, evAssistant, map[string]interface{}{"text": "orphaned"}),
 	}); got != nil {
 		t.Fatalf("history with no user turn = %v, want nil", got)
@@ -111,6 +111,77 @@ func TestSplitForReplaySnapsToUserTurn(t *testing.T) {
 	// Everything fits → no compaction.
 	if got := splitForReplay(msgs, 100000); got != 0 {
 		t.Fatalf("cut = %d, want 0 when the history fits", got)
+	}
+}
+
+// Claude's own compaction summary is the cheapest possible stand-in for the history it replaced:
+// no summarizer call, and it is the same text the live session was actually running on.
+func TestStoredCompactSummaryIsReusedAndPositioned(t *testing.T) {
+	msgs, summary, cut := replayMessagesFromEvents([]StoredEvent{
+		// Dropped by the open-on-a-user-turn trim, which also has to shift `cut` back by one.
+		ev(1, evAssistant, map[string]interface{}{"text": "leftover"}),
+		ev(2, evUser, map[string]interface{}{"text": "old work"}),
+		ev(3, evAssistant, map[string]interface{}{"text": "done"}),
+		ev(4, evSystem, map[string]interface{}{"subtype": "compact_boundary"}),
+		ev(5, evSystem, map[string]interface{}{"subtype": "compact_summary", "text": "claude's own summary"}),
+		ev(6, evUser, map[string]interface{}{"text": "keep going"}),
+	})
+	if summary != "claude's own summary" {
+		t.Fatalf("stored summary = %q", summary)
+	}
+	if cut != 2 {
+		t.Fatalf("cut = %d, want 2 (the two pre-boundary messages after the trim)", cut)
+	}
+	// It is preferred over paying to write a new one: the summarizer must not be reached.
+	gotCut, gotSummary := planReplay(msgs, summary, cut, func([]replayMessage) string {
+		t.Fatal("a stored summary must not trigger a summarizer call")
+		return ""
+	})
+	if gotCut != 2 || gotSummary != "claude's own summary" {
+		t.Fatalf("planReplay = (%d, %q), want (2, claude's own summary)", gotCut, gotSummary)
+	}
+	// A later compaction supersedes an earlier one.
+	_, latest, _ := replayMessagesFromEvents([]StoredEvent{
+		ev(1, evUser, map[string]interface{}{"text": "start"}),
+		ev(2, evSystem, map[string]interface{}{"subtype": "compact_summary", "text": "first"}),
+		ev(3, evUser, map[string]interface{}{"text": "more"}),
+		ev(4, evSystem, map[string]interface{}{"subtype": "compact_summary", "text": "second"}),
+	})
+	if latest != "second" {
+		t.Fatalf("latest stored summary = %q, want \"second\"", latest)
+	}
+}
+
+// A stored summary only helps if what came AFTER it still fits; otherwise the budget has to pick
+// the split itself, and reusing the stale boundary would replay straight past the window.
+func TestOversizedTailFallsBackToBudgetSplit(t *testing.T) {
+	mk := func(role, typ, text string) replayMessage {
+		return newReplayMessage(role, []map[string]interface{}{{"type": typ, "text": text}}, time.Unix(0, 0))
+	}
+	huge := strings.Repeat("y", transcriptReplayTokenBudget*4) // comfortably over budget
+	msgs := []replayMessage{
+		mk("user", "text", "before the compaction"),
+		mk("user", "text", huge),
+		mk("user", "text", "the newest turn"),
+	}
+	cut, summary := planReplay(msgs, "stale summary", 1, func([]replayMessage) string { return "freshly written" })
+	if cut == 1 || summary == "stale summary" {
+		t.Fatalf("an over-budget tail must not reuse the stored boundary, got (%d, %q)", cut, summary)
+	}
+	if cut != 2 {
+		t.Fatalf("cut = %d, want 2 (the only turn that fits)", cut)
+	}
+}
+
+// Claude's summary already opens with its own explanation; only one we wrote needs introducing.
+func TestSummaryPreambleIsNotDoubled(t *testing.T) {
+	own := compactSummaryMarker + " that ran out of context.\n\nSummary:\nstuff"
+	if got := withCompactPreamble(own); got != own {
+		t.Fatalf("claude's own summary was rewritten:\n%s", got)
+	}
+	ours := withCompactPreamble("we wrote this")
+	if !strings.HasPrefix(ours, rebuiltSummaryPreamble) || strings.Count(ours, "Summary:") != 1 {
+		t.Fatalf("generated summary preamble is wrong:\n%s", ours)
 	}
 }
 
