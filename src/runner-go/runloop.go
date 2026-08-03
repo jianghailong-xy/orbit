@@ -412,7 +412,15 @@ func runLoop(cfg *RunnerConfig) bool {
 		assetMu.Unlock()
 	}
 	go func() {
+		// Publish the disk scan first — it's local and instant, so the first heartbeat carries
+		// the machine's own commands/skills without waiting on a process spawn. The CLI's own
+		// registry (built-ins, plugin skills, namespaced commands) is invisible to that scan and
+		// is learned right after, then re-published; retried on each tick while it stays empty,
+		// since engines install on demand and `claude` may not be on PATH yet.
 		refreshHeartbeatAssets()
+		if ensureClaudeSlashRegistry(loopCtx, cfg.WorkDir) {
+			refreshHeartbeatAssets()
+		}
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
@@ -420,6 +428,7 @@ func runLoop(cfg *RunnerConfig) bool {
 			case <-loopCtx.Done():
 				return
 			case <-ticker.C:
+				ensureClaudeSlashRegistry(loopCtx, cfg.WorkDir)
 				refreshHeartbeatAssets()
 			}
 		}

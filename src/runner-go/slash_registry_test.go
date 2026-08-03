@@ -130,3 +130,31 @@ func TestSlashRegistryPersists(t *testing.T) {
 		t.Fatal("re-learning known Kimi names should report no change")
 	}
 }
+
+// emptyFor gates the start-up probe (see ensureClaudeSlashRegistry), so it has to be
+// per-runtime: a Kimi handshake must not make a Claude-less registry look already-learned and
+// skip the probe. It must also survive a restart via the persisted file — otherwise every
+// runner restart would re-spawn a throwaway CLI instead of the intended once-per-machine.
+func TestSlashRegistryEmptyForGatesTheProbe(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "reg.json")
+	r := newSlashRegistry(path)
+	if !r.emptyFor(providerClaude) || !r.emptyFor(providerKimi) {
+		t.Fatal("a fresh registry should be empty for every runtime")
+	}
+
+	r.learnFor(providerKimi, []string{"init"}, nil)
+	if !r.emptyFor(providerClaude) {
+		t.Fatal("a Kimi handshake must not mark Claude as learned")
+	}
+	if r.emptyFor(providerKimi) {
+		t.Fatal("Kimi should be learned after its handshake")
+	}
+
+	r.learn([]string{"loop"}, nil)
+	if r.emptyFor(providerClaude) {
+		t.Fatal("Claude should be learned after its handshake")
+	}
+	if newSlashRegistry(path).emptyFor(providerClaude) {
+		t.Fatal("a restart should reload the learned set, not re-probe")
+	}
+}

@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // slashRegistry caches the slash names each runtime itself registers. Claude learns them
@@ -94,6 +100,18 @@ func addSlashName(set map[string]bool, name string) bool {
 	}
 	set[name] = true
 	return true
+}
+
+// emptyFor reports whether nothing has been learned for a provider yet — the state a freshly
+// enrolled runner is in until its first session boots. Gates the start-up probe below.
+func (r *slashRegistry) emptyFor(provider string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	commandSet, skillSet := r.commands, r.skills
+	if provider == providerKimi {
+		commandSet, skillSet = r.kimiCommands, r.kimiSkills
+	}
+	return len(commandSet) == 0 && len(skillSet) == 0
 }
 
 // extras reports the registered names the disk scan didn't produce — built-ins, plugin
@@ -196,6 +214,78 @@ func slashAssetsForHeartbeat(roots []assetRoot) (commands, skills []SlashCommand
 	commands, skills = append(commands, ec...), append(skills, es...)
 	kc, ks := slashReg.extrasFor(providerKimi, nil)
 	return append(commands, kc...), append(skills, ks...)
+}
+
+// slashProbeTimeout bounds the throwaway CLI start-up below. The init handshake lands within a
+// second or two on a healthy install; the rest of the budget covers a cold node/npm start.
+const slashProbeTimeout = 60 * time.Second
+
+// ensureClaudeSlashRegistry learns the Claude CLI's own slash registry without waiting for this
+// machine's first session to boot. Until it runs, a freshly enrolled runner reports only what the
+// disk scan found, so the composer's `/` menu is missing every built-in, plugin skill and
+// namespaced command — for hours, if nobody starts a session. Returns whether anything was
+// learned (the caller re-publishes the heartbeat catalog when so).
+//
+// A no-op once the registry holds anything: it's persisted under ~/.orbit, so this costs one
+// process spawn per fresh machine, not one per restart. Retried on the caller's rescan tick
+// while still empty, because engines install on demand — `claude` is often not on PATH yet at
+// start-up. Best-effort throughout: a failure leaves the registry exactly as it was.
+func ensureClaudeSlashRegistry(ctx context.Context, workDir string) bool {
+	if !slashReg.emptyFor(providerClaude) || !claudeCLIAvailable() {
+		return false
+	}
+	commands, skills, err := probeClaudeSlashAssets(ctx, workDir)
+	if err != nil {
+		logln("slash registry probe failed:", err)
+		return false
+	}
+	return slashReg.learn(commands, skills)
+}
+
+// probeClaudeSlashAssets reads the registry out of the CLI's own `init` handshake — the same
+// message a real session learns from (see handleMessage), so this is the authoritative list
+// rather than a parse of human-readable help text.
+//
+// The prompt is `/help` specifically because the CLI resolves slash commands client-side: it
+// announces `init` (carrying `slash_commands` + `skills`), answers locally, and exits with
+// `num_turns: 0` and `total_cost_usd: 0` — no API call, nothing billed. It has to be SOME
+// prompt: with an empty stream-json stdin the CLI waits for a message and emits nothing at all,
+// so there is no handshake to read. `--no-session-persistence` keeps the throwaway out of the
+// user's `claude --resume` list.
+func probeClaudeSlashAssets(ctx context.Context, workDir string) (commands, skills []string, err error) {
+	cctx, cancel := context.WithTimeout(ctx, slashProbeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, "claude",
+		"-p", "/help",
+		"--output-format", "stream-json",
+		"--verbose",
+		"--no-session-persistence",
+	)
+	// Slash availability is cwd-scoped, so probe from the runner's own working dir — the same
+	// host-level root the disk scan uses. Agent-level assets are already covered by that scan.
+	if workDir != "" {
+		if _, statErr := os.Stat(workDir); statErr == nil {
+			cmd.Dir = workDir
+		}
+	}
+	cmd.Env = envWithAgent(nil)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, nil, err
+	}
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024) // init lists every command — same cap as runSession
+	for sc.Scan() {
+		var msg map[string]interface{}
+		if json.Unmarshal(sc.Bytes(), &msg) != nil {
+			continue
+		}
+		if msg["type"] != "system" || msg["subtype"] != "init" {
+			continue
+		}
+		return stringsFromJSON(msg["slash_commands"]), stringsFromJSON(msg["skills"]), nil
+	}
+	return nil, nil, errors.New("claude exited without an init handshake")
 }
 
 // stringsFromJSON reads a JSON array of strings out of a decoded message field.

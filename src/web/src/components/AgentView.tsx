@@ -3049,6 +3049,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // The draft is a `!cmd` shell command, not a message: onSend routes it raw to the runner,
+  // bypassing the agent. Mirrors that branch's condition exactly (it reads the trimmed text,
+  // and a reply-to-question draft resolves an approval instead), so the composer only turns
+  // red when the send really would be a shell turn.
+  const shellMode = !replyTo && text.trim().startsWith('!');
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   const insertShell = (): void => {
@@ -4300,6 +4305,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           </Dropdown>
           <Input.TextArea
             ref={taRef}
+            className={shellMode ? 'composer-shell' : undefined}
             variant="borderless"
             // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
             // a fixed height, which takes over (autoSize off + explicit height).

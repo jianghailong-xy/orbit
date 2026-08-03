@@ -3466,6 +3466,17 @@ body {
   padding-inline-start: 2px;
   resize: none;
 }
+/* `!cmd` shell mode: the draft runs raw on the runner instead of going to the agent, so the
+   composer takes on the same red mono treatment as the queued bubble it becomes (and as the
+   CLI's own `!` input) — the mode is visible while typing, not only after sending. Both
+   selectors because antd may hand `className` to the textarea itself or to a wrapper; the
+   `.composer-box` prefix keeps this above antd's own `.ant-input` colour. */
+.composer-box textarea.composer-shell,
+.composer-box .composer-shell textarea {
+  color: var(--error);
+  caret-color: var(--error);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
 /* Top-edge grip to drag the composer taller/shorter; double-click resets to auto-grow.
    Sits over the box's top border so it reads as an affordance without stealing text room.
    Only rendered once the box has hit its auto-grow cap (see composerCapped), so the pill
@@ -4305,8 +4316,12 @@ body {
   color: var(--text-3);
 }
 /* A queued `!cmd`: shown verbatim as the shell command it will run, so it reads like
-   the Bash card its output eventually lands in rather than a chat message. */
+   the Bash card its output eventually lands in rather than a chat message. Red picks up
+   the CLI's own `!`-input colouring, and reads as "this bypasses the agent" — it's the
+   theme's error token only because that's where the palette keeps its red; both the light
+   and dark values are already contrast-checked. */
 .chat-queued-cmd {
+  color: var(--error);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 13px;
   white-space: pre-wrap;
