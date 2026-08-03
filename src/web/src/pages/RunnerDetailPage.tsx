@@ -16,28 +16,23 @@ import {
   Input,
   InputNumber,
   Modal,
-  Select,
   Spin,
   Switch,
   Tag,
   type MenuProps,
 } from 'antd';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { PlanUsage } from '@orbit/shared';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
-import { meQuery, providersQuery } from '../lib/queries';
+import { providersQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
 import { planUsageRows, planUsageSnapshots } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import {
-  DEFAULT_PERMISSION_MODE,
   defaultModelForProvider,
-  MODE_OPTIONS,
   mergedProviderOptions,
-  effortOptionsForProvider,
-  supportsAuto,
 } from '../lib/agentDefaults';
 
 interface Agent {
@@ -45,8 +40,6 @@ interface Agent {
   name: string;
   appendSystemPrompt?: string | null;
   provider?: string;
-  permissionMode?: string;
-  effort?: string | null;
   workDir?: string | null;
   env?: Record<string, string> | null;
   runnerId?: string | null;
@@ -124,10 +117,9 @@ export function RunnerDetailPage() {
 
   const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
   const agents = (agentsQ.data ?? []).filter((a) => a.runnerId === runnerId);
-  // Configured providers (custom slugs) are merged into the Runtime picker; their model metadata
-  // is used only to validate the Runtime-owned default against permission capabilities.
-  const configuredProvidersQuery = useQuery(providersQuery());
-  const configuredProviders = configuredProvidersQuery.data ?? [];
+  // Configured providers (custom slugs) are used to resolve the provider label and effective
+  // Runtime-owned model shown in each agent row.
+  const configuredProviders = useQuery(providersQuery()).data ?? [];
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -168,75 +160,16 @@ export function RunnerDetailPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [fName, setFName] = useState('');
-  const [fProvider, setFProvider] = useState('claude');
-  const [fMode, setFMode] = useState('auto');
-  const [fEffort, setFEffort] = useState('');
   const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
 
-  // Permission mode remains an account-level new-agent default. Model is deliberately absent:
-  // it is reported by the selected Runtime and may be overridden on an individual Session.
-  const me = useQuery(meQuery());
-  const prefMode = me.data?.preferences?.defaultPermissionMode ?? DEFAULT_PERMISSION_MODE;
-
-  const formDefaultModel = defaultModelForProvider(
-    fProvider,
-    runner?.modelCatalog,
-    configuredProviders,
-    runner?.runtimeDefaultModels,
-  );
-  const formProviderResolved =
-    fProvider === 'claude' ||
-    fProvider === 'codex' ||
-    fProvider === 'kimi' ||
-    configuredProvidersQuery.data !== undefined;
-  // A Runtime heartbeat can change its effective default while the form is open. Never leave Auto
-  // selected once that default becomes a model that cannot run it.
-  useEffect(() => {
-    if (
-      formOpen &&
-      fMode === 'auto' &&
-      formProviderResolved &&
-      !supportsAuto(formDefaultModel, fProvider, configuredProviders)
-    ) {
-      setFMode('default');
-    }
-  }, [
-    configuredProviders,
-    formDefaultModel,
-    formOpen,
-    formProviderResolved,
-    fMode,
-    fProvider,
-  ]);
-
-  const onProviderChange = (provider: string) => {
-    setFProvider(provider);
-    const nextModel = defaultModelForProvider(
-      provider,
-      runner?.modelCatalog,
-      configuredProviders,
-      runner?.runtimeDefaultModels,
-    );
-    if (fMode === 'auto' && !supportsAuto(nextModel, provider, configuredProviders)) {
-      setFMode('default');
-    }
-    // Effort levels differ per provider (codex has 'minimal', not 'max'); reset to Default so the
-    // Select never shows a value absent from the new provider's options.
-    setFEffort('');
-  };
-
   const saveMut = useMutation({
     mutationFn: () => {
       const body = {
         name: fName.trim(),
-        provider: fProvider,
-        permissionMode: fMode,
-        // Sent even when '' (Default) so picking Default clears a previously-set effort.
-        effort: fEffort,
         appendSystemPrompt: fAppend.trim() || undefined,
         workDir: fWorkDir.trim() || undefined,
         enableWorktree: fEnableWorktree,
@@ -265,19 +198,6 @@ export function RunnerDetailPage() {
   const openCreate = () => {
     setEditing(null);
     setFName('');
-    setFProvider('claude');
-    const claudeDefault = defaultModelForProvider(
-      'claude',
-      runner?.modelCatalog,
-      configuredProviders,
-      runner?.runtimeDefaultModels,
-    );
-    setFMode(
-      prefMode === 'auto' && !supportsAuto(claudeDefault, 'claude', configuredProviders)
-        ? 'default'
-        : prefMode,
-    );
-    setFEffort('');
     setFAppend('');
     setFWorkDir('');
     setFEnableWorktree(false);
@@ -288,9 +208,6 @@ export function RunnerDetailPage() {
   const openEdit = (a: Agent) => {
     setEditing(a);
     setFName(a.name);
-    setFProvider(a.provider ?? 'claude');
-    setFMode(a.permissionMode ?? 'dontAsk');
-    setFEffort(a.effort ?? '');
     setFAppend(a.appendSystemPrompt ?? '');
     setFWorkDir(a.workDir ?? '');
     setFEnableWorktree(a.enableWorktree ?? false);
@@ -321,38 +238,6 @@ export function RunnerDetailPage() {
             placeholder="e.g. tea-cli builder"
             maxLength={60}
             autoFocus
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Runtime</div>
-          <Select
-            value={fProvider}
-            onChange={onProviderChange}
-            options={mergedProviderOptions(configuredProviders)}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Permission mode</div>
-          <Select
-            value={fMode}
-            onChange={setFMode}
-            options={MODE_OPTIONS.filter(
-              (o) =>
-                o.value !== 'auto' ||
-                !formProviderResolved ||
-                supportsAuto(formDefaultModel, fProvider, configuredProviders),
-            )}
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div className="rd-form-field">
-          <div className="rd-form-label">Reasoning effort</div>
-          <Select
-            value={fEffort}
-            onChange={setFEffort}
-            options={effortOptionsForProvider(fProvider)}
-            style={{ width: '100%' }}
           />
         </div>
         <div className="rd-form-field">
