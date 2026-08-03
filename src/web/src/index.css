@@ -206,11 +206,18 @@ body {
    in the corner keeps the conversation column and the session title clear. AntD has no
    placement option for message, so we right-align its full-width wrapper. Fixed width keeps a
    stack's edges flush; text-align:start because the wrapper's alignment would otherwise
-   ragged-right the wrapped lines. Vertical offset is main.tsx's TOAST_TOP (clears the header).
+   ragged-right the wrapped lines. Vertically the holder hugs the top edge (AntD's own 8px, plus
+   the notch inset) and the card paints 8px lower again via the wrapper's padding, so it starts
+   level with the lifecycle notifications below — one origin for both toast surfaces. Sitting
+   over the header band is fine here: the cards take no clicks (see below), so the controls
+   underneath stay live.
    !important only on the declarations AntD itself sets: its cssinjs rules are injected after
    this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice-wrapper …`, i.e.
    specificity (0,2,0)/(0,3,0) — nothing we can write flatly outranks them. The ones AntD
    leaves alone (width, the card's text-align, user-select) land without it. */
+.ant-message {
+  top: calc(env(safe-area-inset-top, 0px) + 8px) !important;
+}
 .ant-message-notice-wrapper {
   text-align: right !important;
   padding-right: 16px !important;
@@ -240,14 +247,14 @@ body {
 
 /* Session-level results use Notification rather than Message: this is a compact card with the
    outcome + session title, optional diagnostic detail, and a real action button when reversible.
-   AgentView measures the active pane header and writes the custom top value, so the first card
-   consistently begins 8px below the visible header on desktop, the mobile list, and the mobile
-   conversation. Subsequent cards stack downward with an 8px gap. */
+   These hug the viewport's top-right corner instead of hanging off the pane header's bottom edge:
+   anchored under the header the card dropped ~100px down and landed inside the reading column,
+   covering the top of the transcript and reading as page content rather than as a transient
+   system message. A toast is chrome, so it sits over chrome — the band it now overlaps carries
+   only the conversation header's ⋮ menu (desktop) or empty space right of "Orbit" (the mobile top
+   bar). Subsequent cards stack downward with an 8px gap. */
 .ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
-  top: max(
-    var(--session-lifecycle-toast-top, 16px),
-    calc(env(safe-area-inset-top, 0px) + 16px)
-  ) !important;
+  top: calc(env(safe-area-inset-top, 0px) + 16px) !important;
   margin-right: max(16px, env(safe-area-inset-right, 0px)) !important;
 }
 .ant-notification.ant-notification-topRight

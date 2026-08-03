@@ -19,15 +19,9 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 });
 
-// Toasts stack in the top-right corner (index.css does the right-alignment; AntD's message
-// has no placement option). This offset drops them below the header band instead of AntD's
-// default 8px, which lands them on the header's own controls. It positions the notice holder;
-// the card itself paints 8px lower (the notice wrapper's padding), so it starts at 112px —
-// clear of the tallest headers we render: the conversation header with a task back-link above
-// the title (105px) and the mobile "Orbit" top bar plus session-list head (100px), both
-// measured with the toast live. Session lifecycle notifications use a separately measured
-// header anchor (see AgentView) because their first card needs to sit closer to each layout.
-const TOAST_TOP = 104;
+// Both toast surfaces (message + notification) hang off the viewport's top-right corner, so
+// they share one origin — index.css owns the offset for each (AntD's message has no placement
+// option, so its full-width holder is right-aligned there too).
 
 // Feeds AntD the matching theme for the resolved light/dark mode; custom CSS is
 // driven separately via <html data-theme> (see lib/theme).
@@ -35,9 +29,7 @@ function ThemedConfig({ children }: { children: React.ReactNode }) {
   const { resolved } = useThemeMode();
   return (
     <ConfigProvider theme={resolved === 'dark' ? darkTheme : lightTheme}>
-      <AntApp message={{ top: TOAST_TOP }} notification={{ placement: 'topRight', stack: false }}>
-        {children}
-      </AntApp>
+      <AntApp notification={{ placement: 'topRight', stack: false }}>{children}</AntApp>
     </ConfigProvider>
   );
 }
