@@ -519,6 +519,19 @@ model Session {
   // exposed via the token (see SharedController) — never ownership/billing/runner internals.
   shareToken           String?   @unique @map("share_token")
   sharedAt             DateTime? @map("shared_at")
+  // ── Provider quota exhausted → retry when it resets ─────────────────────────
+  // A turn killed by the account's provider quota ("You've hit your session limit · resets
+  // 6:20pm (Europe/Berlin)") says nothing about the work: the same message will succeed once
+  // the window rolls over. quotaRetryAt is when to re-send it — set on event ingestion the
+  // moment such a reply lands, and cleared by anything that means nobody is waiting on it
+  // any more (the retry fired, the user sent their own message, the session ended, or the
+  // user switched auto-retry off). null = no armed retry, which is also how "the user
+  // declined" and "no reset time could be determined" are both spelled.
+  quotaRetryAt         DateTime? @map("quota_retry_at")
+  // Attempts already spent on the current outage, so a quota that reports itself spent past
+  // its own reset time backs off and eventually hands back to the user instead of re-sending
+  // forever. Reset to 0 on a successful resume.
+  quotaRetryAttempts   Int       @default(0) @map("quota_retry_attempts")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
@@ -541,6 +554,8 @@ model Session {
   @@index([ownerId])
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
+  // The quota sweeper's only query: armed retries that have come due.
+  @@index([quotaRetryAt])
   @@map("session")
 }
 

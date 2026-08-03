@@ -3,6 +3,11 @@
 撞上 provider 配额上限时，Orbit 目前把它当作一次成功的回复。本文档设计两件事：**认出它**、
 **到点自己接上**。
 
+> **实施记录（2026-08-03）**：v1 已实现，与本文最初的设计有五处偏离，都在 §8 列明并说明理由。
+> 读本文时以 §8 为准。
+
+---
+
 ---
 
 ## 1. 现状：一次真实事故
@@ -163,19 +168,26 @@ FAILED）。
 结构照抄 `AuthErrorCard`（`Transcript.tsx`）：新增 `quotaLimit` 节点 + `QuotaLimitCard`，
 经 `QuotaLimitCtx` 从 `AgentView` 拿 session 上下文。文案英文（对齐 [ui-english-standardization]）。
 
+**视觉稿**：`docs/mocks/quota-limit-retry.html` —— 全部状态、亮暗两套，引的是 web 真实的
+`index.css` 与色板 token，卡片 CSS 就是将来要落进 `index.css` 的那段。渲染：
+
+```sh
+chromium --headless --no-sandbox --force-device-scale-factor=2 --window-size=860,1600 \
+  --screenshot=light.png docs/mocks/quota-limit-retry.html      # 加 ?dark 出暗色
 ```
-┌──────────────────────────────────────────────────────────┐
-│ ⏳  Session limit reached                                 │
-│                                                           │
-│ Claude's 5-hour limit is used up on "wikova".             │
-│ Resets 6:20 PM · in 11 min                                │
-│                                                           │
-│ ⟳ Auto-retry when it resets            [ ●—— on ]         │
-│   Will re-send:  "当出现这个 limit 的提示时…"              │
-│                                                           │
-│ [ Retry now ]                          Turn off           │
-└──────────────────────────────────────────────────────────┘
-```
+
+**卡片的强度跟着"还需不需要你动手"走**，这是这张图确立的原则：
+
+| 状态 | 谁的球 | 视觉 |
+|---|---|---|
+| A 已武装 / B 重试中 / E 中途撞限 | 我们的 —— 已经接手 | 中性（`--bg-raised` + 灰时钟） |
+| C 恢复时间未知 / D 重试放弃 | 用户的 | warning 橙（与 sign-in 卡片同款） |
+
+配额撞限**不是错误，是暂停**。自动重试开着的时候它甚至是"已经安排好了"，长期橙着刺眼且
+在说谎；只有当球回到用户脚下，卡片才升级成警告色。
+
+其余细节（引用要重发的内容、`Retry now anyway` 的降级样式、`Resumed automatically at …`
+那条分隔线）见 mock 中的注释。
 
 - **恢复时间**：绝对时刻（观看者本地时区）+ 相对倒计时。倒计时每分钟走，归零后卡片自己
   变成 "Retrying…"。
@@ -277,7 +289,55 @@ FAILED）。
 ## 7. 需要拍板
 
 1. **自动重试默认开还是默认关？** 建议**默认开**（本文按此写）—— 这正是需求原话，且仅在
-   恢复时刻可信时才生效，风险面很窄。
+   恢复时刻可信时才生效，风险面很窄。**已按默认开实现。**
 2. **attempts 上限 5 / 退避 2-5-10-20-30 分钟** 是拍的，可调。weekly limit 场景下 5 次约覆盖
-   1 小时的快照滞后，够用。
+   1 小时的快照滞后，够用。**已按此实现。**
 3. **v1 要不要带 push 通知？** 建议带 —— 自动重试的全部价值在于人不在场，不通知就只能靠回来刷。
+   **未做**，见 §8.5。
+
+---
+
+## 8. 实施与设计的偏离（2026-08-03）
+
+写代码时发现五处，前两处是本文最初写错了：
+
+### 8.1 turn **不**记 FAILED（§3.3 作废）
+
+原设计要 runner 把撞限的 turn 标 FAILED。**这会踩坑**：turn 记 FAILED 会触发
+`reclaimStalledTask` → task 打成 FAILED → auto-run backoff 接手重跑，与 `quotaRetryAt` 形成
+**两套重试机制并行**（[auto-run-reconciler-retry-storm] 就是这类事故）。
+
+改为：session 照旧停在 `AWAITING_INPUT`（语义本来就对 —— 它在等人说话，而那个人是我们），
+只挂 `quotaRetryAt`。§1 说的"归类错了"其实质危害是"没人管"，现在有人管了。
+
+副作用是好的：**runner-go 完全不用改**，因此不需要等 runner 自更新，也没有跨版本兼容问题。
+
+### 8.2 检测点在 apiserver 摄入，不在 runner
+
+原设计在 runner 的 `session.go` 认，apiserver reaper 兜底。实现改为**只在
+`runner-api.controller.ts` 的事件摄入处认**（`lastAssistant` 已经算好了）。老 runner 自动
+覆盖，不需要兜底路径，少一处需要保持同步的判定。
+
+### 8.3 不做 probe kick（§3.2 简化）
+
+原设计要 runner 撞限时立即刷新配额快照。实测发现 `planUsage.go` 的 `planUsageRefreshDue()`
+**已经**会在 reset 时刻过后 15 秒强制刷新，而 active 状态下本来就 2 分钟一轮 —— 而我们要等
+到 reset 才用它。文案解析（源 B）负责撞限当场的显示，快照（源 A）在 sweeper 真正开火前复查。
+kick 是纯多余的。
+
+### 8.4 mid-turn 撞限不区分（§3.4 的第二行未实现）
+
+`messageToResend()` 永远重发最后一条用户消息。区分"回合中途撞限 → 发 continue"需要在摄入时
+判断这一 turn 是否已产生实质事件，是额外状态；且实测 DB 里的 5 条撞限记录**全部**是回合开头
+（`numTurns:1, costUsd:0`）—— 5 小时窗口内撞限只会发生在请求发出时。留给 v1.1。
+
+### 8.5 未做：push 通知、re-arm API、"自动恢复"分隔线
+
+- **push 通知**：§7 里我自己建议要带，没做。这是 v1 最值得补的一块。
+- **re-arm API**：设计图里画过 "Arm auto-retry again" 按钮。实现时发现它需要一个**没人有的
+  信息** —— 重新武装要一个新的 reset 时刻，而此时配额快照要么给得出（那说明还封着，本来就会
+  自己顺延）要么给不出（那就是可以直接重试）。按钮删了，D 状态只留 `Retry now`。
+- **"Resumed automatically at …" 分隔线**：需要在事件流里插标记（污染 `run_event` 或再加字
+  段）。替代方案已实现且够用：**任何新的用户消息都会让上方的配额卡片转为静态历史**
+  （`quotaOutageOver()`），所以"卡片 → 紧接着一条重发的消息"这个因果在 transcript 里是看得见
+  的。顺带修掉一个真 bug：重试成功后 `quotaRetryAt` 被清空，卡片会翻成橙色警告说"无法重试"。

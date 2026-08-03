@@ -1127,6 +1127,21 @@ export class SessionsService {
   }
 
   /**
+   * Stop the pending quota retry on this session. The user is saying they will decide when
+   * (or whether) to send this message again — the transcript card keeps its manual Retry.
+   * Idempotent: a retry that already fired, or was never armed, is a no-op.
+   */
+  async cancelQuotaRetry(ownerId: string, id: string): Promise<{ ok: true }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    await this.prisma.session.update({ where: { id }, data: { quotaRetryAt: null } });
+    return { ok: true };
+  }
+
+  /**
    * Resolve a public share token to its sanitized, read-only transcript. NO ownerId — the
    * unguessable token IS the capability. Returns only what a viewer needs to render the
    * conversation (title, agent name, status, the event stream); never ownership, billing,
@@ -1923,6 +1938,11 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // A message on this session disarms any quota retry waiting on it — whether it
+          // came from the user (they took over; sending their own message again behind
+          // their back would be a second, unasked-for turn) or from the sweeper itself
+          // (the retry has now fired). Both routes into a new turn pass through here.
+          quotaRetryAt: null,
           ...(session.mergeStatus === 'pending'
             ? {
                 mergeStatus: null,
@@ -2747,6 +2767,9 @@ export class SessionsService {
           // A resumable Completed session moves back to Open. Trash was rejected above.
           completedAt: null,
           archivedAt: null,
+          // As in createTurn: a new message — the user's or the sweeper's own — disarms the
+          // quota retry. This is the route the sweeper itself takes for a parked session.
+          quotaRetryAt: null,
           ...(dto.model !== undefined ? { model: dto.model } : {}),
           ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),

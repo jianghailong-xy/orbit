@@ -50,7 +50,6 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
-import { authRetryText } from '../lib/authRetry';
 import {
   agentsQuery,
   type Me,
@@ -112,6 +111,7 @@ import {
   ApiError,
   type ApprovalInfo,
   completeSession,
+  cancelQuotaRetry,
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
@@ -139,13 +139,13 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, MD, QuotaLimitCtx, type QuotaLimitHelp, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
+import { lastUserMessageText, MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -3241,7 +3241,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
   // session would just throw out of the send mutation.
-  const retryText = authRetryText(events, detailForSelected?.prompt, selected?.numTurns);
+  const retryText = lastUserMessageText(events, detailForSelected?.prompt, selected?.numTurns);
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
@@ -3268,6 +3268,41 @@ export function AgentView({ runner }: { runner: Runner }) {
       selectedMissing,
       sendMutate,
       navigate,
+    ],
+  );
+  // The same retry, plus the pending auto-retry, for the quota card. Disarming is a plain
+  // fire-and-forget: the detail query refetches on settle, and the card's own countdown is
+  // driven by the value it reads back.
+  const quotaLimitHelp: QuotaLimitHelp = useMemo(
+    () => ({
+      provider: shownProvider,
+      runnerName: runner.name,
+      retryAt: detailForSelected?.quotaRetryAt ?? null,
+      attempts: detailForSelected?.quotaRetryAttempts ?? 0,
+      onRetry:
+        retryText && !selectedTrashed && !selectedMissing
+          ? () => sendMutate({ content: retryText, images: [] })
+          : undefined,
+      retryText,
+      onCancelAuto: selected?.id
+        ? () => {
+            cancelQuotaRetry(selected.id)
+              .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
+              .catch((e: Error) => message.error(e.message));
+          }
+        : undefined,
+    }),
+    [
+      shownProvider,
+      runner.name,
+      detailForSelected?.quotaRetryAt,
+      detailForSelected?.quotaRetryAttempts,
+      retryText,
+      selectedTrashed,
+      selectedMissing,
+      sendMutate,
+      selected?.id,
+      qc,
     ],
   );
   const shownMode: string = live
@@ -4034,7 +4069,9 @@ export function AgentView({ runner }: { runner: Runner }) {
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
                 <EventFullCtx.Provider value={fetchEventFull}>
                   <AuthErrorCtx.Provider value={authErrorHelp}>
-                    <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                    <QuotaLimitCtx.Provider value={quotaLimitHelp}>
+                      <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                    </QuotaLimitCtx.Provider>
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>

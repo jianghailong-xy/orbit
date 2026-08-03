@@ -80,6 +80,13 @@ export const USAGE_LIMIT_ERROR_MARKERS = [
   // Codex app-server: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/
   // usage to purchase more credits or try again at Aug 9th, 2026 1:26 PM."
   'hit your usage limit',
+  // Claude Code, rolling 5-hour window: "You've hit your session limit · resets 6:20pm
+  // (Europe/Berlin)". Arrives as plain `assistant` text with a `success` result — same path
+  // as an API error, so nothing upstream treats the turn as failed.
+  'hit your session limit',
+  // Claude Code, 7-day window: "You've hit your weekly limit · resets 1pm (Europe/Berlin)".
+  // The date is present only when the reset is not today ("resets Aug 3, 1pm (…)").
+  'hit your weekly limit',
 ];
 
 /**

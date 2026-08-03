@@ -4625,6 +4625,198 @@ body {
   color: var(--brand);
 }
 
+/* Provider quota exhausted. Not an error — a pause — and the card's weight follows one
+   question: does the reader still have to do something? While a retry is armed the answer is
+   no, so this sits neutral, a status line rather than an alarm; a card that stays orange for
+   five hours over a situation already handled is just wrong. It escalates to the sign-in
+   card's warning tint only when the ball is back in their court (no reset time, retries
+   spent, or auto-retry switched off). Same skeleton as .chat-authfix throughout. */
+.chat-quota {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  font-size: 13px;
+}
+.chat-quota[data-needs-you='true'] {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.chat-quota-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-quota-icon {
+  color: var(--text-3);
+  flex: none;
+}
+.chat-quota[data-needs-you='true'] .chat-quota-icon {
+  color: var(--warning);
+}
+.chat-quota-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.chat-quota-msg {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+/* Absolute time first, countdown second: the absolute one is what the user plans around ("I'll
+   be back after lunch"), the relative one is what they feel. Tabular figures because it ticks
+   — a digit changing width twitches the line every second in the corner of the eye. */
+.chat-quota-when {
+  margin: 7px 0 0;
+  color: var(--text-1);
+  font-size: 13px;
+}
+.chat-quota-in {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* What happens next, and the one switch that stops it. Boxed because it is the only thing in
+   the card that is a control rather than prose. */
+.chat-quota-auto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 11px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.chat-quota-auto-txt {
+  flex: 1;
+  min-width: 0;
+}
+.chat-quota-auto-l {
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.chat-quota-auto-d {
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin-top: 1px;
+}
+.sw {
+  flex: none;
+  width: 40px;
+  height: 21px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--fill-muted);
+  position: relative;
+  cursor: pointer;
+}
+.sw[data-on='true'] {
+  background: var(--brand);
+}
+.sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+.sw[data-on='true']::after {
+  left: 21px;
+}
+/* The message the retry would re-send, quoted — same panel and same reason as
+   .chat-authfix-last: by now it has scrolled away, and on a first-turn limit it was never in
+   the transcript at all. */
+.chat-quota-last {
+  max-height: 13em;
+  overflow-y: auto;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-quota[data-needs-you='true'] .chat-quota-last {
+  background: var(--bg-base);
+}
+.chat-quota-lastl {
+  margin: 10px 0 -4px;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.chat-quota-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.chat-quota-retry {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+/* :not() so the escalated card's lighter fill doesn't swallow the primary button — the
+   specificity war .rsi-btn-alt lost once already. */
+.chat-quota[data-needs-you='true'] .chat-quota-retry:not([data-primary='true']) {
+  background: var(--bg-base);
+}
+.chat-quota-retry:hover {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.chat-quota-retry[data-primary='true'] {
+  border-color: var(--brand-border);
+  background: var(--brand);
+  color: #fff;
+}
+.chat-quota-retry[data-primary='true']:hover {
+  background: var(--brand-strong);
+  color: #fff;
+}
+.chat-quota-note {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+/* Firing: the card becomes its own progress indicator rather than being replaced by one, so
+   whoever comes back to a resumed session can still read what happened here. */
+.chat-quota-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  color: var(--brand);
+  font-size: 12.5px;
+}
+.chat-quota-run .spin {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--brand-border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: chat-quota-spin 0.8s linear infinite;
+}
+@keyframes chat-quota-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── rich transcript: Markdown + per-tool cards + sub-agent nesting ───────── */
 .md {
   font-size: 14px;
