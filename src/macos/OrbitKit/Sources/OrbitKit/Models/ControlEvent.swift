@@ -71,6 +71,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         public let id: String
         public let name: String?
         public let model: String?
+        /// Sent by the control plane (`realtime.service.ts` selects it alongside name/model). Decoded
+        /// here so the payload round-trips; `SessionUpsert` still prefers the row's own richer agent.
+        public let effort: String?
     }
     public let id: String
     public let title: String?
