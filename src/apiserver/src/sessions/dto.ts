@@ -13,6 +13,12 @@ export interface CreateSessionDto {
   agentId?: string;
   /** Optional parent work item this session runs under. */
   taskId?: string;
+  /** Per-session provider override, picked on the New Session screen: a built-in engine
+   *  ("claude"/"codex"/"kimi"/"opencode") or one of the caller's configured ModelProvider
+   *  slugs. Omitted keeps the historical behaviour — the session inherits its agent's
+   *  provider. An unknown or foreign slug is rejected rather than silently falling back,
+   *  so a session never dispatches with an identity the caller can't use. */
+  provider?: string;
   /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;
   permissionMode?: string;

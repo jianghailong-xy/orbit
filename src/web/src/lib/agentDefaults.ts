@@ -24,6 +24,11 @@ export interface ConfiguredProvider {
   runtime: string;
   models: { value: string; label: string; contextWindow?: number }[];
   defaultModel?: string | null;
+  /** The vendor preset this provider was configured from — its brand identity, and where the
+   *  New Session picker gets its logo. NULL for a self-maintained custom endpoint. Served by
+   *  GET /providers (providers.service listPublic), which selects it and passes it through
+   *  withPreset(). */
+  presetSlug?: string | null;
 }
 
 /** Resolve a configured provider by slug — built-in slugs never match. */

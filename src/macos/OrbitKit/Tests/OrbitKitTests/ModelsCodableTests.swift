@@ -138,10 +138,12 @@ final class ModelsCodableTests: XCTestCase {
         [{"slug":"deepseek","label":"DeepSeek","runtime":"claude",
           "models":[{"value":"deepseek-v4-pro","label":"DeepSeek V4 Pro","contextWindow":128000},
                     {"value":"deepseek-v4-lite","label":"DeepSeek V4 Lite"}],
-          "defaultModel":"deepseek-v4-pro","futureField":true}]
+          "defaultModel":"deepseek-v4-pro","presetSlug":"deepseek","futureField":true},
+         {"slug":"my-endpoint","label":"my endpoint","runtime":"claude","models":[],
+          "defaultModel":null,"presetSlug":null}]
         """#
         let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
-        XCTAssertEqual(list.count, 1)
+        XCTAssertEqual(list.count, 2)
         XCTAssertEqual(list[0].slug, "deepseek")
         XCTAssertEqual(list[0].label, "DeepSeek")
         XCTAssertEqual(list[0].runtime, "claude")
@@ -149,6 +151,17 @@ final class ModelsCodableTests: XCTestCase {
         XCTAssertEqual(list[0].models.map(\.value), ["deepseek-v4-pro", "deepseek-v4-lite"])
         XCTAssertEqual(list[0].models[0].contextWindow, 128_000)
         XCTAssertNil(list[0].models[1].contextWindow)
+        // The preset is what the new-session picker brands the row with; a self-maintained
+        // endpoint has none and falls back to the neutral glyph.
+        XCTAssertEqual(list[0].presetSlug, "deepseek")
+        XCTAssertNil(list[1].presetSlug)
+    }
+
+    /// A server that predates `presetSlug` must still decode — the field is additive.
+    func testConfiguredProviderDecodesWithoutPresetSlug() throws {
+        let json = #"[{"slug":"deepseek","label":"DeepSeek","models":[],"defaultModel":null}]"#
+        let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
+        XCTAssertNil(list[0].presetSlug)
     }
 
     func testLoginResponseDecodes() throws {

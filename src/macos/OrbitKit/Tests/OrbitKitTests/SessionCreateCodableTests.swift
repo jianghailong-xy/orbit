@@ -11,9 +11,20 @@ final class SessionCreateCodableTests: XCTestCase {
         let obj = try jsonObject(CreateSessionRequest(prompt: "do it", agentId: "ag1"))
         XCTAssertEqual(obj["prompt"] as? String, "do it")
         XCTAssertEqual(obj["agentId"] as? String, "ag1")
-        for key in ["title", "assignedRunnerId", "model", "permissionMode", "effort", "shell", "attachmentIds"] {
+        for key in ["title", "assignedRunnerId", "provider", "model", "permissionMode", "effort", "shell", "attachmentIds"] {
             XCTAssertFalse(obj.keys.contains(key), "expected \(key) omitted")
         }
+    }
+
+    /// The new-session provider pick. Omitted means "inherit the agent's" server-side, so sending
+    /// it only when the user actually picked is what keeps an untouched draft behaving as before.
+    func testCreateSendsThePickedProviderOnlyWhenChosen() throws {
+        let picked = try jsonObject(CreateSessionRequest(
+            prompt: "do it", agentId: "ag1", provider: "deepseek"))
+        XCTAssertEqual(picked["provider"] as? String, "deepseek")
+
+        let inherited = try jsonObject(CreateSessionRequest(prompt: "do it", agentId: "ag1"))
+        XCTAssertFalse(inherited.keys.contains("provider"))
     }
 
     /// A fully-configured draft sends every pill plus the shell flag.

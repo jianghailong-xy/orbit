@@ -103,6 +103,8 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
+import { NewSessionProviderHero } from './NewSessionProviderHero';
+import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
 import {
@@ -1458,7 +1460,20 @@ export function AgentView({ runner }: { runner: Runner }) {
     );
   }, [agentsForRunner, lockedAgentId]);
 
-  // The provider this composer talks to: a live session's own, else the picked agent's.
+  // The New Session provider pick, scoped to the agent it was made under: switching agents means
+  // switching projects, so the previous pick must not follow. Kept as {agentId, provider} rather
+  // than reset by an effect so the stale value is never readable for a render.
+  const [draftProviderPick, setDraftProviderPick] = useState<{
+    agentId?: string;
+    provider: string;
+  } | null>(null);
+  const draftProvider =
+    draftProviderPick && draftProviderPick.agentId === agentId ? draftProviderPick.provider : null;
+  // The provider a NEW session would run: an explicit pick, else the agent's own (which is what
+  // the pick is remembered as on send, so the two agree from the next session onwards).
+  const pickedProvider: string = draftProvider ?? pickedAgent?.provider ?? 'claude';
+
+  // The provider this composer talks to: a live session's own, else the one picked for the draft.
   // Declared here (not next to its other consumers) because the `/` autocomplete memo below
   // needs it.
   const shownProvider: string = selected
@@ -1466,7 +1481,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         detailForSelected?.provider ??
         detailForSelected?.agent?.provider ??
         'claude')
-    : (pickedAgent?.provider ?? 'claude');
+    : pickedProvider;
   const shownProviderCapabilitiesResolved = providerIdentityResolved(
     shownProvider,
     configuredProvidersLoaded,
@@ -1531,20 +1546,65 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   const pickedModelDefault = pickedAgent
     ? defaultModelForProvider(
-        pickedAgent.provider ?? 'claude',
+        pickedProvider,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
       )
     : null;
   const pickedProviderCapabilitiesResolved = providerIdentityResolved(
-    pickedAgent?.provider,
+    pickedProvider,
     configuredProvidersLoaded,
   );
 
+  // What the New Session hero offers, and what it shows as current. Engines first (always all
+  // three, so a user with nothing configured still has choices), then this account's providers.
+  const providerChoicesForDraft = useMemo(
+    () => providerChoices(configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels),
+    [configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels],
+  );
+  const currentProviderChoiceForDraft = useMemo(
+    () =>
+      currentProviderChoice(
+        pickedProvider,
+        providerChoicesForDraft,
+        runner.modelCatalog,
+        configuredProviders,
+        runner.runtimeDefaultModels,
+      ),
+    [
+      pickedProvider,
+      providerChoicesForDraft,
+      runner.modelCatalog,
+      configuredProviders,
+      runner.runtimeDefaultModels,
+    ],
+  );
+  // What a switch just changed. Shown under the summary and cleared on a timer: the model move
+  // is a silent side effect otherwise, and so is the write-back that remembers the pick.
+  const [providerSwitchNote, setProviderSwitchNote] = useState<string | null>(null);
+  const providerNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current); }, []);
+  const pickDraftProvider = (slug: string): void => {
+    setDraftProviderPick({ agentId, provider: slug });
+    const picked = providerChoicesForDraft.find((c) => c.slug === slug);
+    const agentName = pickedAgent?.name;
+    setProviderSwitchNote(
+      picked
+        ? `Model → ${picked.modelLabel}${agentName ? ` · saved as ${agentName}'s default on send` : ''}`
+        : null,
+    );
+    if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
+    providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+
+  // The provider is part of the draft's seed context: picking a different one has to re-seed
+  // Model (each provider owns its own model space) and re-clamp Mode, which is exactly what a
+  // context change does — including resetting `dirty`, so a model chosen for the old provider
+  // never carries into the new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${agentId ?? 'none'}`;
+    : `draft:${runner.id}:${agentId ?? 'none'}:${pickedProvider}`;
   const modelSeed = selectedId ? (!live ? selectedModelDefault : null) : pickedModelDefault;
 
   // A late Runtime catalog/configured-provider response may refine the seed for an untouched
@@ -1563,7 +1623,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           ? clampPermissionModeForModel(
               pickedAgent.permissionMode ?? 'dontAsk',
               pickedModelDefault ?? DEFAULT_MODEL,
-              pickedAgent.provider,
+              pickedProvider,
               configuredProviders,
             )
           : (pickedAgent.permissionMode ?? 'dontAsk')
@@ -1621,15 +1681,19 @@ export function AgentView({ runner }: { runner: Runner }) {
   // falling through. Reacts to `me` loading so the pill fills once preferences arrive.
   useEffect(() => {
     if (selectedId) return;
-    const provider = pickedAgent?.provider ?? 'claude';
+    const provider = pickedProvider;
     const candidate = pickedAgent?.effort ?? me.data?.preferences?.defaultEffort ?? '';
-    const selectedModel =
-      pickedAgent?.model ??
-      defaultModelForProvider(provider, runner.modelCatalog, configuredProviders);
+    // A picked provider owns its own model space, so its default model — not the agent's, which
+    // belongs to the provider being switched away from — is what the effort must be legal for.
+    const selectedModel = draftProvider
+      ? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders)
+      : (pickedAgent?.model ??
+        defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
     setEffort(normalizeEffortForProvider(provider, candidate, selectedModel, runner.modelCatalog));
   }, [
     selectedId,
-    pickedAgent?.provider,
+    pickedProvider,
+    draftProvider,
     pickedAgent?.model,
     pickedAgent?.effort,
     me.data?.preferences?.defaultEffort,
@@ -2032,7 +2096,14 @@ export function AgentView({ runner }: { runner: Runner }) {
   const send = useMutation({
     mutationFn: async (
       vars: { content: string; images: ComposerImage[]; shell?: boolean },
-    ): Promise<{ id: string; turnId?: string; queuedItem?: QueuedTurn; created?: boolean }> => {
+    ): Promise<{
+      id: string;
+      turnId?: string;
+      queuedItem?: QueuedTurn;
+      created?: boolean;
+      /** The provider this create actually sent, for the remember-on-the-agent write-back. */
+      provider?: string;
+    }> => {
       const { content, images: imgs, shell } = vars;
       if (selectedTrashed)
         throw new Error('Restore this session to Open before sending a message');
@@ -2115,7 +2186,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         // Fall through to createInteractiveSession: terminal non-resumable sessions keep the
         // established "start a new session" behavior instead of sending an invalid resume.
       }
-      const provider = pickedAgent?.provider ?? 'claude';
+      const provider = pickedProvider;
       const wireEffort = normalizeEffortForProvider(provider, effort);
       const providerResolved = providerIdentityResolved(
         provider,
@@ -2146,6 +2217,9 @@ export function AgentView({ runner }: { runner: Runner }) {
         prompt: content,
         assignedRunnerId: runner.id,
         agentId,
+        // Only an explicit pick travels: leaving it off keeps the server's inherit-from-agent
+        // path, so a session started without touching the hero behaves exactly as before.
+        provider: draftProvider ?? undefined,
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the agent's
@@ -2157,9 +2231,11 @@ export function AgentView({ runner }: { runner: Runner }) {
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
       });
-      return { id: created.id, created: true };
+      // Report the provider actually sent (not the render-time state) so the write-back below
+      // can never remember a value this session didn't run with.
+      return { id: created.id, created: true, provider: draftProvider ?? undefined };
     },
-    onSuccess: ({ id, turnId, queuedItem, created }, vars) => {
+    onSuccess: ({ id, turnId, queuedItem, created, provider: sentProvider }, vars) => {
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
@@ -2172,6 +2248,24 @@ export function AgentView({ runner }: { runner: Runner }) {
           assignedRunnerId: runner.id,
           agent: agentId ? { id: agentId } : null,
         });
+      // Remember the provider pick on the agent it was made under, so the next new session here
+      // opens on it. Same write-back the Model pill does, and best-effort for the same reason:
+      // the session already carries its own provider, so a failed PATCH costs a remembered
+      // default, never a wrong dispatch. Cleared either way — the pick has become the agent's.
+      if (created && sentProvider && agentId) {
+        const patchedAgentId = agentId;
+        const patchedProvider = sentProvider;
+        qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
+          old?.map((a) => (a.id === patchedAgentId ? { ...a, provider: patchedProvider } : a)),
+        );
+        setDraftProviderPick(null);
+        void api(`/agents/${patchedAgentId}`, {
+          method: 'PATCH',
+          body: { provider: patchedProvider },
+        })
+          .then(() => qc.invalidateQueries({ queryKey: agentsQuery().queryKey }))
+          .catch(() => {});
+      }
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
       // Hand the sent image previews to the transcript, keyed by turnId, so they show in
@@ -4063,14 +4157,21 @@ export function AgentView({ runner }: { runner: Runner }) {
               )}
             </div>
           ) : composing ? (
-            // The empty-state note is centered as a hero only while it's alone: .agent-draft is a
-            // centering flex row, so once /status prints a card it would sit beside the note instead
+            // The provider hero is centered as a hero only while it's alone: .agent-draft is a
+            // centering flex row, so once /status prints a card it would sit beside the hero instead
             // of under it. With cards the pane falls back to plain transcript flow.
             <div
               className={`agent-sessions${localStatusCards.length ? '' : ' agent-draft'}`}
               ref={scrollRef}
             >
-              <div className="chat-note">Send this agent a task to start a new session.</div>
+              <NewSessionProviderHero
+                current={currentProviderChoiceForDraft}
+                choices={providerChoicesForDraft}
+                onPick={pickDraftProvider}
+                // Nothing to choose until we know which agent (and so which project) this runs in.
+                disabled={!pickedAgent}
+                note={providerSwitchNote}
+              />
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}

@@ -390,6 +390,10 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let title: String?
     public let agentId: String?
     public let assignedRunnerId: String?
+    /// Provider picked on the new-session screen: a built-in engine slug or one of this account's
+    /// configured providers. Nil omits the field, so the session inherits its agent's provider —
+    /// the behaviour every client had before the picker existed.
+    public let provider: String?
     public let model: String?
     public let permissionMode: String?
     /// Provider-defined effort / variant value; nil omits the field and "" explicitly clears it.
@@ -399,12 +403,14 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let shell: Bool?
     public let attachmentIds: [String]?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
+                provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
         self.assignedRunnerId = assignedRunnerId
+        self.provider = provider
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort

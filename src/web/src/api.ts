@@ -223,6 +223,9 @@ export const createInteractiveSession = (body: {
   prompt: string;
   assignedRunnerId?: string;
   agentId?: string;
+  /** Provider picked on the New Session screen: a built-in engine slug or one of the caller's
+   *  configured providers. Omitted inherits the agent's, which is the historical behaviour. */
+  provider?: string;
   model?: string;
   permissionMode?: string;
   effort?: string;

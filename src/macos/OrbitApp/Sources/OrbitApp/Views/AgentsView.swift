@@ -362,6 +362,7 @@ struct NewSessionView: View {
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
     @State private var showSwitcher = false
+    @State private var showProviderPicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
@@ -383,7 +384,10 @@ struct NewSessionView: View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
                 VStack(spacing: 10) {
-                    AgentAvatar(provider: agent.provider, size: 64)
+                    // The mark is the provider's, so it re-colours when the provider row below is
+                    // switched — "who is running this" reads from the colour before the text.
+                    AgentAvatar(provider: draft.provider, size: 64,
+                                brandKey: currentProviderChoice.brandKey)
                         .padding(.bottom, 6)
                     // The agent identity is the hero — a cold launch lands here, so the screen answers
                     // "which agent am I about to task?" at a glance. Tapping opens the switcher.
@@ -396,6 +400,21 @@ struct NewSessionView: View {
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(Color.primary.opacity(0.05),
                                     in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    // Agent answers "where it runs"; this answers "who runs it". Separate controls
+                    // because they're separate decisions — and the agent name must stay tappable.
+                    Button { showProviderPicker = true } label: {
+                        HStack(spacing: 5) {
+                            Text(currentProviderChoice.label)
+                                .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
+                            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.05),
+                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -472,10 +491,31 @@ struct NewSessionView: View {
                 app.composeWithAgent(id)
             }
         }
+        .sheet(isPresented: $showProviderPicker) {
+            ProviderSwitchSheet(choices: providerChoices, currentSlug: draft.provider,
+                                agentName: agent.name) { slug in
+                draft.pickDraftProvider(slug)
+            }
+        }
     }
 
-    /// "New session · <model> · <effort>" — surfaces the config the draft will start with (mirrors
-    /// the composer footer) so the model/effort are visible up front, not just the agent name.
+    /// Engines first, then this account's configured providers. Built from the draft's own
+    /// snapshot so the list matches the model space the pills are already resolving against.
+    private var providerChoices: [ProviderChoice] {
+        SessionProviderChoices.choices(configured: draft.configuredProviders,
+                                       catalog: draft.modelCatalog)
+    }
+
+    private var currentProviderChoice: ProviderChoice {
+        SessionProviderChoices.current(draft.provider, in: providerChoices,
+                                       configured: draft.configuredProviders,
+                                       catalog: draft.modelCatalog)
+    }
+
+    /// "New session · <model> · <effort> · <who pays>" — surfaces the config the draft will start
+    /// with (mirrors the composer footer) so the model/effort are visible up front, not just the
+    /// agent name. The funding source rides here too: it's the one thing that separates an engine
+    /// from a configured provider, and it belongs next to the model it applies to.
     private var heroSubtitle: String {
         let model = draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
@@ -483,6 +523,7 @@ struct NewSessionView: View {
             : "Runtime default"
         var parts = ["New session", model]
         if draft.effort != .default { parts.append(draft.effort.label) }
+        parts.append(currentProviderChoice.kind == .engine ? "runner login" : "your API key")
         return parts.joined(separator: " · ")
     }
 }

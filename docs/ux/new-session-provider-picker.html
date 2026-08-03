@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>UX sketch · Pick a configured provider on New Session</title>
+<style>
+/* Tokens copied verbatim from src/web/src/index.css so the sketch is measurable against
+   the real app — do not invent colors here. */
+:root {
+  color-scheme: light;
+  --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+  --bg-hover:#f5f6f7; --fill-muted:#f1f1f4; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+  --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-tint-hover:#e1ebff;
+  --brand-border:#bcd3ff; --success:#1a7f37; --success-solid:#2ea121; --success-border:#b6e7c4;
+  --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  --invert-surface:#1f2329; --invert-text:#ffffff;
+  --page:#eef0f3; --frame-shadow:0 10px 34px rgba(20,24,31,.12);
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-base:#202023; --bg-raised:#2b2b2e; --bg-subtle:#252528; --bg-sunken:#17171a;
+  --bg-hover:#343437; --fill-muted:#38383c; --border:#424246; --border-subtle:#343437;
+  --text-1:#c9ced5; --text-2:#a7adb6; --text-3:#8b9099; --text-4:#71767f;
+  --brand:#5b8cff; --brand-strong:#7aa2ff; --brand-tint:rgba(91,140,255,.16);
+  --brand-tint-hover:rgba(91,140,255,.24); --brand-border:rgba(91,140,255,.32);
+  --success:#4ac26b; --success-solid:#3fb45b; --success-border:rgba(46,161,33,.35);
+  --warning:#e0a23b; --warning-bg:rgba(250,140,22,.15); --warning-border:rgba(250,140,22,.38);
+  --invert-surface:#e6e8eb; --invert-text:#16171a;
+  --page:#161619; --frame-shadow:0 10px 34px rgba(0,0,0,.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:var(--page); color:var(--text-1); padding:32px 28px 72px;
+  font:14px/1.5 -apple-system,"SF Pro Text","Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+.page-head { max-width:1180px; margin:0 auto 26px; display:flex; align-items:flex-start; gap:16px; }
+.page-head h1 { font-size:20px; font-weight:650; letter-spacing:-.01em; }
+.page-head p { color:var(--text-2); font-size:13px; margin-top:5px; max-width:760px; }
+.theme-btn {
+  margin-left:auto; flex:none; border:1px solid var(--border); background:var(--bg-raised);
+  color:var(--text-2); font-size:12px; padding:7px 13px; border-radius:8px; cursor:pointer;
+}
+.theme-btn:hover { background:var(--bg-hover); }
+
+.grid { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(2,1fr); gap:30px 28px; }
+.cell.wide { grid-column:1 / -1; }
+.cap { font-size:13px; font-weight:600; margin-bottom:2px; }
+.cap b { color:var(--brand); font-weight:700; margin-right:6px; }
+.cap-sub { color:var(--text-3); font-size:12px; margin-bottom:10px; }
+.notes { margin-top:10px; color:var(--text-3); font-size:12px; line-height:1.7; }
+.notes li { margin-left:16px; }
+.notes code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--text-2); }
+
+/* ---------- app frame: the session pane only (sidebar omitted) ---------- */
+.frame {
+  background:var(--bg-base); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--frame-shadow); overflow:hidden; display:flex; flex-direction:column;
+  height:452px; padding:14px 20px 16px;
+}
+.frame.tall { height:620px; }
+.frame.mid { height:540px; }
+.f-head { display:flex; align-items:center; gap:10px; padding-bottom:12px; border-bottom:1px solid var(--border-subtle); }
+.f-title { font-size:15px; font-weight:600; }
+.f-sub { font-size:12px; color:var(--text-3); margin-top:1px; }
+.f-head .spacer { flex:1; }
+.f-dots { color:var(--text-3); letter-spacing:2px; font-size:14px; }
+
+/* the middle area — today it holds one grey line; this is what we are designing */
+.f-body { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0; min-height:0; }
+/* only for the overflow frame, so the popover has room to hang below the strip */
+.f-body.top { justify-content:flex-start; padding-top:10px; }
+
+/* ---------- the provider hero ---------- */
+.hero { width:100%; max-width:620px; text-align:center; }
+.hero-title { font-size:17px; font-weight:600; color:var(--text-1); letter-spacing:-.01em; }
+.hero-sub { font-size:12.5px; color:var(--text-3); margin-top:5px; }
+.strip { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:16px; }
+
+.chip {
+  display:flex; align-items:center; gap:8px; padding:7px 12px 7px 8px;
+  background:var(--bg-raised); border:1px solid var(--border); border-radius:12px;
+  cursor:pointer; transition:border-color .15s, box-shadow .15s, transform .15s, background .15s;
+  font-size:13px; color:var(--text-2); font-weight:500; position:relative;
+}
+.chip:hover { border-color:var(--brand-border); transform:translateY(-1px); box-shadow:0 4px 14px rgba(51,112,255,.10); }
+.chip.on { background:var(--brand-tint); border-color:var(--brand-border); color:var(--text-1); font-weight:600; }
+.chip.off { opacity:.45; cursor:not-allowed; }
+.chip.off:hover { transform:none; box-shadow:none; border-color:var(--border); }
+.chip.ghost { border-style:dashed; background:var(--bg-subtle); color:var(--text-3); }
+.chip.more { padding-left:12px; }
+/* divides the two kinds of identity: engines you sign into vs. keys you brought */
+/* the collapsed default: a vertical hero — big brand mark on top, name under it.
+   No card border: a framed box at this size reads heavy, and the mark itself is the anchor.
+   Same shape as the iOS new-session agent hero, so the three clients line up. */
+.idcard {
+  display:inline-flex; flex-direction:column; align-items:center; gap:10px;
+  cursor:pointer; border:0; background:none; padding:0;
+}
+.idcard .tile { transition:transform .16s, box-shadow .16s; }
+.idcard:hover .tile { transform:translateY(-2px); }
+.idname {
+  display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:10px;
+  font-size:16px; font-weight:650; color:var(--text-1); transition:background .15s, color .15s;
+}
+.idcard:hover .idname { background:var(--bg-hover); }
+.idcard.open .idname { background:var(--brand-tint); color:var(--brand-strong); }
+.idcard .chev { color:var(--text-3); font-size:11px; font-weight:400; }
+.idcard.open .chev { color:var(--brand-strong); }
+.idcard-wrap { position:relative; display:inline-flex; flex-direction:column; align-items:center; }
+.mini {
+  background:var(--bg-base); border:1px solid var(--border); border-radius:12px; padding:16px 12px;
+  height:158px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
+}
+.mini .lab { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+.mini .verdict { font-size:11.5px; font-weight:600; }
+.ok { color:var(--success); } .no { color:var(--error); }
+.strip .sep-v { width:1px; height:24px; background:var(--border); margin:0 4px; align-self:center; }
+.chip .tag {
+  font-size:10px; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
+  color:var(--text-4); border:1px solid var(--border); border-radius:5px; padding:1px 4px; margin-left:2px;
+}
+.chip.on .tag { color:var(--brand-strong); border-color:var(--brand-border); }
+
+/* logo tile — same construction as web ProviderTile (brand gradient + white glyph) */
+.tile { flex:none; display:grid; place-items:center; color:#fff; font-weight:700; border-radius:8px; position:relative; }
+.tile svg { fill:currentColor; }
+.tile.dash { background:var(--fill-muted); color:var(--text-3); border:1px dashed var(--border); font-weight:500; }
+.check {
+  position:absolute; right:-4px; bottom:-4px; width:15px; height:15px; border-radius:50%;
+  display:grid; place-items:center; background:var(--success-solid); color:#fff;
+  font-size:9px; border:2px solid var(--bg-base); font-weight:700;
+}
+
+.resolved {
+  margin-top:14px; display:flex; align-items:center; justify-content:center; gap:8px;
+  font-size:12px; color:var(--text-3);
+}
+.resolved .dot { color:var(--text-4); }
+.resolved b { color:var(--text-2); font-weight:600; }
+.resolved a { color:var(--brand); text-decoration:none; }
+.hint {
+  margin-top:9px; font-size:11.5px; color:var(--brand-strong);
+  background:var(--brand-tint); border:1px solid var(--brand-border);
+  display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+}
+.warn {
+  margin-top:9px; font-size:11.5px; color:var(--warning);
+  background:var(--warning-bg); border:1px solid var(--warning-border);
+  display:inline-flex; gap:6px; padding:4px 10px; border-radius:999px;
+}
+.old-note { font-size:13px; color:var(--text-3); }
+
+/* ---------- composer ---------- */
+.composer { padding-top:12px; }
+.c-box { display:flex; gap:8px; align-items:flex-end; }
+.c-input {
+  flex:1; min-height:56px; border:1px solid var(--border); border-radius:10px; background:var(--bg-raised);
+  padding:10px 12px; color:var(--text-4); font-size:13.5px;
+}
+.c-send { flex:none; width:34px; height:34px; border-radius:8px; background:var(--brand); color:#fff; display:grid; place-items:center; font-size:15px; }
+.pills { display:flex; align-items:center; gap:8px; margin-top:7px; flex-wrap:wrap; font-size:12px; color:var(--text-2); }
+.pill { display:inline-flex; align-items:center; gap:5px; padding:2px 4px; border-radius:6px; }
+.pill.static { color:var(--text-3); }
+.pill.hl { background:var(--brand-tint); color:var(--brand-strong); font-weight:600; }
+.pill .cv { color:var(--text-3); }
+.pills .sp { flex:1; }
+.ring { width:13px; height:13px; border-radius:50%; border:2px solid var(--border); display:inline-block; }
+
+/* ---------- alt B: card grid ---------- */
+.cards { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:16px; width:100%; max-width:600px; }
+.pcard {
+  display:flex; align-items:center; gap:10px; padding:11px; text-align:left;
+  background:var(--bg-raised); border:1px solid var(--border); border-radius:12px; cursor:pointer;
+}
+.pcard.on { border-color:var(--brand-border); background:var(--brand-tint); }
+.pcard .nm { font-size:13px; font-weight:600; color:var(--text-1); }
+.pcard .sb { font-size:11px; color:var(--text-3); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ---------- popover (overflow) ---------- */
+.pop {
+  position:absolute; z-index:5; width:236px; background:var(--bg-raised); border:1px solid var(--border);
+  border-radius:12px; box-shadow:0 12px 30px rgba(20,24,31,.16); padding:6px; text-align:left;
+}
+html[data-theme='dark'] .pop { box-shadow:0 12px 30px rgba(0,0,0,.55); }
+.pop .search { border:1px solid var(--border); border-radius:8px; padding:6px 9px; font-size:12px; color:var(--text-4); margin:2px 2px 6px; background:var(--bg-subtle); }
+.pop .row { display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; font-size:12.5px; color:var(--text-2); }
+.pop .row:hover { background:var(--bg-hover); }
+.pop .row.on { background:var(--brand-tint); color:var(--text-1); font-weight:600; }
+.pop .row .mdl { margin-left:auto; font-size:11px; color:var(--text-4); }
+.pop .sep { height:1px; background:var(--border-subtle); margin:5px 4px; }
+/* two words are enough to separate "signed-in engines" from "keys you brought" */
+.pop-group {
+  font-size:10.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--text-4); padding:7px 8px 3px;
+}
+.pop .row.link { color:var(--brand); }
+.anchor { position:relative; display:inline-flex; }
+
+.legend { max-width:1180px; margin:34px auto 0; border-top:1px solid var(--border); padding-top:20px; }
+.legend h2 { font-size:14px; font-weight:650; margin-bottom:10px; }
+.legend table { width:100%; border-collapse:collapse; font-size:12.5px; }
+.legend td { padding:7px 10px 7px 0; vertical-align:top; border-bottom:1px solid var(--border-subtle); color:var(--text-2); }
+.legend td:first-child { width:168px; color:var(--text-1); font-weight:600; white-space:nowrap; }
+.legend code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--text-1); background:var(--fill-muted); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div>
+    <h1>New Session · 选择已配置的 Provider</h1>
+    <p>把 Provider 选择放进 New Session 的中间区域(今天那里只有一行灰字 “Send this agent a task to start a new session.”)。
+       主张:<b>Agent 决定在哪儿干</b>(机器 / 目录 / 规则),<b>Provider 决定谁来干</b>(模型 / 密钥)。两者今天绑死在一起,这版把后者变成可切换的。<br>
+       <b>默认只显示一枚身份牌</b>(记住上次的选择),点开才是全部选项 —— provider 是粘性选择,不该每次都摆出来问一遍。一个 provider 都没配的新用户,点开是三枚内置引擎
+       <b>Claude / Codex / Kimi</b>,默认 Claude,所以这里始终可用,而不是一句“请先去配置”。</p>
+  </div>
+  <button class="theme-btn" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme==='dark'?'light':'dark'">切换 Light / Dark</button>
+</div>
+
+<div class="grid">
+
+  <!-- ============ C1 默认态:收敛 ============ -->
+  <div class="cell">
+    <div class="cap"><b>C1</b>默认态 — 一枚身份牌 · <b style="color:var(--warning)">本次修订</b></div>
+    <div class="cap-sub">记住上次的选择,所以默认<b>只显示当前这一个</b>。中间区安静下来,主角回到输入框。</div>
+    <div class="frame">
+      <div class="f-head">
+        <div><div class="f-title">New session</div><div class="f-sub">orbit-web · /root/orbit · mac-studio</div></div>
+        <div class="spacer"></div><div class="f-dots">···</div>
+      </div>
+      <div class="f-body">
+        <div class="hero">
+          <div class="hero-title">Start a new session</div>
+          <div class="hero-sub">Describe the task — Orbit remembers who runs it.</div>
+          <div style="margin-top:18px"><span class="idcard" id="id1"></span></div>
+          <div class="resolved" id="res1"></div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="c-box"><div class="c-input">Describe the task…</div><div class="c-send">↑</div></div>
+        <div class="pills">
+          <span class="pill">orbit-web</span><span class="pill">Auto</span>
+          <span class="sp"></span><span class="pill" id="pill-model1">Claude Opus 5</span>
+          <span class="pill">Default</span><span class="ring"></span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <li>身份牌 = <b>56px 品牌 mark 在第一行,名字 + <code>▾</code> 在第二行</b>,无边框 —— 这个尺寸再套一层框会很重,mark 自己就是锚点。它<b>只回答一个问题</b>:这次会话谁来跑。</li>
+      <li>下面一行小字说清模型和钱从哪出:<code>Claude Opus 5 · runner login</code>。</li>
+      <li>色块比文字先被识别 —— 换到 DeepSeek(C4)时整块变蓝,“谁在跑”一眼就到,不用读字。</li>
+      <li><b>可点</b>:点它展开(见 C2),选完自动收起。</li>
+    </div>
+  </div>
+
+  <!-- ============ C2 展开 ============ -->
+  <div class="cell">
+    <div class="cap"><b>C2</b>点开 — 全部选项只在这时出现</div>
+    <div class="cap-sub">内置引擎在上,BYOK provider 在下,末行是连接新的。5 个以上才出搜索框。</div>
+    <div class="frame tall">
+      <div class="f-head">
+        <div><div class="f-title">New session</div><div class="f-sub">orbit-web · /root/orbit · mac-studio</div></div>
+        <div class="spacer"></div><div class="f-dots">···</div>
+      </div>
+      <div class="f-body top">
+        <div class="hero">
+          <div class="hero-title">Start a new session</div>
+          <div class="hero-sub">Describe the task — Orbit remembers who runs it.</div>
+          <div style="margin-top:18px"><span class="idcard open" id="id2"></span></div>
+          <div style="position:relative;height:0">
+            <div class="pop" style="left:50%;transform:translateX(-118px);top:6px" id="pop2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="c-box"><div class="c-input">Describe the task…</div><div class="c-send">↑</div></div>
+        <div class="pills">
+          <span class="pill">orbit-web</span><span class="pill">Auto</span>
+          <span class="sp"></span><span class="pill">Claude Opus 5</span><span class="pill">Default</span><span class="ring"></span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <li>分组标题只有两个词:<b>Engines</b>(登录来的,走订阅额度)/ <b>Your keys</b>(BYOK,走 API 计费)。</li>
+      <li>每行右侧是该 provider 的默认模型 —— 换 provider 会改模型这件事,在点下去之前就说清楚。</li>
+      <li>键盘:Enter / Space 展开,↑↓ 选,Enter 确认,Esc 关。焦点默认仍在输入框。</li>
+    </div>
+  </div>
+
+  <!-- ============ C3 空态 ============ -->
+  <div class="cell">
+    <div class="cap"><b>C3</b>空态 — 一个 provider 都没配</div>
+    <div class="cap-sub">身份牌照常显示 Claude;点开只有三枚内置引擎 <code>Claude / Codex / Kimi</code>(= <code>LoginEngine</code> 的完整集合)+ 连接入口。</div>
+    <div class="frame mid">
+      <div class="f-head">
+        <div><div class="f-title">New session</div><div class="f-sub">orbit-web · /root/orbit · mac-studio</div></div>
+        <div class="spacer"></div><div class="f-dots">···</div>
+      </div>
+      <div class="f-body top">
+        <div class="hero">
+          <div class="hero-title">Start a new session</div>
+          <div class="hero-sub">Describe the task — Orbit remembers who runs it.</div>
+          <div style="margin-top:18px"><span class="idcard open" id="id3"></span></div>
+          <div style="position:relative;height:0">
+            <div class="pop" style="left:50%;transform:translateX(-118px);top:6px" id="pop3"></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="c-box"><div class="c-input">Describe the task…</div><div class="c-send">↑</div></div>
+        <div class="pills">
+          <span class="pill">orbit-web</span><span class="pill">Auto</span>
+          <span class="sp"></span><span class="pill">Claude Opus 5</span><span class="pill">Default</span><span class="ring"></span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <li>默认 Claude 不需要单开一条规则:预选 = <code>agent.provider</code>,而它的兜底初值就是 <code>claude</code>(<code>sessions.service.ts:155</code>)。</li>
+      <li>Codex / Kimi 未登录时<b>不置灰</b> —— 控制面今天看不到 runner 的引擎状态,点了之后走已有的 <code>RunnerSignIn</code> 卡,而不是假装知道。</li>
+    </div>
+  </div>
+
+  <!-- ============ C4 切换后 ============ -->
+  <div class="cell">
+    <div class="cap"><b>C4</b>切换后 — 两件事必须说出来</div>
+    <div class="cap-sub">① 模型跟着换了 ② 这个选择被记住了。隐式副作用不说,用户下次会困惑“我的模型怎么自己变了”。</div>
+    <div class="frame">
+      <div class="f-head">
+        <div><div class="f-title">New session</div><div class="f-sub">orbit-web · /root/orbit · mac-studio</div></div>
+        <div class="spacer"></div><div class="f-dots">···</div>
+      </div>
+      <div class="f-body">
+        <div class="hero">
+          <div class="hero-title">Start a new session</div>
+          <div class="hero-sub">Describe the task — Orbit remembers who runs it.</div>
+          <div style="margin-top:18px"><span class="idcard" id="id4"></span></div>
+          <div class="resolved">
+            <b>DeepSeek</b><span class="dot">·</span>DeepSeek V4 Pro<span class="dot">·</span>your API key
+            <span class="dot">·</span><a href="#">Manage</a>
+          </div>
+          <div><span class="hint">↻ Model → DeepSeek V4 Pro · Auto → Default · saved as orbit-web’s default</span></div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="c-box"><div class="c-input">Fix the flaky worktree test…</div><div class="c-send">↑</div></div>
+        <div class="pills">
+          <span class="pill">orbit-web</span><span class="pill">Default</span>
+          <span class="sp"></span><span class="pill static">DeepSeek</span>
+          <span class="pill hl">DeepSeek V4 Pro</span><span class="pill">Default</span><span class="ring"></span>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <li>胶囊 3s 后淡出,Model pill 同时高亮一次。</li>
+      <li><b>“saved as orbit-web’s default”</b> 是关键一句:记忆写回的是这个 <b>agent</b>,不是全局 —— agent ≈ 项目,项目和 provider 的绑定本来就稳定。</li>
+      <li>发出去之后中间区随草稿消失,provider 作为<b>静态 pill 留在 composer 左侧</b>,会话中途永远知道现在是谁在跑。</li>
+    </div>
+  </div>
+
+  <!-- ============ 密度光谱 ============ -->
+  <div class="cell wide">
+    <div class="cap">为什么是收敛,而不是摆开 —— 同一个功能的三种密度</div>
+    <div class="cap-sub">Provider 是<b>粘性选择</b>:配好之后绝大多数会话都用同一个。摆开是给 10% 的换用场景付 100% 的视觉成本,而可发现性只需要付一次。</div>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr);max-width:none">
+      <div class="mini">
+        <span class="idcard" style="font-size:13px;padding:7px 11px 7px 8px" id="m1"></span>
+        <div class="lab">1 个元素 · 换用要 2 击</div>
+        <div class="verdict ok">✓ 推荐 — 安静,主角是输入框</div>
+      </div>
+      <div class="mini">
+        <div class="strip" style="margin-top:0" id="m2"></div>
+        <div class="lab">5 个元素 · 换用 1 击</div>
+        <div class="verdict no">✗ 每次都在喊“选我” · 决策疲劳</div>
+      </div>
+      <div class="mini">
+        <div class="cards" style="grid-template-columns:repeat(2,1fr);gap:6px;max-width:230px;margin-top:0" id="m3"></div>
+        <div class="lab">N 张卡 · 占满中间区</div>
+        <div class="verdict no">✗ 把“开会话”变成向导步骤</div>
+      </div>
+    </div>
+    <div class="notes">
+      <li>收敛唯一的代价是<b>可发现性</b>:从没换过的人可能不知道能换。缓解 = 身份牌的 <code>▾</code> + hover 高亮 + 首次进入时副标题写 “Orbit remembers who runs it”,而不是把五个选项永久摆在那儿。</li>
+      <li>它也和 composer 里 Model / Effort / Mode 已有的“显示当前值 + 点击换”是同一套语言 —— 摆一排 chip 反而是这个界面里的外来物。</li>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <h2>设计决策 & 落地影响</h2>
+  <table>
+    <tr><td>默认显示什么<br><i style="font-weight:400;color:var(--warning)">(本次修订)</i></td><td><b>一枚身份牌,不是一排选项。</b>Provider 是粘性选择 —— 配好之后绝大多数会话都用同一个,把 5 枚 chip 永久摆在中间区,是给 10% 的换用场景付 100% 的视觉成本。可发现性只需要付一次(<code>▾</code> + hover + 副标题),不需要每次都付。</td></tr>
+    <tr><td>记忆写在哪<br><i style="font-weight:400;color:var(--warning)">(本次新增)</i></td><td><b>写回 <code>agent.provider</code>,即 per-agent 记忆。</b><code>PATCH /agents/:id</code> 今天就收 <code>provider</code>(<code>agents/dto.ts:24</code>),所以记忆本身零后端改动;而且这与现有“选模型即写回 agent 默认”是同一条路,不引入第二套记忆机制。粒度选 agent 而不是全局,是因为 <b>agent ≈ 项目</b>,项目和 provider 的绑定本来就稳定。</td></tr>
+    <tr><td>记忆必须被说出来</td><td>写回是隐式副作用,不说的话下次会变成“我的模型怎么自己变了”。所以切换后的胶囊带一句 <code>saved as orbit-web’s default</code>(C4)。<b>这也是我上一版“不回写”主张被化解的方式:不是不写,而是写了要说。</b></td></tr>
+    <tr><td>当次会话怎么落地</td><td>仍然走 <code>CreateSessionDto.provider</code>,而不是“先 PATCH agent 再 POST session” —— 后者是两个请求,中间有竞态,而且会顺带影响这个 agent 的 task run / MCP spawn。<b>精确落地当次 + 异步写回记忆,两件事分开做。</b></td></tr>
+    <tr><td>牌里有什么</td><td><b>Engines 组在上,Your keys 组在下。</b>Engines = <code>LoginEngine</code> 的三个:<code>claude / codex / kimi</code>(<code>shared/src/dto.ts:340</code>,DTO 层已在拒绝把 configured-provider slug 当登录引擎)。<code>opencode</code> 虽是第四个 <code>AgentProvider</code>,但不可登录,故不进列表。顺序与 <code>mergedProviderOptions()</code> 今天一致。</td></tr>
+    <tr><td>默认选中</td><td><b>agent 自己的 provider,其兜底就是 <code>claude</code></b>(<code>sessions.service.ts:155</code> 的初值)。所以“默认 Claude”和“默认跟 agent 走”在全新账号上是同一件事,不需要两套规则。有了记忆之后,这一栏读作:上次在这个 agent 下选的那个。</td></tr>
+    <tr><td>钱从哪出</td><td>摘要行直说:内置写 <code>runner login</code>(订阅额度),BYOK 写 <code>your API key</code>。这是两类身份唯一需要用户分清的差别,所以给它一行字,而不是给它两套视觉。</td></tr>
+    <tr><td>草稿保留</td><td>未发送的选择跟着现有的 per-agent 草稿键 <code>draft:&lt;runnerId&gt;:&lt;agentId&gt;</code> 走,离开再回来不丢;发送时才写回 agent 记忆。</td></tr>
+    <tr><td>模型联动</td><td>切 provider → 重新 seed 该 provider 的 <code>defaultModel</code> → clamp effort → Auto 模式不支持时退回 Default。全部沿用 <code>defaultModelForProvider / normalizeEffortForProvider / supportsAuto</code>,无新逻辑。</td></tr>
+    <tr><td>后端改动</td><td>只差一个入参:<code>CreateSessionDto.provider?: string</code>。<code>session.provider</code> 列已存在,分发链路 <code>session.provider ?? agent.provider</code> 已经就位(queue.service.ts:213、runner-api.controller.ts:2349)。服务端需校验该 slug 属于本人且 enabled,并据此写 <code>providerBuiltin</code>;缺省时维持今天的“继承 agent”。</td></tr>
+    <tr><td>不可用态<br><i style="font-weight:400;color:var(--warning)">(有前提)</i></td><td>理想是提前置灰:内置引擎没登录、或 BYOK provider 借壳的 runtime 没装在这台 runner 上,都该点不动。<b>但控制面今天看不到 runner 的引擎状态</b> —— <code>runners</code> 表只存“正在进行的那次登录”(<code>loginEngine / loginStatus</code>),已装/已登录的快照没有上报。<b>P0 先不置灰</b>,点了之后复用已有的 <code>RunnerSignIn</code> / <code>ClaudeSubscriptionCard</code> 事后引导;要做置灰得先给心跳加 <code>engines[]</code>。</td></tr>
+    <tr><td>会话开始后</td><td>中间区随草稿消失;provider 变成 composer 左侧的静态 pill(与只读态的 Agent pill 同一套样式),中途可见不可改。</td></tr>
+    <tr><td>三端一致</td><td>web 与 native <b>已同时落地</b>。native 的 hero 本来就是 provider 品牌色的圆形 mark + agent 名,所以那枚 mark 直接跟着 provider 走,底下补一行 provider 胶囊 —— <b>agent 名管“在哪儿干”,provider 胶囊管“谁来干”</b>,两个 chevron 各司其职。点开在 iOS/macOS 是 Sheet(分 Engines / Your keys 两段),不是 popover。</td></tr>
+  </table>
+</div>
+
+<script>
+const GLYPH = {
+  anthropic:'<path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/>',
+  deepseek:'<path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z"/>',
+  kimi:'<path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z"/><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z"/>',
+  glm:'<path d="M11.991 23.503a.24.24 0 00-.244.248.24.24 0 00.244.249.24.24 0 00.245-.249.24.24 0 00-.22-.247l-.025-.001zM9.671 5.365a1.697 1.697 0 011.099 2.132l-.071.172-.016.04-.018.054c-.07.16-.104.32-.104.498-.035.71.47 1.279 1.186 1.314h.366c1.309.053 2.338 1.173 2.286 2.523-.052 1.332-1.152 2.38-2.478 2.327h-.174c-.715.018-1.274.64-1.239 1.368 0 .124.018.23.053.337.209.373.54.658.96.8.75.23 1.517-.125 1.9-.782l.018-.035c.402-.64 1.17-.96 1.92-.711.854.284 1.378 1.226 1.099 2.167a1.661 1.661 0 01-2.077 1.102 1.711 1.711 0 01-.907-.711l-.017-.035c-.2-.323-.463-.58-.851-.711l-.056-.018a1.646 1.646 0 00-1.954.746 1.66 1.66 0 01-1.065.764 1.677 1.677 0 01-1.989-1.279c-.209-.906.332-1.83 1.257-2.043a1.51 1.51 0 01.296-.035h.018c.68-.071 1.151-.622 1.116-1.333a1.307 1.307 0 00-.227-.693 2.515 2.515 0 01-.366-1.403 2.39 2.39 0 01.366-1.208c.14-.195.21-.444.227-.693.018-.71-.506-1.261-1.186-1.332l-.07-.018a1.43 1.43 0 01-.299-.07l-.05-.019a1.7 1.7 0 01-1.047-2.114 1.68 1.68 0 012.094-1.101zm-5.575 10.11c.26-.264.639-.367.994-.27.355.096.633.379.728.74.095.362-.007.748-.267 1.013-.402.41-1.053.41-1.455 0a1.062 1.062 0 010-1.482zm14.845-.294c.359-.09.738.024.992.297.254.274.344.665.237 1.025-.107.36-.396.634-.756.718-.551.128-1.1-.22-1.23-.781a1.05 1.05 0 01.757-1.26zm-.064-4.39c.314.32.49.753.49 1.206 0 .452-.176.886-.49 1.206-.315.32-.74.5-1.185.5-.444 0-.87-.18-1.184-.5a1.727 1.727 0 010-2.412 1.654 1.654 0 012.369 0zm-11.243.163c.364.484.447 1.128.218 1.691a1.665 1.665 0 01-2.188.923c-.855-.36-1.26-1.358-.907-2.228a1.68 1.68 0 011.33-1.038c.593-.08 1.183.169 1.547.652zm11.545-4.221c.368 0 .708.2.892.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.892.524c-.568 0-1.03-.47-1.03-1.048 0-.579.462-1.048 1.03-1.048zm-14.358 0c.368 0 .707.2.891.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.891.524c-.569 0-1.03-.47-1.03-1.048 0-.579.461-1.048 1.03-1.048zm10.031-1.475c.925 0 1.675.764 1.675 1.706s-.75 1.705-1.675 1.705-1.674-.763-1.674-1.705c0-.942.75-1.706 1.674-1.706z"/>',
+  minimax:'<path d="M16.278 2c1.156 0 2.093.927 2.093 2.07v12.501a.74.74 0 00.744.709.74.74 0 00.743-.709V9.099a2.06 2.06 0 012.071-2.049A2.06 2.06 0 0124 9.1v6.561a.649.649 0 01-.652.645.649.649 0 01-.653-.645V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v7.472a2.037 2.037 0 01-2.048 2.026 2.037 2.037 0 01-2.048-2.026v-12.5a.785.785 0 00-.788-.753.785.785 0 00-.789.752l-.001 15.904A2.037 2.037 0 0113.441 22a2.037 2.037 0 01-2.048-2.026V18.04c0-.356.292-.645.652-.645.36 0 .652.289.652.645v1.934c0 .263.142.506.372.638.23.131.514.131.744 0a.734.734 0 00.372-.638V4.07c0-1.143.937-2.07 2.093-2.07zm-5.674 0c1.156 0 2.093.927 2.093 2.07v11.523a.648.648 0 01-.652.645.648.648 0 01-.652-.645V4.07a.785.785 0 00-.789-.78.785.785 0 00-.789.78v14.013a2.06 2.06 0 01-2.07 2.048 2.06 2.06 0 01-2.071-2.048V9.1a.762.762 0 00-.766-.758.762.762 0 00-.766.758v3.8a2.06 2.06 0 01-2.071 2.049A2.06 2.06 0 010 12.9v-1.378c0-.357.292-.646.652-.646.36 0 .653.29.653.646V12.9c0 .418.343.757.766.757s.766-.339.766-.757V9.099a2.06 2.06 0 012.07-2.048 2.06 2.06 0 012.071 2.048v8.984c0 .419.343.758.767.758.423 0 .766-.339.766-.758V4.07c0-1.143.937-2.07 2.093-2.07z"/>',
+  qwen:'<path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031z"/>',
+  openai:'<path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128z"/>'
+};
+// Two kinds of identity, in this order — the same order mergedProviderOptions() already uses:
+//   builtin = the runner's own signed-in engines (LoginEngine = claude | codex | kimi)
+//   byok    = the user's configured providers from GET /providers
+const PROVIDERS = [
+  { slug:'claude',   label:'Claude',  model:'Claude Opus 5',   from:'#d97757', to:'#c15f3c', g:'anthropic', kind:'builtin' },
+  { slug:'codex',    label:'Codex',   model:'GPT-5.6-sol',     from:'#4b5158', to:'#1f2226', g:'openai',    kind:'builtin' },
+  { slug:'kimi',     label:'Kimi',    model:'Kimi for Coding', from:'#3a3a3a', to:'#111111', g:'kimi',      kind:'builtin' },
+  { slug:'deepseek', label:'DeepSeek',model:'DeepSeek V4 Pro', from:'#5b7cff', to:'#3a57e8', g:'deepseek',  kind:'byok' },
+  { slug:'glm',      label:'GLM',     model:'GLM-5.2',         from:'#33b6b0', to:'#1e8e8e', g:'glm',       kind:'byok' },
+];
+const bySlug = s => PROVIDERS.find(p => p.slug === s);
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+const tile = (p, size) => `<span class="tile" style="width:${size}px;height:${size}px;
+  border-radius:${Math.round(size * .26)}px;background:linear-gradient(135deg,${p.from},${p.to});
+  ${size >= 40 ? `box-shadow:0 8px 22px ${rgba(p.to, .34)}` : ''}">
+  <svg viewBox="0 0 24 24" width="${Math.round(size*.56)}" height="${Math.round(size*.56)}">${GLYPH[p.g]}</svg></span>`;
+
+// The collapsed default. One card, one question: who runs this.
+const idcardHtml = p => tile(p, 56) + `<span class="idname">${p.label}<span class="chev">▾</span></span>`;
+// The summary line is where "which model" and "who pays" get said out loud.
+const resolvedHtml = p =>
+  `<b>${p.label}</b><span class="dot">·</span>${p.model}<span class="dot">·</span>` +
+  `${p.kind === 'builtin' ? 'runner login' : 'your API key'}<span class="dot">·</span><a href="#">Manage</a>`;
+
+// The expanded list: engines, then your keys, then the way to add one.
+function popHtml(list, sel) {
+  let html = '';
+  let kind = null;
+  for (const p of list) {
+    if (p.kind !== kind) {
+      kind = p.kind;
+      html += `<div class="pop-group">${kind === 'builtin' ? 'Engines' : 'Your keys'}</div>`;
+    }
+    html += `<div class="row${p.slug === sel ? ' on' : ''}" data-slug="${p.slug}">${tile(p, 20)}${p.label}
+      <span class="mdl">${p.model}</span></div>`;
+  }
+  return html + '<div class="sep"></div>' +
+    '<div class="row link"><span class="tile dash" style="width:20px;height:20px;font-size:11px">＋</span>Connect a provider…</div>';
+}
+
+// C1 — collapsed, and clickable: picking re-seeds the model pill and the summary line.
+function renderC1(sel) {
+  const p = bySlug(sel);
+  document.getElementById('id1').innerHTML = idcardHtml(p);
+  document.getElementById('res1').innerHTML = resolvedHtml(p);
+  document.getElementById('pill-model1').textContent = p.model;
+  document.getElementById('id1').onclick = () => {
+    const i = PROVIDERS.indexOf(p);
+    renderC1(PROVIDERS[(i + 1) % PROVIDERS.length].slug); // sketch shortcut: cycle instead of opening
+  };
+}
+renderC1('claude');
+
+// C2 — the same card, open, with every option under it.
+document.getElementById('id2').innerHTML = idcardHtml(bySlug('claude'));
+document.getElementById('pop2').innerHTML = popHtml(PROVIDERS, 'claude');
+// C3 — nothing configured yet: only the three built-in engines.
+document.getElementById('id3').innerHTML = idcardHtml(bySlug('claude'));
+document.getElementById('pop3').innerHTML = popHtml(PROVIDERS.filter(p => p.kind === 'builtin'), 'claude');
+// C4 — switched to a BYOK provider.
+document.getElementById('id4').innerHTML = idcardHtml(bySlug('deepseek'));
+
+// The density comparison: same feature at three densities.
+document.getElementById('m1').innerHTML =
+  tile(bySlug('claude'), 40) + '<span class="idname" style="font-size:13px;padding:3px 8px">Claude<span class="chev">▾</span></span>';
+document.getElementById('m2').innerHTML = PROVIDERS.slice(0, 4).map((p, i) =>
+  `<div class="chip${i === 0 ? ' on' : ''}" style="font-size:11px;padding:5px 9px 5px 6px">${tile(p, 18)}${p.label}</div>`).join('');
+document.getElementById('m3').innerHTML = PROVIDERS.slice(0, 4).map((p, i) =>
+  `<div class="pcard${i === 0 ? ' on' : ''}" style="padding:7px;gap:7px">${tile(p, 20)}
+   <div style="min-width:0"><div class="nm" style="font-size:11px">${p.label}</div></div></div>`).join('');
+</script>
+</body>
+</html>

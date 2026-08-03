@@ -28,14 +28,20 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     public let runtime: String?
     public let models: [ConfiguredProviderModel]
     public let defaultModel: String?
+    /// The vendor preset this provider was configured from — its brand identity, and where the
+    /// new-session picker gets its mark. Nil for a self-maintained custom endpoint (which falls
+    /// back to the neutral glyph). Optional so an older server's payload still decodes.
+    public let presetSlug: String?
     public var id: String { slug }
 
     public init(slug: String, label: String, runtime: String? = nil,
-                models: [ConfiguredProviderModel] = [], defaultModel: String? = nil) {
+                models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
+                presetSlug: String? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
         self.models = models
         self.defaultModel = defaultModel
+        self.presetSlug = presetSlug
     }
 }

@@ -72,6 +72,10 @@ final class ConsoleModel {
     /// (see `createDraftSession`). A live console leaves this nil.
     private let draftAgent: Agent?
     private(set) var provider = "claude"
+    /// Draft only: an explicit provider pick from the new-session hero, as opposed to the agent's
+    /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
+    /// once the session exists — so the next draft here opens on it without the override.
+    private(set) var draftProviderOverride: String?
     var isDraft: Bool { draftAgent != nil }
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
@@ -700,6 +704,26 @@ final class ConsoleModel {
         return changedPermissionMode
     }
 
+    /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
+    /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
+    /// default, and the mode/effort pills are re-clamped to what that provider accepts. The seed is
+    /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
+    /// about this one, and keeping it would pin an id the new provider may not even offer.
+    func pickDraftProvider(_ slug: String) {
+        guard isDraft, slug != provider else { return }
+        draftProviderOverride = slug
+        provider = slug
+        modelID = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog,
+                                             configured: configuredProviders)
+        modelSelectionRevision = ModelSelectionRevision()
+        if providerCapabilitiesResolved {
+            permissionMode = AgentDefaults.clampPermissionMode(
+                permissionMode, for: modelID, provider: slug, configured: configuredProviders)
+        }
+        effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
+                                                catalog: modelCatalog)
+    }
+
     /// Keep an already-constructed draft in sync with AgentsModel's later provider/runner fetch.
     /// SwiftUI preserves the draft's @State across parent updates, so constructor snapshots alone
     /// are insufficient. An unresolved custom slug retains its placeholder seed; once the provider
@@ -715,7 +739,13 @@ final class ConsoleModel {
         }
         if modelSelectionRevision.isPristine,
            AgentDefaults.isBuiltInProvider(provider) || loaded {
-            modelID = defaultModel
+            // `defaultModel` is the parent's, computed for the AGENT's provider. Once this draft
+            // has been pointed somewhere else, that value belongs to a different model space —
+            // resolve the picked provider's own default instead of dragging the agent's back in.
+            modelID = draftProviderOverride == nil
+                ? defaultModel
+                : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
+                                             configured: configuredProviders)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -964,16 +994,32 @@ final class ConsoleModel {
                 // a placeholder. Omit it so the server applies the configured provider's own
                 // default instead of persisting a guessed Claude model.
                 prompt: text, agentId: agent.id,
+                // Only an explicit hero pick travels: omitting it keeps the server's
+                // inherit-from-agent path, so an untouched draft behaves exactly as before.
+                provider: draftProviderOverride,
                 model: providerCapabilitiesResolved ? modelID : nil,
                 permissionMode: permissionMode.rawValue, effort: effort.rawValue,
                 shell: shell ? true : nil,
                 attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             composerText = ""
             pendingAttachments = []
+            rememberProviderPick(agentID: agent.id)
             onSessionCreated?(session)
         } catch {
             statusMessage = "Couldn't start the session — \(error)"
         }
+    }
+
+    /// Remember a hero provider pick as the agent's default, so the next draft here opens on it.
+    /// Detached from the send: the created session already carries its own provider, so this must
+    /// not hold up opening it. Best-effort for the same reason — a failed PATCH costs a remembered
+    /// default, never a wrong dispatch. Cleared either way: from here on the pick is (or was meant
+    /// to be) the agent's own rather than this draft's override.
+    private func rememberProviderPick(agentID: String) {
+        guard let slug = draftProviderOverride else { return }
+        draftProviderOverride = nil
+        let api = self.api
+        Task { _ = try? await api.updateAgent(agentID, UpdateAgentRequest(provider: slug)) }
     }
 
     /// Draft footer/slash seed (no stream): load the `/` command + skill set for the agent and,

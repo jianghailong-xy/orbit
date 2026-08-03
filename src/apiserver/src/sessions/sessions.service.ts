@@ -195,6 +195,24 @@ export class SessionsService {
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
     }
+    // An explicit provider (the New Session picker) overrides what the agent would have
+    // contributed. Resolved here rather than trusted: a built-in engine slug is always fine,
+    // and anything else has to be a provider this caller can actually dispatch with.
+    if (dto.provider) {
+      provider = dto.provider;
+      // Same enum test the agent write path uses (agents.service create/update), NOT
+      // isBuiltinProvider() — that one reads `kimi` as custom unless told otherwise, and the
+      // picker's choice is later remembered on the agent. Both sides must agree, or a
+      // remembered `kimi` would land with a different providerBuiltin than the session it came from.
+      providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
+      if (!providerBuiltin) {
+        const configured = await this.prisma.modelProvider.findFirst({
+          where: { slug: dto.provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+          select: { id: true },
+        });
+        if (!configured) throw new BadRequestException('provider not available');
+      }
+    }
     await this.assertOwnedRefs(ownerId, { agentId: dto.agentId, assignedRunnerId });
     // Linking to a task: it must belong to the same user (no cross-tenant linking).
     if (dto.taskId) {
