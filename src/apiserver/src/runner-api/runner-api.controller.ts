@@ -856,6 +856,25 @@ export class RunnerApiController {
     if (!generation) throw new BadRequestException('leaseGeneration is required');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
+
+    // Idempotency fast path: if this exact generation is already installed, skip the
+    // FOR UPDATE lock. A reclaim storm may call takeover-leases on the same session
+    // hundreds of times per minute; each call would otherwise acquire a row lock that
+    // starves the claim queue's FOR UPDATE SKIP LOCKED, preventing new PENDING
+    // sessions from ever being claimed.
+    const preflight = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { inboxLeaseOwner: true, inboxLeaseGeneration: true, status: true },
+    });
+    if (
+      preflight &&
+      OPEN.includes(preflight.status) &&
+      preflight.inboxLeaseOwner === leaseOwner &&
+      preflight.inboxLeaseGeneration === generation
+    ) {
+      return { ok: true };
+    }
+
     await this.prisma.$transaction(async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{

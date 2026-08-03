@@ -16,17 +16,21 @@ export function isTerminalResumeHandoffOwner(owner: string | null | undefined): 
 
 /**
  * Whether a pending heartbeat-delivered Git operation may already have local
- * side effects. Modern unclaimed rows have an operation UUID and no owner and
- * may be superseded under the Session lock. A legacy NULL/NULL row is
- * deliberately indistinguishable from an old runner already executing it, so
- * rolling upgrades must treat it as in flight too.
+ * side effects. Modern rows carry both an operation UUID and an owner; a row
+ * that has neither is a stale orphan (not an in-flight operation) and must
+ * not block takeover indefinitely. Only an owner-bearing row can have a
+ * runner process that is still executing the operation:
+ *   - owner + id    → modern, executing
+ *   - owner, no id  → legacy (pre-operation-id), treat as executing
+ *   - no owner + id → modern, completed or orphaned → free
+ *   - no owner, no id → stale orphan → free
  */
 export function pendingWorktreeOperationMayBeExecuting(
   status: string | null | undefined,
   operationId: string | null | undefined,
   operationOwner: string | null | undefined,
 ): boolean {
-  return status === 'pending' && (!!operationOwner || !operationId);
+  return status === 'pending' && !!operationOwner;
 }
 
 /**

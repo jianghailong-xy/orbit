@@ -67,11 +67,18 @@ export class QueueService {
     // PENDING rows, both observe the same RUNNING count, and over-claim the final slot.
     // The global transaction-scoped advisory lock also makes a batch cap spanning several
     // runners authoritative. buildSession deliberately stays outside this short lock.
-    const rows = await this.prisma.$transaction(async (tx) => {
-      // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
-      // executeRaw deliberately discards that result (same pattern as pg_notify).
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
-      return tx.$queryRaw<Array<{ id: string }>>`
+    //
+    // Uses FOR UPDATE NOWAIT: when a concurrent transaction (e.g. activateLeases) holds
+    // a row lock on the candidate, Postgres immediately raises lock_not_available (55P03)
+    // instead of silently skipping the row (SKIP LOCKED) or blocking. The catch clause
+    // returns null so the outer claimSessionForRunner loop waits on the signal and
+    // retries; this prevents lock storms from starving new sessions indefinitely.
+    try {
+      const rows = await this.prisma.$transaction(async (tx) => {
+        // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
+        // executeRaw deliberately discards that result (same pattern as pg_notify).
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
+        return tx.$queryRaw<Array<{ id: string }>>`
         UPDATE "session" SET
           status = 'RUNNING',
           "started_at" = COALESCE("started_at", now()),
@@ -109,14 +116,29 @@ export class QueueService {
               ) < s."batch_max_concurrent"
             )
           ORDER BY s."created_at" ASC
-          FOR UPDATE SKIP LOCKED
+          FOR UPDATE NOWAIT
           LIMIT 1
         )
         RETURNING id
       `;
-    });
-    if (rows.length === 0) return null;
-    return this.buildSession(rows[0].id);
+      });
+      if (rows.length === 0) return null;
+      return this.buildSession(rows[0].id);
+    } catch (err: any) {
+      // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
+      // candidate row because a concurrent transaction (e.g. activateLeases in a
+      // reclaim storm) holds it. Return null so the outer claimSessionForRunner
+      // loop waits on the signal and retries instead of starving forever.
+      if (
+        err?.code === '55P03' ||
+        err?.meta?.code === '55P03' ||
+        String(err?.message ?? '').includes('55P03') ||
+        String(err?.message ?? '').includes('lock_not_available')
+      ) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   private async buildSession(sessionId: string): Promise<ClaimedSession> {
