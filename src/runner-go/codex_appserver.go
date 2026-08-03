@@ -170,12 +170,21 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evError, map[string]interface{}{"message": "failed to initialize codex app-server: " + err.Error()})
 		return stFailed, true, false
 	}
+	// A resumed thread already carries the developer message an earlier generation
+	// injected, and inject_items appends rather than replaces. Injecting again on every
+	// warm restart / LRU reload would accumulate a copy of the agent context per
+	// generation. Compaction still replays it through prepareInstructionContext.
+	// The assumption only breaks for a thread first created under a different
+	// instruction mode, which needs the engine to cross 0.125 mid-session; the
+	// inject_items band is itself a narrow compatibility window, so prefer the
+	// bounded transcript over a per-generation copy.
+	resumedThread := job.RuntimeSessionID != ""
 	threadID, err := app.startOrResumeThread(ctx, job, execDir, upDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to start codex thread: " + err.Error()})
 		return stFailed, true, false
 	}
-	if app.currentInstructionMode() == codexInstructionsInjectItems {
+	if !resumedThread && app.currentInstructionMode() == codexInstructionsInjectItems {
 		if err := app.injectAgentContext(ctx, threadID, job.Agent); err != nil {
 			// Some downstream builds can report a newer-looking user agent while
 			// omitting the experimental method. Preserve discoverability through

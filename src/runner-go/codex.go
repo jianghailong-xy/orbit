@@ -86,7 +86,10 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 		switch resp.Kind {
 		case "message":
 			if !waitTurnPermit(ctx) {
-				break
+				// The permit is also lost when this session detaches or leaves the
+				// pool, which does not cancel ctx. Returning (not breaking out of the
+				// switch) keeps this from spinning on the inbox discarding messages.
+				return stCancelled, true, false
 			}
 			if inflight[resp.TurnID] {
 				continue
@@ -132,7 +135,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 
 		case "shell":
 			if !waitTurnPermit(ctx) {
-				break
+				return stCancelled, true, false
 			}
 			if inflight[resp.TurnID] {
 				continue

@@ -191,8 +191,19 @@ func TestEngineAuthPreflightOnASignedOutEngine(t *testing.T) {
 	if !strings.HasPrefix(engineSignedOutMessage(providerCodex), "Failed to authenticate") {
 		t.Fatal("the message that pairs with authNo must carry the card's prefix")
 	}
-	// And on this machine, where codex is installed and signed in, nothing is blocked.
-	if msg := engineAuthPreflight(providerCodex, nil); msg != "" {
+	// And the composition agrees with this machine's own probe. Asserting agreement
+	// rather than a fixed verdict keeps the test honest wherever it runs: a dev box with
+	// a signed-in codex and a container with an installed-but-signed-out one both hold.
+	path, installed := lookEngine(providerCodex)
+	if !installed {
+		return // ensureEngine, not preflight, owns the missing-binary case
+	}
+	msg := engineAuthPreflight(providerCodex, nil)
+	if probeAuth(providerCodex, path) == authNo {
+		if msg == "" {
+			t.Error("a signed-out engine must be blocked by preflight")
+		}
+	} else if msg != "" {
 		t.Errorf("a signed-in (or unprobeable) engine must not be blocked: %q", msg)
 	}
 }
