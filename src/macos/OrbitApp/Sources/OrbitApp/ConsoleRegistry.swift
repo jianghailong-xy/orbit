@@ -98,10 +98,11 @@ final class ConsoleRegistry {
     /// session on the poll cadence (so a crash loses at most a few seconds) and when leaving it.
     func flush(_ sessionID: String?) {
         guard let sessionID, let model = models[sessionID] else { return }
-        persist(sessionID, model)
+        persist(sessionID, model, synchronously: false)
     }
 
-    /// Persist every cached console (sign-out / app backgrounded).
+    /// Persist every cached console (sign-out / app backgrounded). Synchronous by design — see
+    /// `persist`: iOS may suspend the process the moment the `.background` handler returns.
     func persistAll() {
         for (id, model) in models { persist(id, model) }
     }
@@ -146,15 +147,42 @@ final class ConsoleRegistry {
                             tokenStore: tokenStore, attachments: attachments, restoring: restored)
     }
 
-    private func persist(_ sessionID: String, _ model: ConsoleModel) {
+    /// Snapshot a console's reducer and write it, unless nothing advanced since the last write.
+    ///
+    /// `synchronously: false` hands the write to a background task. Encoding a whole transcript to
+    /// JSON and writing it is tens of milliseconds on a long session, and the focused console repeats
+    /// it every few seconds for as long as that session streams — that does not belong on the main
+    /// actor. The reducer is a `Sendable` value copy, so the task works on a stable snapshot even as
+    /// the live one keeps folding in events. Two writes for the same session can in principle land out
+    /// of order, which at worst leaves the on-disk *cache* a few seconds behind — reopening then
+    /// resumes the stream from the older `maxSeq` and re-fetches the difference, so nothing is lost.
+    ///
+    /// The default stays synchronous for the paths that must complete before the process can go away
+    /// (`persistAll` at `.background` / sign-out).
+    private func persist(_ sessionID: String, _ model: ConsoleModel, synchronously: Bool = true) {
         let reducer = model.snapshotReducer()
         guard savedSeq[sessionID] != reducer.state.maxSeq else { return }   // nothing new durable
-        store.save(sessionID: sessionID, reducer: reducer)
+        // Claimed before the write, so a later tick can't queue a second write of the same state.
+        // A failed write was already indistinguishable from a successful one (the store swallows it)
+        // and self-heals on the next advance.
         savedSeq[sessionID] = reducer.state.maxSeq
+        guard !synchronously else {
+            store.save(sessionID: sessionID, reducer: reducer)
+            return
+        }
+        let store = self.store   // capture the Sendable store, never `self` (main-actor isolated)
+        Task.detached(priority: .utility) {
+            store.save(sessionID: sessionID, reducer: reducer)
+        }
     }
 
     private func evict(_ sessionID: String) {
-        if let model = models[sessionID] { persist(sessionID, model); model.stopStreaming() }
+        // Off-main too: eviction happens while navigating between sessions, which is exactly when the
+        // main thread is busy laying out the console being opened.
+        if let model = models[sessionID] {
+            persist(sessionID, model, synchronously: false)
+            model.stopStreaming()
+        }
         if streamingSessionID == sessionID { streamingSessionID = nil }
         models[sessionID] = nil
     }

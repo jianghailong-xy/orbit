@@ -14,6 +14,10 @@ import OrbitKit
 struct OrbitiOSApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    /// Whether the app actually reached `.background` since the last time it became active — the
+    /// difference between "was suspended, sockets may be dead" and "a notification banner passed over
+    /// us". See the `scenePhase` handler below.
+    @State private var didBackground = false
     // The only reliable way to receive the APNs device token in a SwiftUI app (see Push.swift).
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
 
@@ -36,18 +40,32 @@ struct OrbitiOSApp: App {
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
                 }
+                // Both sides of this are keyed to `.background` — a REAL trip out of the foreground —
+                // and never to `.inactive`, which on iOS is the transient state for a notification
+                // banner, a Notification/Control Centre pull, the app switcher or a system dialog. The
+                // app can't be suspended from `.inactive` and its sockets stay alive there, so treating
+                // it as leaving/returning made every incoming push cost a synchronous whole-transcript
+                // write (`persistAll`) plus a full SSE teardown/reconnect and the snapshot + agent +
+                // task refetches that follow one — a visible stall per banner, worst exactly when
+                // several sessions were pushing approvals at once.
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
-                        // Returning to the foreground: a stream socket suspended in the background may
-                        // be dead but not yet erroring, so kick the open consoles to reconnect promptly
-                        // instead of waiting out URLSession's long read timeout.
-                        model.consoleRegistry?.reconnectAll()
-                        // Same for the user-level control-plane stream that keeps the lists fresh.
-                        model.kickControlPlane()
-                    } else {
-                        // iOS can suspend/terminate at will, so checkpoint the moment we leave the
-                        // foreground rather than relying on a clean quit.
+                    switch phase {
+                    case .background:
+                        // iOS can suspend/terminate at will from here, so checkpoint synchronously
+                        // (an async write could be cut off mid-flight) before we lose the CPU.
+                        didBackground = true
                         model.consoleRegistry?.persistAll()
+                    case .active:
+                        // Only after a genuine background trip: a socket suspended there may be dead
+                        // but not yet erroring, so kick the open consoles + the user-level
+                        // control-plane stream to reconnect instead of waiting out URLSession's long
+                        // read timeout. Coming back from a banner has nothing to repair.
+                        guard didBackground else { break }
+                        didBackground = false
+                        model.consoleRegistry?.reconnectAll()
+                        model.kickControlPlane()
+                    default:
+                        break
                     }
                 }
                 .task { model.bootstrap() }

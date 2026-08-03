@@ -165,31 +165,49 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertNil(store.load(sessionID: "sess-A"))
     }
 
+    /// The cap is enforced as new sessions arrive, dropping the least-recently-written snapshot.
     func testFileStorePrunesOldestBeyondCap() throws {
         let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let store = FileTranscriptStore(directory: dir, maxFiles: 2)
         let r = TranscriptReducer()
 
-        // Save 3 sessions with strictly increasing modification times so order is deterministic.
-        for (i, id) in ["old", "mid", "new"].enumerated() {
+        // Two snapshots, back-dated so "old" is unambiguously the least recent.
+        for (i, id) in ["old", "mid"].enumerated() {
             store.save(sessionID: id, reducer: r)
-            let url = dir.appendingPathComponent("\(id).json")
-            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: Double(1000 + i))],
-                                                  ofItemAtPath: url.path)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSince1970: Double(1000 + i))],
+                ofItemAtPath: dir.appendingPathComponent("\(id).json").path)
         }
-        // A save re-runs prune; trigger it once more after the mtimes are set.
+        XCTAssertEqual(Set(store.storedSessionIDs()), ["old", "mid"], "at the cap, nothing dropped yet")
+
+        // A third session takes it past the cap — its own file is the newest, so "old" goes.
         store.save(sessionID: "new", reducer: r)
-        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2000)],
-                                              ofItemAtPath: dir.appendingPathComponent("new.json").path)
-        store.save(sessionID: "mid", reducer: r)
-        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1500)],
-                                              ofItemAtPath: dir.appendingPathComponent("mid.json").path)
-        store.save(sessionID: "new", reducer: r) // re-prune with mid<new, old oldest → old evicted
 
         let remaining = Set(store.storedSessionIDs())
         XCTAssertFalse(remaining.contains("old"), "oldest snapshot pruned beyond the cap")
-        XCTAssertTrue(remaining.contains("new"))
-        XCTAssertLessThanOrEqual(remaining.count, 2)
+        XCTAssertEqual(remaining, ["mid", "new"])
+    }
+
+    /// Re-saving an existing session skips the prune scan: it cannot grow the directory, and the
+    /// focused console re-saves the same file every few seconds while a session streams — pruning
+    /// there cost a stat per stored snapshot each time, on the main thread. Overwrites must therefore
+    /// leave a directory that is AT the cap completely alone.
+    func testFileStoreOverwriteDoesNotPrune() throws {
+        let dir = tempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let store = FileTranscriptStore(directory: dir, maxFiles: 1)
+        var r = TranscriptReducer()
+
+        store.save(sessionID: "a", reducer: r)   // new file → prunes, but it's at the cap
+        // Plant a snapshot directly on disk so the directory is now OVER the cap. Nothing but a prune
+        // can remove it, which is what makes the assertion below meaningful: were prune still running
+        // on every save, the overwrite would evict this (leaving only the just-written "a").
+        try Data("{}".utf8).write(to: dir.appendingPathComponent("planted.json"))
+
+        for ev in turnOne() { r.apply(ev) }
+        store.save(sessionID: "a", reducer: r)   // an overwrite — the streaming checkpoint's shape
+
+        XCTAssertEqual(Set(store.storedSessionIDs()), ["a", "planted"], "an overwrite drops nothing")
+        XCTAssertEqual(store.load(sessionID: "a")?.state, r.state, "and still writes the new state")
     }
 
     // MARK: - LRUOrder

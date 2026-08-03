@@ -44,10 +44,17 @@ public struct FileTranscriptStore: TranscriptPersisting {
     public func save(sessionID: String, reducer: TranscriptReducer) {
         let env = Envelope(version: Self.schemaVersion, reducer: reducer)
         guard let data = try? JSONEncoder().encode(env) else { return }
+        let target = url(for: sessionID)
+        // Overwriting an existing snapshot cannot grow the directory, so only a genuinely new file
+        // can push it past the cap — and `prune` is expensive (one `attributesOfItem` per file, up
+        // to `maxFiles` of them, then a sort). Checkpointing the focused console re-saves the same
+        // file every few seconds while a session streams, so pruning on every save meant hundreds
+        // of stat calls a minute on the main thread for a directory that hadn't changed shape.
+        let isNew = !FileManager.default.fileExists(atPath: target.path)
         // `.atomic` writes to a temp file then renames, so a crash mid-write never leaves a
         // half-written file that fails to decode and loses the session.
-        try? data.write(to: url(for: sessionID), options: .atomic)
-        prune()
+        try? data.write(to: target, options: .atomic)
+        if isNew { prune() }
     }
 
     public func remove(sessionID: String) {
