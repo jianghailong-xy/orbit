@@ -270,7 +270,11 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
             <div style={{ fontWeight: 600 }}>{identity.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
               {identity.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'} ·{' '}
-              {identity.count} model{identity.count === 1 ? '' : 's'} {identity.counted}
+              {/* Counting a shipped list would misstate what this offers — the runner's CLI
+                  decides, and that list changes without us. */}
+              {preset?.modelsFromRuntime
+                ? 'models from the runtime CLI'
+                : `${identity.count} model${identity.count === 1 ? '' : 's'} ${identity.counted}`}
             </div>
           </div>
         </div>
@@ -376,8 +380,17 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                   </Field>
                 </>
               )}
+              {/* A vendor the runtime CLI talks to natively has no list to maintain: the runner
+                  probes the installed CLI hourly, so whatever it reports is what the pickers
+                  offer — including models released after this build. Editing a list here would
+                  only be a copy that goes stale. */}
               <Field label="Models">
-                {modelsOpen ? (
+                {preset?.modelsFromRuntime ? (
+                  <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                    Provided by the {runtime === 'codex' ? 'Codex' : 'Claude Code'} CLI on each
+                    runner, refreshed automatically — new models appear without any change here.
+                  </div>
+                ) : modelsOpen ? (
                   <>
                     <div className="pf-models-head">
                       <span>Model ID</span>
@@ -439,8 +452,9 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                   </div>
                 )}
                 {/* Who owns this list, and how to change hands. A following row is maintained for
-                    the user; once they edit it, keeping up with the vendor is on them. */}
-                {preset && (
+                    the user; once they edit it, keeping up with the vendor is on them. Moot when
+                    the CLI supplies the list — there's no ownership to hand over. */}
+                {preset && !preset.modelsFromRuntime && (
                   <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
                     {follows ? (
                       <>

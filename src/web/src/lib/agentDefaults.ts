@@ -29,6 +29,9 @@ export interface ConfiguredProvider {
    *  GET /providers (providers.service listPublic), which selects it and passes it through
    *  withPreset(). */
   presetSlug?: string | null;
+  /** True when this vendor's endpoint is the runtime CLI's own (Anthropic for claude, OpenAI for
+   *  codex), so the runner's live catalogue describes it and `models` is only a fallback. */
+  modelsFromRuntime?: boolean;
 }
 
 /** Resolve a configured provider by slug — built-in slugs never match. */
@@ -158,6 +161,16 @@ export const modelOptionsForProvider = (
   // A configured provider carries its own model list (from the API), which wins for its slug.
   const custom = configuredProvider(provider, configured);
   if (custom) {
+    // …except when the vendor IS the runtime's own endpoint: there the runner's probe of the
+    // installed CLI is more current than any list we ship, so it leads and the stored list is
+    // the fallback. The catalogue is read under the borrowed runtime's key, never the slug, so
+    // an OpenAI provider reads Codex models and can't land in Claude's namespace.
+    if (custom.modelsFromRuntime) {
+      const runtime =
+        custom.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+      const live = catalogOptionsForProvider(runtime, modelCatalog);
+      if (live) return live;
+    }
     const options = custom.models
       .filter((m) => m.value && m.label)
       .map((m) => ({ value: m.value, label: m.label }));
@@ -194,6 +207,14 @@ export const defaultModelForProvider = (
   if (custom) {
     const customRuntime =
       custom.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    // Same precedence as the option list: for a vendor the runtime CLI speaks to natively, what
+    // that CLI reports as its default beats the id we shipped in the preset.
+    if (custom.modelsFromRuntime) {
+      const live =
+        runtimeDefaultModels?.[customRuntime] ||
+        catalogOptionsForProvider(customRuntime, modelCatalog)?.[0]?.value;
+      if (live) return live;
+    }
     return (
       custom.defaultModel ||
       custom.models.find((model) => model.value && model.label)?.value ||

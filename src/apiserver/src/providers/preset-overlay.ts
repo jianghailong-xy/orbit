@@ -41,6 +41,13 @@ export function presetDefaultModel(row: PresetBackedRow): string | null {
 export function withPreset<T extends PresetBackedRow>(row: T): T {
   const preset = governing(row);
   if (!preset) return row;
-  // Only the two fields the row already declares are replaced, so the shape is unchanged.
-  return { ...row, models: preset.models, defaultModel: presetDefaultModel(row) } as T;
+  // `models` here is the fallback for a vendor whose CLI reports its own — see modelsFromRuntime
+  // on the preset. The flag rides along so the pickers (and the connect form) know to prefer the
+  // runner's live catalogue over this list without having to know the endpoint.
+  return {
+    ...row,
+    models: preset.models,
+    defaultModel: presetDefaultModel(row),
+    modelsFromRuntime: preset.modelsFromRuntime ?? false,
+  } as T;
 }

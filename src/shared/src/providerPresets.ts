@@ -31,6 +31,18 @@ export interface ProviderPreset {
    * `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, …).
    */
   runtime?: 'claude' | 'codex';
+  /**
+   * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
+   * for `codex`. The runner probes those CLIs for their live model list (see the runner's
+   * claude_models.go / codex_models.go), so the picker follows the installed CLI and nobody has
+   * to maintain a list that goes stale the day a model ships. `models` below stays as the
+   * fallback for a runner whose probe hasn't landed yet, but it is not editable in the UI.
+   *
+   * A third-party Anthropic-compatible endpoint (DeepSeek, Moonshot, GLM…) is NOT this: the
+   * runner's probe reports what its own CLI offers, which says nothing about what that vendor
+   * serves. Those keep a maintained list.
+   */
+  modelsFromRuntime?: boolean;
   /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
   /** Logo tile shown in the provider gallery and rows. */
@@ -51,19 +63,26 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200_000 },
     ],
     defaultModel: 'claude-opus-4-8',
+    modelsFromRuntime: true,
     brand: { mono: 'A', from: '#d97757', to: '#c15f3c' },
     keyUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
     slug: 'openai',
-    label: 'OpenAI',
+    // Named for the CLI that drives it, matching "Anthropic (Claude)": what a user picks here is
+    // which coding agent runs, and Codex is the one this vendor speaks to. The vendor keeps the
+    // lead because the key, the billing and the console are all OpenAI's.
+    label: 'OpenAI (Codex)',
     runtime: 'codex',
     baseUrl: 'https://api.openai.com/v1',
+    // Without this the generic hint reads "OpenAI (Codex)'s OpenAI-compatible endpoint."
+    note: "OpenAI's own API — the endpoint the Codex CLI talks to by default.",
     models: [
       { value: 'gpt-5.1', label: 'GPT-5.1' },
       { value: 'gpt-5.1-mini', label: 'GPT-5.1 mini' },
     ],
     defaultModel: 'gpt-5.1',
+    modelsFromRuntime: true,
     brand: { mono: 'O', from: '#4b5158', to: '#1f2226' },
     keyUrl: 'https://platform.openai.com/api-keys',
   },
