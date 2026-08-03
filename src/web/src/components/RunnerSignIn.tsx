@@ -12,6 +12,11 @@ const ENGINE_NAME: Record<LoginEngine, string> = {
   kimi: 'Kimi Code',
 };
 
+/** A sign-in still under way: the card polls while one of these is current, and seeing one is
+ *  what makes the outcome that follows this card's own news rather than a leftover (see below). */
+const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
+  s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval';
+
 /** What the parked tab shows until the CLI prints its URL, so it doesn't read as a dead popup. */
 const WAITING_PAGE = `<!doctype html><meta charset="utf-8"><title>Signing in…</title>
 <body style="margin:0;height:100vh;display:grid;place-items:center;font:14px system-ui,sans-serif;color:#666">
@@ -50,6 +55,8 @@ export function RunnerSignIn({
   const [code, setCode] = useState('');
   // Set once a pasted code is on its way to the runner — see `verifying` below.
   const [sent, setSent] = useState(false);
+  // Set once this card has seen a sign-in actually running — see `status` below.
+  const [watched, setWatched] = useState(false);
   // The tab parked by the click, waiting for a URL to point at. Cleared once it has one.
   const tab = useRef<Window | null>(null);
   const dropTab = () => {
@@ -62,10 +69,7 @@ export function RunnerSignIn({
     queryFn: () => api<RunnerLoginState>(`/runners/${runnerId}/login`),
     // Only poll while something is actually in flight; idle/terminal states are push-free. The
     // device flow completes without any further input from us, so its wait has to be polled too.
-    refetchInterval: (q) => {
-      const s = q.state.data?.status;
-      return s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval' ? 2000 : false;
-    },
+    refetchInterval: (q) => (inFlight(q.state.data?.status) ? 2000 : false),
     // The parked tab takes focus the moment it opens, which backgrounds this one — and a
     // background tab stops polling by default, so the URL we opened it for would never arrive.
     refetchIntervalInBackground: true,
@@ -109,8 +113,20 @@ export function RunnerSignIn({
   // A runner runs one relay at a time. If the one in flight is for the other engine (another card,
   // another tab), this card has nothing to report — show it as idle so pressing it takes over.
   const mine = !s?.engine || s.engine === engine;
-  const status = mine ? (s?.status ?? null) : null;
+  const reported = mine ? (s?.status ?? null) : null;
+  // done/failed stay on the runner until the *next* sign-in starts, so they describe the last
+  // attempt rather than whether that machine's credentials are good now. A card raised by a later
+  // failure would open on "Signed in — this runner is ready" left over from a sign-in that has
+  // since expired or been logged out — the one thing it must never claim while the engine is
+  // signed out. So an outcome is only reported if this card watched the sign-in that produced it;
+  // one already finished when the card arrives is history, and the card opens on its button, the
+  // same as for a runner that has never signed in from the browser.
+  const status = watched || inFlight(reported) ? reported : null;
   const err = (start.error ?? submit.error) as Error | undefined;
+
+  useEffect(() => {
+    if (inFlight(reported)) setWatched(true);
+  }, [reported]);
 
   // Submitting a code only parks it for the runner's next heartbeat — thirty seconds away at
   // worst — and the CLI still has to exchange it after that. So the POST resolving means nothing
