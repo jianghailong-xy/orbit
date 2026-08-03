@@ -4513,13 +4513,15 @@ body {
   gap: 8px;
 }
 /* The alternative route: same weight of decision, less weight of ink — it costs the user a key
-   they may not have yet, so it doesn't compete with the sign-in for the first click. */
+   they may not have yet, so it doesn't compete with the sign-in for the first click. Raised, not
+   transparent: once the surrounding panel went away it sat straight on the card's warm tint,
+   which read as a disabled control rather than the sibling of the retry button below it. */
 .rsi-btn-alt {
   flex: none;
   padding: 5px 14px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: transparent;
+  background: var(--bg-raised);
   color: var(--text-1);
   font-size: 13px;
   cursor: pointer;
