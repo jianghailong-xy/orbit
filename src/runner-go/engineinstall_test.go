@@ -191,6 +191,12 @@ func TestEngineAuthPreflightOnASignedOutEngine(t *testing.T) {
 	if !strings.HasPrefix(engineSignedOutMessage(providerCodex), "Failed to authenticate") {
 		t.Fatal("the message that pairs with authNo must carry the card's prefix")
 	}
+	// An engine that can't be resolved at all is ensureEngine's business, and the probe
+	// declines to block it. Asserted on a name that exists nowhere, so it holds on any
+	// machine — the case below returns early exactly when this one would apply.
+	if msg := engineAuthPreflight("orbit-not-an-engine", nil); msg != "" {
+		t.Errorf("an unresolvable engine must not be blocked here: %q", msg)
+	}
 	// And the composition agrees with this machine's own probe. Asserting agreement
 	// rather than a fixed verdict keeps the test honest wherever it runs: a dev box with
 	// a signed-in codex and a container with an installed-but-signed-out one both hold.

@@ -922,14 +922,18 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		return stFailed, true, false
 	}
 	// Signed out is the other way a session can't run, and the engine's own report of it
-	// is no use: codex answers a missing login with five reconnect attempts and a raw
-	// "401 Unauthorized", which reads as a network problem. Ask before spawning instead.
-	// First spawn only — a re-spawn is seconds later, on credentials we just checked.
-	if firstSpawn {
-		if msg := engineAuthPreflight(provider, job.Agent.Env); msg != "" {
-			emit(evError, map[string]interface{}{"message": msg})
-			return stFailed, true, false
-		}
+	// is no use: codex answers a missing login with two rounds of five reconnects and a raw
+	// "401 Unauthorized" twenty seconds later, which reads as a network problem. Ask before
+	// spawning instead.
+	//
+	// Every spawn, not just the session's first. This used to run under `firstSpawn`, which
+	// is false for a resume or a reclaim — the two cases where the credentials are most
+	// likely to have died, because the last time anything checked them was whenever the
+	// session last ran, hours or days ago. A local probe per engine start is cheap next to
+	// what it replaces.
+	if msg := engineAuthPreflight(provider, job.Agent.Env); msg != "" {
+		emit(evError, map[string]interface{}{"message": msg})
+		return stFailed, true, false
 	}
 	if provider == providerCodex {
 		return runCodexSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
