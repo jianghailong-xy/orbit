@@ -508,7 +508,7 @@ final class Phase2LogicTests: XCTestCase {
     }
 
     func testAgentDefaults() {
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "Opus 5")
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "claude-opus-5")
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")
         XCTAssertEqual(AgentDefaults.label(.bypass), "Bypass")
         XCTAssertEqual(AgentDefaults.defaultModelID, "claude-opus-5")

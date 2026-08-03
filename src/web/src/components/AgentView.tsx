@@ -1475,8 +1475,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
     'dontAsk';
 
+  // Same fallback chain as the permission mode above: a session that never stored a model of its
+  // own runs the owning agent's model, so the picker must show that — not the provider default.
   const selectedModelDefault = selected
     ? selected.model ??
+      detailForSelected?.agent?.model ??
+      agentsForRunner.find((a) => a.id === selected.agent?.id)?.model ??
       defaultModelForProvider(
         shownProvider,
         runner.modelCatalog,
@@ -3062,6 +3066,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const selectedAgent = agentsForRunner.find((a) => a.id === selected?.agent?.id);
   const effectiveModel =
     selected?.model ??
+    detailForSelected?.agent?.model ??
+    selectedAgent?.model ??
     defaultModelForProvider(
       shownProvider,
       runner.modelCatalog,

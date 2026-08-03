@@ -7,20 +7,36 @@ import XCTest
 final class AgentDefaultsTests: XCTestCase {
 
     func testModelsForProvider() {
+        // Codex models come exclusively from the runner catalog; no static fallback.
         let codex = AgentDefaults.models(for: "codex").map(\.id)
-        XCTAssertEqual(codex, ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"])
-        XCTAssertFalse(codex.contains("claude-opus-4-8"))
+        XCTAssertEqual(codex, [])
+        // With a catalog, codex models are returned.
+        let catalog = RunnerModelCatalog(
+            claude: nil,
+            codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol", priority: nil,
+                                    contextWindow: nil, reasoningLevels: nil,
+                                    defaultReasoningLevel: nil, serviceTiers: nil)])
+        let codexFromCatalog = AgentDefaults.models(for: "codex", catalog: catalog).map(\.id)
+        XCTAssertEqual(codexFromCatalog, ["gpt-5.6-sol"])
 
+        // Claude models also come exclusively from the runner catalog; no static fallback.
         let claude = AgentDefaults.models(for: "claude").map(\.id)
-        XCTAssertEqual(claude, ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"])
-        XCTAssertFalse(claude.contains("gpt-5.6-sol"))
+        XCTAssertEqual(claude, [])
+        let claudeCatalog = RunnerModelCatalog(
+            claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", priority: nil,
+                                     contextWindow: nil, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)],
+            codex: nil)
+        let claudeFromCatalog = AgentDefaults.models(for: "claude", catalog: claudeCatalog).map(\.id)
+        XCTAssertEqual(claudeFromCatalog, ["claude-opus-5"])
 
+        // Managed Kimi is the one provider the catalog never reports, so its list stays static.
         let kimi = AgentDefaults.models(for: "kimi")
         XCTAssertEqual(kimi.map(\.id), ["kimi-code/kimi-for-coding"])
         XCTAssertEqual(kimi.map(\.name), ["Kimi for Coding"])
 
-        // Unknown provider falls back to Claude, never to an empty menu.
-        XCTAssertEqual(AgentDefaults.models(for: "gemini").map(\.id), claude)
+        // Unknown provider returns empty (no static list to fall back to).
+        XCTAssertEqual(AgentDefaults.models(for: "gemini").map(\.id), [])
     }
 
     func testDefaultModelForProvider() {
@@ -31,11 +47,21 @@ final class AgentDefaultsTests: XCTestCase {
     }
 
     func testFriendlyNameSpansProviders() {
-        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol"), "GPT-5.6-Sol")
-        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.5"), "GPT-5.5")
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "Opus 5")
-        XCTAssertEqual(AgentDefaults.friendlyName("claude-fable-5"), "Fable 5")
+        // Claude/Codex ids render as raw ids without a catalog (no static fallback for them);
+        // managed Kimi's single model keeps its static label.
+        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol"), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5"), "claude-opus-5")
         XCTAssertEqual(AgentDefaults.friendlyName("kimi-code/kimi-for-coding"), "Kimi for Coding")
+        // With a catalog, model ids get their friendly names from the catalog.
+        let catalog = RunnerModelCatalog(
+            claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", priority: nil,
+                                     contextWindow: nil, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)],
+            codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol", priority: nil,
+                                    contextWindow: nil, reasoningLevels: nil,
+                                    defaultReasoningLevel: nil, serviceTiers: nil)])
+        XCTAssertEqual(AgentDefaults.friendlyName("gpt-5.6-sol", catalog: catalog), "GPT-5.6-Sol")
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", catalog: catalog), "Opus 5")
         // Unknown ids (incl. non-current models like claude-opus-4-8) fall back to the raw string.
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model"), "unknown-model")
     }
@@ -130,17 +156,13 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(models.map(\.id), ["deepseek-v4-pro", "deepseek-v4-lite"])
         XCTAssertEqual(models.map(\.name), ["DeepSeek V4 Pro", "DeepSeek V4 Lite"])
 
-        // A built-in slug never resolves to a configured provider — the static list stays.
-        XCTAssertEqual(AgentDefaults.models(for: "claude", catalog: nil, configured: [deepseek]).map(\.id),
-                       AgentDefaults.claudeModels.map(\.id))
-        // An unconfigured slug keeps the existing fallback (Claude, never an empty menu).
-        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: nil, configured: [deepseek]).map(\.id),
-                       AgentDefaults.claudeModels.map(\.id))
-        // A configured provider with no usable models stays empty; the composer inserts only its
-        // effective fallback instead of leaking the Claude picker into this model space.
+        // A built-in slug never resolves to a configured provider — returns empty (no static fallback).
+        XCTAssertEqual(AgentDefaults.models(for: "claude", catalog: nil, configured: [deepseek]).map(\.id), [])
+        // An unconfigured slug also returns empty (no static fallback).
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: nil, configured: [deepseek]).map(\.id), [])
+        // A configured provider with no usable models also returns empty.
         let empty = ConfiguredProvider(slug: "hollow", label: "Hollow")
-        XCTAssertEqual(AgentDefaults.models(
-            for: "hollow", catalog: nil, configured: [empty]).map(\.id), [])
+        XCTAssertEqual(AgentDefaults.models(for: "hollow", catalog: nil, configured: [empty]).map(\.id), [])
     }
 
     func testDefaultModelForConfiguredProvider() {
@@ -265,9 +287,9 @@ final class AgentDefaultsTests: XCTestCase {
     func testFriendlyNameFromConfiguredProvider() {
         XCTAssertEqual(AgentDefaults.friendlyName("deepseek-v4-pro", catalog: nil, configured: [deepseek]),
                        "DeepSeek V4 Pro")
-        // Static ids and unknown ids keep the existing behavior.
+        // Static ids and unknown ids render as raw without a catalog (no static fallback).
         XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", catalog: nil, configured: [deepseek]),
-                       "Opus 5")
+                       "claude-opus-5")
         XCTAssertEqual(AgentDefaults.friendlyName("unknown-model", catalog: nil, configured: [deepseek]),
                        "unknown-model")
     }

@@ -74,39 +74,21 @@ public enum AgentDefaults {
         configured?.first { $0.slug == slug }
     }
 
-    /// Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
-    /// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as their
-    /// raw id, same as any other non-current model.
-    public static let claudeModels: [ModelOption] = [
-        ModelOption(id: "claude-opus-5", name: "Opus 5"),
-        ModelOption(id: "claude-fable-5", name: "Fable 5"),
-        ModelOption(id: "claude-sonnet-5", name: "Sonnet 5"),
-        ModelOption(id: "claude-haiku-4-5", name: "Haiku 4.5"),
-    ]
-
-    public static let codexModels: [ModelOption] = [
-        ModelOption(id: "gpt-5.6-sol", name: "GPT-5.6-Sol"),
-        ModelOption(id: "gpt-5.6-terra", name: "GPT-5.6-Terra"),
-        ModelOption(id: "gpt-5.6-luna", name: "GPT-5.6-Luna"),
-        ModelOption(id: "gpt-5.5", name: "GPT-5.5"),
-        ModelOption(id: "gpt-5.4", name: "GPT-5.4"),
-        ModelOption(id: "gpt-5.4-mini", name: "GPT-5.4 Mini"),
-    ]
-
+    /// Managed Kimi runs a single fixed model and the runner catalog only reports claude/codex,
+    /// so its lone option is the one model list that stays static.
     public static let kimiModels: [ModelOption] = [
         ModelOption(id: "kimi-code/kimi-for-coding", name: "Kimi for Coding"),
     ]
 
     public static let defaultModelID = "claude-opus-5"
 
-    /// The models a provider's pickers offer. Unknown provider strings fall back to Claude so a
-    /// stale value can't empty the menu.
+    /// The models a provider's pickers offer. Claude and Codex lists come exclusively from the
+    /// runner catalog (Codex via `codex debug models`; Claude via `claude -p "/model <alias>"`).
+    /// There is no static fallback for them — when the catalog is unavailable the picker is empty.
+    /// An unknown provider string returns an empty array too, matching apiserver's
+    /// `agentProvider()`, so a stale value can't leak Claude-only options.
     public static func models(for provider: String) -> [ModelOption] {
-        switch provider {
-        case "codex": return codexModels
-        case "kimi":  return kimiModels
-        default:      return claudeModels
-        }
+        provider == "kimi" ? kimiModels : []
     }
 
     public static func models(for provider: String, catalog: RunnerModelCatalog?) -> [ModelOption] {
@@ -219,7 +201,7 @@ public enum AgentDefaults {
     /// Display name for a model id, across providers. Unknown ids (an `ANTHROPIC_MODEL` env
     /// override pointing at a custom endpoint) render as the raw id.
     public static func friendlyName(_ id: String) -> String {
-        (claudeModels + codexModels + kimiModels).first { $0.id == id }?.name ?? id
+        kimiModels.first { $0.id == id }?.name ?? id
     }
 
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {

@@ -70,38 +70,17 @@ export const mergedProviderOptions = (
   ...(configured ?? []).map((p) => ({ value: p.slug, label: p.label })),
 ];
 
-// Model options shared across the app. `value` is the local runtime's model id;
-// `label` is the friendly display name shown in every picker.
+// Model options are sourced exclusively from the runner's live model catalog (Codex:
+// `codex debug models`; Claude: `claude -p "/model <alias>"`). There are no static
+// fallback lists — when no runner catalog is available the picker is empty.
 // Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
-// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as their
-// raw id, same as any other non-current model.
-export const CLAUDE_MODEL_OPTIONS = [
-  { value: 'claude-opus-5', label: 'Opus 5' },
-  { value: 'claude-fable-5', label: 'Fable 5' },
-  { value: 'claude-sonnet-5', label: 'Sonnet 5' },
-  { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
-
-export const CODEX_MODEL_OPTIONS = [
-  { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' },
-  { value: 'gpt-5.6-terra', label: 'GPT-5.6-Terra' },
-  { value: 'gpt-5.6-luna', label: 'GPT-5.6-Luna' },
-  { value: 'gpt-5.5', label: 'GPT-5.5' },
-  { value: 'gpt-5.4', label: 'GPT-5.4' },
-  { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini' },
-];
-
+// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as
+// their raw id, same as any other non-current model.
+// Kimi is the one exception: the runner catalog only reports claude/codex, and managed Kimi
+// runs a single fixed model, so its lone option stays static.
 export const KIMI_MODEL_OPTIONS = [
   { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
 ];
-
-export const MODEL_OPTIONS_BY_PROVIDER: Record<string, ModelOption[]> = {
-  claude: CLAUDE_MODEL_OPTIONS,
-  codex: CODEX_MODEL_OPTIONS,
-  kimi: KIMI_MODEL_OPTIONS,
-};
-
-export const MODEL_OPTIONS = [...CLAUDE_MODEL_OPTIONS, ...CODEX_MODEL_OPTIONS, ...KIMI_MODEL_OPTIONS];
 
 // Per-model context-window size (max input tokens), for the composer's context-usage gauge.
 // Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
@@ -174,8 +153,7 @@ export const modelOptionsForProvider = (
   }
   return (
     catalogOptionsForProvider(provider, modelCatalog) ??
-    MODEL_OPTIONS_BY_PROVIDER[provider ?? 'claude'] ??
-    CLAUDE_MODEL_OPTIONS
+    (provider === AgentProvider.KIMI ? KIMI_MODEL_OPTIONS : [])
   );
 };
 

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import {
-  CLAUDE_MODEL_OPTIONS,
   clampPermissionModeForModel,
   contextWindowFor,
   DEFAULT_CONTEXT_WINDOW,
@@ -16,16 +15,16 @@ import {
   type ConfiguredProvider,
 } from './agentDefaults';
 
-describe('Claude model options', () => {
-  it('matches the current Claude Code picker, including Fable 5', () => {
-    expect(CLAUDE_MODEL_OPTIONS).toEqual([
-      { value: 'claude-opus-5', label: 'Opus 5' },
-      { value: 'claude-fable-5', label: 'Fable 5' },
-      { value: 'claude-sonnet-5', label: 'Sonnet 5' },
-      { value: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-    ]);
+describe('Claude model capabilities', () => {
+  it('knows the current tiers without a static picker list', () => {
+    // Claude/Codex options come from the runner catalog only, so there is no list to assert —
+    // what still lives here are the per-model traits the CLI cannot report.
+    expect(modelOptionsForProvider('claude')).toEqual([]);
     expect(contextWindowFor('claude-fable-5')).toBe(1_000_000);
+    expect(supportsAuto('claude-opus-5', 'claude')).toBe(true);
     expect(supportsAuto('claude-fable-5', 'claude')).toBe(true);
+    expect(supportsAuto('claude-sonnet-5', 'claude')).toBe(true);
+    expect(supportsAuto('claude-haiku-4-5', 'claude')).toBe(false);
   });
 
   it('clamps Auto when the effective Runtime default cannot run it', () => {

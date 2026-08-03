@@ -1056,6 +1056,26 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // A session converted from a different provider (e.g. codex → claude) has
+    // numTurns > 0 from the prior provider but no claude/runtime session ids,
+    // so the capabilities payload says MISSING_CONTEXT and the UI blocks resume
+    // (it creates a new session instead). Fix it eagerly on read so every consumer
+    // — detail page, list, realtime stream — sees the session as resumable.
+    if (
+      session.provider === 'claude' &&
+      session.numTurns > 0 &&
+      !session.claudeSessionId &&
+      !session.runtimeSessionId
+    ) {
+      const sid = randomUUID();
+      await this.prisma.session.update({
+        where: { id },
+        data: { claudeSessionId: sid, runtimeSessionId: sid, numTurns: 0 },
+      });
+      session.claudeSessionId = sid;
+      session.runtimeSessionId = sid;
+      session.numTurns = 0;
+    }
     // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
     const { tagLinks, ...rest } = session;
     const tags = tagLinks
@@ -2561,6 +2581,27 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // A session converted from a different provider (e.g. codex → claude) has
+    // numTurns > 0 from the prior provider but no claude/runtime session ids.
+    // That wedges the capabilities check: MISSING_CONTEXT blocks resume because
+    // the session appears to have lost its conversation. Generate fresh ids and
+    // reset numTurns so the runner does a first spawn (--session-id) instead of
+    // a doomed --resume, and the session is resumable from the UI.
+    if (
+      session.provider === 'claude' &&
+      session.numTurns > 0 &&
+      !session.claudeSessionId &&
+      !session.runtimeSessionId
+    ) {
+      const sid = randomUUID();
+      await this.prisma.session.update({
+        where: { id },
+        data: { claudeSessionId: sid, runtimeSessionId: sid, numTurns: 0 },
+      });
+      session.claudeSessionId = sid;
+      session.runtimeSessionId = sid;
+      session.numTurns = 0;
+    }
     const initialCapabilities = deriveSessionCapabilities(session);
     if (initialCapabilities.resumeBlockedReason === 'TRASHED') {
       throw SessionsService.resumeBlocked('TRASHED');

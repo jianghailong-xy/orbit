@@ -348,8 +348,13 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
       }
+      case 'system':
+        // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
+        // an error so the user sees why the turn failed instead of a silent blank turn.
+        if (p.stderr) into(parent).push({ kind: 'error', seq: ev.seq, message: String(p.stderr).trim() });
+        break;
       default:
-        break; // system / status — not part of the chat transcript
+        break;
     }
   }
   return roots;
