@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { MD, type RunEvent, Transcript } from './Transcript';
+import { AuthErrorCtx, MD, type RunEvent, Transcript } from './Transcript';
 
 const AUTH_FAILED =
   'Failed to authenticate: Codex is installed on this runner but not signed in — sign in from here, or run `codex login` on that machine.';
@@ -33,6 +33,19 @@ describe('transcript sign-in cards', () => {
     );
 
     expect(cards(html)).toBe(2);
+  });
+
+  it('shows the message the retry would re-send', () => {
+    const html = renderToStaticMarkup(
+      <AuthErrorCtx.Provider
+        value={{ provider: 'codex', onRetry: () => {}, retryText: 'ship the thing' }}
+      >
+        <Transcript events={[errorEvent(1, AUTH_FAILED)]} />
+      </AuthErrorCtx.Provider>,
+    );
+
+    expect(html).toContain('ship the thing');
+    expect(html).toContain('Retry — re-send my last message');
   });
 });
 

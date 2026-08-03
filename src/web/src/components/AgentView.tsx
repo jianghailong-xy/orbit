@@ -3109,6 +3109,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         retryText && !selectedTrashed && !selectedMissing
           ? () => sendMutate({ content: retryText, images: [] })
           : undefined,
+      retryText,
     }),
     // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
     // rebuild this every render and re-render the card through the context.

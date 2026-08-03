@@ -4511,6 +4511,22 @@ body {
   font-size: 13px;
 }
 
+/* The message the retry would re-send, quoted. Clamped: it can be a whole pasted prompt, and
+   this is a label for the button under it, not a second copy of the conversation. */
+.chat-authfix-last {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-top: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--warning-border);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .chat-authfix-retry {
   margin-top: 10px;
   padding: 5px 12px;

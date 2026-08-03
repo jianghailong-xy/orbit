@@ -104,6 +104,8 @@ export interface AuthErrorHelp {
   runnerId?: string;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
+  /** What that re-send would say, so the card can show it rather than make the user trust it. */
+  retryText?: string;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
 
@@ -554,9 +556,16 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         </div>
       ) : null}
       {help?.onRetry && (
-        <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
-          Retry — re-send my last message
-        </button>
+        <>
+          {/* "my last message" is a promise the reader can't check — by this point it has usually
+              scrolled away, and on a first-run failure it was never in the transcript at all
+              (the card is the whole session). Quote it, clamped, so the button is a decision
+              rather than a leap of faith. */}
+          {help.retryText && <div className="chat-authfix-last">{help.retryText}</div>}
+          <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
+            Retry — re-send my last message
+          </button>
+        </>
       )}
     </div>
   );
