@@ -99,6 +99,15 @@ extension Color {
         Color(light: Color(red: 0.965, green: 0.965, blue: 0.957),
               dark:  Color(red: 0.12,  green: 0.12,  blue: 0.13))
     }
+
+    /// The transcript's floating scroll-to-latest puck. Light: plain white, lifted off the near-white
+    /// transcript by its shadow alone. Dark: deliberately *not* the transcript's own near-black — an
+    /// opaque black disc on a black backdrop, edged by a black shadow, is invisible — but a raised grey
+    /// that reads as a disc unaided. Lighter than both dark backdrops it sits on (iOS's black system
+    /// background and macOS's `orbitSurface`).
+    static var floatingDiscSurface: Color {
+        Color(light: .white, dark: Color(red: 0.18, green: 0.18, blue: 0.19))
+    }
 }
 
 extension View {
