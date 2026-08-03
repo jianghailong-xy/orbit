@@ -245,6 +245,16 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     }
     return roots;
   };
+  // A sign-in failure is reported once per dispatch, so a session that is picked up again
+  // reports the identical one seconds later. That card is a remedy, not a log line: stacking
+  // two says nothing new and puts two live copies of a sign-in there is only one of — with two
+  // codes to read and two Cancels for the same relay. A repeat folds into the card above it.
+  const authError = (parentId: string | undefined, seq: number, message: string) => {
+    const list = into(parentId);
+    const prev = list[list.length - 1];
+    if (prev?.kind === 'authError' && prev.message === message) return;
+    list.push({ kind: 'authError', seq, message });
+  };
 
   for (const ev of events) {
     const p = ev.payload ?? {};
@@ -291,7 +301,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           // unmistakable instead of looking like a normal reply. An expired sign-in arrives
           // the same way but gets its own card: the fix is a human action, so a bare error
           // line would leave the user staring at a diagnosis with no remedy.
-          if (isAuthErrorText(text)) into(parent).push({ kind: 'authError', seq: ev.seq, message: text });
+          if (isAuthErrorText(text)) authError(parent, ev.seq, text);
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
         }
@@ -344,7 +354,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // (there is no model in the loop yet — it never got to spawn), but the remedy is the
         // same human action, so it earns the same card instead of a bare error line.
         const msg = String(p.message ?? 'error');
-        if (isAuthErrorText(msg)) into(parent).push({ kind: 'authError', seq: ev.seq, message: msg });
+        if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
       }
