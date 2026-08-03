@@ -338,9 +338,31 @@ body {
   gap: 12px;
   min-height: 38px;
 }
+/* The copy block is a button that opens the session the card names (see lib/toast.tsx). Strip
+   the button chrome so the card looks exactly as it did, and let the hover state carry the
+   affordance — a pointer plus an underlined headline, the same signal a link gives. */
 .session-lifecycle-toast-copy {
+  display: block;
   flex: 1;
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.session-lifecycle-toast-copy:hover .session-lifecycle-toast-status {
+  text-decoration: underline;
+}
+.session-lifecycle-toast-copy:hover .session-lifecycle-toast-title {
+  color: var(--text-2);
+}
+.session-lifecycle-toast-copy:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 .session-lifecycle-toast-status {
   color: var(--text-1);
