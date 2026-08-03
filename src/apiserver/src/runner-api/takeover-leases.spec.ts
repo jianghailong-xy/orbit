@@ -207,48 +207,7 @@ for (const tc of [
 
 for (const tc of [
   {
-    name: 'merge',
-    operationState: {
-      mergeStatus: 'pending',
-      mergeOperationId: null,
-      mergeOperationOwner: null,
-    },
-  },
-  {
-    name: 'commit',
-    operationState: {
-      commitStatus: 'pending',
-      commitOperationId: null,
-      commitOperationOwner: null,
-    },
-  },
-] as const) {
-  test(`takeover treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
-    const h = harness(
-      OLD_OWNER,
-      GENERATION,
-      true,
-      RunStatus.AWAITING_INPUT,
-      tc.operationState,
-    );
-
-    await assert.rejects(
-      () =>
-        h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
-          leaseOwner: NEW_OWNER,
-          expectedLeaseOwner: OLD_OWNER,
-        }),
-      ConflictException,
-    );
-
-    assert.equal(h.executeCalls.length, 0);
-    assert.equal(h.notified(), undefined);
-  });
-}
-
-for (const tc of [
-  {
-    name: 'merge',
+    name: 'a modern unclaimed merge',
     operationState: {
       mergeStatus: 'pending',
       mergeOperationId: '66666666-6666-4666-8666-666666666666',
@@ -256,15 +215,33 @@ for (const tc of [
     },
   },
   {
-    name: 'commit',
+    name: 'a modern unclaimed commit',
     operationState: {
       commitStatus: 'pending',
       commitOperationId: '66666666-6666-4666-8666-666666666666',
       commitOperationOwner: null,
     },
   },
+  // An orphaned NULL/NULL row has no runner process behind it; blocking on one
+  // 409s every takeover forever, so the runner never reaches the claim loop.
+  {
+    name: 'an orphaned NULL/NULL merge',
+    operationState: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'an orphaned NULL/NULL commit',
+    operationState: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+  },
 ] as const) {
-  test(`takeover may rotate past a modern unclaimed ${tc.name}`, async () => {
+  test(`takeover may rotate past ${tc.name}`, async () => {
     const h = harness(
       OLD_OWNER,
       GENERATION,

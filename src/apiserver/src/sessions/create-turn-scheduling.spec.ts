@@ -159,46 +159,7 @@ for (const tc of [
 
 for (const tc of [
   {
-    name: 'merge',
-    sessionOverrides: {
-      mergeStatus: 'pending',
-      mergeOperationId: null,
-      mergeOperationOwner: null,
-    },
-  },
-  {
-    name: 'commit',
-    sessionOverrides: {
-      commitStatus: 'pending',
-      commitOperationId: null,
-      commitOperationOwner: null,
-    },
-  },
-] as const) {
-  test(`a new turn treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
-    const h = makeService(RunStatus.AWAITING_INPUT, {
-      sessionOverrides: tc.sessionOverrides,
-    });
-
-    await assert.rejects(
-      () =>
-        h.service.createTurn(h.session.ownerId, h.session.id, {
-          clientTurnId: 'client-1',
-          content: 'follow up',
-        }),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === 'wait for the pending worktree operation to finish',
-    );
-
-    assert.deepEqual(h.updateWrites, []);
-    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
-  });
-}
-
-for (const tc of [
-  {
-    name: 'merge',
+    name: 'a modern unclaimed merge',
     sessionOverrides: {
       mergeStatus: 'pending',
       mergeOperationId: '66666666-6666-4666-8666-666666666666',
@@ -207,7 +168,7 @@ for (const tc of [
     fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
   },
   {
-    name: 'commit',
+    name: 'a modern unclaimed commit',
     sessionOverrides: {
       commitStatus: 'pending',
       commitOperationId: '66666666-6666-4666-8666-666666666666',
@@ -215,8 +176,28 @@ for (const tc of [
     },
     fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
   },
+  // An orphaned NULL/NULL row has no runner process behind it; blocking on one
+  // wedges the session's next turn behind an operation nobody is running.
+  {
+    name: 'an orphaned NULL/NULL merge',
+    sessionOverrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+    fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
+  },
+  {
+    name: 'an orphaned NULL/NULL commit',
+    sessionOverrides: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+  },
 ] as const) {
-  test(`a new turn may supersede a modern unclaimed ${tc.name}`, async () => {
+  test(`a new turn may supersede ${tc.name}`, async () => {
     const h = makeService(RunStatus.AWAITING_INPUT, {
       sessionOverrides: tc.sessionOverrides,
     });

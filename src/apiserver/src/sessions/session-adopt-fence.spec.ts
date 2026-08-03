@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConflictException } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -45,36 +44,6 @@ function harness(overrides: Record<string, unknown>) {
 for (const tc of [
   {
     name: 'merge',
-    overrides: {
-      mergeStatus: 'pending',
-      mergeOperationId: null,
-      mergeOperationOwner: null,
-    },
-  },
-  {
-    name: 'commit',
-    overrides: {
-      commitStatus: 'pending',
-      commitOperationId: null,
-      commitOperationOwner: null,
-    },
-  },
-] as const) {
-  test(`Adopt treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
-    const h = harness(tc.overrides);
-
-    await assert.rejects(
-      () => h.service.adoptWorktreeBranch(OWNER_ID, SESSION_ID),
-      ConflictException,
-    );
-
-    assert.deepEqual(h.writes, []);
-  });
-}
-
-for (const tc of [
-  {
-    name: 'merge',
     title: 'Adopt may supersede a modern unclaimed merge',
     overrides: {
       mergeStatus: 'pending',
@@ -93,6 +62,36 @@ for (const tc of [
     overrides: {
       commitStatus: 'pending',
       commitOperationId: OPERATION_ID,
+      commitOperationOwner: null,
+    },
+    expected: {
+      commitStatus: undefined,
+      commitOperationId: undefined,
+      commitOperationOwner: undefined,
+    },
+  },
+  // An orphaned NULL/NULL row has no runner process behind it; blocking on one
+  // leaves the session permanently unable to adopt its worktree branch.
+  {
+    name: 'merge',
+    title: 'Adopt may supersede an orphaned NULL/NULL merge',
+    overrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+    expected: {
+      mergeStatus: null,
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+  },
+  {
+    name: 'commit',
+    title: 'Adopt allows an orphaned NULL/NULL commit and preserves its receipt epoch',
+    overrides: {
+      commitStatus: 'pending',
+      commitOperationId: null,
       commitOperationOwner: null,
     },
     expected: {

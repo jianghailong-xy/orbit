@@ -25,6 +25,15 @@ interface HarnessOptions {
   currentRetired?: boolean;
   candidateRetired?: boolean;
   status?: RunStatus;
+  /**
+   * What the unlocked preflight read observes, when it must differ from the row the
+   * `FOR UPDATE` read then returns — i.e. a concurrent activate landed in between.
+   */
+  preflight?: {
+    inboxLeaseOwner: string | null;
+    inboxLeaseGeneration: string | null;
+    status: RunStatus;
+  } | null;
 }
 
 function harness({
@@ -33,7 +42,9 @@ function harness({
   currentRetired = false,
   candidateRetired = false,
   status = RunStatus.AWAITING_INPUT,
+  preflight,
 }: HarnessOptions) {
+  const preflightCalls: unknown[] = [];
   const queryCalls: unknown[][] = [];
   const executeCalls: unknown[][] = [];
   const tx = {
@@ -68,6 +79,15 @@ function harness({
     },
   };
   const prisma = {
+    // The unlocked idempotency preflight. It reads the same row the transaction locks,
+    // so it mirrors the harness state unless a test overrides it to simulate a race.
+    session: {
+      findUnique: async (args: unknown) => {
+        preflightCalls.push(args);
+        if (preflight !== undefined) return preflight;
+        return { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status };
+      },
+    },
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   } as never;
   return {
@@ -79,6 +99,7 @@ function harness({
       {} as never,
     ),
     executeCalls,
+    preflightCalls,
     queryCalls,
   };
 }
@@ -102,8 +123,43 @@ test('activate-leases registers and installs a generation under the owned Sessio
   assert.match(sql(h.executeCalls[2]), /"lease_generation" IS DISTINCT FROM \?::uuid/);
 });
 
-test('activate-leases is idempotent for the current live generation', async () => {
+test('an already-installed generation returns without taking the Session row lock', async () => {
+  // A reclaim storm re-activates the same generation hundreds of times a minute; each
+  // FOR UPDATE would starve the claim queue, so the installed case must not lock.
   const h = harness({ current: GENERATION });
+
+  assert.deepEqual(
+    await h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
+    { ok: true },
+  );
+  assert.equal(h.preflightCalls.length, 1);
+  assert.equal(h.queryCalls.length, 0);
+  assert.equal(h.executeCalls.length, 0);
+});
+
+test('a terminal session is not short-circuited by an installed generation', async () => {
+  for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
+    const h = harness({ current: GENERATION, status });
+
+    await assert.rejects(
+      h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
+      ConflictException,
+    );
+    assert.equal(h.executeCalls.length, 0);
+  }
+});
+
+test('activate-leases is idempotent for the current live generation', async () => {
+  // The preflight missed it: a concurrent activate installed this exact generation
+  // between the unlocked read and the lock. Re-installing under the lock is a no-op.
+  const h = harness({
+    current: GENERATION,
+    preflight: {
+      inboxLeaseOwner: LEASE_OWNER,
+      inboxLeaseGeneration: null,
+      status: RunStatus.AWAITING_INPUT,
+    },
+  });
 
   await h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request);
 
@@ -196,16 +252,26 @@ test('activate-leases rejects a non-owner and malformed or missing identities', 
 });
 
 test('activate-leases normalizes uppercase UUIDs before comparing database values', async () => {
-  const h = harness({ current: GENERATION });
+  const uppercase = {
+    leaseGeneration: GENERATION.toUpperCase(),
+    leaseOwner: LEASE_OWNER.toUpperCase(),
+  };
 
-  await h.controller.activateLeases(
-    { id: RUNNER_ID },
-    SESSION_ID,
-    {
-      leaseGeneration: GENERATION.toUpperCase(),
-      leaseOwner: LEASE_OWNER.toUpperCase(),
+  // Both comparisons against stored values must normalize: the unlocked preflight...
+  const fastPath = harness({ current: GENERATION });
+  await fastPath.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, uppercase);
+  assert.equal(fastPath.queryCalls.length, 0);
+  assert.equal(fastPath.executeCalls.length, 0);
+
+  // ...and the locked read, reached here because the preflight raced a concurrent activate.
+  const lockedPath = harness({
+    current: GENERATION,
+    preflight: {
+      inboxLeaseOwner: LEASE_OWNER,
+      inboxLeaseGeneration: null,
+      status: RunStatus.AWAITING_INPUT,
     },
-  );
-
-  assert.equal(h.executeCalls.length, 3);
+  });
+  await lockedPath.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, uppercase);
+  assert.equal(lockedPath.executeCalls.length, 3);
 });

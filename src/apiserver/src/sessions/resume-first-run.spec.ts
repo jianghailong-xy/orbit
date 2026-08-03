@@ -185,41 +185,7 @@ for (const tc of [
 
 for (const tc of [
   {
-    name: 'merge',
-    overrides: {
-      mergeStatus: 'pending',
-      mergeOperationId: null,
-      mergeOperationOwner: null,
-    },
-  },
-  {
-    name: 'commit',
-    overrides: {
-      commitStatus: 'pending',
-      commitOperationId: null,
-      commitOperationOwner: null,
-    },
-  },
-] as const) {
-  test(`terminal resume treats a legacy NULL/NULL pending ${tc.name} as already claimed`, async () => {
-    const { service, updates, notified, retired } = makeService(tc.overrides);
-
-    await assert.rejects(
-      () => service.resume('owner-1', 'session-1', retry),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === 'wait for the pending worktree operation to finish',
-    );
-
-    assert.deepEqual(updates, []);
-    assert.equal(retired(), 0);
-    assert.equal(notified(), 0);
-  });
-}
-
-for (const tc of [
-  {
-    name: 'merge',
+    name: 'a modern unclaimed merge',
     overrides: {
       mergeStatus: 'pending',
       mergeOperationId: '11111111-1111-4111-8111-111111111111',
@@ -228,7 +194,7 @@ for (const tc of [
     fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
   },
   {
-    name: 'commit',
+    name: 'a modern unclaimed commit',
     overrides: {
       commitStatus: 'pending',
       commitOperationId: '11111111-1111-4111-8111-111111111111',
@@ -236,8 +202,28 @@ for (const tc of [
     },
     fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
   },
+  // An orphaned NULL/NULL row has no runner process behind it; blocking on one
+  // leaves the terminal session unresumable forever.
+  {
+    name: 'an orphaned NULL/NULL merge',
+    overrides: {
+      mergeStatus: 'pending',
+      mergeOperationId: null,
+      mergeOperationOwner: null,
+    },
+    fields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
+  },
+  {
+    name: 'an orphaned NULL/NULL commit',
+    overrides: {
+      commitStatus: 'pending',
+      commitOperationId: null,
+      commitOperationOwner: null,
+    },
+    fields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
+  },
 ] as const) {
-  test(`terminal resume may supersede a modern unclaimed ${tc.name}`, async () => {
+  test(`terminal resume may supersede ${tc.name}`, async () => {
     const { service, updates, notified, retired } = makeService(tc.overrides);
 
     await service.resume('owner-1', 'session-1', retry);

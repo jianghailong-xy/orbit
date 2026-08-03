@@ -40,6 +40,7 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
           availableSkills: null,
           planUsage: null,
           modelCatalog: null,
+          runtimeDefaultModels: null,
         }));
       },
       update: async (args: { where: { id: string }; data: { position: number } }) => {
@@ -109,6 +110,7 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
       availableSkills: true,
       planUsage: true,
       modelCatalog: true,
+      runtimeDefaultModels: true,
     },
   });
 });
