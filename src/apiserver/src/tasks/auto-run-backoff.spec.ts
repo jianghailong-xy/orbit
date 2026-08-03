@@ -31,8 +31,9 @@ type GroupByArgs = {
 
 /**
  * One OPEN, auto-run, runner-bound task per entry in `history` plus `readyTaskIds` with no
- * failures at all, each with a single DONE prerequisite so dependencyStatesFor reports READY.
- * Everything the reconcile sweep reads is stubbed; execute() records what it dispatched.
+ * failures at all. READY is resolved in SQL now, so the task stub simply returns the rows the
+ * sweep's own `where` would have selected; what these tests exercise is everything the sweep
+ * decides *after* that. execute() records what it dispatched.
  *
  * The session.groupBy stub honours the caller's exclusion filter rather than ignoring the
  * `where`, so a test can assert which failures are counted — that filter is the contract.
@@ -51,10 +52,6 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     runner: {
       findMany: async () => [{ id: 'runner-1', planUsage: options.planUsage ?? null }],
-    },
-    taskDependency: {
-      findMany: async ({ where }: { where: { taskId: { in: string[] } } }) =>
-        where.taskId.in.map((taskId) => ({ taskId, dependsOnTask: { status: 'DONE' } })),
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {

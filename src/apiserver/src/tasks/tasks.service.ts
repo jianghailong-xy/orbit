@@ -1823,18 +1823,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * that has since become genuinely runnable: OPEN, opted into auto-run, all prerequisites
    * DONE (READY — it therefore HAS prerequisites; a task with none is never auto-run), its
    * assignee bound to a runner, and not already occupied by a live/queued session.
-   * execute()'s own session dedup makes a redundant pass a no-op, so it is safe to repeat.
+   *
+   * Repeating the pass is only safe while something stops a *terminated* run from making its
+   * task a candidate again: execute()'s session dedup covers a run still in flight, but the
+   * moment one ends the task matches again a minute later. The quota gate and the failure
+   * backoff below are what bound that — without them this is an unbounded respawn loop.
    */
   private async reconcileReadyTasks(): Promise<void> {
-    const candidates = await this.prisma.task.findMany({
+    const ready = await this.prisma.task.findMany({
       where: {
         status: TaskStatus.OPEN,
         autoRunWhenReady: true,
         // Assignee bound to a runner — the exact gap triggerDependents skips ("stays ready
         // for later"). Once a runner is attached, the task becomes eligible here.
         assignee: { runnerId: { not: null } },
-        // Must have prerequisites; a dependency-free task is never part of auto-run.
-        dependsOn: { some: {} },
+        // READY, resolved database-side: the task HAS prerequisites (a dependency-free task
+        // is never auto-run) and none of them is unfinished. Same predicate as
+        // computeDependencyState's READY — BLOCKED and BLOCKED_FAILED alike have a
+        // prerequisite that is `not DONE` and drop out here. Filtering in SQL rather than in
+        // memory is what keeps this sweep proportional to the work: a backlog is
+        // overwhelmingly BLOCKED tasks waiting their turn, and loading all of them (plus
+        // every one of their dependency edges) once a minute only to discard them dwarfs
+        // the dispatch it exists to do.
+        dependsOn: { some: {}, none: { dependsOnTask: { status: { not: TaskStatus.DONE } } } },
         // Not already being worked or queued: don't double-dispatch, and don't re-poke an
         // idle AWAITING_INPUT/INTERRUPTED session every pass. Same set as reclaimStalledTask.
         sessions: { none: { status: { in: TASK_OCCUPYING } } },
@@ -1845,11 +1856,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         assignee: { select: { provider: true, runnerId: true } },
       },
     });
-    if (candidates.length === 0) return;
-    // Keep only those whose prerequisites are ALL DONE now (READY). BLOCKED /
-    // BLOCKED_FAILED are left for the normal flow / a human to resolve.
-    const states = await this.dependencyStatesFor(candidates.map((t) => t.id));
-    const ready = candidates.filter((t) => (states.get(t.id) ?? 'NONE') === 'READY');
     if (ready.length === 0) return;
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
