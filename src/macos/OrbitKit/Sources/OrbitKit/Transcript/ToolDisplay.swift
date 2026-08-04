@@ -75,10 +75,13 @@ public struct ToolDisplay: Equatable, Sendable {
 
         switch name {
         case "Bash":
+            let command = input["command"]?.stringValue ?? ""
+            let prose = (input["description"]?.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let bashSummary = prose.isEmpty ? shellCommandSummary(command) : prose
             return ToolDisplay(label: "Bash", symbol: "terminal", tone: .exec,
-                               summary: input["description"]?.stringValue, summaryMono: false,
+                               summary: bashSummary.isEmpty ? nil : bashSummary, summaryMono: prose.isEmpty,
                                path: nil, meta: nil,
-                               body: .command(input["command"]?.stringValue ?? ""), autoOpen: isError)
+                               body: .command(command), autoOpen: isError)
 
         case "Read":
             return ToolDisplay(label: "Read", symbol: "doc.text", tone: .read,
@@ -279,6 +282,28 @@ public struct ToolDisplay: Equatable, Sendable {
     }
 
     // MARK: - summary helpers
+
+    /// Codex's shell calls carry no `description`, and it wraps every one of them as
+    /// `/bin/bash -lc "<command>"` — unwrap that shell (and its outer quoting) so a Bash row can
+    /// fall back to the command itself instead of showing a bare "Bash" with nothing beside it.
+    /// Whitespace is collapsed because the row is a single truncated line (mirrors web
+    /// `shellCommandSummary`).
+    static func shellCommandSummary(_ command: String) -> String {
+        var text = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fields = text.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true).map(String.init)
+        if fields.count == 3,
+           ["sh", "bash", "zsh"].contains(fields[0].split(separator: "/").last.map(String.init) ?? ""),
+           fields[1].hasPrefix("-"), fields[1].hasSuffix("c"),
+           fields[1].dropFirst().allSatisfy({ $0.isLetter }) {
+            var inner = fields[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            if let quote = inner.first, quote == "\"" || quote == "'",
+               inner.count > 1, inner.hasSuffix(String(quote)) {
+                inner = String(inner.dropFirst().dropLast())
+            }
+            text = inner
+        }
+        return text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
 
     private static func joinSummary(_ vals: [JSONValue?]) -> String? {
         let parts = vals.compactMap { $0?.stringValue }.filter { !$0.isEmpty }

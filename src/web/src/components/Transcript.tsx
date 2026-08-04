@@ -1607,7 +1607,7 @@ function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary
 function latestToolSummary(node: ToolNode, desc: ToolDesc): { text: string; mono: boolean } | undefined {
   const input = node.input ?? {};
   if (node.name === 'Bash' && typeof input.command === 'string' && input.command) {
-    return { text: input.command, mono: true };
+    return { text: shellCommandSummary(input.command), mono: true };
   }
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
@@ -1659,6 +1659,22 @@ type ToolDesc = {
   meta?: string; // small trailing badge (line range, edit count)
 };
 
+// Codex's shell calls carry no `description`, and it wraps every one of them as
+// `/bin/bash -lc "<command>"` — unwrap that shell (and its outer quoting) so the folded row can
+// fall back to the command itself instead of showing a bare "Bash" with nothing beside it.
+function shellCommandSummary(command: string): string {
+  let text = command.trim();
+  const wrapped = /^(?:\S*\/)?(?:ba|z)?sh\s+-[A-Za-z]*c\s+([\s\S]+)$/.exec(text);
+  if (wrapped) {
+    text = wrapped[1].trim();
+    const quote = text[0];
+    if ((quote === '"' || quote === "'") && text.length > 1 && text.endsWith(quote)) {
+      text = text.slice(1, -1);
+    }
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 // describeTool maps a tool name + input to a folded-row label/summary/icon and an
 // optional expanded body, roughly matching how Claude Code Web renders each tool.
 function describeTool(name: string, input: any, isShell?: boolean, answer?: string): ToolDesc {
@@ -1669,8 +1685,18 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
     return { label: 'Shell', icon: <ConsoleSqlOutlined />, tone: 'exec', summary: String(i.command ?? ''), summaryMono: true };
   }
   switch (name) {
-    case 'Bash':
-      return { label: 'Bash', icon: <CodeOutlined />, tone: 'exec', summary: i.description, body: <Pre text={String(i.command ?? '')} prompt /> };
+    case 'Bash': {
+      const command = String(i.command ?? '');
+      const prose = typeof i.description === 'string' ? i.description.trim() : '';
+      return {
+        label: 'Bash',
+        icon: <CodeOutlined />,
+        tone: 'exec',
+        summary: prose || shellCommandSummary(command) || undefined,
+        summaryMono: !prose,
+        body: <Pre text={command} prompt />,
+      };
+    }
     case 'Read':
       return { label: 'Read', icon: <FileTextOutlined />, tone: 'read', path: i.file_path, meta: lineMeta(i.offset, i.limit) };
     case 'Write':

@@ -114,6 +114,27 @@ describe('hand-typed Markdown', () => {
   });
 });
 
+// Claude's Bash calls carry a prose `description` that fills the folded row; Codex's carry none
+// and wrap the command in `/bin/bash -lc "…"`, so its rows used to read as a bare "Bash".
+describe('Bash folded row', () => {
+  const bashRow = (input: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input } }]} />,
+    );
+
+  it('falls back to the command when the runtime sends no description', () => {
+    const html = bashRow({ command: `/bin/bash -lc "orbit task get 'x' --json"` });
+
+    expect(html).toContain('<span class="chat-tool-summary mono">orbit task get &#x27;x&#x27; --json</span>');
+  });
+
+  it('still prefers the description when there is one', () => {
+    const html = bashRow({ command: 'grep -rn x src/', description: 'Find x' });
+
+    expect(html).toContain('<span class="chat-tool-summary">Find x</span>');
+  });
+});
+
 describe('runtime authentication help', () => {
   // The relay branch renders RunnerSignIn, which reads the query cache.
   const card = (provider: string) =>

@@ -77,6 +77,23 @@ final class ToolDisplayTests: XCTestCase {
         XCTAssertNil(d.path)
     }
 
+    // Codex sends no description and wraps the command in `/bin/bash -lc "…"`; without a fallback
+    // its rows read as a bare "Bash" while Claude's read as prose.
+    func testBashWithoutDescriptionFallsBackToTheUnwrappedCommand() {
+        let d = ToolDisplay.describe(name: "Bash",
+                                     input: obj(["command": .string("/bin/bash -lc \"orbit task get 'x' --json\"")]),
+                                     status: .ok, id: "exec-1")
+        XCTAssertEqual(d.summary, "orbit task get 'x' --json")
+        XCTAssertTrue(d.summaryMono)
+        XCTAssertEqual(d.body, .command("/bin/bash -lc \"orbit task get 'x' --json\""))
+    }
+
+    func testBashFallbackKeepsAnUnwrappedCommandOnOneLine() {
+        XCTAssertEqual(ToolDisplay.shellCommandSummary("grep -rn x src/\nwc -l"), "grep -rn x src/ wc -l")
+        XCTAssertEqual(ToolDisplay.shellCommandSummary("sh -c 'echo hi'"), "echo hi")
+        XCTAssertEqual(ToolDisplay.shellCommandSummary("bash script.sh -lc"), "bash script.sh -lc")
+    }
+
     func testShellIdIsTaggedAndAutoOpens() {
         let d = ToolDisplay.describe(name: "Bash",
                                      input: obj(["command": .string("ls -la")]),
