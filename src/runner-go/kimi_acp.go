@@ -728,9 +728,28 @@ func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, 
 		effort = "on"
 	}
 	if err := set("thinking", effort); err != nil {
-		return err
+		// Kimi validates the level against the current model's declared
+		// support_efforts, which is per-model and only knowable here: a
+		// KIMI_MODEL_* provider declares none at all, so its picker offers
+		// nothing but off/on. Effort is a tuning knob, so fall back to the
+		// model's own default rather than failing the session over a level
+		// this model cannot express.
+		if effort == "on" || !kimiRejectedEffort(err) {
+			return err
+		}
+		logln("kimi rejected thinking effort", effort+"; falling back to the model default")
+		if err := set("thinking", "on"); err != nil {
+			return err
+		}
 	}
 	return set("mode", kimiModeForPermission(agent.PermissionMode))
+}
+
+// Kimi answers an unsupported thinking level with JSON-RPC invalid_params,
+// raised before it reaches the engine so the session is otherwise untouched.
+func kimiRejectedEffort(err error) bool {
+	failure, ok := err.(*kimiRPCFailure)
+	return ok && failure.err.Code == -32602
 }
 
 func kimiUsesEnvModel(env map[string]string) bool {

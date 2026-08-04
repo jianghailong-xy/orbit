@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -324,6 +326,150 @@ func TestKimiWriterQueuesPromptAndCancelWithoutBlockingMainLoop(t *testing.T) {
 	}
 	if !reflect.DeepEqual(methods, []string{"session/prompt", "session/cancel"}) {
 		t.Fatalf("wire methods = %v, want prompt then cancel", methods)
+	}
+}
+
+// kimiSetConfigCall is one `session/set_config_option` the client put on the wire.
+type kimiSetConfigCall struct{ configID, value string }
+
+// runKimiConfigureSession drives configureSession against a scripted ACP peer:
+// the peer answers every set_config_option with reject(configID, value), or with
+// an empty result when that returns nil. It reports the calls in wire order.
+func runKimiConfigureSession(
+	t *testing.T,
+	agent AgentExecConfig,
+	reject func(configID, value string) *kimiRPCError,
+) ([]kimiSetConfigCall, error) {
+	t.Helper()
+	peerReads, clientWrites := io.Pipe()
+	clientReads, peerWrites := io.Pipe()
+	app := &kimiACPClient{
+		stdin:         clientWrites,
+		done:          make(chan struct{}),
+		pending:       map[string]chan kimiRPCMessage{},
+		outWake:       make(chan struct{}, 1),
+		notifications: make(chan kimiInboundItem, 8),
+		permissions:   map[string]context.CancelFunc{},
+		permissionOff: true,
+	}
+	go app.writerLoop()
+	go app.readLoop(clientReads)
+	defer app.closeDone()
+	// readLoop holds every response behind a notification barrier, so the session
+	// loop's consumer has to exist for a response to reach its waiter at all.
+	go func() {
+		for {
+			select {
+			case item := <-app.notifications:
+				if item.barrier != nil {
+					close(item.barrier)
+				}
+			case <-app.done:
+				return
+			}
+		}
+	}()
+
+	var (
+		mu    sync.Mutex
+		calls []kimiSetConfigCall
+	)
+	go func() {
+		defer peerWrites.Close()
+		sc := bufio.NewScanner(peerReads)
+		for sc.Scan() {
+			var request kimiRPCMessage
+			if err := json.Unmarshal(sc.Bytes(), &request); err != nil {
+				return
+			}
+			var params struct{ ConfigID, Value string }
+			_ = json.Unmarshal(request.Params, &params)
+			mu.Lock()
+			calls = append(calls, kimiSetConfigCall{params.ConfigID, params.Value})
+			mu.Unlock()
+			response := kimiRPCMessage{ID: request.ID, Result: json.RawMessage(`{}`)}
+			if failure := reject(params.ConfigID, params.Value); failure != nil {
+				response = kimiRPCMessage{ID: request.ID, Error: failure}
+			}
+			wire, err := json.Marshal(response)
+			if err != nil {
+				return
+			}
+			if _, err := peerWrites.Write(append(wire, '\n')); err != nil {
+				return
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := app.configureSession(ctx, "session-1", agent)
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]kimiSetConfigCall(nil), calls...), err
+}
+
+// A KIMI_MODEL_* provider's synthesized alias declares no support_efforts, so
+// Kimi rejects every level Orbit's picker offers. That must not kill the session
+// before its first turn — the effort degrades to the model's own default.
+func TestKimiUnsupportedThinkingEffortFallsBackToModelDefault(t *testing.T) {
+	calls, err := runKimiConfigureSession(t,
+		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		func(configID, value string) *kimiRPCError {
+			if configID != "thinking" || value == "on" {
+				return nil
+			}
+			return &kimiRPCError{
+				Code:    -32602,
+				Message: `Invalid params: Unknown thinking effort for model "__kimi_env_model__": ` + value,
+			}
+		})
+	if err != nil {
+		t.Fatalf("configureSession = %v, want the rejected effort to be absorbed", err)
+	}
+	want := []kimiSetConfigCall{{"thinking", "max"}, {"thinking", "on"}, {"mode", "default"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
+	}
+}
+
+// Only the effort is negotiable. Any other rejection still fails the session
+// rather than running it under a configuration Orbit did not ask for.
+func TestKimiConfigureSessionStillFailsOnOtherRejections(t *testing.T) {
+	calls, err := runKimiConfigureSession(t,
+		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		func(configID, _ string) *kimiRPCError {
+			if configID != "mode" {
+				return nil
+			}
+			return &kimiRPCError{Code: -32602, Message: "Invalid params: unknown mode"}
+		})
+	if err == nil {
+		t.Fatal("configureSession succeeded, want the rejected mode to fail the session")
+	}
+	want := []kimiSetConfigCall{{"thinking", "max"}, {"mode", "default"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
+	}
+}
+
+// A transport-level failure is not a "this model cannot do that level" answer,
+// so it must not be retried into a silent downgrade.
+func TestKimiThinkingRetryOnlyOnInvalidParams(t *testing.T) {
+	calls, err := runKimiConfigureSession(t,
+		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		func(configID, _ string) *kimiRPCError {
+			if configID != "thinking" {
+				return nil
+			}
+			return &kimiRPCError{Code: -32603, Message: "Internal error"}
+		})
+	if err == nil {
+		t.Fatal("configureSession succeeded, want an internal error to fail the session")
+	}
+	want := []kimiSetConfigCall{{"thinking", "max"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
 	}
 }
 
