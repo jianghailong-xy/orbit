@@ -1022,10 +1022,19 @@ export class RunnerApiController {
           SET "retired_at" = COALESCE("inbox_lease_generation"."retired_at", now())
         WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
       `;
+      // Rotating the owner means a different process now supervises this session, so the one
+      // that launched its background shells and sub-agents is gone and took them with it. Clear
+      // the running sets here as well as on a runtime handshake (see bgReset): `init`/`resumed`
+      // only fire when an engine actually starts, which for a session that parks and is never
+      // resumed is never — leaving it reading "N background processes running" for the rest of
+      // its life. Takeover is the one point where the handoff is observable without the user
+      // having to touch the session.
       await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${fence}::uuid,
-            "inbox_lease_owner" = ${leaseOwner}::uuid
+            "inbox_lease_owner" = ${leaseOwner}::uuid,
+            "running_bg_shells" = '{}'::text[],
+            "running_subagents" = '{}'::text[]
         WHERE id = ${sessionId}::uuid
       `;
       await tx.$executeRaw`

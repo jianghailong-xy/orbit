@@ -89,6 +89,35 @@ test('takeover CAS retires the observed process generation and installs the new 
   assert.equal(h.notified(), SESSION_ID);
 });
 
+test('takeover clears background work left behind by the process it replaces', async () => {
+  // The predecessor's shells and sub-agents are its children, so the handoff is the moment
+  // they stop existing. Without this a session that parks and is never resumed keeps a stale
+  // "N background processes running" forever: no `init`/`resumed` handshake ever follows.
+  const h = harness(OLD_OWNER, GENERATION);
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  const rotation = sql(h.executeCalls[1]);
+  assert.match(rotation, /"running_bg_shells" = '\{\}'::text\[\]/);
+  assert.match(rotation, /"running_subagents" = '\{\}'::text\[\]/);
+});
+
+test('an idempotent takeover leaves a live process its running background work', async () => {
+  // Same owner means no handoff — the process that launched those shells is still supervising,
+  // so clearing here would erase work that is genuinely running.
+  const h = harness(NEW_OWNER, GENERATION);
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: NEW_OWNER,
+  });
+
+  assert.equal(h.executeCalls.length, 0);
+});
+
 test('takeover from legacy NULL state creates a retired barrier before returning', async () => {
   const h = harness(null, null);
 
