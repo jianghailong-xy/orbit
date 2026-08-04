@@ -201,6 +201,24 @@ public struct TranscriptReducer: Sendable, Codable {
         state.items[i] = .user(b)
     }
 
+    /// Drop an optimistic bubble whose send ultimately failed, so a message that never reached the
+    /// server doesn't sit in the transcript looking delivered (the composer hands its text back
+    /// instead — see `ConsoleModel.send`). Matched by `clientTurnId`, and only while still `pending`:
+    /// a bubble the durable `user` event already reconciled belongs to a turn that DID land — the
+    /// response to it was merely lost — and must stay.
+    public mutating func removeOptimisticUser(clientTurnId: String) {
+        state.queued.removeAll { $0.clientTurnId == clientTurnId && $0.pending }
+        guard let i = state.items.firstIndex(where: {
+            if case .user(let b) = $0 { return b.clientTurnId == clientTurnId && b.pending }
+            return false
+        }) else { return }
+        state.items.remove(at: i)
+        // The open-bubble cursors are item INDICES — close the gap left behind, or a delta arriving
+        // for a still-streaming turn would land in the wrong bubble (same hazard as `prependPage`).
+        if let o = openAssistant, o > i { openAssistant = o - 1 }
+        if let o = openThinking, o > i { openThinking = o - 1 }
+    }
+
     /// Withdraw a still-queued message locally (the queued bubble's Cancel button). The server-side
     /// `DELETE …/turns/:turnId` is fired by the caller; if the runner already leased it, its durable
     /// `user` event simply lands as a normal transcript row (`appendUser` finds no queue entry to

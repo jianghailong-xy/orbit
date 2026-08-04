@@ -432,6 +432,51 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.queued.count, 1)
     }
 
+    /// A send that failed for good (retries exhausted) takes its optimistic bubble back down, from
+    /// wherever it sits — a queued send waits in `state.queued`, an idle one is already in `items` —
+    /// so a message that never reached the server doesn't read as delivered. The composer gets the
+    /// text back instead (`ConsoleModel.send`).
+    func testRemoveOptimisticUserDropsTheUndeliveredBubble() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "never landed")
+        r.addOptimisticUser(clientTurnId: "c2", text: "queued, never landed", queued: true)
+
+        r.removeOptimisticUser(clientTurnId: "c1")
+        XCTAssertTrue(r.state.items.isEmpty, "the undelivered bubble is gone from the transcript")
+        r.removeOptimisticUser(clientTurnId: "c2")
+        XCTAssertTrue(r.state.queued.isEmpty, "…and from the queue")
+
+        r.removeOptimisticUser(clientTurnId: "never-sent")   // unknown id → no-op
+    }
+
+    /// A bubble the durable `user` event already reconciled belongs to a turn that DID land — only
+    /// the response to it was lost — so a late failure must leave it alone. (The replay's idempotent
+    /// clientTurnId normally recovers that turn; this is the belt to that suspenders.)
+    func testRemoveOptimisticUserKeepsAnAlreadyReconciledTurn() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "landed after all")
+        r.apply(RunEvent(seq: 3, type: .user, payload: .object(["text": .string("landed after all"),
+                                                                "clientTurnId": .string("c1")])))
+        XCTAssertEqual(r.state.items[0].asUser?.pending, false)
+
+        r.removeOptimisticUser(clientTurnId: "c1")
+        XCTAssertEqual(r.state.items.count, 1, "a confirmed turn stays in the transcript")
+    }
+
+    /// Removing a bubble from the middle of the transcript must close the gap for the open-bubble
+    /// cursors too (they're item INDICES): a failed send while another turn is still streaming would
+    /// otherwise send the next delta into the wrong bubble.
+    func testRemoveOptimisticUserKeepsStreamingCursorsAligned() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "this one fails")
+        r.apply(RunEvent(seq: 1, type: .textDelta, payload: .object(["delta": .string("still ")])))
+
+        r.removeOptimisticUser(clientTurnId: "c1")
+        r.apply(RunEvent(seq: 2, type: .textDelta, payload: .object(["delta": .string("streaming")])))
+        XCTAssertEqual(r.state.items.count, 1, "only the assistant bubble is left")
+        XCTAssertEqual(r.state.items[0].asAssistant?.displayText, "still streaming")
+    }
+
     /// The durable `user` event carries `attachments` ([{id,mime,name}]) and a `ts` — both must
     /// land on the bubble so it can render image thumbnails / file chips and a relative time
     /// (web parity; the runner echoes `attachments`, not `attachmentIds`).

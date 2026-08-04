@@ -883,6 +883,11 @@ final class ConsoleModel {
             return
         }
         let clientTurnId = UUID().uuidString
+        // What the composer is about to be cleared of. A send that fails for good hands it straight
+        // back (see the catch) rather than making the user retype a message they can no longer see.
+        // The raw draft, so a shell send comes back with its leading `!`.
+        let draft = composerText
+        let staged = pendingAttachments
         // Every staged attachment is uploaded by now (send is gated on `isUploading`), so each
         // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
         let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
@@ -912,27 +917,18 @@ final class ConsoleModel {
 
         sending = true
         defer { sending = false }
+        // Decide the endpoint once, before any retry: a replay has to be the same request, and the
+        // status it reads can move underneath a retry that's waiting out a gateway blip.
+        let resuming = ComposerLogic.shouldResume(status: sessionStatus, capabilities: serverCapabilities)
         do {
-            let accepted: TurnAccepted
-            if ComposerLogic.shouldResume(status: sessionStatus, capabilities: serverCapabilities) {
-                accepted = try await api.resume(sessionID: sessionID,
-                                         ResumeRequest(clientTurnId: clientTurnId, content: text,
-                                                       kind: shell ? "shell" : "message",
-                                                       model: modelID, permissionMode: permissionMode.rawValue,
-                                                       // Resume config is authoritative. Keep the
-                                                       // empty string so Default clears a stale
-                                                       // server-side model variant.
-                                                       effort: effort.rawValue,
-                                                       attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+            let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
+                                              text: text, shell: shell, attachmentIds: attachmentIds)
+            if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
                 // snapshot so the stream drives status again and a quick follow-up doesn't
                 // re-resume a session that hasn't re-claimed yet.
                 serverStatus = nil
                 serverCapabilities = nil
-            } else {
-                accepted = try await api.sendTurn(sessionID: sessionID,
-                                           ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
-                                                                  shell: shell, attachmentIds: attachmentIds))
             }
             // Tag the optimistic bubble with the server's turnId so the durable `user` event
             // reconciles it instead of appending a duplicate (the runner echoes turnId, not
@@ -942,8 +938,63 @@ final class ConsoleModel {
                 publishStateNow()
             }
         } catch {
-            statusMessage = "Send failed — \(error)"
+            // Nothing was queued — a POST whose response was merely lost would have been recognized
+            // by the replay's idempotent clientTurnId — so take the bubble back down rather than
+            // leave a message sitting in the transcript looking delivered…
+            reducer.removeOptimisticUser(clientTurnId: clientTurnId)
             awaitingReply = false   // no turn is coming — drop the tail "working" indicator
+            publishStateNow()
+            // …and hand the draft back: the composer was cleared on send, so this is the only copy
+            // left. Anything typed while the retries ran stays, below the returned text.
+            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
+            pendingAttachments = staged + pendingAttachments
+            statusMessage = ComposerLogic.sendFailureMessage(error)
+        }
+    }
+
+    /// POST the turn, replaying it through a transient failure — the gateway answering 503 while the
+    /// apiserver restarts, a mobile connection dropped mid-request. Safe to replay because the
+    /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
+    /// message or is handed back the turn a lost attempt already queued, never a second one.
+    private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
+                          attachmentIds: [String]) async throws -> TurnAccepted {
+        // Built once, for the same reason the endpoint is chosen once: every attempt must send the
+        // identical request, and the pills it reads stay editable while a retry waits.
+        let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
+                                          kind: shell ? "shell" : "message",
+                                          model: modelID, permissionMode: permissionMode.rawValue,
+                                          // Resume config is authoritative. Keep the empty string
+                                          // so Default clears a stale server-side model variant.
+                                          effort: effort.rawValue,
+                                          attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+        let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
+                                                 shell: shell, attachmentIds: attachmentIds)
+        return try await retryingTransientFailures { () async throws -> TurnAccepted in
+            if resuming { return try await self.api.resume(sessionID: self.sessionID, resumeRequest) }
+            return try await self.api.sendTurn(sessionID: self.sessionID, turnRequest)
+        }
+    }
+
+    /// Run a send that is safe to replay verbatim, retrying only connection-level failures (see
+    /// `ComposerLogic.isRetriableSendFailure`) on a short backoff. Both callers post something the
+    /// server dedupes — a turn by its `clientTurnId`, a decision by only applying to a still-PENDING
+    /// approval — so a lost response costs a repeat request, never a repeated action.
+    private func retryingTransientFailures<T>(_ post: () async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do {
+                let result = try await post()
+                if attempt > 0 { statusMessage = nil }   // the retry notice, now moot
+                return result
+            } catch {
+                guard attempt < ComposerLogic.sendRetryDelaysMs.count,
+                      ComposerLogic.isRetriableSendFailure(error) else { throw error }
+                // Explain the wait — this is otherwise a silent spinner for several seconds.
+                // Cleared above on success; replaced by the real reason if the retries run out.
+                statusMessage = "Connection problem — retrying…"
+                try? await Task.sleep(nanoseconds: ComposerLogic.sendRetryDelaysMs[attempt] * 1_000_000)
+                attempt += 1
+            }
         }
     }
 
@@ -1196,8 +1247,14 @@ final class ConsoleModel {
         publishStateNow()
         localSendTick &+= 1 // a reply is a send too — pin the transcript to the tail (web parity)
         let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRule: nil)
-        do { try await api.decideApproval(sessionID: sessionID, approvalID: approvalID, req) }
-        catch {
+        // Replayed through a gateway blip like any other send — the decision only applies to a
+        // still-PENDING approval server-side, so a lost response can't answer the question twice.
+        do {
+            try await retryingTransientFailures {
+                try await self.api.decideApproval(sessionID: self.sessionID,
+                                                  approvalID: approvalID, req)
+            }
+        } catch {
             statusMessage = "Reply failed"
             await refreshApprovals()
         }
