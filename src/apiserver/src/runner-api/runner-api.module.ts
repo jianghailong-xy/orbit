@@ -8,6 +8,13 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerServiceTokensController } from './runner-service-tokens.controller';
+import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
+import {
+  createServiceTokenJwt,
+  SERVICE_TOKEN_JWT,
+  ServiceTokenAuthorizer,
+} from './service-token.authorizer';
 import {
   createRunnerOrchestrationJwt,
   RUNNER_ORCHESTRATION_JWT,
@@ -26,15 +33,28 @@ import { PushModule } from '../push/push.module';
   imports: [SessionsModule, PushModule, TasksModule],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
-  controllers: [RunnerApiController, RunnerTasksController, RunnerSessionsController, RunnerAgentsController],
+  controllers: [
+    RunnerApiController,
+    RunnerTasksController,
+    RunnerServiceTokensController,
+    RunnerSessionsController,
+    RunnerAgentsController,
+  ],
   providers: [
     RunnerAuthGuard,
+    RunnerSessionAuthGuard,
     {
       provide: RUNNER_ORCHESTRATION_JWT,
       inject: [ConfigService],
       useFactory: createRunnerOrchestrationJwt,
     },
     RunnerOrchestrationAuthorizer,
+    {
+      provide: SERVICE_TOKEN_JWT,
+      inject: [ConfigService],
+      useFactory: createServiceTokenJwt,
+    },
+    ServiceTokenAuthorizer,
     TaskListsService,
     AgentsService,
   ],

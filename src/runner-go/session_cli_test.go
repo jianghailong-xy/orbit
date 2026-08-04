@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) {
@@ -34,7 +35,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 			if capability == nil {
 				t.Fatalf("%s capability missing for a headless caller (allow=%q)", id, allow)
 			}
-			if want := headlessSessionActions[strings.TrimPrefix(id, "session_")]; capability.Description != want {
+			if want := headlessActionDescription[strings.TrimPrefix(id, "session_")]; capability.Description != want {
 				t.Errorf("%s headless description = %q, want %q", id, capability.Description, want)
 			}
 		}
@@ -428,6 +429,120 @@ func TestSessionCLIHeadlessCallsCarryNoSessionContext(t *testing.T) {
 	}
 }
 
+// A minted service credential is the only way a headless process may START a session, and it
+// authenticates in place of the machine credential so the control plane can hold it to exactly
+// the scopes someone granted.
+func TestSessionCLIServiceTokenAuthorizesCreateAndGatesTheRest(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv(envMCPOrchestration, "")
+	t.Setenv(envOrchestrationToken, "")
+	t.Setenv("ORBIT_AGENT_ID", "")
+
+	// Without a service token, create is refused locally and names the way to get it.
+	var out bytes.Buffer
+	err := cmdSessionCLI([]string{"create", "--prompt", "work", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "orbit token mint") {
+		t.Fatalf("create without a service token error = %v", err)
+	}
+
+	var authorization string
+	var sessionHeaders []string
+	requestCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/sessions" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		authorization = r.Header.Get("Authorization")
+		for _, header := range []string{"X-Orbit-Session-Id", "X-Orbit-Session-Token"} {
+			if got := r.Header.Get(header); got != "" {
+				sessionHeaders = append(sessionHeaders, header+"="+got)
+			}
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"spawned","status":"PENDING"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv("ORBIT_AGENT_ID", "")
+
+	token := fakeServiceToken(t, []string{"session:create"}, "agent-1", time.Hour)
+	t.Setenv(envServiceToken, token)
+
+	out.Reset()
+	if err := cmdSessionCLI([]string{"create", "--prompt", "ship it", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if requestCount != 1 {
+		t.Fatalf("request count = %d", requestCount)
+	}
+	// The service token replaces the runner credential, and still carries no session context.
+	if authorization != "Bearer "+token {
+		t.Errorf("authorization = %q, want the service token", authorization)
+	}
+	if len(sessionHeaders) != 0 {
+		t.Errorf("service-token call carried session context: %v", sessionHeaders)
+	}
+
+	// A create-only token cannot read or message, and says so without a round-trip.
+	for _, args := range [][]string{
+		{"get", "spawned", "--json"},
+		{"list", "--json"},
+		{"send", "spawned", "--message", "hi", "--json"},
+	} {
+		out.Reset()
+		err := cmdSessionCLI(args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "this service token allows only: create") {
+			t.Errorf("session %s with a create-only token error = %v", args[0], err)
+		}
+	}
+	// Nor can it reach a verb no token may hold.
+	out.Reset()
+	err = cmdSessionCLI([]string{"end", "spawned", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "this service token allows only") {
+		t.Errorf("session end with a service token error = %v", err)
+	}
+
+	// --wait polls the new session, so a token that may create but not read fails before
+	// spawning rather than leaving a session running it cannot observe.
+	out.Reset()
+	err = cmdSessionCLI([]string{"create", "--prompt", "ship it", "--wait", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "session:get scope") {
+		t.Errorf("create --wait without session:get error = %v", err)
+	}
+	if requestCount != 1 {
+		t.Fatalf("create --wait spawned a session before failing (requests = %d)", requestCount)
+	}
+}
+
+func TestSessionCLICapabilitiesFollowServiceTokenScopes(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv(envMCPOrchestration, "")
+	t.Setenv(envOrchestrationToken, "")
+	t.Setenv(envServiceToken, fakeServiceToken(t, []string{"session:create", "session:get"}, "agent-1", time.Hour))
+
+	doc := buildCLICapabilities("/opt/orbit")
+	for _, id := range []string{"session_create", "session_get"} {
+		if sessionCLICapabilityByID(doc.Capabilities, id) == nil {
+			t.Errorf("%s missing for a token that carries its scope", id)
+		}
+	}
+	for _, id := range []string{"session_list", "session_send", "session_end", "session_search"} {
+		if sessionCLICapabilityByID(doc.Capabilities, id) != nil {
+			t.Errorf("%s advertised for a token that does not carry its scope", id)
+		}
+	}
+	if doc.Context.ServiceToken == nil || doc.Context.ServiceToken.AgentID != "agent-1" {
+		t.Fatalf("capabilities did not report the grant: %#v", doc.Context.ServiceToken)
+	}
+	if strings.Join(doc.Context.ServiceToken.Scopes, ",") != "session:create,session:get" {
+		t.Errorf("reported scopes = %#v", doc.Context.ServiceToken.Scopes)
+	}
+}
+
 func TestSessionCLIPropagatesForbiddenWithoutDroppingContextOrRetrying(t *testing.T) {
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -492,7 +607,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "")
 	for _, args := range disabledCommands {
-		if _, headless := headlessSessionActions[args[0]]; headless {
+		if headlessAllowedActions(nil)[args[0]] {
 			continue
 		}
 		var out bytes.Buffer
@@ -501,7 +616,7 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 			t.Errorf("session %s without caller context error = %v", args[0], err)
 			continue
 		}
-		if !strings.Contains(err.Error(), headlessSessionActionList()) {
+		if !strings.Contains(err.Error(), headlessActionList(headlessAllowedActions(nil))) {
 			t.Errorf("session %s error does not name the headless subset: %v", args[0], err)
 		}
 	}

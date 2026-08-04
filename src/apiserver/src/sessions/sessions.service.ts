@@ -69,6 +69,21 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
   }
 }
 
+/**
+ * How far a headless caller may see: always one runner, optionally one agent within it. Built
+ * from the credential, never from anything the caller passes, and applied identically to reads
+ * and to sends so no route can accidentally be broader than another.
+ */
+export type RunnerSessionScope = { assignedRunnerId: string; agentId?: string | null };
+
+function runnerScopeWhere(scope: RunnerSessionScope | undefined) {
+  if (!scope) return {};
+  return {
+    assignedRunnerId: scope.assignedRunnerId,
+    ...(scope.agentId ? { agentId: scope.agentId } : {}),
+  };
+}
+
 function legacyArtifactMime(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
     case '.png':
@@ -479,15 +494,15 @@ export class SessionsService {
   }
 
   /**
-   * Headless callers (a launchd/cron bridge) authenticate with the runner token alone: there is
-   * no calling session to bind a signed credential to. Their reach is therefore capped at the
+   * Headless callers (a launchd/cron bridge) authenticate with no session context: there is no
+   * calling session to bind a signed credential to. Their reach is therefore capped at the
    * sessions that runner already hosts — it receives their prompts and streams their output, so
    * observing or messaging one grants no authority the machine did not already have. Sessions on
-   * any other runner stay invisible.
+   * any other runner stay invisible. A service token may narrow this further to a single agent.
    */
-  async assertHostedByRunner(ownerId: string, runnerId: string, id: string): Promise<void> {
+  async assertHostedByRunner(ownerId: string, scope: RunnerSessionScope, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
-      where: { id, ownerId, assignedRunnerId: runnerId, deletedAt: null },
+      where: { id, ownerId, deletedAt: null, ...runnerScopeWhere(scope) },
       select: { id: true },
     });
     // 404 rather than 403: a session hosted on another machine must not be distinguishable
@@ -495,12 +510,59 @@ export class SessionsService {
     if (!session) throw new NotFoundException('session not found');
   }
 
+  /**
+   * Start a session for a headless caller holding a session:create service token. Unlike
+   * spawnFromSession there is no parent to inherit from, so the agent pin on the token is the
+   * whole authorization: the agent must live on the runner the token was minted for.
+   *
+   * Every session one token starts shares a batch keyed on that token, so a bridge stuck in a
+   * loop queues behind itself instead of flooding the machine — the same bound spawned children
+   * get, applied to the credential rather than to a parent session.
+   */
+  async spawnForServiceToken(
+    ownerId: string,
+    scope: { assignedRunnerId: string; agentId: string; tokenId: string },
+    dto: { prompt: string; title?: string; model?: string },
+  ) {
+    if (!dto.prompt) throw new BadRequestException('prompt is required');
+    const agent = await this.prisma.agent.findFirst({
+      where: {
+        id: scope.agentId,
+        ownerId,
+        runnerId: scope.assignedRunnerId,
+        deletedAt: null,
+        enabled: true,
+      },
+      select: { id: true, name: true },
+    });
+    if (!agent) throw new NotFoundException('agent not found on this runner');
+    const effort = await this.resolveDefaultEffort(ownerId, agent.id);
+    const created = await this.create(
+      ownerId,
+      { prompt: dto.prompt, title: dto.title, agentId: agent.id, model: dto.model, effort },
+      { batch: { id: scope.tokenId, maxConcurrent: SessionsService.CHILD_CONCURRENCY } },
+    );
+    return {
+      id: created.id,
+      status: created.status,
+      runStatus: created.runStatus,
+      sessionState: created.sessionState,
+      runState: created.runState,
+      lifecycleState: created.lifecycleState,
+      filingState: created.filingState,
+      title: created.title,
+      agentName: agent.name,
+      provider: created.provider,
+    };
+  }
+
   /** Owner-scoped session list for orchestration (orbit mcp `session_list`): compact rows with
    *  optional status / parent filter. Distinct from the UI `list` below (view tabs, previews).
-   *  `assignedRunnerId` narrows the list to one runner's own sessions for headless callers. */
+   *  `scope` narrows the list to one runner's (optionally one agent's) sessions for headless
+   *  callers. */
   async listForOrchestration(
     ownerId: string,
-    filters: { status?: RunStatus; parentSessionId?: string; assignedRunnerId?: string },
+    filters: { status?: RunStatus; parentSessionId?: string; scope?: RunnerSessionScope },
   ) {
     const sessions = await this.prisma.session.findMany({
       where: {
@@ -508,7 +570,7 @@ export class SessionsService {
         deletedAt: null,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
-        ...(filters.assignedRunnerId ? { assignedRunnerId: filters.assignedRunnerId } : {}),
+        ...runnerScopeWhere(filters.scope),
       },
       select: {
         id: true,
@@ -534,11 +596,11 @@ export class SessionsService {
    * Owner-scoped detail returned to an orchestrating agent. Keep this deliberately
    * narrower than the UI detail query: the full Agent row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
-   * `assignedRunnerId` narrows it to one runner's own sessions for headless callers.
+   * `scope` narrows it to one runner's (optionally one agent's) sessions for headless callers.
    */
-  async getForOrchestration(ownerId: string, id: string, assignedRunnerId?: string) {
+  async getForOrchestration(ownerId: string, id: string, scope?: RunnerSessionScope) {
     const session = await this.prisma.session.findFirst({
-      where: { id, ownerId, ...(assignedRunnerId ? { assignedRunnerId } : {}) },
+      where: { id, ownerId, ...runnerScopeWhere(scope) },
       select: {
         id: true,
         title: true,

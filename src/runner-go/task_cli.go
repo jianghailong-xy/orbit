@@ -738,6 +738,14 @@ type cliCapabilityContext struct {
 	SessionID string `json:"sessionId,omitempty"`
 	AgentID   string `json:"agentId,omitempty"`
 	TaskID    string `json:"taskId,omitempty"`
+	// Present when this process holds a minted service credential, so a headless operator can
+	// see which grant is in play without decoding the token by hand.
+	ServiceToken *cliServiceTokenContext `json:"serviceToken,omitempty"`
+}
+
+type cliServiceTokenContext struct {
+	Scopes  []string `json:"scopes"`
+	AgentID string   `json:"agentId,omitempty"`
 }
 
 type cliCapabilitiesDocument struct {
@@ -756,12 +764,17 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
 		Actor:     "runner_owner",
 	}
-	includeOrchestration := mcpOrchestrationEnabled() &&
-		ctx.SessionID != ""
-	// No session context at all => a headless process (launchd/cron), which reaches the
-	// non-destructive subset on the runner credential alone. An in-session agent whose agent
-	// has orchestration off is NOT headless: it keeps seeing no session_* capability.
-	includeHeadlessSession := !includeOrchestration && ctx.SessionID == ""
+	// A minted service credential names its own scopes, so it decides what this process may do —
+	// including inside a session, where it was passed deliberately rather than injected.
+	service := decodeServiceTokenClaims(currentServiceToken())
+	includeOrchestration := service == nil && mcpOrchestrationEnabled() && ctx.SessionID != ""
+	// No session context at all => a headless process (launchd/cron), which reaches only what its
+	// credential grants. An in-session agent whose agent has orchestration off is NOT headless:
+	// it keeps seeing no session_* capability.
+	includeHeadlessSession := service != nil || (!includeOrchestration && ctx.SessionID == "")
+	if service != nil {
+		ctx.ServiceToken = &cliServiceTokenContext{Scopes: service.Scopes, AgentID: service.AgentID}
+	}
 	descriptors := make(map[string]map[string]interface{})
 	for _, d := range toolDescriptors(false, includeOrchestration || includeHeadlessSession) {
 		name, _ := d["name"].(string)
@@ -771,7 +784,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 	} else if includeHeadlessSession {
-		specs = append(specs, headlessSessionCLICapabilities()...)
+		specs = append(specs, headlessSessionCLICapabilities(headlessAllowedActions(service))...)
 	}
 	commands := make([]cliCapability, 0, len(specs))
 	for _, spec := range specs {

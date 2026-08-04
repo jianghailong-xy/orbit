@@ -207,6 +207,28 @@ orbit session get <session-id> --json                        # status · numTurn
 echo "$event" | orbit session send <session-id> --message-file - --json
 ```
 
+Starting a session headlessly takes more than the machine credential. The runner token sits in
+plaintext in `~/.orbit/config.json` and authenticates every claim, so promoting it to "may spawn
+any agent with any prompt" would make one leaked file equal arbitrary execution. `orbit token
+mint` instead issues a **service token**: a signed credential that enumerates its scopes
+(`session:get`, `session:list`, `session:send`, `session:create` — the destructive verbs are not
+in the vocabulary at all), is pinned to a single agent whenever it may create, expires on its
+own, and is revoked individually without re-registering the machine. Minting takes the runner
+credential, so a service token can never mint another; the token is a JWT whose `jti` is its row
+id, so the database stores no secret and revocation takes effect on the next request rather than
+at expiry. Put it in the job's environment as `ORBIT_SERVICE_TOKEN` and `orbit session` uses it
+in place of the runner credential, with `orbit capabilities --json` reporting the grant it holds:
+
+```bash
+orbit token mint --scope session:create,session:get --agent-id <agent-id> \
+                 --ttl 24h --label "feishu bridge"      # printed once, never stored
+orbit token list --json                                 # scope · pin · expiry · last use
+orbit token revoke <token-id>                           # effective immediately
+
+# in the launchd job, with ORBIT_SERVICE_TOKEN set from the mint above
+orbit session create --prompt "$event" --json           # starts the pinned agent, on this runner
+```
+
 ## Cost & tokens
 
 Runners report runtime cost/token usage when the engine exposes it; Orbit aggregates these for

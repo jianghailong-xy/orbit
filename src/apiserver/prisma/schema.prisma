@@ -80,6 +80,7 @@ model User {
   agents           Agent[]
   runners          Runner[]
   enrollmentTokens EnrollmentToken[]
+  serviceTokens    ServiceToken[]
   ownedSessions    Session[]         @relation("SessionOwner")
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
@@ -216,9 +217,49 @@ model Runner {
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).
   agents   Agent[]
+  // Narrow, revocable credentials minted for headless processes on this machine.
+  serviceTokens ServiceToken[]
 
   @@index([ownerId])
   @@map("runner")
+}
+
+// A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that
+// belongs to no session, so it can hold none of the session-bound proofs orchestration uses.
+//
+// Deliberately not the runner credential: that one sits in plaintext in ~/.orbit/config.json and
+// is what the machine authenticates every claim with, so promoting it to "may spawn any agent
+// with any prompt" would make a config leak equal arbitrary execution. A service token instead
+// enumerates exactly what it may do, may be pinned to a single agent, expires on its own, and is
+// revoked individually without re-registering the machine.
+//
+// The token itself is a signed JWT whose `jti` is this row's id — nothing secret is stored here,
+// so a database leak cannot yield a usable credential. This row is the revocation list and the
+// audit record: `lastUsedAt` says whether the thing is still in use before anyone revokes it.
+model ServiceToken {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  ownerId    String    @map("owner_id") @db.Uuid
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // The machine this token acts on. Its reach never crosses to another runner's sessions.
+  runnerId   String    @map("runner_id") @db.Uuid
+  runner     Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  // Optional single-agent pin. Required when the token may create sessions, so a leaked bridge
+  // token can only ever start the one agent it was minted for.
+  agentId    String?   @map("agent_id") @db.Uuid
+  agent      Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  // Human label shown by `orbit token list`, so an unused token can be identified before revoking.
+  label      String?
+  // Enumerated capabilities: session:get | session:list | session:send | session:create. The
+  // destructive verbs (end/interrupt/merge/complete) are deliberately not representable.
+  scopes     String[]  @default([])
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([runnerId])
+  @@index([ownerId])
+  @@map("service_token")
 }
 
 // One-time token a user generates in the UI and passes to `orbit register`.
@@ -337,6 +378,8 @@ model Agent {
 
   sessions      Session[]
   assignedTasks Task[] // tasks assigned to this agent to execute
+  // Service tokens pinned to this agent (see ServiceToken).
+  serviceTokens ServiceToken[]
 
   @@index([ownerId])
   @@index([runnerId])

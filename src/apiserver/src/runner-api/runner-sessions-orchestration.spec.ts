@@ -19,9 +19,10 @@ type RouteCase = {
   serviceMethod: string;
 };
 
-// Routes a headless caller (no calling session) may reach on the runner credential alone. Every
-// other route below must keep refusing a request with no session context.
-const HEADLESS_ROUTE_NAMES = new Set(['list', 'get', 'send']);
+// Routes a headless caller (no calling session) may reach at all — get/list/send on the runner
+// credential, create only with a minted service token (see service-token.spec.ts). Every other
+// route below must keep refusing a request with no session context.
+const HEADLESS_ROUTE_NAMES = new Set(['list', 'get', 'send', 'create']);
 
 // Keep the calling session immediately after the runner in every controller method. This mirrors
 // RunnerAgentsController and, more importantly, makes it difficult to accidentally authenticate
@@ -30,55 +31,55 @@ const ROUTES: RouteCase[] = [
   {
     name: 'create',
     invoke: (c, caller, credential) =>
-      c.createSession(RUNNER, caller, credential, { prompt: 'do the work' }),
+      c.createSession(RUNNER, undefined, caller, credential, { prompt: 'do the work' }),
     serviceMethod: 'spawnFromSession',
   },
   {
     name: 'list',
     invoke: (c, caller, credential) =>
-      c.listSessions(RUNNER, caller, credential, undefined, undefined),
+      c.listSessions(RUNNER, undefined, caller, credential, undefined, undefined),
     serviceMethod: 'listForOrchestration',
   },
   {
     name: 'search',
     invoke: (c, caller, credential) =>
-      c.searchSessions(RUNNER, caller, credential, 'needle', '5'),
+      c.searchSessions(RUNNER, undefined, caller, credential, 'needle', '5'),
     serviceMethod: 'search',
   },
   {
     name: 'get',
     invoke: (c, caller, credential) =>
-      c.getSession(RUNNER, caller, credential, TARGET_SESSION_ID),
+      c.getSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'getForOrchestration',
   },
   {
     name: 'send',
     invoke: (c, caller, credential) =>
-      c.sendMessage(RUNNER, caller, credential, TARGET_SESSION_ID, { message: 'continue' }),
+      c.sendMessage(RUNNER, undefined, caller, credential, TARGET_SESSION_ID, { message: 'continue' }),
     serviceMethod: 'createTurn',
   },
   {
     name: 'interrupt',
     invoke: (c, caller, credential) =>
-      c.interruptSession(RUNNER, caller, credential, TARGET_SESSION_ID),
+      c.interruptSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'interrupt',
   },
   {
     name: 'merge',
     invoke: (c, caller, credential) =>
-      c.mergeSession(RUNNER, caller, credential, TARGET_SESSION_ID, { targetBranch: 'main' }),
+      c.mergeSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID, { targetBranch: 'main' }),
     serviceMethod: 'mergeToMain',
   },
   {
     name: 'end',
     invoke: (c, caller, credential) =>
-      c.endSession(RUNNER, caller, credential, TARGET_SESSION_ID),
+      c.endSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'end',
   },
   {
     name: 'complete',
     invoke: (c, caller, credential) =>
-      c.completeSession(RUNNER, caller, credential, TARGET_SESSION_ID),
+      c.completeSession(RUNNER, undefined, caller, credential, TARGET_SESSION_ID),
     serviceMethod: 'complete',
   },
 ];
@@ -219,27 +220,31 @@ test('headless callers reach the read and send routes scoped to the runner that 
   };
   const controller = new RunnerSessionsController(sessions as never, authorizer as never);
 
-  assert.deepEqual(await controller.listSessions(RUNNER, undefined, undefined, 'RUNNING', undefined), {
+  assert.deepEqual(await controller.listSessions(RUNNER, undefined, undefined, undefined, 'RUNNING', undefined), {
     route: 'listForOrchestration',
   });
   assert.deepEqual(calls.at(-1), {
     method: 'listForOrchestration',
     args: [
       'owner-1',
-      { status: 'RUNNING', parentSessionId: undefined, assignedRunnerId: 'runner-1' },
+      {
+        status: 'RUNNING',
+        parentSessionId: undefined,
+        scope: { assignedRunnerId: 'runner-1', agentId: null },
+      },
     ],
   });
 
-  assert.deepEqual(await controller.getSession(RUNNER, undefined, undefined, TARGET_SESSION_ID), {
+  assert.deepEqual(await controller.getSession(RUNNER, undefined, undefined, undefined, TARGET_SESSION_ID), {
     route: 'getForOrchestration',
   });
   assert.deepEqual(calls.at(-1), {
     method: 'getForOrchestration',
-    args: ['owner-1', TARGET_SESSION_ID, 'runner-1'],
+    args: ['owner-1', TARGET_SESSION_ID, { assignedRunnerId: 'runner-1', agentId: null }],
   });
 
   assert.deepEqual(
-    await controller.sendMessage(RUNNER, undefined, undefined, TARGET_SESSION_ID, {
+    await controller.sendMessage(RUNNER, undefined, undefined, undefined, TARGET_SESSION_ID, {
       message: 'continue',
     }),
     { route: 'createTurn' },
@@ -249,7 +254,11 @@ test('headless callers reach the read and send routes scoped to the runner that 
     calls.slice(-2).map((call) => call.method),
     ['assertHostedByRunner', 'createTurn'],
   );
-  assert.deepEqual(calls.at(-2)?.args, ['owner-1', 'runner-1', TARGET_SESSION_ID]);
+  assert.deepEqual(calls.at(-2)?.args, [
+    'owner-1',
+    { assignedRunnerId: 'runner-1', agentId: null },
+    TARGET_SESSION_ID,
+  ]);
 });
 
 test('the headless session scope only matches sessions assigned to the authenticated runner', async () => {
@@ -267,7 +276,12 @@ test('the headless session scope only matches sessions assigned to the authentic
   // A session hosted on another machine is reported as missing rather than forbidden, so the
   // runner credential cannot be used to probe for sessions it may not touch.
   await assert.rejects(
-    () => service.assertHostedByRunner('owner-1', 'runner-1', TARGET_SESSION_ID),
+    () =>
+      service.assertHostedByRunner(
+        'owner-1',
+        { assignedRunnerId: 'runner-1' },
+        TARGET_SESSION_ID,
+      ),
     (error: unknown) => error instanceof NotFoundException,
   );
   assert.deepEqual(query.where, {
@@ -290,11 +304,15 @@ test('session orchestration detail scopes to one runner only when asked', async 
   };
   const service = new SessionsService(prisma as never, {} as never, {} as never);
 
-  await service.getForOrchestration('owner-1', TARGET_SESSION_ID, 'runner-1');
+  await service.getForOrchestration('owner-1', TARGET_SESSION_ID, {
+    assignedRunnerId: 'runner-1',
+    agentId: 'agent-1',
+  });
   assert.deepEqual(query.where, {
     id: TARGET_SESSION_ID,
     ownerId: 'owner-1',
     assignedRunnerId: 'runner-1',
+    agentId: 'agent-1',
   });
 });
 

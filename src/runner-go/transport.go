@@ -843,6 +843,31 @@ func (t *Transport) completeSession(callerSessionID, orchestrationToken, id stri
 	return out, err
 }
 
+// ── Service tokens for headless processes (`orbit token`) ──────────────────
+// Runner-token authenticated on purpose: a service token can never mint another, so a leaked
+// bridge credential cannot renew itself or widen its own scope.
+
+func (t *Transport) mintServiceToken(body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, http.MethodPost, "/runner/service-tokens", body, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) listServiceTokens() (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, http.MethodGet, "/runner/service-tokens", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+func (t *Transport) revokeServiceToken(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, http.MethodDelete, "/runner/service-tokens/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // ── Agent management ops for the `orbit mcp` server (L3 orchestration) ──────
 // Owner-scoped via the runner token; gated server-side on the CALLING session's agent
 // having orchestration enabled (proved by the session id plus its signed credential).

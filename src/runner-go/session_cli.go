@@ -26,7 +26,9 @@ Usage:
 Session orchestration is available inside a live Orbit session whose agent has
 enableOrchestration enabled. Outside any session — a launchd/cron process with no
 ORBIT_SESSION_ID — the runner credential alone allows get, list and send, scoped to
-the sessions this runner hosts. Run 'orbit session <command> --help' for options.
+the sessions this runner hosts; set ORBIT_SERVICE_TOKEN to a credential from
+'orbit token mint' to get exactly its scopes instead, including create.
+Run 'orbit session <command> --help' for options.
 `
 
 var sessionActionHelp = map[string]string{
@@ -44,6 +46,9 @@ Options:
   --model MODEL
   --wait[=BOOL]            Wait until the first turn settles
   --json
+
+Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
+session starts the agent that token is pinned to, and --agent-id may only name that agent.
 `,
 	"list": `orbit session list — list sessions
 
@@ -105,15 +110,15 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 }
 
 // headlessSessionCLICapabilities is what `orbit capabilities` advertises outside a session: the
-// same commands, re-described with the scope a runner credential actually gets.
-func headlessSessionCLICapabilities() []cliCapabilitySpec {
-	specs := make([]cliCapabilitySpec, 0, len(headlessSessionActions))
+// commands this process's credential actually reaches, re-described with their narrower scope.
+func headlessSessionCLICapabilities(allowed map[string]bool) []cliCapabilitySpec {
+	specs := make([]cliCapabilitySpec, 0, len(allowed))
 	for _, spec := range sessionCLICapabilities {
-		description, ok := headlessSessionActions[strings.TrimPrefix(spec.Tool, "session_")]
-		if !ok {
+		action := strings.TrimPrefix(spec.Tool, "session_")
+		if !allowed[action] {
 			continue
 		}
-		spec.Description = description
+		spec.Description = headlessActionDescription[action]
 		specs = append(specs, spec)
 	}
 	return specs
@@ -183,42 +188,94 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 type cliOrchestrationContext struct {
 	sessionID string
 	token     string
+	// A minted service credential from the environment, used INSTEAD of the runner credential
+	// so the control plane authorizes exactly the scopes someone granted on purpose.
+	serviceToken string
 }
 
-// headlessSessionActions are the commands a process outside any session may run on the runner
-// credential alone. They are non-destructive and the control plane scopes each of them to the
-// sessions this runner hosts; spawning and the lifecycle verbs stay session-gated. The value is
-// the description `orbit capabilities` advertises, so the gate and the advertisement cannot drift.
-var headlessSessionActions = map[string]string{
-	"list": "List the sessions this runner hosts. Authorized by the runner credential alone (no session context required); sessions on other runners are not listed.",
-	"get":  "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
-	"send": "Queue a follow-up message for a session this runner hosts, as the runner owner. Authorized by the runner credential alone; it neither spawns nor ends a session.",
+// sessionActionScope maps a session subcommand to the service-token scope that authorizes it.
+// The lifecycle verbs are absent because no credential can grant them outside a session.
+var sessionActionScope = map[string]string{
+	"list":   "session:list",
+	"get":    "session:get",
+	"send":   "session:send",
+	"create": "session:create",
 }
 
-func headlessSessionActionList() string {
-	actions := make([]string, 0, len(headlessSessionActions))
-	for action := range headlessSessionActions {
+// headlessActionDescription is what `orbit capabilities` advertises for each action outside a
+// session, so the gate below and the advertisement cannot drift apart.
+var headlessActionDescription = map[string]string{
+	"list":   "List the sessions this runner hosts. Sessions on other runners are not listed; a token pinned to an agent sees only that agent's.",
+	"get":    "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
+	"send":   "Queue a follow-up message for a session this runner hosts, as the runner owner. It neither spawns nor ends a session.",
+	"create": "Start a session for the agent this service token is pinned to, on this runner. Requires a minted token with the session:create scope; the runner credential alone cannot spawn.",
+}
+
+// runnerCredentialActions are what the machine's own credential allows a headless caller: observe
+// and message the sessions this runner already hosts. Creation is deliberately excluded — starting
+// new work must come from a credential someone minted on purpose and can revoke on its own.
+var runnerCredentialActions = []string{"get", "list", "send"}
+
+// headlessAllowedActions resolves what this process may do outside a session. Without a service
+// token that is the runner-credential subset; with one it is exactly the scopes it carries.
+func headlessAllowedActions(service *serviceTokenClaims) map[string]bool {
+	allowed := map[string]bool{}
+	if service == nil {
+		for _, action := range runnerCredentialActions {
+			allowed[action] = true
+		}
+		return allowed
+	}
+	for action, scope := range sessionActionScope {
+		if contains(service.Scopes, scope) {
+			allowed[action] = true
+		}
+	}
+	return allowed
+}
+
+func headlessActionList(allowed map[string]bool) string {
+	actions := make([]string, 0, len(allowed))
+	for action := range allowed {
 		actions = append(actions, action)
 	}
 	sort.Strings(actions)
+	if len(actions) == 0 {
+		return "(none)"
+	}
 	return strings.Join(actions, ", ")
 }
 
 // requireCLIOrchestrationContext resolves how this process is allowed to reach the session API.
-// With ORBIT_SESSION_ID set the caller is an agent, and nothing changes: it needs its agent's
-// orchestration opt-in plus the signed credential Transport attaches. With no session id at all
-// the caller is headless (launchd/cron) — it can hold no session-bound credential, and outliving
-// the session that would have issued one is the whole point — so it runs on the runner
-// credential, which the server confines to this runner's own sessions.
+//
+//   - ORBIT_SERVICE_TOKEN set: a headless process running on a credential someone minted for it.
+//     The token is the whole authorization; the control plane confines it to its scopes, its
+//     runner and its agent pin.
+//   - otherwise, ORBIT_SESSION_ID set: an agent, unchanged — its agent's orchestration opt-in
+//     plus the signed session credential Transport attaches.
+//   - neither: headless on the runner credential, which reaches only this runner's own sessions
+//     and cannot spawn.
 func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, error) {
+	if service := currentServiceToken(); service != "" {
+		claims := decodeServiceTokenClaims(service)
+		// Unreadable claims (a truncated paste, a token from a newer CLI) are not judged here:
+		// let the control plane reject it, so its error is the one the operator sees.
+		if claims != nil && !headlessAllowedActions(claims)[action] {
+			return cliOrchestrationContext{}, fmt.Errorf(
+				"%s needs the %s scope; this service token allows only: %s",
+				action, sessionActionScope[action], headlessActionList(headlessAllowedActions(claims)))
+		}
+		return cliOrchestrationContext{serviceToken: service}, nil
+	}
 	id := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if id == "" {
-		if _, headless := headlessSessionActions[action]; headless {
+		allowed := headlessAllowedActions(nil)
+		if allowed[action] {
 			return cliOrchestrationContext{}, nil
 		}
 		return cliOrchestrationContext{}, fmt.Errorf(
-			"session orchestration requires ORBIT_SESSION_ID context; without a session the runner credential allows only: %s",
-			headlessSessionActionList())
+			"session orchestration requires ORBIT_SESSION_ID context; without a session the runner credential allows only: %s (mint a scoped credential with `orbit token mint` for the rest)",
+			headlessActionList(allowed))
 	}
 	if !mcpOrchestrationEnabled() {
 		return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
@@ -228,6 +285,19 @@ func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, err
 	}
 	token := strings.TrimSpace(os.Getenv(envOrchestrationToken))
 	return cliOrchestrationContext{sessionID: id, token: token}, nil
+}
+
+// cliSessionTransport authenticates session calls with the service credential when the process
+// was given one, and with the machine credential otherwise.
+func cliSessionTransport(ctx cliOrchestrationContext) (*Transport, error) {
+	t, err := cliTransport()
+	if err != nil {
+		return nil, err
+	}
+	if ctx.serviceToken != "" {
+		return NewTransport(t.baseURL, ctx.serviceToken), nil
+	}
+	return t, nil
 }
 
 func resolveSessionCLIId(leading string, trailing []string) (string, error) {
@@ -289,6 +359,14 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	if flagWasSet(fs, "agent-id") && flagWasSet(fs, "agent-name") {
 		return fmt.Errorf("--agent-id and --agent-name cannot be used together")
 	}
+	// --wait polls the new session, so refuse before spawning rather than after: a token that
+	// may create but not read would otherwise leave a session running with no way to see it.
+	if *wait && ctx.serviceToken != "" {
+		if claims := decodeServiceTokenClaims(ctx.serviceToken); claims != nil && !contains(claims.Scopes, "session:get") {
+			return fmt.Errorf("--wait polls the new session and needs the session:get scope; this token allows only: %s",
+				headlessActionList(headlessAllowedActions(claims)))
+		}
+	}
 	body := map[string]interface{}{"prompt": promptText}
 	if flagWasSet(fs, "agent-id") {
 		if strings.TrimSpace(*agentID) == "" {
@@ -315,7 +393,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 		}
 		body["model"] = *model
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -361,7 +439,7 @@ func cliSessionList(args []string, out io.Writer, ctx cliOrchestrationContext) e
 	if *parentSessionID != "" {
 		queryArgs["parentSessionId"] = *parentSessionID
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -393,7 +471,7 @@ func cliSessionSearch(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if *limit > 0 {
 		queryArgs["limit"] = *limit
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -415,7 +493,7 @@ func cliSessionGet(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -446,7 +524,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if !messageSet || messageText == "" {
 		return fmt.Errorf("--message or --message-file - is required")
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -462,7 +540,7 @@ func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationConte
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -492,7 +570,7 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 		}
 		body["targetBranch"] = *targetBranch
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -508,7 +586,7 @@ func cliSessionEnd(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
@@ -524,7 +602,7 @@ func cliSessionComplete(args []string, out io.Writer, ctx cliOrchestrationContex
 	if err != nil {
 		return err
 	}
-	t, err := cliTransport()
+	t, err := cliSessionTransport(ctx)
 	if err != nil {
 		return err
 	}
