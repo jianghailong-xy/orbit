@@ -74,9 +74,10 @@ export function NewSessionProviderHero({
 
   // Naming the runner and the engine, so the Providers page can unfold that machine's card and
   // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
-  // find it among every runner they own.
+  // find it among every runner they own. The engine named is the one that runs the choice, which
+  // for a configured provider is the CLI it borrows rather than its own slug.
   const fixLink = (choice: ProviderChoice) =>
-    `/providers?runner=${encodeId(runnerId)}&engine=${choice.slug}`;
+    `/providers?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
 
   // An engine this runner hasn't installed, or isn't signed into, can't run a session, so the row
   // doesn't pick it — it goes where the fix lives instead. The identity greys out (it isn't usable

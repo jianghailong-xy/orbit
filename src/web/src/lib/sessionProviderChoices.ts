@@ -3,6 +3,7 @@ import type { RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } fro
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
+  runtimeForProvider,
   type ConfiguredProvider,
 } from './agentDefaults';
 
@@ -39,6 +40,10 @@ export interface ProviderChoice {
    *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to the
    *  Providers page instead of picking, because that is where the install and the sign-in are. */
   unavailable?: string;
+  /** Which engine row on the Providers page answers `unavailable`. That is the CLI this choice
+   *  runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the Kimi
+   *  engine row. Set whenever `unavailable` is. */
+  fixEngine?: string;
 }
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -113,6 +118,14 @@ function engineBlocker(health?: RunnerEngineHealth): string | undefined {
   return undefined;
 }
 
+/** The same question for a configured provider, which runs by borrowing an engine's CLI (a
+ *  Moonshot row spawns the Kimi CLI with its key in the environment). The binary has to be there,
+ *  so a missing one blocks it exactly as it blocks the engine. Sign-in doesn't apply: the pasted
+ *  key is the credential, and a signed-out CLI runs this provider fine. */
+function byokBlocker(health?: RunnerEngineHealth): string | undefined {
+  return health && !health.installed ? 'Not installed' : undefined;
+}
+
 /**
  * The picker's contents: the three engines, then the configured providers in the order the API
  * returned them.
@@ -123,6 +136,10 @@ function engineBlocker(health?: RunnerEngineHealth): string | undefined {
  * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
  * out why it isn't offered. A runner that has reported nothing claims nothing, so all three stay
  * pickable — as does any engine missing from a partial report.
+ *
+ * A configured provider is judged the same way through the engine it borrows, since that CLI is
+ * what actually runs it — a Moonshot row on a machine without the Kimi CLI reads "Not installed"
+ * just as the Kimi engine does, and points at the same install.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -138,20 +155,25 @@ export function providerChoices(
       kind: 'engine' as const,
       ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
       modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
-      ...(blocker ? { unavailable: blocker } : {}),
+      ...(blocker ? { unavailable: blocker, fixEngine: slug } : {}),
     };
   });
   // A configured row that shadows a built-in slug would give the picker two rows that dispatch
   // the same identity; the engine entry above already covers it.
   const byok: ProviderChoice[] = configured
     .filter((p) => !ENGINE_SLUGS.some((slug) => slug === p.slug))
-    .map((p) => ({
-      slug: p.slug,
-      label: p.label,
-      kind: 'byok' as const,
-      ...brandForProvider(p.slug, p.label, p.presetSlug),
-      modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
-    }));
+    .map((p) => {
+      const runtime = runtimeForProvider(p.slug, configured);
+      const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
+      return {
+        slug: p.slug,
+        label: p.label,
+        kind: 'byok' as const,
+        ...brandForProvider(p.slug, p.label, p.presetSlug),
+        modelLabel: defaultModelLabel(p.slug, modelCatalog, configured, runtimeDefaultModels),
+        ...(blocker ? { unavailable: blocker, fixEngine: runtime } : {}),
+      };
+    });
   return [...engines, ...byok];
 }
 

@@ -15,6 +15,14 @@ const configured: ConfiguredProvider[] = [
     defaultModel: 'deepseek-v4-pro',
     presetSlug: 'deepseek',
   },
+  {
+    slug: 'moonshot',
+    label: 'Kimi (Moonshot)',
+    runtime: 'kimi',
+    models: [{ value: 'kimi-k3', label: 'Kimi K3' }],
+    defaultModel: 'kimi-k3',
+    presetSlug: 'moonshot',
+  },
 ];
 const catalog = { claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }] } as never;
 
@@ -74,6 +82,17 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('Not installed on this runner');
     expect(html).toContain('engine=kimi');
     expect(html).not.toContain('runner login');
+  });
+
+  it('sends a configured provider’s fix to the engine it borrows, not to its own slug', () => {
+    // Kimi (Moonshot) runs on the Kimi CLI, and `moonshot` has no row on the Providers page to
+    // land on — the install that fixes it is the kimi engine's.
+    const html = markup('moonshot', {
+      engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],
+    });
+    expect(html).toContain('Not installed on this runner');
+    expect(html).toContain('engine=kimi');
+    expect(html).not.toContain('engine=moonshot');
   });
 
   it('labels an unknown provider truthfully instead of falling back to Claude', () => {

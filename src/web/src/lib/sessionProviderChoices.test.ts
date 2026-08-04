@@ -26,6 +26,15 @@ const custom: ConfiguredProvider = {
   presetSlug: null,
 };
 
+const moonshot: ConfiguredProvider = {
+  slug: 'moonshot',
+  label: 'Kimi (Moonshot)',
+  runtime: 'kimi',
+  models: [{ value: 'kimi-k3', label: 'Kimi K3' }],
+  defaultModel: 'kimi-k3',
+  presetSlug: 'moonshot',
+};
+
 const catalog = {
   claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }],
   codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
@@ -78,6 +87,8 @@ describe('providerChoices', () => {
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
+    // An engine is fixed on its own row.
+    expect(choices.find((c) => c.slug === 'kimi')?.fixEngine).toBe('kimi');
   });
 
   it('says not installed, not signed out, for a missing CLI that never answered', () => {
@@ -99,6 +110,40 @@ describe('providerChoices', () => {
     // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
     expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
+  });
+
+  it('blocks a configured provider whose borrowed CLI is not installed', () => {
+    // The Moonshot row spawns the Kimi CLI with its key in the environment: no CLI, no session.
+    const choices = providerChoices([moonshot, deepseek], catalog, undefined, [
+      { engine: 'claude', installed: true, auth: 'yes' },
+      { engine: 'kimi', installed: false, auth: 'unknown' },
+    ]);
+    const row = choices.find((c) => c.slug === 'moonshot');
+    expect(row?.unavailable).toBe('Not installed');
+    // Its own slug has no row on the Providers page; the install lives on the engine it borrows.
+    expect(row?.fixEngine).toBe('kimi');
+    // A provider on a CLI that is there stays pickable.
+    expect(choices.find((c) => c.slug === 'deepseek')?.unavailable).toBeUndefined();
+  });
+
+  it('keeps a configured provider on a signed-out CLI pickable — its key is the credential', () => {
+    const choices = providerChoices([moonshot], catalog, undefined, [
+      { engine: 'kimi', installed: true, auth: 'no' },
+    ]);
+    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not signed in');
+    expect(choices.find((c) => c.slug === 'moonshot')?.unavailable).toBeUndefined();
+  });
+
+  it('offers a configured provider whose CLI the runner has claimed nothing about', () => {
+    expect(
+      providerChoices([moonshot], catalog, undefined, [
+        { engine: 'claude', installed: false, auth: 'no' },
+      ]).find((c) => c.slug === 'moonshot')?.unavailable,
+    ).toBeUndefined();
+    expect(
+      providerChoices([moonshot], catalog, undefined, null).find((c) => c.slug === 'moonshot')
+        ?.unavailable,
+    ).toBeUndefined();
   });
 
   it('offers every engine a runner has claimed nothing about', () => {
