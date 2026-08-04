@@ -1,5 +1,5 @@
 import { providerPreset } from '@orbit/shared';
-import { catalogModels } from './model-catalog';
+import { catalogDefaultModel, catalogModels } from './model-catalog';
 
 /** The fields of a ModelProvider row the preset governs (a subset of the Prisma row). */
 export interface PresetBackedRow {
@@ -18,15 +18,15 @@ function governing(row: PresetBackedRow) {
 /**
  * The model a configured-provider session dispatches with when it has no explicit model.
  *
- * A following row keeps whatever default it stored as long as the preset still offers it — an
- * admin who pinned Sonnet keeps Sonnet — but a stored id the catalogue has dropped (a retired
- * model) yields to the preset's current choice rather than reaching the runner as a dead `-m`.
+ * A following row takes the catalogue's current pick — the newest model the vendor offers — rather
+ * than the copy it stored when it was created: following the vendor is the whole point of the flag,
+ * and a default frozen at creation time is how a provider ends up dispatching last year's model
+ * months after its successor shipped. A row that wants a specific model takes ownership of its list
+ * (followsPreset false) and keeps its own default from then on.
  */
 export function presetDefaultModel(row: PresetBackedRow): string | null {
   const preset = governing(row);
-  if (!preset) return row.defaultModel;
-  const stored = row.defaultModel;
-  return stored && catalogModels(preset).some((m) => m.value === stored) ? stored : preset.defaultModel;
+  return preset ? catalogDefaultModel(preset) : row.defaultModel;
 }
 
 /**

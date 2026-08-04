@@ -52,14 +52,20 @@ export const providersQuery = () =>
     queryFn: () => api<ConfiguredProvider[]>('/providers'),
   });
 
-/** Each vendor preset's model list as the server has it *now*, by slug: the shipped catalogue with
- *  the latest third-party refresh (models.dev) folded in. Only the connect form needs it — a saved
- *  provider's row already comes back resolved. Nested under ['providers'] so the control plane's
- *  provider events invalidate it along with everything else that catalogue feeds. */
+/** What each vendor preset offers as the server has it *now*, by slug: the shipped catalogue with
+ *  the latest third-party refresh (models.dev) folded in, and the default those models resolve to.
+ *  Only the connect form needs it — a saved provider's row already comes back resolved. Nested
+ *  under ['providers'] so the control plane's provider events invalidate it along with everything
+ *  else that catalogue feeds. */
+export interface PresetCatalogEntry {
+  models: ProviderModelRow[];
+  defaultModel: string;
+}
+
 export const presetModelsQuery = () =>
   queryOptions({
     queryKey: ['providers', 'presets'] as const,
-    queryFn: () => api<Record<string, ProviderModelRow[]>>('/providers/presets'),
+    queryFn: () => api<Record<string, PresetCatalogEntry>>('/providers/presets'),
     staleTime: 5 * 60_000,
   });
 

@@ -44,10 +44,32 @@ export function catalogModels(preset: ProviderPreset): ProviderPresetModel[] {
   return live.get(preset.slug) ?? preset.models;
 }
 
-/** Every preset's current list, for the connect form (which is offering models, not resolving a
- *  saved row) — keyed by slug. */
-export function presetCatalog(presets: ProviderPreset[] = PROVIDER_PRESETS): Record<string, ProviderPresetModel[]> {
-  return Object.fromEntries(presets.map((p) => [p.slug, catalogModels(p)]));
+/**
+ * The model a provider following this preset dispatches with: the newest one the vendor offers.
+ *
+ * Following the catalogue means following it all the way — a vendor's new flagship becomes the
+ * default the day it lands, without anyone editing a provider. A row that wants to stay on a
+ * specific model takes ownership of its list (followsPreset false), which is the same escape hatch
+ * that governs the models themselves.
+ *
+ * Only a refresh moves this. The shipped `defaultModel` is a deliberate pick (MiniMax ships M2.7 as
+ * its default over the newer M3), so it stands until there is live data to prefer.
+ */
+export function catalogDefaultModel(preset: ProviderPreset): string {
+  return live.get(preset.slug)?.[0]?.value ?? preset.defaultModel;
+}
+
+/** What each preset offers right now, for the connect form — which is offering a vendor's models
+ *  rather than resolving a saved row, and so can't get this from a provider. */
+export function presetCatalog(presets: ProviderPreset[] = PROVIDER_PRESETS): Record<string, PresetCatalogEntry> {
+  return Object.fromEntries(
+    presets.map((p) => [p.slug, { models: catalogModels(p), defaultModel: catalogDefaultModel(p) }]),
+  );
+}
+
+export interface PresetCatalogEntry {
+  models: ProviderPresetModel[];
+  defaultModel: string;
 }
 
 /** A value that changes exactly when the offered models do — what a refresh compares to decide
@@ -98,12 +120,18 @@ function usable(m: CatalogEntry, match: RegExp): boolean {
   return Array.isArray(output) && output.length === 1 && output[0] === 'text';
 }
 
-// Newest first. Dates are ISO-ish strings of varying precision ("2026-01" alongside "2026-01-19"),
-// which compare correctly as text; an entry without one sorts last, then by id for a stable order.
+// Newest first — and the head of this order is what a following provider dispatches with, so the
+// tie-break matters. Dates are ISO-ish strings of varying precision ("2026-01" alongside
+// "2026-01-19"), which compare correctly as text; an entry without one sorts last. A vendor ships
+// its variants on the same day as the model they derive from (`gemini-3.6-flash` with
+// `gemini-3.5-flash-lite`, `kimi-k2.7-code` with `kimi-k2.7-code-highspeed`), and a variant is the
+// base id plus a suffix — so on a tie the shorter id is the one to lead with.
 function byNewest(a: CatalogEntry, b: CatalogEntry): number {
   const da = typeof a.release_date === 'string' ? a.release_date : '';
   const db = typeof b.release_date === 'string' ? b.release_date : '';
-  return db.localeCompare(da) || String(a.id).localeCompare(String(b.id));
+  const ia = String(a.id);
+  const ib = String(b.id);
+  return db.localeCompare(da) || ia.length - ib.length || ia.localeCompare(ib);
 }
 
 function toPresetModel(m: CatalogEntry): ProviderPresetModel {

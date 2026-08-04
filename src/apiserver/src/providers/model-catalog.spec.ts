@@ -1,7 +1,13 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { PROVIDER_PRESETS } from '@orbit/shared';
-import { catalogModels, parseModelCatalog, presetCatalog, setModelCatalog } from './model-catalog';
+import {
+  catalogDefaultModel,
+  catalogModels,
+  parseModelCatalog,
+  presetCatalog,
+  setModelCatalog,
+} from './model-catalog';
 import { withPreset } from './preset-overlay';
 
 const moonshot = PROVIDER_PRESETS.find((p) => p.slug === 'moonshot')!;
@@ -88,13 +94,27 @@ test('model-catalog', async (t) => {
     assert.equal(anthropic.catalog, undefined);
   });
 
+  await t.test('same-day variants rank behind the model they derive from', () => {
+    // A vendor ships `-highspeed`/`-lite`/`-preview` alongside their base model, and the head of
+    // this order becomes the default — so a tie goes to the plain id, not the alphabetical one.
+    const catalog = parseModelCatalog(
+      payload([
+        model({ id: 'kimi-k2.7-code-highspeed', name: 'Highspeed', release_date: '2026-06-12' }),
+        model({ id: 'kimi-k2.7-code', name: 'Code', release_date: '2026-06-12' }),
+      ]),
+    );
+    assert.equal(catalog.get('moonshot')![0].value, 'kimi-k2.7-code');
+  });
+
   await t.test('what is installed is what reads resolve through', () => {
     assert.deepEqual(catalogModels(moonshot), moonshot.models, 'falls back before any refresh');
+    assert.equal(catalogDefaultModel(moonshot), moonshot.defaultModel);
 
     setModelCatalog(parseModelCatalog(payload([model({ id: 'kimi-k3', name: 'Kimi K3', release_date: '2026-07-16' })])));
     const fresh = catalogModels(moonshot);
     assert.equal(fresh[0].value, 'kimi-k3');
-    // The row of someone who connected Kimi months ago serves it too, and keeps its pinned default.
+    // The row of someone who connected Kimi months ago serves the new list — and dispatches with
+    // the new flagship, rather than the default it stored back then.
     const row = withPreset({
       presetSlug: 'moonshot',
       followsPreset: true,
@@ -102,11 +122,16 @@ test('model-catalog', async (t) => {
       defaultModel: 'kimi-k2.7-code',
     });
     assert.deepEqual(row.models, fresh);
-    assert.equal(row.defaultModel, 'kimi-k2.7-code');
-    assert.deepEqual(presetCatalog()['moonshot'], fresh);
-    assert.deepEqual(presetCatalog()['anthropic'], anthropic.models);
+    assert.equal(row.defaultModel, 'kimi-k3');
+    assert.deepEqual(presetCatalog()['moonshot'], { models: fresh, defaultModel: 'kimi-k3' });
+    // A vendor with no refresh keeps both halves of what it shipped.
+    assert.deepEqual(presetCatalog()['anthropic'], {
+      models: anthropic.models,
+      defaultModel: anthropic.defaultModel,
+    });
 
     setModelCatalog(new Map());
     assert.deepEqual(catalogModels(moonshot), moonshot.models);
+    assert.equal(catalogDefaultModel(moonshot), moonshot.defaultModel);
   });
 });

@@ -19,10 +19,12 @@ test('preset-overlay', async (t) => {
     assert.equal(row.defaultModel, anthropic.defaultModel);
   });
 
-  await t.test('a pinned default the preset still offers survives', () => {
-    const pinned = anthropic.models[1].value;
-    const row = withPreset({ presetSlug: 'anthropic', followsPreset: true, models: [], defaultModel: pinned });
-    assert.equal(row.defaultModel, pinned);
+  await t.test("a following row's stored default yields to the catalogue's current pick", () => {
+    // Following the vendor includes which model it recommends, so a default stored at creation
+    // time doesn't hold a provider on last year's model. Keeping one means taking the list over.
+    const stale = anthropic.models[1].value;
+    const row = withPreset({ presetSlug: 'anthropic', followsPreset: true, models: [], defaultModel: stale });
+    assert.equal(row.defaultModel, anthropic.defaultModel);
     assert.deepEqual(row.models, anthropic.models);
   });
 

@@ -4,14 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
-import { presetModelsQuery, providersQuery } from '../lib/queries';
+import { presetModelsQuery, providersQuery, type PresetCatalogEntry } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
-import {
-  PROVIDERS_BASE,
-  PROVIDERS_LIST_KEY,
-  type ProviderModelRow,
-  type ProviderRow,
-} from '../lib/providerAdmin';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { useToast } from '../lib/toast';
 
@@ -123,8 +118,8 @@ function ProviderForm({
   editing,
 }: {
   preset?: ProviderPreset;
-  /** The preset's models as the server resolves them today; falls back to the shipped list. */
-  catalog?: ProviderModelRow[];
+  /** What the preset offers as the server resolves it today; falls back to the shipped catalogue. */
+  catalog?: PresetCatalogEntry;
   editing?: ProviderRow;
 }) {
   const message = useToast();
@@ -133,7 +128,10 @@ function ProviderForm({
   // A custom provider names itself and declares its own endpoint; a preset ships every field but
   // the key, so those fields live behind Advanced.
   const isCustom = !preset;
-  const presetModels = catalog ?? preset?.models ?? [];
+  const presetModels = catalog?.models ?? preset?.models ?? [];
+  // The vendor's current pick, which a following provider dispatches with — not the one this
+  // bundle was built with, or the form would probe the key against a model the session won't use.
+  const presetDefault = catalog?.defaultModel ?? preset?.defaultModel;
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(editing?.label ?? preset?.label ?? '');
@@ -186,8 +184,8 @@ function ProviderForm({
         ? editing.defaultModel && values.includes(editing.defaultModel)
           ? undefined
           : values[0]
-        : preset?.defaultModel && values.includes(preset.defaultModel)
-          ? preset.defaultModel
+        : presetDefault && values.includes(presetDefault)
+          ? presetDefault
           : undefined;
       if (editing) {
         return api(`${PROVIDERS_BASE}/${editing.id}`, {
@@ -238,7 +236,7 @@ function ProviderForm({
     label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : apiKey.trim() !== '');
   // The model the probe pings with: the one a session would get by default.
   const probeModel = (
-    preset?.defaultModel ||
+    presetDefault ||
     editing?.defaultModel ||
     models.find((m) => m.value.trim())?.value ||
     ''

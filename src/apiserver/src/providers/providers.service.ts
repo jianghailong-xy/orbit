@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
-import { catalogModels, presetCatalog } from './model-catalog';
+import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
@@ -53,9 +53,10 @@ export class ProvidersService {
     return rows.map((r) => this.desensitize(r));
   }
 
-  /** What each vendor preset offers *right now*, by slug — the shipped list with the last
-   *  models.dev refresh folded in. The connect form reads this instead of the list compiled into
-   *  the bundle, so what it shows a user about to connect Kimi is what their picker will hold. */
+  /** What each vendor preset offers *right now*, by slug — its models and the default they resolve
+   *  to, with the last models.dev refresh folded in. The connect form reads this instead of the
+   *  catalogue compiled into the bundle, so what it shows a user about to connect Kimi (and probes
+   *  their key with) is what their sessions will actually get. */
   presetModels() {
     return presetCatalog();
   }
@@ -90,7 +91,7 @@ export class ProvidersService {
       baseUrl: dto.baseUrl,
       apiKeyEnc: encryptSecret(dto.apiKey),
       models: models as Prisma.InputJsonValue,
-      defaultModel: (follows ? preset!.defaultModel : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
+      defaultModel: (follows ? catalogDefaultModel(preset!) : dto.defaultModel) ?? dto.models?.[0]?.value ?? null,
       // Identity outlives ownership: a row that maintains its own list is still an Anthropic one.
       presetSlug: preset?.slug ?? null,
       followsPreset: follows,
