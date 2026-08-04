@@ -89,8 +89,9 @@ export const mergedProviderOptions = (
 // Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
 // Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as
 // their raw id, same as any other non-current model.
-// Kimi is the one exception: the runner catalog only reports claude/codex, and managed Kimi
-// runs a single fixed model, so its lone option stays static.
+// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
+// model's context window and thinking levels). Its managed default is the one static fallback,
+// for a runner whose CLI predates that probe.
 export const KIMI_MODEL_OPTIONS = [
   { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
 ];
@@ -272,6 +273,10 @@ export const CODEX_EFFORT_OPTIONS = [
   { value: 'xhigh', label: 'xHigh' },
 ];
 
+// Kimi's vocabulary is closed, but which of these levels a model accepts is declared per model
+// (`supportEfforts`): K2.7 Coding declares none and rejects every level, while K3 takes low/high/
+// max. The runner catalog carries each model's own list, so this is only the fallback for a model
+// it does not report — an env-injected KIMI_MODEL_* alias, or a runner too old to probe its CLI.
 export const KIMI_EFFORT_OPTIONS = [
   { value: '', label: 'Default' },
   { value: 'low', label: 'Low' },
@@ -294,19 +299,39 @@ export const OPENCODE_EFFORT_OPTIONS = [
 const effortLabel = (level: string): string =>
   level === 'xhigh' ? 'xHigh' : level.charAt(0).toUpperCase() + level.slice(1);
 
+/** The runner catalog row for one of the two runtimes whose reasoning levels are model-defined
+ *  (both call sites gate on that), or undefined when the runner-wide catalog does not report the
+ *  model. "No row" means "unknown", never "unsupported": an OpenCode model may be project-scoped,
+ *  and an older runner reports no Kimi models at all. */
+const modelDefinedEffortRow = (
+  provider: string,
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+) =>
+  modelCatalog?.[provider === 'kimi' ? AgentProvider.KIMI : AgentProvider.OPENCODE]?.find(
+    (entry) => entry.value === model,
+  );
+
+// Kimi has no `minimal`/`medium` and calls Codex's top level `max`, so a value carried in from
+// another runtime maps onto its vocabulary before the model's own list is consulted.
+const KIMI_EFFORT_ALIASES: Record<string, string> = {
+  minimal: 'low',
+  medium: 'high',
+  xhigh: 'max',
+};
+
 export const effortOptionsForProvider = (
   provider?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
 ) => {
   if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
-  if (provider === 'kimi') return KIMI_EFFORT_OPTIONS;
-  if (provider !== 'opencode') return CLAUDE_EFFORT_OPTIONS;
+  if (provider !== 'opencode' && provider !== 'kimi') return CLAUDE_EFFORT_OPTIONS;
 
-  const exactModel = modelCatalog?.opencode?.find((entry) => entry.value === model);
-  // A project-only model may be absent from the runner-wide catalog, so keep the generic
-  // fallback. An exact row with no variants is authoritative: that model supports Default only.
-  if (!exactModel) return OPENCODE_EFFORT_OPTIONS;
+  const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
+  // A model the runner-wide catalog does not report keeps the generic fallback. An exact row with
+  // no levels is authoritative: that model supports Default only.
+  if (!exactModel) return provider === 'kimi' ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
   const unique = [...new Set((exactModel.reasoningLevels ?? []).filter(Boolean))];
   return [
     { value: '', label: 'Default' },
@@ -320,16 +345,16 @@ export const normalizeEffortForProvider = (
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
 ): string => {
-  if (provider === 'kimi') {
-    if (effort === 'minimal') return 'low';
-    if (effort === 'medium') return 'high';
-    if (effort === 'xhigh') return 'max';
-    return effort;
-  }
-  const normalized = provider === 'codex' && effort === 'max' ? 'xhigh' : effort;
+  // Kimi's closed vocabulary maps first; the model's own list below has the last word.
+  const normalized =
+    provider === 'kimi'
+      ? (KIMI_EFFORT_ALIASES[effort] ?? effort)
+      : provider === 'codex' && effort === 'max'
+        ? 'xhigh'
+        : effort;
 
-  if (provider === 'opencode') {
-    const exactModel = modelCatalog?.opencode?.find((entry) => entry.value === model);
+  if (provider === 'opencode' || provider === 'kimi') {
+    const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
     // The heartbeat catalog is deliberately global, so a project-only model may
     // be absent. Preserve its variant only in that case; an exact row (including one
     // with an empty variants object) is authoritative.

@@ -39,7 +39,17 @@ describe('Claude model capabilities', () => {
 });
 
 describe('Kimi runtime defaults', () => {
-  it('offers the managed Kimi coding model as its only default model', () => {
+  // What `kimi provider list --json` reports on a signed-in runner: the two K2.7 aliases
+  // declare no thinking levels at all, while K3 declares low/high/max.
+  const kimiCatalog = {
+    kimi: [
+      { value: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding', contextWindow: 262_144 },
+      { value: 'kimi-code/k3', label: 'K3', contextWindow: 1_048_576,
+        reasoningLevels: ['low', 'high', 'max'] },
+    ],
+  };
+
+  it('falls back to the managed Kimi coding model when no runner catalog is available', () => {
     expect(mergedProviderOptions()).toContainEqual({ value: 'kimi', label: 'Kimi' });
     expect(KIMI_MODEL_OPTIONS).toEqual([
       { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
@@ -51,7 +61,15 @@ describe('Kimi runtime defaults', () => {
     expect(supportsAuto('local-kimi-alias', 'kimi')).toBe(true);
   });
 
-  it('offers Kimi efforts without Codex-only minimal', () => {
+  it('lists every model the runner reports, with its own context window', () => {
+    expect(modelOptionsForProvider('kimi', kimiCatalog)).toEqual([
+      { value: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding' },
+      { value: 'kimi-code/k3', label: 'K3' },
+    ]);
+    expect(contextWindowFor('kimi-code/k3', kimiCatalog)).toBe(1_048_576);
+  });
+
+  it('offers Kimi efforts without Codex-only minimal when the model is unknown', () => {
     expect(effortOptionsForProvider('kimi')).toEqual([
       { value: '', label: 'Default' },
       { value: 'low', label: 'Low' },
@@ -63,6 +81,28 @@ describe('Kimi runtime defaults', () => {
     expect(normalizeEffortForProvider('kimi', 'medium')).toBe('high');
     expect(normalizeEffortForProvider('kimi', 'xhigh')).toBe('max');
     expect(normalizeEffortForProvider('kimi', 'high')).toBe('high');
+  });
+
+  it("offers each Kimi model only the thinking levels it declares", () => {
+    // K2.7 Coding rejects every level with invalid_params, so Default is the whole picker.
+    expect(effortOptionsForProvider('kimi', 'kimi-code/kimi-for-coding', kimiCatalog)).toEqual([
+      { value: '', label: 'Default' },
+    ]);
+    expect(effortOptionsForProvider('kimi', 'kimi-code/k3', kimiCatalog)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' },
+      { value: 'max', label: 'Max' },
+    ]);
+
+    expect(normalizeEffortForProvider('kimi', 'max', 'kimi-code/kimi-for-coding', kimiCatalog))
+      .toBe('');
+    expect(normalizeEffortForProvider('kimi', 'max', 'kimi-code/k3', kimiCatalog)).toBe('max');
+    // Vocabulary mapping still runs before the model's own list is consulted.
+    expect(normalizeEffortForProvider('kimi', 'xhigh', 'kimi-code/k3', kimiCatalog)).toBe('max');
+    expect(normalizeEffortForProvider('kimi', 'medium', 'kimi-code/k3', kimiCatalog)).toBe('high');
+    // A model the catalog does not report (KIMI_MODEL_* alias) keeps its value.
+    expect(normalizeEffortForProvider('kimi', 'max', 'local-kimi-alias', kimiCatalog)).toBe('max');
   });
 });
 

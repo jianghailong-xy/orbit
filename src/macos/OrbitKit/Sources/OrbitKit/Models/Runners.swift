@@ -84,14 +84,17 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         let rows: [RunnerModelInfo]?
         switch provider {
         case "codex": rows = codex
+        case "kimi": rows = kimi
         case "opencode": rows = opencode
         default: rows = claude
         }
         return rows?.first { $0.value == model }
     }
 
+    /// Runtimes whose reasoning levels are declared per model: OpenCode's variants, and Kimi's
+    /// `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max).
     public func reasoningLevels(for provider: String, model: String) -> [String]? {
-        guard provider == "opencode" else { return nil }
+        guard provider == "opencode" || provider == "kimi" else { return nil }
         return modelInfo(for: provider, model: model)?.reasoningLevels
     }
 }

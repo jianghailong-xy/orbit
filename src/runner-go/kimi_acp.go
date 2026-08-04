@@ -736,12 +736,15 @@ func kimiToolPolicyError(agent AgentExecConfig) string {
 }
 
 func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, agent AgentExecConfig) error {
-	set := func(configID, value string) error {
-		_, err := a.request(ctx, "session/set_config_option", map[string]interface{}{
+	setOption := func(configID, value string) (map[string]interface{}, error) {
+		return a.request(ctx, "session/set_config_option", map[string]interface{}{
 			"sessionId": sessionID,
 			"configId":  configID,
 			"value":     value,
 		})
+	}
+	set := func(configID, value string) error {
+		_, err := setOption(configID, value)
 		return err
 	}
 	// KIMI_MODEL_* synthesizes an in-memory default alias. Setting Orbit's
@@ -749,8 +752,16 @@ func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, 
 	// and defeat the injected API key, so retain Kimi's environment-selected
 	// default in that explicit override mode.
 	if agent.Model != "" && !kimiUsesEnvModel(agent.Env) {
-		if err := set("model", agent.Model); err != nil {
+		result, err := setOption("model", agent.Model)
+		if err != nil {
 			return err
+		}
+		// Thinking levels are declared per model — K2.7 Coding declares none, K3
+		// declares low/high/max — and this response re-describes the pickers for the
+		// model just selected. The handshake's list belongs to the session's previous
+		// model, so adopt this one before asking for a level.
+		if levels := kimiConfigOptionValues(result, "thinking"); len(levels) > 0 {
+			a.thinkingOptions = levels
 		}
 	}
 	// `on` means the selected model's default thought level. This also gives

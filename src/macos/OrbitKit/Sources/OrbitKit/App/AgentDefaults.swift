@@ -83,8 +83,9 @@ public enum AgentDefaults {
         configured?.first { $0.slug == slug }
     }
 
-    /// Managed Kimi runs a single fixed model and the runner catalog only reports claude/codex,
-    /// so its lone option is the one model list that stays static.
+    /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
+    /// model's context window and thinking levels). Its managed default is the one static fallback,
+    /// for a runner whose CLI predates that probe.
     public static let kimiModels: [ModelOption] = [
         ModelOption(id: "kimi-code/kimi-for-coding", name: "Kimi for Coding"),
     ]
@@ -251,8 +252,8 @@ public enum AgentDefaults {
     }
 
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
-    /// tops out at `xhigh` and adds `minimal`; managed Kimi exposes low/high/max. OpenCode variants
-    /// are model-defined, so its static list is only a fallback while the catalog is unavailable.
+    /// tops out at `xhigh` and adds `minimal`. Kimi's and OpenCode's levels are model-defined, so
+    /// their static lists are only the fallback for a model the catalog does not report.
     /// Mirrors web. The server and runner both coerce an illegal value, but a picker should never
     /// offer one.
     public static func efforts(for provider: String) -> [Effort] {
@@ -286,13 +287,15 @@ public enum AgentDefaults {
         }
     }
 
-    /// OpenCode variants are model-specific. Preserve every runner-reported key verbatim so a new
-    /// runtime variant does not require a native-client release. An exact catalog row is
-    /// authoritative even when its variant list is empty; only a model absent from the global
-    /// heartbeat catalog falls back to the common list because it may be project-only.
+    /// OpenCode variants and Kimi thinking levels are model-specific. Preserve every runner-reported
+    /// key verbatim so a new runtime variant does not require a native-client release. An exact
+    /// catalog row is authoritative even when its variant list is empty — Kimi's K2.7 Coding
+    /// declares no levels and rejects every one of them — while only a model absent from the global
+    /// heartbeat catalog falls back to the common list, because it may be project-only or come from
+    /// a runner too old to probe its CLI.
     public static func efforts(for provider: String, model: String,
                                catalog: RunnerModelCatalog?) -> [Effort] {
-        guard provider == "opencode" else { return efforts(for: provider) }
+        guard provider == "opencode" || provider == "kimi" else { return efforts(for: provider) }
         guard let row = catalog?.modelInfo(for: provider, model: model) else {
             return efforts(for: provider)
         }
@@ -305,13 +308,14 @@ public enum AgentDefaults {
         return result
     }
 
-    /// Whether a stored/current value is valid for this provider-model pair. If an OpenCode model
-    /// is absent from the global catalog, retain the value: it may be a project-defined model and
-    /// variant. An exact row, including one with no variants, is authoritative.
+    /// Whether a stored/current value is valid for this provider-model pair. If an OpenCode or Kimi
+    /// model is absent from the global catalog, retain the value: it may be a project-defined model
+    /// and variant, or a KIMI_MODEL_* alias. An exact row, including one with no variants, is
+    /// authoritative.
     public static func supportsEffort(_ effort: Effort, for provider: String, model: String,
                                       catalog: RunnerModelCatalog?) -> Bool {
         if effort == .default { return true }
-        if provider == "opencode" {
+        if provider == "opencode" || provider == "kimi" {
             guard let row = catalog?.modelInfo(for: provider, model: model) else { return true }
             return (row.reasoningLevels ?? []).contains(effort.rawValue)
         }
@@ -328,6 +332,12 @@ public enum AgentDefaults {
         }
         // Closed vocabularies: map what maps (Codex max→xhigh, Kimi medium→high), clear the rest.
         let mapped = normalizeEffort(effort, for: provider)
+        // Kimi's vocabulary is closed but per-model, so the mapped value still has to clear the
+        // model's own list: K2.7 Coding takes none of them.
+        if provider == "kimi" {
+            return supportsEffort(mapped, for: provider, model: model, catalog: catalog)
+                ? mapped : .default
+        }
         return efforts(for: provider).contains(mapped) ? mapped : .default
     }
 

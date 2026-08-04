@@ -100,6 +100,9 @@ func carryOverModelCatalog(prev, next *ModelCatalog) *ModelCatalog {
 	if len(next.Claude) == 0 {
 		next.Claude = prev.Claude
 	}
+	if len(next.Kimi) == 0 {
+		next.Kimi = prev.Kimi
+	}
 	if len(next.OpenCode) == 0 {
 		next.OpenCode = prev.OpenCode
 	}
@@ -519,6 +522,13 @@ func runLoop(cfg *RunnerConfig) bool {
 				catalog.Claude = models
 			}
 		}
+		if kimiCLIAvailable() {
+			if models, err := fetchKimiModelCatalog(loopCtx); err != nil {
+				logln("kimi model catalog refresh failed:", err)
+			} else {
+				catalog.Kimi = models
+			}
+		}
 		if openCodeCLIAvailable() {
 			// A heartbeat catalog is runner-wide, while OpenCode project config is
 			// workDir-scoped. Report only globally available models from a neutral
@@ -533,7 +543,8 @@ func runLoop(cfg *RunnerConfig) bool {
 			}
 		}
 		modelSnapshotMu.Lock()
-		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 || len(catalog.OpenCode) > 0 {
+		if len(catalog.Codex) > 0 || len(catalog.Claude) > 0 || len(catalog.Kimi) > 0 ||
+			len(catalog.OpenCode) > 0 {
 			hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
 		}
 		modelSnapshotMu.Unlock()

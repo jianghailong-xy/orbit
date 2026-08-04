@@ -61,9 +61,11 @@ export function normalizeBuiltinPermissionMode(
 
 /**
  * Keep persisted effort values valid when a session changes runtime or is resumed from an older
- * client. Codex historically called its top level `xhigh`; managed Kimi currently advertises
- * only low/high/max through ACP. OpenCode variants are model/provider-defined and stay
- * open-ended, so only the closed CLI enums are clamped.
+ * client. Codex historically called its top level `xhigh`; Kimi's vocabulary tops out at `max`
+ * and has no `minimal`/`medium`. Which of those levels a Kimi model actually accepts is
+ * per-model (K2.7 Coding accepts none at all), so this maps the vocabulary and
+ * `normalizeEffortForRuntimeModel` applies the model's own list. OpenCode variants are
+ * model/provider-defined and stay open-ended, so only the closed CLI enums are clamped.
  */
 export function normalizeEffortForProvider(
   provider: AgentProvider,
@@ -84,14 +86,23 @@ export function normalizeEffortForProvider(
   return CLAUDE_EFFORTS.has(effort) ? effort : '';
 }
 
+/** Runtimes whose reasoning levels are per-model, so only the assigned runner's catalog can say
+ *  whether one is valid. OpenCode's variants are model/provider-defined; Kimi's are declared by
+ *  each model's `supportEfforts` and rejected with invalid_params when they are not. */
+const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
+  AgentProvider.OPENCODE,
+  AgentProvider.KIMI,
+];
+
 /**
  * The dispatch-time variant check, applied once the assigned runner's model catalog is known.
  *
- * OpenCode variants are model-defined, so `normalizeEffortForProvider` alone cannot police them:
- * an account-level default picked in a Claude session (`max`) would otherwise reach the CLI as
- * `--variant=max` and fail the turn. Mirrors the web picker's rule — an exact catalog row is
- * authoritative even when it lists no variants, while a model the runner-wide catalog does not
- * report may be project-scoped and keeps its value.
+ * These runtimes' levels are model-defined, so `normalizeEffortForProvider` alone cannot police
+ * them: an account-level default picked in a Claude session (`max`) would otherwise reach OpenCode
+ * as `--variant=max` and fail the turn, or reach Kimi's K2.7 Coding, which declares no levels at
+ * all. Mirrors the web picker's rule — an exact catalog row is authoritative even when it lists no
+ * variants, while a model the runner-wide catalog does not report may be project-scoped (or come
+ * from a runner too old to probe its CLI) and keeps its value.
  */
 export function normalizeEffortForRuntimeModel(
   provider: AgentProvider,
@@ -100,7 +111,7 @@ export function normalizeEffortForRuntimeModel(
   modelCatalog: unknown,
 ): string | undefined {
   const normalized = normalizeEffortForProvider(provider, effort);
-  if (provider !== AgentProvider.OPENCODE || !normalized) return normalized;
+  if (!MODEL_DEFINED_EFFORT_RUNTIMES.includes(provider) || !normalized) return normalized;
   const levels = runtimeCatalogReasoningLevels(modelCatalog, provider, model);
   if (levels === undefined) return normalized;
   return levels.includes(normalized) ? normalized : '';

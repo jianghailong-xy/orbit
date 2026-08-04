@@ -343,6 +343,20 @@ func runKimiConfigureSession(
 	reject func(configID, value string) *kimiRPCError,
 ) ([]kimiSetConfigCall, error) {
 	t.Helper()
+	return runKimiConfigureSessionWithResults(t, agent, advertised, reject, nil)
+}
+
+// runKimiConfigureSessionWithResults is runKimiConfigureSession with a peer that can
+// answer an accepted call with a real result body — how the CLI re-describes its
+// pickers when the model changes — instead of an empty object.
+func runKimiConfigureSessionWithResults(
+	t *testing.T,
+	agent AgentExecConfig,
+	advertised []string,
+	reject func(configID, value string) *kimiRPCError,
+	result func(configID, value string) json.RawMessage,
+) ([]kimiSetConfigCall, error) {
+	t.Helper()
 	peerReads, clientWrites := io.Pipe()
 	clientReads, peerWrites := io.Pipe()
 	app := &kimiACPClient{
@@ -390,7 +404,13 @@ func runKimiConfigureSession(
 			mu.Lock()
 			calls = append(calls, kimiSetConfigCall{params.ConfigID, params.Value})
 			mu.Unlock()
-			response := kimiRPCMessage{ID: request.ID, Result: json.RawMessage(`{}`)}
+			body := json.RawMessage(`{}`)
+			if result != nil {
+				if scripted := result(params.ConfigID, params.Value); scripted != nil {
+					body = scripted
+				}
+			}
+			response := kimiRPCMessage{ID: request.ID, Result: body}
 			if failure := reject(params.ConfigID, params.Value); failure != nil {
 				response = kimiRPCMessage{ID: request.ID, Error: failure}
 			}
@@ -435,6 +455,58 @@ func TestKimiEffortClampedToAdvertisedLevels(t *testing.T) {
 	want := []kimiSetConfigCall{{"thinking", "on"}, {"mode", "default"}}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("config calls = %v, want %v — max must never reach the wire", calls, want)
+	}
+}
+
+// The handshake describes the session's *current* model. Selecting another one
+// re-describes the thinking picker, so the levels captured at session/new are the
+// previous model's: K3 declares low/high/max where the default K2.7 Coding declares
+// none, and clamping against the stale list would silently flatten Max to the model
+// default.
+func TestKimiEffortClampedAgainstTheSelectedModel(t *testing.T) {
+	calls, err := runKimiConfigureSessionWithResults(t,
+		AgentExecConfig{Model: "kimi-code/k3", Effort: "max", PermissionMode: "default"},
+		[]string{"on"},
+		func(string, string) *kimiRPCError { return nil },
+		func(configID, value string) json.RawMessage {
+			if configID != "model" {
+				return nil
+			}
+			return json.RawMessage(`{"configOptions":[{"id":"thinking","options":[
+				{"value":"low"},{"value":"high"},{"value":"max"}]}]}`)
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []kimiSetConfigCall{
+		{"model", "kimi-code/k3"}, {"thinking", "max"}, {"mode", "default"},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
+	}
+}
+
+// …and the other direction: a model that declares no levels of its own must clamp a
+// carried-over one, even when the handshake's model did declare it.
+func TestKimiEffortClampedWhenSelectedModelDeclaresNoLevels(t *testing.T) {
+	calls, err := runKimiConfigureSessionWithResults(t,
+		AgentExecConfig{Model: "kimi-code/kimi-for-coding", Effort: "max", PermissionMode: "default"},
+		[]string{"low", "high", "max"},
+		func(string, string) *kimiRPCError { return nil },
+		func(configID, value string) json.RawMessage {
+			if configID != "model" {
+				return nil
+			}
+			return json.RawMessage(`{"configOptions":[{"id":"thinking","options":[{"value":"on"}]}]}`)
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []kimiSetConfigCall{
+		{"model", "kimi-code/kimi-for-coding"}, {"thinking", "on"}, {"mode", "default"},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
 	}
 }
 

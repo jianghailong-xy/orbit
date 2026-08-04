@@ -347,6 +347,60 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(catalog.contextWindow(for: "kimi-code/kimi-for-coding"), 262_144)
     }
 
+    /// What `kimi provider list --json` reports on a signed-in runner: the K2.7 aliases declare no
+    /// thinking levels at all, while K3 declares low/high/max.
+    private var kimiCatalog: RunnerModelCatalog {
+        RunnerModelCatalog(
+            kimi: [RunnerModelInfo(value: "kimi-code/kimi-for-coding", label: "K2.7 Coding",
+                                   priority: nil, contextWindow: 262_144, reasoningLevels: nil,
+                                   defaultReasoningLevel: nil, serviceTiers: nil),
+                   RunnerModelInfo(value: "kimi-code/k3", label: "K3", priority: nil,
+                                   contextWindow: 1_048_576, reasoningLevels: ["low", "high", "max"],
+                                   defaultReasoningLevel: "high", serviceTiers: nil)])
+    }
+
+    func testKimiModelsComeFromRunnerCatalog() {
+        XCTAssertEqual(AgentDefaults.models(for: "kimi", catalog: kimiCatalog).map(\.id),
+                       ["kimi-code/kimi-for-coding", "kimi-code/k3"])
+        XCTAssertEqual(AgentDefaults.models(for: "kimi", catalog: kimiCatalog).map(\.name),
+                       ["K2.7 Coding", "K3"])
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "kimi-code/k3", catalog: kimiCatalog),
+                       1_048_576)
+        // Without a catalog the managed default is still the fallback.
+        XCTAssertEqual(AgentDefaults.models(for: "kimi", catalog: nil).map(\.id),
+                       ["kimi-code/kimi-for-coding"])
+    }
+
+    func testKimiEffortsAreDeclaredPerModel() {
+        // K2.7 Coding declares no levels and answers every one with invalid_params.
+        XCTAssertEqual(AgentDefaults.efforts(for: "kimi", model: "kimi-code/kimi-for-coding",
+                                             catalog: kimiCatalog), [.default])
+        XCTAssertEqual(AgentDefaults.efforts(for: "kimi", model: "kimi-code/k3",
+                                             catalog: kimiCatalog), [.default, .low, .high, .max])
+        XCTAssertFalse(AgentDefaults.supportsEffort(.max, for: "kimi",
+                                                    model: "kimi-code/kimi-for-coding",
+                                                    catalog: kimiCatalog))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "kimi",
+                                                      model: "kimi-code/kimi-for-coding",
+                                                      catalog: kimiCatalog), .default)
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "kimi", model: "kimi-code/k3",
+                                                      catalog: kimiCatalog), .max)
+        // The closed vocabulary still maps before the model's own list is consulted.
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.xhigh, for: "kimi", model: "kimi-code/k3",
+                                                      catalog: kimiCatalog), .max)
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.medium, for: "kimi", model: "kimi-code/k3",
+                                                      catalog: kimiCatalog), .high)
+        // A model the catalog does not report (KIMI_MODEL_* alias, or a runner too old to probe
+        // its CLI) keeps the runtime-wide list and its stored value.
+        XCTAssertEqual(AgentDefaults.efforts(for: "kimi", model: "company/alias",
+                                             catalog: kimiCatalog), [.default, .low, .high, .max])
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "kimi", model: "company/alias",
+                                                      catalog: kimiCatalog), .max)
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "kimi",
+                                                      model: "kimi-code/kimi-for-coding",
+                                                      catalog: nil), .max)
+    }
+
     func testOpenCodeModelsComeFromRunnerCatalogAfterEmptyDefault() {
         let catalog = RunnerModelCatalog(
             opencode: [RunnerModelInfo(value: "anthropic/claude-sonnet-4",

@@ -868,16 +868,19 @@ struct AgentFormContent: View {
                     get: { provider },
                     set: { new in
                         provider = new
-                        // Effort vocabularies still differ by runtime even though the default model
-                        // itself now comes from the Runtime heartbeat.
-                        effort = AgentDefaults.normalizeEffort(effort, for: new)
-                        // OpenCode variants are model-defined, so a runtime switch has no catalog
-                        // row to validate the old value against — reset rather than carry it over.
-                        if new == "opencode" || !AgentDefaults.efforts(for: new).contains(effort) {
-                            effort = .default
-                        }
                         let nextModel = agents.effectiveDefaultModel(
                             for: new, runnerId: agent.runnerId)
+                        // Effort vocabularies still differ by runtime even though the default model
+                        // itself now comes from the Runtime heartbeat, and Kimi's differ per model
+                        // — so validate against the model this Runtime will actually provide.
+                        effort = AgentDefaults.normalizedEffort(
+                            effort, for: new, model: nextModel,
+                            catalog: agents.modelCatalog(for: agent.runnerId))
+                        // OpenCode picks its own model, so a runtime switch has no catalog row to
+                        // validate the old value against — reset rather than carry it over.
+                        if new == "opencode" {
+                            effort = .default
+                        }
                         mode = AgentDefaults.clampPermissionMode(
                             mode, for: nextModel, provider: new,
                             configured: agents.configuredProviders)

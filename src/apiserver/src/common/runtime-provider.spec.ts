@@ -5,6 +5,7 @@ import {
   initializesRuntimeDynamically,
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
+  normalizeEffortForRuntimeModel,
   normalizeRuntimeProvider,
 } from './runtime-provider';
 
@@ -83,6 +84,47 @@ test('OpenCode preserves provider-defined variants; closed CLI enums reject leak
   assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), '');
   assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'minimal'), 'minimal');
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, null), undefined);
+});
+
+test('model-defined effort vocabularies are clamped against the assigned runner catalog', () => {
+  // What a signed-in runner reports: Kimi's K2.7 Coding declares no thinking levels and answers
+  // any of them with invalid_params, while K3 declares low/high/max.
+  const catalog = {
+    kimi: [
+      { value: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding' },
+      { value: 'kimi-code/k3', label: 'K3', reasoningLevels: ['low', 'high', 'max'] },
+    ],
+    opencode: [{ value: 'anthropic/claude-sonnet-5', label: 'Sonnet 5', reasoningLevels: [] }],
+  };
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.KIMI, 'max', 'kimi-code/kimi-for-coding', catalog),
+    '',
+  );
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.KIMI, 'max', 'kimi-code/k3', catalog),
+    'max',
+  );
+  // The vocabulary map still runs first, so a Claude/Codex-shaped level lands on a real Kimi one.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.KIMI, 'xhigh', 'kimi-code/k3', catalog),
+    'max',
+  );
+  // A model the runner-wide catalog does not report keeps its value: an env-injected
+  // KIMI_MODEL_* alias, or a runner whose CLI predates the catalog probe.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.KIMI, 'max', 'company/kimi-alias', catalog),
+    'max',
+  );
+  assert.equal(normalizeEffortForRuntimeModel(AgentProvider.KIMI, 'max', 'kimi-code/k3', null), 'max');
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.OPENCODE, 'max', 'anthropic/claude-sonnet-5', catalog),
+    '',
+  );
+  // Closed-vocabulary runtimes never consult the catalog.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, 'max', 'claude-opus-5', catalog),
+    'max',
+  );
 });
 
 test('OpenCode is a dynamically-initialized runtime whose Auto mode is never downgraded', () => {
