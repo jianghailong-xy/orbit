@@ -462,6 +462,34 @@ export class RunnerApiController {
         // Do not cancel on an indeterminate DB read; the next heartbeat retries.
       }
     }
+    // Self-heal the running background-work sets against the same supervisor list. They're kept
+    // by inference — appended on a launch, cleared by a terminal notification or a runtime
+    // handshake (see bgReset) — so a shell that never reports on its own (a `vite` dev server
+    // the agent left up) leaks whenever its runtime disappears without either landing: the
+    // runner was killed outright AND the session then parked, so no `init` will ever follow.
+    // Such a session reads as "N background processes running" forever. A session this runner
+    // isn't supervising has no runtime, so that work is gone by definition — clear it. Legacy
+    // heartbeats omit leaseOwner (hence supervisedSessionIds), so they skip the sweep entirely
+    // rather than wrongly clearing everything.
+    if (heartbeatLeaseOwner) {
+      try {
+        await this.prisma.session.updateMany({
+          where: {
+            assignedRunnerId: runner.id,
+            status: { in: OPEN },
+            id: { notIn: supervisedSessionIds },
+            OR: [
+              { runningBgShells: { isEmpty: false } },
+              { runningSubagents: { isEmpty: false } },
+            ],
+          },
+          data: { runningBgShells: [], runningSubagents: [] },
+        });
+      } catch {
+        // Never fail a heartbeat over housekeeping — a missed one reads as the runner going
+        // offline. The next heartbeat sweeps again.
+      }
+    }
     // Persist each running session's live worktree diff so the composer's status bar can
     // appear mid-turn, not just at turn-complete. The `status in OPEN` guard stops a
     // straggler heartbeat from overwriting a just-finalized session's committed diff;

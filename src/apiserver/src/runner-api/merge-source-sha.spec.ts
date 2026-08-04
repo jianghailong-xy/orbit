@@ -125,16 +125,18 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
           },
         },
       ]);
-      assert.equal(writes.length, 1);
-      assert.deepEqual(writes[0].where, {
+      // The heartbeat also sweeps stale background work; this test is about the diff write.
+      const diffWrites = writes.filter((w) => !('runningBgShells' in w.data));
+      assert.equal(diffWrites.length, 1);
+      assert.deepEqual(diffWrites[0].where, {
         id: SESSION_ID,
         assignedRunnerId: RUNNER_ID,
         status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
         inboxLeaseOwner: LEASE_OWNER,
       });
-      assert.equal(writes[0].data.branchMerged, true);
-      assert.equal(writes[0].data.mergeStatus, undefined);
-      assert.equal(writes[0].data.mergedSourceSha, undefined);
+      assert.equal(diffWrites[0].data.branchMerged, true);
+      assert.equal(diffWrites[0].data.mergeStatus, undefined);
+      assert.equal(diffWrites[0].data.mergedSourceSha, undefined);
     });
   }
 });
