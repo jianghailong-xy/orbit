@@ -1039,7 +1039,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       else break;
     }
     if (cur) {
-      setStuck({ seq: cur.getAttribute('data-seq'), text: cur.textContent || '' });
+      // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
+      // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
+      // textContent would splice those labels in front of the question.
+      setStuck({ seq: cur.getAttribute('data-seq'), text: cur.querySelector('.md')?.textContent || '' });
     } else if (hasMoreOlderRef.current) {
       // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
       // the content now in view is in an unloaded page. Don't blank the bar — show a loading
