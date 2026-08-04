@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerSessionsController } from './runner-sessions.controller';
 
@@ -18,6 +18,10 @@ type RouteCase = {
   ) => Promise<unknown>;
   serviceMethod: string;
 };
+
+// Routes a headless caller (no calling session) may reach on the runner credential alone. Every
+// other route below must keep refusing a request with no session context.
+const HEADLESS_ROUTE_NAMES = new Set(['list', 'get', 'send']);
 
 // Keep the calling session immediately after the runner in every controller method. This mirrors
 // RunnerAgentsController and, more importantly, makes it difficult to accidentally authenticate
@@ -112,8 +116,8 @@ function makeController(orchestrationEnabled: boolean) {
   };
 }
 
-test('all session orchestration routes reject a missing calling session before doing work', async () => {
-  for (const route of ROUTES) {
+test('session orchestration routes outside the headless subset reject a missing calling session before doing work', async () => {
+  for (const route of ROUTES.filter((r) => !HEADLESS_ROUTE_NAMES.has(r.name))) {
     const { controller, serviceCalls, authorizationCalls } = makeController(true);
     await assert.rejects(
       () => route.invoke(controller),
@@ -192,6 +196,106 @@ test('all session orchestration routes accept an enabled caller and invoke only 
     );
     assert.deepEqual(serviceCalls, [route.serviceMethod], route.name);
   }
+});
+
+// A launchd/cron bridge belongs to no session and outlives every session, so it can hold no
+// session-bound credential. It authenticates with the runner token alone, and every route it can
+// reach must therefore be narrowed to the sessions this runner already hosts.
+test('headless callers reach the read and send routes scoped to the runner that authenticated', async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const sessions = new Proxy(
+    {},
+    {
+      get: (_target, prop: string) => async (...args: unknown[]) => {
+        calls.push({ method: prop, args });
+        return { route: prop };
+      },
+    },
+  );
+  const authorizer = {
+    assert: async () => {
+      throw new Error('a headless call must not go through the orchestration authorizer');
+    },
+  };
+  const controller = new RunnerSessionsController(sessions as never, authorizer as never);
+
+  assert.deepEqual(await controller.listSessions(RUNNER, undefined, undefined, 'RUNNING', undefined), {
+    route: 'listForOrchestration',
+  });
+  assert.deepEqual(calls.at(-1), {
+    method: 'listForOrchestration',
+    args: [
+      'owner-1',
+      { status: 'RUNNING', parentSessionId: undefined, assignedRunnerId: 'runner-1' },
+    ],
+  });
+
+  assert.deepEqual(await controller.getSession(RUNNER, undefined, undefined, TARGET_SESSION_ID), {
+    route: 'getForOrchestration',
+  });
+  assert.deepEqual(calls.at(-1), {
+    method: 'getForOrchestration',
+    args: ['owner-1', TARGET_SESSION_ID, 'runner-1'],
+  });
+
+  assert.deepEqual(
+    await controller.sendMessage(RUNNER, undefined, undefined, TARGET_SESSION_ID, {
+      message: 'continue',
+    }),
+    { route: 'createTurn' },
+  );
+  // The scope check must run BEFORE the turn is created, not alongside it.
+  assert.deepEqual(
+    calls.slice(-2).map((call) => call.method),
+    ['assertHostedByRunner', 'createTurn'],
+  );
+  assert.deepEqual(calls.at(-2)?.args, ['owner-1', 'runner-1', TARGET_SESSION_ID]);
+});
+
+test('the headless session scope only matches sessions assigned to the authenticated runner', async () => {
+  let query: { where?: Record<string, unknown> } = {};
+  const prisma = {
+    session: {
+      findFirst: async (args: typeof query) => {
+        query = args;
+        return null;
+      },
+    },
+  };
+  const service = new SessionsService(prisma as never, {} as never, {} as never);
+
+  // A session hosted on another machine is reported as missing rather than forbidden, so the
+  // runner credential cannot be used to probe for sessions it may not touch.
+  await assert.rejects(
+    () => service.assertHostedByRunner('owner-1', 'runner-1', TARGET_SESSION_ID),
+    (error: unknown) => error instanceof NotFoundException,
+  );
+  assert.deepEqual(query.where, {
+    id: TARGET_SESSION_ID,
+    ownerId: 'owner-1',
+    assignedRunnerId: 'runner-1',
+    deletedAt: null,
+  });
+});
+
+test('session orchestration detail scopes to one runner only when asked', async () => {
+  let query: { where?: Record<string, unknown> } = {};
+  const prisma = {
+    session: {
+      findFirst: async (args: typeof query) => {
+        query = args;
+        return { id: TARGET_SESSION_ID, status: 'RUNNING' };
+      },
+    },
+  };
+  const service = new SessionsService(prisma as never, {} as never, {} as never);
+
+  await service.getForOrchestration('owner-1', TARGET_SESSION_ID, 'runner-1');
+  assert.deepEqual(query.where, {
+    id: TARGET_SESSION_ID,
+    ownerId: 'owner-1',
+    assignedRunnerId: 'runner-1',
+  });
 });
 
 test('session orchestration detail uses an explicit allowlist and never returns agent secrets', async () => {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -22,8 +23,10 @@ Usage:
   orbit session end SESSION_ID [--json]
   orbit session complete SESSION_ID [--json]
 
-Session orchestration is available only inside a live Orbit session whose agent
-has enableOrchestration enabled. Run 'orbit session <command> --help' for options.
+Session orchestration is available inside a live Orbit session whose agent has
+enableOrchestration enabled. Outside any session — a launchd/cron process with no
+ORBIT_SESSION_ID — the runner credential alone allows get, list and send, scoped to
+the sessions this runner hosts. Run 'orbit session <command> --help' for options.
 `
 
 var sessionActionHelp = map[string]string{
@@ -56,6 +59,9 @@ Usage:
 
 Usage:
   orbit session get SESSION_ID [--json]
+
+Reports status, numTurns and lastTurnAt, so a headless poller can tell whether a
+long-lived session has finished the turn it was given.
 `,
 	"send": `orbit session send — send a follow-up message to a session
 
@@ -98,11 +104,27 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 }
 
+// headlessSessionCLICapabilities is what `orbit capabilities` advertises outside a session: the
+// same commands, re-described with the scope a runner credential actually gets.
+func headlessSessionCLICapabilities() []cliCapabilitySpec {
+	specs := make([]cliCapabilitySpec, 0, len(headlessSessionActions))
+	for _, spec := range sessionCLICapabilities {
+		description, ok := headlessSessionActions[strings.TrimPrefix(spec.Tool, "session_")]
+		if !ok {
+			continue
+		}
+		spec.Description = description
+		specs = append(specs, spec)
+	}
+	return specs
+}
+
 // cmdSessionCLI is the native adapter for the MCP session_* orchestration tools.
-// The environment gate controls discovery and fails closed locally; every request
-// also carries the calling session; Transport reads or refreshes its signed credential
-// lazily so the control plane can authorize the exact runtime against the current
-// Agent.enableOrchestration value.
+// For an agent the environment gate controls discovery and fails closed locally; every
+// request also carries the calling session, and Transport reads or refreshes its signed
+// credential lazily so the control plane can authorize the exact runtime against the current
+// Agent.enableOrchestration value. A caller with no session at all sends no session context,
+// which is what asks the control plane for the narrower headless scope.
 func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, sessionHelp)
@@ -129,7 +151,7 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
-	ctx, err := requireCLIOrchestrationContext()
+	ctx, err := requireCLIOrchestrationContext(action)
 	if err != nil {
 		return err
 	}
@@ -163,13 +185,43 @@ type cliOrchestrationContext struct {
 	token     string
 }
 
-func requireCLIOrchestrationContext() (cliOrchestrationContext, error) {
-	if !mcpOrchestrationEnabled() {
-		return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
+// headlessSessionActions are the commands a process outside any session may run on the runner
+// credential alone. They are non-destructive and the control plane scopes each of them to the
+// sessions this runner hosts; spawning and the lifecycle verbs stay session-gated. The value is
+// the description `orbit capabilities` advertises, so the gate and the advertisement cannot drift.
+var headlessSessionActions = map[string]string{
+	"list": "List the sessions this runner hosts. Authorized by the runner credential alone (no session context required); sessions on other runners are not listed.",
+	"get":  "Get one session's status, numTurns, lastTurnAt and latest output — enough for a headless poller to tell whether a long-lived session finished its turn. Limited to sessions this runner hosts.",
+	"send": "Queue a follow-up message for a session this runner hosts, as the runner owner. Authorized by the runner credential alone; it neither spawns nor ends a session.",
+}
+
+func headlessSessionActionList() string {
+	actions := make([]string, 0, len(headlessSessionActions))
+	for action := range headlessSessionActions {
+		actions = append(actions, action)
 	}
+	sort.Strings(actions)
+	return strings.Join(actions, ", ")
+}
+
+// requireCLIOrchestrationContext resolves how this process is allowed to reach the session API.
+// With ORBIT_SESSION_ID set the caller is an agent, and nothing changes: it needs its agent's
+// orchestration opt-in plus the signed credential Transport attaches. With no session id at all
+// the caller is headless (launchd/cron) — it can hold no session-bound credential, and outliving
+// the session that would have issued one is the whole point — so it runs on the runner
+// credential, which the server confines to this runner's own sessions.
+func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, error) {
 	id := strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
 	if id == "" {
-		return cliOrchestrationContext{}, fmt.Errorf("session orchestration requires ORBIT_SESSION_ID context")
+		if _, headless := headlessSessionActions[action]; headless {
+			return cliOrchestrationContext{}, nil
+		}
+		return cliOrchestrationContext{}, fmt.Errorf(
+			"session orchestration requires ORBIT_SESSION_ID context; without a session the runner credential allows only: %s",
+			headlessSessionActionList())
+	}
+	if !mcpOrchestrationEnabled() {
+		return cliOrchestrationContext{}, fmt.Errorf(orchestrationOffMsg)
 	}
 	if err := validatePathSegmentID(id); err != nil {
 		return cliOrchestrationContext{}, fmt.Errorf("ORBIT_SESSION_ID %w", err)

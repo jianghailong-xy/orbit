@@ -13,21 +13,39 @@ import (
 
 func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
-	t.Setenv("ORBIT_SESSION_ID", "")
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
 	t.Setenv(envMCPOrchestration, "")
 	t.Setenv(envOrchestrationToken, "")
 
+	// In a session whose agent has orchestration off, no session_* capability exists at all.
 	off := buildCLICapabilities("/opt/orbit")
 	if capability := sessionCLIFirstSessionCapability(off.Capabilities); capability != nil {
 		t.Fatalf("session capability exposed with orchestration disabled: %#v", capability)
 	}
 
-	t.Setenv(envMCPOrchestration, "true")
-	withoutContext := buildCLICapabilities("/opt/orbit")
-	if capability := sessionCLIFirstSessionCapability(withoutContext.Capabilities); capability != nil {
-		t.Fatalf("session capability exposed without a caller session: %#v", capability)
+	// Outside any session (launchd/cron) only the headless subset is advertised, whether or not
+	// the orchestration env flag happens to be set — the flag alone never unlocks spawning.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	for _, allow := range []string{"", "true"} {
+		t.Setenv(envMCPOrchestration, allow)
+		headless := buildCLICapabilities("/opt/orbit")
+		for _, id := range []string{"session_list", "session_get", "session_send"} {
+			capability := sessionCLICapabilityByID(headless.Capabilities, id)
+			if capability == nil {
+				t.Fatalf("%s capability missing for a headless caller (allow=%q)", id, allow)
+			}
+			if want := headlessSessionActions[strings.TrimPrefix(id, "session_")]; capability.Description != want {
+				t.Errorf("%s headless description = %q, want %q", id, capability.Description, want)
+			}
+		}
+		for _, id := range []string{"session_create", "session_search", "session_interrupt", "session_merge", "session_end", "session_complete"} {
+			if capability := sessionCLICapabilityByID(headless.Capabilities, id); capability != nil {
+				t.Fatalf("%s must not be advertised to a headless caller (allow=%q)", id, allow)
+			}
+		}
 	}
 
+	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	withoutCredential := buildCLICapabilities("/opt/orbit")
 	if capability := sessionCLICapabilityByID(withoutCredential.Capabilities, "session_list"); capability == nil {
@@ -352,6 +370,64 @@ func TestSessionCLICreateWaitPollsWithCallerContext(t *testing.T) {
 	}
 }
 
+// A launchd/cron process has no ORBIT_* session variables at all: get/list/send must go out on
+// the runner credential alone, carrying no session headers (which is what tells the control plane
+// to scope the request to this runner's own sessions) and never touching the session-credential
+// store — the credential a session would have issued does not outlive it.
+func TestSessionCLIHeadlessCallsCarryNoSessionContext(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantMethod string
+		wantPath   string
+	}{
+		{name: "get", args: []string{"get", "long-lived", "--json"}, wantMethod: http.MethodGet, wantPath: "/api/runner/sessions/long-lived"},
+		{name: "list", args: []string{"list", "--status", "RUNNING", "--json"}, wantMethod: http.MethodGet, wantPath: "/api/runner/sessions"},
+		{name: "send", args: []string{"send", "long-lived", "--message-file", "-", "--json"}, wantMethod: http.MethodPost, wantPath: "/api/runner/sessions/long-lived/turns"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			requestCount := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+				if r.Method != tc.wantMethod || r.URL.Path != tc.wantPath {
+					t.Errorf("request = %s %s, want %s %s", r.Method, r.URL.Path, tc.wantMethod, tc.wantPath)
+				}
+				if got := r.Header.Get("Authorization"); got != "Bearer runner-secret" {
+					t.Errorf("authorization header = %q", got)
+				}
+				for _, header := range []string{"X-Orbit-Session-Id", "X-Orbit-Session-Token"} {
+					if got := r.Header.Get(header); got != "" {
+						t.Errorf("%s = %q, want no session context", header, got)
+					}
+				}
+				w.Header().Set("content-type", "application/json")
+				_, _ = w.Write([]byte(`{"id":"long-lived","status":"AWAITING_INPUT","numTurns":7,"lastTurnAt":"2026-08-04T00:00:00.000Z"}`))
+			}))
+			defer srv.Close()
+
+			configureCLITestRunner(t, srv.URL)
+			t.Setenv(envMCPOrchestration, "")
+			t.Setenv("ORBIT_SESSION_ID", "")
+			t.Setenv(envOrchestrationToken, "")
+			t.Setenv("ORBIT_AGENT_ID", "")
+
+			var out bytes.Buffer
+			if err := cmdSessionCLI(tc.args, strings.NewReader("ping from the bridge"), &out); err != nil {
+				t.Fatal(err)
+			}
+			if requestCount != 1 {
+				t.Fatalf("request count = %d, want exactly one call with no credential refresh", requestCount)
+			}
+			for _, field := range []string{`"status"`, `"numTurns"`, `"lastTurnAt"`} {
+				if !strings.Contains(out.String(), field) {
+					t.Errorf("output %q is missing %s", out.String(), field)
+				}
+			}
+		})
+	}
+}
+
 func TestSessionCLIPropagatesForbiddenWithoutDroppingContextOrRetrying(t *testing.T) {
 	requestCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -390,6 +466,7 @@ func TestSessionCLIPropagatesForbiddenWithoutDroppingContextOrRetrying(t *testin
 func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv(envMCPOrchestration, "")
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
 	disabledCommands := [][]string{
 		{"create", "--prompt", "work", "--json"},
 		{"list", "--json"},
@@ -401,6 +478,8 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 		{"end", "child", "--json"},
 		{"complete", "child", "--json"},
 	}
+	// An agent in a session whose agent has orchestration off gets nothing — the headless
+	// subset below is for processes with no session context, not for a non-enabled agent.
 	for _, args := range disabledCommands {
 		var out bytes.Buffer
 		if err := cmdSessionCLI(args, strings.NewReader(""), &out); err == nil || !strings.Contains(err.Error(), "orchestration") {
@@ -408,12 +487,22 @@ func TestSessionCLIRequiresOrchestrationAndExplicitContext(t *testing.T) {
 		}
 	}
 
+	// With no session context, everything outside the headless subset is still refused, and the
+	// error names both the missing context and what a headless caller may do instead.
 	t.Setenv(envMCPOrchestration, "true")
 	t.Setenv("ORBIT_SESSION_ID", "")
 	for _, args := range disabledCommands {
+		if _, headless := headlessSessionActions[args[0]]; headless {
+			continue
+		}
 		var out bytes.Buffer
-		if err := cmdSessionCLI(args, strings.NewReader(""), &out); err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID") {
+		err := cmdSessionCLI(args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID") {
 			t.Errorf("session %s without caller context error = %v", args[0], err)
+			continue
+		}
+		if !strings.Contains(err.Error(), headlessSessionActionList()) {
+			t.Errorf("session %s error does not name the headless subset: %v", args[0], err)
 		}
 	}
 

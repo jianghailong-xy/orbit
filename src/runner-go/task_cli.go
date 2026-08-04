@@ -758,14 +758,20 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	}
 	includeOrchestration := mcpOrchestrationEnabled() &&
 		ctx.SessionID != ""
+	// No session context at all => a headless process (launchd/cron), which reaches the
+	// non-destructive subset on the runner credential alone. An in-session agent whose agent
+	// has orchestration off is NOT headless: it keeps seeing no session_* capability.
+	includeHeadlessSession := !includeOrchestration && ctx.SessionID == ""
 	descriptors := make(map[string]map[string]interface{})
-	for _, d := range toolDescriptors(false, includeOrchestration) {
+	for _, d := range toolDescriptors(false, includeOrchestration || includeHeadlessSession) {
 		name, _ := d["name"].(string)
 		descriptors[name] = d
 	}
 	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
+	} else if includeHeadlessSession {
+		specs = append(specs, headlessSessionCLICapabilities()...)
 	}
 	commands := make([]cliCapability, 0, len(specs))
 	for _, spec := range specs {

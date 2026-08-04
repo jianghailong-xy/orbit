@@ -919,6 +919,12 @@ func (t *Transport) refreshOrchestrationCredential(sessionID string) (string, er
 // doOrchestration reads the credential dynamically, then refreshes and retries
 // exactly once only when the server explicitly identifies it as missing/invalid.
 func (t *Transport) doOrchestration(method, path string, body, out interface{}, sessionID, fallbackToken string) error {
+	// A headless caller (launchd/cron) has no calling session, so there is no session-bound
+	// credential to read or refresh: the runner token alone authenticates, and the server
+	// narrows the request to this runner's own sessions.
+	if strings.TrimSpace(sessionID) == "" {
+		return t.doHeaders(nil, method, path, body, out, taskOpTimeout, nil)
+	}
 	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
 	if err != nil {
 		return err

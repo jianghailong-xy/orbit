@@ -15,11 +15,22 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 
+/** No calling session => the request comes from a headless process, not from an agent. */
+function isHeadlessCaller(callingSessionId: string | undefined): boolean {
+  return !callingSessionId?.trim();
+}
+
 /**
  * Session orchestration (L3) for in-session agents, reached by the `orbit mcp` server with the
  * machine's runner token. Tenant scope is the runner's owner; a spawn is attributed to the
  * PARENT session (X-Orbit-Session-Id, injected by the runner) whose agent must have
  * orchestration enabled — SessionsService enforces that plus the depth/child-count guards.
+ *
+ * A caller with no X-Orbit-Session-Id at all is HEADLESS: a launchd/cron bridge that belongs to
+ * no session and outlives every session, so it can hold no session-bound credential. It gets the
+ * three non-destructive routes below (get / list / send), scoped to the sessions this runner
+ * already hosts. Everything else — spawning, interrupt, merge, end, complete, and the owner-wide
+ * search — still requires a live calling session with orchestration enabled.
  *
  * Registered AFTER RunnerApiController (see runner-api.module.ts) so its static
  * GET sessions/claim | sessions/reclaim routes win over this controller's GET sessions/:id.
@@ -51,10 +62,17 @@ export class RunnerSessionsController {
     @Query('status') status: string | undefined,
     @Query('parentSessionId') parentSessionId: string | undefined,
   ) {
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     // Ignore an unknown status rather than letting Prisma 500 on a bad enum value.
     const s =
       status && (Object.values(RunStatus) as string[]).includes(status) ? (status as RunStatus) : undefined;
+    if (isHeadlessCaller(callingSessionId)) {
+      return this.sessions.listForOrchestration(runner.ownerId, {
+        status: s,
+        parentSessionId,
+        assignedRunnerId: runner.id,
+      });
+    }
+    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.listForOrchestration(runner.ownerId, { status: s, parentSessionId });
   }
 
@@ -80,6 +98,9 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id') id: string,
   ) {
+    if (isHeadlessCaller(callingSessionId)) {
+      return this.sessions.getForOrchestration(runner.ownerId, id, runner.id);
+    }
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.getForOrchestration(runner.ownerId, id);
   }
@@ -92,7 +113,11 @@ export class RunnerSessionsController {
     @Param('id') id: string,
     @Body() dto: { message: string },
   ) {
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    if (isHeadlessCaller(callingSessionId)) {
+      await this.sessions.assertHostedByRunner(runner.ownerId, runner.id, id);
+    } else {
+      await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    }
     return this.sessions.createTurn(runner.ownerId, id, {
       clientTurnId: randomUUID(),
       content: dto.message,

@@ -167,7 +167,9 @@ Codex and OpenCode receive the same context without replacing provider/project d
 Native Orbit MCP tools remain the preferred path when available.
 
 Inside an Orbit task session, task commands may omit the task id and use
-`ORBIT_TASK_ID`. Session commands require an explicit target id and a live caller
+`ORBIT_TASK_ID`. Session commands always require an explicit target id. Spawning a session,
+the lifecycle verbs (`interrupt`, `merge`, `end`, `complete`) and the owner-wide `search`
+additionally require a live caller
 session whose current agent has `enableOrchestration`; the runner receives a signed,
 session-bound credential and every request is re-authorized by the control plane.
 Credential support is negotiated explicitly, so an older runner safely disables orchestration
@@ -186,6 +188,24 @@ credential storage to private permissions on the next runner restart; the CLI re
 legacy world-readable config until that migration has happened.
 Task CLI mutations are attributed to the runner owner, so agents should prefer native
 Orbit MCP tools when agent/session attribution matters.
+
+A process with **no** `ORBIT_SESSION_ID` at all — a launchd/cron bridge that belongs to no
+session and outlives every session, so it can hold no session-bound proof — is treated as
+headless and gets `session get`, `session list` and `session send` on the runner credential
+alone, scoped by the control plane to the sessions that runner hosts. That is what the runner
+already has for those sessions, and nothing more: sessions on other machines stay invisible, and
+spawning, the lifecycle verbs and the owner-wide search stay session-gated. `orbit session get`
+reports `status`, `numTurns` and `lastTurnAt`, which is how a poller decides whether a
+long-lived session finished the turn it was given. `orbit capabilities --json` shrinks to match
+whatever the calling context actually allows, so it can be read as the source of truth:
+
+```bash
+# in a launchd job, with no ORBIT_* session variables in the environment
+orbit capabilities --json                                    # lists the headless subset
+orbit session list --status AWAITING_INPUT --json            # only this runner's sessions
+orbit session get <session-id> --json                        # status · numTurns · lastTurnAt
+echo "$event" | orbit session send <session-id> --message-file - --json
+```
 
 ## Cost & tokens
 
