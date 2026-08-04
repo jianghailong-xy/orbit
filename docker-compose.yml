@@ -32,10 +32,9 @@ services:
       # Optional: access-token (JWT) lifetime (e.g. 1h, 24h, 7d). Clients auto-refresh via a
       # 30d refresh token, so this can be short; defaults to 7d. Shorten once clients ship refresh.
       ACCESS_TOKEN_TTL: "${ACCESS_TOKEN_TTL:-7d}"
-      # Optional: master key (AES-256-GCM) that encrypts control-plane model providers' API keys
-      # (DeepSeek etc.) at rest. Needed only to add a provider in the admin UI; unset → provider
-      # create/dispatch throws a clear error. Generate: openssl rand -base64 32.
-      PROVIDER_SECRET_KEY: "${PROVIDER_SECRET_KEY:-}"
+      # Required: master key (AES-256-GCM) that encrypts control-plane model providers' API keys
+      # (DeepSeek etc.) at rest. Must be set at startup. Generate: openssl rand -base64 32.
+      PROVIDER_SECRET_KEY: "${PROVIDER_SECRET_KEY:?set PROVIDER_SECRET_KEY (generate: openssl rand -base64 32)}"
       # Optional: where the third-party vendor model lists (Kimi, DeepSeek, GLM, …) refresh from,
       # twice a day. Point at a mirror or a pinned copy where models.dev isn't reachable; a failed
       # fetch just leaves the pickers on the lists this build shipped.
