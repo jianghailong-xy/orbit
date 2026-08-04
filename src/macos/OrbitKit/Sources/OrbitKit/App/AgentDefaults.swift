@@ -1,8 +1,10 @@
 import Foundation
 
-/// Single source of truth for the composer's model / permission-mode / effort pickers. The
-/// `claude` CLI has no list command, so (like the web's lib/agentDefaults) this is a static,
-/// Opus-first list. Keep in sync with src/web/src/lib/agentDefaults.
+/// The composer's model / permission-mode / effort pickers, and the *floor* for their contents:
+/// a static, Opus-first list (like the web's lib/agentDefaults) that an async runner probe or a
+/// configured provider's catalogue may replace once it lands — see ModelSelectionRevision below,
+/// which is what keeps such a refresh from overwriting a choice the user already made.
+/// Keep in sync with src/web/src/lib/agentDefaults.
 public struct ModelOption: Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String

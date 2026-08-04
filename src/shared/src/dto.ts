@@ -983,8 +983,9 @@ export interface SessionSearchHit {
   /** @deprecated Compatibility alias of `completedAt`. */
   archivedAt: string | Date | null;
   deletedAt: string | Date | null;
-  /** Why the session ended — carried so the clients' shared status-label logic reports the same
-   *  wording here as in the session list (a benign recycle reads "Dormant", not "Cancelled"). */
+  /** Why the session ended. Not a run outcome — every deliberate end resolves to
+   *  `runState=ENDED` — but carried so a result row can explain itself the same way the session
+   *  list does, and so `deriveSessionRunState` can tell a stopped turn from an ended session. */
   endReason: string | null;
   matchField: SessionSearchMatchField;
   /** A whitespace-collapsed window around the match, or null for a `recent` row. Clients

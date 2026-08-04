@@ -1,7 +1,15 @@
 # Codex support in the Swift clients
 
 **Date:** 2026-07-09
-**Status:** Approved, pending implementation
+**Status:** Implemented. Kept as the record of the decision, not as a description of today's code.
+
+> **Since then**, `AgentDefaults` grew past what this spec asked for: the Claude and Codex model
+> lists are no longer static Swift constants but come from the runner's own CLI probe
+> (`claude -p "/model <alias>"`, `codex debug models`), and the provider list is extended at
+> runtime by control-plane–configured providers (BYOK) — with Kimi and OpenCode added as further
+> built-ins. The bug this spec was written to fix (clamping a Codex agent's model to the Claude
+> list) is fixed; the mechanism is `SessionProviderChoices` + `ModelSelectionRevision` rather than
+> the flat per-provider constants sketched below.
 
 ## Problem
 

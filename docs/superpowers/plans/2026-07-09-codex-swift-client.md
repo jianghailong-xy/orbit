@@ -1,5 +1,10 @@
 # Codex Support in the Swift Clients — Implementation Plan
 
+> **Completed (2026-07).** This is a finished work plan, kept as a record — do not execute it
+> against today's tree: the checkboxes, line numbers and the 263-test baseline are all from
+> 2026-07-09, and the design has since moved on (see the note at the top of the
+> [spec](../specs/2026-07-09-codex-swift-client-design.md)).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stop the macOS/iOS clients from sending a Claude model id to a Codex runner, and let a Codex session be configured from the app.

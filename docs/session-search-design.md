@@ -256,7 +256,7 @@ sheet 挂在两端各自的「已登录根视图」(macOS `RootView` in `OrbitAp
 |---|---|---|
 | 1 | migration 0068 + `GET /sessions/search` | ✅ `EXPLAIN ANALYZE` 确认两个索引都走 Bitmap Index Scan;`search-query.spec.ts` 6 例绿;apiserver 81/81 |
 | 2 | web ⌘K 面板 + recents + snippet 高亮 | ✅ web 构建通过,70/70(新增 `searchHighlight.test.ts` 9 例) |
-| 3 | OrbitKit + `SessionSearchView` + macOS ⌘K + iOS 抽屉入口 | ⚠️ **代码完成但未编译** —— 本机无 Swift 工具链,须 Mac CI |
+| 3 | OrbitKit + `SessionSearchView` + macOS ⌘K + iOS 抽屉入口 | ✅ 已过 Mac/iOS CI 编译门并发版;后续修过一处实机问题(Esc 关闭面板) |
 
 **实测性能**(通过编译后的 service 打真实数据副本,best-of-3 热连接):
 
@@ -275,7 +275,6 @@ sheet 挂在两端各自的「已登录根视图」(macOS `RootView` in `OrbitAp
 
 **仍需人工验收**
 
-- Mac CI 编译 Swift(三端里唯一没跑过编译器的部分),再发 beta 实机点一遍。
 - 上线后观察事件摄取延迟,确认 `run_event` 上的 GIN 索引没有可观测回归。
 - 生产 migration 的实际耗时(临时库 3.6 万行是 11.3 s,生产 300 万行会更久)。
 

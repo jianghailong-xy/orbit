@@ -15,9 +15,12 @@ minus the macOS-only ones, plus the iOS-only files in `Sources/`.
 src/ios/
   project.yml                 # XcodeGen spec — the checked-in source of truth for the .xcodeproj
   Sources/OrbitiOSApp.swift   # iOS @main entry (no menu-bar/Settings/Window scenes, no Sparkle)
-  Support/Info.plist          # bundle keys, orbit:// URL scheme, orientations
-  Support/Orbit.entitlements  # empty for now; APNs keys land in Phase E
-  Support/Assets.xcassets     # AppIcon (placeholder, reuses the macOS mark) + AccentColor
+  Sources/Push.swift          # APNs: registration → device token → server, + silent-push handling
+  Support/Info.plist          # bundle keys, orbit:// URL scheme, orientations, remote-notification
+  Support/Orbit.entitlements  # aps-environment = production (Release/TestFlight)
+  Support/Orbit.Debug.entitlements  # aps-environment = development (local on-device debug builds)
+  Support/Assets.xcassets     # AppIcon + AccentColor
+  ExportOptions.plist         # used by the release workflow's TestFlight upload
   .github/workflows/client.yml       # (repo root) generate + build on CI (macOS + iOS)
 
 ../macos/OrbitKit             # shared cross-platform core (models, SSE, transcript reducer) — SPM dep
@@ -86,11 +89,26 @@ platform input: `gh workflow run release.yml --ref main -f platform=ios` (builds
 `Orbit.xcodeproj` in Xcode → *Product ▸ Archive* → *Distribute App ▸ TestFlight & App Store*. Xcode
 signs with your logged-in Apple ID.
 
+## Push (APNs)
+
+Shipped. `Sources/Push.swift` registers for remote notifications and hands the device token to
+`AppModel`, which POSTs it (with its `sandbox`/`production` environment, so the server picks the
+matching APNs host) once signed in. Two kinds of push arrive:
+
+- an **alert** when a tool approval is created — banner + sound + icon badge, actionable;
+- a **silent** `content-available` push whenever the "needs you" count changes on any device —
+  no banner, updates the badge, and carries `clearSessions` so already-delivered banners for
+  sessions handled elsewhere are removed.
+
+The badge number has one authoritative server-side definition shared with the in-app count; see
+`docs/cross-platform-badge-sync.md` for the semantics and the known force-quit limitation. The
+server side is disabled (no-op) unless `APNS_KEY` / `APNS_KEY_ID` / `APNS_TEAM_ID` are configured.
+
 ## Roadmap
 
 - **B** — Xcode project stands up, shared sources wired, cross-platform shims. ✔
 - **C** — adaptive navigation: iPhone tab shell + iPad three-column. ✔
 - **D** — iOS-native polish: attachments (PhotosPicker/`.fileImporter`), pull-to-refresh, keyboard. ✔
-- **F** — signing + App Store Connect + TestFlight release workflow; full-bleed app icon. ✔ (this)
-- **E** — APNs push (device-token registration + server push for "needs your reply") + icon badge.
+- **F** — signing + App Store Connect + TestFlight release workflow; full-bleed app icon. ✔
+- **E** — APNs push (device-token registration + server push for "needs your reply") + icon badge. ✔
 - Optional — image paste (⌘V / PasteButton); on-device interaction pass.

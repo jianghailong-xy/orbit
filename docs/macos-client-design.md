@@ -1,9 +1,22 @@
 # Orbit — Native macOS Client Design
 
-> Status: **proposal**. Scope chosen: a **unified** native app = end-user **console** +
-> local-**runner control**, built in **native SwiftUI** (not Tauri/Electron). This document
-> is the design record; it maps the existing REST/SSE protocol onto a native client and
-> calls out the hard parts, the phasing, and the honest costs.
+> Status: **built and shipped** (Phases 0–5 of §11; signed/notarized DMG + Sparkle). Scope
+> chosen: a **unified** native app = end-user **console** + local-**runner control**, built in
+> **native SwiftUI** (not Tauri/Electron). This document is the design record; it maps the
+> existing REST/SSE protocol onto a native client and calls out the hard parts, the phasing,
+> and the honest costs.
+>
+> Two things the original proposal did not anticipate, both now shipped, are recorded elsewhere
+> rather than retrofitted into the argument below:
+> - The **iOS client** reuses this app's SwiftUI sources in place (Structure B) rather than
+>   being a second codebase — see [`src/ios/README.md`](../src/ios/README.md).
+> - List state is driven by a **user-level SSE control-plane stream**, not the 4 s polling
+>   assumed in §4.1/§5.2 — see
+>   [`realtime-control-plane-stream.md`](./realtime-control-plane-stream.md) (polling survives
+>   only as the fallback when that stream is down).
+>
+> §2 (protocol) and §5 (data model) are kept current because clients are written against them;
+> the rest reads as of the time the bet was made.
 
 ---
 
@@ -45,13 +58,21 @@ into the web** rather than be rebuilt. See §10 (Risks).
 Everything below already exists and is used by the web UI — the console needs **zero**
 server changes.
 
-- **Base:** `https://<instance>/api`, JWT Bearer, 7-day token, no refresh endpoint
-  (re-login on 401). One origin (gateway), `/api/*` proxied to the control plane.
-- **Auth:** `POST /auth/login {email,password} → {accessToken,user}`;
-  `GET /auth/setup-status → {needsSetup}`; `POST /auth/bootstrap`; `POST /auth/change-password`.
-- **Real-time:** **SSE only** — `GET /sessions/:id/events?sinceSeq=N`. No WebSocket (gateway
-  strips `Upgrade`). Browser EventSource needs `?access_token=`; **native `URLSession` should
-  use the `Authorization` header instead** (cleaner, keeps the token out of URLs/logs).
+- **Base:** `https://<instance>/api`, JWT Bearer. The access token's TTL is deployment-set
+  (`ACCESS_TOKEN_TTL`, default 7 d) and login also returns a **rotating refresh token**, so a
+  401 means "refresh", not "re-login" — only a failed/reused refresh forces the login screen.
+  One origin (gateway), `/api/*` proxied to the control plane.
+- **Auth:** `POST /auth/login {email,password} → {accessToken,refreshToken,user}`;
+  `POST /auth/refresh {refreshToken}` (rotation — re-presenting an already-rotated token revokes
+  the whole family); `POST /auth/logout {refreshToken}`; `GET /auth/setup-status → {needsSetup}`;
+  `POST /auth/bootstrap`; `POST /auth/change-password`.
+- **Real-time:** **SSE only**, two streams — the per-session transcript
+  `GET /sessions/:id/events?sinceSeq=N` (data plane, seq replay) and the per-user
+  `GET /events` (control plane: lifecycle/status/approval/library nudges, no replay — reconnect
+  with a REST snapshot instead). No WebSocket (gateway strips `Upgrade`). Browser EventSource
+  needs `?access_token=`; **native `URLSession` should use the `Authorization` header instead**
+  (cleaner, keeps the token out of URLs/logs). Both streams emit a ~20 s `ping` frame; clients
+  run a byte watchdog and reconnect on silence.
 - **Sessions:** `POST /sessions` (create+first prompt), `GET /sessions?view=open|completed|trash`,
   `GET /sessions/:id`, `POST /sessions/:id/turns`, `DELETE /sessions/:id/turns/:turnId`
   (withdraw queued), `POST .../resume|interrupt|end|complete|restore`, `DELETE /sessions/:id`,
@@ -70,10 +91,17 @@ server changes.
   the id in the turn payload. `GET /attachments/:id` to display.
 - **Me/prefs:** `GET /users/me`, `PATCH /users/me/preferences {theme,defaultModel,…}`.
 
-Turn-send rule (important for the composer): `/turns` is **rejected 409 while RUNNING**,
-accepted in `AWAITING_INPUT`; a per-run pending cap returns **429**; `clientTurnId` (client
-UUID) is the idempotency key. Queue-while-running is allowed via the durable PENDING turn —
-the composer queues optimistically and reconciles on the server `user` event.
+Turn-send rule (important for the composer): **queue-while-running is allowed** — `/turns` is
+accepted while `RUNNING` and even while the session is still `PENDING` (unclaimed), and the
+message lands as a durable `PENDING` `ConversationTurn` the runner consumes at the next turn
+boundary. `clientTurnId` (client UUID) is the idempotency key: a retry/double-click returns the
+existing turn. The composer queues optimistically and reconciles on the server `user` event; a
+still-queued turn can be listed (`GET /sessions/:id/turns`) and withdrawn
+(`DELETE /sessions/:id/turns/:turnId`). **409** is now reserved for "this session can't take a
+message at all" (in Trash, ended/cancel-requested, or a worktree merge/commit in flight); there
+is no per-run 429 cap. Terminal sessions go through `POST /resume` instead, gated by
+`capabilities.canResume` (see
+[`session-lifecycle-design.md`](./session-lifecycle-design.md) §4).
 
 ---
 
@@ -211,10 +239,20 @@ Enum string values are stable (the TS file is explicit that values are kept in s
 string with the Prisma schema), so these port 1:1. Hand-written now; consider codegen later.
 
 ```swift
+// Raw runner/process status — what the run is doing, as the runner reports it.
 enum RunStatus: String, Codable {
     case pending = "PENDING", running = "RUNNING", succeeded = "SUCCEEDED",
          failed = "FAILED", cancelled = "CANCELLED",
-         awaitingInput = "AWAITING_INPUT", interrupted = "INTERRUPTED", parked = "PARKED"
+         awaitingInput = "AWAITING_INPUT", interrupted = "INTERRUPTED"
+}
+// What the UI actually shows. Derived server-side and sent as `runState`; the client re-derives
+// it from RunStatus + endReason only for older control planes. Orthogonal to lifecycleState
+// (OPEN | COMPLETED | TRASH) — filing a session never changes its run outcome.
+// See docs/session-lifecycle-design.md.
+enum SessionRunState: String, Codable {
+    case queued = "QUEUED", running = "RUNNING", awaitingInput = "AWAITING_INPUT",
+         interrupted = "INTERRUPTED", succeeded = "SUCCEEDED", failed = "FAILED",
+         ended = "ENDED"          // the single neutral terminal state
 }
 enum RunnerStatus: String, Codable { case online = "ONLINE", offline = "OFFLINE", draining = "DRAINING" }
 enum PermissionMode: String, Codable, CaseIterable {
@@ -225,7 +263,13 @@ enum RunEventType: String, Codable {
     case system, assistant, text_delta, thinking, thinking_delta, tool_use, tool_result,
          status, error, result, user, turn_end, interrupt,
          approval_request, approval_resolved, background_task, background_output
+    case unknown   // decode fallback — a newer server event must never break the stream
 }
+// `src/shared` also defines control-plane-internal types (session_created/ended/updated,
+// task_changed, agent_changed, task_list_changed, tag_changed, provider_changed). They ride the
+// same server-side hub, but are filtered out of every per-session transcript stream and reach
+// the client only as a `ControlEvent` on GET /events — so this enum deliberately does NOT list
+// them, and would decode one as `.unknown` if it ever appeared.
 enum TaskStatus: String, Codable { case open = "OPEN", inProgress = "IN_PROGRESS", done = "DONE", cancelled = "CANCELLED", failed = "FAILED" }
 
 struct RunEvent: Codable {            // matches NormalizedRunEvent
@@ -244,9 +288,11 @@ struct SessionTurnRequest: Codable {  // POST /sessions/:id/turns
 ```
 
 `payload` is heterogeneous; use a small `JSONValue` enum (or decode into per-type structs
-keyed off `type`). The default-model list is **not** discoverable from the runner (the
-`claude` CLI has no list command), so mirror the web's `lib/agentDefaults` (Opus-first)
-statically.
+keyed off `type`). The model list is **not** a static mirror: runners probe the installed CLIs
+for their live lists and report them on heartbeat, and configured providers resolve theirs from
+the shared preset catalogue (refreshed from models.dev). The native picker therefore reads
+whatever the API serves for that agent/provider, with `OrbitKit/App/AgentDefaults.swift` as the
+floor for a runner whose probe hasn't landed yet.
 
 ---
 
@@ -363,4 +409,5 @@ UI can do this.
 
 A pragmatic **MVP** is Phases 0–1 + the menu bar from 3 + runner control from 4 (the
 native-only value), with the console's send path (Phase 2) and tasks (Phase 5) following.
-```
+
+All six phases shipped; the MVP shortcut was not needed.

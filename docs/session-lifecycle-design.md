@@ -18,17 +18,32 @@
 
 `runState` 只描述运行态或运行结果:
 
-| 值 | 含义 |
-|---|---|
-| `QUEUED` | 等待 runner slot |
-| `RUNNING` | 正在执行 |
-| `AWAITING_INPUT` | 进程存活,等待人类输入 |
-| `INTERRUPTED` | 当前 turn 被中断,Session 仍存活 |
-| `SUCCEEDED` | 运行成功 |
-| `FAILED` | 运行失败 |
-| `CANCELLED` | 运行被取消 |
-| `DORMANT` | 优雅结束,仍可能恢复 |
-| `ENDED` | 其他非活跃终态 |
+| 值 | 含义 | 终态 |
+|---|---|---|
+| `QUEUED` | 等待 runner slot | 否 |
+| `RUNNING` | 正在执行 | 否 |
+| `AWAITING_INPUT` | 进程存活,等待人类输入 | 否 |
+| `INTERRUPTED` | 当前 turn 被中断,Session 仍存活、仍可调度 | 否 |
+| `SUCCEEDED` | 运行成功 | 是 |
+| `FAILED` | 运行失败 | 是 |
+| `ENDED` | **唯一的中性终态**:运行停下来了,但没有成功/失败判定 | 是 |
+
+**中性终态只有一个。** 早期的 `CANCELLED / DORMANT / ENDED` 三件套其实是
+`(RunStatus, endReason)` 的排列,而没有任何行为区分它们 —— 能否继续由
+`deriveSessionCapabilities` 决定,它从不读 `endReason`。于是三个图标、三种文案在描述一个
+服务端并不存在的差别。**"是哪个动作结束了这次运行"不是运行结果**:用户归档的 Session 已经
+由 `lifecycleState=COMPLETED` 标识,其余属于叙述,不属于状态词表。所以现在:用户结束、用户
+停止、Complete、删除、task 驱动结束、以及历史遗留/未知 `endReason`,全部落到 `ENDED`
+(三端统一显示 "Ended",中性灰)。
+
+裸 `INTERRUPTED`(没有 `endReason`)表示"用户停了一个 turn",Session 本身仍然活着;一旦记录
+了任何 `endReason`,就表示 Session 本身被结束,落 `ENDED`。判定见
+`deriveSessionRunState`(`src/shared/src/enums.ts`),Swift 侧对称实现在
+`SessionRunState.resolve`(`OrbitKit/Models/Enums.swift`)。
+
+`endReason` 仍然保留,并且是"为什么结束"的真相源(`task_done` / `task_cancelled` / `ended` /
+`completed` / `deleted` / `cancelled`),只是不再参与派生运行状态;`idle` / `orphaned` 是
+PARKED 时代的遗留值,已无写入方,仅保证旧数据可解码(`LEGACY_END_REASONS`)。
 
 Complete、Move to Open 或 Move to Trash 都不得重写已经形成的运行结果。尤其不能把
 `SUCCEEDED` 改名为 `COMPLETED`:前者是运行结果,后者是用户选择的列表位置。
@@ -53,7 +68,8 @@ Task 的 `OPEN / IN_PROGRESS / DONE / CANCELLED / FAILED` 既不是 Session 的
 映射:
 
 - Task `DONE` → `endReason=task_done` → Session `runState=SUCCEEDED`,并自动进入 Completed;
-- Task `CANCELLED` → `endReason=task_cancelled` → Session `runState=CANCELLED`。
+- Task `CANCELLED` → `endReason=task_cancelled` → Session `runState=ENDED`(中性终态,
+  `endReason` 保留取消原因)。
 
 ## 3. 产品规则
 

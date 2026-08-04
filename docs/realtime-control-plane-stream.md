@@ -1,6 +1,6 @@
 # 设计文档:用户级实时控制面流(Realtime Control-Plane Stream)
 
-状态:定稿 v1(§10 全部决议) · 2026-06-26 · **P1-P5 已落地 2026-07-05**(P1-P3 于 06-26 首次落地但未提交,07-05 从 git dangling blobs 找回并重建;P4 心跳与 P5 客户端接入同日完成;P6 web 未做)
+状态:定稿 v1(§10 全部决议) · 2026-06-26 · **P1-P7 已落地**(P1-P3 于 06-26 首次落地但未提交,07-05 从 git dangling blobs 找回并重建;P4 心跳与 P5 客户端接入同日完成;P6 web 接入见 `src/web/src/lib/useControlPlane.tsx`;P7 事件级 upsert 2026-08-03)
 作者:Claude(应 jianghailong 评估请求)
 影响面:`src/apiserver`(新增端点 + RealtimeService 扩展)、`src/macos`(OrbitKit + OrbitApp)、`src/web`(可选复用)
 关联:[macos-client-design.md](./macos-client-design.md)、[interactive-claude-runner-design.md](./interactive-claude-runner-design.md)
@@ -139,15 +139,24 @@ export enum ControlEventType {
   APPROVAL_REQUESTED = 'approval.requested',
   APPROVAL_RESOLVED  = 'approval.resolved',
   BACKGROUND_TASK    = 'background.task', // 后台进程结束(completed/failed/killed)
+  // 以下为后续按同一机制补的「库变了,去刷一下」提示,`data` 只带 { id }(§4.6 / §4.6.1)
+  TASK_CHANGED       = 'task.changed',      // sessionId = 创建该 task 的 session
+  AGENT_CHANGED      = 'agent.changed',     // sessionId = 调用方(编排者)session
+  TASK_LIST_CHANGED  = 'task.list.changed', // 用户级:sessionId 为空串
+  TAG_CHANGED        = 'tag.changed',       // 用户级
+  PROVIDER_CHANGED   = 'provider.changed',  // 用户级(admin 改 shared provider 时对所有人广播)
   // 预留:未来任意通知都走这个泛化类型,不用每次改协议
   NOTIFICATION       = 'notification',
 }
 ```
 
+真值以 `src/shared/src/realtime.ts` 为准 —— 那里每个值都带用途注释,Swift 侧镜像在
+`OrbitKit/Models/ControlEvent.swift`(带 `.unknown` 兜底,所以服务端加类型不会打空老客户端)。
+
 `data` 载荷约定(够驱动列表/通知即可,**不塞 transcript 正文**):
 - `SESSION_CREATED` / `SESSION_UPDATED`(决议 Q2:**推完整精简摘要**,客户端无脑 upsert):
   `{ id, title, status, runStatus, sessionState, runState, lifecycleState, capabilities?, agentId, agent:{id,name,model}, pendingApprovals, lastTurnAt }` —— 字段对齐 `GET /sessions` 列表行所需(`agent` 复用 `SessionAgentRef`)。`runStatus` 是 runner/进程原始态；`runState` 是用户可见的执行态/结果；`lifecycleState` 是 `OPEN|COMPLETED|TRASH`,唯一决定列表归属；`capabilities` 是服务端统一派生的发送/恢复/Complete/还原权限(滚动升级期间可缺失)。`sessionState`、`filingState` 和 `status` 只为旧客户端兼容保留,其中 `filingState=ARCHIVED` 对应 `lifecycleState=COMPLETED`,`status` 是 `runStatus` 的兼容别名。**不做字段级 delta**(避免客户端做易错的字段合并)。
-- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,可以是 `runState=CANCELLED`、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置。兼容 payload 可额外携带 `filingState=ARCHIVED`。
+- `SESSION_ENDED`:`{ status, runStatus, sessionState, runState, lifecycleState, endReason }`。例如运行中的 Session 被用户 Complete 后,是 `runState=ENDED`(中性终态)、`lifecycleState=COMPLETED`;新客户端分别展示执行结果与所在位置,"是哪个动作结束的"读 `endReason` 而不是读 `runState`(见 [session-lifecycle-design.md](./session-lifecycle-design.md) §2.1)。兼容 payload 可额外携带 `filingState=ARCHIVED`。
 - `SESSION_ERROR`(决议 Q3):`{ message, recoverable }`。`recoverable=false` 通常伴随 status→FAILED 的 `session.updated`(列表行由后者更新);`recoverable=true` 是中途错误(如内容过滤),status 仍可能停在 `AWAITING_INPUT`,此事件携带 `session.updated` 没有的信息。**客户端通知去重见 §5.2**。
 - `APPROVAL_*`:`{ approvalId, pendingApprovals }`(计数用于角标/红点;明细仍走现有 approvals 端点)。
 - `BACKGROUND_TASK`:`{ name, status, exitCode? }`。
@@ -215,7 +224,7 @@ streamForUser(userId: string): Observable<ControlEvent> {
 发的位置:
 
 - **created**:`SessionsService.create`(新建)+ `restore`(从 Completed/Trash 移回 Open)→ `publishSessionCreated`。`streamForUser` 补全完整 summary。
-- **ended**:`SessionsService.complete` + `remove`(移入 Trash)→ `publishSessionEnded(id, status, actualEndReason, actualLifecycleState)`。`actualEndReason` 可为空,并保留数据库中已经形成的运行结束原因；`actualLifecycleState` 来自行锁事务提交后的真实位置,不能根据本次请求猜测。`session.ended` 是为旧客户端保留的事件名,新语义是 **lifecycle changed**,不表示执行结果。**这俩是“列表成员变化但不带 STATUS 事件”的场景**;而**终态运行状态**(SUCCEEDED/FAILED/CANCELLED)已被 `STATUS → session.updated` 覆盖(客户端按 `runState` 展示执行结果,按 `lifecycleState` 判断列表位置),而**优雅回收**(endReason `idle`/`ended`,原始运行态同样落 CANCELLED)仍留在 Open(`runState=DORMANT`,`lifecycleState=OPEN`)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
+- **ended**:`SessionsService.complete` + `remove`(移入 Trash)→ `publishSessionEnded(id, status, actualEndReason, actualLifecycleState)`。`actualEndReason` 可为空,并保留数据库中已经形成的运行结束原因；`actualLifecycleState` 来自行锁事务提交后的真实位置,不能根据本次请求猜测。`session.ended` 是为旧客户端保留的事件名,新语义是 **lifecycle changed**,不表示执行结果。**这俩是“列表成员变化但不带 STATUS 事件”的场景**;而**终态运行状态**(SUCCEEDED/FAILED/ENDED)已被 `STATUS → session.updated` 覆盖(客户端按 `runState` 展示执行结果,按 `lifecycleState` 判断列表位置),而**优雅回收**(原始运行态落 CANCELLED、带 `endReason`)虽然 `runState=ENDED`,却仍留在 Open(`lifecycleState=OPEN`)故不算 ended —— 因此**不在终态/recycle 处重复发 ended**,避免双信号。
 - **evict-on-ended(Q4)**:`session.ended` 映射时顺手 `ownerCache.delete(sessionId)`。
 
 后续按同一机制补的合成信号(都进 `isLifecycleType`,都不持久化):`session_updated`(改名/打标签这类"列表行变了但没有 turn"的场景,复用 `session.updated` 的完整 summary)、`task_changed`(MCP `task_create/update/comment`)、`agent_changed`(MCP `agent_create/update`)。
@@ -266,12 +275,24 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
 
 ---
 
-## 6. Web 客户端复用(`src/web`,可选、推荐)
+## 6. Web 客户端复用(`src/web`)
 
-同一个 `GET /events` 端点,web 用 `EventSource('/api/events?access_token=…')` 即可:
-- 登录后开一条,事件喂给现有 query 缓存(`lib/queries`),`setQueryData` 增量更新列表;
-- 撤掉(或大幅放宽)现有 `refetchInterval`,改"快照 + 跟随"。
-- 收益与 macOS 一致,且证明端点不是 macOS 专属投入。
+**已落地**:`src/web/src/lib/useControlPlane.tsx`,由 `AppShell` 挂载一次(每个 tab 一条流)。
+与原设想有一处刻意的简化:
+
+- 登录后开一条 `EventSource('/api/events?access_token=…')`;
+- **不做 per-event `setQueryData` 增量**,而是把事件当作"去重新拉一下"的 nudge:一张
+  `groupsFor(type)` 的类型前缀表决定这条事件弄脏了哪几组缓存,500ms 去抖后一次性
+  `invalidateQueries`。注意其中的**成对刷新**:`agent.*` 刷 agents **和** sessions、`tag.*` 刷
+  tags **和** sessions —— 改个 agent 名或标签颜色会改变会话列表行的渲染内容。
+  web 的列表查询本来就在 react-query 缓存里、拉一次很便宜;原生端做原地 upsert 是因为它要
+  自己维护 `sessions` 数组(§8 P7),web 没有这个负担,于是少一套易错的字段合并逻辑。
+- (重)连上时**刷新全部分组**,而不只是"会话列表快照":断线期间任何一个库都可能变过,
+  §4.5 的"快照 + 跟随"在这里落地为 `onopen` 里对每组各拉一次。
+- 连上后列表**停掉 `refetchInterval`**:`useControlPlaneLive()` 是那些查询的轮询开关,断流即
+  自动恢复轮询,所以没有该端点的老服务器照常工作(§7 的优雅回退在这里落地为一个布尔)。
+- 看门狗与原生端同构:服务端每 ~20s 一个 ping,**45s 无任何消息**判定半死并重连
+  (`EventSource` 没有读超时,`onerror` 不一定触发)。
 
 ---
 
@@ -293,20 +314,23 @@ hub 以 sessionId 为 key,但**owner 级的库**——任务清单、会话标�
 | **P3 合成生命周期(✅ 07-05)** | created/ended 于 create/restore(created)与 complete/remove(ended)发信号;终态运行状态走 session.updated 不重复发 | node --test 46 passed(realtime 13:含 created/ended 映射 + transcript 隔离) |
 | **P4 心跳 + 看门狗(✅ 07-05)** | 服务端 20s keepalive(Nest @Sse 发不了 `:` 注释帧 → 改发 `{type:"ping"}` data 帧,客户端按类型丢弃、字节喂看门狗——效果等同) + OrbitKit 传输层字节看门狗(2× 间隔无字节 → 断开重连) | ControlStreamTests |
 | **P5 客户端接入(✅ 07-05,macOS+iOS 共享层)** | OrbitKit `ControlEvent.swift`+`URLSessionControlStream`;`AppModel` 常驻流:连上→快照重建+停轮询tick,断→回退 4s 轮询(老服务器兼容);通知复用 SessionDelta(upsert 前后快照 diff) | swift test;真机后台保活待验 |
-| P6 web 复用(可选) | EventSource 接入 + 放宽 refetch | 列表实时、轮询流量下降 |
+| **P6 web 复用(✅ 已落地)** | `lib/useControlPlane.tsx`:`AppShell` 挂一条 EventSource,按事件类别去抖 500ms `invalidateQueries`;`useControlPlaneLive()` 作为列表查询的轮询开关(连上停轮询、断流恢复) | 列表实时、轮询流量下降;断流自动回退轮询 |
 | **P7 事件级 upsert(✅ 2026-08-03,起因:iOS 并发 session 多时卡顿)** | P5 的"每个事件都 `loadSessions()`"让开销随并发运行数增长(事件比 200ms 合并窗口更密 → 常驻"全量拉取+全树重渲"):现在 `session.created/updated` + `approval.*` 按 payload 原地 upsert 行(OrbitKit `SessionUpsert.swift` 纯逻辑,决议 Q2 真正落地),library 事件只刷自己的模型(对齐 web `groupsFor`);摘要装不下的字段(preview 行 / tags / pin / runningBgCount)改由**常驻** 4s tick 兜底(不再"连上就停 tick"),剩下的 nudge 合并窗口 200→500ms;agent pane 的 Open 列表改吃同一份快照(`AgentsModel.applyOpenSnapshot`),删掉第二条全量轮询 | OrbitKit `swift test`(新增 `SessionUpsertTests`);iOS/macOS 编译门在 PR 跑;真机手感待 TestFlight |
 
 P1–P4 大多可在 Linux 上闭环(单测 + curl);P5 的运行时/后台行为需真机。
 
 ---
 
-## 9. 能力边界:退出态通知 → APNs(单独立项)
+## 9. 能力边界:退出态通知 → APNs(已单独立项并落地)
 
-**本方案的长连接只在 app 运行(含后台/菜单栏)时有效。** 如果产品要"**app 完全退出了也能弹通知**",必须:
-1. 接入 **Apple Push Notification service (APNs)**:客户端注册 device token,服务端持久化 token,关键事件(审批、任务完成)经 APNs 推送;
-2. 这需要 Apple Developer 推送证书/Key、服务端 APNs 集成、设备表与投递偏好 —— 工作量与本方案**相当或更大**,且与 SSE 长连接正交。
+**本方案的长连接只在 app 运行(含后台/菜单栏)时有效。** "app 完全退出了也能弹通知"需要
+**Apple Push Notification service (APNs)**:客户端注册 device token,服务端持久化 token,关键
+事件经 APNs 推送。这与 SSE 长连接正交,当时的建议是先做控制面流、APNs 另立项。
 
-建议:**先做本文档的控制面流**(覆盖"app 在用/在后台"的绝大多数场景),APNs 作为后续独立 RFC 评估,不要混在一起。
+**该立项已完成**:服务端 `src/apiserver/src/push/push.service.ts`(token-based APNs,ES256
+provider JWT)+ `DeviceToken` 表,客户端 `src/ios/Sources/Push.swift`。两条推送各司其职 ——
+新建审批发 alert,角标变化发静默 background 同步 —— 触发点就挂在本文 `RealtimeService.publish()`
+的一个事件子集上。详见 [cross-platform-badge-sync.md](./cross-platform-badge-sync.md)。
 
 ---
 

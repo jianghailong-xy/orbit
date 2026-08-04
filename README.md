@@ -1,7 +1,7 @@
 # 🛰 Orbit
 
-An **AI-agent platform** for running **Claude Code, Codex, and OpenCode** against your own infrastructure. Orbit
-gives you **interactive, multi-turn agent sessions** *and* a **task queue** — but the agents
+An **AI-agent platform** for running **Claude Code, Codex, Kimi, and OpenCode** against your own
+infrastructure. Orbit gives you **interactive, multi-turn agent sessions** *and* a **task queue** — but the agents
 don't run on the server. Instead, users register their own machines as **runners** (à la
 GitHub Actions self-hosted runners), and the selected coding runtime runs *there*, where the ops tooling and
 credentials already live (`tea-cli`, HDFS clients, kubectl, …).
@@ -20,21 +20,31 @@ runner.
 
 - **Control plane** (`src/apiserver`) — NestJS + Prisma + PostgreSQL. Owns users, agents,
   sessions + conversation turns, tasks (the queue) with task-lists and dependency DAGs,
-  runs, runners, tool-approvals, attachments, and cost/usage aggregation. Never holds an
-  Anthropic key.
+  runs, runners, tool-approvals, attachments, and cost/usage aggregation. It never holds an
+  engine *login* — a runtime's own OAuth/session credentials stay on the runner. The one
+  secret it does store is a **configured model provider's** API key (BYOK), encrypted at rest
+  with AES-256-GCM under `PROVIDER_SECRET_KEY` and injected into the engine process at spawn.
 - **Runner** (`src/runner-go`) — a small static Go CLI (~6 MB, no runtime needed).
   `orbit register` enrolls a machine via browser approval; `orbit run` long-polls for
-  assigned work and drives the agent's selected local runtime (Claude Code, Codex, or OpenCode),
-  feeding user turns over an inbox long-poll while preserving the runtime conversation. Streams
-  normalized events + token/cost back to the control plane, runs each session in its own
+  assigned work and drives the agent's selected local runtime (Claude Code, Codex, Kimi, or
+  OpenCode), feeding user turns over an inbox long-poll while preserving the runtime conversation.
+  Streams normalized events + token/cost back to the control plane, runs each session in its own
   **git worktree**, drains gracefully on restart, and checks for control-plane updates at
   startup and periodically while running; a live update stops new claims and drains sessions
-  before replacing the process.
+  before replacing the process. It also keeps the installed engine CLIs up to date on a daily
+  auto-update pass.
 - **Web** (`src/web`) — Vite + React + Ant Design. Grouped task lists, agent CRUD, a live
   **chat console** (SSE) with in-flight **tool-approval** cards, image/file attachments,
-  runner enrollment, a Skills browser, a cost dashboard, dark mode, and a mobile-responsive
-  layout.
-- **Shared** (`src/shared`) — enums, normalized run-event types, and runner-API DTOs.
+  runner enrollment, a Skills browser, a cost dashboard, ⌘K cross-session search, dark mode,
+  and a mobile-responsive layout.
+- **Native clients** (`src/macos`, `src/ios`) — a SwiftUI console for macOS (Developer-ID DMG,
+  Sparkle auto-update, menu-bar extra, actionable notifications, local-runner control) and for
+  iPhone/iPad (TestFlight, APNs push + icon badge). Both are built on **OrbitKit**, a UI-free,
+  Linux-testable Swift core holding all protocol logic; the iOS target reuses the macOS SwiftUI
+  sources in place. See [`src/macos/OrbitKit/README.md`](src/macos/OrbitKit/README.md) and
+  [`src/ios/README.md`](src/ios/README.md).
+- **Shared** (`src/shared`) — enums, normalized run-event types, control-plane event envelopes,
+  provider presets, and runner-API DTOs.
 - **Gateway** (`gateway/`) — an nginx reverse proxy serving the web UI and `/api` from one
   origin; the full stack runs under Docker Compose.
 
@@ -65,18 +75,29 @@ Highlights:
   human decision surface as **live approval cards** in the UI (allow / deny, with optional
   remember-rules) rather than blocking unattended. OpenCode maps the same modes to guarded
   non-interactive rules; its provider login remains a manual `opencode auth login` step.
-- **Cost/usage from the source** — runners report Claude Code's own `total_cost_usd` /
-  `usage` per turn; the control plane aggregates these (see caveat below).
+- **Realtime control plane** — one **per-user SSE stream** (`GET /api/events`) carries session
+  lifecycle / status / approval / background-task signals and replaces the clients' list
+  polling, while the per-session transcript stream (`GET /api/sessions/:id/events`) keeps its
+  `sinceSeq` replay for token-level rendering. See
+  [`docs/realtime-control-plane-stream.md`](docs/realtime-control-plane-stream.md).
+- **Bring-your-own model providers** — beyond an engine's own login, an admin (or a user, for a
+  personal row) can connect an API-compatible vendor from a preset catalogue; the session then
+  borrows the matching runtime CLI with that key injected. See `src/shared/src/providerPresets.ts`.
+- **Cost/usage from the source** — runners report the engine's own per-turn cost/token usage
+  where it exposes it (e.g. Claude Code's `total_cost_usd` / `usage`); the control plane
+  aggregates these (see caveat below).
 
 ## Prerequisites
 
 - Node.js ≥ 20 (uses global `fetch`)
 - Docker (for local Postgres) — or any reachable PostgreSQL 16
-- On each runner machine: the runtime selected by its agents — **Claude Code**, **Codex**, or
-  **OpenCode** — installed and authenticated. Use Claude's `/login` (or
-  `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`), `codex login`, or
+- On each runner machine: the runtime selected by its agents — **Claude Code**, **Codex**,
+  **Kimi**, or **OpenCode** — installed and authenticated. Use Claude's `/login` (or
+  `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`), `codex login`, `kimi login`, or
   `opencode auth login`, respectively. Credentials stay on the runner machine; `orbit doctor`
   reports missing engines/auth and the registration flow can install missing engines with consent.
+  Sign-in can also be driven from the UI: Claude uses a hosted callback, while `codex` and `kimi`
+  are device flows (on a remote machine `codex login` needs `--device-auth`).
 
 ## Quickstart (development)
 
@@ -160,10 +181,10 @@ orbit session send <session-id> --message "Please add a regression test" --json
 orbit session complete <session-id> --json
 ```
 
-Each Claude/Codex/OpenCode session receives a short discovery instruction pointing at the
+Each Claude/Codex/Kimi/OpenCode session receives a short discovery instruction pointing at the
 resolved absolute binary path and `capabilities --json`. Claude receives approval-free
 rules for Task/TaskList and, only when enabled for that agent, Session action prefixes;
-Codex and OpenCode receive the same context without replacing provider/project defaults.
+Codex, Kimi and OpenCode receive the same context without replacing provider/project defaults.
 Native Orbit MCP tools remain the preferred path when available.
 
 Inside an Orbit task session, task commands may omit the task id and use
@@ -239,12 +260,15 @@ provider's billing records for authoritative charges.
 
 ```
 src/
-  shared/     enums · normalized run events · runner-API DTOs
+  shared/     enums · normalized run events · control events · provider presets · DTOs
   apiserver/  NestJS control plane + Prisma schema/migrations
   runner-go/  `orbit` CLI (Go): register · run loop · interactive session · worktree
   web/        Vite + React + Ant Design UI
+  macos/      OrbitKit (UI-free Swift core, Linux-testable) + OrbitApp (SwiftUI shell)
+  ios/        XcodeGen spec + iOS entry; reuses OrbitApp's SwiftUI sources in place
 gateway/      nginx reverse proxy (web + /api on one origin)
-docs/         design notes (interactive sessions, Phase-0 CLI probes)
+docs/         design records (interactive sessions, session lifecycle, realtime control
+              plane, badge sync, quota retry, session search, native clients)
 ```
 
 ## Useful scripts (root)
@@ -262,8 +286,11 @@ docs/         design notes (interactive sessions, Phase-0 CLI probes)
 
 Shipped: distributed runners, **interactive multi-turn sessions** with live tool-approvals,
 task CRUD + queue + execution, **task-lists and dependency DAGs**, per-session **git-worktree
-isolation**, graceful runner drain + a heartbeat reaper, image/file attachments, a Skills
-browser, cost/token rollups, and a dark / mobile-responsive UI.
+isolation** with commit/merge from the UI, graceful runner drain + a heartbeat reaper,
+image/file attachments, a Skills browser, cost/token rollups, a dark / mobile-responsive UI,
+a **user-level realtime control-plane stream**, **cross-session ⌘K search**, **configurable
+model providers** (BYOK), an MCP surface for session/task/agent orchestration, and **native
+macOS + iOS clients** with APNs push.
 
 Not yet: cron / recurring schedules and external task sources (e.g. Feishu/Lark) — designed
 for, but not built.

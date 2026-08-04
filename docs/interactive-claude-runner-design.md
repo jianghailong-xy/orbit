@@ -1,6 +1,34 @@
 # Orbit — Interactive Claude Sessions on the Runner (Route B)
 
 > Multi-agent design (red-team hardened). Status: **implemented** and shipped to `main` — kept here as the design record.
+>
+> ### Read this first: the names below have moved
+>
+> This is the record of the design **as argued and accepted**, with the file/line citations that
+> justified each decision at the time. The machinery it describes is what runs today — long-lived
+> engine process, durable turn queue, inbox long-poll, lease-based at-least-once delivery,
+> server-side reaper, `clientTurnId` idempotency. What changed is the naming and the surface:
+>
+> | In this document | In the code today |
+> |---|---|
+> | an interactive `Task` + its `TaskRun` | a first-class **`Session`** row (`model Session`); a `Task` is now only a queued work item that *spawns* a session |
+> | `POST /api/tasks/:id/turns` · `/interrupt` · `/end` · `/cancel` | `POST /api/sessions/:id/turns` · `/interrupt` · `/end` · `/complete` (see `sessions.controller.ts`) |
+> | `GET /api/runner/runs/:id/inbox` · `/reclaim` · `/turn-complete` | `GET /api/runner/sessions/:id/inbox` · `sessions/reclaim` · `POST /api/runner/sessions/:id/turn-complete` |
+> | `GET /api/runs/:id/events` (SSE) | `GET /api/sessions/:id/events` (SSE), plus a per-user control-plane stream `GET /api/events` |
+> | `ConversationTurn.runId` | `ConversationTurn.sessionId` |
+> | "one long-lived `claude` process" | one long-lived process of the agent's **selected runtime** — Claude Code, Codex, Kimi or OpenCode |
+>
+> Decisions since taken that supersede parts of the text below:
+> - **§3 turn serialization is no longer 409-while-RUNNING.** Queue-while-running shipped: a turn
+>   sent mid-turn lands as a durable `PENDING` `ConversationTurn` and is consumed at the next turn
+>   boundary; there is no per-run 429 cap. `clientTurnId` idempotency is unchanged.
+> - **§12.1 single-replica is resolved.** The hub, inbox signal and cancel intent went to Postgres
+>   `LISTEN/NOTIFY` (Phase 6), so the startup advisory-lock guard is not what gates deployment.
+> - **§9's deferred `canUseTool` round-trip shipped** as the live **approval cards**: a tool call
+>   needing a decision becomes an `Approval` row + an SSE nudge, answered from any client.
+> - Session lifecycle vocabulary (`runState` / `lifecycleState`, and the collapse of the old
+>   terminal states into one neutral `ENDED`) is specified in
+>   [`session-lifecycle-design.md`](./session-lifecycle-design.md), not here.
 
 # Route B — Red-Team-Hardened Design: Interactive Multi-Turn Claude Sessions
 

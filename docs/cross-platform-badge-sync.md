@@ -1,15 +1,22 @@
 # 设计文档:跨平台角标同步(Cross-Platform Badge Sync)
 
-状态:**提案 v1 · 待评审**(先讨论方案,暂不改代码) · 2026-07-08
+状态:**已落地**(P1–P3 已实现并部署;P4 真机验收另计) · 提案定稿 2026-07-08
 作者:Claude(应 jianghailong 评估请求)
 影响面:`src/apiserver`(`PushService` + `RealtimeService` 各扩展一处;无 DB 迁移)、`src/ios`(后台静默推送处理器 + 清横幅);`src/macos` 仅共享 `needsYou` 口径,零改动
 关联:[realtime-control-plane-stream.md](./realtime-control-plane-stream.md)(本文档是其 §9「退出态通知 → APNs」的续集)、[macos-client-design.md](./macos-client-design.md)
+
+> **实现与本文的差异(读代码时以此为准)**,见 §11:权威口径函数叫 `needsYouSessions()` 且
+> **返回 sessionId 列表**而非计数;`BADGE_EVENTS` **不含** `APPROVAL_REQUEST`;去抖入口叫
+> `PushService.scheduleBadgeSync(ownerId)`;差分逻辑抽成纯函数 `push/badge-diff.ts`。
 
 ---
 
 ## 1. 背景与问题
 
 ### 1.1 现状:推送与角标怎么来的
+
+> 本节(以及 §1.2、§1.3)描述的是**本方案落地之前**的状态,行号也是当时的。方案已实现,
+> 缺陷 A / B 均已修复;今天的代码见 §11。
 
 - **服务端唯一的推送触发点**是「新建审批」:runner 命中 permission-prompt → `POST /runner/sessions/:id/approvals` 建 `Approval` 行 → `runner-api.controller.ts:624` fire-and-forget 调 `PushService.notifyApprovalRequest`(`push.service.ts:48`)。
 - 这条推送是 **alert 类型**(`apns-push-type: alert`,`push.service.ts:132`),带 `aps.badge`,发给该 owner 的所有 `DeviceToken`。
@@ -44,7 +51,7 @@
 
 1. **「需要你回复」的数量会下降的场景有两类**,不止一类:
    - ① 审批被**决定**(allow/deny)——`decideApproval`;
-   - ② 会话**带着 PENDING 审批离开 RUNNING**(被取消 / 失败 / 休眠 PARKED / 自然结束)——此时客户端 `needsYou` 立刻不再计它,但**审批行仍是 PENDING**。
+   - ② 会话**带着 PENDING 审批离开 RUNNING**(被取消 / 失败 / 自然结束)——此时客户端 `needsYou` 立刻不再计它,但**审批行仍是 PENDING**。
 2. **`decideApproval` 是全仓唯一会改审批状态的地方**(`grep` 确认:除它之外没有任何 `approval.update/deleteMany`)。**没有任何代码在会话进终态时清理它的 PENDING 审批** → 场景 ② 会留下**孤儿审批**。这既解释了缺陷 A 里「push badge 只增不减」,也说明场景 ② 的角标下降**当前完全没有推送**。
 3. **所有相关事件都已流经同一个 choke point** `RealtimeService.publish()`(`realtime.service.ts:195`):新建审批发 `APPROVAL_REQUEST`、`decideApproval` 发 `APPROVAL_RESOLVED`、runner 状态摄取发 `STATUS`、会话结束发合成 `session_ended`。**这意味着我们不需要去每个 mutation site 埋钩子** —— 挂在 `publish()` 上即可一网打尽 ①②。
 
@@ -186,7 +193,7 @@ publish(runId, event) {
 | 方案 | 内容 | 取舍 |
 |---|---|---|
 | **C1 只做 §3(统一语义),不推 decrement** | 仅修数字口径 | ✗ 不满足核心诉求:后台 iOS 仍不消失 |
-| **C2 在每个 mutation site 显式加推送钩子** | decideApproval + 各会话终态路径各调一次 syncBadge | ✗ 场景②的会话终态入口分散(取消/失败/reaper 强杀/park),**极易漏**;§4.1 挂 `publish()` 一处全覆盖,更稳 |
+| **C2 在每个 mutation site 显式加推送钩子** | decideApproval + 各会话终态路径各调一次 syncBadge | ✗ 场景②的会话终态入口分散(取消/失败/reaper 强杀/优雅回收),**极易漏**;§4.1 挂 `publish()` 一处全覆盖,更稳 |
 | **C3 用 alert 推送代替静默来降角标** | 决定后也弹一条 | ✗ 打扰:用户刚在 web 处理完,手机又响一下 |
 | **C4 纯客户端(靠前台 reconcile)** | 不加服务端推送 | ✗ 退出态/后台无效,等于不解决 B |
 | **★ 推荐 = §3 + §4** | 权威口径 + `publish()` 对账器 + 静默 background 推送 | ✓ 一处 choke point 覆盖①②;复用 APNs/ownerCache;无迁移;iOS 能力现成 |
@@ -198,9 +205,9 @@ publish(runId, event) {
 
 | 阶段 | 内容 | 可验证产物 |
 |---|---|---|
-| **P1 权威口径** | `PushService.needsYouBadge()`;把现有 alert 推送(`push.service.ts:61-63`)改用它 | 单测:多审批同会话→1、孤儿审批不计、system 排除;与 `SessionGrouping` 用例对齐 |
-| **P2 静默同步 + 去抖** | `PushService.syncBadge(ownerId)`(background 推送,带 `clearSessions`)+ `RealtimeService` 对账器挂 `publish()`(badge 子集 + **300ms 去抖** + 变了才推 + 攒离开集)+ `send()` 参数化 push-type/priority | 集成:decideApproval / STATUS 离开 RUNNING →(合并后)一条 background 推送;新建审批不重复推 |
-| **P3 清横幅** | iOS `didReceiveRemoteNotification` 按 `clearSessions` + 前台对账兜底,删已送达横幅(无 NSE) | 别处处理后横幅消失;force-quit 回前台清 |
+| **P1 权威口径(✅ 已落地)** | 实现为 `PushService.needsYouSessions()`(返回 id 集合,见 §11.1);alert 推送改用它 | 单测:多审批同会话→1、孤儿审批不计;与 `SessionGrouping` 用例对齐 |
+| **P2 静默同步 + 去抖(✅ 已落地)** | `PushService.syncBadge()`(background 推送,带 `clearSessions`)+ `scheduleBadgeSync()` 挂 `publish()` 的 badge 子集(**300ms 去抖** + 变了才推 + 攒离开集)+ `deliver()`/`send()` 参数化 push-type/priority | `badge-diff.spec.ts` 覆盖差分边界;新建审批不重复推 |
+| **P3 清横幅(✅ 已落地)** | iOS `didReceiveRemoteNotification` 按 `clearSessions` + 前台对账兜底,删已送达横幅(无 NSE) | `src/ios/Sources/Push.swift`;别处处理后横幅消失;force-quit 回前台清 |
 | **P4 联调 + 真机** | 三端角标一致性;iOS 后台/退出态实测静默降角标 + 清横幅;force-quit 兜底 | 真机(静默推送/后台行为 Linux 验不了) |
 
 P1–P2 可在 Linux 闭环(单测/编译);P3 客户端为主;P4 需真机 + 已配置 APNS_KEY 的运行栈。
@@ -216,7 +223,7 @@ P1–P2 可在 Linux 闭环(单测/编译);P3 客户端为主;P4 需真机 + 已
 | Q3 | 首期是否清横幅 | **做**:静默推送唤醒后台处理器 + 前台兜底,无需 NSE(§4.5、§5.1) |
 | Q4 | 孤儿审批终态清理 | **不做,记 TODO**:§3 口径已让孤儿不影响角标;审批表整洁另开小项(见下) |
 
-**TODO(独立小项,不阻塞本方案)**:会话进终态(CANCELED/FAILED/PARKED/结束)时把其残留的 `PENDING` 审批标记为 `CANCELED`,清理 §1.3 的孤儿审批行。仅为数据整洁——角标已由 §3 的 `status==RUNNING` 口径规避,无功能依赖。
+**TODO(独立小项,不阻塞本方案)**:会话进终态(失败/取消/结束)时把其残留的 `PENDING` 审批标记为 `CANCELED`,清理 §1.3 的孤儿审批行。仅为数据整洁——角标已由 §3 的口径规避,无功能依赖。
 
 ---
 
@@ -227,5 +234,42 @@ P1–P2 可在 Linux 闭环(单测/编译);P3 客户端为主;P4 需真机 + 已
 - **一处 choke point**(§4,`publish()` 上的 badge 子集对账器 + 去抖 + 静默 background 推送)让数字每次变化都尽力同步到所有设备(含后台 iOS)、不打扰用户,并**顺带清掉已处理会话的横幅**。
 - **成本可控**:复用 APNs 通道与 `ownerCache`,**无 DB 迁移**;iOS 后台推送能力(`remote-notification`)**已就位**,客户端可零改动;macOS/web 因共享 `needsYou` 口径而天然一致。
 - **边界清晰**:force-quit 是已知限制(iOS 不投递静默推送),角标与横幅均由下次 alert 推送与前台对账兜底。
-</content>
-</invoke>
+
+---
+
+## 11. 实现与设计的偏离(落地记录)
+
+代码在 `src/apiserver/src/push/`(`push.service.ts` + 纯函数 `badge-diff.ts`)与
+`realtime.service.ts`,四处与本文原稿不同:
+
+### 11.1 权威口径返回 id 集合,不只是计数(§3)
+
+`needsYouBadge(): Promise<number>` 实现为
+**`needsYouSessions(ownerId): Promise<string[]>`** —— 角标等于这个集合的大小。改成返回 id 是
+§4.5 清横幅的前提:只有拿到"上次是哪些会话"和"这次是哪些会话",才能算出**掉出集合**的那些
+(`badge-diff.ts` 的 `clearSessions`);光有两个数字做不到。
+
+过滤条件也比原稿更严,与客户端 `SessionGrouping.needsYou` 逐条对齐:除 `status = RUNNING` 与
+`approvals: { some: { status: 'PENDING' } }` 外,还要求 `completedAt / archivedAt / deletedAt /
+cancelRequestedAt` 全为 null —— 已归档、已删除、正在结束的会话不该再要人回复。
+
+### 11.2 `BADGE_EVENTS` 不含 `APPROVAL_REQUEST`(§4.1)
+
+实际子集只有三个:`APPROVAL_RESOLVED` / `STATUS` / `SESSION_ENDED`。**升角标已经由建审批时的
+alert 推送覆盖**(那条推送自己算 `needsYouSessions` 并写入"上次已推"状态),再让对账器跑一遍
+只会算出同值、判定"没变"、然后什么都不推。留着它是纯开销,所以直接从子集里去掉,注释里把
+"increment 已被 alert 覆盖"写清楚。
+
+### 11.3 命名与去抖位置(§4.4)
+
+原稿写的是 `badgeSync.schedule(ownerId)`(一个独立对账器对象)。实现没有引入新对象:去抖计时
+器和"上次已推状态"都在 `PushService` 内,入口是 **`scheduleBadgeSync(ownerId)`**,`publish()`
+解析出 owner 后直接调它。300ms 合并窗与"变了才推"都按原设计保留。
+
+### 11.4 差分抽成纯函数(新增)
+
+`badgeDiff(prev, currentIds)` 单独放进 `push/badge-diff.ts`,于是那几个真正容易错的边界
+——同一会话多条审批只记一次、会话带孤儿审批死掉、状态churn 但集合没变、净值为零的换人——
+可以脱离 Prisma 和 APNs 单测(`badge-diff.spec.ts`)。另有一条实现细节:**没有历史状态视作
+badge=0**,因此"某 owner 名下本来就没有待批"的 STATUS 事件算出 0 → 0、判定未变、不推 ——
+否则每条状态事件都会给所有用户发一条无意义的 `badge=0` 静默推送。
