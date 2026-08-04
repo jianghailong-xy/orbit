@@ -153,6 +153,19 @@ describe('session state predicates', () => {
     expect(isSessionBusy({ runState: 'AWAITING_INPUT', status: 'RUNNING' })).toBe(false);
   });
 
+  // The console releases its in-flight turn state on this split, so that a run which reached a
+  // terminal status without ever completing a turn doesn't leave the composer queueing behind a
+  // turn that will never end. QUEUED is the carve-out: nothing is running yet, but the next
+  // message still has to queue behind the turn it is waiting for.
+  it('counts only settled runs as terminal, keeping QUEUED and INTERRUPTED live', () => {
+    for (const runState of ['FAILED', 'SUCCEEDED', 'ENDED']) {
+      expect([runState, isSessionTerminal({ runState })]).toEqual([runState, true]);
+    }
+    for (const runState of ['QUEUED', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED']) {
+      expect([runState, isSessionTerminal({ runState })]).toEqual([runState, false]);
+    }
+  });
+
   it('uses raw runStatus for runner slot accounting', () => {
     expect(
       sessionHoldsRunnerSlot({ runState: 'SUCCEEDED', runStatus: 'RUNNING' }),
