@@ -16,22 +16,33 @@ export enum RunStatus {
 
 /**
  * Why a session reached a terminal state. Orthogonal to RunStatus, which collapses
- * every graceful end into CANCELLED — so "the runner recycled an idle session" and
- * "the user cancelled" look identical without this. Set by whoever requests the end
- * (endLive / the reaper). null = a natural agent finish (read RunStatus) or a
- * pre-migration row. The column is a plain string, not a Prisma enum; the web reads
- * the same values as string literals.
+ * every graceful end into CANCELLED — so "the task finished" and "the user cancelled"
+ * look identical without this. Set by whoever requests the end (endLive / the reaper).
+ * null = a natural agent finish (read RunStatus) or a pre-migration row. The column is
+ * a plain string, not a Prisma enum; the web reads the same values as string literals.
+ *
+ * Every value here is written by a deliberate user or task-lifecycle decision. Runtime
+ * recycling is NOT one of them: the runner keeps its engines warm/cold on its own and
+ * the control-plane status stays AWAITING_INPUT throughout (see runner-go/session_pool.go),
+ * so no reason is ever recorded for it. The retired 'idle'/'orphaned' values date from the
+ * PARKED era and have no writer left; {@link LEGACY_END_REASONS} keeps them decodable.
  */
 export enum SessionEndReason {
-  IDLE = 'idle', // reaper recycled it after inactivity — resumable
   TASK_DONE = 'task_done', // task finished successfully; execution Session moves to Completed
   TASK_CANCELLED = 'task_cancelled', // reaper recycled it because its task was cancelled
   ENDED = 'ended', // user ended the session — resumable
   COMPLETED = 'completed', // user moved it to Completed
   DELETED = 'deleted', // user deleted it (trash)
-  ORPHANED = 'orphaned', // never-claimed run for an already-finished task
-  CANCELLED = 'cancelled', // user stopped the run (batch-stop) — reads as a hard cancel, not dormant
+  CANCELLED = 'cancelled', // user stopped the run (batch-stop)
 }
+
+/**
+ * End reasons no code writes any more, retained only so stored rows stay readable.
+ * Both settle into the same neutral terminal state as every other graceful end, so
+ * they need no branch of their own — this exists to document the values, not to
+ * decode them.
+ */
+export const LEGACY_END_REASONS = ['idle', 'orphaned'] as const;
 
 /**
  * Legacy combined lifecycle state. Retained for wire compatibility; new consumers
@@ -54,16 +65,24 @@ export enum SessionState {
  * User-facing execution state. Unlike the legacy {@link SessionState}, this describes
  * only what happened to the run and never changes when the session is completed,
  * restored, or moved to Trash.
+ *
+ * There is exactly ONE neutral terminal state. The earlier CANCELLED/DORMANT/ENDED trio
+ * was a permutation of (RunStatus, endReason) that no behaviour distinguished: resume
+ * eligibility is decided by deriveSessionCapabilities, which never reads endReason, so
+ * three glyphs and three tooltips implied a difference the server did not have. Which
+ * deliberate act ended the run is not a run outcome — a session the user filed is already
+ * identified by {@link SessionLifecycleState}.COMPLETED, and the rest belongs in prose,
+ * not in a status vocabulary.
  */
 export enum SessionRunState {
   QUEUED = 'QUEUED',
   RUNNING = 'RUNNING',
   AWAITING_INPUT = 'AWAITING_INPUT',
+  /** A turn was interrupted; the session itself is alive and schedulable. Not terminal. */
+  INTERRUPTED = 'INTERRUPTED',
   SUCCEEDED = 'SUCCEEDED',
   FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
-  DORMANT = 'DORMANT',
-  INTERRUPTED = 'INTERRUPTED',
+  /** The single neutral terminal state: the run stopped without a success/failure verdict. */
   ENDED = 'ENDED',
 }
 
@@ -125,21 +144,14 @@ export function deriveSessionRunState(input: SessionStateInput): SessionRunState
       return SessionRunState.FAILED;
     case RunStatus.CANCELLED:
     case RunStatus.INTERRUPTED:
-      if (reason === SessionEndReason.ORPHANED) return SessionRunState.ENDED;
-      if (
-        reason === SessionEndReason.COMPLETED ||
-        reason === SessionEndReason.DELETED ||
-        reason === SessionEndReason.CANCELLED ||
-        reason === SessionEndReason.TASK_CANCELLED
-      ) {
-        return SessionRunState.CANCELLED;
-      }
+      // A bare INTERRUPTED means the user stopped a turn, not the session: it stays live
+      // and schedulable. Any recorded endReason means the session itself was ended.
       if (rawStatus === RunStatus.INTERRUPTED && reason === '') {
         return SessionRunState.INTERRUPTED;
       }
-      // Pre-endReason rows and unknown graceful recycle reasons are safest presented as
-      // resumable/dormant, preserving the legacy fail-to-dormant behaviour.
-      return SessionRunState.DORMANT;
+      // Every deliberate end — filed, ended, stopped, deleted, task-driven — plus legacy
+      // and unknown reasons settle here. None of them differ in what the user can do next.
+      return SessionRunState.ENDED;
     default:
       return SessionRunState.ENDED;
   }
@@ -195,7 +207,10 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
       return SessionState.QUEUED;
     case RunStatus.CANCELLED:
     case RunStatus.INTERRUPTED:
-      if (reason === SessionEndReason.ORPHANED) return SessionState.ENDED;
+      // Frozen legacy mapping: old clients still decode this vocabulary, so it keeps the
+      // CANCELLED/DORMANT split (and the retired 'orphaned' reason, spelled literally
+      // because SessionEndReason no longer carries it) that SessionRunState has dropped.
+      if (reason === 'orphaned') return SessionState.ENDED;
       if (
         reason === SessionEndReason.COMPLETED ||
         reason === SessionEndReason.DELETED ||
@@ -215,18 +230,16 @@ export function deriveSessionState(input: SessionStateInput): SessionState {
 /**
  * Terminal RunStatus for a session whose end was a *graceful* recycle, or null when it
  * wasn't one (a hard complete/delete/batch-stop, or no reason recorded). TASK_DONE settles
- * SUCCEEDED; TASK_CANCELLED settles CANCELLED. IDLE/ENDED also settle CANCELLED, with
- * `endReason` distinguishing their dormant/resumable meaning. Returning an explicit
- * status is load-bearing for the reaper: its forceFinalize defaults to FAILED, so null
- * would resurface an unacknowledged graceful recycle as a run failure. Shared so the
- * runner's /finalize and the reaper's backstop cannot drift apart.
+ * SUCCEEDED; TASK_CANCELLED/ENDED settle CANCELLED. Returning an explicit status is
+ * load-bearing for the reaper: its forceFinalize defaults to FAILED, so null would
+ * resurface an unacknowledged graceful recycle as a run failure. Shared so the runner's
+ * /finalize and the reaper's backstop cannot drift apart.
  */
 export function gracefulEndStatus(endReason: string | null | undefined): RunStatus | null {
   switch (endReason) {
     case SessionEndReason.TASK_DONE:
       return RunStatus.SUCCEEDED;
     case SessionEndReason.TASK_CANCELLED:
-    case SessionEndReason.IDLE:
     case SessionEndReason.ENDED:
       return RunStatus.CANCELLED;
     default:

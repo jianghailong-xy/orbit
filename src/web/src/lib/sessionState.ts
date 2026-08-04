@@ -11,11 +11,11 @@ export const SESSION_RUN_STATES = [
   'QUEUED',
   'RUNNING',
   'AWAITING_INPUT',
+  'INTERRUPTED',
   'SUCCEEDED',
   'FAILED',
-  'CANCELLED',
-  'DORMANT',
-  'INTERRUPTED',
+  // The one neutral terminal state. See SessionRunState in shared/src/enums.ts for why
+  // the old CANCELLED/DORMANT/ENDED trio collapsed into it.
   'ENDED',
 ] as const;
 
@@ -95,7 +95,10 @@ export const sessionRunStatusOf = (session: SessionStateSource): string =>
 const legacySessionRunState = (session: SessionStateSource): SessionRunState | null => {
   const state = normalizedValue<SessionStateValue>(session.sessionState, SESSION_STATE_SET);
   if (!state || state === 'DELETED') return null;
-  return state === 'COMPLETED' ? 'SUCCEEDED' : state;
+  if (state === 'COMPLETED') return 'SUCCEEDED';
+  // The legacy vocabulary still splits the neutral terminals; the run states no longer do.
+  if (state === 'CANCELLED' || state === 'DORMANT') return 'ENDED';
+  return state;
 };
 
 /**
@@ -125,31 +128,17 @@ export function sessionRunStateOf(session: SessionStateSource): SessionRunState 
       return 'FAILED';
     case 'INTERRUPTED':
     case 'CANCELLED':
-      if (reason === 'orphaned') return 'ENDED';
-      if (
-        reason === 'completed' ||
-        reason === 'deleted' ||
-        reason === 'cancelled' ||
-        reason === 'task_cancelled'
-      )
-        return 'CANCELLED';
+      // A bare INTERRUPTED means a turn was stopped, not the session; it stays live.
       if (runStatus === 'INTERRUPTED' && reason === '') return 'INTERRUPTED';
-      return 'DORMANT';
+      // Every deliberate end settles here regardless of endReason: nothing the user can
+      // do next depends on which one it was. The reason itself is prose, not a state —
+      // sessionEndedBanner is where it gets spelled out.
+      return 'ENDED';
     default:
       // Unknown future/legacy raw values must not accidentally look live or queued.
       return 'ENDED';
   }
 }
-
-/**
- * Filing a live session into Completed recycles its runtime, so the run settles CANCELLED with
- * endReason 'completed' — the same raw pair a batch-stop produces. It's a deliberate wrap-up, not
- * a stop, so the UI names and draws it as Completed. Kept out of {@link sessionRunStateOf} on
- * purpose: the run states are a shared wire vocabulary, and this is presentation only.
- */
-export const isRunCompletedByUser = (session: SessionStateSource): boolean =>
-  sessionRunStateOf(session) === 'CANCELLED' &&
-  (session.endReason ?? '').toLowerCase() === 'completed';
 
 export type SessionLifecycleView = 'open' | 'completed' | 'trash';
 type LegacySessionListView = 'active' | 'archived' | 'deleted';
@@ -231,25 +220,30 @@ export function sessionEndedBanner(
         ? 'Session interrupted.'
         : 'Session failed.';
       break;
-    case 'CANCELLED':
-      base = isRunCompletedByUser(session) ? 'Session completed.' : 'Session cancelled.';
-      break;
     case 'INTERRUPTED':
       base = 'Session interrupted.';
       break;
+    // One neutral terminal state, so this is the only place the end reason is still
+    // spelled out. Prose can afford the distinction a glyph cannot.
     case 'ENDED':
-      base =
-        session.endReason === 'orphaned'
-          ? 'Session ended (the linked task is done).'
-          : 'Session ended.';
-      break;
-    case 'DORMANT':
-      base =
-        session.endReason === 'idle'
-          ? 'Session ended automatically after a long idle period.'
-          : session.endReason === 'task_done'
-            ? 'The linked task is done, so the session ended automatically.'
-            : 'Session ended.';
+      switch ((session.endReason ?? '').toLowerCase()) {
+        case 'completed':
+          base = 'Session completed.';
+          break;
+        case 'cancelled':
+        case 'task_cancelled':
+          base = 'Session cancelled.';
+          break;
+        case 'task_done':
+        case 'orphaned':
+          base = 'The linked task is done, so the session ended.';
+          break;
+        case 'idle':
+          base = 'Session ended automatically after a long idle period.';
+          break;
+        default:
+          base = 'Session ended.';
+      }
       break;
     default:
       base = 'Session ended.';

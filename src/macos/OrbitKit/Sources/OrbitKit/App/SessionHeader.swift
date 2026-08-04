@@ -30,11 +30,6 @@ public enum SessionHeader {
             return "Succeeded"
         case .failed:
             return (s.error ?? "").lowercased().contains("offline") ? "Disconnected" : "Failed"
-        case .cancelled:
-            return s.effectiveRunState.isCompletedByUser(endReason: s.endReason)
-                ? "Completed" : "Cancelled"
-        case .dormant:
-            return "Dormant"
         case .interrupted:
             return "Interrupted"
         case .ended, .unknown:
@@ -50,8 +45,9 @@ public enum SessionHeader {
         guard let s = session else { return nil }
         let word = statusWord(for: s)
         let lifecycle = lifecycleWord(for: s)
-        // A session you filed reads "Completed" on both axes; say it once rather than twice.
-        let head = word == lifecycle ? word : "\(word) · \(lifecycle)"
+        // The two axes no longer share any vocabulary — a filed session reads "Ended · Completed",
+        // which is exactly the split this subtitle exists to show — so there is nothing to collapse.
+        let head = "\(word) · \(lifecycle)"
         if let ts = s.lastTurnAt ?? s.createdAt, let rel = RelativeTime.format(ts, now: now) {
             return "\(head) · \(rel)"
         }

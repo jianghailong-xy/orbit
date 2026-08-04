@@ -48,7 +48,8 @@ test('withSessionState preserves the legacy raw status and adds both explicit fi
   assert.equal(row.status, RunStatus.CANCELLED);
   assert.equal(row.runStatus, RunStatus.CANCELLED);
   assert.equal(row.sessionState, SessionState.COMPLETED);
-  assert.equal(row.runState, SessionRunState.CANCELLED);
+  // The legacy sessionState above still splits by reason; runState no longer does.
+  assert.equal(row.runState, SessionRunState.ENDED);
   assert.equal(row.lifecycleState, SessionLifecycleState.COMPLETED);
   assert.equal(row.filingState, SessionFilingState.ARCHIVED);
   assert.equal(row.id, 'session-1');

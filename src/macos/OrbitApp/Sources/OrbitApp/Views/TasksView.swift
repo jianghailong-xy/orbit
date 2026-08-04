@@ -977,8 +977,6 @@ private struct TaskDetailContent: View {
         case .awaitingInput: return "Awaiting reply"
         case .succeeded:     return "Succeeded"
         case .failed:        return "Failed"
-        case .cancelled:     return "Cancelled"
-        case .dormant:       return "Dormant"
         case .interrupted:   return "Interrupted"
         case .ended:         return "Ended"
         case .unknown, nil:  return "—"

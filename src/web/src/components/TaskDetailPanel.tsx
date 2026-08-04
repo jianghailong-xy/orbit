@@ -59,10 +59,8 @@ const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string 
   RUNNING: { label: 'Running', tone: 'blue' },
   SUCCEEDED: { label: 'Succeeded', tone: 'green' },
   FAILED: { label: 'Failed', tone: 'red' },
-  CANCELLED: { label: 'Cancelled', tone: 'muted' },
   AWAITING_INPUT: { label: 'Awaiting reply', tone: 'amber' },
   INTERRUPTED: { label: 'Interrupted', tone: 'muted' },
-  DORMANT: { label: 'Dormant', tone: 'muted' },
   ENDED: { label: 'Ended', tone: 'muted' },
 };
 

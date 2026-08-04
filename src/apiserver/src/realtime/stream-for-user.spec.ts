@@ -214,14 +214,14 @@ test('publishSessionLifecycleChanged preserves run outcome and exposes Completed
     status: 'CANCELLED',
     runStatus: 'CANCELLED',
     sessionState: 'COMPLETED',
-    runState: 'CANCELLED',
+    runState: 'ENDED',
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'completed',
   });
 });
 
-test('completing a dormant terminal session preserves its actual runState', async () => {
+test('completing an already-ended session preserves its actual runState', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const got: ControlEvent[] = [];
   const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
@@ -239,7 +239,7 @@ test('completing a dormant terminal session preserves its actual runState', asyn
     status: 'CANCELLED',
     runStatus: 'CANCELLED',
     sessionState: 'COMPLETED',
-    runState: 'DORMANT',
+    runState: 'ENDED',
     lifecycleState: 'COMPLETED',
     filingState: 'ARCHIVED',
     endReason: 'ended',

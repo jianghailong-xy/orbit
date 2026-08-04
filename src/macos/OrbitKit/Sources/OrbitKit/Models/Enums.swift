@@ -28,15 +28,20 @@ public enum RunStatus: String, Codable, Sendable {
 /// run is doing or how it ended; moving a session between Open, Completed and Trash never changes
 /// it. New control planes send this as `runState`; older ones use raw ``RunStatus`` plus end reason,
 /// with ``SessionState`` used only by slim payloads that omit raw status entirely.
+/// There is exactly one neutral terminal state. The earlier cancelled/dormant/ended trio was a
+/// permutation of (status, endReason) that no behaviour distinguished — resume eligibility never
+/// consults endReason — so three glyphs implied a difference the server did not have. Which
+/// deliberate act ended a run is not a run outcome: a session the user filed is already identified
+/// by ``SessionLifecycleState/completed``, and the rest belongs in prose.
 public enum SessionRunState: String, Codable, Sendable {
     case queued = "QUEUED"
     case running = "RUNNING"
     case awaitingInput = "AWAITING_INPUT"
+    /// A turn was interrupted; the session itself is alive and schedulable. Not terminal.
+    case interrupted = "INTERRUPTED"
     case succeeded = "SUCCEEDED"
     case failed = "FAILED"
-    case cancelled = "CANCELLED"
-    case dormant = "DORMANT"
-    case interrupted = "INTERRUPTED"
+    /// The single neutral terminal state: the run stopped without a success/failure verdict.
     case ended = "ENDED"
     /// Forward compatibility: an unknown future value falls through to the legacy fields.
     case unknown = "UNKNOWN"
@@ -54,14 +59,6 @@ public enum SessionRunState: String, Codable, Sendable {
         }
     }
 
-    /// Filing a live session into Completed recycles its runtime, so the run settles `.cancelled`
-    /// with endReason 'completed' — the same raw pair a batch-stop produces. Presentation names and
-    /// draws that as Completed while the wire vocabulary stays unchanged. Mirrors the web
-    /// `isRunCompletedByUser`.
-    public func isCompletedByUser(endReason: String?) -> Bool {
-        self == .cancelled && (endReason ?? "").lowercased() == "completed"
-    }
-
     /// Resolve the new field first, then raw runner status + end reason. The legacy mixed
     /// `sessionState` is intentionally not allowed to override a raw state: an old completed row
     /// commonly says `sessionState=COMPLETED` while its actual run status is CANCELLED.
@@ -77,20 +74,14 @@ public enum SessionRunState: String, Codable, Sendable {
         case .succeeded:     return .succeeded
         case .failed:        return .failed
         case .interrupted:
-            let reason = (endReason ?? "").lowercased()
-            if reason == "orphaned" { return .ended }
-            if reason.isEmpty { return .interrupted }
-            if ["completed", "deleted", "cancelled", "task_cancelled"].contains(reason) {
-                return .cancelled
-            }
-            return .dormant
+            // A bare INTERRUPTED means a turn was stopped, not the session; it stays live.
+            // Any recorded reason means the session itself was ended.
+            return (endReason ?? "").isEmpty ? .interrupted : .ended
         case .cancelled:
-            let reason = (endReason ?? "").lowercased()
-            if reason == "orphaned" { return .ended }
-            if ["completed", "deleted", "cancelled", "task_cancelled"].contains(reason) {
-                return .cancelled
-            }
-            return .dormant
+            // Every deliberate end — filed, ended, stopped, deleted, task-driven — plus the
+            // retired PARKED-era 'idle'/'orphaned' reasons settle here. None of them differ in
+            // what the user can do next.
+            return .ended
         }
     }
 
@@ -109,12 +100,11 @@ public enum SessionRunState: String, Codable, Sendable {
         case .queued:        return .queued
         case .running:       return .running
         case .awaitingInput: return .awaitingInput
-        case .dormant:       return .dormant
         case .completed:     return .succeeded
         case .failed:        return .failed
-        case .cancelled:     return .cancelled
         case .interrupted:   return .interrupted
-        case .ended:         return .ended
+        // The legacy vocabulary still splits the neutral terminals; the run states no longer do.
+        case .dormant, .cancelled, .ended: return .ended
         case .deleted, .unknown: return nil
         }
     }

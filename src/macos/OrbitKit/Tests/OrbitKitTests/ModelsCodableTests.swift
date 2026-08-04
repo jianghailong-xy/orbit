@@ -29,7 +29,7 @@ final class ModelsCodableTests: XCTestCase {
     func testEnumRawValuesMatchWireStrings() {
         XCTAssertEqual(RunStatus.awaitingInput.rawValue, "AWAITING_INPUT")
         XCTAssertEqual(SessionRunState.succeeded.rawValue, "SUCCEEDED")
-        XCTAssertEqual(SessionRunState.dormant.rawValue, "DORMANT")
+        XCTAssertEqual(SessionRunState.ended.rawValue, "ENDED")
         XCTAssertEqual(SessionLifecycleState.completed.rawValue, "COMPLETED")
         XCTAssertEqual(PermissionMode.bypass.rawValue, "bypassPermissions")
         XCTAssertEqual(RunEventType.toolResult.rawValue, "tool_result")
@@ -118,7 +118,7 @@ final class ModelsCodableTests: XCTestCase {
         for state: SessionRunState in [.queued, .running, .awaitingInput, .interrupted] {
             XCTAssertTrue(state.isLive, state.rawValue)
         }
-        for state: SessionRunState in [.succeeded, .failed, .cancelled, .dormant, .ended] {
+        for state: SessionRunState in [.succeeded, .failed, .ended] {
             XCTAssertFalse(state.isLive, state.rawValue)
         }
     }

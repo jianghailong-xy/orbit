@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   hasAuthoritativeLifecycleState,
   hasAuthoritativeRunState,
-  isRunCompletedByUser,
   isSessionBusy,
   isSessionLive,
   isSessionTerminal,
@@ -40,14 +39,14 @@ describe('sessionRunStateOf', () => {
         runStatus: 'CANCELLED',
         endReason: 'completed',
       }),
-    ).toBe('CANCELLED');
+    ).toBe('ENDED');
     expect(
       sessionRunStateOf({
-        runState: 'CANCELLED',
+        runState: 'ENDED',
         sessionState: 'COMPLETED',
         runStatus: 'SUCCEEDED',
       }),
-    ).toBe('CANCELLED');
+    ).toBe('ENDED');
     expect(sessionStateOf({ runState: 'SUCCEEDED' })).toBe('COMPLETED');
   });
 
@@ -66,16 +65,42 @@ describe('sessionRunStateOf', () => {
     expect(sessionRunStateOf({ status: 'future_state' })).toBe('ENDED');
   });
 
-  it('keeps overloaded cancelled/interrupted inference inside the legacy fallback', () => {
-    for (const endReason of [undefined, 'idle', 'task_done', 'ended', 'future_reason']) {
-      expect(sessionRunStateOf({ status: 'CANCELLED', endReason })).toBe('DORMANT');
+  it('collapses every ended run into one neutral terminal state', () => {
+    for (const endReason of [
+      undefined,
+      'completed',
+      'ended',
+      'cancelled',
+      'deleted',
+      'task_cancelled',
+      'task_done',
+      // Retired PARKED-era reasons: no writer left, but stored rows still decode here.
+      'idle',
+      'orphaned',
+      'future_reason',
+    ]) {
+      expect(sessionRunStateOf({ status: 'CANCELLED', endReason })).toBe('ENDED');
     }
-    expect(sessionRunStateOf({ status: 'CANCELLED', endReason: 'orphaned' })).toBe('ENDED');
-    for (const endReason of ['completed', 'deleted', 'cancelled', 'task_cancelled']) {
-      expect(sessionRunStateOf({ status: 'CANCELLED', endReason })).toBe('CANCELLED');
-    }
+  });
+
+  it('keeps a bare INTERRUPTED live — a stopped turn is not a stopped session', () => {
     expect(sessionRunStateOf({ status: 'INTERRUPTED' })).toBe('INTERRUPTED');
-    expect(sessionRunStateOf({ status: 'INTERRUPTED', endReason: 'idle' })).toBe('DORMANT');
+    expect(sessionRunStateOf({ status: 'INTERRUPTED', endReason: 'ended' })).toBe('ENDED');
+  });
+
+  it('maps the legacy sessionState vocabulary onto the collapsed run states', () => {
+    // Old payloads with no raw status still split CANCELLED/DORMANT; both mean "ended".
+    expect(sessionRunStateOf({ sessionState: 'CANCELLED' })).toBe('ENDED');
+    expect(sessionRunStateOf({ sessionState: 'DORMANT' })).toBe('ENDED');
+    expect(sessionRunStateOf({ sessionState: 'COMPLETED' })).toBe('SUCCEEDED');
+    expect(sessionRunStateOf({ sessionState: 'INTERRUPTED' })).toBe('INTERRUPTED');
+  });
+
+  it('ignores a runState an older client would not recognise, not the reverse', () => {
+    // Forward compatibility both ways: an unknown value falls back to the raw pair.
+    expect(sessionRunStateOf({ runState: 'DORMANT', status: 'CANCELLED', endReason: 'ended' })).toBe(
+      'ENDED',
+    );
   });
 });
 
@@ -121,7 +146,7 @@ describe('sessionLifecycleStateOf', () => {
 describe('session state predicates', () => {
   it('uses runState for liveness and busy state', () => {
     expect(isSessionLive({ runState: 'INTERRUPTED', lifecycleState: 'COMPLETED' })).toBe(true);
-    expect(isSessionLive({ runState: 'DORMANT', lifecycleState: 'OPEN' })).toBe(false);
+    expect(isSessionLive({ runState: 'ENDED', lifecycleState: 'OPEN' })).toBe(false);
     expect(isSessionTerminal({ runState: 'SUCCEEDED', lifecycleState: 'OPEN' })).toBe(true);
     expect(isSessionBusy({ runState: 'QUEUED', status: 'CANCELLED' })).toBe(true);
     expect(isSessionBusy({ runState: 'RUNNING', status: 'CANCELLED' })).toBe(true);
@@ -139,20 +164,6 @@ describe('session state predicates', () => {
   });
 });
 
-describe('isRunCompletedByUser', () => {
-  it('separates a user-filed Completed run from every other cancelled run', () => {
-    expect(isRunCompletedByUser({ runState: 'CANCELLED', endReason: 'completed' })).toBe(true);
-    // Old servers that only send the raw pair resolve the same way.
-    expect(isRunCompletedByUser({ status: 'CANCELLED', endReason: 'completed' })).toBe(true);
-    for (const endReason of ['cancelled', 'task_cancelled', 'deleted']) {
-      expect(isRunCompletedByUser({ runState: 'CANCELLED', endReason })).toBe(false);
-    }
-    // Filing never rewrites a run that already reached its own outcome.
-    expect(isRunCompletedByUser({ runState: 'SUCCEEDED', endReason: 'completed' })).toBe(false);
-    expect(isRunCompletedByUser({ runState: 'DORMANT', endReason: 'idle' })).toBe(false);
-  });
-});
-
 describe('sessionEndedBanner', () => {
   it('uses the run outcome while separately explaining a Completed resume', () => {
     expect(
@@ -164,7 +175,7 @@ describe('sessionEndedBanner', () => {
     ).toBe('Session succeeded. Sending a message will resume this session in Open.');
     expect(
       sessionEndedBanner(
-        { runState: 'CANCELLED', lifecycleState: 'OPEN', endReason: 'task_cancelled' },
+        { runState: 'ENDED', lifecycleState: 'OPEN', endReason: 'task_cancelled' },
         false,
         true,
       ),
@@ -174,22 +185,26 @@ describe('sessionEndedBanner', () => {
   it('calls a filed session completed rather than cancelled', () => {
     expect(
       sessionEndedBanner(
-        { runState: 'CANCELLED', lifecycleState: 'COMPLETED', endReason: 'completed' },
+        { runState: 'ENDED', lifecycleState: 'COMPLETED', endReason: 'completed' },
         true,
         true,
       ),
     ).toBe('Session completed. Sending a message will resume this session in Open.');
   });
 
-  it('uses the reason only to enrich dormant/ended copy', () => {
+  it('keeps the end reason as prose after the glyph stopped distinguishing it', () => {
+    // The whole point of the collapse: one neutral state, but copy may still explain why.
     expect(
-      sessionEndedBanner({ runState: 'DORMANT', endReason: 'idle' }, false, false),
+      sessionEndedBanner({ runState: 'ENDED', endReason: 'idle' }, false, false),
     ).toBe(
       'Session ended automatically after a long idle period. Runner offline — bring it online to resume.',
     );
     expect(
       sessionEndedBanner({ runState: 'ENDED', endReason: 'orphaned' }, false, true),
-    ).toBe('Session ended (the linked task is done). Sending a message starts a new session.');
+    ).toBe('The linked task is done, so the session ended. Sending a message starts a new session.');
+    expect(
+      sessionEndedBanner({ runState: 'ENDED', endReason: 'future_reason' }, false, true),
+    ).toBe('Session ended. Sending a message starts a new session.');
   });
 
   it('includes a server-provided resume blocker before explaining the fresh-session fallback', () => {

@@ -41,8 +41,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
-             error: s.error,
-             endReason: s.endReason)
+             error: s.error)
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -57,17 +56,17 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                                                status: status, endReason: endReason),
              pendingApprovals: pendingApprovals,
              runningBgCount: runningBgCount,
-             error: error,
-             endReason: endReason)
+             error: error)
     }
 
-    /// The shared presentation mapping for the orthogonal execution state. `endReason` only ever
-    /// refines wording within a state — it never selects a different one (see `.cancelled`).
+    /// The shared presentation mapping for the orthogonal execution state. The end reason is
+    /// deliberately absent: it is consumed by `SessionRunState.resolve` and never reaches the
+    /// glyph, because no two deliberate ends deserve different symbols. Prose (the ended banner)
+    /// is where the reason still gets spelled out.
     public static func make(runState: SessionRunState,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
-                            error: String? = nil,
-                            endReason: String? = nil) -> SessionStatusGlyph {
+                            error: String? = nil) -> SessionStatusGlyph {
         switch runState {
         case .queued:
             return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
@@ -100,28 +99,19 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             let detail = (error?.isEmpty == false) ? error! : "Failed"
             return .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: detail)
 
-        case .dormant:
-            return .init(shape: .symbol("pause.circle"), tone: .neutral,
-                         label: "Dormant — send a message to resume")
-
-        case .cancelled:
-            // Filing a live session into Completed recycles its runtime, so it settles here with
-            // endReason 'completed'. That's a deliberate wrap-up, not a stop: it gets a check
-            // rather than the stop glyph — neutral, since the run never reported success itself.
-            if runState.isCompletedByUser(endReason: endReason) {
-                return .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Completed")
-            }
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled")
-
         case .interrupted:
             return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Interrupted")
 
         case .ended:
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")
+            // Every deliberate end — filed, ended, stopped, task-driven — draws the same neutral
+            // check. Grey rather than green because the run reported no verdict of its own, and
+            // one glyph rather than three because resume eligibility never depended on which act
+            // ended it.
+            return .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Ended")
 
         case .unknown:
             // DTO resolution filters this case. A direct caller still gets a safe terminal glyph.
-            return .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")
+            return .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Ended")
         }
     }
 }

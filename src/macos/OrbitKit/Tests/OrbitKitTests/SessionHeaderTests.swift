@@ -56,16 +56,17 @@ final class SessionHeaderTests: XCTestCase {
                        "Disconnected")
     }
 
-    func testStatusWordDormant() {
-        // A dormant/resumable end (no hard reason) reads as "Dormant", not the accusatory "Cancelled".
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled, endReason: "idle")), "Dormant")
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled)), "Dormant")
+    /// Every ended run reads "Ended" — the accusatory "Cancelled" and the misleading "Dormant"
+    /// both described the same resumable state.
+    func testStatusWordEndedCoversEveryReason() {
+        for reason in ["idle", "cancelled", "orphaned", "completed", "task_cancelled"] {
+            XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled, endReason: reason)),
+                           "Ended", reason)
+        }
+        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled)), "Ended")
     }
 
-    func testStatusWordTerminalCancel() {
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled, endReason: "cancelled")),
-                       "Cancelled")
-        XCTAssertEqual(SessionHeader.statusWord(for: session(.cancelled, endReason: "orphaned")), "Ended")
+    func testStatusWordBareInterruptedStaysInterrupted() {
         XCTAssertEqual(SessionHeader.statusWord(for: session(.interrupted)), "Interrupted")
     }
 
@@ -78,11 +79,8 @@ final class SessionHeaderTests: XCTestCase {
             (.queued, "Queued"),
             (.running, "Running"),
             (.awaitingInput, "Waiting for your reply"),
-            (.dormant, "Dormant"),
             (.succeeded, "Succeeded"),
             (.failed, "Failed"),
-            // 'completed' is the filing reason these fixtures carry, so cancelled reads as Completed.
-            (.cancelled, "Completed"),
             (.interrupted, "Interrupted"),
             (.ended, "Ended"),
         ]
@@ -103,18 +101,21 @@ final class SessionHeaderTests: XCTestCase {
             .cancelled, runState: .failed, error: "runner offline")), "Disconnected")
     }
 
-    /// The raw CANCELLED still wins over the legacy mixed COMPLETED — it just reads as the filing
-    /// word "Completed" rather than "Succeeded", which is what the legacy field would have implied.
+    /// The raw CANCELLED still wins over the legacy mixed COMPLETED — it reads as the neutral
+    /// "Ended" rather than the "Succeeded" the legacy field would have implied.
     func testRawRunStatusWinsOverLegacyMixedCompletedState() {
         let s = session(.succeeded, runStatus: .cancelled, sessionState: .completed,
                         endReason: "completed")
-        XCTAssertEqual(SessionHeader.statusWord(for: s), "Completed")
+        XCTAssertEqual(SessionHeader.statusWord(for: s), "Ended")
     }
 
-    func testCancelledWithHardReasonStaysCancelled() {
-        let s = session(.cancelled, runState: .cancelled, lifecycleState: .completed,
-                        endReason: "cancelled")
-        XCTAssertEqual(SessionHeader.statusWord(for: s), "Cancelled")
+    /// Filed and stopped are the same run outcome; only the lifecycle axis tells them apart.
+    func testFiledAndStoppedShareTheEndedWord() {
+        for reason in ["completed", "cancelled", "ended", "idle"] {
+            let s = session(.cancelled, runState: .ended, lifecycleState: .completed,
+                            endReason: reason)
+            XCTAssertEqual(SessionHeader.statusWord(for: s), "Ended", reason)
+        }
     }
 
     func testUnknownServerSessionStateUsesLegacyFallback() {
@@ -156,11 +157,12 @@ final class SessionHeaderTests: XCTestCase {
         XCTAssertEqual(SessionHeader.subtitle(for: s), "Succeeded · Completed")
     }
 
-    /// Both axes say Completed for a filed session — collapse the repeat instead of stuttering.
-    func testSubtitleSaysCompletedOnce() {
-        let s = session(.cancelled, runState: .cancelled, lifecycleState: .completed,
+    /// A filed session now reads "Ended · Completed": the run outcome and where it lives are
+    /// different facts, and the run axis no longer restates the filing act.
+    func testSubtitleKeepsBothAxesForAFiledSession() {
+        let s = session(.cancelled, runState: .ended, lifecycleState: .completed,
                         endReason: "completed")
-        XCTAssertEqual(SessionHeader.subtitle(for: s), "Completed")
+        XCTAssertEqual(SessionHeader.subtitle(for: s), "Ended · Completed")
     }
 
     func testSubtitleNilWhenNoSession() {

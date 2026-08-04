@@ -224,9 +224,10 @@ final class WorktreeBarLogicTests: XCTestCase {
             SessionDetail.self, from: Data(#"{"id":"s3","sessionState":"FAILED"}"#.utf8))
         XCTAssertEqual(legacy.effectiveRunState, .failed)
 
+        // The raw CANCELLED must not be read as the legacy COMPLETED's success.
         let rawWins = try JSONDecoder().decode(
             SessionDetail.self,
             from: Data(#"{"id":"s4","status":"CANCELLED","sessionState":"COMPLETED"}"#.utf8))
-        XCTAssertEqual(rawWins.effectiveRunState, .dormant)
+        XCTAssertEqual(rawWins.effectiveRunState, .ended)
     }
 }

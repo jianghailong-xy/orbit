@@ -151,7 +151,6 @@ import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import {
-  isRunCompletedByUser,
   isSessionLive,
   isSessionTerminal,
   sessionEndedBanner,
@@ -604,15 +603,13 @@ export function statusLabel(session: any): string {
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
   }
-  if (state === 'CANCELLED') return isRunCompletedByUser(session) ? 'Completed' : 'Cancelled';
-  if (state === 'DORMANT') return 'Dormant';
   if (state === 'INTERRUPTED') return 'Interrupted';
   if (state === 'ENDED') return 'Ended';
   return PENDING_SLOT_LABEL; // PENDING
 }
 // One glyph per session state. Colour carries the meaning: blue = working,
-// amber = needs a human decision, green = done, red = real failure, grey =
-// neutral terminal (dormant / cancelled / interrupted / disconnected). A runner that
+// amber = needs a human decision, green = the run reported success, red = real failure,
+// grey = neutral terminal (ended / interrupted / disconnected). A runner that
 // went offline is reaped to FAILED with error 'runner offline'; that's a dropped
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
 // New payloads carry the authoritative runState. The resolver retains a centralized fallback
@@ -674,32 +671,19 @@ export function StatusIcon({ session }: { session: any }) {
       </Tooltip>
     );
   }
-  if (state === 'DORMANT')
+  if (state === 'INTERRUPTED')
     return (
-      <Tooltip title="Dormant — send a message to resume">
-        <PauseCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
-      </Tooltip>
-    );
-  // Filing a session into Completed lands here (CANCELLED + endReason 'completed'). Wrapping
-  // something up on purpose shouldn't wear the same "stopped" glyph as a batch-stop, so it gets a
-  // neutral check — grey, not green, because the run itself never reported success.
-  if (state === 'CANCELLED' && isRunCompletedByUser(session))
-    return (
-      <Tooltip title="Completed">
-        <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
-      </Tooltip>
-    );
-  if (state === 'CANCELLED' || state === 'INTERRUPTED') {
-    return (
-      <Tooltip title={state === 'INTERRUPTED' ? 'Interrupted' : 'Cancelled'}>
+      <Tooltip title="Interrupted">
         <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
-  }
+  // Every deliberate end — filed, ended, stopped, task-driven — draws the same neutral check.
+  // Grey rather than green because the run reported no verdict of its own, and one glyph
+  // rather than three because resume eligibility never depended on which act ended it.
   if (state === 'ENDED')
     return (
-      <Tooltip title="Ended — task already finished">
-        <MinusCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
+      <Tooltip title="Ended">
+        <CheckCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   // PENDING — waiting for an active turn slot

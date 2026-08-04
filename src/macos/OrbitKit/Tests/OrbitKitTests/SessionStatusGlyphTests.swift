@@ -62,64 +62,42 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g, .init(shape: .symbol("clock"), tone: .neutral, label: "Queued"))
     }
 
-    /// An idle recycle settles CANCELLED like a hard stop, so only the reason keeps it dormant.
-    func testIdleRecycleIsDormant() {
-        for reason in ["idle", "ended"] {
+    /// The collapse: every deliberate end wears one neutral check, whatever ended it. Resume
+    /// eligibility never consulted endReason, so a different glyph per reason claimed a
+    /// difference the server did not have.
+    func testEveryDeliberateEndSharesOneNeutralGlyph() {
+        for reason in ["completed", "ended", "cancelled", "task_cancelled", "deleted",
+                       // Retired PARKED-era reasons: no writer left, stored rows still decode.
+                       "idle", "orphaned", "future_reason"] {
             let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: reason))
-            XCTAssertEqual(g.shape, .symbol("pause.circle"), reason)
-            XCTAssertEqual(g.tone, .neutral, reason)
-            XCTAssertEqual(g.label, "Dormant — send a message to resume", reason)
+            XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle"), tone: .neutral,
+                                    label: "Ended"), reason)
         }
+        // A legacy row carrying no reason at all lands in the same place.
+        XCTAssertEqual(SessionStatusGlyph.make(for: session(.cancelled)),
+                       .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Ended"))
     }
 
-    func testCancelledWithHardReasonIsTerminal() {
-        for reason in ["cancelled", "task_cancelled"] {
-            let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: reason))
-            XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral,
-                                    label: "Cancelled"), reason)
-        }
+    /// Neutral, not green: an ended run reported no verdict of its own, so it must never
+    /// outrank a genuine SUCCEEDED sitting in the same list.
+    func testEndedStaysNeutralWhileSucceededKeepsSuccessTone() {
+        XCTAssertEqual(
+            SessionStatusGlyph.make(for: session(.cancelled, endReason: "completed")).tone,
+            .neutral)
+        XCTAssertEqual(SessionStatusGlyph.make(for: session(.succeeded)).tone, .success)
     }
 
-    /// Filing a session settles the same CANCELLED status, so only the reason keeps it from
-    /// wearing the stop glyph. Neutral, not success: the run itself never reported one.
-    func testUserFiledCompleteReadsAsCompletedNotCancelled() {
-        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "completed",
-                                                     runState: .cancelled,
-                                                     lifecycleState: .completed))
-        XCTAssertEqual(g, .init(shape: .symbol("checkmark.circle"), tone: .neutral,
-                                label: "Completed"))
-    }
-
-    /// Deleting also settles CANCELLED, but a session in Trash was not wrapped up — it stays a stop.
-    func testDeletedKeepsTheStopGlyph() {
-        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "deleted",
-                                                     runState: .cancelled,
-                                                     lifecycleState: .trash))
-        XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
-    }
-
-    func testInterruptedWithoutReasonIsTerminal() {
+    /// A stopped turn is not a stopped session: bare INTERRUPTED keeps its own glyph.
+    func testBareInterruptedKeepsItsOwnGlyph() {
         let g = SessionStatusGlyph.make(for: session(.interrupted))
         XCTAssertEqual(g, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Interrupted"))
     }
 
-    func testOrphanedReadsAsEnded() {
-        let g = SessionStatusGlyph.make(for: session(.cancelled, endReason: "orphaned"))
-        XCTAssertEqual(g.label, "Ended")
-    }
-
-    /// A legacy CANCELLED with an unknown (nil) reason must not read as the accusatory "Cancelled".
-    func testCancelledWithUnknownReasonIsDormant() {
-        let g = SessionStatusGlyph.make(for: session(.cancelled))
-        XCTAssertEqual(g.shape, .symbol("pause.circle"))
-        XCTAssertEqual(g.label, "Dormant — send a message to resume")
-    }
-
-    func testCompletedLifecycleDoesNotOverrideCancelledRun() {
+    func testCompletedLifecycleDoesNotOverrideTheRunOutcome() {
         let s = session(.cancelled, endReason: "cancelled",
-                        runState: .cancelled, lifecycleState: .completed)
+                        runState: .ended, lifecycleState: .completed)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
-                       .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Cancelled"))
+                       .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Ended"))
     }
 
     func testCompletedLifecycleStillSurfacesFailure() {
@@ -142,16 +120,12 @@ final class SessionStatusGlyphTests: XCTestCase {
             (.running, .init(shape: .spinner, tone: .brand, label: "Running")),
             (.awaitingInput, .init(shape: .symbol("message"), tone: .neutral,
                                   label: "Waiting for your reply")),
-            (.dormant, .init(shape: .symbol("pause.circle"), tone: .neutral,
-                             label: "Dormant — send a message to resume")),
             (.succeeded, .init(shape: .symbol("checkmark.circle.fill"), tone: .success,
                                label: "Succeeded")),
             (.failed, .init(shape: .symbol("xmark.circle.fill"), tone: .error, label: "Failed")),
-            (.cancelled, .init(shape: .symbol("minus.circle"), tone: .neutral,
-                               label: "Cancelled")),
             (.interrupted, .init(shape: .symbol("minus.circle"), tone: .neutral,
                                  label: "Interrupted")),
-            (.ended, .init(shape: .symbol("minus.circle"), tone: .neutral, label: "Ended")),
+            (.ended, .init(shape: .symbol("checkmark.circle"), tone: .neutral, label: "Ended")),
         ]
         for (state, expected) in cases {
             let s = session(.cancelled, endReason: "cancelled",
@@ -178,13 +152,13 @@ final class SessionStatusGlyphTests: XCTestCase {
     }
 
     /// The raw CANCELLED must win over the legacy mixed COMPLETED: a filed session reads as the
-    /// neutral "Completed", never as the green Succeeded the legacy field would imply.
+    /// neutral "Ended", never as the green Succeeded the legacy field would imply.
     func testRawRunStatusWinsOverLegacyMixedCompletedState() {
         let s = session(.succeeded, endReason: "completed", runStatus: .cancelled,
                         sessionState: .completed)
         XCTAssertEqual(SessionStatusGlyph.make(for: s),
                        .init(shape: .symbol("checkmark.circle"), tone: .neutral,
-                             label: "Completed"))
+                             label: "Ended"))
     }
 
     func testUnknownServerSessionStateDecodesAndUsesLegacyFallback() throws {
