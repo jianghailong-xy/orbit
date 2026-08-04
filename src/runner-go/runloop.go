@@ -883,11 +883,19 @@ func runLoop(cfg *RunnerConfig) bool {
 			// reason: the server redelivers until our first report moves it on, and the relay
 			// refuses to start a second installer while one is running.
 			if ir := resp.InstallRequest; ir != nil {
-				install.start(ir.Engine, func(res InstallResultRequest) {
+				report := func(res InstallResultRequest) {
 					if err := t.installResult(res); err != nil {
 						logln("install-result POST failed:", err)
 					}
-				}, engineHealth.refresh)
+				}
+				// The same slot also carries "update every engine now" (the daily loop's work,
+				// on demand). Live sessions are visible from here, so unlike `orbit
+				// engine-update` this one won't swap a binary mid-turn.
+				if ir.Mode == "update" {
+					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh)
+				} else {
+					install.start(ir.Engine, report, engineHealth.refresh)
+				}
 			}
 		})
 	}()

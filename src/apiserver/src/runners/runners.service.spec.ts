@@ -46,6 +46,7 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
           installEngine: null,
           installCommand: null,
           installMessage: null,
+          installMode: null,
         }));
       },
       update: async (args: { where: { id: string }; data: { position: number } }) => {
@@ -121,6 +122,7 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
       installEngine: true,
       installCommand: true,
       installMessage: true,
+      installMode: true,
     },
   });
 });

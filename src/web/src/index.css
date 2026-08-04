@@ -7500,6 +7500,15 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* "updated 6h ago", after the version. Dimmer than the version it follows: routine upkeep is a
+   footnote until it stops happening, at which point it is the loudest thing in the row. */
+.re-upd {
+  color: var(--text-4);
+}
+.re-upd.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
 .re-quota-head {
   display: flex;
   justify-content: space-between;
@@ -7537,6 +7546,16 @@ body {
   background: var(--error-bg);
   border-color: var(--error-border);
 }
+/* Drift, not breakage: an engine nobody has updated in a week still works today. Amber says
+   "this needs a person eventually", which is the truth — red would say "this is down". */
+.re-panel.warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+/* A machine-level report belongs above the rows it summarizes, not inside any one of them. */
+.re-relay {
+  margin: 10px 14px 0;
+}
 .re-panel-row {
   font-size: 12.5px;
   color: var(--text-2);
@@ -7544,6 +7563,10 @@ body {
 }
 .re-panel.bad .re-panel-row {
   color: var(--error);
+  font-weight: 500;
+}
+.re-panel.warn .re-panel-row {
+  color: var(--warning);
   font-weight: 500;
 }
 .re-panel-hint {
@@ -7570,6 +7593,11 @@ body {
   color: var(--brand);
   font-size: 11.5px;
   cursor: pointer;
+  white-space: nowrap;
+}
+.re-link:disabled {
+  color: var(--text-4);
+  cursor: default;
 }
 /* The relay card spaces itself off the message above it in a transcript; in a panel of its
    own that margin is doubled padding. */

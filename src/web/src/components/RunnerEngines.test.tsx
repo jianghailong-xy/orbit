@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
-import { RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
+import { RunnerEngines, rowKindOf, summaryOf, updateNoteOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
@@ -19,8 +19,13 @@ const install = (over: Partial<RunnerInstallState>): RunnerInstallState => ({
   engine: null,
   command: null,
   message: null,
+  mode: over.status ? 'install' : null,
   ...over,
 });
+
+const NOW = Date.parse('2026-08-04T12:00:00.000Z');
+const hoursAgo = (h: number) => new Date(NOW - h * 3600_000).toISOString();
+const daysAgo = (d: number) => hoursAgo(d * 24);
 
 describe('what one engine row says', () => {
   it('reads the CLI\'s own answer, and never guesses the third one', () => {
@@ -67,6 +72,70 @@ describe('what one engine row says', () => {
         'claude',
       ),
     ).toBe('installed');
+  });
+});
+
+describe('what a row says about being kept current', () => {
+  it('stays quiet while the daily pass is working', () => {
+    expect(updateNoteOf({ status: 'ok', at: hoursAgo(6), okAt: hoursAgo(6) }, NOW)).toEqual({
+      tone: 'quiet',
+      text: 'updated 6h ago',
+    });
+    expect(updateNoteOf({ status: 'ok', at: daysAgo(2), okAt: daysAgo(2) }, NOW)?.text).toBe(
+      'updated 2d ago',
+    );
+  });
+
+  it('never reported is silence, not an accusation', () => {
+    // An older runner, or one whose first daily pass hasn't run. Neither is a problem, and
+    // inventing one would put a warning on every machine the day this ships.
+    expect(updateNoteOf(undefined, NOW)).toBeNull();
+  });
+
+  it('treats one failure over a working week as a footnote, not an alarm', () => {
+    // The daily pass retries on its own; most of these are a network blip. Shouting here is how
+    // a real warning gets tuned out.
+    expect(
+      updateNoteOf({ status: 'failed', at: hoursAgo(2), okAt: daysAgo(1), message: 'ETIMEDOUT' }, NOW),
+    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying daily' });
+  });
+
+  it('warns once nothing has actually landed in a week', () => {
+    expect(
+      updateNoteOf({ status: 'failed', at: hoursAgo(3), okAt: daysAgo(12), message: 'EACCES' }, NOW),
+    ).toEqual({ tone: 'warn', text: 'not updated in 12d' });
+    // Never once succeeded — a louder fact than a recent failure, not a quieter one.
+    expect(updateNoteOf({ status: 'failed', at: hoursAgo(3), message: 'EACCES' }, NOW)).toEqual({
+      tone: 'warn',
+      text: 'never updated',
+    });
+  });
+
+  it('warns when updates simply stopped running, with nothing failing', () => {
+    // No failures at all, just nothing for a month: the loop isn't running (disabled, or the
+    // machine only ever boots briefly). Same drift, same consequence, so the same warning.
+    expect(updateNoteOf({ status: 'ok', at: daysAgo(30), okAt: daysAgo(30) }, NOW)).toEqual({
+      tone: 'warn',
+      text: 'not updated in 30d',
+    });
+  });
+
+  it('calls a package-managed install what it is, and never an error', () => {
+    // Retrying this does nothing — Orbit deliberately won't install a second copy beside it.
+    // Dressing it as a failure would be a daily warning about a deliberate choice.
+    expect(
+      updateNoteOf(
+        { status: 'skipped', at: hoursAgo(4), okAt: daysAgo(40), message: 'Installed by a package manager (/opt/homebrew/bin/codex)' },
+        NOW,
+      ),
+    ).toEqual({ tone: 'quiet', text: 'updated by its package manager' });
+  });
+
+  it('survives a record it cannot age', () => {
+    expect(updateNoteOf({ status: 'ok', at: 'nonsense' }, NOW)).toEqual({
+      tone: 'warn',
+      text: 'never updated',
+    });
   });
 });
 
@@ -221,6 +290,107 @@ describe('the "On your runners" section', () => {
       'focused',
     );
     expect(render([box])).not.toContain('focused');
+  });
+
+  it('says who keeps these current, and offers the way to do it sooner', () => {
+    const html = render([
+      runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] }),
+    ]);
+    // The answer to "do I have to manage this?" — said once, at the top, not per row.
+    expect(html).toContain('Orbit keeps these CLIs updated daily.');
+    expect(html).toContain('Update engines');
+  });
+
+  it("doesn't offer to update a machine that isn't there", () => {
+    const html = render([runner({ online: false, engines: [health({})] })]);
+    expect(html).toContain('Offline');
+    expect(html).not.toContain('Update engines');
+  });
+
+  it('reports what an update actually did, including what it left alone', () => {
+    const html = render([
+      runner({
+        engines: [health({ engine: 'claude', version: '2.1.220' })],
+        install: install({
+          status: 'done',
+          engine: null,
+          mode: 'update',
+          command: 'orbit engine-update',
+          message:
+            'Claude Code updated 2.1.219 → 2.1.220\nCodex — 2 sessions running, it\'ll update once they finish',
+        }),
+      }),
+    ]);
+    expect(html).toContain('2.1.219');
+    // The part a silent skip would have hidden: the button did less than it looked like it did.
+    expect(html).toContain('sessions running');
+    expect(html).toContain('Dismiss');
+  });
+
+  it('shows a drifting engine the machine\'s own reason, and how to watch it fail', () => {
+    const html = render([
+      runner({
+        engines: [
+          health({
+            engine: 'codex',
+            version: '0.146.0',
+            update: {
+              status: 'failed',
+              at: new Date(Date.now() - 3600_000).toISOString(),
+              okAt: new Date(Date.now() - 20 * 86400_000).toISOString(),
+              message: 'npm error code EACCES: /usr/lib/node_modules/@openai/codex',
+            },
+          }),
+        ],
+      }),
+    ]);
+    expect(html).toContain('not updated in 20d');
+    expect(html).toContain('EACCES');
+    // No Retry: the same command will fail the same way. What's offered is the way to see it.
+    expect(html).toContain('orbit engine-update');
+    expect(html).not.toContain('Retry');
+  });
+
+  it('keeps a working machine quiet, with the fact still on the row', () => {
+    const html = render([
+      runner({
+        engines: [
+          health({
+            engine: 'claude',
+            version: '2.1.220',
+            update: {
+              status: 'ok',
+              at: new Date(Date.now() - 6 * 3600_000).toISOString(),
+              okAt: new Date(Date.now() - 6 * 3600_000).toISOString(),
+            },
+          }),
+        ],
+      }),
+    ]);
+    expect(html).toContain('updated 6h ago');
+    // Nothing to act on: no panel, no colour, no button beyond the standing one.
+    expect(html).not.toContain('re-panel warn');
+  });
+
+  it("a folded card admits it isn't updating, ahead of the good news", () => {
+    const drifted = runner({
+      engines: [
+        health({
+          engine: 'claude',
+          update: { status: 'failed', at: daysAgo(1), okAt: daysAgo(30), message: 'EACCES' },
+        }),
+      ],
+    });
+    expect(summaryOf(drifted)).toBe('1 engine not updating');
+    // An offline machine isn't drifting, it's away — and the header already says so.
+    expect(summaryOf({ ...drifted, online: false })).toBe('1 of 3 signed in');
+    // An update in flight, and its outcome, are the card's news while they last.
+    expect(
+      summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', mode: 'update' }) })),
+    ).toBe('Updating…');
+    expect(
+      summaryOf(runner({ engines: [health({})], install: install({ status: 'failed', mode: 'update' }) })),
+    ).toBe('Update failed');
   });
 
   it('offers the free route first when there is no runner at all', () => {

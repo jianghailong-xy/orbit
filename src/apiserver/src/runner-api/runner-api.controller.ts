@@ -425,7 +425,10 @@ export class RunnerApiController {
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.
-    if (updated.installStatus === 'done' && dto?.engines) {
+    //
+    // A finished update is the opposite: its summary — what moved, what was skipped and why — is
+    // the answer to the button the user pressed, and exists nowhere else. It stays until dismissed.
+    if (updated.installStatus === 'done' && updated.installMode !== 'update' && dto?.engines) {
       const reported = sanitizeRunnerEngines(dto.engines) ?? [];
       if (reported.some((e) => e.engine === updated.installEngine && e.installed)) {
         await this.prisma.runner.update({
@@ -555,9 +558,10 @@ export class RunnerApiController {
   private async drainInstallRequest(runnerId: string): Promise<InstallCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
-      select: { installStatus: true, installEngine: true, installAt: true },
+      select: { installStatus: true, installEngine: true, installAt: true, installMode: true },
     });
     if (!r?.installStatus) return undefined;
+    const update = r.installMode === 'update';
     const started = r.installAt?.getTime() ?? 0;
     if (started && Date.now() - started > INSTALL_RELAY_TIMEOUT_MS) {
       if (r.installStatus === 'pending' || r.installStatus === 'installing') {
@@ -565,14 +569,19 @@ export class RunnerApiController {
           where: { id: runnerId },
           data: {
             installStatus: 'failed',
-            installMessage: 'Install timed out — start it again, or run the command by hand.',
+            installMessage: update
+              ? 'Update timed out — start it again, or run `orbit engine-update` on that machine.'
+              : 'Install timed out — start it again, or run the command by hand.',
           },
         });
       }
       return undefined;
     }
-    if (r.installStatus !== 'pending' || !isLoginEngine(r.installEngine)) return undefined;
-    return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '' };
+    if (r.installStatus !== 'pending') return undefined;
+    // An update names no engine — it does every CLI already on the machine, like the daily loop.
+    if (update) return { attempt: r.installAt?.toISOString() ?? '', mode: 'update' };
+    if (!isLoginEngine(r.installEngine)) return undefined;
+    return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '', mode: 'install' };
   }
 
   /** Runner → control plane: one step of the engine-install relay, scoped to the runner itself. */

@@ -92,6 +92,58 @@ func (r *installRelay) start(engine string, report func(InstallResultRequest), a
 	}()
 }
 
+// startUpdate runs the browser-requested "update every engine on this machine" through the same
+// one slot as an install: both drive a package manager against this machine's single global
+// prefix, so they must not overlap — and the same redelivery guard applies.
+//
+// Unlike the daily loop this one has a person waiting, so what it skipped is reported rather than
+// only logged: an engine left alone because a session is mid-turn looks identical to one the
+// button silently missed.
+func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []envVar, report func(InstallResultRequest), after func()) {
+	r.mu.Lock()
+	if r.running {
+		r.mu.Unlock()
+		return // redelivered, or an install is still running
+	}
+	r.running = true
+	r.wg.Add(1)
+	r.mu.Unlock()
+
+	go func() {
+		defer r.wg.Done()
+		defer func() {
+			r.mu.Lock()
+			r.running = false
+			r.mu.Unlock()
+			if after != nil {
+				after()
+			}
+		}()
+		report(InstallResultRequest{Status: installInstalling, Command: engineUpdateManualCmd})
+		lines := updateEngines(context.Background(), activeCount, proxyVars)
+		res := InstallResultRequest{Status: installDone, Command: engineUpdateManualCmd}
+		if len(lines) == 0 {
+			// Nothing on PATH to update. Saying "done" with no detail would read as success.
+			res.Message = "No engine CLIs are installed on this machine yet."
+		} else {
+			res.Message = strings.Join(lines, "\n")
+		}
+		// One engine's failure is the whole run's news — the per-engine detail is in the rows
+		// below, but the panel must not say "done" when something needs a human.
+		for _, l := range lines {
+			if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") {
+				res.Status = installFailed
+				break
+			}
+		}
+		report(res)
+	}()
+}
+
+// The command that does by hand what the Update button does, shown in the panel so a machine
+// with a broken relay is still fixable from a terminal.
+const engineUpdateManualCmd = "orbit engine-update"
+
 // stop waits for an install already under way. Nothing is cancelled — see the type comment.
 func (r *installRelay) stop() { r.wg.Wait() }
 

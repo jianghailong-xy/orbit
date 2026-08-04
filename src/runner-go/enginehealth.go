@@ -31,6 +31,9 @@ func authWord(a authState) string {
 // prints, reported to the control plane so the web can show and fix this runner's logins.
 func probeEngineHealth() []EngineHealthReport {
 	servicePath := serviceLoginPath()
+	// What the updater last managed to do here, read fresh each probe: the daily loop and
+	// `orbit engine-update` both write it, and neither can reach into this snapshot.
+	updates := loadEngineUpdateLog()
 	out := make([]EngineHealthReport, 0, len(loginEngineBins))
 	for _, bin := range loginEngineBins {
 		spec, ok := specFor(bin)
@@ -38,12 +41,18 @@ func probeEngineHealth() []EngineHealthReport {
 			continue
 		}
 		h := checkEngine(spec, servicePath)
-		out = append(out, EngineHealthReport{
+		report := EngineHealthReport{
 			Engine:    bin,
 			Installed: h.installed,
 			Version:   h.version,
 			Auth:      authWord(h.auth),
-		})
+		}
+		// An engine that isn't here has no update state worth reporting — the record is about
+		// a binary, and a stale one left by an uninstall would describe something gone.
+		if rec, ok := updates[bin]; ok && h.installed && rec.Status != "" {
+			report.Update = &rec
+		}
+		out = append(out, report)
 	}
 	return out
 }

@@ -208,6 +208,10 @@ model Runner {
   installCommand String?   @map("install_command")
   installMessage String?   @map("install_message")
   installAt      DateTime? @map("install_at")
+  // Which job the slot is running: 'install' (installEngine's CLI) or 'update' (every CLI already
+  // on the machine — installEngine is then NULL). Both run a package manager against this
+  // machine's one global prefix, so they share a slot instead of racing. NULL = 'install'.
+  installMode    String?   @map("install_mode")
 
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).

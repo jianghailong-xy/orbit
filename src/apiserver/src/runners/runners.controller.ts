@@ -110,6 +110,13 @@ export class RunnersController {
     return this.runners.cancelInstall(user.userId, id);
   }
 
+  // Update every engine CLI on this machine now — the daily pass, on demand. Shares the relay
+  // slot (and so the DELETE above) with installs, since both run a package manager there.
+  @Post(':id/engine-update')
+  startEngineUpdate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.startEngineUpdate(user.userId, id);
+  }
+
   @Post(':id/rotate-token')
   rotateToken(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.runners.rotateToken(user.userId, id);

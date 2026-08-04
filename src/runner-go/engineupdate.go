@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -49,15 +53,34 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 	}
 }
 
-func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar) {
+// updateEngines updates every engine on this machine, returning one human line per engine that
+// had anything to say — the summary a browser-requested update reports back (the per-engine
+// record it leaves behind is engineUpdateLog's job).
+func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar) []string {
 	servicePath := serviceLoginPath()
+	var lines []string
 	for _, spec := range engineSpecs {
-		if activeCount(spec.bin) > 0 {
+		if n := activeCount(spec.bin); n > 0 {
 			logln("engine-update:", spec.name, "skipped — session(s) active")
+			// Deliberately not recorded: a busy machine says nothing about whether updating
+			// works here, and writing it would leave every well-used engine reading "skipped"
+			// until the next daily pass. It is worth saying out loud to whoever just pressed
+			// the button, though — silence there reads as "nothing happened".
+			lines = append(lines, spec.name+" — "+plural(n, "session")+" running, it'll update once they finish")
 			continue
 		}
-		updateEngine(ctx, spec, servicePath, proxyVars)
+		if _, phrase := updateEngine(ctx, spec, servicePath, proxyVars); phrase != "" {
+			lines = append(lines, phrase)
+		}
 	}
+	return lines
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return strconv.Itoa(n) + " " + word + "s"
 }
 
 // updateEngine runs one engine's in-place update. Claude/Codex use their own updater;
@@ -67,20 +90,30 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 // It uses the same service PATH + proxy env the runner spawns
 // the engine with, then logs the version change. Engines not on the service PATH are
 // left alone (installing one is `orbit doctor`'s job).
-func updateEngine(ctx context.Context, spec engineSpec, servicePath string, proxyVars []envVar) {
+//
+// Returns the record it filed (zero value when there was nothing to update) and a line for
+// whoever asked. Every outcome is recorded, including the ones that are nobody's fault: an
+// engine nothing has updated in weeks is invisible otherwise, which is how a machine ends up
+// silently pinned to a CLI that rejects the model slugs the control plane hands it.
+func updateEngine(ctx context.Context, spec engineSpec, servicePath string, proxyVars []envVar) (EngineUpdateReport, string) {
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
 	// this binary's version wrote to a copy the runner never runs.
 	binPath, ok := lookPathIn(spec.bin, servicePath)
 	if !ok {
-		return
+		return EngineUpdateReport{}, ""
 	}
 	before := engineVersion(binPath)
 	home, _ := os.UserHomeDir()
 	cmdStr, mayUpdate := engineUpdateCommand(spec, binPath, home)
 	if !mayUpdate {
 		logln("engine-update:", spec.name, "skipped — package-managed install at", binPath)
-		return
+		// Not a failure and not fixable by retrying — so it is recorded as its own state, with
+		// the fact that explains it. Reading "update failed" every day about a deliberate
+		// choice is how a real warning gets tuned out.
+		rec := recordEngineUpdate(spec.bin, updateSkipped,
+			"Installed by a package manager ("+binPath+") — Orbit updates it through that, rather than installing a second copy alongside it.")
+		return rec, spec.name + " — package-managed install, left alone"
 	}
 	cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
 	defer cancel()
@@ -95,20 +128,30 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		switch cmdCtx.Err() {
 		case context.DeadlineExceeded:
 			logln("engine-update:", spec.name, "timed out after", engineUpdateTimeout)
+			rec := recordEngineUpdate(spec.bin, updateFailed, "`"+cmdStr+"` was still running after "+engineUpdateTimeout.String()+" and was stopped.")
+			return rec, spec.name + " — update timed out"
 		case context.Canceled:
-			// Runner shutting down mid-update — not a failure, stay quiet.
-		default:
-			logln("engine-update:", spec.name, "failed:", updateErrDetail(err, out))
+			// Runner shutting down mid-update — not a failure, and not this machine's news.
+			return EngineUpdateReport{}, ""
 		}
-		return
+		detail := updateErrDetail(err, out)
+		logln("engine-update:", spec.name, "failed:", detail)
+		rec := recordEngineUpdate(spec.bin, updateFailed, detail)
+		return rec, spec.name + " — update failed: " + detail
 	}
-	if after := engineVersion(binPath); after != "" && after != before {
+	after := engineVersion(binPath)
+	if after != "" && after != before {
 		logln("engine-update:", spec.name, "updated", before, "->", after)
-	} else {
-		// Name the binary we measured: an update that exits 0 without moving the version is
-		// usually one that wrote to a different install than the one PATH resolves.
-		logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
+		rec := recordEngineUpdate(spec.bin, updateOK, "")
+		return rec, spec.name + " updated " + before + " → " + after
 	}
+	// Name the binary we measured: an update that exits 0 without moving the version is
+	// usually one that wrote to a different install than the one PATH resolves.
+	logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
+	// Still `ok`: nothing moved because nothing had to. That is exactly the answer the page
+	// needs — the update path on this machine works.
+	rec := recordEngineUpdate(spec.bin, updateOK, "")
+	return rec, spec.name + " — already up to date (" + before + ")"
 }
 
 func engineUpdateCommand(spec engineSpec, binPath, home string) (string, bool) {
@@ -162,5 +205,65 @@ func cmdEngineUpdate() {
 	if cfg := loadConfig(); cfg != nil {
 		server = cfg.ServerURL
 	}
-	updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server))
+	for _, line := range updateEngines(context.Background(), func(string) int { return 0 }, doctorProxyVars(server)) {
+		fmt.Println("  " + line)
+	}
+}
+
+// The states an engine's updater can leave behind. `skipped` is deliberately not a failure:
+// it means Orbit chose not to touch this install, and retrying would do nothing.
+const (
+	updateOK      = "ok"
+	updateFailed  = "failed"
+	updateSkipped = "skipped"
+)
+
+// engineUpdateLog is the per-engine update record, kept next to the runner's config.
+//
+// On disk rather than in memory for two reasons: a runner restarts (daily self-update, service
+// reload) and would otherwise report "never updated" for the next 24h, and `orbit engine-update`
+// runs in a different process than `orbit run` — a shared file is the only way both of their
+// results reach the same heartbeat.
+//
+// Keyed by engine binary. Best-effort throughout: this is telemetry about updates, and losing a
+// line of it must never break one.
+var engineUpdateLog struct {
+	mu sync.Mutex
+}
+
+func engineUpdateLogPath() string { return filepath.Join(machineHome(), "engine-updates.json") }
+
+func loadEngineUpdateLog() map[string]EngineUpdateReport {
+	b, err := os.ReadFile(engineUpdateLogPath())
+	if err != nil {
+		return map[string]EngineUpdateReport{}
+	}
+	var out map[string]EngineUpdateReport
+	if err := json.Unmarshal(b, &out); err != nil || out == nil {
+		return map[string]EngineUpdateReport{}
+	}
+	return out
+}
+
+// recordEngineUpdate files one outcome and returns the record as reported. `okAt` is carried
+// forward across later failures — without it a machine that updated fine yesterday and errors
+// today is indistinguishable from one that has never managed it, and those need different words.
+func recordEngineUpdate(bin, status, message string) EngineUpdateReport {
+	now := time.Now().UTC().Format(time.RFC3339)
+	engineUpdateLog.mu.Lock()
+	defer engineUpdateLog.mu.Unlock()
+	log := loadEngineUpdateLog()
+	rec := EngineUpdateReport{Status: status, At: now, OkAt: log[bin].OkAt, Message: message}
+	if status == updateOK {
+		rec.OkAt = now
+	}
+	log[bin] = rec
+	if b, err := json.MarshalIndent(log, "", "  "); err == nil {
+		if err := os.MkdirAll(machineHome(), machineHomePerm); err == nil {
+			if err := os.WriteFile(engineUpdateLogPath(), b, configFilePerm); err != nil {
+				logln("engine-update: cannot record outcome:", err)
+			}
+		}
+	}
+	return rec
 }

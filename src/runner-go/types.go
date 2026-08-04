@@ -83,6 +83,28 @@ type EngineHealthReport struct {
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
 	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
+	// What the updater last did to this engine. Nil until it has run once — which the UI shows
+	// as "not reported yet", never as a problem.
+	Update *EngineUpdateReport `json:"update,omitempty"`
+}
+
+// EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
+// health so the Providers page can answer "is this being kept current?" without a button.
+//
+// Kept on the runner's own disk (see engineUpdateLog) rather than derived at report time: it
+// survives a restart, and `orbit engine-update` — a different process from `orbit run` — writes
+// the same record.
+type EngineUpdateReport struct {
+	// "ok" — the update command ran clean (a no-op counts: it proves the path works).
+	// "failed" — it ran and errored; Message is the machine's own words.
+	// "skipped" — Orbit deliberately won't touch this install; Message says why.
+	Status string `json:"status"`
+	// RFC3339 time of the attempt this describes.
+	At string `json:"at"`
+	// RFC3339 time of the last attempt that succeeded, kept across later failures — the one
+	// thing that separates "erroring right now" from "hasn't worked in weeks".
+	OkAt    string `json:"okAt,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // SessionLiveState is one running session's live worktree state, reported each heartbeat
@@ -183,6 +205,11 @@ type InstallCommand struct {
 	Engine string `json:"engine"`
 	// Identifies this install, so a redelivered request can be told from a new one.
 	Attempt string `json:"attempt,omitempty"`
+	// "install" (or empty, from a control plane that only ever installed) or "update": the same
+	// one-slot relay drives both, because both run a package manager against this machine's one
+	// global prefix and must never overlap. An update names no engine — it does every installed
+	// one, like the daily loop.
+	Mode string `json:"mode,omitempty"`
 }
 
 // InstallResultRequest is the runner's progress report for an install: the command it is running,

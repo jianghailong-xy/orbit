@@ -84,6 +84,7 @@ export class RunnersService {
         installEngine: true,
         installCommand: true,
         installMessage: true,
+        installMode: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -111,6 +112,7 @@ export class RunnersService {
       installEngine,
       installCommand,
       installMessage,
+      installMode,
       ...r
     }) => ({
       ...r,
@@ -119,7 +121,13 @@ export class RunnersService {
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
       engines: sanitizeRunnerEngines(engines),
-      install: installStateOf({ installStatus, installEngine, installCommand, installMessage }),
+      install: installStateOf({
+        installStatus,
+        installEngine,
+        installCommand,
+        installMessage,
+        installMode,
+      }),
       online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
@@ -397,6 +405,39 @@ export class RunnersService {
         installCommand: null,
         installMessage: null,
         installAt: new Date(),
+        installMode: 'install',
+      },
+    });
+    return installStateOf(r);
+  }
+
+  /**
+   * Ask this runner to update every engine CLI on it, now.
+   *
+   * The same work the runner already does daily on its own — this is the escape hatch for when
+   * that isn't soon enough, or when it has been failing and someone wants to watch it try. It
+   * shares the install relay's one slot deliberately: both drive a package manager against that
+   * machine's single global prefix.
+   *
+   * Engines with a live session are skipped by the runner and named in the summary, so a machine
+   * that is busy says so rather than quietly doing less than the button implied.
+   */
+  async startEngineUpdate(ownerId: string, id: string): Promise<RunnerInstallState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only update while connected');
+    }
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: {
+        installStatus: 'pending',
+        // Not one engine's business: the row this reports into is the machine's.
+        installEngine: null,
+        installCommand: null,
+        installMessage: null,
+        installAt: new Date(),
+        installMode: 'update',
       },
     });
     return installStateOf(r);
@@ -428,6 +469,7 @@ export class RunnersService {
         installCommand: null,
         installMessage: null,
         installAt: null,
+        installMode: null,
       },
     });
     return installStateOf(r);
@@ -455,12 +497,16 @@ export function installStateOf(r: {
   installEngine: string | null;
   installCommand: string | null;
   installMessage: string | null;
+  installMode?: string | null;
 }): RunnerInstallState {
   return {
     status: (r.installStatus as RunnerInstallState['status']) ?? null,
     engine: r.installStatus ? ((r.installEngine as LoginEngine) ?? null) : null,
     command: r.installCommand,
     message: r.installMessage,
+    // A row written before updates shared this relay is an install, which is also what a client
+    // that doesn't know about modes assumes.
+    mode: r.installStatus ? (r.installMode === 'update' ? 'update' : 'install') : null,
   };
 }
 

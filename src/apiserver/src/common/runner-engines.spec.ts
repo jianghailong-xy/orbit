@@ -53,3 +53,64 @@ test('nothing usable reads as "not reported", which is not the same as "nothing 
   assert.equal(sanitizeRunnerEngines([{ engine: 'nope' }]), null);
   assert.equal(sanitizeRunnerEngines({ claude: true }), null);
 });
+
+test('an update record is carried through, with its times normalized to ISO', () => {
+  const [claude] = sanitizeRunnerEngines([
+    {
+      engine: 'claude',
+      installed: true,
+      auth: 'yes',
+      update: {
+        status: 'failed',
+        at: '2026-08-04T09:00:00Z',
+        okAt: '2026-07-30T09:00:00Z',
+        message: '  npm error code EACCES  ',
+      },
+    },
+  ])!;
+  assert.deepEqual(claude.update, {
+    status: 'failed',
+    at: '2026-08-04T09:00:00.000Z',
+    // The one field that must survive a failure: it separates "erroring today" from "never worked".
+    okAt: '2026-07-30T09:00:00.000Z',
+    message: 'npm error code EACCES',
+  });
+});
+
+test('a malformed update is dropped whole, leaving the engine itself intact', () => {
+  const bad = (update: unknown) =>
+    sanitizeRunnerEngines([{ engine: 'codex', installed: true, auth: 'yes', update }])![0];
+
+  // Each of these would otherwise render as a confident claim about someone's machine.
+  assert.equal(bad({ status: 'maybe', at: '2026-08-04T09:00:00Z' }).update, undefined);
+  assert.equal(bad({ status: 'ok' }).update, undefined, 'a time-less record cannot be aged');
+  assert.equal(bad({ status: 'ok', at: 'last tuesday' }).update, undefined);
+  assert.equal(bad('ok').update, undefined);
+  assert.equal(bad(null).update, undefined);
+  // The engine's own health still stands — a bad update record is not a bad engine report.
+  assert.equal(bad(null).auth, 'yes');
+});
+
+test('an unparseable okAt is dropped without taking the record with it', () => {
+  const [kimi] = sanitizeRunnerEngines([
+    {
+      engine: 'kimi',
+      installed: true,
+      auth: 'yes',
+      update: { status: 'ok', at: '2026-08-04T09:00:00Z', okAt: 'never' },
+    },
+  ])!;
+  assert.deepEqual(kimi.update, { status: 'ok', at: '2026-08-04T09:00:00.000Z' });
+});
+
+test('a runaway message is truncated rather than stored whole', () => {
+  const [claude] = sanitizeRunnerEngines([
+    {
+      engine: 'claude',
+      installed: true,
+      auth: 'yes',
+      update: { status: 'failed', at: '2026-08-04T09:00:00Z', message: 'x'.repeat(5000) },
+    },
+  ])!;
+  assert.equal(claude.update?.message?.length, 400);
+});

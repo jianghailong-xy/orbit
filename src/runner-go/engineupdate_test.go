@@ -2,8 +2,11 @@ package main
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestUpdateErrDetail(t *testing.T) {
@@ -38,6 +41,78 @@ func TestKimiUpdatePreservesInstallSource(t *testing.T) {
 		if got, ok := engineUpdateCommand(spec, managed, home); ok || got != "" {
 			t.Fatalf("package-managed %s update = (%q, %v), want skip", managed, got, ok)
 		}
+	}
+}
+
+func TestRecordEngineUpdateCarriesLastSuccess(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+
+	ok := recordEngineUpdate(providerClaude, updateOK, "")
+	if ok.Status != updateOK || ok.At == "" || ok.OkAt != ok.At {
+		t.Fatalf("a clean update = %+v, want ok with okAt set to its own time", ok)
+	}
+	if _, err := time.Parse(time.RFC3339, ok.At); err != nil {
+		t.Fatalf("At is not RFC3339: %v", err)
+	}
+
+	// The point of the whole record: a failure today must not erase the fact that it worked
+	// yesterday, or "erroring right now" and "hasn't worked in weeks" render identically.
+	failed := recordEngineUpdate(providerClaude, updateFailed, "npm error code EACCES")
+	if failed.Status != updateFailed || failed.OkAt != ok.OkAt {
+		t.Fatalf("after a failure = %+v, want okAt %q preserved", failed, ok.OkAt)
+	}
+	if failed.Message != "npm error code EACCES" {
+		t.Fatalf("message = %q, want the machine's own words", failed.Message)
+	}
+	// Same for a deliberate skip — it is not an attempt that failed, and not one that worked.
+	skipped := recordEngineUpdate(providerClaude, updateSkipped, "Installed by a package manager")
+	if skipped.Status != updateSkipped || skipped.OkAt != ok.OkAt {
+		t.Fatalf("after a skip = %+v, want okAt %q preserved", skipped, ok.OkAt)
+	}
+
+	// It survives the process that wrote it: this is what makes a restarted runner able to say
+	// "updated 6h ago" instead of going quiet for a day.
+	log := loadEngineUpdateLog()
+	if got := log[providerClaude]; got.Status != updateSkipped || got.OkAt != ok.OkAt {
+		t.Fatalf("reloaded = %+v, want the last record with okAt intact", got)
+	}
+	// One engine's record says nothing about another's.
+	if _, ok := log[providerCodex]; ok {
+		t.Fatal("recording claude wrote a codex record")
+	}
+}
+
+func TestLoadEngineUpdateLogTolerates(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ORBIT_HOME", home)
+	// Never recorded anything: an empty map, not a nil one to index into.
+	if log := loadEngineUpdateLog(); len(log) != 0 {
+		t.Fatalf("missing file = %v, want empty", log)
+	}
+	// Garbage on disk must not take the heartbeat's engine probe down with it.
+	if err := os.WriteFile(engineUpdateLogPath(), []byte("{not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if log := loadEngineUpdateLog(); len(log) != 0 {
+		t.Fatalf("corrupt file = %v, want empty", log)
+	}
+}
+
+func TestPlural(t *testing.T) {
+	// This lands in a sentence a user reads while waiting on their own button press.
+	if got := plural(1, "session"); got != "1 session" {
+		t.Fatalf("plural(1) = %q", got)
+	}
+	if got := plural(3, "session"); got != "3 sessions" {
+		t.Fatalf("plural(3) = %q", got)
+	}
+}
+
+func TestEngineUpdateManualCmdIsReal(t *testing.T) {
+	// The panel prints this as the way to do by hand what the button does. If the subcommand
+	// is ever renamed, this catches the panel telling users to run something that doesn't exist.
+	if !strings.HasSuffix(engineUpdateManualCmd, "engine-update") {
+		t.Fatalf("manual command = %q, want the `orbit engine-update` entry point", engineUpdateManualCmd)
 	}
 }
 

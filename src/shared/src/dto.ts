@@ -394,6 +394,29 @@ export interface RunnerEngineHealth {
   version?: string;
   /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
   auth: 'yes' | 'no' | 'unknown';
+  /** What the runner's updater last did to this engine. Absent from an older runner, and until
+   *  the first daily pass — shown as "not reported yet", never as a problem. */
+  update?: RunnerEngineUpdate;
+}
+
+/**
+ * The updater's last word on one engine, reported alongside its health.
+ *
+ * Orbit updates these CLIs itself, daily. That is invisible without this: a version string alone
+ * can't say whether it is the newest one, so the useful question is not "which version is this"
+ * but "is this machine still being kept current" — which only the updater can answer.
+ */
+export interface RunnerEngineUpdate {
+  /** `ok` — the update ran clean (finding nothing to do counts: the path works).
+   *  `failed` — it ran and errored; `message` is the machine's own words.
+   *  `skipped` — Orbit deliberately won't touch this install; `message` says why. */
+  status: 'ok' | 'failed' | 'skipped';
+  /** ISO time of the attempt this describes. */
+  at: string;
+  /** ISO time of the last attempt that succeeded, kept across later failures. Absent if one
+   *  never has — which is a louder fact than a recent failure, not a quieter one. */
+  okAt?: string;
+  message?: string;
 }
 
 /**
@@ -407,10 +430,19 @@ export interface RunnerEngineHealth {
  * engine on one machine, so this path does not consult that flag.
  */
 export interface InstallCommand {
-  engine: LoginEngine;
+  /** Absent only for `mode: 'update'`, which is about every engine on the machine. */
+  engine?: LoginEngine;
   /** Identifies this install, so the runner can tell a redelivered request from a new one. */
   attempt?: string;
+  /** `update` reuses this one relay slot to update every engine already on the machine instead
+   *  of installing one. Both drive a package manager against that machine's single global
+   *  prefix, so they share a slot rather than racing. Absent → `install`, which is what an
+   *  older runner reads it as. */
+  mode?: RelayMode;
 }
+
+/** What the engine relay is doing with its one slot: installing a named CLI, or updating them all. */
+export type RelayMode = 'install' | 'update';
 
 /** Runner → control plane: progress of an engine install. */
 export interface InstallResult {
@@ -421,13 +453,17 @@ export interface InstallResult {
   message?: string;
 }
 
-/** Browser-facing view of a runner's engine-install relay, for the row that drives it. */
+/** Browser-facing view of a runner's engine relay, for the row or card that drives it. */
 export interface RunnerInstallState {
   status: 'pending' | 'installing' | 'done' | 'failed' | null;
-  /** Which engine is being installed; null when nothing is in flight. */
+  /** Which engine is being installed; null when nothing is in flight, and for `update`, which
+   *  is the whole machine's business rather than one row's. */
   engine: LoginEngine | null;
   command: string | null;
   message: string | null;
+  /** Which of the two jobs the slot is running. Null when nothing is in flight; `install` on a
+   *  row written before updates shared this relay. */
+  mode: RelayMode | null;
 }
 
 /** Browser-facing view of a runner's sign-in relay, for the card that drives it. */
