@@ -342,14 +342,14 @@ private let drawerChip = Color(uiColor: .systemGray5)
 
 /// The ChatGPT-style circular chrome for a drawer icon button (search at the top, Settings at the
 /// bottom): one glyph on a 44pt neutral disc — also the HIG minimum tap target. The disc is a
-/// fixed-size container, so the glyph uses the Dynamic-Type-static `orbitControlGlyph`; a scaling
-/// token would overflow it at the larger text sizes.
+/// fixed-size container, so the glyph uses the Dynamic-Type-static `orbitDiscGlyph`; a scaling token
+/// would overflow it at the larger text sizes.
 private struct DrawerCircleGlyph: View {
     let systemName: String
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.orbitControlGlyph.weight(.semibold))
+            .font(.orbitDiscGlyph)
             .foregroundStyle(.primary)
             .frame(width: 44, height: 44)
             .background(drawerChip, in: Circle())
