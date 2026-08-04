@@ -7388,8 +7388,44 @@ body {
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-subtle);
 }
+/* A collapsed card is a header on its own — the border below it would be a line under nothing. */
+.re-card.collapsed .re-head {
+  border-bottom: 0;
+}
 .re-card.offline .re-head {
   background: var(--fill-muted);
+}
+/* Everything that isn't the Manage link folds the card; it's the whole left half of the header,
+   so the hit target matches what reads as "this runner". */
+.re-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.re-chev {
+  flex: none;
+  width: 10px;
+  color: var(--text-3);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.re-chev.open {
+  transform: rotate(90deg);
+}
+.re-summary {
+  font-size: 11.5px;
+  color: var(--text-3);
+  border-left: 1px solid var(--border);
+  padding-left: 9px;
+  white-space: nowrap;
 }
 .re-dot {
   flex: none;

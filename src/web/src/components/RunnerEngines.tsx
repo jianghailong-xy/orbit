@@ -17,6 +17,20 @@ import type { Runner } from './TasksSidePanel';
 // `Record<LoginEngine, …>` — so adding a fourth engine can't silently skip this page.
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 
+// Which runner cards the user folded away. Three engines per machine adds up fast, and a runner
+// that is set up and quiet is exactly the one worth hiding — so the choice is remembered, like
+// the sidebar's width.
+const COLLAPSED_KEY = 'orbit:providers-collapsed-runners';
+
+function readCollapsed(): string[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]');
+    return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 /** What one row is saying. The install relay outranks the probe: it is newer than the last
  *  heartbeat, and it is the thing the user is currently watching. */
 type RowKind =
@@ -224,26 +238,60 @@ function EngineRow({
   );
 }
 
-function RunnerEngineCard({ runner }: { runner: Runner }) {
+/** What a collapsed card says in one line, so folding a runner away never hides a problem. */
+export function summaryOf(runner: Runner): string {
+  if (runner.install?.status === 'failed') return 'Install failed';
+  if (runner.install?.status === 'pending' || runner.install?.status === 'installing') {
+    return 'Installing…';
+  }
+  if (!runner.engines) return 'Engines not reported';
+  const signedIn = runner.engines.filter((e) => e.installed && e.auth === 'yes').length;
+  return signedIn === ENGINES.length
+    ? 'All signed in'
+    : `${signedIn} of ${ENGINES.length} signed in`;
+}
+
+function RunnerEngineCard({
+  runner,
+  collapsed,
+  onToggle,
+}: {
+  runner: Runner;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const [signIn, setSignIn] = useState<LoginEngine | null>(null);
   const engines = runner.engines ?? null;
   return (
-    <div className={`re-card${runner.online ? '' : ' offline'}`}>
+    <div className={`re-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
       <div className="re-head">
-        <span className={`re-dot${runner.online ? ' on' : ''}`} />
-        <span className="re-runner">{runner.displayName || runner.name}</span>
-        <span className="re-runner-meta">
-          {[runner.hostname, runner.version && `runner ${runner.version}`]
-            .filter(Boolean)
-            .join(' · ')}
-        </span>
+        {/* The toggle is its own button rather than the whole header: the header also holds a
+            link, and a link inside a button is neither valid nor operable by keyboard. */}
+        <button
+          className="re-toggle"
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={onToggle}
+        >
+          <span className={`re-chev${collapsed ? '' : ' open'}`} aria-hidden="true">
+            ▸
+          </span>
+          <span className={`re-dot${runner.online ? ' on' : ''}`} />
+          <span className="re-runner">{runner.displayName || runner.name}</span>
+          <span className="re-runner-meta">
+            {[runner.hostname, runner.version && `runner ${runner.version}`]
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+          {collapsed && <span className="re-summary">{summaryOf(runner)}</span>}
+        </button>
         <span className="re-head-sp" />
         {!runner.online && <Tag>Offline</Tag>}
         <Link className="re-manage" to={`/runners/${encodeId(runner.id)}`}>
           Manage runner →
         </Link>
       </div>
-      {engines ? (
+      {collapsed ? null : engines ? (
         ENGINES.map((engine) => (
           <EngineRow
             key={engine}
@@ -274,6 +322,17 @@ function RunnerEngineCard({ runner }: { runner: Runner }) {
  * they get their own section rather than extra rows in the same table.
  */
 export function RunnerEngines() {
+  const [collapsed, setCollapsed] = useState<string[]>(readCollapsed);
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+      } catch {
+        // Private mode / full quota: the fold still works, it just won't outlive the page.
+      }
+      return next;
+    });
   const runners = useQuery({
     ...runnersQuery(),
     // An install is minutes long and its progress lives on the runner row, so poll while one is
@@ -330,7 +389,14 @@ export function RunnerEngines() {
           </Link>
         </div>
       ) : (
-        list.map((runner) => <RunnerEngineCard key={runner.id} runner={runner} />)
+        list.map((runner) => (
+          <RunnerEngineCard
+            key={runner.id}
+            runner={runner}
+            collapsed={collapsed.includes(runner.id)}
+            onToggle={() => toggle(runner.id)}
+          />
+        ))
       )}
     </div>
   );

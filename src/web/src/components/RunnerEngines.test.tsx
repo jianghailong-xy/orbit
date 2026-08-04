@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
-import { RunnerEngines, rowKindOf } from './RunnerEngines';
+import { RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
@@ -145,6 +145,30 @@ describe('the "On your runners" section', () => {
     expect(failed).toContain('Install failed');
     expect(failed).toContain('EACCES');
     expect(failed).toContain('Retry');
+  });
+
+  it('folds a runner away without hiding what it would have said', () => {
+    const busy = runner({
+      engines: [
+        health({ engine: 'claude' }),
+        health({ engine: 'codex', auth: 'no' }),
+        health({ engine: 'kimi', installed: false, auth: 'unknown' }),
+      ],
+    });
+    // Nothing in flight: the summary is the count.
+    expect(summaryOf(busy)).toBe('1 of 3 signed in');
+    expect(
+      summaryOf(runner({ engines: [health({}), health({ engine: 'codex' }), health({ engine: 'kimi' })] })),
+    ).toBe('All signed in');
+    expect(summaryOf(runner({ engines: null }))).toBe('Engines not reported');
+    // A folded card must still say that something needs attention, or collapsing becomes a way
+    // to lose a failed install.
+    expect(
+      summaryOf(runner({ engines: [health({})], install: install({ status: 'failed', engine: 'kimi' }) })),
+    ).toBe('Install failed');
+    expect(
+      summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', engine: 'kimi' }) })),
+    ).toBe('Installing…');
   });
 
   it('offers the free route first when there is no runner at all', () => {
