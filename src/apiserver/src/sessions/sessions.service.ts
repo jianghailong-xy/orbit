@@ -2022,11 +2022,13 @@ export class SessionsService {
           session.mergeStatus,
           session.mergeOperationId,
           session.mergeOperationOwner,
+          session.mergeRequestedAt,
         ) ||
         pendingWorktreeOperationMayBeExecuting(
           session.commitStatus,
           session.commitOperationId,
           session.commitOperationOwner,
+          session.commitRequestedAt,
         )
       ) {
         throw new ConflictException('wait for the pending worktree operation to finish');
@@ -2438,11 +2440,13 @@ export class SessionsService {
           session.mergeStatus,
           session.mergeOperationId,
           session.mergeOperationOwner,
+          session.mergeRequestedAt,
         ) ||
         pendingWorktreeOperationMayBeExecuting(
           session.commitStatus,
           session.commitOperationId,
           session.commitOperationOwner,
+          session.commitRequestedAt,
         )
       ) {
         throw new ConflictException('wait for the pending worktree operation to finish');
@@ -2819,11 +2823,13 @@ export class SessionsService {
           current.mergeStatus,
           current.mergeOperationId,
           current.mergeOperationOwner,
+          current.mergeRequestedAt,
         ) ||
         pendingWorktreeOperationMayBeExecuting(
           current.commitStatus,
           current.commitOperationId,
           current.commitOperationOwner,
+          current.commitRequestedAt,
         )
       ) {
         throw new ConflictException('wait for the pending worktree operation to finish');

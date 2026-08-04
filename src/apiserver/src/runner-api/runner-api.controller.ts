@@ -518,6 +518,9 @@ export class RunnerApiController {
       // runner must advertise its process owner; older binaries leave requests
       // pending until upgraded instead of executing an unfenced operation.
       if (supportsWorktreeOps && heartbeatLeaseOwner) {
+        // A claimed request whose owning process died between claim and result would
+        // otherwise stay pending forever, fencing takeover/messages/resume for its session.
+        await this.realtime.failAbandonedWorktreeOperations(runner.id, heartbeatLeaseOwner);
         mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
         commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
       }
@@ -961,9 +964,11 @@ export class RunnerApiController {
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
+          mergeRequestedAt: Date | null;
           commitStatus: string | null;
           commitOperationId: string | null;
           commitOperationOwner: string | null;
+          commitRequestedAt: Date | null;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
@@ -971,9 +976,11 @@ export class RunnerApiController {
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
+               "merge_requested_at" AS "mergeRequestedAt",
                "commit_status" AS "commitStatus",
                "commit_operation_id" AS "commitOperationId",
-               "commit_operation_owner" AS "commitOperationOwner"
+               "commit_operation_owner" AS "commitOperationOwner",
+               "commit_requested_at" AS "commitRequestedAt"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -997,11 +1004,13 @@ export class RunnerApiController {
           owned[0].mergeStatus,
           owned[0].mergeOperationId,
           owned[0].mergeOperationOwner,
+          owned[0].mergeRequestedAt,
         ) ||
         pendingWorktreeOperationMayBeExecuting(
           owned[0].commitStatus,
           owned[0].commitOperationId,
           owned[0].commitOperationOwner,
+          owned[0].commitRequestedAt,
         )
       ) {
         // A different process may still be mutating this checkout/repository.

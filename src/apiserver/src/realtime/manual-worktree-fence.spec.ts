@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@orbit/shared';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { RealtimeService } from './realtime.service';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
@@ -85,6 +86,8 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
       },
     },
   ]);
+  const restampedAt = (writes[0] as { data: { mergeRequestedAt: Date } }).data.mergeRequestedAt;
+  assert.ok(restampedAt instanceof Date, 'claim must restamp the staleness clock');
   assert.deepEqual(writes, [
     {
       where: {
@@ -95,7 +98,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
         OR: [{ mergeOperationOwner: null }, { mergeOperationOwner: NEW_OWNER }],
         status: { notIn: OPEN_SESSION_STATUSES },
       },
-      data: { mergeOperationOwner: NEW_OWNER },
+      data: { mergeOperationOwner: NEW_OWNER, mergeRequestedAt: restampedAt },
     },
   ]);
 });
@@ -127,6 +130,8 @@ test('merge claim redelivers only to the same owner and loses cleanly to another
 
     assert.equal(commands.length, 1);
     assert.equal(commands[0]?.leaseOwner, OLD_OWNER);
+    const restampedAt = (writes[0] as { data: { mergeRequestedAt: Date } }).data.mergeRequestedAt;
+    assert.ok(restampedAt instanceof Date, 'redelivery must keep restamping the staleness clock');
     assert.deepEqual(writes, [
       {
         where: {
@@ -138,7 +143,7 @@ test('merge claim redelivers only to the same owner and loses cleanly to another
           status: { in: OPEN_SESSION_STATUSES },
           inboxLeaseOwner: OLD_OWNER,
         },
-        data: { mergeOperationOwner: OLD_OWNER },
+        data: { mergeOperationOwner: OLD_OWNER, mergeRequestedAt: restampedAt },
       },
     ]);
   });
@@ -229,6 +234,8 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
       select: { id: true, branch: true, commitOperationId: true, status: true },
     },
   ]);
+  const restampedAt = (writes[0] as { data: { commitRequestedAt: Date } }).data.commitRequestedAt;
+  assert.ok(restampedAt instanceof Date, 'claim must restamp the staleness clock');
   assert.deepEqual(writes, [
     {
       where: {
@@ -238,7 +245,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
         commitOperationId: OPERATION_ID,
         ...idleBranch,
       },
-      data: { commitOperationOwner: NEW_OWNER },
+      data: { commitOperationOwner: NEW_OWNER, commitRequestedAt: restampedAt },
     },
   ]);
 });
@@ -289,6 +296,8 @@ test('terminal commit is redelivered only to its exact operation owner', async (
         branch: 'orbit/session',
       },
     ]);
+    const restampedAt = (writes[0] as { data: { commitRequestedAt: Date } }).data.commitRequestedAt;
+    assert.ok(restampedAt instanceof Date, 'receipt retry must keep restamping the staleness clock');
     assert.deepEqual(writes, [
       {
         where: {
@@ -299,7 +308,7 @@ test('terminal commit is redelivered only to its exact operation owner', async (
           status: { notIn: OPEN_SESSION_STATUSES },
           commitOperationOwner: NEW_OWNER,
         },
-        data: { commitOperationOwner: NEW_OWNER },
+        data: { commitOperationOwner: NEW_OWNER, commitRequestedAt: restampedAt },
       },
     ]);
   });
@@ -332,4 +341,43 @@ test('terminal commit is redelivered only to its exact operation owner', async (
     );
     assert.equal((writes[0] as { where: Record<string, unknown> }).where.OR, undefined);
   });
+});
+
+test('abandoned foreign-owner operations are failed over; live and unclaimed ones are spared', async () => {
+  const writes: unknown[] = [];
+  const prisma = {
+    session: {
+      updateMany: async (args: unknown) => {
+        writes.push(args);
+        return { count: 1 };
+      },
+    },
+  };
+
+  const before = Date.now() - WORKTREE_OPERATION_STALE_MS;
+  await service(prisma).failAbandonedWorktreeOperations(RUNNER_ID, NEW_OWNER);
+  const after = Date.now() - WORKTREE_OPERATION_STALE_MS;
+
+  assert.equal(writes.length, 2);
+  const [merge, commit] = writes as Array<{
+    where: Record<string, unknown> & { mergeRequestedAt?: { lt: Date }; commitRequestedAt?: { lt: Date } };
+    data: Record<string, unknown>;
+  }>;
+  // Only a *claimed* (owner-bearing) request can be abandoned — an unclaimed one is
+  // still deliverable — and only a *foreign* owner is provably a dead process: this
+  // heartbeat's leaseOwner is the runner's one live process and redelivery keeps
+  // restamping its own claims fresh.
+  for (const [write, kind] of [
+    [merge, 'merge'],
+    [commit, 'commit'],
+  ] as const) {
+    assert.equal(write.where.assignedRunnerId, RUNNER_ID);
+    assert.equal(write.where[`${kind}Status`], 'pending');
+    assert.deepEqual(write.where[`${kind}OperationOwner`], { not: null });
+    assert.deepEqual(write.where.NOT, { [`${kind}OperationOwner`]: NEW_OWNER });
+    const cutoff = (write.where[`${kind}RequestedAt`] as { lt: Date }).lt.getTime();
+    assert.ok(cutoff >= before && cutoff <= after, 'staleness cutoff must be the stale window');
+    assert.equal(write.data[`${kind}Status`], 'error');
+    assert.ok(String(write.data[`${kind}Error`]).includes('stopped before reporting a result'));
+  }
 });

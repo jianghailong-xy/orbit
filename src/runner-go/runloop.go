@@ -156,26 +156,42 @@ type reclaimedStart struct {
 	initiallyActive bool
 }
 
+// takeoverConflictLimit caps how many snapshot refreshes one session's takeover
+// conflict may force before that session is set aside for the current reclaim. A
+// snapshot-owner race resolves within a round or two; a row the server keeps
+// fail-closing (e.g. a fenced worktree operation left behind by a dead process)
+// would otherwise retry-loop this function forever — silently, since the claim
+// loop never starts — starving every queued session on the machine.
+const takeoverConflictLimit = 5
+
+// A reclaim that set sessions aside leaves them unsupervised on the server (their
+// rows stay RUNNING/PENDING with no local process). Retry on this cadence until
+// the conflict clears — e.g. the server fails the abandoned operation over.
+const reclaimRetryInterval = 45 * time.Second
+
 // reclaimMissingSessions repairs both startup state and an ambiguous claim
 // response (the server may have committed PENDING -> RUNNING before the HTTP
 // response was lost). Every process takes rows over in stable session-id order,
 // and no supervisor starts until the whole snapshot's CAS operations succeed.
+// The bool result reports that at least one conflicted session was set aside;
+// the caller must schedule another reclaim so it does not stay unsupervised.
 func reclaimMissingSessions(
 	ctx context.Context,
 	t *Transport,
 	knownStates func() map[string]bool,
 	prepareTakeover func(*ClaimedSession) error,
-) ([]reclaimedStart, error) {
+) ([]reclaimedStart, bool, error) {
 	delay := 250 * time.Millisecond
+	conflicts := map[string]int{}
 	for ctx.Err() == nil {
 		rec, err := t.reclaim(ctx)
 		if err != nil {
 			if !isRetryableTransportError(err) {
-				return nil, err
+				return nil, false, err
 			}
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, false, ctx.Err()
 			case <-time.After(delay):
 			}
 			if delay < 5*time.Second {
@@ -191,6 +207,7 @@ func reclaimMissingSessions(
 		localStates := knownStates()
 		pending := make([]reclaimedStart, 0, len(sessions))
 		retrySnapshot := false
+		skippedAny := false
 		lastID := ""
 		for i := range sessions {
 			r := sessions[i]
@@ -198,6 +215,10 @@ func reclaimMissingSessions(
 				continue
 			}
 			lastID = r.SessionID
+			if conflicts[r.SessionID] >= takeoverConflictLimit {
+				skippedAny = true
+				continue
+			}
 			knownActive, locallyKnown := localStates[r.SessionID]
 			// A rotated owner marks a fresh terminal-revive epoch. Even if the old
 			// local supervisor still looks active, it cannot represent this RUNNING
@@ -215,18 +236,29 @@ func reclaimMissingSessions(
 			job := claimedSessionFromReclaim(r)
 			if prepareTakeover != nil {
 				if prepareErr := prepareTakeover(job); prepareErr != nil {
-					return nil, prepareErr
+					return nil, false, prepareErr
 				}
 			}
 			status, takeoverErr := takeoverClaimedSession(ctx, t, job)
 			if takeoverErr != nil {
-				// 409 means another process advanced the snapshot owner; 403 means
-				// the assignment changed after reclaim. Refresh the whole ordered set.
+				// 409 means another process advanced the snapshot owner or the server
+				// is fail-closing the row (e.g. a fenced worktree operation); 403 means
+				// the assignment changed after reclaim. Refresh the whole ordered set —
+				// a bounded number of times per session, so one persistently rejected
+				// row cannot livelock this loop and starve the claim loop.
 				if isTransportHTTPStatus(takeoverErr, 409) || isTransportHTTPStatus(takeoverErr, 403) {
+					conflicts[r.SessionID]++
+					if conflicts[r.SessionID] >= takeoverConflictLimit {
+						logln(fmt.Sprintf("reclaim: setting session %s aside after %d takeover conflicts (last: %v); retrying on a later reclaim",
+							r.SessionID, conflicts[r.SessionID], takeoverErr))
+						skippedAny = true
+						continue
+					}
+					logln(fmt.Sprintf("reclaim: takeover conflict for %s: %v; refreshing snapshot", r.SessionID, takeoverErr))
 					retrySnapshot = true
 					break
 				}
-				return nil, takeoverErr
+				return nil, false, takeoverErr
 			}
 			if !reclaimStatusOpen(status) {
 				continue
@@ -240,16 +272,18 @@ func reclaimMissingSessions(
 			})
 		}
 		if !retrySnapshot {
-			return pending, nil
+			return pending, skippedAny, nil
 		}
-		delay = 250 * time.Millisecond
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, false, ctx.Err()
 		case <-time.After(delay):
 		}
+		if delay < 5*time.Second {
+			delay *= 2
+		}
 	}
-	return nil, ctx.Err()
+	return nil, false, ctx.Err()
 }
 
 // A terminal revive rotates the Session owner before it can be claimed. If this
@@ -960,11 +994,17 @@ func runLoop(cfg *RunnerConfig) bool {
 	// we come up, and a single failed attempt would orphan every resumable session for
 	// the rest of this process — their queued turns then sit PENDING forever.
 	reclaimed := false
-	pendingStarts, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+	// When a reclaim sets conflicted sessions aside, retry at this time so they do
+	// not stay unsupervised; zero means nothing is waiting.
+	var reclaimRetryAt time.Time
+	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
 		loopCancel()
 	} else if reclaimErr == nil {
+		if reclaimSkipped {
+			reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+		}
 		// Prune crash leftovers before any reclaimed provider can start and refresh
 		// its credential. This avoids racing cleanup against the atomic temp file used
 		// by a live refresh.
@@ -986,14 +1026,38 @@ func runLoop(cfg *RunnerConfig) bool {
 	// not just reclaim (a crash mid-finalize, or a cancelled session never resumed). The
 	// branches are kept; only the stray checkout dirs are removed. Skipped unless the
 	// reclaim above actually answered: without that list every live session looks like
-	// an orphan and we would delete the checkouts we are about to resume.
-	if reclaimed {
+	// an orphan and we would delete the checkouts we are about to resume. A session set
+	// aside over a takeover conflict is not in the pool either, so its checkout would
+	// look orphaned too — defer GC to a later clean start rather than remove it.
+	if reclaimed && !reclaimSkipped {
 		liveSet := pool.ids()
 		gcWorktrees(t, liveSet)
 		gcUploads(liveSet)
 	}
 
 	for loopCtx.Err() == nil {
+		// Sessions set aside by an earlier reclaim have authoritative rows but no local
+		// supervisor; their inbox is never polled until a takeover succeeds. Keep retrying
+		// here — the server fails an abandoned worktree operation over after its staleness
+		// window, at which point the takeover passes and the session re-attaches.
+		if !reclaimRetryAt.IsZero() && time.Now().After(reclaimRetryAt) {
+			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+			if recoverErr != nil {
+				if loopCtx.Err() == nil {
+					logln("deferred reclaim retry failed; stopping runner:", recoverErr)
+					loopCancel()
+				}
+				break
+			}
+			for _, pending := range recovered {
+				logln(fmt.Sprintf("reclaiming session %s — %s", pending.job.SessionID, pending.job.Title))
+				startSession(pending.job, pending.initiallyActive)
+			}
+			reclaimRetryAt = time.Time{}
+			if skipped {
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+			}
+		}
 		if pool.activeCount() >= pool.maxConcurrent() {
 			select {
 			case <-loopCtx.Done():
@@ -1015,13 +1079,16 @@ func runLoop(cfg *RunnerConfig) bool {
 			// The claim transaction may have committed before its response was lost.
 			// Reclaim all runner-owned rows and attach any authoritative RUNNING row
 			// missing from the local pool before issuing another claim.
-			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
 					logln("ambiguous claim reconciliation failed; stopping runner:", recoverErr)
 					loopCancel()
 				}
 				break
+			}
+			if skipped {
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
 				logln(fmt.Sprintf("recovering ambiguously claimed session %s — %s", pending.job.SessionID, pending.job.Title))
@@ -1057,13 +1124,16 @@ func runLoop(cfg *RunnerConfig) bool {
 				loopCancel()
 				break
 			}
-			recovered, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 			if recoverErr != nil {
 				if loopCtx.Err() == nil {
 					logln("claim lease reconciliation failed for", job.SessionID+":", recoverErr)
 					loopCancel()
 				}
 				break
+			}
+			if skipped {
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
 			}
 			for _, pending := range recovered {
 				startSession(pending.job, pending.initiallyActive)

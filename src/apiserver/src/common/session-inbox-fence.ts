@@ -15,6 +15,16 @@ export function isTerminalResumeHandoffOwner(owner: string | null | undefined): 
 }
 
 /**
+ * How long a claimed pending Git operation may fence its session. The clock is
+ * `merge_requested_at`/`commit_requested_at`, which heartbeat delivery restamps at
+ * claim time, so it measures time since the owning process last advanced the
+ * operation. Execution is seconds of git work and a live owner is redelivered
+ * every heartbeat; ten minutes also clears any restart window in which an old
+ * process could still be finishing an operation while its successor comes up.
+ */
+export const WORKTREE_OPERATION_STALE_MS = 10 * 60_000;
+
+/**
  * Whether a pending heartbeat-delivered Git operation may already have local
  * side effects. Modern rows carry both an operation UUID and an owner; a row
  * that has neither is a stale orphan (not an in-flight operation) and must
@@ -24,13 +34,21 @@ export function isTerminalResumeHandoffOwner(owner: string | null | undefined): 
  *   - owner, no id  → legacy (pre-operation-id), treat as executing
  *   - no owner + id → modern, completed or orphaned → free
  *   - no owner, no id → stale orphan → free
+ *
+ * An owner-bearing row additionally stops fencing once it is stale: the owner is a
+ * process epoch, and a process that died between claiming and reporting (e.g. a
+ * self-update restart) leaves the row pending forever. Treating it as executing
+ * made takeover 409 indefinitely, which livelocked the runner's reclaim loop and
+ * starved every queued session on the machine ("Waiting for a free slot").
  */
 export function pendingWorktreeOperationMayBeExecuting(
   status: string | null | undefined,
   operationId: string | null | undefined,
   operationOwner: string | null | undefined,
+  requestedAt?: Date | null,
 ): boolean {
-  return status === 'pending' && !!operationOwner;
+  if (status !== 'pending' || !operationOwner) return false;
+  return !requestedAt || Date.now() - requestedAt.getTime() < WORKTREE_OPERATION_STALE_MS;
 }
 
 /**

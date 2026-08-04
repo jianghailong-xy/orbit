@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  WORKTREE_OPERATION_STALE_MS,
   isTerminalResumeHandoffOwner,
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -45,6 +46,32 @@ test('only an owner-bearing pending operation can still be executing', () => {
       );
     }
   }
+});
+
+test('a stale claimed operation stops fencing; a fresh or clock-less one keeps fencing', () => {
+  const fresh = new Date(Date.now() - WORKTREE_OPERATION_STALE_MS / 2);
+  const stale = new Date(Date.now() - WORKTREE_OPERATION_STALE_MS - 1);
+  assert.equal(
+    pendingWorktreeOperationMayBeExecuting('pending', OPERATION_ID, OPERATION_OWNER, fresh),
+    true,
+  );
+  // The owner is a process epoch. One that stopped restamping the clock for the whole
+  // staleness window died between claim and result; treating its row as executing made
+  // takeover 409 forever and livelocked the runner's reclaim loop.
+  assert.equal(
+    pendingWorktreeOperationMayBeExecuting('pending', OPERATION_ID, OPERATION_OWNER, stale),
+    false,
+  );
+  // Callers without the timestamp column keep the fail-closed behavior.
+  for (const requestedAt of [null, undefined]) {
+    assert.equal(
+      pendingWorktreeOperationMayBeExecuting('pending', OPERATION_ID, OPERATION_OWNER, requestedAt),
+      true,
+    );
+  }
+  // Staleness never revives a row that already failed the owner/status gates.
+  assert.equal(pendingWorktreeOperationMayBeExecuting('pending', OPERATION_ID, null, fresh), false);
+  assert.equal(pendingWorktreeOperationMayBeExecuting('error', OPERATION_ID, OPERATION_OWNER, fresh), false);
 });
 
 function sql(call: unknown[] | undefined): string {

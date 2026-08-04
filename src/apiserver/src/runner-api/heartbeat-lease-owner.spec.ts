@@ -17,6 +17,7 @@ function harness(
   const updateManyWhere: unknown[] = [];
   const mergeDrainCalls: unknown[][] = [];
   const commitDrainCalls: unknown[][] = [];
+  const abandonedSweeps: unknown[][] = [];
   const prisma = {
     runner: {
       update: async () => ({ maxConcurrent: 4 }),
@@ -35,6 +36,9 @@ function harness(
   } as never;
   const realtime = {
     drainCancellations: async () => [SESSION_A],
+    failAbandonedWorktreeOperations: async (...args: unknown[]) => {
+      abandonedSweeps.push(args);
+    },
     drainMergeRequests: async (...args: unknown[]) => {
       mergeDrainCalls.push(args);
       return worktreeResponses.merge ?? [];
@@ -51,6 +55,7 @@ function harness(
     updateManyWhere,
     mergeDrainCalls,
     commitDrainCalls,
+    abandonedSweeps,
   };
 }
 
@@ -175,6 +180,9 @@ test('heartbeat drains manual worktree operations only with capability and proce
       SESSION_WORKTREE_OPS_V1,
     );
 
+    // The abandoned-operation sweep shares the drains' fencing: it may only run for
+    // a capable runner that advertised its process owner.
+    assert.deepEqual(h.abandonedSweeps, [[RUNNER_ID, OWNER]]);
     assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER]]);
     assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER]]);
     assert.deepEqual(response.mergeRequests, [merge]);
@@ -214,6 +222,7 @@ test('heartbeat drains manual worktree operations only with capability and proce
         tc.capabilities,
       );
 
+      assert.deepEqual(h.abandonedSweeps, []);
       assert.deepEqual(h.mergeDrainCalls, []);
       assert.deepEqual(h.commitDrainCalls, []);
       assert.deepEqual(response.mergeRequests, []);

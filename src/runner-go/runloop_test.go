@@ -221,11 +221,14 @@ func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	starts, err := reclaimMissingSessions(context.Background(), NewTransport(srv.URL, "token"), func() map[string]bool {
+	starts, skipped, err := reclaimMissingSessions(context.Background(), NewTransport(srv.URL, "token"), func() map[string]bool {
 		return map[string]bool{}
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped {
+		t.Fatal("conflict-free reclaim reported skipped sessions")
 	}
 	mu.Lock()
 	gotOrder := append([]string(nil), takeoverOrder...)
@@ -235,6 +238,49 @@ func TestReclaimMissingSessionsUsesStableTakeoverOrder(t *testing.T) {
 	}
 	if len(starts) != 3 || starts[0].job.SessionID != "a" || !starts[0].initiallyActive {
 		t.Fatalf("reclaimed starts = %#v", starts)
+	}
+}
+
+func TestReclaimSetsAsidePersistentlyConflictedSessionInsteadOfLivelocking(t *testing.T) {
+	// Regression: a claimed worktree operation whose owner process died left the
+	// server 409ing takeover-leases forever. reclaimMissingSessions retried the
+	// snapshot with no bound, so the runner never reached its claim loop and every
+	// queued session on the machine sat at "Waiting for a free slot".
+	var poisonedAttempts atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
+			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: []ReclaimSession{
+				{SessionID: "a-poisoned", Status: stAwaitingInput},
+				{SessionID: "b-healthy", Status: stRunning},
+			}})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
+			if strings.Contains(r.URL.Path, "a-poisoned") {
+				poisonedAttempts.Add(1)
+				http.Error(w, `{"message":"wait for the pending worktree operation to finish"}`, http.StatusConflict)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "status": stRunning})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	starts, skipped, err := reclaimMissingSessions(context.Background(), NewTransport(srv.URL, "token"), func() map[string]bool {
+		return map[string]bool{}
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !skipped {
+		t.Fatal("expected the poisoned session to be reported as set aside")
+	}
+	if got := poisonedAttempts.Load(); got != takeoverConflictLimit {
+		t.Fatalf("poisoned takeover attempts = %d, want %d", got, takeoverConflictLimit)
+	}
+	if len(starts) != 1 || starts[0].job.SessionID != "b-healthy" || !starts[0].initiallyActive {
+		t.Fatalf("healthy session was not reclaimed past the poisoned one: %#v", starts)
 	}
 }
 
@@ -273,7 +319,7 @@ func TestAmbiguousClaimCanBeRecoveredFromAuthoritativeReclaim(t *testing.T) {
 	if _, added := pool.register(poolJob("claimed-after-eof"), func() {}, true); !added {
 		t.Fatal("failed to register the predecessor active supervisor")
 	}
-	starts, err := reclaimMissingSessions(context.Background(), transport, pool.reclaimStates, nil)
+	starts, _, err := reclaimMissingSessions(context.Background(), transport, pool.reclaimStates, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

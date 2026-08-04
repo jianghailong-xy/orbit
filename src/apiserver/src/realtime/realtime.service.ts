@@ -28,6 +28,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -656,6 +657,44 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Fail claimed merge/commit requests whose owning process is provably gone. The operation
+   * owner is a process epoch and this heartbeat's leaseOwner is the runner's only live
+   * process, so a pending operation claimed by a different epoch has no process left to
+   * execute it or report a result — redelivery excludes foreign owners by design (a
+   * half-executed git operation must never rerun under a new process). Left alone, such a
+   * row fences takeover/messages/resume forever, which livelocks the runner's reclaim loop
+   * ("Waiting for a free slot" for every queued session) and pins the UI on Merging….
+   * The staleness margin covers a restart overlap in which the old process could still be
+   * finishing: inside it the row keeps fencing, past it the operation fails visibly so the
+   * user can request it again.
+   */
+  async failAbandonedWorktreeOperations(runnerId: string, leaseOwner: string): Promise<void> {
+    const staleBefore = new Date(Date.now() - WORKTREE_OPERATION_STALE_MS);
+    const abandoned =
+      'the runner process that claimed this operation stopped before reporting a result — request it again';
+    await this.prisma.session.updateMany({
+      where: {
+        assignedRunnerId: runnerId,
+        mergeStatus: 'pending',
+        mergeOperationOwner: { not: null },
+        NOT: { mergeOperationOwner: leaseOwner },
+        mergeRequestedAt: { lt: staleBefore },
+      },
+      data: { mergeStatus: 'error', mergeError: abandoned },
+    });
+    await this.prisma.session.updateMany({
+      where: {
+        assignedRunnerId: runnerId,
+        commitStatus: 'pending',
+        commitOperationOwner: { not: null },
+        NOT: { commitOperationOwner: leaseOwner },
+        commitRequestedAt: { lt: staleBefore },
+      },
+      data: { commitStatus: 'error', commitError: abandoned },
+    });
+  }
+
+  /**
    * Branch merges this runner should perform: sessions it ran (assignedRunnerId) that the
    * user asked to merge into main (mergeStatus='pending'). At-least-once — redelivered each
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
@@ -708,7 +747,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                 ? { status: { in: OPEN_SESSION_STATUSES }, inboxLeaseOwner: leaseOwner }
                 : { status: { notIn: OPEN_SESSION_STATUSES } }),
             },
-            data: { mergeOperationOwner: leaseOwner },
+            // Redelivery restamps requestedAt each heartbeat, so the staleness clock in
+            // pendingWorktreeOperationMayBeExecuting measures time since the owning process
+            // last showed up rather than time since the user clicked.
+            data: { mergeOperationOwner: leaseOwner, mergeRequestedAt: new Date() },
           });
           if (claim.count === 0) return null;
           return {
@@ -785,7 +827,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
                     commitOperationOwner: leaseOwner,
                   }),
             },
-            data: { commitOperationOwner: leaseOwner },
+            // Same restamp as the merge claim: keep the staleness clock a liveness signal.
+            data: { commitOperationOwner: leaseOwner, commitRequestedAt: new Date() },
           });
           if (claim.count === 0) return null;
           return {
