@@ -2131,6 +2131,12 @@ body {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+/* Foot of the list while the next page loads. */
+.session-list-more {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 16px;
+}
 /* The tag's own colour, so a "Group by Tag" heading reads as that tag at a glance. */
 .session-section-dot {
   flex: none;

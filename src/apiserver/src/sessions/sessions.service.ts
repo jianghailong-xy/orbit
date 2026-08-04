@@ -863,11 +863,60 @@ export class SessionsService {
     );
   }
 
+  /**
+   * Per-agent tallies over the Open list: how many of an agent's sessions are mid-turn, and how
+   * many are blocked on an approval. The nav sidebar shows one number per agent and used to
+   * derive them by fetching every open session — the heaviest poll in the app once an account
+   * has thousands. Same definitions as the list payload, including that only a RUNNING session
+   * can hold a live approval (see `list`). Sessions with no agent belong to no row and are
+   * skipped, exactly as the sidebar skipped them.
+   */
+  async agentSessionCounts(ownerId: string) {
+    const open = {
+      ownerId,
+      completedAt: null,
+      archivedAt: null,
+      deletedAt: null,
+      agentId: { not: null },
+    } as const;
+    const [active, blocked] = await Promise.all([
+      this.prisma.session.groupBy({
+        by: ['agentId'],
+        where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
+        _count: { _all: true },
+      }),
+      // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
+      // of the whole list.
+      this.prisma.session.findMany({
+        where: { ...open, status: RunStatus.RUNNING, approvals: { some: { status: 'PENDING' } } },
+        select: { agentId: true },
+      }),
+    ]);
+    const counts = new Map<string, { agentId: string; active: number; needsYou: number }>();
+    const row = (agentId: string) => {
+      const existing = counts.get(agentId);
+      if (existing) return existing;
+      const fresh = { agentId, active: 0, needsYou: 0 };
+      counts.set(agentId, fresh);
+      return fresh;
+    };
+    for (const group of active) {
+      if (group.agentId) row(group.agentId).active = group._count._all;
+    }
+    for (const session of blocked) {
+      if (session.agentId) row(session.agentId).needsYou += 1;
+    }
+    return [...counts.values()];
+  }
+
   async list(
     ownerId: string,
     filters: {
       runnerId?: string;
+      agentId?: string;
+      tagId?: string;
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
+      limit?: number;
     },
   ) {
     // Open = neither completed nor deleted; Completed = completed but not deleted;
@@ -893,14 +942,38 @@ export class SessionsService {
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
+    // The web console's session column is one agent's conversation list, so it scopes the
+    // query rather than filtering a runner-wide list client-side — otherwise a page of rows
+    // could be all *other* agents' sessions and read as an empty (or stalled) list.
+    const agentFilter = filters.agentId
+      ? Prisma.sql`AND s.agent_id = ${filters.agentId}::uuid`
+      : Prisma.empty;
+    // Same reasoning for the list's tag filter: narrowing a page client-side can leave too few
+    // rows to fill (or scroll) the column while the matches sit in pages nobody asked for.
+    const tagFilter = filters.tagId
+      ? Prisma.sql`AND EXISTS (
+          SELECT 1 FROM session_tag_link stl
+          WHERE stl.session_id = s.id AND stl.tag_id = ${filters.tagId}::uuid
+        )`
+      : Prisma.empty;
+    // Paging is opt-in: a caller that omits `limit` (the native clients, any older web build)
+    // still gets the whole list, so this can only ever shrink a response.
+    const pageLimit =
+      typeof filters.limit === 'number' && Number.isFinite(filters.limit) && filters.limit > 0
+        ? Prisma.sql`LIMIT ${Math.floor(filters.limit)}::int`
+        : Prisma.empty;
     // Completed orders by when the session was completed
     // (completed_at, newest first) — not by last activity — and deliberately ignores
     // pinning, which is an Open-list affordance. Every other view floats pinned
     // sessions to the top and orders by last turn activity.
+    // A session that has never run has no last_turn_at, and the clients place it by when it
+    // was created (not last, as `NULLS LAST` would) — so order on the same key they sort by.
+    // With `limit` that stopped being cosmetic: a differently ordered page would cut exactly
+    // the rows the client then floats to the top.
     const orderBy: Prisma.Sql =
       view === 'completed'
         ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) DESC NULLS LAST, s.created_at DESC`
-        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, s.last_turn_at DESC NULLS LAST, s.created_at DESC`;
+        : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     // Raw query so the (potentially multi-KB) last-reply preview is truncated in SQL —
     // only ~200 chars per row ever leave the DB. It also omits big unused columns like
     // `prompt`; together this keeps the list payload flat as the session count grows.
@@ -995,8 +1068,11 @@ export class SessionsService {
       LEFT JOIN task t   ON t.id = s.task_id
       WHERE s.owner_id = ${ownerId}::uuid
         ${runnerFilter}
+        ${agentFilter}
+        ${tagFilter}
         AND (${visibility})
       ORDER BY ${orderBy}
+      ${pageLimit}
     `);
     // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
     const sessions = rows.map((r) =>

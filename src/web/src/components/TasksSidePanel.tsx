@@ -24,7 +24,7 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
-import { meQuery, sessionQuery, sessionsQuery } from '../lib/queries';
+import { agentSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
   groupAgentsByRunner,
@@ -34,7 +34,6 @@ import {
 } from '../lib/agentOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
-import { sessionRunStatusOf } from '../lib/sessionState';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
 // page (Admin is appended for admins below). The agents themselves live in the "Agents"
@@ -320,35 +319,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   });
   const unlistedCount = unlistedTasks.data?.counts.total ?? 0;
 
-  // Open sessions, used below to decorate each agent row with its own "needs you" count.
-  // Polls faster while anything is live. Shares the ['sessions', null,
-  // 'open'] cache the sidebar/console already fill, so it adds no extra request.
-  const openSessions = useQuery({
-    ...sessionsQuery({ view: 'open' }),
+  // Per-agent Open-session tallies, counted server-side. Polls faster while anything is live.
+  // This used to fetch every open session and tally them here, which on an account with
+  // thousands of sessions was the app's heaviest request — and it ran on a 5–15s loop for two
+  // numbers per agent. Sessions with no agent still belong to no row, as before.
+  const sessionCounts = useQuery({
+    ...agentSessionCountsQuery(),
     refetchInterval: controlLive
       ? false
-      : (q) =>
-          (q.state.data ?? []).some((s: any) =>
-            ['RUNNING', 'PENDING'].includes(sessionRunStatusOf(s)),
-          )
-            ? 5_000
-            : 15_000,
+      : (q) => ((q.state.data ?? []).some((c) => c.active > 0) ? 5_000 : 15_000),
   });
-  // The "needs you" signal decomposed per agent: how many of each agent's Open
-  // sessions are blocked on an approval. Lets an agent row show its own attention count
-  // (and hide its ⌘ shortcut) so you can jump straight to the agent that needs you.
-  // Same Open-session cache, no extra request; keyed by nested agent.id (flat
-  // agentId as fallback). Host sessions carry no agent and roll up only into Active.
-  const agentNeedsYou = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const s of (openSessions.data ?? []) as any[]) {
-      if ((s.pendingApprovals ?? 0) <= 0) continue;
-      const id = s.agent?.id ?? s.agentId;
-      if (!id) continue;
-      m.set(id, (m.get(id) ?? 0) + 1);
-    }
-    return m;
-  }, [openSessions.data]);
+  // The "needs you" signal per agent: how many of its Open sessions are blocked on an approval.
+  // Lets an agent row show its own attention count (and hide its ⌘ shortcut) so you can jump
+  // straight to the agent that needs you.
+  const agentNeedsYou = useMemo(
+    () => new Map((sessionCounts.data ?? []).map((c) => [c.agentId, c.needsYou])),
+    [sessionCounts.data],
+  );
 
   // Open an agent's console — the same destination the runner detail page uses.
   // Config-only agents (no runner) have no console to open.

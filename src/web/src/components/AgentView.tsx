@@ -32,7 +32,7 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Tooltip } from 'antd';
+import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
   Fragment,
@@ -55,6 +55,7 @@ import {
   type Me,
   meQuery,
   providersQuery,
+  SESSION_PAGE_SIZE,
   sessionQuery,
   type SessionListView,
   sessionsQuery,
@@ -412,6 +413,11 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
   { value: 'completed', label: 'Completed' },
   { value: 'trash', label: 'Trash' },
 ];
+
+// How close to the end of the loaded session list the scroll has to get before the next
+// page is asked for — roughly a couple of rows, so the list is already widened by the time
+// the user reaches the bottom.
+const SESSION_LOAD_MORE_PX = 240;
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -1078,17 +1084,42 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [resizing, setResizing] = useState(false);
 
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
-  // open; every other open session resolves from Open, where live sessions and runner
-  // slot accounting live.
+  // open; every other open session resolves from Open, where live sessions live.
   const effectiveView = selectedId ? (view === 'completed' ? 'completed' : 'open') : view;
+  // The agent whose conversation list this column is. The route names it on /agents/<id>;
+  // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
+  // resolves (see the effect below) — the query itself is scoped by it, so it can't be
+  // derived further down where the list it would depend on is built.
+  const [scopeAgentId, setScopeAgentId] = useState<string | null>(lockedAgentId ?? null);
+  // How much of the list is loaded. One page on open; scrolling toward the end widens the
+  // window (see loadMoreSessions), which re-keys the query to the larger page.
+  const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
-  const sessionsOpts = sessionsQuery({ runnerId: runner.id, view: effectiveView });
+  const sessionsOpts = sessionsQuery({
+    runnerId: runner.id,
+    agentId: scopeAgentId,
+    view: effectiveView,
+    tagId: tagFilter,
+    limit: sessionLimit,
+  });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
   // event), so stop the 4s poll; on any stream gap `controlLive` flips false and it resumes.
   const controlLive = useControlPlaneLive();
-  const sessionsQ = useQuery({ ...sessionsOpts, refetchInterval: controlLive ? false : 4000 });
+  const sessionsQ = useQuery({
+    ...sessionsOpts,
+    refetchInterval: controlLive ? false : 4000,
+    // Widening the window re-keys the query, so hold the rows already on screen while the
+    // larger page loads instead of blanking the list. Only within one scope (every key part
+    // but the page size): another scope's rows must never stand in for this one's, even for
+    // a frame.
+    placeholderData: (prev, prevQuery) => {
+      const k = prevQuery?.queryKey;
+      if (!k || sessionsKey.slice(0, -1).some((part, i) => k[i] !== part)) return undefined;
+      return prev;
+    },
+  });
   // Capabilities include heartbeat-derived runner availability. Refresh both list and detail when
   // this runner crosses online/offline so a cached RUNNER_OFFLINE denial cannot outlive recovery.
   const previousRunnerAvailability = useRef({ id: runner.id, online: runner.online });
@@ -1339,15 +1370,54 @@ export function AgentView({ runner }: { runner: Runner }) {
   // The session list (always visible in the left column) is scoped to one agent so
   // it reads as a conversation with that agent. On /agents/<id> that's the locked
   // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
-  // the selected session's own agent.
-  const scopeAgentId = lockedAgentId ?? selected?.agent?.id ?? detailForSelected?.agent?.id ?? null;
+  // the selected session's own agent. Feeds the query above (hence the state), which is
+  // why the client-side filter below stays: it covers the frame before the re-scoped
+  // list lands, and the case where no agent resolves at all.
+  const resolvedAgentId =
+    lockedAgentId ?? selected?.agent?.id ?? detailForSelected?.agent?.id ?? null;
+  useEffect(() => setScopeAgentId(resolvedAgentId), [resolvedAgentId]);
   const visibleSessions = useMemo(() => {
-    let list = scopeAgentId ? sessions.filter((s) => s.agent?.id === scopeAgentId) : sessions;
-    // The tag filter narrows here rather than at render so arrow-nav, auto-select and
-    // "open the next session after completing" all step through what's actually on screen.
+    let list = resolvedAgentId ? sessions.filter((s) => s.agent?.id === resolvedAgentId) : sessions;
+    // The tag filter is the query's too; re-applying it here keeps arrow-nav, auto-select and
+    // "open the next session after completing" stepping through exactly what's on screen even
+    // in the frame before a just-changed filter's rows land.
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
-  }, [sessions, scopeAgentId, tagFilter]);
+  }, [sessions, resolvedAgentId, tagFilter]);
+
+  // Paging. The server answered with a full page, so there is probably more behind it; a short
+  // answer means this scope is exhausted.
+  const hasMoreSessions = (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  // The column has nothing to show yet for this scope (a switch to an agent not in cache), or
+  // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
+  // keeps rows within one scope. Neither is the ordinary background refresh, which must not
+  // flash anything over rows that are already correct.
+  const loadingSessions = sessionsQ.isPending || sessionsQ.isPlaceholderData;
+  const loadMoreSessions = useCallback(() => {
+    if (!hasMoreSessions || sessionsQ.isFetching) return;
+    setSessionLimit((n) => n + SESSION_PAGE_SIZE);
+  }, [hasMoreSessions, sessionsQ.isFetching]);
+  // A new scope starts at one page again: a window grown by scrolling deep into one agent's
+  // history must not make the next agent (or view, or tag) fetch just as deep.
+  useEffect(() => {
+    setSessionLimit(SESSION_PAGE_SIZE);
+  }, [runner.id, scopeAgentId, effectiveView, tagFilter]);
+  // The server pages what the column shows, but a frame where the client narrows further (an
+  // agent that hasn't resolved into the query yet) can hold too few visible rows to be
+  // scrollable — and without a scroll there is nothing to trigger the next page. Top it up here.
+  useEffect(() => {
+    if (visibleSessions.length >= SESSION_PAGE_SIZE) return;
+    loadMoreSessions();
+  }, [visibleSessions.length, loadMoreSessions]);
+  // Widen the window as the list nears its end, so scrolling reads as one continuous list.
+  const onSessionListScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      if (el.scrollHeight - el.scrollTop - el.clientHeight > SESSION_LOAD_MORE_PX) return;
+      loadMoreSessions();
+    },
+    [loadMoreSessions],
+  );
 
   // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
   // tag when the user switches grouping — both from the pure groupers shared in shape with
@@ -1730,11 +1800,15 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
   // cold AWAITING_INPUT session remains open for replies without blocking another turn.
+  // Slots are a whole-runner budget, and this list holds one agent's page of it, so the
+  // runner's own server-side count is the number; the list is only a fallback for a
+  // payload that predates it.
   const slotUsage = useMemo(
     () => runnerSlotUsage(sessions, runner.maxConcurrent),
     [sessions, runner.maxConcurrent],
   );
-  const activeSlots = slotUsage.active;
+  const activeSlots =
+    typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
   const slotWaitDescription = pendingSlotDescription(activeSlots, runner.maxConcurrent);
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
@@ -3603,8 +3677,12 @@ export function AgentView({ runner }: { runner: Runner }) {
           <span>Search sessions</span>
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>
-        <div className="agent-sessions session-col-list" ref={listRef}>
-          {visibleSessions.length === 0 && (
+        <div
+          className="agent-sessions session-col-list"
+          ref={listRef}
+          onScroll={onSessionListScroll}
+        >
+          {visibleSessions.length === 0 && !loadingSessions && (
             <div className="chat-note">
               {tagFilter
                 ? 'No sessions with this tag.'
@@ -3810,6 +3888,14 @@ export function AgentView({ runner }: { runner: Runner }) {
               })}
             </Fragment>
           ))}
+          {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
+              fetch (or a switch to an agent not yet cached) shows progress rather than an
+              abrupt end of list. */}
+          {loadingSessions && (
+            <div className="session-list-more">
+              <Spin size="small" />
+            </div>
+          )}
         </div>
       </aside>
 

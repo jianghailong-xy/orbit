@@ -8,6 +8,7 @@ import {
   meQuery,
   providersQuery,
   runnersQuery,
+  SESSION_PAGE_SIZE,
   sessionQuery,
   sessionsQuery,
   setupStatusQuery,
@@ -111,10 +112,19 @@ export function BootGate({ children }: { children: React.ReactNode }) {
       : deep?.kind === 'agent'
         ? ((agents.data ?? []).find((a) => a.id === deep.id)?.runnerId ?? null)
         : (homeFirst ? agentRunnerId(homeFirst) : null);
-  // The runner-scoped Open list AgentView reads on load — same factory, so it lands in
-  // cache under the same key and the console paints in one shot instead of flashing "Starting…".
+  // AgentView's list is one agent's, so the pre-warm has to name the same agent: the deep-linked
+  // one, the open session's own, or the first agent the home route redirects to.
+  const agentId =
+    deep?.kind === 'session'
+      ? (sessionDetail.data?.agent?.id ?? null)
+      : deep?.kind === 'agent'
+        ? deep.id
+        : (homeFirst?.id ?? null);
+  // The first page of the scoped Open list AgentView reads on load — same factory and page size,
+  // so it lands in cache under the same key and the console paints in one shot instead of
+  // flashing "Starting…".
   const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, view: 'open' }),
+    ...sessionsQuery({ runnerId, agentId, view: 'open', limit: SESSION_PAGE_SIZE }),
     enabled: warm && !!runnerId,
   });
 

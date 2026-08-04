@@ -42,6 +42,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
 
     const refetchSessions = (): void => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
+      // The sidebar's per-agent tallies are derived from the same rows, but keyed apart so the
+      // list's optimistic edits can't touch them — so they need their own invalidation here.
+      void qc.invalidateQueries({ queryKey: ['session-counts'] });
     };
     // The task list/board queries: main list & sidebar count (['tasks']), the single-list view
     // (['task-list', id]), the sidebar lists (['task-lists']), and an open detail (['task', id]).

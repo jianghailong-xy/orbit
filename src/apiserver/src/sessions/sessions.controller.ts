@@ -73,12 +73,30 @@ export class SessionsController {
   list(
     @CurrentUser() user: AuthUser,
     @Query('runnerId') runnerId?: string,
+    @Query('agentId') agentId?: string,
+    @Query('tagId') tagId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
     // answers it with an empty list rather than accidentally falling through to Open.
     @Query('view')
     view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system',
+    // Page size. Omitted (every native client) means the whole list, as before.
+    @Query('limit') limit?: string,
   ) {
-    return this.sessions.list(user.userId, { runnerId, view });
+    const parsed = Number(limit);
+    return this.sessions.list(user.userId, {
+      runnerId,
+      agentId,
+      tagId,
+      view,
+      limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+    });
+  }
+
+  // Per-agent Open-session tallies for the nav sidebar's attention badges. Also above
+  // `@Get(':id')`, for the same declaration-order reason as `search` below.
+  @Get('counts')
+  counts(@CurrentUser() user: AuthUser) {
+    return this.sessions.agentSessionCounts(user.userId);
   }
 
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches

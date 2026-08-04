@@ -91,11 +91,20 @@ export const meQuery = () =>
   });
 
 /**
- * Session list, optionally scoped to a runner and/or a lifecycle view. The key mirrors
- * the query string one-to-one — `['sessions', runnerId, view]` — so every scope is its
- * own cache entry while the broad `['sessions']` prefix still invalidates them all.
+ * Session list, optionally scoped to a runner, an agent, a tag, a lifecycle view and a page
+ * size. The key mirrors the query string one-to-one — `['sessions', runnerId, agentId, view,
+ * tagId, limit]` — so every scope is its own cache entry while the broad `['sessions']` prefix
+ * still invalidates them all.
  */
 export type SessionListView = SessionLifecycleView;
+
+/**
+ * Rows in one page of the console's session column. The list asks for a single page on open
+ * and widens the window as it's scrolled, so a machine with thousands of sessions doesn't pay
+ * for all of them (nor re-pay on every list refresh) to paint the first screen. BootGate
+ * pre-warms this same first page, so keep the two in step by importing the constant.
+ */
+export const SESSION_PAGE_SIZE = 40;
 
 const LEGACY_SESSION_VIEW: Record<SessionLifecycleView, 'active' | 'archived' | 'deleted'> = {
   open: 'active',
@@ -103,11 +112,20 @@ const LEGACY_SESSION_VIEW: Record<SessionLifecycleView, 'active' | 'archived' | 
   trash: 'deleted',
 };
 
-async function fetchSessions(runnerId: string | null, view: SessionListView | null): Promise<any[]> {
+async function fetchSessions(
+  runnerId: string | null,
+  agentId: string | null,
+  view: SessionListView | null,
+  tagId: string | null,
+  limit: number | null,
+): Promise<any[]> {
   const path = (requestedView: string | null): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
+    if (agentId) qs.set('agentId', agentId);
     if (requestedView) qs.set('view', requestedView);
+    if (tagId) qs.set('tagId', tagId);
+    if (limit) qs.set('limit', String(limit));
     const suffix = qs.toString();
     return `/sessions${suffix ? `?${suffix}` : ''}`;
   };
@@ -124,15 +142,44 @@ async function fetchSessions(runnerId: string | null, view: SessionListView | nu
 }
 
 export const sessionsQuery = (
-  opts: { runnerId?: string | null; view?: SessionListView | null } = {},
+  opts: {
+    runnerId?: string | null;
+    agentId?: string | null;
+    view?: SessionListView | null;
+    tagId?: string | null;
+    limit?: number | null;
+  } = {},
 ) => {
   const runnerId = opts.runnerId ?? null;
+  const agentId = opts.agentId ?? null;
   const view = opts.view ?? null;
+  const tagId = opts.tagId ?? null;
+  const limit = opts.limit ?? null;
   return queryOptions({
-    queryKey: ['sessions', runnerId, view] as const,
-    queryFn: () => fetchSessions(runnerId, view),
+    queryKey: ['sessions', runnerId, agentId, view, tagId, limit] as const,
+    queryFn: () => fetchSessions(runnerId, agentId, view, tagId, limit),
   });
 };
+
+/** One agent's Open-session tallies, as returned by `GET /sessions/counts`. */
+export interface AgentSessionCounts {
+  agentId: string;
+  /** Sessions with a turn in flight (RUNNING or queued). */
+  active: number;
+  /** Sessions blocked on an approval — the nav sidebar's per-agent attention badge. */
+  needsYou: number;
+}
+
+/**
+ * Per-agent Open-session tallies for the nav sidebar's badges. Its own key (not a `['sessions']`
+ * scope) so the list's optimistic row edits, which patch every `['sessions']` entry, can't reach
+ * these rows; the control-plane stream invalidates it alongside them.
+ */
+export const agentSessionCountsQuery = () =>
+  queryOptions({
+    queryKey: ['session-counts'] as const,
+    queryFn: () => api<AgentSessionCounts[]>('/sessions/counts'),
+  });
 
 /**
  * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
