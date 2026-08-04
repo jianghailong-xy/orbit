@@ -332,15 +332,13 @@ private struct CornerCutout: Shape {
     }
 }
 
-/// The opaque fill behind the drawer's circular icon buttons — one step up from `drawerSurface` so the
-/// disc reads in both modes. Deliberately not the translucent `.quaternary` used for inline badges: the
-/// bottom bar floats over the scrolling rail, and a see-through disc would show session titles sliding
-/// behind the glyph.
-private let drawerChip = Color(uiColor: UIColor { trait in
-    trait.userInterfaceStyle == .dark
-        ? UIColor(red: 44 / 255, green: 44 / 255, blue: 46 / 255, alpha: 1)   // #2C2C2E
-        : UIColor(white: 0.925, alpha: 1)                                     // #ECECEC
-})
+/// The opaque fill behind the drawer's circular icon buttons — the system's own chip step
+/// (`systemGray5`: #E5E5EA light / #2C2C2E dark). Deliberately not the translucent `.quaternary` used
+/// for inline badges: the bottom bar floats over the scrolling rail, and a see-through disc would show
+/// session titles sliding behind the glyph. The first cut hand-rolled #ECECEC, only ~5% off the
+/// #F9F9F9 drawer — enough beside the header's whitespace, but the Settings disc reads over scrolling
+/// rows, where that step disappears.
+private let drawerChip = Color(uiColor: .systemGray5)
 
 /// The ChatGPT-style circular chrome for a drawer icon button (search at the top, Settings at the
 /// bottom): one glyph on a 44pt neutral disc — also the HIG minimum tap target. The disc is a
@@ -494,6 +492,11 @@ private struct NavigationDrawer: View {
                 .padding(.vertical, 11)
                 .background(Color.accentColor.opacity(canCompose ? 1 : 0.35), in: Capsule())
                 .contentShape(Capsule())
+                // Only the capsule gets the lift. Casting the same shadow around the Settings disc
+                // darkened the ring *immediately* outside it, leaving the disc the brightest thing in
+                // its own neighbourhood — so it read as a pale smudge with a bare glyph on it rather
+                // than a button, and stopped matching the (unshadowed) search disc it's meant to twin.
+                .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
             }
             .buttonStyle(.plain)
             .disabled(!canCompose)
@@ -509,9 +512,6 @@ private struct NavigationDrawer: View {
             .buttonStyle(.plain)
             .accessibilityLabel(AppSection.settings.title)
         }
-        // One shadow pass over both controls (the Spacer contributes nothing), so each shape gets the
-        // soft lift that separates it from the rail scrolling underneath.
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
         .padding(.horizontal, DrawerMetrics.hInset)
         .padding(.bottom, 8)
     }
