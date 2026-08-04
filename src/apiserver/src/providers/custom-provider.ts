@@ -40,7 +40,15 @@ function injectedEnv(row: ModelProviderRow): Record<string, string> {
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
   }
-  return { ANTHROPIC_BASE_URL: row.baseUrl, ANTHROPIC_AUTH_TOKEN: apiKey };
+  return {
+    ANTHROPIC_BASE_URL: row.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: apiKey,
+    // Claude Code disables claude.ai connectors on its own once an auth token is set — the
+    // token above — and then warns on stderr, every start, that unsetting it would bring them
+    // back. Unsetting it is exactly what must not happen here (it IS the provider's key), so
+    // turn the feature off explicitly: same outcome, no advice that would break the session.
+    ENABLE_CLAUDEAI_MCP_SERVERS: '0',
+  };
 }
 
 /**

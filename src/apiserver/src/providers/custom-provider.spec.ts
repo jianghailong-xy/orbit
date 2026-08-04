@@ -249,6 +249,31 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'realkey');
   });
 
+  // Otherwise Claude Code opens every turn by warning that unsetting the key would restore
+  // claude.ai connectors — advice that would break the provider it was injected for.
+  await t.test('custom provider turns claude.ai connectors off instead of being warned about them', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row(),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+    });
+    assert.equal(exec.env?.ENABLE_CLAUDEAI_MCP_SERVERS, '0');
+  });
+
+  // A codex-runtime provider never launches the claude CLI, so the flag has nothing to say there.
+  await t.test('codex-runtime provider gets only the OpenAI-compatible vars', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row({ runtime: 'codex' }),
+      sessionModel: null,
+      agentModel: null,
+      agentEnv: null,
+    });
+    assert.deepEqual(Object.keys(exec.env ?? {}).sort(), ['OPENAI_API_KEY', 'OPENAI_BASE_URL']);
+  });
+
   await t.test('a disabled custom row preserves its legacy Agent pin during rolling deploy', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
