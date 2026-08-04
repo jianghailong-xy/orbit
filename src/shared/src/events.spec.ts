@@ -3,6 +3,7 @@ import {
   isApiErrorText,
   isAsyncAgentLaunchAck,
   isAuthErrorText,
+  isBenignEngineStderr,
   isUsageLimitErrorText,
   toolResultText,
 } from './events';
@@ -91,5 +92,24 @@ describe('isUsageLimitErrorText', () => {
     expect(isUsageLimitErrorText('API Error: 500')).toBe(false);
     expect(isUsageLimitErrorText('run failed')).toBe(false);
     expect(isUsageLimitErrorText(null)).toBe(false);
+  });
+});
+
+describe('isBenignEngineStderr', () => {
+  // Verbatim from `claude -p` started with ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN set — i.e.
+  // every turn of every session on a configured provider.
+  it('flags the connectors notice Orbit’s own env injection provokes', () => {
+    expect(
+      isBenignEngineStderr(
+        '⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth ' +
+          'source is set and takes precedence over your claude.ai login · Unset it to load ' +
+          "your organization's connectors\n",
+      ),
+    ).toBe(true);
+  });
+  it('keeps stderr that explains why a runtime failed', () => {
+    expect(isBenignEngineStderr('No conversation found with session ID: abc')).toBe(false);
+    expect(isBenignEngineStderr('')).toBe(false);
+    expect(isBenignEngineStderr(null)).toBe(false);
   });
 });

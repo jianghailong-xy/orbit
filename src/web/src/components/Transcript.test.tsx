@@ -50,6 +50,42 @@ describe('transcript sign-in cards', () => {
   });
 });
 
+describe('engine stderr', () => {
+  const stderrEvent = (seq: number, stderr: string): RunEvent => ({
+    seq,
+    type: 'system',
+    payload: { stderr },
+  });
+
+  // Claude Code prints this whenever an auth token is in its environment — i.e. on every
+  // session of every configured provider, whose API key Orbit injects that way.
+  it('drops the connectors notice Orbit’s own env injection provokes', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth ' +
+              'source is set and takes precedence over your claude.ai login · Unset it to load ' +
+              "your organization's connectors\n",
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('connectors are disabled');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('still shows stderr that explains why a runtime failed', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, 'No conversation found with session ID: abc\n')]} />,
+    );
+
+    expect(html).toContain('No conversation found with session ID: abc');
+  });
+});
+
 describe('transcript Markdown links', () => {
   it('opens ordinary links in a new tab without exposing the opener', () => {
     const html = renderToStaticMarkup(<MD>[Orbit](https://example.com/docs)</MD>);

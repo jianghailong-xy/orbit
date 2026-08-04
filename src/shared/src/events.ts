@@ -103,6 +103,23 @@ export function isUsageLimitErrorText(text: string | null | undefined): boolean 
 }
 
 /**
+ * Does an engine's stderr line say nothing about this session? Claude Code prints
+ * "⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is
+ * set …" on every start when an auth token is in its environment — which is exactly how a
+ * configured ModelProvider (DeepSeek, …) borrows the claude runtime: the control plane injects
+ * ANTHROPIC_AUTH_TOKEN/ANTHROPIC_BASE_URL so the CLI talks to the provider's endpoint
+ * (custom-provider.ts). Its advice — unset the key — would break the very provider the user
+ * picked, and stderr renders as an error line, so every DeepSeek session opened on what looked
+ * like a failed turn.
+ *
+ * Deliberately one known line rather than a "warnings aren't errors" rule: the reason stderr is
+ * surfaced at all is that a runtime's only account of why it failed to come up arrives there.
+ */
+export function isBenignEngineStderr(line: string | null | undefined): boolean {
+  return !!line && line.includes('claude.ai connectors are disabled');
+}
+
+/**
  * A tool_result payload's text, flattened. Claude Code delivers `content` as either a plain
  * string or an array of `{ type, text }` blocks; both collapse to one string here.
  */

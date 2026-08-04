@@ -28,7 +28,7 @@ import {
 import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { isApiErrorText, isAuthErrorText, isUsageLimitErrorText } from '@orbit/shared';
+import { isApiErrorText, isAuthErrorText, isBenignEngineStderr, isUsageLimitErrorText } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
@@ -397,7 +397,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       case 'system':
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
         // an error so the user sees why the turn failed instead of a silent blank turn.
-        if (p.stderr) into(parent).push({ kind: 'error', seq: ev.seq, message: String(p.stderr).trim() });
+        // Except for the lines that are noise from Orbit's own env injection.
+        if (p.stderr && !isBenignEngineStderr(String(p.stderr)))
+          into(parent).push({ kind: 'error', seq: ev.seq, message: String(p.stderr).trim() });
         break;
       default:
         break;
