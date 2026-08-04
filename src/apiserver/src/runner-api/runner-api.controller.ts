@@ -440,6 +440,10 @@ export class RunnerApiController {
             installCommand: null,
             installMessage: null,
             installAt: null,
+            // Retire the whole slot, mode included — the same set cancelInstall clears. A
+            // leftover mode is invisible today (installStateOf gates it on the status), which
+            // is exactly what would make it outlive the next reader who doesn't.
+            installMode: null,
           },
         });
       }
