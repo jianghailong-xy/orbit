@@ -35,9 +35,9 @@ export interface ProviderChoice {
   /** The model this choice will run with when nothing overrides it, already resolved to a
    *  human label — so "switching provider changes your model" is visible before the click. */
   modelLabel: string;
-  /** Why this row can't be picked, or absent when it can. Set for an engine the runner has
-   *  installed but whose CLI says it isn't signed in: the row stays listed, and links to the
-   *  Providers page instead of picking, because that is where the sign-in is. */
+  /** Why this row can't be picked, or absent when it can. Set for an engine whose CLI the runner
+   *  doesn't have, or has but says it isn't signed into: the row stays listed, and links to the
+   *  Providers page instead of picking, because that is where the install and the sign-in are. */
   unavailable?: string;
 }
 
@@ -92,15 +92,27 @@ export function defaultModelLabel(
   return named?.label ?? model;
 }
 
+/** Why an engine can't run a session on that machine, or undefined when it can. Missing outranks
+ *  signed out — a CLI that isn't installed has nothing to sign into. Only the CLI's own "no"
+ *  counts for auth: `unknown` is an engine that wouldn't answer, which is not evidence enough to
+ *  take the choice away. */
+function engineBlocker(health?: RunnerEngineHealth): string | undefined {
+  if (!health) return undefined;
+  if (!health.installed) return 'Not installed';
+  if (health.auth === 'no') return 'Not signed in';
+  return undefined;
+}
+
 /**
- * The picker's contents: the engines this runner can actually run, then the configured providers
- * in the order the API returned them.
+ * The picker's contents: the three engines, then the configured providers in the order the API
+ * returned them.
  *
- * Engines are filtered against the health the runner last reported, because an engine choice is a
- * claim about someone else's machine. Not installed there → dropped, since picking it would start
- * a session with nothing to run it. Installed but signed out → listed, pointing at its sign-in
- * (see `unavailable`). A runner that has reported nothing claims nothing, so all three stay
- * offered — as does any engine missing from a partial report.
+ * Engines carry the health the runner last reported, because an engine choice is a claim about
+ * someone else's machine. Not installed there, or installed but signed out → listed with the
+ * reason, pointing at the Providers page where that machine gets its install or its sign-in (see
+ * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
+ * out why it isn't offered. A runner that has reported nothing claims nothing, so all three stay
+ * pickable — as does any engine missing from a partial report.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -108,21 +120,16 @@ export function providerChoices(
   runtimeDefaultModels?: RuntimeDefaultModels,
   engineHealth?: RunnerEngineHealth[] | null,
 ): ProviderChoice[] {
-  const engines: ProviderChoice[] = ENGINE_SLUGS.flatMap((slug) => {
-    const health = engineHealth?.find((e) => e.engine === slug);
-    if (health && !health.installed) return [];
-    return [
-      {
-        slug,
-        label: ENGINE_LABELS[slug] ?? slug,
-        kind: 'engine' as const,
-        ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
-        modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
-        // Only the CLI's own "no" disables a row; `unknown` is an engine that wouldn't answer,
-        // which is not evidence enough to take the choice away.
-        ...(health?.auth === 'no' ? { unavailable: 'Not signed in' } : {}),
-      },
-    ];
+  const engines: ProviderChoice[] = ENGINE_SLUGS.map((slug) => {
+    const blocker = engineBlocker(engineHealth?.find((e) => e.engine === slug));
+    return {
+      slug,
+      label: ENGINE_LABELS[slug] ?? slug,
+      kind: 'engine' as const,
+      ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
+      modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
+      ...(blocker ? { unavailable: blocker } : {}),
+    };
   });
   // A configured row that shadows a built-in slug would give the picker two rows that dispatch
   // the same identity; the engine entry above already covers it.

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import { providerChoices, currentProviderChoice } from '../lib/sessionProviderChoices';
 import type { ConfiguredProvider } from '../lib/agentDefaults';
+import type { RunnerEngineHealth } from '@orbit/shared';
 
 const configured: ConfiguredProvider[] = [
   {
@@ -17,8 +18,11 @@ const configured: ConfiguredProvider[] = [
 ];
 const catalog = { claude: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }] } as never;
 
-function markup(provider: string, opts: { disabled?: boolean; note?: string } = {}) {
-  const choices = providerChoices(configured, catalog);
+function markup(
+  provider: string,
+  opts: { disabled?: boolean; note?: string; engines?: RunnerEngineHealth[] } = {},
+) {
+  const choices = providerChoices(configured, catalog, undefined, opts.engines);
   return renderToStaticMarkup(
     <MemoryRouter>
       <NewSessionProviderHero
@@ -59,6 +63,17 @@ describe('NewSessionProviderHero', () => {
       'Model → DeepSeek V4 Pro',
     );
     expect(markup('deepseek')).not.toContain('np-note');
+  });
+
+  it('warns in the summary when the current engine has no CLI on this runner', () => {
+    // The pick is sticky: without this the hero reads "Kimi · Kimi for Coding · runner login" and
+    // the first hint that kimi isn't installed is a failed session minutes later.
+    const html = markup('kimi', {
+      engines: [{ engine: 'kimi', installed: false, auth: 'unknown' }],
+    });
+    expect(html).toContain('Not installed on this runner');
+    expect(html).toContain('engine=kimi');
+    expect(html).not.toContain('runner login');
   });
 
   it('labels an unknown provider truthfully instead of falling back to Claude', () => {

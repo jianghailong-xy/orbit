@@ -67,13 +67,25 @@ describe('providerChoices', () => {
     expect(choices.find((c) => c.slug === 'deepseek')?.modelLabel).toBe('DeepSeek V4 Pro');
   });
 
-  it('drops an engine the runner does not have installed', () => {
+  it('keeps an engine the runner does not have installed, with the reason', () => {
     const choices = providerChoices([deepseek], catalog, undefined, [
       { engine: 'claude', installed: true, auth: 'yes' },
       { engine: 'codex', installed: false, auth: 'unknown' },
-      { engine: 'kimi', installed: true, auth: 'yes' },
+      { engine: 'kimi', installed: false, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'kimi', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek']);
+    // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
+    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
+    expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
+    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
+  });
+
+  it('says not installed, not signed out, for a missing CLI that never answered', () => {
+    // Both are true of the report; only one of them has a fix the user can act on first.
+    const choices = providerChoices([], catalog, undefined, [
+      { engine: 'kimi', installed: false, auth: 'no' },
+    ]);
+    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
   });
 
   it('keeps an installed-but-signed-out engine, disabled with the reason', () => {
@@ -99,8 +111,10 @@ describe('providerChoices', () => {
     const partial = providerChoices([], catalog, undefined, [
       { engine: 'claude', installed: false, auth: 'no' },
     ]);
-    expect(partial.map((c) => c.slug)).toEqual(['codex', 'kimi']);
-    expect(partial.every((c) => !c.unavailable)).toBe(true);
+    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    // Only the engine the runner actually spoke about carries a reason.
+    expect(partial.find((c) => c.slug === 'claude')?.unavailable).toBe('Not installed');
+    expect(partial.filter((c) => c.unavailable)).toHaveLength(1);
   });
 });
 

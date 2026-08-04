@@ -72,18 +72,23 @@ export function NewSessionProviderHero({
 }) {
   const [open, setOpen] = useState(false);
 
-  // An engine this runner isn't signed into can't run a session, so the row doesn't pick it — it
-  // goes where the sign-in lives instead. The identity greys out (it isn't usable yet) while the
-  // reason stays lit as the link it now is, so the row states the problem and offers the fix.
+  // Naming the runner and the engine, so the Providers page can unfold that machine's card and
+  // point at the row — where its Install and Sign in buttons are — instead of leaving the user to
+  // find it among every runner they own.
+  const fixLink = (choice: ProviderChoice) =>
+    `/providers?runner=${encodeId(runnerId)}&engine=${choice.slug}`;
+
+  // An engine this runner hasn't installed, or isn't signed into, can't run a session, so the row
+  // doesn't pick it — it goes where the fix lives instead. The identity greys out (it isn't usable
+  // yet) while the reason stays lit as the link it now is, so the row states the problem and
+  // offers the fix rather than disappearing and leaving the absence to be explained.
   const row = (choice: ProviderChoice) =>
     choice.unavailable ? (
       <Link
         key={choice.slug}
-        // Naming the runner and the engine, so the page can unfold that machine's card and point
-        // at the row instead of leaving the user to find it among every runner they own.
-        to={`/providers?runner=${encodeId(runnerId)}&engine=${choice.slug}`}
+        to={fixLink(choice)}
         className="np-row np-unavailable"
-        title={`Sign in to ${choice.label} on the Providers page`}
+        title={`${choice.label}: ${choice.unavailable} on this runner — fix it on the Providers page`}
         onClick={() => setOpen(false)}
       >
         <ProviderMark choice={choice} size={20} />
@@ -156,14 +161,26 @@ export function NewSessionProviderHero({
           {card}
         </Popover>
       )}
+      {/* The pick is sticky, so the current one can be an engine that machine can no longer run —
+          and a session started on it fails minutes later, at the runner. Say so here instead. */}
       <div className="np-summary">
         <b>{current.label}</b>
         <span className="np-dot">·</span>
-        {current.modelLabel}
-        <span className="np-dot">·</span>
-        {current.kind === 'engine' ? 'runner login' : 'your API key'}
-        <span className="np-dot">·</span>
-        <Link to="/providers">Manage</Link>
+        {current.unavailable ? (
+          <>
+            {current.unavailable} on this runner
+            <span className="np-dot">·</span>
+            <Link to={fixLink(current)}>Fix it</Link>
+          </>
+        ) : (
+          <>
+            {current.modelLabel}
+            <span className="np-dot">·</span>
+            {current.kind === 'engine' ? 'runner login' : 'your API key'}
+            <span className="np-dot">·</span>
+            <Link to="/providers">Manage</Link>
+          </>
+        )}
       </div>
       {note && <div className="np-note">{note}</div>}
     </div>
