@@ -106,7 +106,13 @@ export function updateNoteOf(
   // Not a failure, and not fixable by pressing anything: this install belongs to a package
   // manager and Orbit deliberately won't install a second copy beside it. Saying whose job it
   // is IS the fix — retrying would do nothing, so this must never be dressed up as an error.
-  if (update.status === 'skipped') return { tone: 'quiet', text: 'updated by its package manager' };
+  // Orbit deliberately isn't updating this one. There is more than one reason it might not be
+  // — a package manager owns the install, or it belongs to a user this runner isn't — and this
+  // line is too short to hold either. So it states only the part that is true of all of them,
+  // and the runner's own sentence (which names the path and the owner) rides along as a tooltip.
+  // Naming one reason here was worse than naming none: a Kimi skipped for permissions still read
+  // "updated by its package manager", promising an updater that did not exist.
+  if (update.status === 'skipped') return { tone: 'quiet', text: 'not auto-updated' };
   const parsed = update.okAt ? Date.parse(update.okAt) : NaN;
   const lastOk = Number.isNaN(parsed) ? null : parsed;
   if (lastOk !== null && now - lastOk <= STALE_UPDATE_MS) {
@@ -250,7 +256,16 @@ function EngineRow({
             {metaFor(kind, engine, health)}
             {/* Whether this CLI is being kept current, next to what it currently is — the two
                 halves of the same question, and useless apart. */}
-            {note && <span className={`re-upd${warn ? ' warn' : ''}`}> · {note.text}</span>}
+            {/* The machine's own sentence, on hover. The line itself stays short enough to sit
+                after a version string, and everything it had to leave out — which path, which
+                owner, which error — is one pointer away instead of gone. Absent for a healthy
+                engine, which has nothing further to say. */}
+            {note && (
+              <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
+                {' '}
+                · {note.text}
+              </span>
+            )}
           </div>
         </div>
       </div>

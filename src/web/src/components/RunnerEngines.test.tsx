@@ -137,15 +137,22 @@ describe('what a row says about being kept current', () => {
     });
   });
 
-  it('calls a package-managed install what it is, and never an error', () => {
-    // Retrying this does nothing — Orbit deliberately won't install a second copy beside it.
-    // Dressing it as a failure would be a daily warning about a deliberate choice.
-    expect(
-      updateNoteOf(
-        { status: 'skipped', at: hoursAgo(4), okAt: daysAgo(40), message: 'Installed by a package manager (/opt/homebrew/bin/codex)' },
-        NOW,
-      ),
-    ).toEqual({ tone: 'quiet', text: 'updated by its package manager' });
+  it('says only what is true of every skip, and never calls one an error', () => {
+    // Retrying any of these does nothing, so none of them may read as a failure. And the line
+    // must not name a reason: there is more than one, and naming the wrong one is worse than
+    // naming none — a Kimi skipped for permissions once read "updated by its package manager",
+    // promising an updater that did not exist. The specific reason travels as the tooltip.
+    const packageManaged = updateNoteOf(
+      { status: 'skipped', at: hoursAgo(4), okAt: daysAgo(40), message: 'Installed by a package manager (/opt/homebrew/bin/codex)' },
+      NOW,
+    );
+    const notOurs = updateNoteOf(
+      { status: 'skipped', at: hoursAgo(4), message: "Installed at /usr/lib/node_modules/opencode-ai/bin/opencode.exe, which this runner can't replace — it runs as husong." },
+      NOW,
+    );
+    expect(packageManaged).toEqual({ tone: 'quiet', text: 'not auto-updated' });
+    // Both skips get the same words, because the row can only honestly claim what they share.
+    expect(notOurs).toEqual(packageManaged);
   });
 
   it('survives a record it cannot age', () => {
@@ -366,6 +373,31 @@ describe('the "On your runners" section', () => {
     // No Retry: the same command will fail the same way. What's offered is the way to see it.
     expect(html).toContain('orbit engine-update');
     expect(html).not.toContain('Retry');
+  });
+
+  it('keeps the reason reachable when the line is too short to hold it', () => {
+    const html = render([
+      runner({
+        engines: [
+          health({
+            engine: 'kimi',
+            version: '0.32.0',
+            update: {
+              status: 'skipped',
+              at: new Date(Date.now() - 4 * 3600_000).toISOString(),
+              message:
+                "Installed at /usr/lib/node_modules/kimi/bin/kimi, which this runner can't replace — it runs as husong.",
+            },
+          }),
+        ],
+      }),
+    ]);
+    // The line says only what every skip shares...
+    expect(html).toContain('not auto-updated');
+    // ...and the part it had to leave out — which path, which account — is one hover away
+    // rather than gone. Without this, "not auto-updated" would be unactionable.
+    expect(html).toContain('it runs as husong');
+    expect(html).toContain('title="Installed at');
   });
 
   it('keeps a working machine quiet, with the fact still on the row', () => {
