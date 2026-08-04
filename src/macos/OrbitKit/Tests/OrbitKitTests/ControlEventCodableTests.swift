@@ -72,8 +72,10 @@ final class ControlEventCodableTests: XCTestCase {
         XCTAssertEqual(d.runStatus, .cancelled)
         XCTAssertEqual(d.effectiveRunStatus, .cancelled)
         XCTAssertEqual(d.sessionState, .completed)
-        XCTAssertEqual(d.runState, .cancelled)
-        XCTAssertEqual(d.effectiveRunState, .cancelled)
+        // CANCELLED is a pre-collapse run state, so it decodes to the forward-compatibility
+        // case and the legacy CANCELLED status resolves it to the single neutral terminal one.
+        XCTAssertEqual(d.runState, .unknown)
+        XCTAssertEqual(d.effectiveRunState, .ended)
         XCTAssertEqual(d.lifecycleState, .completed)
         XCTAssertEqual(d.effectiveLifecycleState, .completed)
         XCTAssertEqual(d.endReason, "completed")

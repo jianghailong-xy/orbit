@@ -87,8 +87,10 @@ final class SessionSearchCodableTests: XCTestCase {
         XCTAssertEqual(res.hits[0].runStatus, .cancelled)
         XCTAssertEqual(res.hits[0].effectiveRunStatus, .cancelled)
         XCTAssertEqual(res.hits[0].sessionState, .completed)
-        XCTAssertEqual(res.hits[0].runState, .cancelled)
-        XCTAssertEqual(res.hits[0].effectiveRunState, .cancelled)
+        // CANCELLED is a pre-collapse run state, so it decodes to the forward-compatibility
+        // case and the legacy CANCELLED status resolves it to the single neutral terminal one.
+        XCTAssertEqual(res.hits[0].runState, .unknown)
+        XCTAssertEqual(res.hits[0].effectiveRunState, .ended)
         XCTAssertEqual(res.hits[0].lifecycleState, .completed)
         XCTAssertEqual(res.hits[0].effectiveLifecycleState, .completed)
         XCTAssertEqual(res.hits[0].completedAt, "2026-07-26T10:01:00.000Z")
