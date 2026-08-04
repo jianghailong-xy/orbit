@@ -150,18 +150,17 @@ function ProviderForm({
   const [runtime, setRuntime] = useState<'claude' | 'codex'>(
     editing ? (editing.runtime === 'codex' ? 'codex' : 'claude') : (preset?.runtime ?? 'claude'),
   );
-  // The model list is the system's — a preset's, or a saved row's. It shows as a one-line summary;
-  // editing it is an escape hatch for a model the catalogue doesn't know about yet.
+  // A self-maintained list shows as a one-line summary; opening it is how you edit it.
   const [modelsOpen, setModelsOpen] = useState(isCustom && !editing);
-  // Whether the list is still the preset's. The server resolves a following row's models from the
-  // catalogue on every read, so a new Claude model reaches this provider without anyone touching
-  // it — until someone edits the list here, which hands ownership back to them. The row stays an
-  // Anthropic one either way; only ownership of the list changes.
+  // Whether the list is still the preset's. The server resolves a following row's models — and its
+  // default — from the catalogue on every read, so a new model reaches this provider without
+  // anyone touching it.
   const [follows, setFollows] = useState(editing ? editing.followsPreset : !!preset);
-  const editModels = (next: DraftModel[]) => {
-    setModels(next);
-    setFollows(false);
-  };
+  // Every vendor preset maintains its own list now: the runner's CLI reports it, or it refreshes
+  // from the vendor catalogue. There is nothing to configure in either case — a list typed here
+  // would only be a copy that stops updating. What's left is a custom endpoint, which has no
+  // catalogue behind it, and a row saved back when editing the list was still offered.
+  const maintained = !!preset && follows;
   // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
@@ -187,6 +186,9 @@ function ProviderForm({
         : presetDefault && values.includes(presetDefault)
           ? presetDefault
           : undefined;
+      // A maintained list isn't ours to send: the server resolves both halves from the catalogue on
+      // every read, and a payload from here would only park a stale copy on the row.
+      const catalogue = maintained ? {} : { models: modelPayload, defaultModel: dm };
       if (editing) {
         return api(`${PROVIDERS_BASE}/${editing.id}`, {
           method: 'PATCH',
@@ -194,8 +196,7 @@ function ProviderForm({
             label: label.trim(),
             runtime,
             baseUrl: baseUrl.trim(),
-            models: modelPayload,
-            defaultModel: dm,
+            ...catalogue,
             // Who owns the list from here on; the vendor identity is fixed at creation.
             followsPreset: follows,
             enabled,
@@ -213,8 +214,7 @@ function ProviderForm({
           runtime,
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim(),
-          models: modelPayload,
-          defaultModel: dm,
+          ...catalogue,
           ...(preset ? { presetSlug: preset.slug, followsPreset: follows } : {}),
           enabled,
         },
@@ -414,16 +414,31 @@ function ProviderForm({
                   </Field>
                 </>
               )}
-              {/* A vendor the runtime CLI talks to natively has no list to maintain: the runner
-                  probes the installed CLI hourly, so whatever it reports is what the pickers
-                  offer — including models released after this build. Editing a list here would
-                  only be a copy that goes stale. */}
+              {/* A vendor's list keeps itself current — the runner probes the installed CLI, or the
+                  server refreshes the vendor catalogue — so there is nothing to fill in here, only
+                  something to read. Anything typed would be a copy that stops updating the moment
+                  it's saved, which is the staleness this replaced. */}
               <Field label="Models">
-                {preset?.modelsFromRuntime ? (
-                  <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                    Provided by the {runtime === 'codex' ? 'Codex' : 'Claude Code'} CLI on each
-                    runner, refreshed automatically — new models appear without any change here.
-                  </div>
+                {maintained ? (
+                  preset!.modelsFromRuntime ? (
+                    <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                      Provided by the {runtime === 'codex' ? 'Codex' : 'Claude Code'} CLI on each
+                      runner, refreshed automatically — new models appear without any change here.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                        {presetModels
+                          .map((m) => (m.value === presetDefault ? `${m.label || m.value} (default)` : m.label || m.value))
+                          .join(' · ')}
+                      </div>
+                      <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
+                        Maintained by Orbit from the official {preset!.label} catalogue and refreshed
+                        automatically — new models appear on their own, and the newest becomes the
+                        default.
+                      </div>
+                    </>
+                  )
                 ) : modelsOpen ? (
                   <>
                     <div className="pf-models-head">
@@ -439,7 +454,7 @@ function ProviderForm({
                           value={m.value}
                           style={{ flex: 1, minWidth: 0 }}
                           onChange={(e) =>
-                            editModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+                            setModels(models.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
                           }
                         />
                         <Input
@@ -447,7 +462,7 @@ function ProviderForm({
                           value={m.label}
                           style={{ flex: 1, minWidth: 0 }}
                           onChange={(e) =>
-                            editModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
+                            setModels(models.map((r, j) => (j === i ? { ...r, label: e.target.value } : r)))
                           }
                         />
                         <InputNumber
@@ -456,20 +471,20 @@ function ProviderForm({
                           min={0}
                           style={{ width: 140, flex: 'none' }}
                           onChange={(v) =>
-                            editModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
+                            setModels(models.map((r, j) => (j === i ? { ...r, contextWindow: v } : r)))
                           }
                         />
                         <Button
                           type="text"
                           icon={<DeleteOutlined />}
-                          onClick={() => editModels(models.filter((_, j) => j !== i))}
+                          onClick={() => setModels(models.filter((_, j) => j !== i))}
                         />
                       </div>
                     ))}
                     <Button
                       type="dashed"
                       icon={<PlusOutlined />}
-                      onClick={() => editModels([...models, { value: '', label: '', contextWindow: null }])}
+                      onClick={() => setModels([...models, { value: '', label: '', contextWindow: null }])}
                       block
                     >
                       Add model
@@ -485,36 +500,15 @@ function ProviderForm({
                     <a onClick={() => setModelsOpen(true)}>Edit</a>
                   </div>
                 )}
-                {/* Who owns this list, and how to change hands. A following row is maintained for
-                    the user; once they edit it, keeping up with the vendor is on them. Moot when
-                    the CLI supplies the list — there's no ownership to hand over. */}
-                {preset && !preset.modelsFromRuntime && (
+                {/* The way back for a row saved while editing the list was still on offer: its
+                    models are its own until it rejoins the vendor's, which is now a one-way door
+                    because nothing here hands the list back out again. */}
+                {preset && !maintained && (
                   <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>
-                    {follows ? (
-                      <>
-                        Maintained by Orbit, from the official {preset.label} preset — new models
-                        appear here on their own.
-                        {modelsOpen && ' Editing the list stops that.'}
-                      </>
-                    ) : (
-                      <>
-                        This list is yours to maintain.{' '}
-                        <a
-                          onClick={() => {
-                            setModels(
-                              presetModels.map((m) => ({
-                                value: m.value,
-                                label: m.label,
-                                contextWindow: m.contextWindow ?? null,
-                              })),
-                            );
-                            setFollows(true);
-                          }}
-                        >
-                          Follow the {preset.label} preset again
-                        </a>
-                      </>
-                    )}
+                    This list is yours to maintain.{' '}
+                    <a onClick={() => setFollows(true)}>
+                      Follow the {preset.label} catalogue again
+                    </a>
                   </div>
                 )}
               </Field>
