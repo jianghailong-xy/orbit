@@ -100,6 +100,12 @@ extension Font {
     /// arrow). Like `orbitHeroGlyph`, it's a mark in a fixed-size container, not text, so it stays
     /// Dynamic-Type-static — a scaling glyph would overflow the disc. Identical on both platforms.
     static let orbitControlGlyph: Font = .system(size: 15, weight: .regular)
+
+    /// The glyph inside the compact drawer's 44pt circular buttons (search, Settings). Same
+    /// fixed-container rationale as `orbitControlGlyph`, but tuned to that larger disc: at 15pt
+    /// semibold the mark covered only ~36% of the diameter and read small and heavy, where the
+    /// ChatGPT chrome it mirrors runs ~45% on a fine stroke. 19pt regular matches that proportion.
+    static let orbitDiscGlyph: Font = .system(size: 19, weight: .regular)
 }
 
 /// Additive line leading (points on top of the font's own line height) for transcript prose.
