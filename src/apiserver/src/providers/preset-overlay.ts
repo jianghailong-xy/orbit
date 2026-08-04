@@ -1,4 +1,5 @@
 import { providerPreset } from '@orbit/shared';
+import { catalogModels } from './model-catalog';
 
 /** The fields of a ModelProvider row the preset governs (a subset of the Prisma row). */
 export interface PresetBackedRow {
@@ -25,7 +26,7 @@ export function presetDefaultModel(row: PresetBackedRow): string | null {
   const preset = governing(row);
   if (!preset) return row.defaultModel;
   const stored = row.defaultModel;
-  return stored && preset.models.some((m) => m.value === stored) ? stored : preset.defaultModel;
+  return stored && catalogModels(preset).some((m) => m.value === stored) ? stored : preset.defaultModel;
 }
 
 /**
@@ -43,10 +44,11 @@ export function withPreset<T extends PresetBackedRow>(row: T): T {
   if (!preset) return row;
   // `models` here is the fallback for a vendor whose CLI reports its own — see modelsFromRuntime
   // on the preset. The flag rides along so the pickers (and the connect form) know to prefer the
-  // runner's live catalogue over this list without having to know the endpoint.
+  // runner's live catalogue over this list without having to know the endpoint. For everyone else
+  // catalogModels() has already folded in whatever the last models.dev refresh found.
   return {
     ...row,
-    models: preset.models,
+    models: catalogModels(preset),
     defaultModel: presetDefaultModel(row),
     modelsFromRuntime: preset.modelsFromRuntime ?? false,
   } as T;

@@ -7,6 +7,7 @@ import {
 } from './sessionState';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './agentDefaults';
+import type { ProviderModelRow } from './providerAdmin';
 
 export type { ConfiguredProvider };
 
@@ -49,6 +50,17 @@ export const providersQuery = () =>
   queryOptions({
     queryKey: ['providers'] as const,
     queryFn: () => api<ConfiguredProvider[]>('/providers'),
+  });
+
+/** Each vendor preset's model list as the server has it *now*, by slug: the shipped catalogue with
+ *  the latest third-party refresh (models.dev) folded in. Only the connect form needs it — a saved
+ *  provider's row already comes back resolved. Nested under ['providers'] so the control plane's
+ *  provider events invalidate it along with everything else that catalogue feeds. */
+export const presetModelsQuery = () =>
+  queryOptions({
+    queryKey: ['providers', 'presets'] as const,
+    queryFn: () => api<Record<string, ProviderModelRow[]>>('/providers/presets'),
+    staleTime: 5 * 60_000,
   });
 
 /** Per-account UI preferences (theme + new-agent defaults). Mirrors the apiserver's

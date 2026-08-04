@@ -7,10 +7,32 @@
 //
 // Endpoints and model ids verified against vendor docs 2026-07. `brand`/`keyUrl` are for the web
 // gallery only — they're here so adding a vendor stays a single-file edit.
+//
+// The model lists below are a floor, not the whole truth: a vendor the runtime CLI speaks to
+// natively takes its list from that CLI (modelsFromRuntime), and every third-party vendor refreshes
+// its own from models.dev (catalog). Both mean a model that ships after this build still reaches
+// the pickers; what's written here is what a deployment falls back to.
 export interface ProviderPresetModel {
   value: string;
   label: string;
   contextWindow?: number;
+}
+
+/**
+ * Where a third-party vendor's model list refreshes itself from, so it stops going stale between
+ * Orbit releases: models.dev (https://models.dev/api.json), a continuously updated third-party
+ * mapping of provider → models that carries the id, display name and context window of each.
+ *
+ * The apiserver refreshes from it on boot and every few hours, and merges what it finds *over* the
+ * preset's own `models` — which stay the floor: a shipped model is never dropped by a refresh, and
+ * is all there is until one succeeds (or on a deployment that can't reach models.dev).
+ */
+export interface ProviderCatalogSource {
+  /** This vendor's provider id in that catalogue, e.g. `moonshotai` for Kimi. */
+  source: string;
+  /** Which of its ids to keep — a vendor's full catalogue also carries translation, embedding and
+   *  image models that a coding agent can't drive. */
+  match: RegExp;
 }
 
 /** Brand mark for the vendor tile: a monogram over a two-stop gradient. */
@@ -43,6 +65,12 @@ export interface ProviderPreset {
    * serves. Those keep a maintained list.
    */
   modelsFromRuntime?: boolean;
+  /**
+   * Keeps a maintained list current on its own: the vendor's entry in the models.dev catalogue.
+   * Set on every third-party vendor — they are exactly the ones the runner's CLI probe can say
+   * nothing about, so without this their list only changes when somebody edits this file.
+   */
+  catalog?: ProviderCatalogSource;
   /** Caveat shown under the Base URL (e.g. regional endpoint variants). */
   note?: string;
   /** Logo tile shown in the provider gallery and rows. */
@@ -96,6 +124,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', contextWindow: 1_000_000 },
     ],
     defaultModel: 'gemini-2.5-pro',
+    catalog: { source: 'google', match: /^gemini-\d/ },
     note: 'Google Gemini via its OpenAI-compatible endpoint.',
     brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' },
     keyUrl: 'https://aistudio.google.com/apikey',
@@ -109,6 +138,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
     ],
     defaultModel: 'deepseek-v4-pro',
+    catalog: { source: 'deepseek', match: /^deepseek-/ },
     brand: { mono: 'D', from: '#5b7cff', to: '#3a57e8' },
     keyUrl: 'https://platform.deepseek.com',
   },
@@ -124,6 +154,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'kimi-k2.6', label: 'Kimi K2.6', contextWindow: 256_000 },
     ],
     defaultModel: 'kimi-k2.7-code',
+    catalog: { source: 'moonshotai', match: /^kimi-/ },
     note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/anthropic.',
     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
     keyUrl: 'https://platform.moonshot.ai',
@@ -137,6 +168,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'glm-4.7', label: 'GLM-4.7' },
     ],
     defaultModel: 'glm-5.2',
+    // Z.AI ships as `zai` there; `zhipuai` is the CN sibling platform, on a different endpoint.
+    catalog: { source: 'zai', match: /^glm-/ },
     brand: { mono: 'Z', from: '#33b6b0', to: '#1e8e8e' },
     keyUrl: 'https://z.ai',
   },
@@ -150,6 +183,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7 Highspeed', contextWindow: 204_800 },
     ],
     defaultModel: 'MiniMax-M2.7',
+    catalog: { source: 'minimax', match: /^MiniMax-/ },
     brand: { mono: 'M', from: '#ff5b76', to: '#e11d48' },
     keyUrl: 'https://www.minimax.io',
   },
@@ -163,6 +197,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
       { value: 'qwen3.6-flash', label: 'Qwen3.6 Flash' },
     ],
     defaultModel: 'qwen3.7-max',
+    catalog: { source: 'alibaba', match: /^qwen\d/ },
     note: 'Beijing-region endpoint; Singapore/intl uses a workspace-specific URL (see Model Studio docs).',
     brand: { mono: 'Q', from: '#7a72ff', to: '#4f46e5' },
     keyUrl: 'https://bailian.console.aliyun.com',

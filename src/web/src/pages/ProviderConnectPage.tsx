@@ -4,9 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
-import { providersQuery } from '../lib/queries';
+import { presetModelsQuery, providersQuery } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
-import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+import {
+  PROVIDERS_BASE,
+  PROVIDERS_LIST_KEY,
+  type ProviderModelRow,
+  type ProviderRow,
+} from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { useToast } from '../lib/toast';
 
@@ -57,6 +62,19 @@ export function ProviderConnectPage() {
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
     enabled: !!id,
   });
+  // A vendor's list is refreshed server-side, so the form asks for the current one rather than
+  // seeding from the copy compiled into this bundle — otherwise the page that promises new models
+  // "appear here on their own" would be the one place they don't. Waited for (it seeds state at
+  // mount); a failed fetch falls through to the shipped list.
+  const presetModels = useQuery(presetModelsQuery());
+
+  if (presetModels.isPending) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <Spin />
+      </div>
+    );
+  }
 
   if (id) {
     if (providers.isPending) {
@@ -79,25 +97,43 @@ export function ProviderConnectPage() {
     }
     // The vendor a row was created from is recorded on the row, not guessed from its slug — a
     // second key for the same vendor lands on "anthropic-2" and is still an Anthropic provider.
-    return <ProviderForm key={row.id} editing={row} preset={providerPreset(row.presetSlug)} />;
+    const rowPreset = providerPreset(row.presetSlug);
+    return (
+      <ProviderForm
+        key={row.id}
+        editing={row}
+        preset={rowPreset}
+        catalog={rowPreset && presetModels.data?.[rowPreset.slug]}
+      />
+    );
   }
 
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
   if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
-  return <ProviderForm key={slug} preset={preset} />;
+  return <ProviderForm key={slug} preset={preset} catalog={preset && presetModels.data?.[preset.slug]} />;
 }
 
 /**
  * The connect/edit form. Mounted fresh per vendor (or per edited row), so its fields seed from the
  * preset — or the stored row — once, at mount.
  */
-function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: ProviderRow }) {
+function ProviderForm({
+  preset,
+  catalog,
+  editing,
+}: {
+  preset?: ProviderPreset;
+  /** The preset's models as the server resolves them today; falls back to the shipped list. */
+  catalog?: ProviderModelRow[];
+  editing?: ProviderRow;
+}) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // A custom provider names itself and declares its own endpoint; a preset ships every field but
   // the key, so those fields live behind Advanced.
   const isCustom = !preset;
+  const presetModels = catalog ?? preset?.models ?? [];
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(editing?.label ?? preset?.label ?? '');
@@ -105,7 +141,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
   const [apiKey, setApiKey] = useState('');
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [models, setModels] = useState<DraftModel[]>(
-    (editing?.models ?? preset?.models ?? []).map((m) => ({
+    (editing?.models ?? presetModels).map((m) => ({
       value: m.value,
       label: m.label,
       contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : null,
@@ -251,7 +287,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
         counted: 'configured',
       }
     : preset
-      ? { ...preset, runtime: preset.runtime ?? 'claude', count: preset.models.length, counted: 'included' }
+      ? { ...preset, runtime: preset.runtime ?? 'claude', count: presetModels.length, counted: 'included' }
       : null;
 
   return (
@@ -468,7 +504,7 @@ function ProviderForm({ preset, editing }: { preset?: ProviderPreset; editing?: 
                         <a
                           onClick={() => {
                             setModels(
-                              preset.models.map((m) => ({
+                              presetModels.map((m) => ({
                                 value: m.value,
                                 label: m.label,
                                 contextWindow: m.contextWindow ?? null,

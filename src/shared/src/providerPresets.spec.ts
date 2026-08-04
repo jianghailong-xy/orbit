@@ -29,6 +29,20 @@ describe('PROVIDER_PRESETS', () => {
     }
   });
 
+  it('keeps every maintained list on a catalogue that recognizes its own models', () => {
+    for (const p of PROVIDER_PRESETS) {
+      if (!p.catalog) {
+        // The only lists allowed to stand still are the ones the runner's CLI reports instead.
+        expect(p.modelsFromRuntime).toBe(true);
+        continue;
+      }
+      expect(p.catalog.source.trim()).not.toBe('');
+      // A pattern that rejects the ids we ship is a typo — it would filter every refresh down to
+      // nothing and freeze the list without anything failing.
+      for (const m of p.models) expect(m.value).toMatch(p.catalog.match);
+    }
+  });
+
   it('points at an https endpoint', () => {
     for (const p of PROVIDER_PRESETS) expect(p.baseUrl).toMatch(/^https:\/\//);
   });

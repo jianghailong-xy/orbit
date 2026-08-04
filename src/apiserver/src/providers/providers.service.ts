@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { encryptSecret } from './provider-crypto';
+import { catalogModels, presetCatalog } from './model-catalog';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
@@ -52,6 +53,13 @@ export class ProvidersService {
     return rows.map((r) => this.desensitize(r));
   }
 
+  /** What each vendor preset offers *right now*, by slug — the shipped list with the last
+   *  models.dev refresh folded in. The connect form reads this instead of the list compiled into
+   *  the bundle, so what it shows a user about to connect Kimi is what their picker will hold. */
+  presetModels() {
+    return presetCatalog();
+  }
+
   /** The caller's personal (BYOK) providers, disabled ones included. */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
@@ -69,7 +77,7 @@ export class ProvidersService {
     // only ever surfaces if we stop shipping that preset.
     const follows = !!preset && dto.followsPreset !== false;
     const models = follows
-      ? preset!.models.map((m) => ({
+      ? catalogModels(preset!).map((m) => ({
           value: m.value,
           label: m.label,
           ...(m.contextWindow != null ? { contextWindow: m.contextWindow } : {}),

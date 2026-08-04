@@ -36,6 +36,10 @@ services:
       # (DeepSeek etc.) at rest. Needed only to add a provider in the admin UI; unset → provider
       # create/dispatch throws a clear error. Generate: openssl rand -base64 32.
       PROVIDER_SECRET_KEY: "${PROVIDER_SECRET_KEY:-}"
+      # Optional: where the third-party vendor model lists (Kimi, DeepSeek, GLM, …) refresh from,
+      # twice a day. Point at a mirror or a pinned copy where models.dev isn't reachable; a failed
+      # fetch just leaves the pickers on the lists this build shipped.
+      MODEL_CATALOG_URL: "${MODEL_CATALOG_URL:-https://models.dev/api.json}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived

@@ -29,6 +29,14 @@ export class ProvidersController {
     return this.providers.listMine(user.userId);
   }
 
+  // The vendor presets' current model lists, for the connect form. Public catalogue data (no key,
+  // no endpoint) that the browser can't derive: its copy is whatever shipped in the bundle, while
+  // this one carries the latest models.dev refresh.
+  @Get('presets')
+  presets() {
+    return this.providers.presetModels();
+  }
+
   // Stateless key/endpoint probe for the add/edit form — any signed-in user, own inputs only.
   @Post('test')
   test(@Body() dto: TestModelProviderDto) {
