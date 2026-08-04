@@ -132,9 +132,11 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5"), .auto)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.plan, for: "gpt-5.6-sol"), .plan)
 
+        // A configured provider that borrows the Kimi runtime gets Kimi's runtime-wide Auto,
+        // whatever its model alias is — same as web's supportsAuto parity case.
         let configured = [ConfiguredProvider(
             slug: "local-kimi", label: "Local Kimi", runtime: "kimi")]
-        XCTAssertFalse(AgentDefaults.supportsAuto(
+        XCTAssertTrue(AgentDefaults.supportsAuto(
             "any-alias", provider: "local-kimi", configured: configured))
     }
 
