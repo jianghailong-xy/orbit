@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -150,6 +152,17 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 			"Installed by a package manager ("+binPath+") — Orbit updates it through that, rather than installing a second copy alongside it.")
 		return rec, spec.name + " — package-managed install, left alone"
 	}
+	// Same class of answer, found a different way: an install this runner has no permission to
+	// replace. Running the updater anyway is not a slow no-op — `opencode upgrade` on a
+	// root-owned npm prefix wedged for the full ceiling, every pass, and reported as a failure
+	// nobody could act on. Whose install it is IS the fix, so say that instead.
+	if real, ok := engineBinaryUpdatable(binPath); !ok {
+		logln("engine-update:", spec.name, "skipped — no permission to replace", real)
+		rec := recordEngineUpdate(spec.bin, updateSkipped,
+			"Installed at "+real+", which this runner can't replace — it runs as "+runnerUserLabel()+
+				" and that install belongs to another user. Update it as its owner, or install a copy this user owns.")
+		return rec, spec.name + " — owned by another user, left alone"
+	}
 	cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(cmdCtx, "sh", "-c", cmdStr)
@@ -198,6 +211,44 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// needs — the update path on this machine works.
 	rec := recordEngineUpdate(spec.bin, updateOK, "")
 	return rec, spec.name + " — already up to date (" + before + ")"
+}
+
+// engineBinaryUpdatable reports whether this runner could actually replace the binary it is
+// about to update, returning the path it really checked.
+//
+// Every updater ends in writing over an install, so a runner without permission to do that has
+// already lost — but it finds out by running a package manager first, which is neither fast nor
+// quiet: it can wedge for the whole ceiling holding the machine's one package-manager lock, and
+// what it finally reports is a failure that retrying will reproduce forever.
+//
+// The symlink is resolved first because that is what gets replaced: /usr/bin/opencode is a link
+// into a root-owned npm prefix, and the link's own mode says nothing about it. Only a permission
+// error counts as "can't" — anything else (a racing uninstall, an unreadable mount) stays a
+// normal update attempt rather than being explained away as somebody else's install.
+func engineBinaryUpdatable(binPath string) (string, bool) {
+	real := binPath
+	if resolved, err := filepath.EvalSymlinks(binPath); err == nil && resolved != "" {
+		real = resolved
+	}
+	// O_WRONLY without O_TRUNC/O_APPEND: asks the kernel the exact question (may I write this
+	// file, as this user, under this ACL?) without altering a byte. Root passes regardless of
+	// mode, which is correct — a root runner really can replace it.
+	f, err := os.OpenFile(real, os.O_WRONLY, 0)
+	if err == nil {
+		_ = f.Close()
+		return real, true
+	}
+	return real, !errors.Is(err, fs.ErrPermission)
+}
+
+// runnerUserLabel names the account this runner runs as, for a message whose whole job is to say
+// "this install isn't yours". Falls back to the numeric uid, which is still enough to compare
+// against `ls -l`, when the user database can't be read.
+func runnerUserLabel() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return "uid " + strconv.Itoa(os.Getuid())
 }
 
 func engineUpdateCommand(spec engineSpec, binPath, home string) (string, bool) {

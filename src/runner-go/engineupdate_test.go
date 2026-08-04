@@ -215,6 +215,60 @@ func TestEngineCommandTimesOutDespiteForkedChild(t *testing.T) {
 	}
 }
 
+// An install this runner can't replace is an answer, not an attempt. Live symptom: `opencode
+// upgrade` under a non-root runner, against a root-owned npm prefix, wedged for the whole
+// ceiling on every pass and reported a failure that retrying reproduces forever.
+func TestEngineBinaryUpdatable(t *testing.T) {
+	dir := t.TempDir()
+
+	own := filepath.Join(dir, "mine")
+	if err := os.WriteFile(own, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if real, ok := engineBinaryUpdatable(own); !ok || real != own {
+		t.Fatalf("own binary = (%q, %v), want updatable", real, ok)
+	}
+
+	// What /usr/bin/opencode actually is: a link into a prefix elsewhere. The link's own mode
+	// says nothing about whether the thing it points at can be replaced, so the target is what
+	// gets checked — and reported, since that is the path the user has to go fix.
+	link := filepath.Join(dir, "linked")
+	if err := os.Symlink(own, link); err != nil {
+		t.Fatal(err)
+	}
+	if real, ok := engineBinaryUpdatable(link); !ok || real != own {
+		t.Fatalf("symlink = (%q, %v), want the resolved target", real, ok)
+	}
+
+	// Anything that isn't a permission problem stays a normal update attempt: a racing
+	// uninstall must not be explained to the user as somebody else's install.
+	if _, ok := engineBinaryUpdatable(filepath.Join(dir, "gone")); !ok {
+		t.Fatal("a missing binary should not read as 'not yours'")
+	}
+
+	if os.Geteuid() == 0 {
+		// Root passes every mode check, which is correct — a root runner really can replace it.
+		// The unwritable case needs a non-root process to mean anything.
+		t.Skip("running as root; the unwritable case is meaningless here")
+	}
+	theirs := filepath.Join(dir, "theirs")
+	if err := os.WriteFile(theirs, []byte("#!/bin/sh\n"), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := engineBinaryUpdatable(theirs); ok {
+		t.Fatal("a binary this user cannot write should not be attempted")
+	}
+}
+
+func TestRunnerUserLabelAlwaysNamesSomething(t *testing.T) {
+	// This lands in a message whose only job is "this install isn't yours" — an empty name
+	// would make it unactionable, so the uid fallback has to produce something comparable
+	// against `ls -l`.
+	if label := runnerUserLabel(); strings.TrimSpace(label) == "" {
+		t.Fatal("runnerUserLabel returned nothing")
+	}
+}
+
 func TestPlural(t *testing.T) {
 	// This lands in a sentence a user reads while waiting on their own button press.
 	if got := plural(1, "session"); got != "1 session" {
