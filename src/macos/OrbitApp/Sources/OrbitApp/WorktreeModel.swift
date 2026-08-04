@@ -17,10 +17,12 @@ final class WorktreeModel {
     /// Whether the host session is currently live — drives the poll cadence. Wired by `ConsoleModel`.
     @ObservationIgnored var isSessionLive: () -> Bool = { false }
     /// Surface a user-facing status line ("Commit failed"…) on the host console. Wired by `ConsoleModel`.
-    @ObservationIgnored var onStatus: (String) -> Void = { _ in }
+    /// Every outcome of a worktree action — success and failure alike — goes to the app's toast
+    /// host, which is where web puts them too (`sessionNotice`): a merge result is a session result,
+    /// not a comment on what you just typed, so it doesn't belong in the composer's error line.
+    /// Failures carry a warning/error tone, which is what keeps them on screen until dismissed.
+    @ObservationIgnored var onOutcome: (ToastRequest) -> Void = { _ in }
     /// Surface a transient, informational status line that auto-dismisses (the resume confirmation).
-    /// Web shows these as a self-dismissing toast; the sticky `onStatus` banner is for errors only.
-    @ObservationIgnored var onInfo: (String) -> Void = { _ in }
 
     /// GET /sessions/:id detail driving the status bar (branch, changedFiles +/− stats, merge /
     /// commit status, targets). Polled while the console is on screen — see `startPolling`.
@@ -80,7 +82,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.commit(sessionID: sessionID) }
-        catch { onStatus(Self.actionFailure("Commit failed", error: error)); return }
+        catch { onOutcome(Self.failure("Commit failed", error: error)); return }
         // Reflect the pending commit immediately; the poll loop then follows the runner's outcome.
         await loadDetail()
     }
@@ -89,7 +91,7 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.merge(sessionID: sessionID, targetBranch: target) }
-        catch { onStatus(Self.actionFailure("Merge failed", error: error)); return }
+        catch { onOutcome(Self.failure("Merge failed", error: error)); return }
         await loadDetail()
     }
 
@@ -100,8 +102,8 @@ final class WorktreeModel {
         busy = true
         defer { busy = false }
         do { try await api.adoptBranch(sessionID: sessionID) }
-        catch { onStatus(Self.actionFailure("Adopt failed", error: error)); return }
-        onInfo("Now tracking this worktree's branch")
+        catch { onOutcome(Self.failure("Adopt failed", error: error)); return }
+        onOutcome(ToastRequest(message: "Now tracking this worktree's branch"))
         await loadDetail()
     }
 
@@ -123,50 +125,63 @@ final class WorktreeModel {
             _ = try await api.resume(sessionID: sessionID,
                                      ResumeRequest(clientTurnId: UUID().uuidString, content: content,
                                                    kind: "message"))
-            onInfo("Resuming the session to resolve the conflict…")
-        } catch { onStatus("Couldn't resume the session"); return }
+            onOutcome(ToastRequest(message: "Resuming the session to resolve the conflict…",
+                                   tone: .info))
+        } catch {
+            onOutcome(Self.failure("Couldn't resume the session", error: error))
+            return
+        }
         await loadDetail()
     }
 
+    /// Turn a finished merge/commit into the same card web shows for it — same headline, same tone,
+    /// same diagnostic line (`AgentView`'s merge/commit notices). "status bar" in web's copy is this
+    /// worktree bar; on iOS that phrase would read as the system clock strip, so it's named here.
     private func surfaceCompletedAction(from old: SessionDetail?, to new: SessionDetail) {
         guard let old else { return }
         if (old.mergeStatus == "conflict" || old.mergeStatus == "error"), new.mergeStatus == "pending" {
-            onInfo("Merging…")
+            onOutcome(ToastRequest(message: "Merging…", tone: .info))
             return
         }
         if old.commitStatus == "error", new.commitStatus == "pending" {
-            onInfo("Committing…")
+            onOutcome(ToastRequest(message: "Committing…", tone: .info))
             return
         }
-        let mergeFailed = new.mergeStatus == "conflict" || new.mergeStatus == "error"
-        let commitFinished = new.commitStatus == "committed" || new.commitStatus == "nochange"
-        if old.mergeStatus == "pending", mergeFailed {
-            onStatus(WorktreeBarLogic.failureMessage(mergeStatus: new.mergeStatus,
-                                                     mergeError: new.mergeError,
-                                                     commitStatus: nil,
-                                                     commitError: nil) ?? "Merge failed")
-        } else if old.mergeStatus == "pending", new.mergeStatus == "merged" {
-            onInfo("Merged into \(new.mergeTarget ?? "main")")
+        let target = new.mergeTarget ?? "main"
+        if old.mergeStatus == "pending", new.mergeStatus == "merged" {
+            onOutcome(ToastRequest(message: "Merged into \(target)"))
+        } else if old.mergeStatus == "pending", new.mergeStatus == "conflict" {
+            onOutcome(ToastRequest(
+                message: "Merge conflict in \(target)",
+                detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
+                tone: .warning))
+        } else if old.mergeStatus == "pending", new.mergeStatus == "error" {
+            onOutcome(ToastRequest(message: "Merge into \(target) failed",
+                                   detail: Self.trimmed(new.mergeError), tone: .error))
         } else if old.commitStatus == "pending", new.commitStatus == "error" {
-            onStatus(WorktreeBarLogic.failureMessage(mergeStatus: nil,
-                                                     mergeError: nil,
-                                                     commitStatus: new.commitStatus,
-                                                     commitError: new.commitError) ?? "Commit failed")
-        } else if old.commitStatus == "pending", commitFinished {
-            onInfo(new.commitStatus == "nochange" ? "No changes to commit" : "Committed changes")
+            onOutcome(ToastRequest(message: "Commit failed",
+                                   detail: Self.trimmed(new.commitError), tone: .error))
+        } else if old.commitStatus == "pending", new.commitStatus == "committed" {
+            onOutcome(ToastRequest(message: "Changes committed"))
+        } else if old.commitStatus == "pending", new.commitStatus == "nochange" {
+            onOutcome(ToastRequest(message: "No changes to commit", tone: .neutral))
         }
     }
 
-    private static func actionFailure(_ fallback: String, error: Error) -> String {
-        if case APIError.unauthorized = error {
-            return "Session expired — sign in again."
-        }
-        if case APIError.http(_, let body) = error {
-            if let reason = apiMessage(from: body) {
-                return "\(fallback): \(reason)"
-            }
-        }
-        return "\(fallback) — check your connection."
+    /// A failed action as a card: the attempt as the headline, the server's own words underneath.
+    private static func failure(_ headline: String, error: Error) -> ToastRequest {
+        ToastRequest(message: headline, detail: failureDetail(error), tone: .error)
+    }
+
+    private static func failureDetail(_ error: Error) -> String? {
+        if case APIError.unauthorized = error { return "Session expired — sign in again." }
+        if case APIError.http(_, let body) = error { return apiMessage(from: body) }
+        return "Check your connection."
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return cleaned.isEmpty ? nil : cleaned
     }
 
     private static func apiMessage(from body: String?) -> String? {

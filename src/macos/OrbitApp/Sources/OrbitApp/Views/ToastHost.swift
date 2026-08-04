@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// The app's one transient-message surface: a floating card that drops in under the nav bar, carrying
-/// an inline Undo when the message reports a reversible row action ("Completed", "Deleted"). Fed by
-/// `AppModel.showToast` — row actions directly, console confirmations ("Merged into main",
-/// "Committed changes") via `ConsoleRegistry.onToast`.
+/// The app's one session-result surface: a floating card that drops in under the nav bar with the
+/// outcome, the session it happened in, and any diagnostic — the native port of web's `sessionNotice`
+/// (see `lib/toast.tsx`). Fed by `AppModel.showToast`: row actions directly, worktree outcomes via
+/// `ConsoleRegistry.onToast`. Tapping it opens that session; a reversible action adds Undo; a
+/// warning/error stays until its ✕ instead of leaving on a timer.
 ///
 /// Top-anchored deliberately. It used to float at the *bottom*, 24pt above the safe area, which on
 /// iPhone is squarely inside the composer: the card covered the input row and the model/effort pills,
@@ -33,20 +34,33 @@ private struct ToastHost: ViewModifier {
             .overlay(alignment: .top) {
                 if let toast = model.toast {
                     HStack(spacing: 12) {
-                        // The message doubles as the way into the session it reports on. It's the
-                        // message — not the whole card — so Undo keeps its own target, and the label
-                        // takes the full width (see `label`) so the tap target is the whole run of
-                        // empty space beside it, not just the glyphs.
+                        Image(systemName: toast.icon ?? Self.icon(for: toast.tone))
+                            .font(.title3)
+                            .foregroundStyle(Self.tint(for: toast.tone))
+                            .accessibilityHidden(true)
+                        // The copy doubles as the way into the session it reports on. It's the copy —
+                        // not the whole card — so Undo and ✕ keep their own targets, and it takes the
+                        // full width (see `copy`) so the tap lands anywhere along the row.
                         if toast.sessionID != nil {
-                            Button { model.openToastSession() } label: { label(toast.message) }
+                            Button { model.openToastSession() } label: { copy(toast) }
                                 .buttonStyle(.plain)
                                 .accessibilityHint("Opens the session")
                         } else {
-                            label(toast.message)
+                            copy(toast)
                         }
                         if toast.canUndo {
                             Button("Undo") { model.undoSessionAction() }
                                 .font(.body.weight(.semibold))
+                        }
+                        // A persistent card needs a way out; a self-dismissing one would just be
+                        // offering to race its own timer.
+                        if toast.tone.isPersistent {
+                            Button { model.dismissToast() } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Dismiss")
                         }
                     }
                     .padding(.horizontal, 18)
@@ -74,21 +88,61 @@ private struct ToastHost: ViewModifier {
                 }
             }
             .animation(.snappy, value: model.toast)
-            // A toast that only paints is invisible to VoiceOver — announce it as it arrives.
+            // A card that only paints is invisible to VoiceOver — announce it as it arrives, with
+            // the diagnostic, which on a failure is the part worth hearing.
             .onChange(of: model.toast) { _, new in
-                if let new { AccessibilityNotification.Announcement(new.message).post() }
+                guard let new else { return }
+                var spoken = new.message
+                if let detail = new.detail { spoken += ". " + detail }
+                AccessibilityNotification.Announcement(spoken).post()
             }
     }
 
-    /// The message line. Leading, not centred: a centred label reads badly the moment it wraps (web
-    /// parity — `.ant-message-notice-content`). It claims the full width — the card spans it rather
-    /// than hugging its text — so Undo always sits at the trailing edge, and so the tappable run
-    /// covers the empty space beside a short message instead of just the glyphs.
-    private func label(_ message: String) -> some View {
-        Text(message)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+    /// The card's copy, in web's reading order: the outcome, the session it happened in, then any
+    /// diagnostic. Leading, not centred — a centred block reads badly the moment it wraps. It claims
+    /// the full width so Undo and ✕ sit at the trailing edge, and so the tappable run covers the
+    /// empty space beside a short message instead of just the glyphs.
+    private func copy(_ toast: AppModel.Toast) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(toast.message)
+            if let title = toast.sessionTitle {
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            if let detail = toast.detail {
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+            }
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// Tone → glyph, matching what web's card shows for the same outcome.
+    private static func icon(for tone: ToastTone) -> String {
+        switch tone {
+        case .success: return "checkmark.circle.fill"
+        case .neutral: return "info.circle.fill"
+        case .info:    return "info.circle.fill"
+        case .warning: return "exclamationmark.circle.fill"
+        case .error:   return "xmark.circle.fill"
+        }
+    }
+
+    private static func tint(for tone: ToastTone) -> Color {
+        switch tone {
+        case .success: return .green
+        case .neutral: return .secondary
+        case .info:    return .accentColor
+        case .warning: return .orange
+        case .error:   return .red
+        }
     }
 }
 

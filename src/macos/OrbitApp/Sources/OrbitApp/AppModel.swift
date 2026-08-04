@@ -9,6 +9,24 @@ import AppKit
 import UIKit
 #endif
 
+/// How loud a toast is — drives its icon, its tint, and whether it self-dismisses. Ported from
+/// web's `SessionNoticeTone` so the same outcome reads the same on every client.
+enum ToastTone: Equatable {
+    case success, neutral, info, warning, error
+
+    /// Web parity: an outcome you need to read twice — and usually paste somewhere — isn't taken
+    /// away on a timer. It stays until the ✕.
+    var isPersistent: Bool { self == .warning || self == .error }
+}
+
+/// What a console reports to the app's toast host. The session id isn't here: the registry knows
+/// which console it handed this sink to and adds it (see `ConsoleRegistry.onToast`).
+struct ToastRequest: Equatable {
+    let message: String
+    var detail: String?
+    var tone: ToastTone = .success
+}
+
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
 /// here; the heavy protocol logic stays in OrbitKit (APIClient, SessionGrouping, ServerURL).
 @MainActor
@@ -213,8 +231,9 @@ final class AppModel {
                                           store: ConsoleRegistry.defaultStore(for: url))
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
-        consoleRegistry?.onToast = { [weak self] msg, sessionID in
-            self?.showToast(msg, sessionID: sessionID)
+        consoleRegistry?.onToast = { [weak self] request, sessionID in
+            self?.showToast(request.message, sessionID: sessionID,
+                            detail: request.detail, tone: request.tone)
         }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
@@ -953,14 +972,20 @@ final class AppModel {
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
-    /// A fleeting message floated by the app's single toast host (see `toastHost()`) — the native
-    /// equivalent of web's `message.*` toasts. `sessionID` is the session the message reports on, so
-    /// the card doubles as the way into it (web parity — `sessionNotice`); `canUndo` marks that
-    /// action reversible and adds the inline Undo button, where moving to Open is the universal undo
-    /// — the server's `restore` clears both completion and trash state.
+    /// A session result floated by the app's single toast host (see `toastHost()`) — the native
+    /// port of web's `sessionNotice` card: outcome first, the session it happened in second, an
+    /// optional diagnostic third. `sessionID` is that session, so the card doubles as the way into
+    /// it; `canUndo` marks the action reversible and adds the inline Undo button, where moving to
+    /// Open is the universal undo — the server's `restore` clears both completion and trash state.
     struct Toast: Identifiable, Equatable {
         let id = UUID()
         let message: String
+        var sessionTitle: String?
+        var detail: String?
+        var tone: ToastTone = .success
+        /// SF Symbol overriding the tone's default — web passes an `icon` the same way, so a
+        /// neutral outcome can still say what it was ("Moved to Trash" gets a trash can).
+        var icon: String?
         var sessionID: String?
         var canUndo = false
     }
@@ -975,14 +1000,27 @@ final class AppModel {
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
     }
 
-    /// Float `message` as a toast for a few seconds. One carrying an action lives longer — the reader
-    /// has to take it in *and* decide whether to undo, which doesn't fit the 4s a bare confirmation
-    /// needs. Web's result cards sit at that same 6s, Undo or not (see `lib/toast.tsx`'s
-    /// `sessionNotice`). Console-side confirmations arrive here too (see `ConsoleRegistry.onToast`).
-    func showToast(_ message: String, sessionID: String? = nil, canUndo: Bool = false) {
-        toast = Toast(message: message, sessionID: sessionID, canUndo: canUndo)
+    /// Float a session result as a toast. One dwell time for every card — web settled on 6s for the
+    /// whole surface (see `lib/toast.tsx`'s `sessionNotice`), and the ramp keys on what the toast
+    /// asks of you rather than on which client renders it: 4s for a one-line confirmation, 6s once
+    /// there's a session name, a diagnostic or an Undo to take in, and a warning/error doesn't leave
+    /// on a timer at all (see `ToastTone.isPersistent`). Console-side outcomes arrive here too (see
+    /// `ConsoleRegistry.onToast`).
+    ///
+    /// `sessionTitle` is for a result whose session has already left every loaded scope by the time
+    /// the card is built — completing one drops it from Open, so the name has to be taken before the
+    /// mutation or the line just disappears. Everything else lets it resolve here.
+    func showToast(_ message: String, sessionID: String? = nil, sessionTitle: String? = nil,
+                   detail: String? = nil, tone: ToastTone = .success, icon: String? = nil,
+                   canUndo: Bool = false) {
+        let title = sessionTitle ?? sessionID.flatMap(toastSessionTitle)
+        toast = Toast(message: message, sessionTitle: title,
+                      detail: detail, tone: tone, icon: icon,
+                      sessionID: sessionID, canUndo: canUndo)
         toastDismiss?.cancel()
-        let seconds: UInt64 = canUndo ? 6 : 4
+        guard !tone.isPersistent else { return }
+        let isCard = title != nil || detail != nil || canUndo
+        let seconds: UInt64 = isCard ? 6 : 4
         toastDismiss = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             guard !Task.isCancelled else { return }
@@ -990,7 +1028,26 @@ final class AppModel {
         }
     }
 
+    /// The session's name for the card's second line. First line only — a title carrying the whole
+    /// first prompt would otherwise push the card down the screen (web's `titleFirstLine`). Nil when
+    /// the session isn't in any loaded scope, which just drops the line rather than guessing.
+    private func toastSessionTitle(_ id: String) -> String? {
+        guard let title = session(id: id)?.title else { return nil }
+        let firstLine = title.split(separator: "\n").first.map(String.init) ?? title
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     func dismissToast() { toastDismiss?.cancel(); toast = nil }
+
+    /// The server's own words for the card's diagnostic line, when it sent any — web shows
+    /// `e.message` the same way. Falls back to nothing rather than to a restatement of the headline.
+    private static func toastDetail(_ error: Error) -> String? {
+        if case APIError.unauthorized = error { return "Session expired — sign in again." }
+        guard case APIError.http(_, let body) = error else { return nil }
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     /// Tapping the toast opens the session it reports on — a result you just acted on is usually the
     /// one you want to look at next, and without this the only way back was to find the row by hand.
@@ -1008,13 +1065,18 @@ final class AppModel {
             errorText = "This session can't be completed right now."
             return
         }
+        let name = toastSessionTitle(id)
         Task { @MainActor in
             do { try await api.completeSession(id) }
-            catch { errorText = "Couldn't complete the session."; return }
+            catch {
+                showToast("Could not complete session", sessionID: id, sessionTitle: name,
+                          detail: Self.toastDetail(error), tone: .error)
+                return
+            }
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Session completed", sessionID: id, canUndo: true)
+            showToast("Session completed", sessionID: id, sessionTitle: name, canUndo: true)
         }
     }
 
@@ -1025,24 +1087,36 @@ final class AppModel {
             errorText = "This session can't be moved to Open right now."
             return
         }
+        let name = toastSessionTitle(id)
         Task { @MainActor in
             do { try await api.restoreSession(id) }
-            catch { errorText = "Couldn't move the session to Open."; return }
+            catch {
+                showToast("Could not move to Open", sessionID: id, sessionTitle: name,
+                          detail: Self.toastDetail(error), tone: .error)
+                return
+            }
             sessionDetails.remove(id)
             await reloadSessionLists()
+            showToast("Moved to Open", sessionID: id, sessionTitle: name, tone: .info)
         }
     }
 
     /// Soft-delete a session to the trash — reversible via Undo (or the Trash view).
     func deleteSession(_ id: String) {
         guard let api else { return }
+        let name = toastSessionTitle(id)
         Task { @MainActor in
             do { try await api.deleteSession(id) }
-            catch { errorText = "Couldn't delete the session."; return }
+            catch {
+                showToast("Could not move to Trash", sessionID: id, sessionTitle: name,
+                          detail: Self.toastDetail(error), tone: .error)
+                return
+            }
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Moved to Trash", sessionID: id, canUndo: true)
+            showToast("Moved to Trash", sessionID: id, sessionTitle: name,
+                      tone: .neutral, icon: "trash", canUndo: true)
         }
     }
 

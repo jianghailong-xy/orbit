@@ -154,8 +154,8 @@ final class ConsoleModel {
     /// *not* land here: the line is in-flow, so each one reflowed the composer up and back down
     /// mid-typing. They go to the app's toast host instead — see `showTransientStatus`.
     var statusMessage: String?
-    /// Sink for a fleeting confirmation — the app's toast host, injected by `ConsoleRegistry`.
-    @ObservationIgnored var onToast: (String) -> Void = { _ in }
+    /// Sink for a session outcome — the app's toast host, injected by `ConsoleRegistry`.
+    @ObservationIgnored var onToast: (ToastRequest) -> Void = { _ in }
     /// Local `/status` results belong in the conversation, not the error/info banner above the
     /// composer. Keep a short in-memory tail, matching the web client; these are intentionally not
     /// persisted because no corresponding runner event exists.
@@ -239,15 +239,14 @@ final class ConsoleModel {
     /// must not retain the console it's owned by.
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
-        worktree.onStatus = { [weak self] msg in self?.statusMessage = msg }
-        worktree.onInfo = { [weak self] msg in self?.showTransientStatus(msg) }
+        worktree.onOutcome = { [weak self] request in self?.onToast(request) }
     }
 
     /// Show a fleeting, informational message — the native equivalent of web's `message.success`
     /// toast. It floats in the app's toast host under the nav bar, self-dismissing there; errors set
     /// `statusMessage` directly and stay in the line above the composer until the user's ✕.
     func showTransientStatus(_ msg: String) {
-        onToast(msg)
+        onToast(ToastRequest(message: msg, tone: .info))
     }
 
     /// Snapshot the full reducer (state + dedup/cursor internals) for the local store. Restoring
