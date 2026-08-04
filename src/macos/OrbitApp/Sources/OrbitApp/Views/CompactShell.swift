@@ -340,20 +340,52 @@ private struct CornerCutout: Shape {
 /// rows, where that step disappears.
 private let drawerChip = Color(uiColor: .systemGray5)
 
+/// The fill behind the *raised* disc — the action bar's Settings button, which floats over the rail
+/// rather than sitting in the header's whitespace. ChatGPT splits its two discs the same way: a flat
+/// grey chip up top, a lifted white one down here.
+///
+/// The polarity is the entire trick. A shadow only reads as elevation when the shape it wraps is
+/// *lighter* than the surface it floats on; cast around the grey chip it darkened the ring just
+/// outside the disc, making the disc the brightest thing in its own neighbourhood — figure and ground
+/// swapped, and it read as a pale smudge with a bare glyph on it. White gives the shadow something to
+/// lift. Dark mode has no "whiter than the background", so it keeps the chip's own #2C2C2E (already a
+/// step above the #1C1C1E drawer) and lets colour do the separating. Written literally rather than
+/// nesting `UIColor.systemGray5`, matching `drawerSurface`.
+private let drawerRaisedChip = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 44 / 255, green: 44 / 255, blue: 46 / 255, alpha: 1)   // #2C2C2E
+        : .white
+})
+
+/// Light needs this shadow to do *all* the separating (white is only ~6 levels off the #F9F9F9
+/// drawer); dark already separates on colour, so there the shadow just deepens the seam.
+private let drawerRaisedShadow = Color(uiColor: UIColor { trait in
+    UIColor(white: 0, alpha: trait.userInterfaceStyle == .dark ? 0.5 : 0.14)
+})
+
 /// The ChatGPT-style circular chrome for a drawer icon button (search at the top, Settings at the
 /// bottom): one glyph on a 44pt neutral disc — also the HIG minimum tap target. The disc is a
 /// fixed-size container, so the glyph uses the Dynamic-Type-static `orbitDiscGlyph`; a scaling token
 /// would overflow it at the larger text sizes.
 private struct DrawerCircleGlyph: View {
     let systemName: String
+    /// `true` for the action bar's Settings button: a white disc lifted off the rail by a shadow,
+    /// instead of the header search's flat grey chip. See `drawerRaisedChip` for why the two differ.
+    var raised = false
 
+    @ViewBuilder
     var body: some View {
-        Image(systemName: systemName)
+        let disc = Image(systemName: systemName)
             .font(.orbitDiscGlyph)
             .foregroundStyle(.primary)
             .frame(width: 44, height: 44)
-            .background(drawerChip, in: Circle())
+            .background(raised ? drawerRaisedChip : drawerChip, in: Circle())
             .contentShape(Circle())
+        if raised {
+            disc.shadow(color: drawerRaisedShadow, radius: 6, y: 2)
+        } else {
+            disc
+        }
     }
 }
 
@@ -507,7 +539,7 @@ private struct NavigationDrawer: View {
                 model.selectedSection = .settings
                 close()
             } label: {
-                DrawerCircleGlyph(systemName: AppSection.settings.systemImage)
+                DrawerCircleGlyph(systemName: AppSection.settings.systemImage, raised: true)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(AppSection.settings.title)
