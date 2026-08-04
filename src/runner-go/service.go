@@ -290,22 +290,47 @@ func primaryGroup(u *user.User) string {
 // after the unit/plist was written, so every directory must be present even when it
 // does not exist yet.
 func runnerEnginePath(home, path string) string {
-	if home == "" {
-		return path
-	}
-	// Keep ~/.local/bin first for compatibility with the existing Claude/Codex
-	// resolution order; OpenCode and Kimi's official installers each drop their
-	// binary in a private dir instead (~/.opencode/bin, ~/.kimi-code/bin).
-	for _, dir := range []string{
-		filepath.Join(home, ".kimi-code", "bin"),
-		filepath.Join(home, ".opencode", "bin"),
-		filepath.Join(home, ".local", "bin"),
-	} {
+	for _, dir := range engineInstallerDirs(home) {
 		if !pathContains(path, dir) {
 			path = dir + ":" + path
 		}
 	}
 	return path
+}
+
+// engineInstallerDirs lists the directories the official engine installers drop a binary into,
+// in PATH precedence order (~/.local/bin last, preserving the existing Claude/Codex resolution
+// order; OpenCode and Kimi each use a private dir instead).
+//
+// One list, because two questions read it and they must agree: which directories a service's
+// PATH needs, and whether a binary found on that PATH is an official install Orbit may re-run
+// the installer against. They disagreed once — the PATH learned ~/.kimi-code/bin while the
+// update check still recognised only ~/.local/bin, so a correctly installed Kimi was written
+// off as package-managed and silently never updated again.
+func engineInstallerDirs(home string) []string {
+	if home == "" {
+		return nil
+	}
+	home = filepath.Clean(home)
+	return []string{
+		filepath.Join(home, ".kimi-code", "bin"),
+		filepath.Join(home, ".opencode", "bin"),
+		filepath.Join(home, ".local", "bin"),
+	}
+}
+
+// installedByOfficialInstaller reports whether this binary sits where an official installer puts
+// it — the only kind Orbit updates by re-running that installer. Anything else came from a
+// package manager, which owns updating it (and would end up with a second, shadowing copy if
+// Orbit ran the installer beside it).
+func installedByOfficialInstaller(binPath, home string) bool {
+	dir := filepath.Dir(filepath.Clean(binPath))
+	for _, d := range engineInstallerDirs(home) {
+		if dir == d {
+			return true
+		}
+	}
+	return false
 }
 
 // userLoginPath returns the target user's login PATH. When we're root dropping to

@@ -35,14 +35,57 @@ func TestKimiUpdatePreservesInstallSource(t *testing.T) {
 	if !ok {
 		t.Fatal("Kimi engine spec missing")
 	}
-	standalone := filepath.Join(home, ".local", "bin", "kimi")
-	if got, ok := engineUpdateCommand(spec, standalone, home); !ok || got != spec.installCmd {
-		t.Fatalf("standalone update = (%q, %v), want official installer", got, ok)
+	// Every directory the official installer is known to use, current and historical. The
+	// current one is the reason this test exists in this shape: it recognised only ~/.local/bin
+	// while the installer had moved to ~/.kimi-code/bin, so a real, correctly installed Kimi
+	// (v0.32.0 at /root/.kimi-code/bin/kimi) was written off as package-managed and never
+	// updated again — with the suite green the whole time.
+	for _, dir := range []string{
+		filepath.Join(home, ".kimi-code", "bin"),
+		filepath.Join(home, ".local", "bin"),
+	} {
+		official := filepath.Join(dir, "kimi")
+		if got, ok := engineUpdateCommand(spec, official, home); !ok || got != spec.installCmd {
+			t.Fatalf("official install at %s = (%q, %v), want the installer re-run", official, got, ok)
+		}
 	}
-	for _, managed := range []string{"/usr/local/bin/kimi", "/opt/homebrew/bin/kimi"} {
+	// A package manager owns updating its own copy; re-running the installer beside it would
+	// leave a second, shadowing binary.
+	for _, managed := range []string{"/usr/local/bin/kimi", "/opt/homebrew/bin/kimi", "/usr/bin/kimi"} {
 		if got, ok := engineUpdateCommand(spec, managed, home); ok || got != "" {
 			t.Fatalf("package-managed %s update = (%q, %v), want skip", managed, got, ok)
 		}
+	}
+	// No home, nothing to compare against: don't guess an install is ours.
+	if _, ok := engineUpdateCommand(spec, filepath.Join(home, ".kimi-code", "bin", "kimi"), ""); ok {
+		t.Fatal("with no home directory, an install must not be treated as official")
+	}
+}
+
+// The two readers of engineInstallerDirs have to agree: a directory the service PATH adds is
+// exactly a directory whose binaries are official installs. They drifted apart once, and only
+// the live machine noticed.
+func TestEngineInstallerDirsAgreeWithServicePath(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	dirs := engineInstallerDirs(home)
+	if len(dirs) == 0 {
+		t.Fatal("no installer directories")
+	}
+	path := runnerEnginePath(home, "/usr/bin")
+	for _, dir := range dirs {
+		if !pathContains(path, dir) {
+			t.Errorf("%s is treated as an official install location but is missing from the service PATH", dir)
+		}
+		if !installedByOfficialInstaller(filepath.Join(dir, "kimi"), home) {
+			t.Errorf("%s is on the service PATH but not recognised as an official install location", dir)
+		}
+	}
+	// A directory that merely contains one of these as a prefix is not one of them.
+	if installedByOfficialInstaller(filepath.Join(home, ".local", "bin", "nested", "kimi"), home) {
+		t.Error("a nested directory must not count as an official install location")
+	}
+	if engineInstallerDirs("") != nil {
+		t.Error("with no home there are no installer directories to name")
 	}
 }
 

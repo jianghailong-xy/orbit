@@ -255,10 +255,14 @@ func engineUpdateCommand(spec engineSpec, binPath, home string) (string, bool) {
 	if spec.updateCmd != "" {
 		return spec.updateCmd, true
 	}
-	if spec.bin == providerKimi {
-		if home == "" || filepath.Clean(binPath) != filepath.Join(filepath.Clean(home), ".local", "bin", providerKimi) {
-			return "", false
-		}
+	// No unattended update command of its own, so updating means re-running the official
+	// installer — safe only where that installer put the binary itself. Asking
+	// engineInstallerDirs rather than naming a directory here is the point: the installer's
+	// destination has already moved once (~/.local/bin → ~/.kimi-code/bin), and a copy of that
+	// knowledge left behind here is what turned a healthy Kimi into "package-managed" and
+	// stopped updating it.
+	if spec.bin == providerKimi && !installedByOfficialInstaller(binPath, home) {
+		return "", false
 	}
 	return spec.installCmd, spec.installCmd != ""
 }
