@@ -104,6 +104,11 @@ type kimiACPClient struct {
 	doneOnce      sync.Once
 	wg            sync.WaitGroup
 
+	// The `thinking` levels this session's handshake advertised. Written once
+	// during the handshake and read by configureSession, both on the session
+	// loop — a later reload reconfigures against the same engine generation.
+	thinkingOptions []string
+
 	permissionCtx context.Context
 	permission    func(context.Context, map[string]interface{}) map[string]interface{}
 	permissionMu  sync.Mutex
@@ -660,13 +665,40 @@ func (a *kimiACPClient) startOrResumeSession(ctx context.Context, job *ClaimedSe
 		if id == "" {
 			return "", fmt.Errorf("session/new response did not include sessionId")
 		}
+		a.thinkingOptions = kimiConfigOptionValues(result, "thinking")
 		return id, nil
 	}
 	params["sessionId"] = job.RuntimeSessionID
-	if _, err := a.request(ctx, "session/resume", params); err != nil {
+	result, err := a.request(ctx, "session/resume", params)
+	if err != nil {
 		return "", err
 	}
+	a.thinkingOptions = kimiConfigOptionValues(result, "thinking")
 	return job.RuntimeSessionID, nil
+}
+
+// The values a `session/new` or `session/resume` result advertises for one
+// config option's picker. Empty when the handshake does not describe it, which
+// callers must read as "unknown", not as "nothing is allowed".
+func kimiConfigOptionValues(result map[string]interface{}, configID string) []string {
+	rows, _ := result["configOptions"].([]interface{})
+	for _, row := range rows {
+		option, _ := row.(map[string]interface{})
+		if option == nil || firstString(option, "id") != configID {
+			continue
+		}
+		choices, _ := option["options"].([]interface{})
+		values := make([]string, 0, len(choices))
+		for _, choice := range choices {
+			if entry, _ := choice.(map[string]interface{}); entry != nil {
+				if value := firstString(entry, "value"); value != "" {
+					values = append(values, value)
+				}
+			}
+		}
+		return values
+	}
+	return nil
 }
 
 func kimiModeForPermission(mode string) string {
@@ -723,17 +755,10 @@ func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, 
 	}
 	// `on` means the selected model's default thought level. This also gives
 	// an explicit reset target when Orbit's effort picker is changed to Default.
-	effort := agent.Effort
-	if effort == "" {
-		effort = "on"
-	}
+	effort := kimiSupportedEffort(agent.Effort, a.thinkingOptions)
 	if err := set("thinking", effort); err != nil {
-		// Kimi validates the level against the current model's declared
-		// support_efforts, which is per-model and only knowable here: a
-		// KIMI_MODEL_* provider declares none at all, so its picker offers
-		// nothing but off/on. Effort is a tuning knob, so fall back to the
-		// model's own default rather than failing the session over a level
-		// this model cannot express.
+		// Belt and braces for a handshake that described no picker: absorb the
+		// rejection rather than failing the session over a tuning knob.
 		if effort == "on" || !kimiRejectedEffort(err) {
 			return err
 		}
@@ -743,6 +768,30 @@ func (a *kimiACPClient) configureSession(ctx context.Context, sessionID string, 
 		}
 	}
 	return set("mode", kimiModeForPermission(agent.PermissionMode))
+}
+
+// The thinking level to ask for, given what this session's handshake advertised.
+// Kimi validates the level against the current model's declared support_efforts,
+// which is per-model and only knowable from the running CLI — a KIMI_MODEL_*
+// provider declares none at all, so its picker offers nothing but off/on.
+// Sending a level it never offered is answered with invalid_params, and the CLI
+// prints that rejection to stderr, which Orbit surfaces as a failure in the
+// transcript. So ask for the model's own default instead of provoking it.
+func kimiSupportedEffort(effort string, advertised []string) string {
+	if effort == "" {
+		return "on"
+	}
+	// No picker described: the handshake predates config options, or this is a
+	// stub. Send the request through and let the engine be the arbiter.
+	if len(advertised) == 0 {
+		return effort
+	}
+	for _, value := range advertised {
+		if value == effort {
+			return effort
+		}
+	}
+	return "on"
 }
 
 // Kimi answers an unsupported thinking level with JSON-RPC invalid_params,

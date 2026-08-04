@@ -334,23 +334,26 @@ type kimiSetConfigCall struct{ configID, value string }
 
 // runKimiConfigureSession drives configureSession against a scripted ACP peer:
 // the peer answers every set_config_option with reject(configID, value), or with
-// an empty result when that returns nil. It reports the calls in wire order.
+// an empty result when that returns nil. `advertised` stands in for the thinking
+// levels the handshake described. It reports the calls in wire order.
 func runKimiConfigureSession(
 	t *testing.T,
 	agent AgentExecConfig,
+	advertised []string,
 	reject func(configID, value string) *kimiRPCError,
 ) ([]kimiSetConfigCall, error) {
 	t.Helper()
 	peerReads, clientWrites := io.Pipe()
 	clientReads, peerWrites := io.Pipe()
 	app := &kimiACPClient{
-		stdin:         clientWrites,
-		done:          make(chan struct{}),
-		pending:       map[string]chan kimiRPCMessage{},
-		outWake:       make(chan struct{}, 1),
-		notifications: make(chan kimiInboundItem, 8),
-		permissions:   map[string]context.CancelFunc{},
-		permissionOff: true,
+		stdin:           clientWrites,
+		done:            make(chan struct{}),
+		pending:         map[string]chan kimiRPCMessage{},
+		outWake:         make(chan struct{}, 1),
+		notifications:   make(chan kimiInboundItem, 8),
+		permissions:     map[string]context.CancelFunc{},
+		permissionOff:   true,
+		thinkingOptions: advertised,
 	}
 	go app.writerLoop()
 	go app.readLoop(clientReads)
@@ -410,19 +413,58 @@ func runKimiConfigureSession(
 }
 
 // A KIMI_MODEL_* provider's synthesized alias declares no support_efforts, so
-// Kimi rejects every level Orbit's picker offers. That must not kill the session
-// before its first turn — the effort degrades to the model's own default.
-func TestKimiUnsupportedThinkingEffortFallsBackToModelDefault(t *testing.T) {
+// its picker offers nothing but off/on. Orbit must not send a level anyway: the
+// rejection is printed to the CLI's stderr, and Orbit renders engine stderr as a
+// failure, so a session that recovered still reads as broken in the transcript.
+func TestKimiEffortClampedToAdvertisedLevels(t *testing.T) {
 	calls, err := runKimiConfigureSession(t,
 		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		[]string{"off", "on"},
 		func(configID, value string) *kimiRPCError {
-			if configID != "thinking" || value == "on" {
+			if configID != "thinking" || value == "off" || value == "on" {
 				return nil
 			}
 			return &kimiRPCError{
 				Code:    -32602,
 				Message: `Invalid params: Unknown thinking effort for model "__kimi_env_model__": ` + value,
 			}
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []kimiSetConfigCall{{"thinking", "on"}, {"mode", "default"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v — max must never reach the wire", calls, want)
+	}
+}
+
+// Clamping may not flatten a level the model does actually declare.
+func TestKimiAdvertisedEffortIsSentUnchanged(t *testing.T) {
+	calls, err := runKimiConfigureSession(t,
+		AgentExecConfig{Effort: "high", PermissionMode: "default"},
+		[]string{"off", "on", "low", "medium", "high"},
+		func(string, string) *kimiRPCError { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []kimiSetConfigCall{{"thinking", "high"}, {"mode", "default"}}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("config calls = %v, want %v", calls, want)
+	}
+}
+
+// A handshake that described no picker leaves the level unknown, not forbidden.
+// The request goes through, and a rejection is absorbed rather than failing the
+// session before its first turn.
+func TestKimiUnadvertisedEffortFallsBackToModelDefault(t *testing.T) {
+	calls, err := runKimiConfigureSession(t,
+		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		nil,
+		func(configID, value string) *kimiRPCError {
+			if configID != "thinking" || value == "on" {
+				return nil
+			}
+			return &kimiRPCError{Code: -32602, Message: "Invalid params: Unknown thinking effort"}
 		})
 	if err != nil {
 		t.Fatalf("configureSession = %v, want the rejected effort to be absorbed", err)
@@ -438,6 +480,7 @@ func TestKimiUnsupportedThinkingEffortFallsBackToModelDefault(t *testing.T) {
 func TestKimiConfigureSessionStillFailsOnOtherRejections(t *testing.T) {
 	calls, err := runKimiConfigureSession(t,
 		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		[]string{"off", "on"},
 		func(configID, _ string) *kimiRPCError {
 			if configID != "mode" {
 				return nil
@@ -447,7 +490,7 @@ func TestKimiConfigureSessionStillFailsOnOtherRejections(t *testing.T) {
 	if err == nil {
 		t.Fatal("configureSession succeeded, want the rejected mode to fail the session")
 	}
-	want := []kimiSetConfigCall{{"thinking", "max"}, {"mode", "default"}}
+	want := []kimiSetConfigCall{{"thinking", "on"}, {"mode", "default"}}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("config calls = %v, want %v", calls, want)
 	}
@@ -458,6 +501,7 @@ func TestKimiConfigureSessionStillFailsOnOtherRejections(t *testing.T) {
 func TestKimiThinkingRetryOnlyOnInvalidParams(t *testing.T) {
 	calls, err := runKimiConfigureSession(t,
 		AgentExecConfig{Effort: "max", PermissionMode: "default"},
+		nil,
 		func(configID, _ string) *kimiRPCError {
 			if configID != "thinking" {
 				return nil
@@ -470,6 +514,23 @@ func TestKimiThinkingRetryOnlyOnInvalidParams(t *testing.T) {
 	want := []kimiSetConfigCall{{"thinking", "max"}}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("config calls = %v, want %v", calls, want)
+	}
+}
+
+// The handshake shape Kimi actually sends, straight from a `session/new` result.
+func TestKimiConfigOptionValuesReadsAdvertisedPicker(t *testing.T) {
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(`{"sessionId":"session_1","configOptions":[
+		{"type":"select","id":"model","currentValue":"__kimi_env_model__","options":[{"value":"__kimi_env_model__","name":"kimi-k3"}]},
+		{"type":"select","id":"thinking","currentValue":"on","options":[{"value":"off","name":"Off"},{"value":"on","name":"On"}]}
+	]}`), &result); err != nil {
+		t.Fatal(err)
+	}
+	if got := kimiConfigOptionValues(result, "thinking"); !reflect.DeepEqual(got, []string{"off", "on"}) {
+		t.Fatalf("thinking values = %v, want [off on]", got)
+	}
+	if got := kimiConfigOptionValues(result, "mode"); got != nil {
+		t.Fatalf("absent option = %v, want nil so callers read it as unknown", got)
 	}
 }
 
