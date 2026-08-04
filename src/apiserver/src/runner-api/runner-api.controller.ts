@@ -1622,13 +1622,16 @@ export class RunnerApiController {
           mergedSourceSha: true,
         },
       });
-      // A task run that failed mid-turn (e.g. an API/content-filter error the agent
-      // couldn't recover from — the runner now reports such turns as FAILED) would
-      // otherwise park at AWAITING_INPUT and sit there with the task stuck IN_PROGRESS
-      // and nothing watching. For a task-bound session we instead finalize the session
-      // FAILED and reclaim the task as FAILED so it surfaces for a human. Chat sessions
-      // (no taskId) keep parking so the user can retry in place.
-      const failTask = dto.status === RunStatus.FAILED && !!current.taskId;
+      // A turn that failed mid-run (e.g. an API/content-filter error the agent couldn't
+      // recover from — the runner reports such turns as FAILED) would otherwise park at
+      // AWAITING_INPUT, which is indistinguishable from an ordinary idle session: the list
+      // says "Waiting for your reply" and the failure is invisible until you open the
+      // session. So the run outcome settles FAILED — that IS what happened to the run, and
+      // it's what the list must show. The session stays resumable, so retrying is still one
+      // message away. A task-bound session additionally reclaims its task as FAILED (it
+      // would otherwise sit IN_PROGRESS with nothing watching).
+      const failSession = dto.status === RunStatus.FAILED;
+      const failTask = failSession && !!current.taskId;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
@@ -1665,7 +1668,7 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, status: current.status, failTask };
+        return { applied: false, status: current.status, failSession };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -1679,7 +1682,7 @@ export class RunnerApiController {
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
-      const pendingExecutable = failTask
+      const pendingExecutable = failSession
         ? 0
         : await tx.conversationTurn.count({
             where: {
@@ -1688,7 +1691,9 @@ export class RunnerApiController {
               status: 'PENDING',
             },
           });
-      const nextStatus = failTask ? RunStatus.FAILED : statusAfterTurnCompleted(pendingExecutable > 0);
+      const nextStatus = failSession
+        ? RunStatus.FAILED
+        : statusAfterTurnCompleted(pendingExecutable > 0);
       // Settle + bill only if this is still the active turn and is not being torn down,
       // so a late/retried completion cannot resurrect a finalized session or double-bill.
       const parked = await tx.session.updateMany({
@@ -1699,12 +1704,12 @@ export class RunnerApiController {
         },
         data: {
           status: nextStatus,
-          // On a failed task turn claude is still alive (the turn errored, the process
-          // didn't exit), so finalizing FAILED here would leak its runner concurrency
-          // slot — the process lingers, holding a slot, until the runner restarts. Set
+          // On a failed turn claude is still alive (the turn errored, the process didn't
+          // exit), so finalizing FAILED here would leak its runner concurrency slot — the
+          // process lingers, holding a slot, until the runner restarts. Set
           // cancelRequestedAt so the next heartbeat's cancel-drain tells the runner to
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
-          ...(failTask
+          ...(failSession
             ? {
                 error: dto.result || 'run failed',
                 finishedAt: new Date(),
@@ -1743,10 +1748,10 @@ export class RunnerApiController {
         return {
           applied: false,
           status: latest?.status ?? current.status,
-          failTask,
+          failSession,
         };
       }
-      if (failTask) {
+      if (failSession) {
         await retireSessionInboxGeneration(tx, sessionId);
       }
       // Per-file unified diffs to the side table (never on the session row, so the detail/
@@ -1775,19 +1780,21 @@ export class RunnerApiController {
         }));
         if (rows.length > 0) await tx.llmUsage.createMany({ data: rows });
       }
-      if (failTask) {
-        // Drain queued turns so nothing can be leased after the session ends, then
-        // surface the abandoned task.
+      if (failSession) {
+        // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
+      }
+      if (failTask) {
+        // Surface the abandoned task for a human.
         await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, status: nextStatus, failTask };
+      return { applied: true, status: nextStatus, failSession };
     });
-    if (finalized.failTask) {
+    if (finalized.failSession) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
       if (finalized.applied) {

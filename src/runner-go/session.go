@@ -183,8 +183,8 @@ type terminalTurnAck struct {
 	permitGeneration uint64
 }
 
-// terminalTurnAckHandoff transfers one failed-task completion from a provider
-// generation to its session supervisor. A task has only one active turn, so a
+// terminalTurnAckHandoff transfers one failed-turn completion from a provider
+// generation to its session supervisor. A session has only one active turn, so a
 // different pending turn is an invariant violation and is rejected fail-closed.
 type terminalTurnAckHandoff struct {
 	mu      sync.Mutex
@@ -458,7 +458,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}
-		failedTask := req.Status == stFailed && job.TaskID != ""
+		// A failed turn ends the Session (see /turn-complete), task-bound or not: the
+		// control plane cannot show a failure it parked as AWAITING_INPUT. Both kinds take
+		// the terminal handoff below, whose ordering — drain the events, THEN terminalize —
+		// is what keeps the error itself on screen: events posted after the Session is
+		// terminal are persisted but no longer broadcast, so a watching client would see the
+		// status flip to Failed with no sign of what failed until it reloaded.
+		failedTurn := req.Status == stFailed
 		var providerCtx context.Context
 		// A provider's asynchronous finalizer must not keep its generation alive
 		// after cleanup begins.
@@ -467,10 +473,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			completionCtx, cancelCompletion = contextUntilEither(turnAckCtx, providerCtx)
 		}
 		defer cancelCompletion()
-		// A failed task turn terminalizes the Session in /turn-complete. Its provider
-		// stage only seals admission and attempts a bounded early flush; the supervisor
-		// performs the reliable drain and terminal acknowledgement after all emitters join.
-		if failedTask {
+		// A failed turn terminalizes the Session in /turn-complete. Its provider stage only
+		// seals admission and attempts a bounded early flush; the supervisor performs the
+		// reliable drain and terminal acknowledgement after all emitters join.
+		if failedTurn {
 			// Close event admission before asking the provider generation to exit. A
 			// bounded early flush reduces latency; the supervisor performs the stable,
 			// session-scoped drain after every provider/background emitter has joined.
@@ -490,13 +496,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			permitGeneration := pool.permitGeneration(live)
 			if permitGeneration == 0 || !pendingTerminalAck.store(req, permitGeneration) {
 				stopCurrentEngine()
-				return fmt.Errorf("failed-task turn completion lost its exact local permit")
+				return fmt.Errorf("failed-turn completion lost its exact local permit")
 			}
 			if !stopCurrentEngine() {
 				pendingTerminalAck.clear(req.TurnID)
-				return fmt.Errorf("failed-task turn completion has no provider generation to stop")
+				return fmt.Errorf("failed-turn completion has no provider generation to stop")
 			}
-			logln("failed-task turn completion handed to session supervisor for", sessionID)
+			logln("failed-turn completion handed to session supervisor for", sessionID)
 			return nil
 		}
 		// Capture before the network round-trip. Once the server commits
@@ -527,7 +533,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	firstSpawn := !job.Reclaimed && !job.Resume
 	lastClaimJob := job
 	respawns := 0
-	terminalTaskAckSettled := false
+	terminalAckSettled := false
 	leaseResetGeneration := ""
 	retirePendingGeneration := func() error {
 		if leaseResetGeneration == "" {
@@ -631,7 +637,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			currentEngine = nil
 		}
 		engineStopMu.Unlock()
-		// A failed task is deliberately not acknowledged by its provider generation.
+		// A failed turn is deliberately not acknowledged by its provider generation.
 		// That process and every provider worker are joined now. Stop runner-owned
 		// background work too, perform one stable event drain, then settle the exact
 		// request before releasing the inbox generation or allowing a replacement.
@@ -640,7 +646,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if ack, ok := pendingTerminalAck.load(); ok {
 			bg.stopAll()
 			if pool.permitGeneration(live) != ack.permitGeneration {
-				terminalAckErr = fmt.Errorf("failed-task terminal ack crossed its local permit generation")
+				terminalAckErr = fmt.Errorf("failed-turn terminal ack crossed its local permit generation")
 				localDetach()
 			} else if flushErr := flushWithContext(turnAckCtx); flushErr != nil {
 				terminalAckErr = flushErr
@@ -653,10 +659,10 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 					markOwnershipLost(terminalAckErr)
 				}
 				if terminalAckErr == nil && !terminalTurnCompleteStatus(terminalAckStatus) {
-					terminalAckErr = fmt.Errorf("failed-task turn-complete returned non-terminal status %q", terminalAckStatus)
+					terminalAckErr = fmt.Errorf("failed-turn turn-complete returned non-terminal status %q", terminalAckStatus)
 				}
 				if terminalAckErr == nil {
-					terminalTaskAckSettled = true
+					terminalAckSettled = true
 					status = terminalAckStatus
 					pendingTerminalAck.clear(ack.request.TurnID)
 					// Every terminal lifecycle transaction retires the generation; do not
@@ -685,7 +691,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		if terminalAckErr != nil {
 			if !isLeaseOwnershipError(terminalAckErr) {
-				logln("supervisor failed-task turn-complete failed for", sessionID+":", terminalAckErr)
+				logln("supervisor failed-turn turn-complete failed for", sessionID+":", terminalAckErr)
 			}
 			if sessionCtx.Err() != nil || shutdownCtx.Err() != nil {
 				status = stCancelled
@@ -694,7 +700,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 			break
 		}
-		if terminalTaskAckSettled {
+		if terminalAckSettled {
 			break
 		}
 		firstSpawn = false
@@ -748,7 +754,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln(fmt.Sprintf("interactive run %s — %s exited unexpectedly; resuming (attempt %d)", job.SessionID, runtimeProvider(job), respawns))
 		time.Sleep(time.Duration(respawns) * time.Second)
 	}
-	if ctx.Err() != nil && !terminalTaskAckSettled {
+	if ctx.Err() != nil && !terminalAckSettled {
 		status = stCancelled
 	}
 	// Stop and join runner-owned background work before the final event drain and
@@ -772,12 +778,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		logln(fmt.Sprintf("⏏ interactive run %s — detached after lease ownership changed", job.SessionID))
 		return
 	}
-	if terminalTaskAckSettled {
+	if terminalAckSettled {
 		// /turn-complete already committed the terminal lifecycle and retired its
 		// inbox generation. Terminal takeover is intentionally forbidden, so do not
 		// reinterpret its expected 409 as ownership loss or run stale finalization.
 		// The wrapper keeps the local permit/worktree fence until pool.finish.
-		logln(fmt.Sprintf("■ interactive run %s — failed task terminal acknowledgement settled", job.SessionID))
+		logln(fmt.Sprintf("■ interactive run %s — failed turn terminal acknowledgement settled", job.SessionID))
 		return
 	}
 

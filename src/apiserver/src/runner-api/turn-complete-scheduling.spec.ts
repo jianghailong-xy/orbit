@@ -21,6 +21,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
     cancelRequestedAt: null,
   };
   const statusWrites: RunStatus[] = [];
+  const sessionWrites: Record<string, unknown>[] = [];
   let inboxWakes = 0;
   let queueWakes = 0;
   let retireCalls = 0;
@@ -43,6 +44,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
       findUnique: async () => ({ status: session.status }),
       updateMany: async ({ data }: { data: { status: RunStatus } }) => {
         statusWrites.push(data.status);
+        sessionWrites.push(data);
         session.status = data.status;
         return { count: 1 };
       },
@@ -67,6 +69,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
     runnerId,
     sessionId,
     statusWrites,
+    sessionWrites,
     inboxWakes: () => inboxWakes,
     queueWakes: () => queueWakes,
     retireCalls: () => retireCalls,
@@ -99,6 +102,26 @@ test('turn completion retains RUNNING while a follow-up can reuse the held slot'
   assert.deepEqual(h.statusWrites, [RunStatus.RUNNING]);
   assert.equal(h.inboxWakes(), 1);
   assert.equal(h.queueWakes(), 0);
+});
+
+test('a failed chat turn finalizes the session FAILED instead of parking it as idle', async () => {
+  const h = makeController(0);
+
+  const result = await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+    turnId: 'turn-1',
+    status: SharedRunStatus.FAILED,
+    result: 'API Error: Connection closed mid-response.',
+  });
+
+  // AWAITING_INPUT would show as "Waiting for your reply" in the session list, hiding the
+  // failure behind a row that reads exactly like an idle session waiting on the user.
+  assert.deepEqual(result, { ok: true, status: RunStatus.FAILED });
+  assert.deepEqual(h.statusWrites, [RunStatus.FAILED]);
+  assert.equal(h.sessionWrites[0].error, 'API Error: Connection closed mid-response.');
+  // The engine is still alive after a failed turn; the cancel-drain reclaims its slot.
+  assert.ok(h.sessionWrites[0].cancelRequestedAt instanceof Date);
+  assert.equal(h.retireCalls(), 1);
+  assert.equal(h.inboxWakes(), 0);
 });
 
 test('a failed task turn retires its inbox generation in the terminal transaction', async () => {
