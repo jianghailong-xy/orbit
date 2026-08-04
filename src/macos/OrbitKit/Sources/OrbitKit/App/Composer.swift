@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Whether the composer can send, and whether the message will run now or queue. Queue-while-
 /// running is allowed (the durable PENDING turn), so a send during a live turn is accepted and
@@ -160,6 +163,80 @@ public enum ComposerLogic {
     /// reply — instead of held in the queue.
     public static func willQueue(authoritative: RunStatus?, reconciled: RunStatus) -> Bool {
         availability(status: authoritative ?? reconciled) == .queue
+    }
+
+    /// Backoff before each replay of a transiently-failed send, in milliseconds. Three tries over
+    /// ~7s ride out the usual cause — the gateway answering 503 with an empty body while the
+    /// apiserver restarts — without parking the user on a spinner for a failure that won't clear.
+    public static let sendRetryDelaysMs: [UInt64] = [800, 2000, 4000]
+
+    /// Whether a failed send is worth replaying verbatim.
+    ///
+    /// Replaying is safe because the request carries a `clientTurnId` the server is idempotent on:
+    /// POST /turns and /resume both return the turn an earlier attempt already queued rather than
+    /// queueing a second one, so a lost response can never become a duplicate message.
+    ///
+    /// Only connection-level failures qualify — a 5xx (the message never reached the app: gateway
+    /// blip, apiserver restarting) or a URLSession transport error, both of which a mobile client
+    /// hits routinely. Every 4xx is a verdict on this particular message (409 the session ended,
+    /// 413 too large) and must surface at once; `.unauthorized` already survived the client's own
+    /// refresh-and-retry.
+    public static func isRetriableSendFailure(_ error: Error) -> Bool {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .http(let status, _):          return status >= 500
+            case .invalidResponse:              return true
+            case .unauthorized, .notConfigured: return false
+            }
+        }
+        switch (error as? URLError)?.code {
+        case .timedOut, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+             .networkConnectionLost, .notConnectedToInternet, .badServerResponse:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// User-facing text for a send that failed for good — shown in the line above the composer,
+    /// which is also where the message itself has just been put back. Interpolating the raw error
+    /// there printed `http(status: 503, body: Optional(""))`: it reads as a crash log and says
+    /// nothing about what happened or what to do next.
+    public static func sendFailureMessage(_ error: Error) -> String {
+        let reason: String
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .http(let status, let body):
+                reason = serverMessage(body) ?? "the server returned \(status)"
+            case .unauthorized:  reason = "you're signed out"
+            case .invalidResponse: reason = "the server's reply couldn't be read"
+            case .notConfigured: reason = "no server is configured"
+            }
+        } else if error is URLError {
+            // Not `localizedDescription` — it follows the device language, and this line is one of
+            // the app's English strings.
+            reason = "the connection dropped"
+        } else {
+            reason = error.localizedDescription
+        }
+        return "Couldn't send — \(reason). Your message is back in the composer."
+    }
+
+    /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
+    /// validation failure); the raw body when it isn't one, nil when there's nothing to show.
+    private static func serverMessage(_ body: String?) -> String? {
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        guard let data = trimmed.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return trimmed
+        }
+        if let message = json["message"] as? String, !message.isEmpty { return message }
+        if let messages = json["message"] as? [String], !messages.isEmpty {
+            return messages.joined(separator: "\n")
+        }
+        if let error = json["error"] as? String, !error.isEmpty { return error }
+        return trimmed
     }
 
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
