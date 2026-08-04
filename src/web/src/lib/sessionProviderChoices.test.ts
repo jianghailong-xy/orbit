@@ -66,6 +66,42 @@ describe('providerChoices', () => {
     expect(choices.find((c) => c.slug === 'claude')?.modelLabel).toBe('Claude Opus 5');
     expect(choices.find((c) => c.slug === 'deepseek')?.modelLabel).toBe('DeepSeek V4 Pro');
   });
+
+  it('drops an engine the runner does not have installed', () => {
+    const choices = providerChoices([deepseek], catalog, undefined, [
+      { engine: 'claude', installed: true, auth: 'yes' },
+      { engine: 'codex', installed: false, auth: 'unknown' },
+      { engine: 'kimi', installed: true, auth: 'yes' },
+    ]);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'kimi', 'deepseek']);
+  });
+
+  it('keeps an installed-but-signed-out engine, disabled with the reason', () => {
+    const choices = providerChoices([], catalog, undefined, [
+      { engine: 'claude', installed: true, auth: 'yes' },
+      { engine: 'codex', installed: true, auth: 'no' },
+      { engine: 'kimi', installed: true, auth: 'unknown' },
+    ]);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
+    // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
+    expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
+    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBeUndefined();
+  });
+
+  it('offers every engine a runner has claimed nothing about', () => {
+    // Never reported (older runner / first heartbeat still pending), and a partial report.
+    expect(providerChoices([], catalog, undefined, null).map((c) => c.slug)).toEqual([
+      'claude',
+      'codex',
+      'kimi',
+    ]);
+    const partial = providerChoices([], catalog, undefined, [
+      { engine: 'claude', installed: false, auth: 'no' },
+    ]);
+    expect(partial.map((c) => c.slug)).toEqual(['codex', 'kimi']);
+    expect(partial.every((c) => !c.unavailable)).toBe(true);
+  });
 });
 
 describe('brandForProvider', () => {

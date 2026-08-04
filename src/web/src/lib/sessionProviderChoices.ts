@@ -1,5 +1,5 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
-import type { RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type { RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -8,9 +8,9 @@ import {
 
 /**
  * What the New Session provider picker shows: the runner's own signed-in engines first, then the
- * user's configured (BYOK) providers. Two groups, because they differ in the one way a user cares
- * about — an engine spends the subscription you signed into on that machine, a configured provider
- * spends the API key you pasted.
+ * user's configured (BYOK) providers. One flat list, but the `kind` distinction survives for the
+ * summary under the card — an engine spends the subscription you signed into on that machine, a
+ * configured provider spends the API key you pasted.
  *
  * Engines are exactly the slugs a runner can sign into (LoginEngine in @orbit/shared). `opencode`
  * is a fourth AgentProvider but not a login engine, so it never appears as a choice — it only
@@ -35,6 +35,10 @@ export interface ProviderChoice {
   /** The model this choice will run with when nothing overrides it, already resolved to a
    *  human label — so "switching provider changes your model" is visible before the click. */
   modelLabel: string;
+  /** Why this row can't be picked, or absent when it can. Set for an engine the runner has
+   *  installed but whose CLI says it isn't signed in: the row stays listed and disabled, because
+   *  the fix is a sign-in on the Providers page and hiding it would hide the reason. */
+  unavailable?: string;
 }
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -89,22 +93,37 @@ export function defaultModelLabel(
 }
 
 /**
- * The picker's contents. Engines always come first and are always all three: they're what a user
- * with nothing configured can still run, so the picker must never be empty. Configured providers
- * follow in the order the API returned them.
+ * The picker's contents: the engines this runner can actually run, then the configured providers
+ * in the order the API returned them.
+ *
+ * Engines are filtered against the health the runner last reported, because an engine choice is a
+ * claim about someone else's machine. Not installed there → dropped, since picking it would start
+ * a session with nothing to run it. Installed but signed out → listed and disabled (see
+ * `unavailable`). A runner that has reported nothing claims nothing, so all three stay offered —
+ * as does any engine missing from a partial report.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
   modelCatalog?: RunnerModelCatalog | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
+  engineHealth?: RunnerEngineHealth[] | null,
 ): ProviderChoice[] {
-  const engines: ProviderChoice[] = ENGINE_SLUGS.map((slug) => ({
-    slug,
-    label: ENGINE_LABELS[slug] ?? slug,
-    kind: 'engine' as const,
-    ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
-    modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
-  }));
+  const engines: ProviderChoice[] = ENGINE_SLUGS.flatMap((slug) => {
+    const health = engineHealth?.find((e) => e.engine === slug);
+    if (health && !health.installed) return [];
+    return [
+      {
+        slug,
+        label: ENGINE_LABELS[slug] ?? slug,
+        kind: 'engine' as const,
+        ...brandForProvider(slug, ENGINE_LABELS[slug] ?? slug),
+        modelLabel: defaultModelLabel(slug, modelCatalog, configured, runtimeDefaultModels),
+        // Only the CLI's own "no" disables a row; `unknown` is an engine that wouldn't answer,
+        // which is not evidence enough to take the choice away.
+        ...(health?.auth === 'no' ? { unavailable: 'Not signed in' } : {}),
+      },
+    ];
+  });
   // A configured row that shadows a built-in slug would give the picker two rows that dispatch
   // the same identity; the engine entry above already covers it.
   const byok: ProviderChoice[] = configured

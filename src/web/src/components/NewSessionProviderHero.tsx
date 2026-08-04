@@ -66,14 +66,16 @@ export function NewSessionProviderHero({
   note?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const engines = choices.filter((c) => c.kind === 'engine');
-  const byok = choices.filter((c) => c.kind === 'byok');
 
   const row = (choice: ProviderChoice) => (
     <button
       key={choice.slug}
       type="button"
       className={`np-row${choice.slug === current.slug ? ' on' : ''}`}
+      // An engine this runner isn't signed into can't run a session; the row stays so the reason
+      // is visible, and takes the model column to say it.
+      disabled={!!choice.unavailable}
+      title={choice.unavailable ? `Sign in to ${choice.label} on the Providers page` : undefined}
       onClick={() => {
         setOpen(false);
         if (choice.slug !== current.slug) onPick(choice.slug);
@@ -81,16 +83,16 @@ export function NewSessionProviderHero({
     >
       <ProviderMark choice={choice} size={20} />
       <span className="np-row-name">{choice.label}</span>
-      <span className="np-row-model">{choice.modelLabel}</span>
+      <span className="np-row-model">{choice.unavailable ?? choice.modelLabel}</span>
     </button>
   );
 
+  // One flat list: whose subscription or key each row spends is already carried by its brand mark
+  // and by the summary under the card, so section headers would only be chrome between the user
+  // and the pick. Engines still come first (that's the order `choices` arrives in).
   const list = (
     <div className="np-list">
-      <div className="np-group">Engines</div>
-      {engines.map(row)}
-      {byok.length > 0 && <div className="np-group">Your keys</div>}
-      {byok.map(row)}
+      {choices.map(row)}
       <div className="np-sep" />
       <Link to="/providers" className="np-row np-connect" onClick={() => setOpen(false)}>
         <span className="np-plus">+</span>

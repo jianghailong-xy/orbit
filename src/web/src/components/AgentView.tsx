@@ -1645,11 +1645,18 @@ export function AgentView({ runner }: { runner: Runner }) {
     configuredProvidersLoaded,
   );
 
-  // What the New Session hero offers, and what it shows as current. Engines first (always all
-  // three, so a user with nothing configured still has choices), then this account's providers.
+  // What the New Session hero offers, and what it shows as current. Engines first — only the ones
+  // this runner reported as installed, since the session runs on that machine — then this
+  // account's providers.
   const providerChoicesForDraft = useMemo(
-    () => providerChoices(configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels),
-    [configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels],
+    () =>
+      providerChoices(
+        configuredProviders,
+        runner.modelCatalog,
+        runner.runtimeDefaultModels,
+        runner.engines,
+      ),
+    [configuredProviders, runner.modelCatalog, runner.runtimeDefaultModels, runner.engines],
   );
   const currentProviderChoiceForDraft = useMemo(
     () =>
