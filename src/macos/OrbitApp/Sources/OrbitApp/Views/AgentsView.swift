@@ -78,6 +78,18 @@ struct AgentPanes: View {
     @State private var tagFilter: String?
     /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
     @State private var groupByTag = false
+    #if os(iOS)
+    /// The inline search field's text, and what came back for it. The list searches in place —
+    /// results replace its sections — rather than opening the palette sheet over the very list
+    /// you're looking at.
+    @State private var searchQuery = ""
+    @State private var hits: [SessionSearchHit] = []
+    /// The query `hits` came from — what their snippets are highlighted against, so highlighting
+    /// can't run ahead of the results while typing.
+    @State private var hitsQuery = ""
+    @State private var contentSearched = true
+    @State private var searching = false
+    #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
     @FocusState private var listFocused: Bool
@@ -95,7 +107,9 @@ struct AgentPanes: View {
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
             // sections; the tag filter chip narrows either. Both are the pure, tested OrbitKit
             // groupers over the same console-sorted, tag-filtered list (`shownSessions`).
-            if groupByTag {
+            if isSearching {
+                searchResults
+            } else if groupByTag {
                 ForEach(SessionTagGrouping.sections(shownSessions)) { section in
                     Section {
                         ForEach(section.sessions) { sessionRow($0) }
@@ -129,7 +143,18 @@ struct AgentPanes: View {
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
         .overlay {
-            if agents.agentSessions.isEmpty {
+            if isSearching {
+                #if os(iOS)
+                // Only once a search has actually answered: `hitsQuery` is empty until the first
+                // response lands, and holding the empty state back over that gap (and over every
+                // later keystroke, via `searching`) keeps "No matches" from flashing at someone
+                // who is still typing.
+                if hits.isEmpty && !searching && !hitsQuery.isEmpty {
+                    ContentUnavailableView("No matches", systemImage: "magnifyingglass",
+                                           description: Text("Nothing matches \u{201C}\(hitsQuery)\u{201D}."))
+                }
+                #endif
+            } else if agents.agentSessions.isEmpty {
                 ContentUnavailableView(
                     agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
                     systemImage: "bubble.left.and.bubble.right")
@@ -144,12 +169,17 @@ struct AgentPanes: View {
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
         .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
-        // The session list's own way into search, mirroring the box web keeps above its session
-        // column. Until now the palette was only reachable from inside the drawer (or ⌘K, which
-        // needs a keyboard), so on iPhone the session list itself looked like it had no search.
-        // Pinned above the rows via `safeAreaInset` rather than being a list row, so it stays put
-        // while the sections scroll — and the list keeps its own refresh/scroll behaviour.
-        .safeAreaInset(edge: .top, spacing: 0) { sessionSearchBar }
+        // Search, in the list rather than over it. Until now it was only reachable from inside the
+        // drawer (or ⌘K, which needs a keyboard), so the list itself looked like it had none.
+        // `.navigationBarDrawer` is what keeps the field *below* the agent title instead of over
+        // it — the system owns that layout, which a hand-placed bar can't do — and `.always` keeps
+        // it visible rather than hidden until you pull down, since not being able to find it is
+        // what started this. Typing searches the server (every agent, scope and message text) and
+        // shows the hits here; clearing the field restores the sections.
+        .searchable(text: $searchQuery,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search sessions")
+        .task(id: searchQuery) { await runSearch() }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
         // external changes (new sessions, status transitions made from the web) show up without
@@ -272,33 +302,58 @@ struct AgentPanes: View {
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
     }
 
+    /// True while the list is showing search results in place of its sections. Always false on
+    /// macOS, whose window searches from the ⌘K palette instead.
+    private var isSearching: Bool {
+        #if os(iOS)
+        return !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        #else
+        return false
+        #endif
+    }
+
     #if os(iOS)
-    /// The search box above the list. It *opens the palette* rather than being a `.searchable`
-    /// field over these rows: the palette spans every agent, runner and lifecycle scope and reaches
-    /// into message text, none of which this one-agent, one-scope list can show — dropping those
-    /// hits in here would read as a bug (see `SessionSearchView`'s header). Its own background is
-    /// opaque so rows scroll *under* it, not through it.
-    private var sessionSearchBar: some View {
-        Button { app.searchOpen = true } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                Text("Search sessions")
-                Spacer(minLength: 0)
+    /// Search results, standing in for the session sections while the field has text. They're the
+    /// palette's rows (agent · what matched · snippet, with a Completed/Trash badge), not session
+    /// rows: the search spans every agent and scope, so a hit has to say where it lives rather than
+    /// pose as a row of *this* agent's list. Tapping one opens it, switching agent if it belongs to
+    /// another.
+    @ViewBuilder private var searchResults: some View {
+        Section {
+            ForEach(hits) { hit in
+                Button { app.route(to: .session(hit.id)) } label: {
+                    SessionSearchRow(hit: hit, query: hitsQuery)
+                }
+                .buttonStyle(.plain)
             }
-            .font(.orbitControl)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .background(Color.primary.opacity(0.05),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        } header: {
+            // Doubles as the short-query notice the palette keeps in its footer: below the
+            // server's content threshold only names are matched, which is worth saying before
+            // "no matches" reads as "this doesn't exist".
+            Text(contentSearched
+                 ? "All sessions"
+                 : "Matching names only — type more to search message text.")
+                .textCase(nil)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Search sessions")
-        // 16pt gutter — the plain list's own row inset, so the box lines up with the titles below.
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .background(.background)
+    }
+
+    /// Debounced server-side search behind the field. `.task(id:)` cancels the previous run on each
+    /// keystroke, so the sleep *is* the debounce — a cancelled run never reaches the request.
+    private func runSearch() async {
+        let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else {
+            hits = []
+            hitsQuery = ""
+            return
+        }
+        try? await Task.sleep(for: sessionSearchDebounce)
+        if Task.isCancelled { return }
+        searching = true
+        defer { searching = false }
+        guard let res = await app.searchSessions(q), !Task.isCancelled else { return }
+        hits = res.hits
+        contentSearched = res.contentSearched
+        hitsQuery = res.q
     }
     #endif
 
