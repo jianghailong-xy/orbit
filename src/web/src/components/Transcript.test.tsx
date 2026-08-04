@@ -96,6 +96,24 @@ describe('transcript Markdown links', () => {
   });
 });
 
+// `MD breaks` is the renderer for hand-laid-out text: composer messages and the task
+// panel's Description. Both used to be shown pre-wrapped, so formatting has to render
+// *and* the author's own line breaks have to survive.
+describe('hand-typed Markdown', () => {
+  it('renders the markup while keeping single newlines as line breaks', () => {
+    const html = renderToStaticMarkup(
+      <MD breaks>{'## Goal\nMake `tdp-prose` render\nKeep this on its own row\n- one\n- two'}</MD>,
+    );
+
+    expect(html).toContain('<h2>Goal</h2>');
+    expect(html).toContain('<code>tdp-prose</code>');
+    expect(html).toContain('<li>one</li>');
+    // The two adjacent prose lines are one paragraph — without hard breaks CommonMark
+    // would join them with a space.
+    expect(html).toContain('render<br/>');
+  });
+});
+
 describe('runtime authentication help', () => {
   // The relay branch renders RunnerSignIn, which reads the query cache.
   const card = (provider: string) =>

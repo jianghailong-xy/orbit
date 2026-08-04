@@ -649,7 +649,10 @@ private struct TaskDetailContent: View {
                         dependencies(task)
                         if let description = task.description, !description.isEmpty {
                             section("Description") {
-                                Text(description)
+                                // Descriptions are written as agent-ready prompts, so render their
+                                // Markdown like comments do. `parseMarkdownBlocks` keeps soft
+                                // newlines, so a plain multi-line description still lays out as typed.
+                                MarkdownView(source: description)
                                     .font(.orbitProse)
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)

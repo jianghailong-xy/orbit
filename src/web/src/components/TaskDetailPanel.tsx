@@ -28,6 +28,7 @@ import {
   type SessionRunState,
 } from '../lib/sessionState';
 import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
+import { MD } from './Transcript';
 import { TaskDependencyList } from './TaskDependencyList';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
@@ -883,7 +884,13 @@ export function TaskDetailPanel({
           {q.data?.description && (
             <section className="tdp-section">
               <div className="tdp-section-title">Description</div>
-              <div className="tdp-prose">{q.data.description}</div>
+              {/* Descriptions are written as agent-ready prompts — headings, lists, fenced code —
+                  so render them as Markdown. `breaks` because they're hand-laid-out text: the
+                  panel used to show them pre-wrapped, and CommonMark's soft break would collapse
+                  a plain multi-line description into one run-on paragraph. */}
+              <div className="tdp-prose">
+                <MD breaks>{q.data.description}</MD>
+              </div>
             </section>
           )}
 

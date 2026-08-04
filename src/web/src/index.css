@@ -5912,12 +5912,15 @@ body {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* Wrapper around the description's Markdown render — no pre-wrap here, the `.md`
+   child is real HTML. Description markdown inherits the 13px panel size rather
+   than .md's 14px, same as .tdp-comment-text. */
 .tdp-prose {
-  font-size: 13px;
   color: var(--text-2);
-  line-height: 1.7;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.tdp-prose .md {
+  font-size: 13px;
 }
 .tdp-muted {
   color: var(--text-3);
