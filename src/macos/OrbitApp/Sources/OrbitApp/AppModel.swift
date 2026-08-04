@@ -973,7 +973,8 @@ final class AppModel {
 
     /// Float `message` as a toast for a few seconds. One carrying an action lives longer — the reader
     /// has to take it in *and* decide whether to undo, which doesn't fit the 4s a bare confirmation
-    /// needs. Console-side confirmations arrive here too (see `ConsoleRegistry.onToast`).
+    /// needs. Web's result cards sit at that same 6s, Undo or not (see `lib/toast.tsx`'s
+    /// `sessionNotice`). Console-side confirmations arrive here too (see `ConsoleRegistry.onToast`).
     func showToast(_ message: String, undoSessionID: String? = nil) {
         toast = Toast(message: message, undoSessionID: undoSessionID)
         toastDismiss?.cancel()

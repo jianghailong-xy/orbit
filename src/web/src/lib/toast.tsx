@@ -126,10 +126,13 @@ export function useToast() {
     () => {
       // Entity-bearing results use a richer card than a short Message: result first, the
       // affected session second, optional diagnostic detail third. Error/warning outcomes stay
-      // until dismissed; everything else leaves after eight seconds — twice the Message layer's
-      // four, because there's a headline, a session title and sometimes a diagnostic to read.
-      // Every card holds while hovered: they all take clicks now that the copy block opens the
-      // session, so a card you're reaching for never leaves under the cursor.
+      // until dismissed; every other card gets six seconds — half again the Message layer's four,
+      // since there's a headline, a session title and sometimes a diagnostic to get through, and
+      // the same window the native clients give an Undo (`AppModel.showToast`). One number for the
+      // whole surface: the card offering Undo is the one you're most likely to be reaching for, so
+      // it shouldn't be the one that outlives its neighbours. Every card holds while hovered —
+      // they all take clicks now that the copy block opens the session, so a card you're reaching
+      // for never leaves under the cursor.
       const sessionNotice = ({
         sessionId,
         sessionTitle,
@@ -203,7 +206,7 @@ export function useToast() {
               )}
             </div>
           ),
-          duration: persistent ? 0 : (duration ?? 8),
+          duration: persistent ? 0 : (duration ?? 6),
           pauseOnHover: true,
           closable: persistent,
           placement: 'topRight',

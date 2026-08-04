@@ -23,11 +23,12 @@ const queryClient = new QueryClient({
 // they share one origin — index.css owns the offset for each (AntD's message has no placement
 // option, so its full-width holder is right-aligned there too).
 //
-// Two dwell times across the app, picked by how much there is to read rather than by which
+// Two dwell times across the app, picked by what the toast asks of you rather than by which
 // component happens to render it: 4s for a one-line confirmation (this layer, and the native
-// clients' status line), 8s for a card with a headline + session + optional detail, or one
-// carrying an Undo (the lifecycle notifications, and the native undo bar). Warnings and errors
-// are the third case — they don't leave on their own at all. AntD's Message default is 3s.
+// clients' bare toast), 6s for a card — there's a headline, a session and sometimes a diagnostic
+// to take in, often an Undo to decide on, and that's the window the native clients already give
+// that decision. Warnings and errors are the third case: they don't leave on their own at all.
+// AntD's Message default is 3s.
 
 // Feeds AntD the matching theme for the resolved light/dark mode; custom CSS is
 // driven separately via <html data-theme> (see lib/theme).
