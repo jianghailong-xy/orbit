@@ -33,15 +33,18 @@ private struct ToastHost: ViewModifier {
             .overlay(alignment: .top) {
                 if let toast = model.toast {
                     HStack(spacing: 12) {
-                        // Leading, not centred: a centred label reads badly the moment it wraps
-                        // (web parity — `.ant-message-notice-content`). The card spans the full
-                        // width (up to the cap below) rather than hugging its text, so the action
-                        // always sits at the trailing edge — one predictable target, wherever the
-                        // message length lands.
-                        Text(toast.message)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if toast.undoSessionID != nil {
+                        // The message doubles as the way into the session it reports on. It's the
+                        // message — not the whole card — so Undo keeps its own target, and the label
+                        // takes the full width (see `label`) so the tap target is the whole run of
+                        // empty space beside it, not just the glyphs.
+                        if toast.sessionID != nil {
+                            Button { model.openToastSession() } label: { label(toast.message) }
+                                .buttonStyle(.plain)
+                                .accessibilityHint("Opens the session")
+                        } else {
+                            label(toast.message)
+                        }
+                        if toast.canUndo {
                             Button("Undo") { model.undoSessionAction() }
                                 .font(.body.weight(.semibold))
                         }
@@ -62,10 +65,10 @@ private struct ToastHost: ViewModifier {
                     .frame(maxWidth: 560)
                     .padding(.horizontal, 16)
                     .padding(.top, Self.topInset)
-                    // Only an actionable toast takes touches. A bare confirmation must stay
-                    // pass-through, or it would eat scrolls and taps on the transcript beneath it
-                    // (including the sticky "↑ Your question" header it lands on).
-                    .allowsHitTesting(toast.undoSessionID != nil)
+                    // A card that names a session is a shortcut into it, so it has to take touches.
+                    // One that names none (a draft console's) stays pass-through rather than eating
+                    // scrolls and taps on the transcript beneath it for its whole 4s.
+                    .allowsHitTesting(toast.sessionID != nil)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .id(toast.id)
                 }
@@ -75,6 +78,17 @@ private struct ToastHost: ViewModifier {
             .onChange(of: model.toast) { _, new in
                 if let new { AccessibilityNotification.Announcement(new.message).post() }
             }
+    }
+
+    /// The message line. Leading, not centred: a centred label reads badly the moment it wraps (web
+    /// parity — `.ant-message-notice-content`). It claims the full width — the card spans it rather
+    /// than hugging its text — so Undo always sits at the trailing edge, and so the tappable run
+    /// covers the empty space beside a short message instead of just the glyphs.
+    private func label(_ message: String) -> some View {
+        Text(message)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
     }
 }
 

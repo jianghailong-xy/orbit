@@ -213,7 +213,9 @@ final class AppModel {
                                           store: ConsoleRegistry.defaultStore(for: url))
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
-        consoleRegistry?.onToast = { [weak self] msg in self?.showToast(msg) }
+        consoleRegistry?.onToast = { [weak self] msg, sessionID in
+            self?.showToast(msg, sessionID: sessionID)
+        }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
         #endif
@@ -952,13 +954,15 @@ final class AppModel {
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
     /// A fleeting message floated by the app's single toast host (see `toastHost()`) — the native
-    /// equivalent of web's `message.*` toasts. `undoSessionID` marks a just-performed reversible
-    /// action and adds the inline Undo button; moving to Open is the universal undo — the server's
-    /// `restore` clears both completion and trash state.
+    /// equivalent of web's `message.*` toasts. `sessionID` is the session the message reports on, so
+    /// the card doubles as the way into it (web parity — `sessionNotice`); `canUndo` marks that
+    /// action reversible and adds the inline Undo button, where moving to Open is the universal undo
+    /// — the server's `restore` clears both completion and trash state.
     struct Toast: Identifiable, Equatable {
         let id = UUID()
         let message: String
-        var undoSessionID: String?
+        var sessionID: String?
+        var canUndo = false
     }
     var toast: Toast?
     private var toastDismiss: Task<Void, Never>?
@@ -975,10 +979,10 @@ final class AppModel {
     /// has to take it in *and* decide whether to undo, which doesn't fit the 4s a bare confirmation
     /// needs. Web's result cards sit at that same 6s, Undo or not (see `lib/toast.tsx`'s
     /// `sessionNotice`). Console-side confirmations arrive here too (see `ConsoleRegistry.onToast`).
-    func showToast(_ message: String, undoSessionID: String? = nil) {
-        toast = Toast(message: message, undoSessionID: undoSessionID)
+    func showToast(_ message: String, sessionID: String? = nil, canUndo: Bool = false) {
+        toast = Toast(message: message, sessionID: sessionID, canUndo: canUndo)
         toastDismiss?.cancel()
-        let seconds: UInt64 = undoSessionID == nil ? 4 : 6
+        let seconds: UInt64 = canUndo ? 6 : 4
         toastDismiss = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             guard !Task.isCancelled else { return }
@@ -987,6 +991,15 @@ final class AppModel {
     }
 
     func dismissToast() { toastDismiss?.cancel(); toast = nil }
+
+    /// Tapping the toast opens the session it reports on — a result you just acted on is usually the
+    /// one you want to look at next, and without this the only way back was to find the row by hand.
+    /// The card has done its job once it's been followed, so it goes with the navigation.
+    func openToastSession() {
+        guard let sessionID = toast?.sessionID else { return }
+        dismissToast()
+        route(to: .session(sessionID))
+    }
 
     /// Complete a session, drop it from any open pane and offer Undo.
     func completeSession(_ id: String) {
@@ -1001,7 +1014,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Session completed", undoSessionID: id)
+            showToast("Session completed", sessionID: id, canUndo: true)
         }
     }
 
@@ -1029,7 +1042,7 @@ final class AppModel {
             sessionDetails.remove(id)
             dropIfOpen(id)
             await reloadSessionLists()
-            showToast("Moved to Trash", undoSessionID: id)
+            showToast("Moved to Trash", sessionID: id, canUndo: true)
         }
     }
 
@@ -1112,7 +1125,7 @@ final class AppModel {
     }
 
     func undoSessionAction() {
-        guard let sessionID = toast?.undoSessionID else { return }
+        guard let toast, toast.canUndo, let sessionID = toast.sessionID else { return }
         moveSessionToOpen(sessionID)
         dismissToast()
     }

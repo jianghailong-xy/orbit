@@ -24,7 +24,9 @@ final class ConsoleRegistry {
     let attachments: AttachmentImageStore
     /// Where a console's fleeting confirmations go — the app's toast host. Set once by `AppModel` and
     /// handed to every console this registry makes, so a `ConsoleModel` needn't know about `AppModel`.
-    @ObservationIgnored var onToast: (String) -> Void = { _ in }
+    /// The session id rides along so the toast can be tapped back into the session it reports on; a
+    /// draft console has none yet, so it passes nil.
+    @ObservationIgnored var onToast: (String, String?) -> Void = { _, _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -75,7 +77,7 @@ final class ConsoleRegistry {
                                  configuredProvidersLoaded: configuredProvidersLoaded,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
-        model.onToast = { [weak self] msg in self?.onToast(msg) }
+        model.onToast = { [weak self] msg in self?.onToast(msg, nil) }
         return model
     }
 
@@ -149,7 +151,7 @@ final class ConsoleRegistry {
         if let restored { savedSeq[sessionID] = restored.state.maxSeq }
         let model = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
                                  tokenStore: tokenStore, attachments: attachments, restoring: restored)
-        model.onToast = { [weak self] msg in self?.onToast(msg) }
+        model.onToast = { [weak self] msg in self?.onToast(msg, sessionID) }
         return model
     }
 
