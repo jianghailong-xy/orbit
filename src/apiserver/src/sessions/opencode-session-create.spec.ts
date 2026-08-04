@@ -16,6 +16,11 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
   const prisma = {
     agent: { findFirst: async () => agent },
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
+    // The agent carries no providerBuiltin, i.e. a row written before that column existed. That
+    // is the case worth keeping here — it is the one create() resolves by looking the slug up in
+    // modelProvider — so the stub has to answer that lookup. No row matches "opencode", so no
+    // runtime is borrowed and the built-in OpenCode runtime stands.
+    modelProvider: { findFirst: async () => null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         createdData = data;
