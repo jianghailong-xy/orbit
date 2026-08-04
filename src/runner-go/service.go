@@ -283,18 +283,21 @@ func primaryGroup(u *user.User) string {
 	return u.Username
 }
 
-// runnerEnginePath adds the private-bin destination used by the official engine
-// installers. Services do not source shell rc files, and an engine may be
-// installed on demand after the unit/plist was written, so it must be present
-// even when the directory does not exist yet. ~/.kimi-code/bin is deliberately
-// absent: Kimi manages helper rg/fd binaries there, not the kimi executable.
+// runnerEnginePath adds the private-bin destinations used by the official engine
+// installers. Each installer's own way onto PATH is to append an export line to a
+// shell rc file, which a service never sources — so without this an engine installs
+// successfully and is still unreachable. An engine may also be installed on demand
+// after the unit/plist was written, so every directory must be present even when it
+// does not exist yet.
 func runnerEnginePath(home, path string) string {
 	if home == "" {
 		return path
 	}
-	// Keep ~/.local/bin first for compatibility with the existing Claude/Codex/Kimi
-	// resolution order; OpenCode's official installer uses its own private dir.
+	// Keep ~/.local/bin first for compatibility with the existing Claude/Codex
+	// resolution order; OpenCode and Kimi's official installers each drop their
+	// binary in a private dir instead (~/.opencode/bin, ~/.kimi-code/bin).
 	for _, dir := range []string{
+		filepath.Join(home, ".kimi-code", "bin"),
 		filepath.Join(home, ".opencode", "bin"),
 		filepath.Join(home, ".local", "bin"),
 	} {

@@ -122,8 +122,8 @@ type engineHealth struct {
 }
 
 // serviceLoginPath reconstructs the PATH the background service runs with, the
-// same way setupService bakes it: the user's login PATH plus ~/.local/bin,
-// used by the official Claude and Kimi installers. A CLI that works
+// same way setupService bakes it: the user's login PATH plus the directories the
+// official engine installers use (see runnerEnginePath). A CLI that works
 // in your shell but isn't here will spawn fine by hand yet fail under the service.
 func serviceLoginPath() string {
 	u, err := user.Current()

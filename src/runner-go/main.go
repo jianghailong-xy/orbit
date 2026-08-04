@@ -19,9 +19,25 @@ import (
 // One shared reader so sequential prompts (confirm, name) don't drop buffered input.
 var stdinReader = bufio.NewReader(os.Stdin)
 
+// interactive reports whether stdin can carry an answer back from a person.
+//
+// A pipe or a redirected file is not a character device, so those are already out —
+// but /dev/null is one, and it is exactly what systemd, launchd, cron and agent
+// harnesses hand a process they run unattended. Counting it as interactive makes
+// every prompt answer itself with its default: `orbit doctor` then starts a sign-in
+// flow nobody is there to finish, and `orbit register` consents on the user's behalf.
+//
+// isatty(3) would be the general answer, but it costs either a module dependency
+// (this binary deliberately has none) or a per-OS ioctl whose behaviour can't be
+// verified on both targets from one machine. /dev/null is the only null-ish device
+// anything realistically redirects stdin from.
 func interactive() bool {
-	fi, _ := os.Stdin.Stat()
-	return fi != nil && fi.Mode()&os.ModeCharDevice != 0
+	fi, err := os.Stdin.Stat()
+	if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	devNull, err := os.Stat(os.DevNull)
+	return err != nil || !os.SameFile(fi, devNull)
 }
 
 // Overridden at build time with -ldflags "-X main.version=...". A "dev" build

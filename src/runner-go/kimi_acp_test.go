@@ -572,13 +572,13 @@ func TestKimiPromptCarriesAgentAndOrbitInstructions(t *testing.T) {
 
 func TestRunnerEnginePathIncludesKimiInstallerDirectory(t *testing.T) {
 	got := runnerEnginePath("/home/alice", "/usr/bin")
-	for _, want := range []string{"/home/alice/.local/bin", "/usr/bin"} {
+	// ~/.kimi-code/bin is where the official installer puts the `kimi` binary; its
+	// only way onto PATH is an export line in a shell rc, which a service never
+	// sources. Without it the install succeeds and the binary stays unreachable.
+	for _, want := range []string{"/home/alice/.local/bin", "/home/alice/.kimi-code/bin", "/usr/bin"} {
 		if !pathContains(got, want) {
 			t.Fatalf("runnerEnginePath = %q, missing %q", got, want)
 		}
-	}
-	if pathContains(got, "/home/alice/.kimi-code/bin") {
-		t.Fatalf("runnerEnginePath must not expose Kimi's managed rg/fd directory: %q", got)
 	}
 	if twice := runnerEnginePath("/home/alice", got); twice != got {
 		t.Fatalf("runnerEnginePath is not idempotent: %q -> %q", got, twice)
