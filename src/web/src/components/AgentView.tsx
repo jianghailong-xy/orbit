@@ -1949,6 +1949,15 @@ export function AgentView({ runner }: { runner: Runner }) {
           // watcher re-opens it (replaying the missed seq) once the session is live again.
           paused = true;
           es?.close();
+          // However the run ended, no turn is in flight any more. `turn_end` is the
+          // only other event that says so, and a run that died before its first one —
+          // an engine that failed during session setup, a crash before the first
+          // reply — never emits it. Without this the console keeps the turn state of
+          // a session that is already terminal: a half-streamed bubble left mid-air,
+          // and the next message queued behind a turn that will never end.
+          setIdle(true);
+          setStreamingText('');
+          setStreamingThink('');
           return;
         }
         // Streaming increment: append to the in-progress assistant bubble. Don't
@@ -2116,10 +2125,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   // selectedId dep this effect wouldn't re-run and idle would stay wrongly false — flipping
   // turnActive on and hiding the worktree bar's "committed"/merge state until a refresh.
   const runStatus = selectedSession ? sessionRunStatusOf(selectedSession) : undefined;
+  // A terminal run has no turn in flight either, and it may have reached that state
+  // without a turn_end — so this is the recovery path when the `final` event was the one
+  // that got missed. Deliberately the live/terminal split, not "anything but RUNNING":
+  // a QUEUED session has nothing running yet, but the next message still has to queue
+  // behind the turn it is waiting for.
+  const runTerminal = !!selectedSession && isSessionTerminal(selectedSession);
   useEffect(() => {
     if (runStatus === 'AWAITING_INPUT') setIdle(true);
     else if (runStatus === 'RUNNING') setIdle(false);
-  }, [runStatus, selectedId]);
+    else if (runTerminal) setIdle(true);
+  }, [runStatus, runTerminal, selectedId]);
 
   // A finalized session can be resumed in place (same selectedId, so the SSE effect above
   // doesn't re-run and its stream was paused on `final`). When the polled status shows it
