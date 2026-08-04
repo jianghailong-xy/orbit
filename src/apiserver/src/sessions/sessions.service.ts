@@ -1104,6 +1104,7 @@ export class SessionsService {
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
       runningSubagentCount: number;
+      engineTurnActive: boolean;
       agentId: string | null;
       agentName: string | null;
       agentModel: string | null;
@@ -1151,6 +1152,7 @@ export class SessionsService {
         ), '[]'::json) AS "tags",
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        s.engine_turn_active AS "engineTurnActive",
         a.id    AS "agentId",
         a.name  AS "agentName",
         a.model AS "agentModel",
@@ -1204,6 +1206,7 @@ export class SessionsService {
         tags: r.tags,
         runningBgCount: r.runningBgCount,
         runningSubagentCount: r.runningSubagentCount,
+        engineTurnActive: r.engineTurnActive,
         agent: r.agentId
           ? { id: r.agentId, name: r.agentName, model: r.agentModel, effort: r.agentEffort }
           : null,

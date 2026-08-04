@@ -95,6 +95,7 @@ import {
 } from './resume-continuation';
 import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
 import { runtimeInitSessionId } from './runtime-init';
+import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -1962,12 +1963,19 @@ export class RunnerApiController {
         lastAssistant && isUsageLimitErrorText(lastAssistant.text)
           ? await this.quotaRetryAtFor(tx, sessionId, runner.id, lastAssistant.text)
           : null;
-      if (lastAssistant || frontier) {
+      // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
+      // separately from the frontier above because it must survive a tool_result (a tool
+      // finishing clears lastToolUse but the turn runs on) and because `status` cannot answer
+      // it: a turn the runtime started for itself never reaches /turn-complete, so the session
+      // stays AWAITING_INPUT for its whole duration.
+      const engineTurnActive = engineTurnActiveAfter(durable);
+      if (lastAssistant || frontier || engineTurnActive !== undefined) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
             ...(frontier ? { lastToolUse: frontier.tool } : {}),
+            ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
             // undefined = nothing in this batch either asked or answered; keep the stored
             // message rather than writing null over it.
             ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),

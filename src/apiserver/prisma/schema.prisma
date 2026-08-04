@@ -493,6 +493,14 @@ model Session {
   // own top-scope system progress events, so lastToolUse can't carry this. Lets the list show
   // "Running Agent…" while a sub-agent is in flight. Only meaningful while live.
   runningSubagents     String[]  @map("running_subagents")
+  // Denormalized "the engine is generating right now", tracked independently of `status`.
+  // A runtime restarts the model on its own for a background-task notification or a scheduled
+  // wake-up; those turns never pass through the inbox, so /turn-complete never acks them and
+  // `status` stays AWAITING_INPUT while tools and replies stream for minutes. Set by any
+  // generation event, cleared by a turn ending or a runtime (re)spawn handshake. Display only:
+  // `status` remains the sole source of truth for runner-slot accounting, so a self-driven
+  // turn never consumes a permit it did not acquire.
+  engineTurnActive     Boolean   @default(false) @map("engine_turn_active")
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).

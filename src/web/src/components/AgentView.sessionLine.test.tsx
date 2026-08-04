@@ -18,6 +18,38 @@ describe('sessionLine', () => {
     expect(sessionLine({ status: 'RUNNING' }, true)).toEqual({ text: 'Running…', tone: 'running' });
   });
 
+  /**
+   * A turn the runtime started for itself — a background task reporting in, a scheduled wake-up —
+   * never reaches /turn-complete, so the session stays parked at AWAITING_INPUT while it streams.
+   * The row must say what it is doing rather than fall through to the previous reply, which reads
+   * as idle.
+   */
+  it('reads a self-driven turn as working, not as parked', () => {
+    expect(
+      sessionLine(
+        {
+          status: 'AWAITING_INPUT',
+          engineTurnActive: true,
+          lastToolUse: 'Bash',
+          lastAssistantText: 'Waiting for the completion notification.',
+        },
+        true,
+      ),
+    ).toEqual({ text: 'Running Bash…', tone: 'running' });
+    // Between tools there is no frontier tool, and the stale reply would read as idle.
+    expect(sessionLine({ status: 'AWAITING_INPUT', engineTurnActive: true }, true)).toEqual({
+      text: 'Running…',
+      tone: 'running',
+    });
+    // Once the turn ends the server clears the flag and the reply preview takes over again.
+    expect(
+      sessionLine(
+        { status: 'AWAITING_INPUT', engineTurnActive: false, lastAssistantText: 'All done.' },
+        true,
+      ),
+    ).toEqual({ text: 'All done.', tone: 'preview' });
+  });
+
   it('flattens the last reply into one prose line', () => {
     expect(
       sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: '## Done\n\nFixed `Session`.' }, true),

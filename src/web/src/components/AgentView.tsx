@@ -529,6 +529,18 @@ const bgRunningLabel = (n: number): string =>
 const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
 
+// Whether to draw this session as working. RUNNING is the dispatched case. The second one is a
+// turn the runtime started for itself — a background task reporting in, a scheduled wake-up —
+// which never reaches /turn-complete and so stays parked at AWAITING_INPUT for its whole
+// duration, streaming tools and replies the whole time. Server-tracked
+// (Session.engineTurnActive), since only the event stream can see it; absent when talking to an
+// older control plane, which simply keeps the old parked reading. Both cases get the same glyph,
+// header word and list line — without this the row says "Waiting for your reply" over a session
+// the user can watch working. Outranks parkedWorkLabel below: this is the agent itself
+// generating, not something it left running behind a finished turn.
+const isGenerating = (s: any, state: string): boolean =>
+  state === 'RUNNING' || (state === 'AWAITING_INPUT' && s.engineTurnActive === true);
+
 // Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-agent
 // (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins) with
 // the kind behind it, or null when the session is genuinely idle. Shared by the list line,
@@ -557,7 +569,7 @@ type SessionLine = {
 };
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
-  if (live && state === 'RUNNING') {
+  if (live && isGenerating(s, state)) {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
     // A sub-agent in flight: lastToolUse is already cleared (the async Agent tool_result +
@@ -596,7 +608,7 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
 export function statusLabel(session: any): string {
   const state = sessionRunStateOf(session);
   if (state === 'SUCCEEDED') return 'Succeeded';
-  if (state === 'RUNNING')
+  if (isGenerating(session, state))
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
   if (state === 'FAILED') {
@@ -623,7 +635,7 @@ export function StatusIcon({ session }: { session: any }) {
         <CheckCircleFilled style={{ color: 'var(--success-solid)', fontSize }} />
       </Tooltip>
     );
-  if (state === 'RUNNING') {
+  if (isGenerating(session, state)) {
     return (session.pendingApprovals ?? 0) > 0 ? (
       <Tooltip title="Waiting for approval">
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />

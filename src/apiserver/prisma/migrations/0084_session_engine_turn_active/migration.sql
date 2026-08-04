@@ -1,0 +1,13 @@
+-- A runtime can start a turn nobody dispatched: Claude Code restarts the model when a background
+-- task reports in or a scheduled wake-up fires. Those turns never travel through the inbox, so
+-- /turn-complete never acks them and `status` stays AWAITING_INPUT for their whole duration —
+-- the session list and header then read "Waiting for your reply" over a session that is visibly
+-- streaming tools.
+--
+-- This flag carries that fact on its own rather than widening `status`, whose RUNNING value also
+-- means "holds a runner slot": a self-driven turn acquired no permit, and marking it RUNNING
+-- would over-subscribe the runner and make a runner going offline fatal for it.
+--
+-- Defaulted, so an older replica writing this table is unaffected: it never sets the flag and
+-- every row simply reads as not-generating, exactly today's behaviour.
+ALTER TABLE "session" ADD COLUMN "engine_turn_active" BOOLEAN NOT NULL DEFAULT false;
