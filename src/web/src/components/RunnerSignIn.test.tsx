@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { RunnerLoginState } from '@orbit/shared';
-import { RunnerSignIn } from './RunnerSignIn';
+import { probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
 
 const RUNNER = 'runner-1';
 
@@ -57,6 +57,42 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
 
     expect(html).toContain('ZXHO-K06HC');
     expect(html).toContain('href="https://auth.openai.com/codex/device"');
+  });
+});
+
+// What ends the wait for the runner to re-report after a sign-in lands. Getting this wrong is
+// what left a signed-in engine reading "Signed out" under a card saying it was ready.
+describe('waiting for the runner to confirm a sign-in', () => {
+  const runners = (auth: 'yes' | 'no' | 'unknown') => [
+    { id: 'other', engines: [{ engine: 'kimi' as const, installed: true, auth: 'yes' as const }] },
+    {
+      id: RUNNER,
+      engines: [
+        { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+        { engine: 'kimi' as const, installed: true, auth },
+      ],
+    },
+  ];
+
+  it('ends once that machine reports this engine signed in', () => {
+    expect(probeReportsSignedIn(runners('yes'), RUNNER, 'kimi')).toBe(true);
+  });
+
+  it('keeps waiting while the runner still reports the pre-sign-in probe', () => {
+    expect(probeReportsSignedIn(runners('no'), RUNNER, 'kimi')).toBe(false);
+    // A CLI that wouldn't answer is not a yes — the wait is bounded, not ended, by this.
+    expect(probeReportsSignedIn(runners('unknown'), RUNNER, 'kimi')).toBe(false);
+  });
+
+  it('answers for this runner and this engine, not another that happens to be signed in', () => {
+    expect(probeReportsSignedIn(runners('no'), 'other', 'kimi')).toBe(true);
+    expect(probeReportsSignedIn(runners('no'), RUNNER, 'claude')).toBe(true);
+  });
+
+  it('keeps waiting on a runner that has reported nothing yet', () => {
+    expect(probeReportsSignedIn(undefined, RUNNER, 'kimi')).toBe(false);
+    expect(probeReportsSignedIn([{ id: RUNNER, engines: null }], RUNNER, 'kimi')).toBe(false);
+    expect(probeReportsSignedIn([], RUNNER, 'kimi')).toBe(false);
   });
 });
 

@@ -1,8 +1,9 @@
 import { CheckCircleFilled, ExportOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import type { LoginEngine, RunnerLoginState } from '@orbit/shared';
+import type { LoginEngine, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
 import { api } from '../api';
+import { runnersQuery } from '../lib/queries';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
@@ -18,6 +19,28 @@ export const ENGINE_NAME: Record<LoginEngine, string> = {
  *  what makes the outcome that follows this card's own news rather than a leftover (see below). */
 const inFlight = (s: RunnerLoginState['status'] | null | undefined) =>
   s === 'pending' || s === 'awaiting_code' || s === 'awaiting_approval';
+
+/** The slice of GET /runners this card reads back: whether that machine's probe has caught up. */
+type ProbedRunner = { id: string; engines?: RunnerEngineHealth[] | null };
+
+/** Does the runner's own probe now say this engine is signed in? "unknown" is not a yes — the
+ *  wait below is bounded precisely because a CLI that won't answer never becomes one. */
+export function probeReportsSignedIn(
+  runners: ProbedRunner[] | undefined,
+  runnerId: string,
+  engine: LoginEngine,
+): boolean {
+  const health = runners
+    ?.find((r) => r.id === runnerId)
+    ?.engines?.find((e) => e.engine === engine);
+  return health?.auth === 'yes';
+}
+
+/** How often the runner list is re-read while waiting for that probe, and for how long: the
+ *  runner re-probes the moment the CLI exits but only reports on its next heartbeat, so this is
+ *  a check-in (30s) plus the probe, with room for one missed heartbeat. */
+const PROBE_POLL_MS = 4000;
+const PROBE_WAIT_MS = 90_000;
 
 /** What the parked tab shows until the CLI prints its URL, so it doesn't read as a dead popup. */
 const WAITING_PAGE = `<!doctype html><meta charset="utf-8"><title>Signing in…</title>
@@ -142,6 +165,31 @@ export function RunnerSignIn({
   useEffect(() => {
     if (inFlight(reported)) setWatched(true);
   }, [reported]);
+
+  // A finished sign-in does not move the engine row this card opened under: that row reads the
+  // runner's last heartbeat probe, and the runner only re-probes once the CLI exits, then waits
+  // for its next check-in — half a minute at worst, with nothing pushing it here and no refetch
+  // on focus. So the row kept saying "Signed out", quota withheld, directly beneath this card's
+  // "this runner is ready", until the page was reloaded. Re-read the runner list until that
+  // machine's own probe agrees — a single refetch on `done` would only lose the same race.
+  const [awaitingProbe, setAwaitingProbe] = useState(false);
+  useEffect(() => {
+    if (status !== 'done') return;
+    setAwaitingProbe(true);
+    const stop = setTimeout(() => setAwaitingProbe(false), PROBE_WAIT_MS);
+    return () => clearTimeout(stop);
+  }, [status]);
+  useQuery({
+    ...runnersQuery(),
+    enabled: awaitingProbe,
+    refetchInterval: (q) =>
+      probeReportsSignedIn(q.state.data as ProbedRunner[] | undefined, runnerId, engine)
+        ? false
+        : PROBE_POLL_MS,
+    // The sign-in is approved in the tab this one opened, so this wait usually starts while the
+    // page is backgrounded — where a paused interval would never run it.
+    refetchIntervalInBackground: true,
+  });
 
   // Submitting a code only parks it for the runner's next heartbeat — thirty seconds away at
   // worst — and the CLI still has to exchange it after that. So the POST resolving means nothing
