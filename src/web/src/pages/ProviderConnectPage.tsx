@@ -138,6 +138,11 @@ function ProviderForm({
   const [label, setLabel] = useState(editing?.label ?? preset?.label ?? '');
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
+  // The stored key once it's been read back, so a revealed-but-untouched field still counts as
+  // "keep the current key" — showing what you configured shouldn't turn Save into a re-write.
+  const [storedKey, setStoredKey] = useState<string | null>(null);
+  const [keyVisible, setKeyVisible] = useState(false);
+  const [revealing, setRevealing] = useState(false);
   const [enabled, setEnabled] = useState(editing?.enabled ?? true);
   const [models, setModels] = useState<DraftModel[]>(
     (editing?.models ?? presetModels).map((m) => ({
@@ -171,6 +176,10 @@ function ProviderForm({
   // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
   const [probeError, setProbeError] = useState<string | null>(null);
   const [probing, setProbing] = useState(false);
+
+  // What Save has to carry: a key that came back from Reveal is the one already stored, so only a
+  // typed change is a new key — and only a new key is worth probing.
+  const newKey = apiKey.trim() && apiKey !== storedKey ? apiKey.trim() : '';
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -208,7 +217,7 @@ function ProviderForm({
             followsPreset: follows,
             enabled,
             // Omit the key to keep the stored one; send it only when a new one was typed.
-            ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+            ...(newKey ? { apiKey: newKey } : {}),
           },
         });
       }
@@ -220,7 +229,7 @@ function ProviderForm({
           label: label.trim(),
           runtime,
           baseUrl: baseUrl.trim(),
-          apiKey: apiKey.trim(),
+          apiKey: newKey,
           ...catalogue,
           ...(preset ? { presetSlug: preset.slug, followsPreset: follows } : {}),
           enabled,
@@ -239,8 +248,7 @@ function ProviderForm({
   });
 
   // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
-  const canSave =
-    label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : apiKey.trim() !== '');
+  const canSave = label.trim() !== '' && baseUrl.trim() !== '' && (editing ? true : newKey !== '');
   // The model the probe pings with: the one a session would get by default.
   const probeModel = (
     presetDefault ||
@@ -248,6 +256,27 @@ function ProviderForm({
     models.find((m) => m.value.trim())?.value ||
     ''
   ).trim();
+
+  /**
+   * Load the stored key into the field. It's the caller's own key, and nothing else on this page
+   * can say *which* key a provider holds — without this, checking one means re-pasting it from the
+   * vendor. Fetched on demand rather than with the row, so a key reaches the browser only when
+   * someone asks to see it.
+   */
+  const reveal = async () => {
+    if (!editing) return;
+    setRevealing(true);
+    try {
+      const r = await api<{ apiKey: string }>(`${PROVIDERS_BASE}/${editing.id}/key`);
+      setStoredKey(r.apiKey);
+      setApiKey(r.apiKey);
+      setKeyVisible(true);
+    } catch (e) {
+      message.error((e as Error).message || 'Could not load the key');
+    } finally {
+      setRevealing(false);
+    }
+  };
 
   /**
    * The single commit action. Connecting a provider *is* checking it works, so the probe rides
@@ -258,12 +287,12 @@ function ProviderForm({
    */
   const connect = async () => {
     setProbeError(null);
-    if (apiKey.trim() && probeModel) {
+    if (newKey && probeModel) {
       setProbing(true);
       try {
         const r = await api<{ ok: boolean; message: string }>('/providers/test', {
           method: 'POST',
-          body: { baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), model: probeModel, runtime },
+          body: { baseUrl: baseUrl.trim(), apiKey: newKey, model: probeModel, runtime },
         });
         if (!r.ok) {
           setProbeError(r.message);
@@ -373,11 +402,18 @@ function ProviderForm({
         }
         hideNum={!isCustom || !!editing}
       >
-        {/* The stored key never comes back to the browser, so whether one exists is said by the
-            placeholder rather than by a second line of hint. */}
+        {/* The field starts blank even when a key is stored — reading one back is a request of its
+            own — so whether one exists is said by the placeholder, and Show fills it in. */}
         <Input.Password
           placeholder={editing?.hasApiKey ? 'Leave blank to keep the current key' : 'Provider API key'}
           value={apiKey}
+          visibilityToggle={{
+            visible: keyVisible,
+            // On an empty field the eye means "show me the key this provider has", not "show me
+            // nothing" — it loads the stored one, same as the link below.
+            onVisibleChange: (v) =>
+              v && !apiKey && editing?.hasApiKey ? void reveal() : setKeyVisible(v),
+          }}
           onChange={(e) => {
             setApiKey(e.target.value);
             setProbeError(null);
@@ -385,8 +421,18 @@ function ProviderForm({
           autoComplete="new-password"
         />
         <div className="ps-hint">
-          Stored encrypted — never sent back to your browser.
-          {apiKey.trim() ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
+          Stored encrypted — only you can see it.
+          {editing?.hasApiKey && !apiKey ? (
+            <>
+              {' '}
+              <a onClick={() => !revealing && void reveal()}>
+                {revealing ? 'Loading…' : 'Show the current key'}
+              </a>
+            </>
+          ) : (
+            ''
+          )}
+          {newKey ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
         </div>
       </Step>
 

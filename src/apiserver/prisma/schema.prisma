@@ -980,8 +980,9 @@ model ModelProvider {
   // slug, which stays reserved.
   runtime       String   @default("claude")
   baseUrl       String   @map("base_url")
-  // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Never
-  // selected into a browser-facing payload.
+  // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Kept out of
+  // every browser-facing payload but one: the owner of a personal row can read their own key
+  // back (GET /providers/mine/:id/key).
   apiKeyEnc     String   @map("api_key_enc")
   // Picker model list: [{ value, label, contextWindow? }]. `value` is the runtime model id
   // passed as --model (e.g. "deepseek-chat"). For a preset-backed row this is a snapshot taken

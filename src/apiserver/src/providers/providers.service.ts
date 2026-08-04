@@ -4,7 +4,7 @@ import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
-import { encryptSecret } from './provider-crypto';
+import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
@@ -68,6 +68,16 @@ export class ProvidersService {
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
+  }
+
+  /** The stored key itself, decrypted — the one payload here that carries a key back to a browser,
+   *  and only ever the caller's own. Nothing else can tell you which key a provider holds, so the
+   *  alternative to showing it is re-pasting from the vendor to find out. Scoped like every write:
+   *  a shared row, or another user's, reads as not-found. */
+  async revealKey(ownerId: string, id: string) {
+    const row = await this.getScoped(ownerId, id);
+    if (!row.apiKeyEnc) throw new NotFoundException('provider has no API key');
+    return { apiKey: decryptSecret(row.apiKeyEnc) };
   }
 
   /** Create a provider. ownerId null = shared (admin area); set = the caller's personal one. */

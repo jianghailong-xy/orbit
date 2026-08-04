@@ -11,7 +11,7 @@ import { ProvidersService } from './providers.service';
 /**
  * Model providers for signed-in users. GET / is the de-sensitized picker catalog (shared +
  * the caller's own; never a key or endpoint). The /mine routes are each user's personal
- * (BYOK) providers — owner-scoped CRUD, no role gate. Shared providers are managed in the
+ * (BYOK) providers — owner-scoped CRUD (including reading back one's own key), no role gate. Shared providers are managed in the
  * admin-only AdminProvidersController.
  */
 @UseGuards(JwtAuthGuard)
@@ -27,6 +27,13 @@ export class ProvidersController {
   @Get('mine')
   listMine(@CurrentUser() user: AuthUser) {
     return this.providers.listMine(user.userId);
+  }
+
+  // The stored key of one of the caller's own providers, in the clear — what the edit form fills
+  // its key field from. Owner-scoped: there is no route here that reveals a shared provider's key.
+  @Get('mine/:id/key')
+  revealMineKey(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.providers.revealKey(user.userId, id);
   }
 
   // The vendor presets' current model lists, for the connect form. Public catalogue data (no key,
