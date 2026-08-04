@@ -264,7 +264,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "dependsOnTaskIds", "autoRunWhenReady")
+		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -282,7 +282,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "dependsOnTaskIds", "autoRunWhenReady")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -677,6 +677,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	taskIDProp := map[string]interface{}{"type": "string", "description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted"}
 	promptDesc := map[string]interface{}{"type": "string", "description": "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."}
 	status := map[string]interface{}{"type": "string", "enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED"}}
+	providerProp := map[string]interface{}{
+		"type":        []string{"string", "null"},
+		"description": "Run this task on a specific provider instead of whatever its assignee agent uses: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to inherit from the assignee, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
+	}
+	modelProp := map[string]interface{}{
+		"type":        []string{"string", "null"},
+		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to inherit the assignee agent's model. An id the provider doesn't have will fail at run time, not here.",
+	}
 	obj := func(props map[string]interface{}, required ...string) map[string]interface{} {
 		schema := map[string]interface{}{"type": "object", "properties": props}
 		if len(required) > 0 {
@@ -735,6 +743,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
 				"dueDate":     str,
+				"provider":    providerProp,
+				"model":       modelProp,
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",
 					"items":       str,
@@ -748,7 +758,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). Pass null for assigneeId/listId/dueDate to clear them.",
+			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). Pass null for assigneeId/listId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,
@@ -757,6 +767,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
 				"dueDate":     map[string]interface{}{"type": []string{"string", "null"}},
+				"provider":    providerProp,
+				"model":       modelProp,
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",
 					"items":       str,

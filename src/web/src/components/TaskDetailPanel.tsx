@@ -7,7 +7,13 @@ import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import {
+  mergedProviderOptions,
+  modelOptionsForProvider,
+  type ConfiguredProvider,
+} from '../lib/agentDefaults';
 import { encodeId } from '../lib/idCodec';
+import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
 import {
@@ -139,6 +145,8 @@ interface AgentRow {
   id: string;
   name: string;
   runnerId?: string | null;
+  /** The agent's own provider — what a task with no pin of its own inherits. */
+  provider?: string | null;
 }
 
 export function TaskDetailPanel({
@@ -281,6 +289,22 @@ export function TaskDetailPanel({
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
+  // The provider/model override pickers below need the same two sources the agent and New
+  // Session pickers use: the owner's configured (BYOK) providers, and the model catalogue the
+  // assignee's runner reported — model ids are per-machine, so they come from that runner.
+  const providersQ = useQuery(providersQuery());
+  const runnersQ = useQuery(runnersQuery());
+  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
+  const assigneeAgent = agentList.find((a) => a.id === task?.assignee?.id);
+  const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeAgent?.runnerId);
+  // The provider whose model space the Model picker lists: the task's own pin when it has one,
+  // otherwise the assignee agent's — so the models offered always match what the run will use.
+  const effectiveProvider = q.data?.provider ?? assigneeAgent?.provider ?? null;
+  const modelOptions = useMemo(
+    () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
+    [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
+  );
+
   // Esc closes the panel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -309,6 +333,19 @@ export function TaskDetailPanel({
   const updateAssignee = useMutation({
     mutationFn: (assigneeId: string | null) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body: { assigneeId } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+
+  // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
+  // agent's. Clearing the provider clears the model with it: a model id only means anything
+  // inside one provider's model space, so leaving it behind would pin a stale id.
+  const updateRunTarget = useMutation({
+    mutationFn: (body: { provider?: string | null; model?: string | null }) =>
+      api(`/tasks/${taskId}`, { method: 'PATCH', body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
@@ -730,6 +767,49 @@ export function TaskDetailPanel({
                 popupMatchSelectWidth={false}
                 options={agentList.map((a) => ({ value: a.id, label: a.name }))}
                 onChange={(val) => updateAssignee.mutate(val ?? null)}
+              />
+            </div>
+            <div className="tdp-field">
+              <span className="tdp-field-label">Provider</span>
+              <Select
+                className="tdp-assignee-select"
+                variant="borderless"
+                value={q.data?.provider ?? undefined}
+                // Unpinned is the normal case, so say what it actually does rather than "None".
+                placeholder={
+                  assigneeAgent ? `Assignee's (${assigneeAgent.provider ?? 'claude'})` : "Assignee's"
+                }
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                loading={providersQ.isLoading || updateRunTarget.isPending}
+                disabled={updateRunTarget.isPending}
+                popupMatchSelectWidth={false}
+                options={mergedProviderOptions(configuredProviders)}
+                onChange={(val) => updateRunTarget.mutate({ provider: val ?? null, model: null })}
+              />
+            </div>
+            <div className="tdp-field">
+              <span className="tdp-field-label">Model</span>
+              <Select
+                className="tdp-assignee-select"
+                variant="borderless"
+                value={q.data?.model ?? undefined}
+                placeholder="Provider default"
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                loading={runnersQ.isLoading || updateRunTarget.isPending}
+                disabled={updateRunTarget.isPending}
+                popupMatchSelectWidth={false}
+                // A model the catalogue doesn't name (an id pinned by an agent or the API) still
+                // has to render as itself rather than vanish from the box.
+                options={
+                  q.data?.model && !modelOptions.some((o) => o.value === q.data.model)
+                    ? [...modelOptions, { value: q.data.model, label: q.data.model }]
+                    : modelOptions
+                }
+                onChange={(val) => updateRunTarget.mutate({ model: val ?? null })}
               />
             </div>
             <div className="tdp-field">

@@ -77,6 +77,36 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertEqual(status["status"] as? String, "DONE")    // enum → wire string
     }
 
+    /// The per-task provider/model pin: absent on the wire means "inherit the assignee's", which
+    /// has to survive as nil rather than decoding into a value the run would then be forced onto.
+    func testProviderModelPinDecodesAndEncodesThreeState() throws {
+        let unpinned = try JSONDecoder().decode(
+            TaskItem.self,
+            from: Data(#"{"id":"t1","title":"T","status":"OPEN"}"#.utf8))
+        XCTAssertNil(unpinned.provider)
+        XCTAssertNil(unpinned.model)
+
+        let pinned = try JSONDecoder().decode(
+            TaskItem.self,
+            from: Data(#"{"id":"t1","title":"T","status":"OPEN","provider":"kimi","model":"kimi-code/kimi-for-coding"}"#.utf8))
+        XCTAssertEqual(pinned.provider, "kimi")
+        XCTAssertEqual(pinned.model, "kimi-code/kimi-for-coding")
+
+        let keep = try jsonObject(UpdateTaskRequest(title: "x"))
+        XCTAssertFalse(keep.keys.contains("provider"))
+        XCTAssertFalse(keep.keys.contains("model"))
+
+        // Switching provider clears the model with it — a model id only means something inside
+        // one provider's model space (TasksModel.setProvider sends exactly this pair).
+        let switched = try jsonObject(UpdateTaskRequest(provider: .set("codex"), model: .clear))
+        XCTAssertEqual(switched["provider"] as? String, "codex")
+        XCTAssertTrue(switched["model"] is NSNull)
+
+        let unpin = try jsonObject(UpdateTaskRequest(provider: .clear))
+        XCTAssertTrue(unpin["provider"] is NSNull)
+        XCTAssertFalse(unpin.keys.contains("model"))
+    }
+
     /// Dependency PATCH uses replacement semantics: omitted keeps the graph, an empty array
     /// clears every prerequisite, and a populated array becomes the complete new set.
     func testUpdateDependencyReplacementEncoding() throws {

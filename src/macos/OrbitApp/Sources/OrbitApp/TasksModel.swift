@@ -315,6 +315,24 @@ final class TasksModel {
         }
     }
 
+    /// Pin (nil = clear) the provider this task's runs use instead of the assignee agent's.
+    /// The model is cleared along with it: a model id only means something inside one provider's
+    /// model space, so carrying it across a provider change would pin a stale id.
+    func setProvider(_ id: String, _ provider: String?) async {
+        let field: FieldUpdate<String> = provider.map { .set($0) } ?? .clear
+        _ = await mutate(id) {
+            _ = try await self.api.updateTask(id, UpdateTaskRequest(provider: field, model: .clear))
+        }
+    }
+
+    /// Pin (nil = clear) the model this task's runs use, within its effective provider.
+    func setModel(_ id: String, _ model: String?) async {
+        let field: FieldUpdate<String> = model.map { .set($0) } ?? .clear
+        _ = await mutate(id) {
+            _ = try await self.api.updateTask(id, UpdateTaskRequest(model: field))
+        }
+    }
+
     @discardableResult
     func addComment(_ id: String, _ body: String, mentions: [String] = []) async -> Bool {
         await mutate(id) {

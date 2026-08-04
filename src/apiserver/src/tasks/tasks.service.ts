@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
 import {
+  AgentProvider,
   planUsageBlockedUntil,
   RunEventType,
   TaskStatus,
@@ -33,6 +34,15 @@ import {
 
 /** A polymorphic actor (user or agent) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
+
+/** What runAgentOnTask needs off a task to dispatch it: its identity, and the provider/model
+ *  pin that overrides the assignee agent's own (null on both = inherit from the agent). */
+type TaskRunTarget = {
+  id: string;
+  title: string;
+  provider?: string | null;
+  model?: string | null;
+};
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
@@ -310,6 +320,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!agent) throw new ForbiddenException('agent not found');
   }
 
+  /**
+   * A task may only pin a provider this caller can actually dispatch with: a built-in engine
+   * slug, or one of the configured providers visible to them. Rejected here rather than at run
+   * time, so a typo surfaces on the edit instead of failing every future run of the task.
+   * Mirrors the identical check SessionsService.create runs on an explicit provider.
+   */
+  private async assertUsableProvider(ownerId: string, provider?: string | null): Promise<void> {
+    if (!provider) return;
+    if (Object.values(AgentProvider).includes(provider as AgentProvider)) return;
+    const configured = await this.prisma.modelProvider.findFirst({
+      where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+      select: { slug: true },
+    });
+    if (!configured) throw new BadRequestException('provider not available');
+  }
+
   /** A task may only be filed under a list the same user owns (cf. assertOwnedAgent). */
   private async assertOwnedList(ownerId: string, listId?: string | null): Promise<void> {
     if (!listId) return;
@@ -531,6 +557,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedAgent(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
+    await this.assertUsableProvider(ownerId, dto.provider);
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
@@ -550,6 +577,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       assigneeId: dto.assigneeId,
       listId: dto.listId,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      provider: dto.provider,
+      model: dto.model,
       autoRunWhenReady: dto.autoRunWhenReady,
     } satisfies Prisma.TaskUncheckedCreateInput;
     // Initial edges and their task must become visible atomically. Taking the same owner lock
@@ -1705,6 +1734,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedAgent(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
+    if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
     const dependsOnTaskIds =
       dto.dependsOnTaskIds === undefined ? undefined : [...new Set(dto.dependsOnTaskIds)];
     if (dependsOnTaskIds?.includes(id)) {
@@ -1718,6 +1748,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       description: dto.description,
       status: dto.status,
       dueDate: dto.dueDate === null ? null : dto.dueDate ? new Date(dto.dueDate) : undefined,
+      // Three-state like the FKs above, except these are plain columns: omitted keeps the current
+      // pin, null goes back to inheriting the assignee's provider/model.
+      provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
+      model: dto.model === undefined ? undefined : (dto.model ?? null),
       autoRunWhenReady: dto.autoRunWhenReady,
     };
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
@@ -2058,7 +2092,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Notify & trigger each mentioned agent. Best-effort: a trigger failure (e.g. the
     // agent has no runner) must never fail the comment write.
     for (const agent of mentioned) {
-      await this.triggerMentionedAgent(ownerId, { id: task.id, title: task.title }, agent, dto.body).catch(
+      await this.triggerMentionedAgent(
+        ownerId,
+        { id: task.id, title: task.title, provider: task.provider, model: task.model },
+        agent,
+        dto.body,
+      ).catch(
         (e) =>
           this.logger.warn(`mention trigger failed for agent ${agent.id} on task ${id}: ${e?.message ?? e}`),
       );
@@ -2084,7 +2123,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   private async triggerMentionedAgent(
     ownerId: string,
-    task: { id: string; title: string },
+    task: TaskRunTarget,
     agent: { id: string; runnerId: string | null },
     body: string,
   ): Promise<void> {
@@ -2101,10 +2140,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * when it's resumable (live, or ended-but-revivable), otherwise start a fresh one.
    * resume() throws ConflictException when the session can't be revived (never ran /
    * runner offline / not started yet) — fall back to a new session. Returns the session id.
+   *
+   * The task's own provider/model pin (when it has one) is what the run dispatches with,
+   * overriding the assignee agent's defaults.
    */
   private async runAgentOnTask(
     ownerId: string,
-    task: { id: string; title: string },
+    task: TaskRunTarget,
     agent: { id: string; runnerId: string | null },
     prompt: string,
     newSessionTitle: string,
@@ -2131,14 +2173,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const latest = await this.prisma.session.findFirst({
       where: { taskId: task.id, agentId: agent.id, ownerId },
       orderBy: { createdAt: 'desc' },
-      select: { id: true },
+      select: { id: true, provider: true },
     });
-    if (latest) {
+    // A session's provider is fixed for its lifetime — its runtime thread belongs to the CLI that
+    // created it — so a task re-pinned to a different provider can't be continued on the old
+    // session. Falling through to create() is what makes re-pinning take effect on the next run;
+    // resuming instead would silently keep running the previous provider forever. A model change
+    // needs no such split: resume() re-spawns the runtime and applies it.
+    if (latest && (!task.provider || task.provider === latest.provider)) {
       try {
         await this.sessions.resume(
           ownerId,
           latest.id,
-          { clientTurnId: randomUUID(), content: prompt },
+          {
+            clientTurnId: randomUUID(),
+            content: prompt,
+            ...(task.model != null ? { model: task.model } : {}),
+          },
           { batch: batch ?? null },
         );
         return latest.id;
@@ -2153,6 +2204,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         agentId: agent.id,
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
+        // Unpinned (null) fields are left off entirely so the session keeps inheriting the
+        // agent's provider/model, exactly as before these columns existed.
+        ...(task.provider != null ? { provider: task.provider } : {}),
+        ...(task.model != null ? { model: task.model } : {}),
       },
       // Task runs belong in Active regardless of whether they were started manually,
       // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
@@ -2174,6 +2229,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        provider: true,
+        model: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2191,7 +2248,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const prompt = this.buildExecutePrompt(task);
     const sessionId = await this.runAgentOnTask(
       ownerId,
-      { id: task.id, title: task.title },
+      task,
       { id: task.assignee.id, runnerId: task.assignee.runnerId },
       prompt,
       `执行任务：${task.title}`,
@@ -2230,6 +2287,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        provider: true,
+        model: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2273,7 +2332,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       try {
         const sessionId = await this.runAgentOnTask(
           ownerId,
-          { id: t.id, title: t.title },
+          t,
           { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
           this.buildExecutePrompt(t),
           `执行任务：${t.title}`,

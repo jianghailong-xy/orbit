@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
@@ -29,6 +30,11 @@ export class CreateTaskDto {
   // The list this task belongs to. Must be owned by the caller.
   @IsOptional() @IsUUID() listId?: string;
   @IsOptional() @IsDateString() dueDate?: string;
+  // Provider/model this task's runs use, overriding the assignee agent's own. The provider must
+  // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
+  // null) inherits from the assignee, which is the historical behaviour.
+  @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Prerequisite task ids this new task should wait on (each must be owned by the
   // caller). The task only runs once they're all DONE.
   @IsOptional() @IsArray() @IsUUID('all', { each: true }) dependsOnTaskIds?: string[];
@@ -45,6 +51,10 @@ export class UpdateTaskDto {
   // null detaches from its list; a string (re)assigns to that list.
   @IsOptional() @IsUUID() listId?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  // null goes back to inheriting the assignee agent's provider/model; a string pins this task's
+  // runs to that provider / model id. Omit to leave the current pin alone.
+  @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Full replacement for this task's prerequisites. Omit to keep them unchanged;
   // pass [] to clear them all.
   @ValidateIf((_dto, value) => value !== undefined)

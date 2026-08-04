@@ -407,6 +407,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	unassigned := fs.Bool("unassigned", false, "leave task unassigned")
 	listID := fs.String("list-id", "", "task list id")
 	dueDate := fs.String("due-date", "", "ISO due date")
+	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
+	model := fs.String("model", "", "run on this model instead of the assignee's")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "comma-separated prerequisite task ids (repeatable)")
 	autoRun := fs.Bool("auto-run-when-ready", false, "auto-run after dependencies complete")
@@ -453,6 +455,18 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["dueDate"] = *dueDate
 	}
+	if flagWasSet(fs, "provider") {
+		if strings.TrimSpace(*provider) == "" {
+			return fmt.Errorf("--provider cannot be empty")
+		}
+		body["provider"] = *provider
+	}
+	if flagWasSet(fs, "model") {
+		if strings.TrimSpace(*model) == "" {
+			return fmt.Errorf("--model cannot be empty")
+		}
+		body["model"] = *model
+	}
 	if deps := uniqueStrings(dependsOn); len(deps) > 0 {
 		body["dependsOnTaskIds"] = deps
 	}
@@ -486,6 +500,10 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearList := fs.Bool("clear-list", false, "clear task list")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	clearDueDate := fs.Bool("clear-due-date", false, "clear due date")
+	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
+	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
+	model := fs.String("model", "", "run on this model instead of the assignee's")
+	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
 	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
@@ -512,6 +530,12 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearDueDate && flagWasSet(fs, "due-date") {
 		return fmt.Errorf("--clear-due-date and --due-date cannot be used together")
+	}
+	if *clearProvider && flagWasSet(fs, "provider") {
+		return fmt.Errorf("--clear-provider and --provider cannot be used together")
+	}
+	if *clearModel && flagWasSet(fs, "model") {
+		return fmt.Errorf("--clear-model and --model cannot be used together")
 	}
 	if *clearDependencies && flagWasSet(fs, "depends-on") {
 		return fmt.Errorf("--clear-dependencies and --depends-on cannot be used together")
@@ -559,6 +583,22 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--due-date cannot be empty; use --clear-due-date")
 		}
 		body["dueDate"] = *dueDate
+	}
+	if *clearProvider {
+		body["provider"] = nil
+	} else if flagWasSet(fs, "provider") {
+		if strings.TrimSpace(*provider) == "" {
+			return fmt.Errorf("--provider cannot be empty; use --clear-provider")
+		}
+		body["provider"] = *provider
+	}
+	if *clearModel {
+		body["model"] = nil
+	} else if flagWasSet(fs, "model") {
+		if strings.TrimSpace(*model) == "" {
+			return fmt.Errorf("--model cannot be empty; use --clear-model")
+		}
+		body["model"] = *model
 	}
 	if *clearDependencies {
 		body["dependsOnTaskIds"] = []string{}

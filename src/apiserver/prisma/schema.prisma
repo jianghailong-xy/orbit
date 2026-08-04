@@ -899,6 +899,14 @@ model Task {
   listId           String?     @map("list_id") @db.Uuid
   list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
   dueDate          DateTime?   @map("due_date")
+  // Per-task override for the runs this task dispatches: a built-in engine slug
+  // ("claude"/"codex"/"kimi"/"opencode") or one of the owner's configured ModelProvider slugs,
+  // and a model id inside that provider's space. NULL keeps the historical behaviour — the run
+  // inherits whatever its assignee agent is set to. Pinning the provider makes the next run
+  // start a fresh session rather than continue the last one, since a session's provider is
+  // fixed for its lifetime (see TasksService.runAgentOnTask).
+  provider         String?
+  model            String?
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")

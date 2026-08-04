@@ -821,6 +821,8 @@ private struct TaskDetailContent: View {
     private func details(_ task: TaskItem) -> some View {
         section("Details") {
             detailRow("Assignee") { assigneeMenu(task) }
+            detailRow("Provider") { providerMenu(task) }
+            detailRow("Model") { modelMenu(task) }
             detailRow("List") { listMenu(task) }
             if let creator = task.creatorName ?? tasks.item(task.id)?.creatorName {
                 detailRow("Created by") { Text(creator) }
@@ -853,6 +855,71 @@ private struct TaskDetailContent: View {
             }
         } label: {
             Label(task.assignee?.name ?? "Unassigned", systemImage: "chevron.up.chevron.down")
+                .labelStyle(.titleAndIcon)
+        }
+        .disabled(tasks.isMutating(task.id))
+    }
+
+    /// The agent this task runs on, resolved from the loaded agent list — its provider is what an
+    /// unpinned task inherits, and its runner is where the model catalogue comes from.
+    private func assigneeAgent(_ task: TaskItem) -> Agent? {
+        guard let id = task.assignee?.id else { return nil }
+        return model.agents?.items.first { $0.id == id }
+    }
+
+    /// The provider whose model space the Model menu lists: this task's pin, else the assignee's.
+    private func effectiveProvider(_ task: TaskItem) -> String {
+        task.provider ?? assigneeAgent(task)?.provider ?? "claude"
+    }
+
+    private func providerMenu(_ task: TaskItem) -> some View {
+        let configured = model.agents?.configuredProviders
+        let inherited = assigneeAgent(task).map {
+            AgentDefaults.providerName($0.provider ?? "claude", configured: configured)
+        }
+        return Menu {
+            Button { Task { await tasks.setProvider(task.id, nil) } } label: {
+                Label(inherited.map { "Assignee's (\($0))" } ?? "Assignee's",
+                      systemImage: task.provider == nil ? "checkmark" : "person")
+            }
+            Divider()
+            ForEach(AgentDefaults.providers(configured: configured)) { option in
+                Button { Task { await tasks.setProvider(task.id, option.id) } } label: {
+                    Label(option.name, systemImage: task.provider == option.id ? "checkmark" : "cpu")
+                }
+            }
+        } label: {
+            Label(task.provider.map { AgentDefaults.providerName($0, configured: configured) }
+                    ?? inherited.map { "Assignee's (\($0))" } ?? "Assignee's",
+                  systemImage: "chevron.up.chevron.down")
+                .labelStyle(.titleAndIcon)
+        }
+        .disabled(tasks.isMutating(task.id))
+    }
+
+    private func modelMenu(_ task: TaskItem) -> some View {
+        let provider = effectiveProvider(task)
+        let options = AgentDefaults.models(
+            for: provider,
+            catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
+            configured: model.agents?.configuredProviders)
+        return Menu {
+            Button { Task { await tasks.setModel(task.id, nil) } } label: {
+                Label("Provider default", systemImage: task.model == nil ? "checkmark" : "sparkles")
+            }
+            if !options.isEmpty {
+                Divider()
+                ForEach(options) { option in
+                    Button { Task { await tasks.setModel(task.id, option.id) } } label: {
+                        Label(option.name, systemImage: task.model == option.id ? "checkmark" : "cube")
+                    }
+                }
+            }
+        } label: {
+            // A pinned id the catalogue doesn't name still has to read as itself, not vanish.
+            Label(task.model.map { id in options.first { $0.id == id }?.name ?? id }
+                    ?? "Provider default",
+                  systemImage: "chevron.up.chevron.down")
                 .labelStyle(.titleAndIcon)
         }
         .disabled(tasks.isMutating(task.id))

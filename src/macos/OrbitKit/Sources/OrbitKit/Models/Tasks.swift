@@ -17,6 +17,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let assigneeId: String?
     public let listId: String?
     public let dueDate: String?
+    /// Per-task run override: the provider/model this task's runs use instead of the assignee
+    /// agent's own. Both nil = inherit from the assignee (the common case).
+    public let provider: String?
+    public let model: String?
     public let autoRunWhenReady: Bool?
     public let creatorSessionId: String?
     public let creatorType: String?
@@ -46,7 +50,8 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public var commentCount: Int? { counts?.comments ?? comments?.count }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, description, status, assigneeId, listId, dueDate, autoRunWhenReady
+        case id, title, description, status, assigneeId, listId, dueDate, provider, model
+        case autoRunWhenReady
         case creatorSessionId, creatorType, creatorId, creatorName, createdAt, updatedAt
         case running, queued, blocked, dependencyState
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
@@ -208,9 +213,10 @@ public struct CreateTaskRequest: Encodable, Sendable {
     }
 }
 
-/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate` are three-state (omit / null=clear / set),
-/// mirroring `UpdateTaskDto` where they're typed `string | null`. `dependsOnTaskIds` replaces
-/// the complete prerequisite set when present: nil omits the field, [] clears it.
+/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate`/`provider`/`model` are three-state (omit /
+/// null=clear / set), mirroring `UpdateTaskDto` where they're typed `string | null`.
+/// `dependsOnTaskIds` replaces the complete prerequisite set when present: nil omits the field,
+/// [] clears it.
 public struct UpdateTaskRequest: Encodable, Sendable {
     public var title: String?
     public var description: String?
@@ -218,12 +224,15 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     public var assigneeId: FieldUpdate<String>
     public var listId: FieldUpdate<String>
     public var dueDate: FieldUpdate<String>
+    public var provider: FieldUpdate<String>
+    public var model: FieldUpdate<String>
     public var dependsOnTaskIds: [String]?
     public var autoRunWhenReady: Bool?
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
-                dueDate: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
+                dueDate: FieldUpdate<String> = .keep, provider: FieldUpdate<String> = .keep,
+                model: FieldUpdate<String> = .keep, dependsOnTaskIds: [String]? = nil,
                 autoRunWhenReady: Bool? = nil) {
         self.title = title
         self.description = description
@@ -231,12 +240,15 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.assigneeId = assigneeId
         self.listId = listId
         self.dueDate = dueDate
+        self.provider = provider
+        self.model = model
         self.dependsOnTaskIds = dependsOnTaskIds
         self.autoRunWhenReady = autoRunWhenReady
     }
 
     enum CodingKeys: String, CodingKey {
-        case title, description, status, assigneeId, listId, dueDate, dependsOnTaskIds, autoRunWhenReady
+        case title, description, status, assigneeId, listId, dueDate, provider, model
+        case dependsOnTaskIds, autoRunWhenReady
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -247,6 +259,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try assigneeId.encode(into: &c, forKey: .assigneeId)
         try listId.encode(into: &c, forKey: .listId)
         try dueDate.encode(into: &c, forKey: .dueDate)
+        try provider.encode(into: &c, forKey: .provider)
+        try model.encode(into: &c, forKey: .model)
         try c.encodeIfPresent(dependsOnTaskIds, forKey: .dependsOnTaskIds)
         try c.encodeIfPresent(autoRunWhenReady, forKey: .autoRunWhenReady)
     }
