@@ -4322,6 +4322,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForDraft}
                 onPick={pickDraftProvider}
+                runnerId={runner.id}
                 // Nothing to choose until we know which agent (and so which project) this runs in.
                 disabled={!pickedAgent}
                 note={providerSwitchNote}

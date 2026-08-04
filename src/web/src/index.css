@@ -7465,6 +7465,12 @@ body {
 .re-row + .re-row {
   border-top: 1px solid var(--border-subtle);
 }
+/* The row a "Not signed in" link came here for. Tinted for as long as the URL names it, the way a
+   linked-to line stays lit — so the answer to "which one?" survives a scroll or a second look. */
+.re-row.focused {
+  background: var(--brand-tint);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
 @media (max-width: 700px) {
   /* Status and action stay together on the second line; the quota gauge is the one part
      that can wait for a wider window. */

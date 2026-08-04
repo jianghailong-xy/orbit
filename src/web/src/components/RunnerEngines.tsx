@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
 import type { LoginEngine, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import { api } from '../api';
-import { encodeId } from '../lib/idCodec';
+import { decodeId, encodeId } from '../lib/idCodec';
 import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
@@ -93,6 +93,7 @@ function EngineRow({
   health,
   signIn,
   onSignIn,
+  focused,
 }: {
   runner: Runner;
   engine: LoginEngine;
@@ -100,11 +101,17 @@ function EngineRow({
   /** The engine whose sign-in panel is open on this runner, if any. */
   signIn: LoginEngine | null;
   onSignIn: (engine: LoginEngine | null) => void;
+  /** This is the row a deep link came here for: mark it and bring it into view. */
+  focused?: boolean;
 }) {
   const message = useToast();
   const qc = useQueryClient();
   const kind = rowKindOf(health, runner.install, engine);
   const offline = !runner.online;
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) row.current?.scrollIntoView({ block: 'center' });
+  }, [focused]);
 
   const install = useMutation({
     mutationFn: () =>
@@ -165,7 +172,7 @@ function EngineRow({
   };
 
   return (
-    <div className="re-row">
+    <div className={`re-row${focused ? ' focused' : ''}`} ref={row}>
       <div className="re-id">
         <ProviderTile slug={ENGINE_PRESET[engine]} label={ENGINE_NAME[engine]} size={28} />
         <div style={{ minWidth: 0 }}>
@@ -255,10 +262,13 @@ function RunnerEngineCard({
   runner,
   collapsed,
   onToggle,
+  focusEngine,
 }: {
   runner: Runner;
   collapsed: boolean;
   onToggle: () => void;
+  /** The engine a deep link named for this runner, if this is the runner it named. */
+  focusEngine?: LoginEngine | null;
 }) {
   const [signIn, setSignIn] = useState<LoginEngine | null>(null);
   const engines = runner.engines ?? null;
@@ -300,6 +310,7 @@ function RunnerEngineCard({
             health={engines.find((e) => e.engine === engine)}
             signIn={signIn}
             onSignIn={setSignIn}
+            focused={engine === focusEngine}
           />
         ))
       ) : (
@@ -323,16 +334,30 @@ function RunnerEngineCard({
  */
 export function RunnerEngines() {
   const [expanded, setExpanded] = useState<string[]>(readExpanded);
+  const write = (next: string[]) => {
+    try {
+      localStorage.setItem(EXPANDED_KEY, JSON.stringify(next));
+    } catch {
+      // Private mode / full quota: the fold still works, it just won't outlive the page.
+    }
+    return next;
+  };
   const toggle = (id: string) =>
-    setExpanded((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      try {
-        localStorage.setItem(EXPANDED_KEY, JSON.stringify(next));
-      } catch {
-        // Private mode / full quota: the fold still works, it just won't outlive the page.
-      }
-      return next;
-    });
+    setExpanded((prev) => write(prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  // Where a "Not signed in" row in the new-session picker sends the user: this exact engine on
+  // this exact machine. Cards start folded, so the one row they came for is exactly what's
+  // hidden — arriving opens that card, and the open sticks, because it is the same edit they'd
+  // have made by hand.
+  const [params] = useSearchParams();
+  const focusRunner = decodeId(params.get('runner'));
+  const engineParam = params.get('engine');
+  const focusEngine = ENGINES.find((e) => e === engineParam) ?? null;
+  useEffect(() => {
+    if (!focusRunner) return;
+    setExpanded((prev) => (prev.includes(focusRunner) ? prev : write([...prev, focusRunner])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRunner]);
   const runners = useQuery({
     ...runnersQuery(),
     // An install is minutes long and its progress lives on the runner row, so poll while one is
@@ -395,6 +420,7 @@ export function RunnerEngines() {
             runner={runner}
             collapsed={!expanded.includes(runner.id)}
             onToggle={() => toggle(runner.id)}
+            focusEngine={runner.id === focusRunner ? focusEngine : null}
           />
         ))
       )}

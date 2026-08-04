@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Popover } from 'antd';
 import { Link } from 'react-router-dom';
+import { encodeId } from '../lib/idCodec';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 
@@ -54,12 +55,16 @@ export function NewSessionProviderHero({
   current,
   choices,
   onPick,
+  runnerId,
   disabled,
   note,
 }: {
   current: ProviderChoice;
   choices: ProviderChoice[];
   onPick: (slug: string) => void;
+  /** The machine these engines live on — the sign-in link has to name it, since the Providers
+   *  page lists every runner and only this one's row is the answer. */
+  runnerId: string;
   /** A live/locked session has no choice to make; the hero then reads as a label. */
   disabled?: boolean;
   /** Transient line under the summary (what a switch just changed, and where it was saved). */
@@ -74,7 +79,9 @@ export function NewSessionProviderHero({
     choice.unavailable ? (
       <Link
         key={choice.slug}
-        to="/providers"
+        // Naming the runner and the engine, so the page can unfold that machine's card and point
+        // at the row instead of leaving the user to find it among every runner they own.
+        to={`/providers?runner=${encodeId(runnerId)}&engine=${choice.slug}`}
         className="np-row np-unavailable"
         title={`Sign in to ${choice.label} on the Providers page`}
         onClick={() => setOpen(false)}

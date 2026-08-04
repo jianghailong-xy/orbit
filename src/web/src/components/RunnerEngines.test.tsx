@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
+import { encodeId } from '../lib/idCodec';
 import { RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
@@ -88,7 +89,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   },
 });
 
-function render(runners: Runner[], { open = true } = {}) {
+function render(runners: Runner[], { open = true, path = '/providers' } = {}) {
   store.clear();
   if (open) {
     store.set('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
@@ -96,7 +97,7 @@ function render(runners: Runner[], { open = true } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['runners'], runners);
   return renderToStaticMarkup(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <QueryClientProvider client={qc}>
         <RunnerEngines />
       </QueryClientProvider>
@@ -200,6 +201,26 @@ describe('the "On your runners" section', () => {
     expect(
       summaryOf(runner({ engines: [health({})], install: install({ status: 'installing', engine: 'kimi' }) })),
     ).toBe('Installing…');
+  });
+
+  it('marks the one row a "Not signed in" link came here for', () => {
+    const box = runner({
+      engines: [
+        health({ engine: 'claude' }),
+        health({ engine: 'codex', auth: 'no' }),
+        health({ engine: 'kimi' }),
+      ],
+    });
+    const path = `/providers?runner=${encodeId(box.id)}&engine=codex`;
+    const html = render([box], { path });
+    // Exactly one row is marked, and it's the engine the link named — not the first one drawn.
+    expect(html.match(/re-row focused/g)).toHaveLength(1);
+    expect(html.slice(html.indexOf('re-row focused'))).toContain('Codex');
+    // An unnamed engine, or no link at all, marks nothing.
+    expect(render([box], { path: `/providers?runner=${encodeId(box.id)}` })).not.toContain(
+      'focused',
+    );
+    expect(render([box])).not.toContain('focused');
   });
 
   it('offers the free route first when there is no runner at all', () => {

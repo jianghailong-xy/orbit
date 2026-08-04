@@ -25,6 +25,7 @@ function markup(provider: string, opts: { disabled?: boolean; note?: string } = 
         current={currentProviderChoice(provider, choices, catalog, configured)}
         choices={choices}
         onPick={() => {}}
+        runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
         disabled={opts.disabled}
         note={opts.note}
       />
