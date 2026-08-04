@@ -44,6 +44,23 @@ final class RecentsLogicTests: XCTestCase {
         XCTAssertEqual(RecentsLogic.recent([]).count, 0)
     }
 
+    func testScrollWindowGrowsAPageAtATime() {
+        // The drawer starts at one page and adds one more each time its last row scrolls into view.
+        XCTAssertEqual(RecentsLogic.nextWindow(shown: RecentsLogic.pageSize, total: 500),
+                       RecentsLogic.pageSize * 2)
+        // The final page is clamped to what exists — never a window past the end of the feed.
+        XCTAssertEqual(RecentsLogic.nextWindow(shown: 495, total: 500), 500)
+    }
+
+    func testScrollWindowStopsWhenEverythingIsRendered() {
+        // nil is what lets the drawer skip the state write (and re-render) when the last row
+        // re-appears: nothing left to page in, whether the feed was exhausted by scrolling…
+        XCTAssertNil(RecentsLogic.nextWindow(shown: 500, total: 500))
+        // …or never filled the first page to begin with.
+        XCTAssertNil(RecentsLogic.nextWindow(shown: RecentsLogic.pageSize, total: 3))
+        XCTAssertNil(RecentsLogic.nextWindow(shown: RecentsLogic.pageSize, total: 0))
+    }
+
     func testMissingTimestampSinksButStillIncluded() {
         let sessions = [
             session(#"{"id":"dated","status":"RUNNING","lastTurnAt":"2026-07-07T10:00:00.000Z"}"#),

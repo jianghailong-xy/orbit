@@ -24,6 +24,21 @@ public enum RecentsLogic {
             .map { $0.session }
     }
 
+    /// How many Recents rows the drawer renders per page. An account with hundreds of open sessions
+    /// handed the whole feed to one `ForEach` paid a full identity diff of every row on each snapshot
+    /// (every poll and every control-plane event), lazy rows or not — so the drawer renders a page at
+    /// a time and extends as you scroll.
+    public static let pageSize = 20
+
+    /// The window size once the last rendered row scrolls into view: one more page, clamped to
+    /// `total`. nil when everything is already rendered — including the common case where the first
+    /// page covers the whole feed — so the drawer can skip the state write, and the re-render it
+    /// costs, each time that final row re-appears.
+    public static func nextWindow(shown: Int, total: Int) -> Int? {
+        guard shown < total else { return nil }
+        return min(shown + pageSize, total)
+    }
+
     /// Seconds-since-reference of a session's last activity; a missing/unparseable timestamp sinks
     /// the row to the bottom (returns 0) rather than throwing off the sort.
     static func recency(_ s: Session) -> Double {

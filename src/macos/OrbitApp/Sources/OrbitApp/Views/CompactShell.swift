@@ -421,6 +421,11 @@ private struct NavigationDrawer: View {
     /// The drawer is a quick switcher, not the full task-list directory. Four rows preserve room
     /// for machines and Recents on a compact screen; the directory page owns the complete set.
     private let taskListPreviewLimit = 4
+    /// How many Recents rows are currently rendered. Grows a page at a time as you scroll to the
+    /// bottom of the feed (see `recentsRows`); never reset, so a drawer you reopen keeps the window
+    /// you scrolled to — resetting it under a preserved scroll offset would leave the list stranded
+    /// past its own end.
+    @State private var recentsShown = RecentsLogic.pageSize
 
     var body: some View {
         let isAdmin = model.user?.role == "ADMIN"
@@ -734,9 +739,16 @@ private struct NavigationDrawer: View {
 
     /// The "Recents" header + rows: the most-recently-active sessions across every agent, tapping
     /// straight into that session's console. Hidden until the cross-agent Open list has loaded.
+    ///
+    /// Scroll-loaded a page at a time: only `recentsShown` rows are handed to the `ForEach`, and
+    /// reaching the last one extends the window (see `RecentsLogic.nextWindow`). The rows are all
+    /// already in memory — Recents is derived from the Open snapshot, not fetched — so this is a
+    /// render window, not a fetch: no spinner, no latency, just a first layout and a per-snapshot
+    /// diff bounded to one page instead of every open session.
     @ViewBuilder
     private var recentsRows: some View {
         let recents = model.recentSessions
+        let shown = recents.prefix(recentsShown)
         if !recents.isEmpty {
             Text("Recents")
                 .font(.subheadline.weight(.semibold))
@@ -748,8 +760,15 @@ private struct NavigationDrawer: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
-            ForEach(recents) { session in
+            ForEach(shown) { session in
                 recentRow(session)
+                    .onAppear {
+                        guard session.id == shown.last?.id,
+                              let next = RecentsLogic.nextWindow(shown: recentsShown,
+                                                                 total: recents.count)
+                        else { return }
+                        recentsShown = next
+                    }
             }
         }
     }

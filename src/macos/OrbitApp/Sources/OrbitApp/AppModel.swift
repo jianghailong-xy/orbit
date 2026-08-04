@@ -129,9 +129,10 @@ final class AppModel {
 
     /// The drawer's **Recents** feed: every jump-back session across all agents, newest first, derived
     /// from the already-fresh cross-agent Open list (`sessions`) — which the server returns in full,
-    /// unpaginated. Uncapped on purpose: the drawer's Recents List is lazy, so it renders rows as you
-    /// scroll rather than stopping at a fixed count. Empty until the first `loadSessions` lands; kept
-    /// live by the same control-plane stream that drives the list.
+    /// unpaginated. Uncapped on purpose, but the cut belongs to the drawer, not here: it renders one
+    /// page of rows and extends the window as you scroll (`RecentsLogic.pageSize`), which needs the
+    /// complete ordering to page through. Empty until the first `loadSessions` lands; kept live by
+    /// the same control-plane stream that drives the list.
     ///
     /// Derived ONCE per applied snapshot (see `applySessionSnapshot`) rather than on every read: the
     /// drawer stays mounted behind the content card, so it reads this on every body pass — and it is
