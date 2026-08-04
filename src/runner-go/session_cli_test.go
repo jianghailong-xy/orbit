@@ -498,11 +498,20 @@ func TestSessionCLIServiceTokenAuthorizesCreateAndGatesTheRest(t *testing.T) {
 			t.Errorf("session %s with a create-only token error = %v", args[0], err)
 		}
 	}
-	// Nor can it reach a verb no token may hold.
-	out.Reset()
-	err = cmdSessionCLI([]string{"end", "spawned", "--json"}, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), "this service token allows only") {
-		t.Errorf("session end with a service token error = %v", err)
+	// A verb no token may hold says so, instead of pointing at a scope that does not exist.
+	for _, action := range []string{"end", "interrupt", "merge", "complete", "search"} {
+		args := []string{action, "spawned", "--json"}
+		if action == "search" {
+			args = []string{action, "--query", "x", "--json"}
+		}
+		out.Reset()
+		err = cmdSessionCLI(args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), "no service token can grant it") {
+			t.Errorf("session %s with a service token error = %v", action, err)
+		}
+		if err != nil && strings.Contains(err.Error(), "needs the  scope") {
+			t.Errorf("session %s error names an empty scope: %v", action, err)
+		}
 	}
 
 	// --wait polls the new session, so a token that may create but not read fails before

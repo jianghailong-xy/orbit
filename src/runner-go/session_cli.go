@@ -261,9 +261,16 @@ func requireCLIOrchestrationContext(action string) (cliOrchestrationContext, err
 		// Unreadable claims (a truncated paste, a token from a newer CLI) are not judged here:
 		// let the control plane reject it, so its error is the one the operator sees.
 		if claims != nil && !headlessAllowedActions(claims)[action] {
+			scope, grantable := sessionActionScope[action]
+			if !grantable {
+				// A lifecycle verb: no scope names it, so minting a wider token would not help.
+				return cliOrchestrationContext{}, fmt.Errorf(
+					"%s runs only inside a live Orbit session — no service token can grant it; this token allows: %s",
+					action, headlessActionList(headlessAllowedActions(claims)))
+			}
 			return cliOrchestrationContext{}, fmt.Errorf(
 				"%s needs the %s scope; this service token allows only: %s",
-				action, sessionActionScope[action], headlessActionList(headlessAllowedActions(claims)))
+				action, scope, headlessActionList(headlessAllowedActions(claims)))
 		}
 		return cliOrchestrationContext{serviceToken: service}, nil
 	}
