@@ -36,8 +36,8 @@ export interface ProviderChoice {
    *  human label — so "switching provider changes your model" is visible before the click. */
   modelLabel: string;
   /** Why this row can't be picked, or absent when it can. Set for an engine the runner has
-   *  installed but whose CLI says it isn't signed in: the row stays listed and disabled, because
-   *  the fix is a sign-in on the Providers page and hiding it would hide the reason. */
+   *  installed but whose CLI says it isn't signed in: the row stays listed, and links to the
+   *  Providers page instead of picking, because that is where the sign-in is. */
   unavailable?: string;
 }
 
@@ -98,9 +98,9 @@ export function defaultModelLabel(
  *
  * Engines are filtered against the health the runner last reported, because an engine choice is a
  * claim about someone else's machine. Not installed there → dropped, since picking it would start
- * a session with nothing to run it. Installed but signed out → listed and disabled (see
- * `unavailable`). A runner that has reported nothing claims nothing, so all three stay offered —
- * as does any engine missing from a partial report.
+ * a session with nothing to run it. Installed but signed out → listed, pointing at its sign-in
+ * (see `unavailable`). A runner that has reported nothing claims nothing, so all three stay
+ * offered — as does any engine missing from a partial report.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],

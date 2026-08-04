@@ -67,25 +67,37 @@ export function NewSessionProviderHero({
 }) {
   const [open, setOpen] = useState(false);
 
-  const row = (choice: ProviderChoice) => (
-    <button
-      key={choice.slug}
-      type="button"
-      className={`np-row${choice.slug === current.slug ? ' on' : ''}`}
-      // An engine this runner isn't signed into can't run a session; the row stays so the reason
-      // is visible, and takes the model column to say it.
-      disabled={!!choice.unavailable}
-      title={choice.unavailable ? `Sign in to ${choice.label} on the Providers page` : undefined}
-      onClick={() => {
-        setOpen(false);
-        if (choice.slug !== current.slug) onPick(choice.slug);
-      }}
-    >
-      <ProviderMark choice={choice} size={20} />
-      <span className="np-row-name">{choice.label}</span>
-      <span className="np-row-model">{choice.unavailable ?? choice.modelLabel}</span>
-    </button>
-  );
+  // An engine this runner isn't signed into can't run a session, so the row doesn't pick it — it
+  // goes where the sign-in lives instead. The identity greys out (it isn't usable yet) while the
+  // reason stays lit as the link it now is, so the row states the problem and offers the fix.
+  const row = (choice: ProviderChoice) =>
+    choice.unavailable ? (
+      <Link
+        key={choice.slug}
+        to="/providers"
+        className="np-row np-unavailable"
+        title={`Sign in to ${choice.label} on the Providers page`}
+        onClick={() => setOpen(false)}
+      >
+        <ProviderMark choice={choice} size={20} />
+        <span className="np-row-name">{choice.label}</span>
+        <span className="np-row-model np-fix">{choice.unavailable}</span>
+      </Link>
+    ) : (
+      <button
+        key={choice.slug}
+        type="button"
+        className={`np-row${choice.slug === current.slug ? ' on' : ''}`}
+        onClick={() => {
+          setOpen(false);
+          if (choice.slug !== current.slug) onPick(choice.slug);
+        }}
+      >
+        <ProviderMark choice={choice} size={20} />
+        <span className="np-row-name">{choice.label}</span>
+        <span className="np-row-model">{choice.modelLabel}</span>
+      </button>
+    );
 
   // One flat list: whose subscription or key each row spends is already carried by its brand mark
   // and by the summary under the card, so section headers would only be chrome between the user

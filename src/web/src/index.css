@@ -7967,13 +7967,18 @@ body {
   text-decoration: none;
   cursor: pointer;
 }
-.np-row:hover:not(:disabled) {
+.np-row:hover {
   background: var(--bg-hover);
 }
-/* An engine the runner has but isn't signed into: listed so the reason shows, not pickable. */
-.np-row:disabled {
-  cursor: default;
+/* An engine the runner has but isn't signed into: the identity reads as unavailable, while the
+   reason doubles as the link to the Providers page that fixes it. */
+.np-unavailable .np-mark,
+.np-unavailable .np-row-name {
   opacity: 0.5;
+}
+/* Beats .np-row-model's grey below, wherever the two land in the cascade. */
+.np-row-model.np-fix {
+  color: var(--brand);
 }
 .np-row.on {
   background: var(--brand-tint);
