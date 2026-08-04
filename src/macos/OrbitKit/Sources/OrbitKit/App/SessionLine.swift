@@ -4,7 +4,7 @@ import Foundation
 /// web `sessionLine`. For a live RUNNING session it surfaces the current state (the tool in flight,
 /// that it's blocked on you, the message you just sent while awaiting the reply, or a bare
 /// "Running…") so the row never collapses to just a title; otherwise it's the flattened last
-/// assistant reply (or nil). `tone` drives the colour.
+/// assistant reply, falling back to the run's own state word. `tone` drives the colour.
 public struct SessionLine: Equatable, Sendable {
     public enum Tone: String, Sendable {
         case preview     // reply content — default/secondary
@@ -20,9 +20,10 @@ public struct SessionLine: Equatable, Sendable {
         self.tone = tone
     }
 
-    /// Build the line for a session. `live` is false in Trash. Returns nil when there's nothing to
-    /// show (an idle session with no last reply) — the row then shows only its title.
-    public static func make(for s: Session, live: Bool) -> SessionLine? {
+    /// Build the line for a session. `live` is false in Trash. Always yields a line: a run that
+    /// ended before producing any reply still says what happened, so the row can't shrink to a
+    /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
+    public static func make(for s: Session, live: Bool) -> SessionLine {
         if live && s.effectiveRunState == .running {
             if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
@@ -42,8 +43,17 @@ public struct SessionLine: Equatable, Sendable {
         if live, let bg = s.runningBgCount, bg > 0 {
             return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
         }
+        // A message that never got an answer — the turn was interrupted, or failed, before any
+        // reply or tool landed — outranks the previous turn's reply: it's the newer of the two,
+        // and it's what the session is left waiting on. The server only keeps it while it stands
+        // unanswered, so a non-empty value here always means exactly that.
+        if let u = s.lastUserText, !u.isEmpty { return SessionLine(text: plainPreview(u), tone: .preview) }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
-        return nil
+        // Nothing to preview at all (a run that died before even its user turn was recorded, or an
+        // older row from before the server kept the pending message). Fall back to the run's own
+        // state word — the same one the console header shows — so the row still says what happened
+        // instead of collapsing.
+        return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
     }
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the common

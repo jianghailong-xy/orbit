@@ -5,11 +5,11 @@ import XCTest
 final class SessionLineTests: XCTestCase {
     private func session(status: RunStatus, lastAssistantText: String? = nil, lastToolUse: String? = nil,
                          lastUserText: String? = nil, runningBgCount: Int? = nil,
-                         pendingApprovals: Int? = nil) -> Session {
+                         pendingApprovals: Int? = nil, endReason: String? = nil) -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 lastAssistantText: lastAssistantText, lastToolUse: lastToolUse, lastUserText: lastUserText,
-                runningBgCount: runningBgCount)
+                runningBgCount: runningBgCount, endReason: endReason)
     }
 
     func testRunningPrioritisesApprovalThenToolThenPreview() {
@@ -40,7 +40,7 @@ final class SessionLineTests: XCTestCase {
 
         // Markdown in the sent message is flattened, like a reply preview.
         let md = session(status: .running, lastUserText: "please `run` the **tests**")
-        XCTAssertEqual(SessionLine.make(for: md, live: true)?.text, "please run the tests")
+        XCTAssertEqual(SessionLine.make(for: md, live: true).text, "please run the tests")
     }
 
     func testPendingAndBackground() {
@@ -55,12 +55,41 @@ final class SessionLineTests: XCTestCase {
         let parked = session(status: .awaitingInput,
                              lastAssistantText: "## Done\n\nFixed the `Session` model and ran ```swift\ntest()\n``` — all green.")
         let line = SessionLine.make(for: parked, live: true)
-        XCTAssertEqual(line?.tone, .preview)
-        XCTAssertEqual(line?.text, "Done Fixed the Session model and ran — all green.")
+        XCTAssertEqual(line.tone, .preview)
+        XCTAssertEqual(line.text, "Done Fixed the Session model and ran — all green.")
     }
 
-    func testNoLineWhenIdleWithoutReply() {
-        XCTAssertNil(SessionLine.make(for: session(status: .succeeded), live: true))
+    /// A turn interrupted before any reply leaves the message you sent standing (the server only
+    /// clears it once the agent actually answers), and it outranks the older reply below it.
+    func testInterruptedTurnShowsTheUnansweredMessage() {
+        let interrupted = session(status: .interrupted, lastAssistantText: "previous reply",
+                                  lastUserText: "设置按钮的底色很奇怪，请帮我 review")
+        XCTAssertEqual(SessionLine.make(for: interrupted, live: true),
+                       .init(text: "设置按钮的底色很奇怪，请帮我 review", tone: .preview))
+
+        // A process left up outranks it — that's live status, not history.
+        let bg = session(status: .awaitingInput, lastUserText: "run the tests", runningBgCount: 1)
+        XCTAssertEqual(SessionLine.make(for: bg, live: true),
+                       .init(text: "Background process running…", tone: .background))
+    }
+
+    /// No reply to preview — the run ended before producing one (interrupted, failed at startup,
+    /// cancelled) — so the line falls back to the run's state word rather than vanishing, which on
+    /// iOS would shrink the row to a bare title.
+    func testFallsBackToStateWordWithoutReply() {
+        XCTAssertEqual(SessionLine.make(for: session(status: .succeeded), live: true),
+                       .init(text: "Succeeded", tone: .preview))
+        XCTAssertEqual(SessionLine.make(for: session(status: .failed), live: true),
+                       .init(text: "Failed", tone: .preview))
+        // Nothing was ever recorded to preview — an old row, or a run that died before its user
+        // turn reached the server.
+        XCTAssertEqual(SessionLine.make(for: session(status: .interrupted), live: true),
+                       .init(text: "Interrupted", tone: .preview))
+        XCTAssertEqual(SessionLine.make(for: session(status: .cancelled, endReason: "deleted"), live: true),
+                       .init(text: "Cancelled", tone: .preview))
+        // Trash (live: false) states the outcome the same way.
+        XCTAssertEqual(SessionLine.make(for: session(status: .cancelled, endReason: "completed"), live: false),
+                       .init(text: "Completed", tone: .preview))
     }
 
     /// The list payload's preview fields decode (server keys: lastAssistantText / lastToolUse /

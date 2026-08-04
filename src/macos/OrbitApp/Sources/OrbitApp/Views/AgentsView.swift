@@ -538,7 +538,7 @@ struct AgentSessionRow: View {
     private var isPinned: Bool { showsPin && session.pinnedAt != nil }
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
     // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
-    private var line: SessionLine? { SessionLine.make(for: session, live: !deleted) }
+    private var line: SessionLine { SessionLine.make(for: session, live: !deleted) }
 
     var body: some View {
         #if os(iOS)
@@ -561,9 +561,7 @@ struct AgentSessionRow: View {
                         Text(session.title ?? "Untitled session").lineLimit(1)
                         SessionTagDots(tags: session.tags ?? [])
                     }
-                    if let line {
-                        Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
-                    }
+                    Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -602,9 +600,7 @@ struct AgentSessionRow: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
-            if let line {
-                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
-            }
+            Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its

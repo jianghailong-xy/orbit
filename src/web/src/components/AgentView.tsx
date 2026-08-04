@@ -549,14 +549,14 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
-// Otherwise it's the flattened last reply (or nothing). `tone` drives the colour:
-// blue = working, amber = needs you, grey = queued or a left-up background process,
-// default = reply content.
+// Otherwise it's the flattened last reply, falling back to the run's own state word.
+// `tone` drives the colour: blue = working, amber = needs you, grey = queued or a
+// left-up background process, default = reply content.
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
 };
-const sessionLine = (s: any, live: boolean): SessionLine | null => {
+export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
   if (live && state === 'RUNNING') {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
@@ -582,8 +582,14 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
   const parked = live ? parkedWorkLabel(s) : null;
   if (parked)
     return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
+  // A message that never got an answer — the turn was interrupted, or failed, before any reply
+  // or tool landed — outranks the previous turn's reply: it's the newer of the two, and it's what
+  // the session is left waiting on. The server only keeps lastUserText while it stands unanswered.
+  if (s.lastUserText) return { text: plainPreview(s.lastUserText), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
-  return null;
+  // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
+  // row from before the server kept the pending message): say what happened rather than nothing.
+  return { text: statusLabel(s), tone: 'preview' };
 };
 
 // State word for the session header — mirrors StatusIcon's branching (and its tooltip
@@ -3811,13 +3817,11 @@ export function AgentView({ runner }: { runner: Runner }) {
                           )}
                           <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
                         </div>
-                        {line ? (
-                          <div
-                            className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                          >
-                            {line.text}
-                          </div>
-                        ) : null}
+                        <div
+                          className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                        >
+                          {line.text}
+                        </div>
                       </div>
                     </div>
                     <div className="session-right">

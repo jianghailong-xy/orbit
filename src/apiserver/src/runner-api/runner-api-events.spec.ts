@@ -137,6 +137,117 @@ test('a durable turn event still advances lastTurnAt', async () => {
   assert.ok(calls.updateMany[0].data.lastTurnAt instanceof Date);
 });
 
+/** The session write carrying the list-preview columns, which is not the batch's only update. */
+function previewUpdate(calls: { update: any[] }) {
+  const hit = calls.update.filter((c: any) => 'lastToolUse' in (c.data ?? {}));
+  assert.equal(hit.length, 1, 'exactly one preview write per batch');
+  return hit[0].data;
+}
+
+/**
+ * A turn interrupted before the agent said anything must keep the message you sent as the list's
+ * preview. The interrupt and the turn end are frontier events but not *answers*, so they must not
+ * write null over `lastUserText` — doing so left the row with no preview at all.
+ */
+test('an interrupt before any reply keeps the pending user message', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.USER,
+        ts: '2026-08-04T01:21:58.000Z',
+        turnId: 'turn-1',
+        payload: { text: '设置按钮的底色很奇怪，请帮我 review' },
+      },
+      {
+        seq: 2,
+        type: RunEventType.SYSTEM,
+        ts: '2026-08-04T01:22:05.000Z',
+        turnId: 'turn-1',
+        payload: { subtype: 'init', sessionId: 'runtime-1' },
+      },
+      {
+        seq: 3,
+        type: RunEventType.INTERRUPT,
+        ts: '2026-08-04T01:22:09.000Z',
+        turnId: 'turn-1',
+        payload: {},
+      },
+      {
+        seq: 4,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-04T01:22:09.000Z',
+        turnId: 'turn-1',
+        payload: { subtype: 'error_during_execution' },
+      },
+    ],
+  });
+
+  // The init handshake in this batch also resets the outliving-work sets, so pick the preview
+  // write rather than assuming it's the only one.
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, '设置按钮的底色很奇怪，请帮我 review');
+  assert.equal(preview.lastToolUse, null, 'the turn ended, so no tool is in flight');
+});
+
+test('a reply answers the pending message and clears it', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.USER,
+        ts: '2026-08-04T01:21:58.000Z',
+        turnId: 'turn-1',
+        payload: { text: 'review the button colour' },
+      },
+      {
+        seq: 2,
+        type: RunEventType.ASSISTANT,
+        ts: '2026-08-04T01:22:20.000Z',
+        turnId: 'turn-1',
+        payload: { text: 'Looks like a token mismatch.' },
+      },
+      {
+        seq: 3,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-04T01:22:21.000Z',
+        turnId: 'turn-1',
+        payload: {},
+      },
+    ],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastAssistantText, 'Looks like a token mismatch.');
+  assert.equal(preview.lastUserText, null, 'the reply replaced the pending message');
+});
+
+/** A batch that neither asks nor answers must leave the stored message untouched. */
+test('a batch with no user turn and no answer never writes lastUserText', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 9,
+        type: RunEventType.SYSTEM,
+        ts: '2026-08-04T01:23:00.000Z',
+        turnId: 'turn-2',
+        payload: { subtype: 'status' },
+      },
+    ],
+  });
+
+  assert.ok(
+    !('lastUserText' in previewUpdate(calls)),
+    'no event decided either way, so the column is left alone',
+  );
+});
+
 test('terminal sessions reject durable events before any write or publish', async () => {
   for (const status of [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED]) {
     const { calls, controller, published } = makeController(status);
