@@ -1348,6 +1348,12 @@ export function AgentView({ runner }: { runner: Runner }) {
     [visibleSessions, groupByTag, view, tagFilter],
   );
 
+  // The rows in the order they're actually on screen. Sectioning can reorder relative to the
+  // server sort — Completed arrives ordered by completion time but buckets by last activity,
+  // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
+  // "open the next one after completing") has to walk this, not the pre-section list.
+  const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions), [sections]);
+
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
   // none selected we're composing a new session — explicitly (/agents/<id>/new),
   // while browsing Completed/Trash (nothing openable there), or implicitly
@@ -1394,18 +1400,18 @@ export function AgentView({ runner }: { runner: Runner }) {
   const stepSession = useCallback(
     (dir: 1 | -1): boolean => {
       if (!selectedId && view === 'trash') return false;
-      if (visibleSessions.length === 0) return false;
-      const cur = visibleSessions.findIndex((s) => s.id === selectedId);
+      if (orderedSessions.length === 0) return false;
+      const cur = orderedSessions.findIndex((s) => s.id === selectedId);
       let next: number;
-      if (cur === -1) next = dir === 1 ? 0 : visibleSessions.length - 1;
+      if (cur === -1) next = dir === 1 ? 0 : orderedSessions.length - 1;
       else {
         next = cur + dir;
-        if (next < 0 || next >= visibleSessions.length) return false; // stop at the ends
+        if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(`/sessions/${encodeId(visibleSessions[next].id)}`);
+      navigate(`/sessions/${encodeId(orderedSessions[next].id)}`);
       return true;
     },
-    [visibleSessions, selectedId, view, navigate],
+    [orderedSessions, selectedId, view, navigate],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -2404,8 +2410,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // shows its empty/compose state. A non-open row leaves the conversation untouched.
   const leaveIfOpen = (id: string): void => {
     if (id !== selectedId) return;
-    const idx = visibleSessions.findIndex((s) => s.id === id);
-    const next = idx >= 0 ? (visibleSessions[idx + 1] ?? visibleSessions[idx - 1]) : null;
+    const idx = orderedSessions.findIndex((s) => s.id === id);
+    const next = idx >= 0 ? (orderedSessions[idx + 1] ?? orderedSessions[idx - 1]) : null;
     if (next) {
       navigate(`/sessions/${encodeId(next.id)}`);
       return;
