@@ -21,6 +21,11 @@ struct ConsoleView: View {
     // the in-transcript `statusBar` instead.
     @Environment(AppModel.self) private var appModel
     @State private var showShare = false
+    /// Tapping the nav-bar title renames the session (web double-clicks its header title). Seeded
+    /// from the session's own title — not `SessionHeader.title`, whose agent-name fallback would
+    /// otherwise be typed in as if it were the name.
+    @State private var renaming = false
+    @State private var renameDraft = ""
     #endif
 
     var body: some View {
@@ -76,8 +81,23 @@ struct ConsoleView: View {
         // band before; on iOS that band is now retired in favour of this.
         .toolbar {
             ToolbarItem(placement: .principal) {
-                ConsoleNavTitle(session: appModel.session(id: sessionID),
-                                console: registry.peek(sessionID))
+                let session = appModel.session(id: sessionID)
+                let title = ConsoleNavTitle(session: session, console: registry.peek(sessionID))
+                // Tap to rename, matching web's double-click-the-header-title. A trashed session is
+                // not renamable there either, and a row we haven't loaded yet has no title to seed
+                // the field with — both fall back to the plain, non-interactive title.
+                if let session, session.effectiveLifecycleState != .trash {
+                    Button {
+                        renameDraft = session.title ?? ""
+                        renaming = true
+                    } label: {
+                        title
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint("Renames this session")
+                } else {
+                    title
+                }
             }
             // Public read-only share link (web parity: the "Share…" menu item on the Agent console).
             ToolbarItem(placement: .topBarTrailing) {
@@ -92,6 +112,7 @@ struct ConsoleView: View {
                 ShareSheet(sessionID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)
             }
         }
+        .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
         #endif
     }
 }

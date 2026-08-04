@@ -191,6 +191,12 @@ public final class APIClient: @unchecked Sendable {
     /// DELETE to clear). After either the caller refetches the list to pick up the new order.
     public func pinSession(_ id: String) async throws { _ = try await postRaw("sessions/\(id)/pin", body: Optional<Empty>.none) }
     public func unpinSession(_ id: String) async throws { try await deleteRaw("sessions/\(id)/pin") }
+    /// Rename a session's display title (`PATCH /sessions/:id`). Pure metadata: the server allows it
+    /// in any status — a dormant or completed session renames too — and never reloads the runner. It
+    /// broadcasts `session.updated`, so the owner's other clients follow without a refetch.
+    public func renameSession(_ id: String, title: String) async throws {
+        let _: OkResponse = try await patch("sessions/\(id)", body: RenameSessionRequest(title: title))
+    }
 
     // MARK: session tags (personal colored labels)
 

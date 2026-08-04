@@ -382,6 +382,12 @@ public struct SetSessionTagsRequest: Codable, Sendable {
     public init(tagIds: [String]) { self.tagIds = tagIds }
 }
 
+/// PATCH /sessions/:id — rename a session's display title (server trims; empty or >200 chars is a 400).
+public struct RenameSessionRequest: Codable, Sendable {
+    public let title: String
+    public init(title: String) { self.title = title }
+}
+
 /// POST /sessions/:id/turns — send a user message or raw shell command.
 public struct SessionTurnRequest: Codable, Sendable {
     public let clientTurnId: String   // client UUID, idempotency key

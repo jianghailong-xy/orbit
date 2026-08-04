@@ -135,6 +135,15 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertEqual(merged.settingPendingApprovals(0), row)
     }
 
+    /// The optimistic half of a rename: the typed title shows immediately, and nothing else on the
+    /// row moves while the server's `session.updated` is in flight.
+    func testSettingTitleTouchesNothingElse() throws {
+        let row = try loadedRow()
+        let merged = row.settingTitle("Fix bug, properly")
+        XCTAssertEqual(merged.title, "Fix bug, properly")
+        XCTAssertEqual(merged.settingTitle("Fix bug"), row)
+    }
+
     /// The pending count is what flips a running row between the spinner and the amber needs-you
     /// cue, so an approval event alone is enough to repaint it — no list refetch needed.
     func testPendingApprovalsDrivesTheRowGlyph() throws {

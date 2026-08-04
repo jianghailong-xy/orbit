@@ -43,6 +43,12 @@ public extension Session {
         )
     }
 
+    /// Apply a title the user just typed, so the header and every loaded row show the new name before
+    /// the server's `session.updated` (and the next list snapshot) confirm it. See `AppModel.renameSession`.
+    func settingTitle(_ title: String) -> Session {
+        merging(title: title)
+    }
+
     /// Apply an `approval.requested` / `approval.resolved` pending count — the one field those
     /// events carry, and all a row needs to switch between the working spinner and the amber
     /// needs-you cue (see `SessionStatusGlyph`).

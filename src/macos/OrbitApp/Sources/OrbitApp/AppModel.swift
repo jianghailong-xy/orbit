@@ -1133,6 +1133,42 @@ final class AppModel {
         }
     }
 
+    /// Rename a session's display title — web parity with the console header's inline rename.
+    /// No capability gate: the server treats this as pure metadata and allows it in any status
+    /// (dormant, completed, trashed), with no runner reload behind it. A blank or unchanged title is
+    /// the same no-op as web's editor closing on an empty field.
+    ///
+    /// The new name is written into the loaded snapshots first so the header and the row change on
+    /// the spot; the reload settles the authoritative value either way, which is also what reverts
+    /// the optimistic patch when the server rejects the rename.
+    func renameSession(_ id: String, title rawTitle: String) {
+        guard let api else { return }
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title != session(id: id)?.title else { return }
+        patchSessionTitle(id, to: title)
+        Task { @MainActor in
+            do { try await api.renameSession(id, title: title) }
+            catch {
+                showToast("Could not rename session", sessionID: id,
+                          detail: Self.toastDetail(error), tone: .error)
+            }
+            await reloadSessionLists()
+        }
+    }
+
+    /// Write a title into every loaded copy of a row: the cross-agent Open snapshot (which also feeds
+    /// the agent pane and Recents), the agent pane's own Completed / Trash list — those rows are not
+    /// in the Open snapshot — and the cold-route detail cache the console header falls back to.
+    private func patchSessionTitle(_ id: String, to title: String) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            var list = sessions
+            list[index] = list[index].settingTitle(title)
+            applySessionSnapshot(list)
+        }
+        if let cached = sessionDetails.resolve(id) { sessionDetails.store(cached.settingTitle(title)) }
+        agents?.applyRenamedSession(id, title: title)
+    }
+
     /// Pin or unpin a session; the server floats pinned sessions to the top of every list.
     func setPinned(_ session: Session, pinned: Bool) {
         guard let api else { return }

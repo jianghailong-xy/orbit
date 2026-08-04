@@ -30,6 +30,9 @@ private struct SessionRowActions: ViewModifier {
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
+    /// The rename alert and its draft, seeded from the row's current title when the menu item fires.
+    @State private var renaming = false
+    @State private var renameDraft = ""
     private var isCompleted: Bool { scope == .completed }
     private var isTrash: Bool { scope == .trash }
     private var canComplete: Bool { session.capabilities?.canComplete ?? true }
@@ -49,6 +52,10 @@ private struct SessionRowActions: ViewModifier {
                 deleteButton
             }
             .contextMenu {
+                // Rename stays out of the swipe actions — it opens an editor rather than performing
+                // the action, which is not what a swipe promises. Trash matches web, where the
+                // header title isn't editable for a trashed session.
+                if !isTrash { renameButton }
                 if !isTrash { pinButton }
                 if !isTrash, let onTag {
                     Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
@@ -57,6 +64,7 @@ private struct SessionRowActions: ViewModifier {
                 Divider()
                 deleteButton
             }
+            .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: session.id)
             .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
                 Button("Delete Permanently", role: .destructive) { model.purgeSession(session.id) }
                 Button("Cancel", role: .cancel) {}
@@ -79,6 +87,15 @@ private struct SessionRowActions: ViewModifier {
             }
             .tint(.green)
             .disabled(!canComplete)
+        }
+    }
+
+    private var renameButton: some View {
+        Button {
+            renameDraft = session.title ?? ""
+            renaming = true
+        } label: {
+            Label("Rename…", systemImage: "pencil")
         }
     }
 

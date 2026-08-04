@@ -134,6 +134,14 @@ final class AgentsModel {
         agentSessions.insert(session, at: 0)
     }
 
+    /// Show a just-typed title on this pane's row. The Open list is handed down whole from the app's
+    /// snapshot (`applyOpenSnapshot`), but Completed / Trash are this pane's own query — so those rows
+    /// would otherwise keep the old name until the next fetch. See `AppModel.renameSession`.
+    func applyRenamedSession(_ id: String, title: String) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index] = agentSessions[index].settingTitle(title)
+    }
+
     /// Remove a session after its exact detail endpoint returned 404. The current Completed / Trash
     /// list may otherwise retain a tappable ghost row until its next successful polling response.
     func discardSession(_ id: String) {

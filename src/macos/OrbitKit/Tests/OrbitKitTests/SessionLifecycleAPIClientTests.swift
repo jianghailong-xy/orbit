@@ -31,11 +31,13 @@ private final class SessionLifecycleURLProtocol: URLProtocol, @unchecked Sendabl
 private final class RequestPathRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var storage: [String] = []
+    private var verbs: [String] = []
 
     func append(_ request: URLRequest) {
         lock.lock()
         storage.append(request.url?.path(percentEncoded: false) ?? "")
         if let query = request.url?.query { storage[storage.count - 1] += "?\(query)" }
+        verbs.append(request.httpMethod ?? "")
         lock.unlock()
     }
 
@@ -43,6 +45,12 @@ private final class RequestPathRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+
+    var methods: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return verbs
     }
 }
 
@@ -86,6 +94,21 @@ final class SessionLifecycleAPIClientTests: XCTestCase {
             "/api/sessions/session-1/complete",
             "/api/sessions/session-1/archive",
         ])
+    }
+
+    /// Rename is a PATCH on the session itself — not on `:id/config`, which is a different endpoint
+    /// with a terminal-state guard and a runner reload behind it.
+    func testRenameSessionPatchesTheSessionResource() async throws {
+        let recorder = RequestPathRecorder()
+        SessionLifecycleURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data(#"{"ok":true,"title":"New name"}"#.utf8))
+        }
+
+        try await client().renameSession("session-1", title: "New name")
+
+        XCTAssertEqual(recorder.paths, ["/api/sessions/session-1"])
+        XCTAssertEqual(recorder.methods, ["PATCH"])
     }
 
     func testCompletedListFallsBackWhenOldServerTreatsUnknownViewAsOpen() async throws {
