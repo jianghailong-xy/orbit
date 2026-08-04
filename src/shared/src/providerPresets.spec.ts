@@ -47,6 +47,15 @@ describe('PROVIDER_PRESETS', () => {
     for (const p of PROVIDER_PRESETS) expect(p.baseUrl).toMatch(/^https:\/\//);
   });
 
+  it('runs Kimi on the Kimi CLI, pointed at the API that CLI speaks', () => {
+    const kimi = providerPreset('moonshot')!;
+    // Picking Kimi has to reach the Kimi CLI through either door — the runner's own sign-in or a
+    // key pasted here. Its injected provider (KIMI_MODEL_*) takes Moonshot's platform API, not the
+    // Anthropic-compatible shim other CLIs are given, so runtime and endpoint move together.
+    expect(kimi.runtime).toBe('kimi');
+    expect(kimi.baseUrl).toBe('https://api.moonshot.ai/v1');
+  });
+
   it('resolves a preset only for a slug it knows', () => {
     expect(providerPreset('anthropic')?.label).toBe('Anthropic (Claude)');
     expect(providerPreset('moonshot')?.label).toBe('Kimi (Moonshot)');

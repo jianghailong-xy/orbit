@@ -178,14 +178,16 @@ export class ProvidersService {
     const base = this.assertTestableUrl(dto.baseUrl).replace(/\/+$/, '');
     const model = (dto.model ?? '').trim();
     if (!model) throw new BadRequestException('add a model before testing');
-    // codex providers speak OpenAI chat-completions; claude providers the Anthropic Messages API.
-    const isCodex = dto.runtime === 'codex';
-    const endpoint = isCodex ? `${base}/chat/completions` : `${base}/v1/messages`;
+    // What the endpoint speaks, not which CLI drives it: codex and kimi providers both point at
+    // an OpenAI-compatible base URL (Moonshot's own /v1 for kimi), claude providers at the
+    // Anthropic Messages API.
+    const isOpenAIDialect = dto.runtime === 'codex' || dto.runtime === 'kimi';
+    const endpoint = isOpenAIDialect ? `${base}/chat/completions` : `${base}/v1/messages`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${dto.apiKey}`,
     };
-    if (!isCodex) headers['anthropic-version'] = '2023-06-01';
+    if (!isOpenAIDialect) headers['anthropic-version'] = '2023-06-01';
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',

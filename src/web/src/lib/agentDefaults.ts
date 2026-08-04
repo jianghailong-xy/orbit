@@ -47,10 +47,12 @@ export const runtimeForProvider = (
   configured?: ConfiguredProvider[] | null,
 ): AgentProvider => {
   const custom = configuredProvider(provider, configured);
-  // Configured providers currently borrow only Claude or Codex; invalid/legacy runtime values use
-  // the same safe Claude fallback as the backend. First-class Kimi is the literal built-in slug.
+  // Configured providers borrow Claude, Codex or Kimi; invalid/legacy runtime values use the same
+  // safe Claude fallback as the backend. First-class Kimi is also the literal built-in slug below.
   if (custom) {
-    return custom.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    if (custom.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
+    if (custom.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
+    return AgentProvider.CLAUDE;
   }
   const value = provider;
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;

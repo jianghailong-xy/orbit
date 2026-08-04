@@ -123,14 +123,19 @@ describe('Runtime-reported default models', () => {
     ).toBe('claude-runtime-default');
   });
 
-  it('uses only supported configured runtimes when deciding whether Auto is available', () => {
+  it('reads Auto availability from the runtime a configured provider borrows', () => {
     const configured: ConfiguredProvider[] = [
-      { slug: 'local-kimi', label: 'Local Kimi', runtime: 'kimi', models: [] },
+      { slug: 'moonshot', label: 'Kimi (Moonshot)', runtime: 'kimi', models: [] },
       { slug: 'local-codex', label: 'Local Codex', runtime: 'codex', models: [] },
+      { slug: 'local-legacy', label: 'Legacy', runtime: 'nonsense', models: [] },
     ];
 
-    expect(supportsAuto('any-local-alias', 'local-kimi', configured)).toBe(false);
+    // Kimi's Auto is a runtime-wide mode, so it holds for this vendor's model ids too.
+    expect(supportsAuto('kimi-k2.7-code', 'moonshot', configured)).toBe(true);
     expect(supportsAuto('claude-opus-5', 'local-codex', configured)).toBe(false);
+    // An unreadable runtime keeps the backend's Claude fallback, model rules and all.
+    expect(supportsAuto('claude-opus-5', 'local-legacy', configured)).toBe(true);
+    expect(supportsAuto('some-alias', 'local-legacy', configured)).toBe(false);
   });
 
   it('does not leak Claude picker rows into an empty custom model space', () => {

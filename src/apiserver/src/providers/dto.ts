@@ -1,10 +1,12 @@
 import { IsArray, IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 // Custom providers borrow one of the configurable runtimes: `claude` for Anthropic-compatible endpoints,
-// `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, etc.). The runner
-// translates a codex provider's OPENAI_BASE_URL into codex `-c model_providers.*` overrides.
-// `kimi` is a first-class runtime identity and is deliberately not accepted here.
-const RUNTIMES = ['claude', 'codex'];
+// `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, etc.), `kimi` for Moonshot's
+// own API. The runner translates a codex provider's OPENAI_BASE_URL into codex
+// `-c model_providers.*` overrides, and a kimi provider's key into the CLI's KIMI_MODEL_* provider.
+// This is the runtime a row *borrows*; `kimi` remains reserved as a provider SLUG (provider-slug.ts),
+// so a configured row can run on the Kimi CLI without claiming the built-in engine's identity.
+const RUNTIMES = ['claude', 'codex', 'kimi'];
 
 export class CreateModelProviderDto {
   /** Preferred dispatch identifier. Normally omitted: the server derives one from the preset or
@@ -33,7 +35,7 @@ export class TestModelProviderDto {
   @IsString() @MinLength(1) apiKey!: string;
   /** Model to probe with; the picker sends the default (or the first) model. */
   @IsOptional() @IsString() model?: string;
-  /** Which dialect to probe: claude → Anthropic Messages, codex → OpenAI chat completions. */
+  /** Which dialect to probe: claude → Anthropic Messages, codex/kimi → OpenAI chat completions. */
   @IsOptional() @IsIn(RUNTIMES) runtime?: string;
 }
 

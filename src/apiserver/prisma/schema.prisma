@@ -919,8 +919,10 @@ model ModelProvider {
   // Stable identity stored in Agent/Session.provider and shown in pickers, e.g. "deepseek".
   slug          String   @unique
   label         String
-  // Which configurable runtime CLI drives it: "claude" (Anthropic-compatible endpoint)
-  // or "codex" (OpenAI-compatible). Kimi is first-class and cannot be borrowed here.
+  // Which configurable runtime CLI drives it: "claude" (Anthropic-compatible endpoint),
+  // "codex" (OpenAI-compatible) or "kimi" (Moonshot's own API, which the Kimi CLI speaks
+  // natively). Borrowing the Kimi runtime is not the same as claiming the built-in `kimi`
+  // slug, which stays reserved.
   runtime       String   @default("claude")
   baseUrl       String   @map("base_url")
   // AES-256-GCM ciphertext of the provider API key ("iv:tag:ct", each base64). Never

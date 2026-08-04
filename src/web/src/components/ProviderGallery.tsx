@@ -5,7 +5,7 @@ import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { runnersQuery } from '../lib/queries';
-import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
+import { ENGINE_PRESET, runtimeSummary } from '../lib/sessionProviderChoices';
 
 /** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
 interface SignedInRunner {
@@ -142,9 +142,7 @@ export function ProviderGallery() {
                 {count === 0
                   ? (signedInOn.get(p.slug)
                       ? `Already signed in on ${signedInOn.get(p.slug)}`
-                      : p.runtime === 'codex'
-                        ? 'OpenAI-compatible'
-                        : 'Anthropic-compatible')
+                      : runtimeSummary(p.runtime))
                   : count === 1
                     ? 'Connected'
                     : `Connected · ${count} keys`}

@@ -7,7 +7,11 @@ import { SessionsService } from './sessions.service';
  * row is what dispatch reads (`session.provider ?? agent.provider`), so the override has to land
  * there — and it has to be checked, since the slug arrives from the client.
  */
-function makeService(agentProvider = 'claude', configuredRows: Array<{ slug: string }> = []) {
+function makeService(
+  agentProvider = 'claude',
+  configuredRows: Array<{ slug: string; runtime?: string }> = [],
+  agentProviderBuiltin = true,
+) {
   const creates: Array<Record<string, unknown>> = [];
   const providerQueries: unknown[] = [];
   const prisma = {
@@ -16,7 +20,7 @@ function makeService(agentProvider = 'claude', configuredRows: Array<{ slug: str
         id: 'agent-1',
         runnerId: 'runner-1',
         provider: agentProvider,
-        providerBuiltin: true,
+        providerBuiltin: agentProviderBuiltin,
         enableWorktree: false,
         permissionMode: null,
       }),
@@ -89,6 +93,48 @@ test('a configured provider the caller can reach overrides the agent', async () 
   // Owner-scoped and enabled-only: a disabled row, or another user's, must not resolve.
   assert.deepEqual((fixture.providerQueries[0] as { where: unknown }).where, {
     slug: 'deepseek',
+    enabled: true,
+    OR: [{ ownerId: null }, { ownerId: 'owner-1' }],
+  });
+});
+
+/**
+ * The pre-generated session id is Claude's alone: Codex and Kimi mint their own thread after the
+ * process starts, and one they never issued turns their first spawn into a resume of a
+ * conversation that does not exist. Which CLI runs a configured provider is on its row, not in
+ * its slug, so the row has to be consulted before that id is minted.
+ */
+test('a configured provider gets a pre-generated session id only if it borrows Claude', async () => {
+  const cases = [
+    { slug: 'deepseek', runtime: 'claude', pregenerated: true },
+    { slug: 'moonshot', runtime: 'kimi', pregenerated: false },
+    { slug: 'gemini', runtime: 'codex', pregenerated: false },
+  ];
+  for (const { slug, runtime, pregenerated } of cases) {
+    const fixture = makeService('claude', [{ slug, runtime }]);
+    await fixture.service.create('owner-1', {
+      prompt: 'Fix the login timeout',
+      title: 'Fix login',
+      agentId: 'agent-1',
+      provider: slug,
+    });
+    assert.equal(typeof fixture.creates[0].runtimeSessionId === 'string', pregenerated, slug);
+  }
+});
+
+test('an inherited configured provider is looked up for the runtime it borrows', async () => {
+  const fixture = makeService('moonshot', [{ slug: 'moonshot', runtime: 'kimi' }], false);
+  await fixture.service.create('owner-1', {
+    prompt: 'Fix the login timeout',
+    title: 'Fix login',
+    agentId: 'agent-1',
+  });
+
+  assert.equal(fixture.creates[0].provider, 'moonshot');
+  assert.equal(fixture.creates[0].runtimeSessionId, null);
+  // Same owner scoping as the explicit path: the picker's rules don't loosen by inheritance.
+  assert.deepEqual((fixture.providerQueries[0] as { where: unknown }).where, {
+    slug: 'moonshot',
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'owner-1' }],
   });

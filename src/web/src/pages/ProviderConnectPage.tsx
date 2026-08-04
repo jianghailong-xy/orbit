@@ -8,6 +8,7 @@ import { presetModelsQuery, providersQuery, type PresetCatalogEntry } from '../l
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 
 // A model row while it's being edited in the form. contextWindow is a free InputNumber (null when
@@ -145,10 +146,16 @@ function ProviderForm({
       contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : null,
     })),
   );
-  // Anthropic-compatible (claude) vs OpenAI-compatible (codex) endpoint dialect. A preset knows its
-  // own dialect, so only a custom provider is asked.
-  const [runtime, setRuntime] = useState<'claude' | 'codex'>(
-    editing ? (editing.runtime === 'codex' ? 'codex' : 'claude') : (preset?.runtime ?? 'claude'),
+  // Which runtime CLI this endpoint is driven by, and with it the dialect it has to speak:
+  // Anthropic-compatible (claude), OpenAI-compatible (codex), or Moonshot's own API (kimi). A
+  // preset knows its own, so only a custom provider is asked — and only about the two dialects a
+  // hand-typed endpoint can implement.
+  const [runtime, setRuntime] = useState<'claude' | 'codex' | 'kimi'>(
+    editing
+      ? editing.runtime === 'codex' || editing.runtime === 'kimi'
+        ? editing.runtime
+        : 'claude'
+      : (preset?.runtime ?? 'claude'),
   );
   // A self-maintained list shows as a one-line summary; opening it is how you edit it.
   const [modelsOpen, setModelsOpen] = useState(isCustom && !editing);
@@ -303,7 +310,7 @@ function ProviderForm({
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 600 }}>{identity.label}</div>
             <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              {identity.runtime === 'codex' ? 'OpenAI-compatible' : 'Anthropic-compatible'} ·{' '}
+              {runtimeSummary(identity.runtime)} ·{' '}
               {/* Counting a shipped list would misstate what this offers — the runner's CLI
                   decides, and that list changes without us. */}
               {preset?.modelsFromRuntime
@@ -324,7 +331,7 @@ function ProviderForm({
 
           <Step num={2} title="Endpoint" hideNum={!!editing}>
             <Space direction="vertical" size={8} style={{ width: '100%' }}>
-              <Select<'claude' | 'codex'>
+              <Select<'claude' | 'codex' | 'kimi'>
                 value={runtime}
                 onChange={(v) => {
                   setRuntime(v);
@@ -409,7 +416,9 @@ function ProviderForm({
                       {preset.note ??
                         (preset.runtime === 'codex'
                           ? `${preset.label}'s OpenAI-compatible endpoint.`
-                          : `The endpoint ${preset.label} documents for Claude Code.`)}
+                          : preset.runtime === 'kimi'
+                            ? `${preset.label}'s own API, which the Kimi CLI speaks natively.`
+                            : `The endpoint ${preset.label} documents for Claude Code.`)}
                     </div>
                   </Field>
                 </>

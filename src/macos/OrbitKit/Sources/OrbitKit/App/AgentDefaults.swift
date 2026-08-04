@@ -159,7 +159,7 @@ public enum AgentDefaults {
             if let first = custom.models.first(where: { !$0.value.isEmpty && !$0.label.isEmpty }) {
                 return first.value
             }
-            return defaultModel(for: custom.runtime == "codex" ? "codex" : "claude")
+            return defaultModel(for: runtime(for: provider, configured: configured))
         }
         return models(for: provider, catalog: catalog).first?.id ?? defaultModel(for: provider)
     }
@@ -186,9 +186,9 @@ public enum AgentDefaults {
     public static func runtime(for provider: String,
                                configured: [ConfiguredProvider]? = nil) -> String {
         if let custom = configuredProvider(provider, in: configured) {
-            // Configured providers currently borrow only Claude or Codex. Invalid legacy values
-            // use the same safe Claude fallback as the backend.
-            return custom.runtime == "codex" ? "codex" : "claude"
+            // Configured providers borrow Claude, Codex or Kimi. Invalid legacy values use the
+            // same safe Claude fallback as the backend.
+            return custom.runtime == "codex" || custom.runtime == "kimi" ? custom.runtime : "claude"
         }
         let value = provider
         return value == "codex" || value == "kimi" ? value : "claude"

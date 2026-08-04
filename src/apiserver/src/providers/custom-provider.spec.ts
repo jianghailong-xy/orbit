@@ -164,16 +164,49 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, 'kimi-code/kimi-for-coding');
   });
 
-  await t.test('configured provider runtime remains limited to Claude/Codex semantics', () => {
+  const kimiRow = (over: Record<string, unknown> = {}) =>
+    row({
+      runtime: 'kimi',
+      baseUrl: 'https://api.moonshot.ai/v1',
+      apiKeyEnc: encryptSecret('sk-moon'),
+      defaultModel: 'kimi-k2.7-code',
+      ...over,
+    });
+
+  await t.test('configured kimi provider: the Kimi CLI runs on this row, not the runner sign-in', () => {
     const exec = resolveProviderExec({
-      declaredProvider: 'legacy-row',
-      customRow: row({ runtime: 'kimi' }),
+      declaredProvider: 'moonshot',
+      customRow: kimiRow(),
       sessionModel: null,
+      agentModel: null,
+      agentEnv: { KEEP: '1' },
+    });
+    assert.equal(exec.provider, 'kimi');
+    assert.equal(exec.model, 'kimi-k2.7-code');
+    // The CLI activates its injected provider only with the whole set present; a missing half
+    // silently leaves the session on whatever account that machine is signed into.
+    assert.equal(exec.env?.KIMI_MODEL_NAME, 'kimi-k2.7-code');
+    assert.equal(exec.env?.KIMI_MODEL_API_KEY, 'sk-moon');
+    assert.equal(exec.env?.KIMI_MODEL_BASE_URL, 'https://api.moonshot.ai/v1');
+    assert.equal(exec.env?.KIMI_MODEL_PROVIDER_TYPE, 'kimi');
+    assert.equal(exec.env?.KEEP, '1');
+    // Nothing Anthropic-shaped rides along — that pair is what used to send this key to Claude.
+    assert.equal(exec.env?.ANTHROPIC_BASE_URL, undefined);
+    assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, undefined);
+  });
+
+  await t.test('configured kimi provider: the chosen model travels in the environment', () => {
+    const exec = resolveProviderExec({
+      declaredProvider: 'moonshot',
+      customRow: kimiRow(),
+      sessionModel: 'kimi-k3',
       agentModel: null,
       agentEnv: null,
     });
-    assert.equal(exec.provider, 'claude');
-    assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
+    // Kimi's ACP `model` option would switch the session back to the runner's own sign-in, so
+    // KIMI_MODEL_NAME is the only place the picked model can reach the CLI.
+    assert.equal(exec.model, 'kimi-k3');
+    assert.equal(exec.env?.KIMI_MODEL_NAME, 'kimi-k3');
   });
 
   await t.test('built-in opencode: model and agent env pass through untouched', () => {

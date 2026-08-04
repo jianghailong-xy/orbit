@@ -30,15 +30,32 @@ export interface ModelProviderRow {
 }
 
 function runtimeOf(row: ModelProviderRow): AgentProvider {
-  return row.runtime === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+  if (row.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
+  if (row.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
+  return AgentProvider.CLAUDE;
 }
 
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
-// Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2).
-function injectedEnv(row: ModelProviderRow): Record<string, string> {
+// Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
+// the Kimi CLI's own KIMI_MODEL_* provider.
+function injectedEnv(row: ModelProviderRow, model: string): Record<string, string> {
   const apiKey = decryptSecret(row.apiKeyEnc);
   if (runtimeOf(row) === AgentProvider.CODEX) {
     return { OPENAI_BASE_URL: row.baseUrl, OPENAI_API_KEY: apiKey };
+  }
+  if (runtimeOf(row) === AgentProvider.KIMI) {
+    // Kimi has no base-url/key flags: setting KIMI_MODEL_NAME is what makes the CLI synthesize an
+    // in-memory provider from these, and it refuses to start with any of the pair missing. The
+    // model travels in the environment rather than through ACP's `model` config option, which
+    // would switch the session back to the runner's own Kimi sign-in and ignore this key —
+    // hence the runner's kimiUsesEnvModel() check. The type pins the protocol the base URL
+    // speaks, so a row pointed at a CN/self-hosted Moonshot endpoint stays consistent.
+    return {
+      KIMI_MODEL_NAME: model,
+      KIMI_MODEL_API_KEY: apiKey,
+      KIMI_MODEL_PROVIDER_TYPE: 'kimi',
+      KIMI_MODEL_BASE_URL: row.baseUrl,
+    };
   }
   return {
     ANTHROPIC_BASE_URL: row.baseUrl,
@@ -54,7 +71,7 @@ function injectedEnv(row: ModelProviderRow): Record<string, string> {
 /**
  * Resolve how to actually run a (possibly custom) provider at dispatch: the runner-facing
  * built-in runtime, the model to pass, and the process env. For a configured provider
- * the runner never learns its slug — it just receives a Claude/Codex job whose env points at
+ * the runner never learns its slug — it just receives a Claude/Codex/Kimi job whose env points at
  * the provider's endpoint, so the runner needs no changes. A built-in may also resolve
  * directly to Kimi or OpenCode.
  *
@@ -89,17 +106,20 @@ export function resolveProviderExec(args: {
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = runtimeOf(customRow);
+    // A custom provider's model space is its own; never coerce it through the claude/gpt
+    // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
+    // by old replicas; current clients put their choice directly on Session.model.
+    const model =
+      firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
+      presetDefaultModel(customRow) ||
+      DEFAULT_MODEL_BY_PROVIDER[runtime];
     return {
       provider: runtime,
-      // A custom provider's model space is its own; never coerce it through the claude/gpt
-      // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
-      // by old replicas; current clients put their choice directly on Session.model.
-      model:
-        firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
-        presetDefaultModel(customRow) ||
-        DEFAULT_MODEL_BY_PROVIDER[runtime],
+      model,
       // Provider env wins over any user-set agent env (e.g. a hand-typed ANTHROPIC_BASE_URL).
-      env: { ...(agentEnv ?? {}), ...injectedEnv(customRow) },
+      // The kimi runtime also reads the model from here, so it can only be built once the
+      // model above is resolved.
+      env: { ...(agentEnv ?? {}), ...injectedEnv(customRow, model) },
     };
   }
   // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:

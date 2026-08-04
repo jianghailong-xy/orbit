@@ -50,9 +50,10 @@ export interface ProviderPreset {
   defaultModel: string;
   /**
    * Runtime the provider borrows: `claude` for Anthropic-compatible endpoints (default),
-   * `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, …).
+   * `codex` for OpenAI-compatible ones (Gemini's OpenAI endpoint, OpenAI, …), `kimi` for
+   * Moonshot's own API — the Kimi CLI speaks it natively, so a Kimi key runs on Kimi.
    */
-  runtime?: 'claude' | 'codex';
+  runtime?: 'claude' | 'codex' | 'kimi';
   /**
    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
    * for `codex`. The runner probes those CLIs for their live model list (see the runner's
@@ -143,11 +144,14 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyUrl: 'https://platform.deepseek.com',
   },
   {
-    // `kimi` is reserved for the first-class Kimi runtime. Keep this Anthropic-compatible
-    // Moonshot endpoint available as a configured-provider preset under a distinct identity.
+    // `kimi` is reserved for the first-class Kimi runtime, which is what this borrows: picking
+    // Kimi runs the Kimi CLI either way, on this key instead of the runner's own sign-in. The
+    // CLI's env-backed provider (KIMI_MODEL_*) takes Moonshot's native API, not the
+    // Anthropic-compatible shim other CLIs use, so this endpoint is the platform's own /v1.
     slug: 'moonshot',
     label: 'Kimi (Moonshot)',
-    baseUrl: 'https://api.moonshot.ai/anthropic',
+    runtime: 'kimi',
+    baseUrl: 'https://api.moonshot.ai/v1',
     models: [
       { value: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', contextWindow: 256_000 },
       { value: 'kimi-k2.7-code-highspeed', label: 'Kimi K2.7 Code Highspeed', contextWindow: 256_000 },
@@ -155,7 +159,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     ],
     defaultModel: 'kimi-k2.7-code',
     catalog: { source: 'moonshotai', match: /^kimi-/ },
-    note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/anthropic.',
+    note: 'Global endpoint; the CN platform uses https://api.moonshot.cn/v1.',
     brand: { mono: 'K', from: '#3a3a3a', to: '#111111' },
     keyUrl: 'https://platform.moonshot.ai',
   },

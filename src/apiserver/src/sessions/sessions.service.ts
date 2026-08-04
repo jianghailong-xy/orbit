@@ -195,6 +195,9 @@ export class SessionsService {
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
     }
+    // The runtime a configured provider borrows, which is what decides the pre-generated session
+    // id below — its slug says nothing about which CLI ends up running it.
+    let borrowedRuntime: string | null = null;
     // An explicit provider (the New Session picker) overrides what the agent would have
     // contributed. Resolved here rather than trusted: a built-in engine slug is always fine,
     // and anything else has to be a provider this caller can actually dispatch with.
@@ -208,10 +211,20 @@ export class SessionsService {
       if (!providerBuiltin) {
         const configured = await this.prisma.modelProvider.findFirst({
           where: { slug: dto.provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
-          select: { id: true },
+          select: { runtime: true },
         });
         if (!configured) throw new BadRequestException('provider not available');
+        borrowedRuntime = configured.runtime;
       }
+    } else if (!providerBuiltin) {
+      // Inherited from the agent, so it hasn't been looked up yet. A row that has since been
+      // deleted or disabled leaves this null: dispatch falls back to Claude, and so does the
+      // runtime below.
+      const configured = await this.prisma.modelProvider.findFirst({
+        where: { slug: provider, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+        select: { runtime: true },
+      });
+      borrowedRuntime = configured?.runtime ?? null;
     }
     await this.assertOwnedRefs(ownerId, { agentId: dto.agentId, assignedRunnerId });
     // Linking to a task: it must belong to the same user (no cross-tenant linking).
@@ -240,9 +253,13 @@ export class SessionsService {
     const title = explicitTitle ?? titleFromPrompt(dto.prompt);
     const branch = enableWorktree ? makeBranchName(title) : null;
     // provider is the identity stored on the row; runtime is which built-in CLI actually
-    // drives it (a custom provider borrows Claude/Codex), and decides the pre-generated session-id
-    // and effort normalization.
-    const runtime = normalizeRuntimeProvider(provider, providerBuiltin);
+    // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
+    // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
+    // Codex/Kimi session a Claude-style id it never created makes its very first spawn a resume
+    // of a conversation that doesn't exist.
+    const runtime = borrowedRuntime
+      ? normalizeRuntimeProvider(borrowedRuntime)
+      : normalizeRuntimeProvider(provider, providerBuiltin);
     const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {

@@ -48,6 +48,16 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.OPENCODE]: 'OpenCode',
 };
 
+/** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
+ *  Claude and Codex borrow a CLI to speak a dialect the vendor exposes for it, so the dialect is
+ *  the useful fact. Kimi is the vendor's own CLI on its own API, where it isn't. */
+export const runtimeSummary = (runtime?: string | null): string =>
+  runtime === AgentProvider.KIMI
+    ? 'Runs on the Kimi CLI'
+    : runtime === AgentProvider.CODEX
+      ? 'OpenAI-compatible'
+      : 'Anthropic-compatible';
+
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
 // company, and a user who sees both should see one logo.
