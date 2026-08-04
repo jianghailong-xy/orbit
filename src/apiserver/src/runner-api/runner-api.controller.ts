@@ -1857,8 +1857,9 @@ export class RunnerApiController {
 
       // Maintain the running background-shell set (Session.runningBgShells), which drives the
       // "Background running" status on the list + header. Added on a Bash(run_in_background)
-      // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>,
-      // and cleared on a (re)spawn (Claude restarted → any prior background children are gone).
+      // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>
+      // — which the runner also synthesizes when the launching runtime stops, since its
+      // children die with it — and cleared on a (re)spawn handshake (see bgReset).
       // Atomic array ops stay idempotent under event-batch retries.
       const bgStarted = events
         .filter(
@@ -1910,9 +1911,15 @@ export class RunnerApiController {
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
+      // A runtime handshake means a fresh provider process: whatever the previous one had
+      // running died with it. `resumed` covers an in-place respawn; `init` is the backstop for
+      // a runtime that came back with no chance to report anything — a runner killed outright
+      // (crash/reboot) emits no terminal notification for its children, so without this its
+      // sessions would carry a stale "running" set until they end.
       const bgReset = events.some(
         (e) =>
-          e.type === RunEventType.SYSTEM && String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
+          e.type === RunEventType.SYSTEM &&
+          ['init', 'resumed'].includes(String((e.payload as { subtype?: unknown }).subtype ?? '')),
       );
       if (bgReset) {
         await tx.session.update({

@@ -159,7 +159,8 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
-import { hasOutlivingSessionWork, isSessionTurnActive } from '../lib/sessionActivity';
+import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
+import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import {
   isCompleteShortcutEligible,
@@ -524,22 +525,31 @@ const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
 
 // Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-agent
-// (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins), or
-// null when the session is genuinely idle. Shared by the list line, status glyph and header
-// so all three agree a parked-but-still-working session isn't "waiting for your reply".
-const parkedWorkLabel = (s: any): string | null => {
-  if (!hasOutlivingSessionWork(s)) return null;
-  return (s.runningSubagentCount ?? 0) > 0
-    ? subagentRunningLabel(s.runningSubagentCount)
-    : bgRunningLabel(s.runningBgCount);
+// (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins) with
+// the kind behind it, or null when the session is genuinely idle. Shared by the list line,
+// status glyph and header so all three agree a parked-but-still-working session isn't
+// "waiting for your reply" — and agree on how emphatically to say so: a sub-agent is the
+// agent still working, while a background shell is usually a dev server or watcher the agent
+// deliberately left up, which keeps reporting for the rest of the session's life.
+type ParkedWork = { text: string; kind: OutlivingWork };
+const parkedWorkLabel = (s: any): ParkedWork | null => {
+  const kind = outlivingSessionWork(s);
+  if (!kind) return null;
+  return kind === 'subagent'
+    ? { text: subagentRunningLabel(s.runningSubagentCount), kind }
+    : { text: bgRunningLabel(s.runningBgCount), kind };
 };
 
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
 // Otherwise it's the flattened last reply (or nothing). `tone` drives the colour:
-// blue = working, amber = needs you, grey = queued, default = reply content.
-type SessionLine = { text: string; tone: 'preview' | 'running' | 'approval' | 'queued' };
+// blue = working, amber = needs you, grey = queued or a left-up background process,
+// default = reply content.
+type SessionLine = {
+  text: string;
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
+};
 const sessionLine = (s: any, live: boolean): SessionLine | null => {
   const state = sessionRunStateOf(s);
   if (live && state === 'RUNNING') {
@@ -564,7 +574,8 @@ const sessionLine = (s: any, live: boolean): SessionLine | null => {
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked) return { text: `${parked}…`, tone: 'running' };
+  if (parked)
+    return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   return null;
 };
@@ -576,7 +587,7 @@ export function statusLabel(session: any): string {
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (state === 'RUNNING')
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
-  if (state === 'AWAITING_INPUT') return parkedWorkLabel(session) ?? 'Waiting for your reply';
+  if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
   if (state === 'FAILED') {
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
@@ -616,11 +627,22 @@ export function StatusIcon({ session }: { session: any }) {
   }
   if (state === 'AWAITING_INPUT') {
     const work = parkedWorkLabel(session);
-    return work ? (
-      <Tooltip title={work}>
-        <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
-      </Tooltip>
-    ) : (
+    // A sub-agent is the agent itself still working, so it keeps the working spinner. A
+    // background shell isn't: agents routinely leave a dev server or watcher up, and it never
+    // exits, so spinning at it would mark the session busy for the rest of its life and drown
+    // out the sessions that really are working. It gets a static, muted console glyph — the
+    // same one the Background processes tray uses — and keeps its label.
+    if (work)
+      return (
+        <Tooltip title={work.text}>
+          {work.kind === 'subagent' ? (
+            <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
+          ) : (
+            <ConsoleSqlOutlined style={{ color: 'var(--text-3)', fontSize }} />
+          )}
+        </Tooltip>
+      );
+    return (
       <Tooltip title="Waiting for your reply">
         <MessageOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>

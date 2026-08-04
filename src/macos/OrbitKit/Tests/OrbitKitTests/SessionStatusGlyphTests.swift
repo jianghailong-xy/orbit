@@ -33,9 +33,12 @@ final class SessionStatusGlyphTests: XCTestCase {
         XCTAssertEqual(g, .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply"))
     }
 
-    func testAwaitingInputWithBackgroundShowsSpinner() {
+    /// A left-up dev server outlives the turn but isn't the agent working — it says so with a
+    /// static, muted glyph rather than the working spinner, which would never stop.
+    func testAwaitingInputWithBackgroundShowsMutedConsoleGlyph() {
         let g = SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3))
-        XCTAssertEqual(g, .init(shape: .spinner, tone: .brand, label: "3 background processes running"))
+        XCTAssertEqual(g, .init(shape: .symbol("terminal"), tone: .neutral,
+                                label: "3 background processes running"))
     }
 
     func testSucceeded() {
@@ -165,7 +168,7 @@ final class SessionStatusGlyphTests: XCTestCase {
 
         let background = session(.cancelled, runningBgCount: 3, runState: .awaitingInput)
         XCTAssertEqual(SessionStatusGlyph.make(for: background),
-                       .init(shape: .spinner, tone: .brand,
+                       .init(shape: .symbol("terminal"), tone: .neutral,
                              label: "3 background processes running"))
 
         let offline = session(.cancelled, error: "runner offline", runState: .failed)

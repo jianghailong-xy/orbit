@@ -162,6 +162,43 @@ func TestReadCappedReturnsOnlyTheFileTail(t *testing.T) {
 	}
 }
 
+// A shell dies with the engine that launched it, and Claude writes a <task-notification> only
+// for a shell that ends on its own — so the stop has to report it, or it stays "running" for
+// the rest of the session. Runner-owned `!`-shells outlive the engine and are left alone.
+func TestKillEngineShellsReportsOnlyEngineOwnedShells(t *testing.T) {
+	emit, got := bgCollector()
+	bg := newBgTailer(context.Background(), emit)
+	defer bg.stopAll()
+	dir := t.TempDir()
+	bg.startTail("toolu_A", "bei1", filepath.Join(dir, "bei1.output"), true)
+	bg.startTail("toolu_B", "bei2", filepath.Join(dir, "bei2.output"), false)
+
+	bg.killEngineShells()
+
+	if len(*got) != 1 || (*got)[0] != "toolu_A|killed" {
+		t.Fatalf("want the engine-owned shell killed only, got %v", *got)
+	}
+	if _, ok := bg.live["toolu_B"]; !ok {
+		t.Fatal("runner-owned shell must survive its engine stopping")
+	}
+}
+
+// Whichever terminal signal lands first wins: a notification arriving after the engine stop
+// (the transcript tail re-reads the whole file) must not report the same shell twice.
+func TestLateNotificationDoesNotRelitigateAKilledShell(t *testing.T) {
+	emit, got := bgCollector()
+	bg := newBgTailer(context.Background(), emit)
+	defer bg.stopAll()
+	bg.startTail("toolu_A", "bei1", filepath.Join(t.TempDir(), "bei1.output"), true)
+
+	bg.killEngineShells()
+	bgTaskFromNotification(taskNotif("bei1", "toolu_A", "completed"), emit, bg)
+
+	if len(*got) != 1 || (*got)[0] != "toolu_A|killed" {
+		t.Fatalf("want a single terminal report, got %v", *got)
+	}
+}
+
 // watchJSONL must return once the session run ends (stopAll), not leak a goroutine.
 func TestWatchJSONLStopsOnStopAll(t *testing.T) {
 	emit, _ := bgCollector()

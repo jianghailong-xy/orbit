@@ -666,6 +666,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			}
 		}
 		engineCancel()
+		// This engine's process tree is gone, so the background shells it launched are too.
+		// Claude only writes a <task-notification> for a shell that ends on its own, so report
+		// them here: an idle warm engine recycled by the timer/LRU otherwise leaves its `vite`
+		// or watcher marked running forever, painting a parked session as busy for the rest of
+		// its life. (A crash respawn also emits `resumed`, which resets the server's set.)
+		bg.killEngineShells()
 		evicted := pool.engineStopped(live, engineGeneration)
 		// Retire before any cold wait, branch handling, or crash backoff. The HTTP inbox
 		// handler can outlive cancellation of the Go request, so leaving this until the next

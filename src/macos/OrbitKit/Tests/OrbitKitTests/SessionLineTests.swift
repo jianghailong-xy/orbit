@@ -46,8 +46,9 @@ final class SessionLineTests: XCTestCase {
     func testPendingAndBackground() {
         XCTAssertEqual(SessionLine.make(for: session(status: .pending), live: true),
                        .init(text: "Queued", tone: .queued))
+        // Muted, not the working blue: the process outlives the turn but isn't the agent working.
         XCTAssertEqual(SessionLine.make(for: session(status: .awaitingInput, runningBgCount: 2), live: true),
-                       .init(text: "2 background processes running…", tone: .running))
+                       .init(text: "2 background processes running…", tone: .background))
     }
 
     func testParkedShowsLastReplyAndStripsMarkdown() {

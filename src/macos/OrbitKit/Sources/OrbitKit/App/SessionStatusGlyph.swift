@@ -80,7 +80,11 @@ public struct SessionStatusGlyph: Equatable, Sendable {
 
         case .awaitingInput:
             if (runningBgCount ?? 0) > 0 {
-                return .init(shape: .spinner, tone: .brand, label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
+                // Not the agent working: a dev server or watcher the agent left up never exits,
+                // so the working spinner would mark the session busy for the rest of its life.
+                // A static, muted console glyph says "still something running" without it.
+                return .init(shape: .symbol("terminal"), tone: .neutral,
+                             label: SessionLine.bgRunningLabel(runningBgCount ?? 0))
             }
             return .init(shape: .symbol("message"), tone: .neutral, label: "Waiting for your reply")
 

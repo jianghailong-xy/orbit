@@ -3205,14 +3205,16 @@ body {
   text-overflow: ellipsis;
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
-   status glyph: blue = running, amber = waiting on you, grey = queued. */
+   status glyph: blue = running, amber = waiting on you, grey = queued or a background
+   process the agent left up (which outlives the turn but isn't the agent working). */
 .session-preview.tone-running {
   color: var(--brand);
 }
 .session-preview.tone-approval {
   color: var(--warning-solid);
 }
-.session-preview.tone-queued {
+.session-preview.tone-queued,
+.session-preview.tone-background {
   color: var(--text-3);
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle

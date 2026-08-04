@@ -8,9 +8,16 @@ export interface SessionActivity {
 
 /** A parent turn may be AWAITING_INPUT while async sub-agents or background shells keep working.
  * Drives the status label/glyph, so a parked-but-still-working session never reads as "waiting
- * for your reply". */
-export const hasOutlivingSessionWork = (session: SessionActivity | null | undefined): boolean =>
-  (session?.runningSubagentCount ?? 0) > 0 || (session?.runningBgCount ?? 0) > 0;
+ * for your reply" — and so the two kinds don't read the same. A sub-agent is the agent itself
+ * still working; a background shell usually isn't (agents leave dev servers and watchers up),
+ * so only the former earns the working spinner. Sub-agent wins when both are live. */
+export type OutlivingWork = 'subagent' | 'background';
+export const outlivingSessionWork = (
+  session: SessionActivity | null | undefined,
+): OutlivingWork | null => {
+  if ((session?.runningSubagentCount ?? 0) > 0) return 'subagent';
+  return (session?.runningBgCount ?? 0) > 0 ? 'background' : null;
+};
 
 /** Whether the selected session's worktree is currently transient — i.e. something is still
  * *writing* to it. That's the parent turn (`idle` tracks its boundary) plus async sub-agents,

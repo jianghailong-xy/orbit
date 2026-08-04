@@ -57,15 +57,32 @@ type bgTailer struct {
 	// stopping is protected by mu and closes the WaitGroup registration gate.
 	// stopAll sets it before Wait, so no goroutine can Add concurrently with Wait.
 	stopping bool
-	live     map[string]context.CancelFunc // toolUseId → stop its tail
-	seen     map[string]bool               // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
+	live     map[string]liveShell // toolUseId → its running tail
+	seen     map[string]bool      // "<toolUseId>\x00<status>" already emitted (dedupe across sources)
+	terminal map[string]bool      // toolUseId already reported in a terminal state
+}
+
+// liveShell is a background shell with a tail running. engineOwned separates the agent's
+// Bash(run_in_background) shells — children of the provider process, so they die with it —
+// from user `!cmd &` shells, which the runner owns and which outlive an engine restart.
+type liveShell struct {
+	cancel      context.CancelFunc
+	shellID     string
+	engineOwned bool
 }
 
 func newBgTailer(ctx context.Context, emit emitFn) *bgTailer {
 	// Own a cancellable child so stopAll reliably ends the watcher goroutine even when the
 	// parent context outlives a normally-ended session run.
 	ctx, cancel := context.WithCancel(ctx)
-	return &bgTailer{ctx: ctx, cancel: cancel, emit: emit, live: map[string]context.CancelFunc{}, seen: map[string]bool{}}
+	return &bgTailer{
+		ctx:      ctx,
+		cancel:   cancel,
+		emit:     emit,
+		live:     map[string]liveShell{},
+		seen:     map[string]bool{},
+		terminal: map[string]bool{},
+	}
 }
 
 // markSeen records a (toolUseId, status) transition, returning true only the first time it's
@@ -83,6 +100,20 @@ func (b *bgTailer) markSeen(toolUseID, status string) bool {
 	return true
 }
 
+// markTerminal records that a shell reached a terminal state, returning true only for the
+// first report. A shell terminalizes exactly once: whichever of its own <task-notification>
+// and killEngineShells lands first wins, so a shell that finished just as its engine stopped
+// isn't also reported as killed.
+func (b *bgTailer) markTerminal(toolUseID string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.terminal[toolUseID] {
+		return false
+	}
+	b.terminal[toolUseID] = true
+	return true
+}
+
 // onToolResult inspects a tool_result's text for the "running in background" confirmation and,
 // when found, starts tailing that process's output file. toolUseID correlates the tail (and
 // the later completion) with the launching Bash call.
@@ -95,13 +126,13 @@ func (b *bgTailer) onToolResult(toolUseID, content string) {
 	if idM == nil || pathM == nil {
 		return
 	}
-	b.startTail(toolUseID, idM[1], pathM[1])
+	b.startTail(toolUseID, idM[1], pathM[1], true)
 }
 
 // startTail begins tailing path for the given background shell (no-op if already tailing
-// toolUseID). Shared by agent shells (file parsed from a tool_result) and user `!`-shells
-// (file the runner owns).
-func (b *bgTailer) startTail(toolUseID, shellID, path string) {
+// toolUseID). Shared by agent shells (engineOwned: file parsed from a tool_result) and user
+// `!`-shells (file the runner owns).
+func (b *bgTailer) startTail(toolUseID, shellID, path string, engineOwned bool) {
 	b.mu.Lock()
 	if b.stopping {
 		b.mu.Unlock()
@@ -112,7 +143,7 @@ func (b *bgTailer) startTail(toolUseID, shellID, path string) {
 		return
 	}
 	ctx, cancel := context.WithCancel(b.ctx)
-	b.live[toolUseID] = cancel
+	b.live[toolUseID] = liveShell{cancel: cancel, shellID: shellID, engineOwned: engineOwned}
 	b.wg.Add(1)
 	b.mu.Unlock()
 	go func() {
@@ -172,7 +203,7 @@ func (b *bgTailer) startUserShell(execDir, command, toolUseID, shellID, outputPa
 		f.Close()
 		return err
 	}
-	b.startTail(toolUseID, shellID, outputPath)
+	b.startTail(toolUseID, shellID, outputPath, false)
 	waiterStarted = true
 	go func() {
 		defer b.wg.Done()
@@ -231,9 +262,42 @@ func readCapped(path string) string {
 func (b *bgTailer) stop(toolUseID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if cancel, ok := b.live[toolUseID]; ok {
-		cancel()
+	if s, ok := b.live[toolUseID]; ok {
+		s.cancel()
 		delete(b.live, toolUseID)
+	}
+}
+
+// killEngineShells reports every still-running shell of the provider process as killed and
+// stops its tail. Those shells are children of that process, so they're gone the moment it
+// stops — but Claude only writes a <task-notification> for a shell that ends on its own, so
+// without this a left-up dev server or watcher stays "running" for the rest of the session:
+// the tray never resolves it, and Session.runningBgShells keeps painting a parked session as
+// busy until it's resumed or ended, which may never happen. Runner-owned `!`-shells are left
+// alone — they survive an engine restart and report their own exit.
+func (b *bgTailer) killEngineShells() {
+	type killedShell struct{ toolUseID, shellID string }
+	b.mu.Lock()
+	killed := make([]killedShell, 0, len(b.live))
+	for id, s := range b.live {
+		if !s.engineOwned {
+			continue
+		}
+		s.cancel()
+		delete(b.live, id)
+		killed = append(killed, killedShell{toolUseID: id, shellID: s.shellID})
+	}
+	b.mu.Unlock()
+	for _, s := range killed {
+		if !b.markTerminal(s.toolUseID) {
+			continue // its own notification already reported a terminal state
+		}
+		b.emit(evBackgroundTask, map[string]interface{}{
+			"shellId":   s.shellID,
+			"toolUseId": s.toolUseID,
+			"status":    "killed",
+			"summary":   "Background command stopped with the session runtime that launched it",
+		})
 	}
 }
 
@@ -243,8 +307,8 @@ func (b *bgTailer) stop(toolUseID string) {
 func (b *bgTailer) stopAll() {
 	b.mu.Lock()
 	b.stopping = true
-	for id, cancel := range b.live {
-		cancel()
+	for id, s := range b.live {
+		s.cancel()
 		delete(b.live, id)
 	}
 	b.mu.Unlock()
@@ -297,10 +361,17 @@ func bgTaskFromNotification(s string, emit emitFn, bg *bgTailer) bool {
 	}
 	toolUseID := get(bgNotifToolUse)
 	status := get(bgNotifStatus)
-	// Skip a notification we've already turned into an event (the same <task-notification>
-	// reaches us via both the stdout stream and the transcript tail — see watchJSONL).
-	if bg != nil && toolUseID != "" && !bg.markSeen(toolUseID, status) {
-		return true
+	terminal := isTerminalBgStatus(status)
+	if bg != nil && toolUseID != "" {
+		// Skip a notification we've already turned into an event (the same <task-notification>
+		// reaches us via both the stdout stream and the transcript tail — see watchJSONL).
+		if !bg.markSeen(toolUseID, status) {
+			return true
+		}
+		// A shell already reported as killed with its engine must not terminalize twice.
+		if terminal && !bg.markTerminal(toolUseID) {
+			return true
+		}
 	}
 	emit(evBackgroundTask, map[string]interface{}{
 		"shellId":    get(bgNotifTaskID),
@@ -309,13 +380,20 @@ func bgTaskFromNotification(s string, emit emitFn, bg *bgTailer) bool {
 		"summary":    get(bgNotifSummary),
 		"outputFile": get(bgNotifFile),
 	})
-	if bg != nil && toolUseID != "" {
-		switch status {
-		case "completed", "failed", "killed", "stopped":
-			bg.stop(toolUseID)
-		}
+	if bg != nil && toolUseID != "" && terminal {
+		bg.stop(toolUseID)
 	}
 	return true
+}
+
+// isTerminalBgStatus reports whether a <task-notification> status ends the shell's life
+// (mirrors the server's own terminal set in runner-api.controller).
+func isTerminalBgStatus(status string) bool {
+	switch status {
+	case "completed", "failed", "killed", "stopped":
+		return true
+	}
+	return false
 }
 
 func asString(v interface{}) string {

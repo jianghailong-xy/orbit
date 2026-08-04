@@ -10,7 +10,7 @@ function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
   runtimeSessionId: string | null = 'runtime-1',
 ) {
-  const calls = { createMany: [] as any[], updateMany: [] as any[] };
+  const calls = { createMany: [] as any[], updateMany: [] as any[], update: [] as any[] };
   let published = 0;
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
@@ -29,7 +29,10 @@ function makeController(
         calls.updateMany.push(args);
         return { count: 1 };
       },
-      update: async () => ({}),
+      update: async (args: any) => {
+        calls.update.push(args);
+        return {};
+      },
     },
   };
   const prisma = {
@@ -87,6 +90,32 @@ test('an OpenCode init event persists the runtime id without counting as turn ac
       data: { runtimeSessionId: 'opencode-runtime-1' },
     },
   ]);
+});
+
+test('a runtime handshake clears background work left by the previous process', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.SYSTEM,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { subtype: 'init', sessionId: 'runtime-1' },
+      },
+    ],
+  });
+
+  // A runner killed outright reports no terminal notification for the shells it was running,
+  // so the fresh handshake is the first proof they're gone — otherwise the session keeps
+  // reading as busy forever.
+  assert.ok(
+    calls.update.some(
+      (c: any) =>
+        c.data?.runningBgShells?.length === 0 && c.data?.runningSubagents?.length === 0,
+    ),
+    'the handshake resets both outliving-work sets',
+  );
 });
 
 test('a durable turn event still advances lastTurnAt', async () => {

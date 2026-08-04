@@ -7,10 +7,11 @@ import Foundation
 /// assistant reply (or nil). `tone` drives the colour.
 public struct SessionLine: Equatable, Sendable {
     public enum Tone: String, Sendable {
-        case preview   // reply content — default/secondary
-        case running   // working
-        case approval  // needs you
-        case queued    // waiting for a slot
+        case preview     // reply content — default/secondary
+        case running     // working
+        case approval    // needs you
+        case queued      // waiting for a slot
+        case background  // a process the agent left up — outlives the turn, but isn't work
     }
     public let text: String
     public let tone: Tone
@@ -36,9 +37,10 @@ public struct SessionLine: Equatable, Sendable {
         if live && s.effectiveRunState == .queued {
             return SessionLine(text: "Queued", tone: .queued)
         }
-        // Parked (AWAITING_INPUT) but a background process is still running — not idle.
+        // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
+        // not the agent working either (see the glyph): muted, not the working blue.
         if live, let bg = s.runningBgCount, bg > 0 {
-            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .running)
+            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
         }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
         return nil
