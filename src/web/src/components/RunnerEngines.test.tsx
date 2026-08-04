@@ -77,7 +77,22 @@ const runner = (over: Partial<Runner>): Runner => ({
   ...over,
 });
 
-function render(runners: Runner[]) {
+// Cards start folded and the section remembers which ones the user opened, in localStorage —
+// which Node doesn't have. This stub is how a test says "this card is open".
+const store = new Map<string, string>();
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  value: {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+  },
+});
+
+function render(runners: Runner[], { open = true } = {}) {
+  store.clear();
+  if (open) {
+    store.set('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
+  }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['runners'], runners);
   return renderToStaticMarkup(
@@ -145,6 +160,22 @@ describe('the "On your runners" section', () => {
     expect(failed).toContain('Install failed');
     expect(failed).toContain('EACCES');
     expect(failed).toContain('Retry');
+  });
+
+  it('starts folded, so a page of set-up machines is a list rather than a wall', () => {
+    const html = render(
+      [
+        runner({
+          engines: [health({ engine: 'claude' }), health({ engine: 'codex', auth: 'no' })],
+        }),
+      ],
+      { open: false },
+    );
+
+    // The card is there and says how it's doing — it just isn't unpacked into a row per engine.
+    expect(html).toContain('mac-studio');
+    expect(html).toContain('1 of 3 signed in');
+    expect(html).not.toContain('Signed out');
   });
 
   it('folds a runner away without hiding what it would have said', () => {

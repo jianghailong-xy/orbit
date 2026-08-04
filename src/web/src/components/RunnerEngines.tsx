@@ -17,14 +17,14 @@ import type { Runner } from './TasksSidePanel';
 // `Record<LoginEngine, …>` — so adding a fourth engine can't silently skip this page.
 const ENGINES = Object.keys(ENGINE_NAME) as LoginEngine[];
 
-// Which runner cards the user folded away. Three engines per machine adds up fast, and a runner
-// that is set up and quiet is exactly the one worth hiding — so the choice is remembered, like
-// the sidebar's width.
-const COLLAPSED_KEY = 'orbit:providers-collapsed-runners';
+// Which runner cards the user opened. Cards start folded — three engines per machine adds up
+// fast, and a runner that is set up and quiet has nothing to say beyond its summary line — so
+// this remembers the ones worth keeping open, like the sidebar's width.
+const EXPANDED_KEY = 'orbit:providers-expanded-runners';
 
-function readCollapsed(): string[] {
+function readExpanded(): string[] {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]');
+    const raw: unknown = JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? '[]');
     return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === 'string') : [];
   } catch {
     return [];
@@ -322,12 +322,12 @@ function RunnerEngineCard({
  * they get their own section rather than extra rows in the same table.
  */
 export function RunnerEngines() {
-  const [collapsed, setCollapsed] = useState<string[]>(readCollapsed);
+  const [expanded, setExpanded] = useState<string[]>(readExpanded);
   const toggle = (id: string) =>
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
       try {
-        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next));
+        localStorage.setItem(EXPANDED_KEY, JSON.stringify(next));
       } catch {
         // Private mode / full quota: the fold still works, it just won't outlive the page.
       }
@@ -393,7 +393,7 @@ export function RunnerEngines() {
           <RunnerEngineCard
             key={runner.id}
             runner={runner}
-            collapsed={collapsed.includes(runner.id)}
+            collapsed={!expanded.includes(runner.id)}
             onToggle={() => toggle(runner.id)}
           />
         ))
