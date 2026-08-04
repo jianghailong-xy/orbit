@@ -24,6 +24,11 @@ public enum SessionHeader {
         case .running:
             return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
         case .awaitingInput:
+            // A turn the runtime started for itself keeps the run state parked for its whole
+            // duration, so the parked branch is where it has to be caught (see `isGenerating`).
+            if s.isGenerating {
+                return (s.pendingApprovals ?? 0) > 0 ? "Waiting for approval" : "Running"
+            }
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
             return "Waiting for your reply"
         case .succeeded:

@@ -2001,18 +2001,26 @@ export class RunnerApiController {
       }
 
       // Maintain the running background-shell set (Session.runningBgShells), which drives the
-      // "Background running" status on the list + header. Added on a Bash(run_in_background)
-      // launch (keyed by its tool_use id), removed on that task's terminal <task-notification>
-      // — which the runner also synthesizes when the launching runtime stops, since its
-      // children die with it — and cleared on a (re)spawn handshake (see bgReset).
+      // "Background running" status on the list + header. Added on a background launch (keyed by
+      // its tool_use id), removed on that task's terminal <task-notification> — which the runner
+      // also synthesizes when the launching runtime stops, since its children die with it — and
+      // cleared on a respawn handshake (see bgReset).
+      // Two tools launch one: Bash with run_in_background, and Monitor, a watcher that has no such
+      // flag because backgrounding is all it does. Both report in through the same
+      // <task-notification> carrying the launch tool_use id (a Monitor's per-event pings carry
+      // neither id nor status, so only its terminal one clears the set), which is what lets
+      // bgEnded below retire either kind without knowing which it was.
       // Atomic array ops stay idempotent under event-batch retries.
       const bgStarted = events
-        .filter(
-          (e) =>
-            e.type === RunEventType.TOOL_USE &&
-            (e.payload as { name?: string }).name === 'Bash' &&
-            (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background === true,
-        )
+        .filter((e) => {
+          if (e.type !== RunEventType.TOOL_USE) return false;
+          const name = (e.payload as { name?: string }).name;
+          if (name === 'Monitor') return true;
+          return (
+            name === 'Bash' &&
+            (e.payload as { input?: { run_in_background?: boolean } }).input?.run_in_background === true
+          );
+        })
         .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
         .filter(Boolean);
       // Sub-agents (Task/Agent tool) run async: the launch tool_result ("Async agent launched")
@@ -2056,15 +2064,21 @@ export class RunnerApiController {
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
-      // A runtime handshake means a fresh provider process: whatever the previous one had
-      // running died with it. `resumed` covers an in-place respawn; `init` is the backstop for
-      // a runtime that came back with no chance to report anything — a runner killed outright
-      // (crash/reboot) emits no terminal notification for its children, so without this its
-      // sessions would carry a stale "running" set until they end.
+      // A respawn handshake means a fresh provider process: whatever the previous one had running
+      // died with it. Only `resumed` qualifies, because the runner emits that one itself, exactly
+      // when it restarts an engine in place.
+      //
+      // `init` used to count too, as a backstop for a runner killed outright. It cannot: Claude
+      // Code emits an `init` at the head of EVERY query, including the self-driven turns it starts
+      // for a background-task notification (see Session.engineTurnActive). So the wake-up that
+      // proved a background task was alive was also what erased the record of it, and a session
+      // watching a live Monitor reported no background work at all. The crash case is covered
+      // where the handoff is actually observable: /takeover-leases clears the same two sets when a
+      // different process takes the session over, and every claim and reclaim goes through it.
       const bgReset = events.some(
         (e) =>
           e.type === RunEventType.SYSTEM &&
-          ['init', 'resumed'].includes(String((e.payload as { subtype?: unknown }).subtype ?? '')),
+          String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
       );
       if (bgReset) {
         await tx.session.update({

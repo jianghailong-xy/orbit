@@ -1,10 +1,11 @@
 import Foundation
 
 /// The preview line shown under a session title in the Agent-console list — a direct port of the
-/// web `sessionLine`. For a live RUNNING session it surfaces the current state (the tool in flight,
-/// that it's blocked on you, the message you just sent while awaiting the reply, or a bare
-/// "Running…") so the row never collapses to just a title; otherwise it's the flattened last
-/// assistant reply, falling back to the run's own state word. `tone` drives the colour.
+/// web `sessionLine`. For a live session that's generating (see `Session.isGenerating`) it
+/// surfaces the current state (the tool in flight, that it's blocked on you, the message you just
+/// sent while awaiting the reply, or a bare "Running…") so the row never collapses to just a
+/// title; otherwise it's the flattened last assistant reply, falling back to the run's own state
+/// word. `tone` drives the colour.
 public struct SessionLine: Equatable, Sendable {
     public enum Tone: String, Sendable {
         case preview     // reply content — default/secondary
@@ -24,7 +25,7 @@ public struct SessionLine: Equatable, Sendable {
     /// ended before producing any reply still says what happened, so the row can't shrink to a
     /// bare title (iOS sizes its list row from its content — a missing line visibly shortens it).
     public static func make(for s: Session, live: Bool) -> SessionLine {
-        if live && s.effectiveRunState == .running {
+        if live && s.isGenerating {
             if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
             // A turn just started and the agent hasn't replied yet: show the message you just sent

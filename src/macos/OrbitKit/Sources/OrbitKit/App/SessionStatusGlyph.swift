@@ -41,6 +41,7 @@ public struct SessionStatusGlyph: Equatable, Sendable {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
+             engineTurnActive: s.engineTurnActive == true,
              error: s.error)
     }
 
@@ -50,12 +51,14 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             sessionState: SessionState? = nil,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
+                            engineTurnActive: Bool = false,
                             error: String? = nil,
                             endReason: String? = nil) -> SessionStatusGlyph {
         make(runState: SessionRunState.resolve(runState, legacy: sessionState,
                                                status: status, endReason: endReason),
              pendingApprovals: pendingApprovals,
              runningBgCount: runningBgCount,
+             engineTurnActive: engineTurnActive,
              error: error)
     }
 
@@ -66,18 +69,27 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     public static func make(runState: SessionRunState,
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
+                            engineTurnActive: Bool = false,
                             error: String? = nil) -> SessionStatusGlyph {
+        // The working glyph, shared by the two states that mean the agent is generating.
+        func generating() -> SessionStatusGlyph {
+            if (pendingApprovals ?? 0) > 0 {
+                return .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval")
+            }
+            return .init(shape: .spinner, tone: .brand, label: "Running")
+        }
         switch runState {
         case .queued:
             return .init(shape: .symbol("clock"), tone: .neutral, label: "Queued")
 
         case .running:
-            if (pendingApprovals ?? 0) > 0 {
-                return .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval")
-            }
-            return .init(shape: .spinner, tone: .brand, label: "Running")
+            return generating()
 
         case .awaitingInput:
+            // A turn the runtime started for itself is the agent working, so it earns the same
+            // spinner a dispatched turn gets — and it outranks a background process left up
+            // below, which is not the agent working at all.
+            if engineTurnActive { return generating() }
             if (runningBgCount ?? 0) > 0 {
                 // Not the agent working: a dev server or watcher the agent left up never exits,
                 // so the working spinner would mark the session busy for the rest of its life.

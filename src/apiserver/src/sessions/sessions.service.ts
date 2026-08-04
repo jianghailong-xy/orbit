@@ -40,6 +40,7 @@ import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming'
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
+import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -985,9 +986,11 @@ export class SessionsService {
         _count: { _all: true },
       }),
       // Only the blocked rows come back (a handful at most), so this stays a lookup, not a scan
-      // of the whole list.
+      // of the whole list. `active` above counts runner slots, so it stays on RUNNING/PENDING;
+      // this one counts prompts a human has to answer, which a self-driven turn raises just as
+      // well — and those sit at AWAITING_INPUT for the whole turn.
       this.prisma.session.findMany({
-        where: { ...open, status: RunStatus.RUNNING, approvals: { some: { status: 'PENDING' } } },
+        where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
         select: { agentId: true },
       }),
     ]);
@@ -1223,14 +1226,15 @@ export class SessionsService {
         taskTitle: r.taskTitle,
       }),
     );
-    // A turn blocked on a permission prompt keeps the session RUNNING, so the
-    // list can't tell "running" from "waiting for approval" without this count.
-    // Only RUNNING sessions can hold a live approval; skip the query otherwise.
-    const running = sessions.filter((s) => s.status === RunStatus.RUNNING).map((s) => s.id);
-    if (running.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
+    // A turn blocked on a permission prompt keeps the session generating, so the list can't tell
+    // "running" from "waiting for approval" without this count. Only a generating session can
+    // hold a live approval; skip the query otherwise. That includes a self-driven turn, which
+    // stays at AWAITING_INPUT while it runs — its prompt is no less blocking for it.
+    const generating = sessions.filter(isSessionGenerating).map((s) => s.id);
+    if (generating.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
     const counts = await this.prisma.approval.groupBy({
       by: ['sessionId'],
-      where: { sessionId: { in: running }, status: 'PENDING' },
+      where: { sessionId: { in: generating }, status: 'PENDING' },
       _count: { _all: true },
     });
     const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));

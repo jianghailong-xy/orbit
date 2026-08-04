@@ -5,11 +5,37 @@ import XCTest
 final class SessionLineTests: XCTestCase {
     private func session(status: RunStatus, lastAssistantText: String? = nil, lastToolUse: String? = nil,
                          lastUserText: String? = nil, runningBgCount: Int? = nil,
+                         engineTurnActive: Bool? = nil,
                          pendingApprovals: Int? = nil, endReason: String? = nil) -> Session {
         Session(id: "s", title: "t", status: status, agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 lastAssistantText: lastAssistantText, lastToolUse: lastToolUse, lastUserText: lastUserText,
-                runningBgCount: runningBgCount, endReason: endReason)
+                runningBgCount: runningBgCount, engineTurnActive: engineTurnActive, endReason: endReason)
+    }
+
+    /// A turn the runtime started for itself — a background task reporting in, a scheduled
+    /// wake-up — never reaches the control plane's turn bookkeeping, so the session stays parked
+    /// at AWAITING_INPUT while it streams. The row has to say what it is doing rather than fall
+    /// through to the previous reply, which reads as idle. (Ports the web case of the same name.)
+    func testSelfDrivenTurnReadsAsWorkingNotParked() {
+        let tool = session(status: .awaitingInput,
+                           lastAssistantText: "Waiting for the completion notification.",
+                           lastToolUse: "Bash", engineTurnActive: true)
+        XCTAssertEqual(SessionLine.make(for: tool, live: true), .init(text: "Running Bash…", tone: .running))
+
+        // Between tools there is no frontier tool, and the stale reply would read as idle.
+        let bare = session(status: .awaitingInput, engineTurnActive: true)
+        XCTAssertEqual(SessionLine.make(for: bare, live: true), .init(text: "Running…", tone: .running))
+
+        // A self-driven turn is the agent itself working, so it outranks a left-up background
+        // process — which is not.
+        let overBackground = session(status: .awaitingInput, runningBgCount: 2, engineTurnActive: true)
+        XCTAssertEqual(SessionLine.make(for: overBackground, live: true),
+                       .init(text: "Running…", tone: .running))
+
+        // Once the turn ends the server clears the flag and the reply preview takes over again.
+        let done = session(status: .awaitingInput, lastAssistantText: "All done.", engineTurnActive: false)
+        XCTAssertEqual(SessionLine.make(for: done, live: true), .init(text: "All done.", tone: .preview))
     }
 
     func testRunningPrioritisesApprovalThenToolThenPreview() {

@@ -5,6 +5,7 @@ import XCTest
 /// carries the meaning, so each state is asserted on shape + tone + label.
 final class SessionStatusGlyphTests: XCTestCase {
     private func session(_ status: RunStatus, pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
+                         engineTurnActive: Bool? = nil,
                          error: String? = nil, endReason: String? = nil,
                          runStatus: RunStatus? = nil,
                          sessionState: SessionState? = nil,
@@ -15,7 +16,8 @@ final class SessionStatusGlyphTests: XCTestCase {
                 runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
-                runningBgCount: runningBgCount, error: error, endReason: endReason)
+                runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
+                error: error, endReason: endReason)
     }
 
     func testRunning() {
@@ -39,6 +41,21 @@ final class SessionStatusGlyphTests: XCTestCase {
         let g = SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3))
         XCTAssertEqual(g, .init(shape: .symbol("terminal"), tone: .neutral,
                                 label: "3 background processes running"))
+    }
+
+    /// A turn the runtime started for itself IS the agent working, so unlike a left-up background
+    /// process it earns the working spinner — and outranks one when both are true.
+    func testAwaitingInputWithSelfDrivenTurnSpins() {
+        XCTAssertEqual(SessionStatusGlyph.make(for: session(.awaitingInput, engineTurnActive: true)),
+                       .init(shape: .spinner, tone: .brand, label: "Running"))
+        XCTAssertEqual(
+            SessionStatusGlyph.make(for: session(.awaitingInput, runningBgCount: 3,
+                                                 engineTurnActive: true)),
+            .init(shape: .spinner, tone: .brand, label: "Running"))
+        XCTAssertEqual(
+            SessionStatusGlyph.make(for: session(.awaitingInput, pendingApprovals: 1,
+                                                 engineTurnActive: true)),
+            .init(shape: .symbol("pause.circle"), tone: .warning, label: "Waiting for approval"))
     }
 
     func testSucceeded() {

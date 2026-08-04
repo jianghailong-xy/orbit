@@ -10,16 +10,30 @@ function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
   runtimeSessionId: string | null = 'runtime-1',
 ) {
-  const calls = { createMany: [] as any[], updateMany: [] as any[], update: [] as any[] };
+  const calls = {
+    createMany: [] as any[],
+    updateMany: [] as any[],
+    update: [] as any[],
+    executeRaw: [] as string[],
+  };
   let published = 0;
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
+    // The running-work sets are maintained with atomic array SQL rather than a read-modify-write;
+    // record the statement so a test can assert which set a launch touched.
+    $executeRaw: async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+      calls.executeRaw.push(strings.join('?'));
+      return 1;
+    },
     runEvent: {
       createMany: async (args: any) => {
         calls.createMany.push(args);
         return { count: args.data.length };
       },
     },
+    // Every tool_use is also denormalized into tool_call; irrelevant here, but the ingest path
+    // writes it unconditionally, so the stub has to exist for any batch carrying one.
+    toolCall: { createMany: async (args: any) => ({ count: args.data.length }) },
     session: {
       findUniqueOrThrow: async () => ({
         status,
@@ -92,7 +106,39 @@ test('an OpenCode init event persists the runtime id without counting as turn ac
   ]);
 });
 
-test('a runtime handshake clears background work left by the previous process', async () => {
+test('a respawn handshake clears background work left by the previous process', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.SYSTEM,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { subtype: 'resumed', sessionId: 'runtime-1' },
+      },
+    ],
+  });
+
+  // The runner emits `resumed` itself when it restarts an engine in place, and the shells that
+  // engine was running died with it — no terminal notification for any of them.
+  assert.ok(
+    calls.update.some(
+      (c: any) =>
+        c.data?.runningBgShells?.length === 0 && c.data?.runningSubagents?.length === 0,
+    ),
+    'the handshake resets both outliving-work sets',
+  );
+});
+
+/**
+ * Claude Code emits an `init` at the head of every query, including the self-driven turns it
+ * starts for a background-task notification. Resetting on those erased the very background work
+ * whose notification woke the agent — a session watching a live Monitor reported none. The
+ * crash-recovery case that `init` used to stand in for is covered by /takeover-leases, which
+ * every claim and reclaim performs.
+ */
+test('an init does not clear background work, since every query emits one', async () => {
   const { calls, controller } = makeController();
 
   await controller.events({ id: 'runner-1' }, 'session-1', {
@@ -106,15 +152,34 @@ test('a runtime handshake clears background work left by the previous process', 
     ],
   });
 
-  // A runner killed outright reports no terminal notification for the shells it was running,
-  // so the fresh handshake is the first proof they're gone — otherwise the session keeps
-  // reading as busy forever.
   assert.ok(
-    calls.update.some(
+    !calls.update.some(
       (c: any) =>
         c.data?.runningBgShells?.length === 0 && c.data?.runningSubagents?.length === 0,
     ),
-    'the handshake resets both outliving-work sets',
+    'a per-query init leaves the outliving-work sets alone',
+  );
+});
+
+/** A Monitor is a background watcher with no run_in_background flag — backgrounding is all it
+ *  does — and it reports in through the same terminal notification, so it is tracked alike. */
+test('a Monitor launch joins the running background set', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 42,
+        type: RunEventType.TOOL_USE,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { id: 'toolu_mon', name: 'Monitor', input: { command: 'until done; do :; done' } },
+      },
+    ],
+  });
+
+  assert.ok(
+    calls.executeRaw.some((sql: string) => sql.includes('running_bg_shells')),
+    'the Monitor launch is recorded as background work',
   );
 });
 

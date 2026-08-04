@@ -200,6 +200,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// tool lands, so the row shows your pending message instead of the now-stale previous reply.
     public let lastUserText: String?
     public let runningBgCount: Int?
+    /// Whether the engine is generating on a turn nobody dispatched. A runtime restarts the model
+    /// on its own when a background task reports in or a scheduled wake-up fires; those turns
+    /// never reach the control plane's turn bookkeeping, so the session stays at AWAITING_INPUT
+    /// while tools and replies stream for minutes. Absent from older servers, which simply keeps
+    /// the old parked reading. See `isGenerating`.
+    public let engineTurnActive: Bool?
     /// Terminal-state detail the status glyph needs (mirrors web `StatusIcon`): `error` tells a
     /// runner-offline disconnect apart from a real crash; `endReason` tells a benign recycle
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
@@ -217,6 +223,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
+    }
+    /// Whether to draw this session as working — a port of the web console's `isGenerating`.
+    /// `.running` is the dispatched case; a parked session with `engineTurnActive` is a turn the
+    /// runtime started for itself, which streams tools and replies for its whole duration while
+    /// the run state never leaves `.awaitingInput`. The line, the header word and the glyph all
+    /// consult this, so none of them reads a working session as "waiting for your reply".
+    public var isGenerating: Bool {
+        let state = effectiveRunState
+        return state == .running || (state == .awaitingInput && engineTurnActive == true)
     }
     /// Prefer the explicit field, then the lifecycle timestamps older servers already returned.
     public var effectiveLifecycleState: SessionLifecycleState {
@@ -260,6 +275,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         lastToolUse = try values.decodeIfPresent(String.self, forKey: .lastToolUse)
         lastUserText = try values.decodeIfPresent(String.self, forKey: .lastUserText)
         runningBgCount = try values.decodeIfPresent(Int.self, forKey: .runningBgCount)
+        engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
@@ -277,6 +293,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
+                engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 tags: [SessionTag]? = nil) {
@@ -304,6 +321,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastToolUse = lastToolUse
         self.lastUserText = lastUserText
         self.runningBgCount = runningBgCount
+        self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
         self.agent = agent

@@ -16,8 +16,9 @@ public extension Session {
     ///
     /// Only the fields the summary carries are replaced. Everything the slim payload omits — the
     /// preview line (`lastAssistantText` / `lastToolUse` / `lastUserText`), tags, pin, runner,
-    /// background count, error text — is preserved from this row, which is what makes applying the
-    /// event non-destructive; those fields stay the periodic snapshot's job.
+    /// background count, whether a self-driven turn is generating, error text — is preserved from
+    /// this row, which is what makes applying the event non-destructive; those fields stay the
+    /// periodic snapshot's job.
     func applying(_ summary: ControlSessionSummary) -> Session {
         merging(
             // A summary with no title means "still untitled" (the naming pass hasn't run), not
@@ -88,6 +89,7 @@ public extension Session {
                 lastToolUse: lastToolUse,
                 lastUserText: lastUserText,
                 runningBgCount: runningBgCount,
+                engineTurnActive: engineTurnActive,
                 error: error,
                 endReason: endReason,
                 agent: agent ?? self.agent,

@@ -10,6 +10,7 @@ final class SessionHeaderTests: XCTestCase {
                          runState: SessionRunState? = nil,
                          lifecycleState: SessionLifecycleState? = nil,
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
+                         engineTurnActive: Bool? = nil,
                          error: String? = nil, endReason: String? = nil,
                          createdAt: String? = nil, lastTurnAt: String? = nil) -> Session {
         Session(id: "s", title: title, status: status, runStatus: runStatus,
@@ -17,7 +18,8 @@ final class SessionHeaderTests: XCTestCase {
                 runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
-                runningBgCount: runningBgCount, error: error, endReason: endReason,
+                runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
+                error: error, endReason: endReason,
                 createdAt: createdAt, lastTurnAt: lastTurnAt)
     }
 
@@ -41,6 +43,27 @@ final class SessionHeaderTests: XCTestCase {
                        "2 background processes running")
         XCTAssertEqual(SessionHeader.statusWord(for: session(.awaitingInput, runningBgCount: 1)),
                        "Background process running")
+    }
+
+    /// A self-driven turn keeps the run state parked for its whole duration, so the header has to
+    /// catch it in the parked branch or it reads "Waiting for your reply" over a working session.
+    func testStatusWordSelfDrivenTurnReadsAsRunning() {
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.awaitingInput, engineTurnActive: true)),
+            "Running")
+        // A prompt raised mid-wake-up still blocks the turn, and still needs you.
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.awaitingInput, pendingApprovals: 1,
+                                                  engineTurnActive: true)),
+            "Waiting for approval")
+        // It outranks a background process the agent merely left up.
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.awaitingInput, runningBgCount: 2,
+                                                  engineTurnActive: true)),
+            "Running")
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.awaitingInput, engineTurnActive: false)),
+            "Waiting for your reply")
     }
 
     func testStatusWordSucceeded() {

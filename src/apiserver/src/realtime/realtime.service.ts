@@ -28,6 +28,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import { isSessionGenerating } from '../common/session-generating';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import {
   approvalIdOf,
@@ -569,6 +570,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         status: true,
+        engineTurnActive: true,
         endReason: true,
         completedAt: true,
         archivedAt: true,
@@ -592,10 +594,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const lifecycleState = deriveSessionLifecycleState(s);
     const filingState = deriveSessionFilingState(s);
     const capabilities = deriveSessionCapabilities(s);
-    // A blocked permission keeps a session RUNNING, so only RUNNING sessions can hold a live
-    // approval — skip the count otherwise (mirrors the list endpoint).
-    const pendingApprovals =
-      s.status === RunStatus.RUNNING ? await this.countPendingApprovals(sessionId) : 0;
+    // A blocked permission keeps a session generating, so only a generating session can hold a
+    // live approval — skip the count otherwise (mirrors the list endpoint). A self-driven turn
+    // counts: it stays at AWAITING_INPUT while it runs, and its prompt still blocks it.
+    const pendingApprovals = isSessionGenerating(s) ? await this.countPendingApprovals(sessionId) : 0;
     return {
       id: s.id,
       title: s.title ?? null,
