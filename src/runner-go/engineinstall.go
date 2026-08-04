@@ -120,7 +120,7 @@ func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []env
 			}
 		}()
 		report(InstallResultRequest{Status: installInstalling, Command: engineUpdateManualCmd})
-		lines := updateEngines(context.Background(), activeCount, proxyVars)
+		lines := updateEnginesFn(context.Background(), activeCount, proxyVars)
 		res := InstallResultRequest{Status: installDone, Command: engineUpdateManualCmd}
 		if len(lines) == 0 {
 			// Nothing on PATH to update. Saying "done" with no detail would read as success.
@@ -128,13 +128,8 @@ func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []env
 		} else {
 			res.Message = strings.Join(lines, "\n")
 		}
-		// One engine's failure is the whole run's news — the per-engine detail is in the rows
-		// below, but the panel must not say "done" when something needs a human.
-		for _, l := range lines {
-			if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") {
-				res.Status = installFailed
-				break
-			}
+		if updateRunFailed(lines) {
+			res.Status = installFailed
 		}
 		report(res)
 	}()
@@ -143,6 +138,27 @@ func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []env
 // The command that does by hand what the Update button does, shown in the panel so a machine
 // with a broken relay is still fixable from a terminal.
 const engineUpdateManualCmd = "orbit engine-update"
+
+// updateEnginesFn is updateEngines behind one level of indirection, so the relay's own reporting
+// — progress first, then a verdict derived from what the pass said — can be exercised without
+// executing a package manager on whatever machine runs the tests. Never reassigned in production.
+var updateEnginesFn = updateEngines
+
+// updateRunFailed is the whole pass's verdict, read back off the lines it produced.
+//
+// One engine's failure is the run's news: the per-engine detail lands on rows the card with the
+// button doesn't show, so a run reported "done" with a failure buried in its body goes silent
+// about an engine that has stopped being updated. The deliberate outcomes — busy, package-managed,
+// not ours, out of budget — are not failures; retrying them changes nothing, and a daily warning
+// about a choice Orbit made is how a real warning gets tuned out.
+func updateRunFailed(lines []string) bool {
+	for _, l := range lines {
+		if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") {
+			return true
+		}
+	}
+	return false
+}
 
 // configureEngineCommandTree makes a package-manager command killable as a whole.
 //
