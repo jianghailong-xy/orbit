@@ -984,7 +984,10 @@ while :; do :; done`)
 		ctx, shutdownCtx, NewTransport(srv.URL, "token"),
 		&ClaimedSession{SessionID: "s1", Agent: AgentExecConfig{Env: map[string]string{"READY_PATH": readyPath, "COUNT_PATH": countPath}}},
 		"", dir, dir, func(string, map[string]interface{}) {}, func(string) {}, false, nil,
-		func(req TurnCompleteRequest, _ ...context.Context) error { completions = append(completions, req); return nil },
+		func(req TurnCompleteRequest, _ ...context.Context) error {
+			completions = append(completions, req)
+			return nil
+		},
 		func(context.Context) bool { permits.Add(1); return true },
 		func(error) {},
 	)
