@@ -642,15 +642,15 @@ export function StatusIcon({ session }: { session: any }) {
     // A sub-agent is the agent itself still working, so it keeps the working spinner. A
     // background shell isn't: agents routinely leave a dev server or watcher up, and it never
     // exits, so spinning at it would mark the session busy for the rest of its life and drown
-    // out the sessions that really are working. It gets a static, muted console glyph — the
-    // same one the Background processes tray uses — and keeps its label.
+    // out the sessions that really are working. It gets a static, muted terminal-prompt glyph
+    // (the native port's SF `terminal`) and keeps its label.
     if (work)
       return (
         <Tooltip title={work.text}>
           {work.kind === 'subagent' ? (
             <LoadingOutlined spin style={{ color: 'var(--brand)', fontSize }} />
           ) : (
-            <ConsoleSqlOutlined style={{ color: 'var(--text-3)', fontSize }} />
+            <CodeOutlined style={{ color: 'var(--text-3)', fontSize }} />
           )}
         </Tooltip>
       );
