@@ -2233,6 +2233,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       created?: boolean;
       /** The provider this create actually sent, for the remember-on-the-agent write-back. */
       provider?: string;
+      /** The explicitly picked permission mode, for the same write-back. */
+      permissionMode?: string;
     }> => {
       const { content, images: imgs, shell } = vars;
       if (selectedTrashed)
@@ -2362,10 +2364,21 @@ export function AgentView({ runner }: { runner: Runner }) {
         shell,
       });
       // Report the provider actually sent (not the render-time state) so the write-back below
-      // can never remember a value this session didn't run with.
-      return { id: created.id, created: true, provider: draftProvider ?? undefined };
+      // can never remember a value this session didn't run with. Only an *edited* Mode is worth
+      // remembering: the untouched seed is the agent's own mode, possibly clamped for this
+      // provider (Auto -> Default on a model that can't run it), and writing that back would
+      // erase the agent's real default.
+      return {
+        id: created.id,
+        created: true,
+        provider: draftProvider ?? undefined,
+        permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
+      };
     },
-    onSuccess: ({ id, turnId, queuedItem, created, provider: sentProvider }, vars) => {
+    onSuccess: (
+      { id, turnId, queuedItem, created, provider: sentProvider, permissionMode: sentMode },
+      vars,
+    ) => {
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
       // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
@@ -2392,6 +2405,21 @@ export function AgentView({ runner }: { runner: Runner }) {
         void api(`/agents/${patchedAgentId}`, {
           method: 'PATCH',
           body: { provider: patchedProvider },
+        })
+          .then(() => qc.invalidateQueries({ queryKey: agentsQuery().queryKey }))
+          .catch(() => {});
+      }
+      // Same for the Mode pick: without this it lived on that one session only, so the next new
+      // session here — and every task-launched run, which inherits agent.permissionMode server-side
+      // — fell back to the agent's old mode. Best-effort for the same reason as the provider above.
+      if (created && sentMode && agentId) {
+        const patchedAgentId = agentId;
+        qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
+          old?.map((a) => (a.id === patchedAgentId ? { ...a, permissionMode: sentMode } : a)),
+        );
+        void api(`/agents/${patchedAgentId}`, {
+          method: 'PATCH',
+          body: { permissionMode: sentMode },
         })
           .then(() => qc.invalidateQueries({ queryKey: agentsQuery().queryKey }))
           .catch(() => {});
