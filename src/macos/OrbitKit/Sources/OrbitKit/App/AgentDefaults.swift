@@ -187,9 +187,11 @@ public enum AgentDefaults {
     public static func runtime(for provider: String,
                                configured: [ConfiguredProvider]? = nil) -> String {
         if let custom = configuredProvider(provider, in: configured) {
-            // Configured providers borrow Claude, Codex or Kimi. Invalid legacy values use the
-            // same safe Claude fallback as the backend.
-            return custom.runtime == "codex" || custom.runtime == "kimi" ? custom.runtime : "claude"
+            // Configured providers borrow Claude, Codex or Kimi. Invalid legacy values, and a
+            // provider row that names no runtime at all, use the same safe Claude fallback as
+            // the backend.
+            let borrowed = custom.runtime ?? ""
+            return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
         }
         let value = provider
         return value == "codex" || value == "kimi" ? value : "claude"
