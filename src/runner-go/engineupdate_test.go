@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -95,6 +96,39 @@ func TestLoadEngineUpdateLogTolerates(t *testing.T) {
 	}
 	if log := loadEngineUpdateLog(); len(log) != 0 {
 		t.Fatalf("corrupt file = %v, want empty", log)
+	}
+}
+
+// Three paths can want this machine's one global package-manager prefix: the daily loop, a
+// browser-requested update, and a session's on-demand install. The relay's own single-flight
+// covers only the second — it is not a lock the daily timer ever touches — so the update path
+// has to take the install lock like everything else.
+//
+// This was a real collision, not a hypothetical: a runner that came online at 10:11 fired its
+// first daily pass at 10:21:11.839 (engineUpdateInitialDelay), and a relay update landing
+// 182ms later ran a second `codex update` beside it.
+func TestUpdateEngineSerializesWithInstalls(t *testing.T) {
+	engineInstall.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Nothing on PATH: this returns the moment it holds the lock, so "goroutine finished"
+		// means exactly "it got past the lock".
+		updateEngine(context.Background(), engineSpec{name: "Nope", bin: "orbit-no-such-engine"}, t.TempDir(), nil)
+	}()
+
+	select {
+	case <-done:
+		engineInstall.mu.Unlock()
+		t.Fatal("updateEngine proceeded while an install held the lock — two package managers can now run against the same prefix")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	engineInstall.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("updateEngine never proceeded after the install released the lock")
 	}
 }
 

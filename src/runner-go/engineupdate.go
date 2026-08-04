@@ -96,6 +96,13 @@ func plural(n int, word string) string {
 // engine nothing has updated in weeks is invisible otherwise, which is how a machine ends up
 // silently pinned to a CLI that rejects the model slugs the control plane hands it.
 func updateEngine(ctx context.Context, spec engineSpec, servicePath string, proxyVars []envVar) (EngineUpdateReport, string) {
+	// Every package-manager run on this machine takes the same lock, whichever path asked for
+	// it: the daily loop, a browser-requested update, and a session's on-demand install can all
+	// want the one global prefix at once. The relay's own single-flight doesn't cover this —
+	// it only stops a second *relay* job, and the daily timer isn't a relay job. Held across
+	// the version probes too, so `before` can't be measured against another updater's write.
+	engineInstall.mu.Lock()
+	defer engineInstall.mu.Unlock()
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
 	// this binary's version wrote to a copy the runner never runs.
