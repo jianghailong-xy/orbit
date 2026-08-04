@@ -4,13 +4,20 @@ import OrbitKit
 // The ⌘K session palette, shared by macOS and iOS (the iOS target compiles this file in place —
 // see src/ios/project.yml). SwiftUI here is parse-checked only on Linux; verify on a Mac.
 //
-// Presented as a sheet on both platforms rather than wired into either session list with
-// `.searchable`. The search deliberately spans every agent, runner and lifecycle scope, and
-// dropping cross-scope results into a list that's scoped to one agent reads as a bug — the list
-// would show sessions that vanish the moment you clear the field.
+// A sheet, opened by ⌘K, the macOS menu command and the iOS drawer's magnifier. The iPhone/iPad
+// session list runs this same search *inline* instead (see `AgentPanes`) — a sheet over the list
+// you're already looking at is a detour on touch. It stays a sheet everywhere else because there's
+// no list to search in place: the macOS window is a three-pane layout the palette floats over, and
+// the drawer's entry point fires from whichever section you're in.
+//
+// Either way the results are their own view, never rows merged into a session list's sections: the
+// search spans every agent, runner and lifecycle scope, so a hit carries the agent it belongs to,
+// a Completed/Trash badge and the snippet it matched on — which is what stops a cross-scope result
+// from reading as a session the list itself is claiming to hold.
 
-/// How long the palette waits after the last keystroke before searching. Matches the web palette.
-private let searchDebounce = Duration.milliseconds(200)
+/// How long a search waits after the last keystroke before firing. Matches the web palette, and
+/// shared with the session list's inline search so both settle at the same rhythm.
+let sessionSearchDebounce = Duration.milliseconds(200)
 
 /// What the hit matched on, when it isn't the title (which the row already shows).
 private func matchLabel(_ field: SessionSearchMatchField) -> String? {
@@ -47,10 +54,6 @@ struct SessionSearchView: View {
     /// The query the currently displayed `hits` came from — what the snippets are highlighted
     /// against, so highlighting can't run ahead of the results while typing.
     @State private var shownQuery = ""
-    /// iOS only: opens with the field already active, so the session list's search box lands you
-    /// typing instead of one tap short of it. Cancelling just deactivates the field — the bar stays.
-    /// macOS has no such gap (the sheet's field takes key focus), so it keeps the plain form.
-    @State private var typing = true
 
     var body: some View {
         // NavigationStack so `.searchable` has a bar to live in — without one the field never
@@ -73,11 +76,7 @@ struct SessionSearchView: View {
                 }
                 footer
             }
-            #if os(iOS)
-            .searchable(text: $query, isPresented: $typing, prompt: "Search sessions")
-            #else
             .searchable(text: $query, prompt: "Search sessions")
-            #endif
             .navigationTitle("Search Sessions")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -123,7 +122,7 @@ struct SessionSearchView: View {
     private func runSearch() async {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !q.isEmpty {
-            try? await Task.sleep(for: searchDebounce)
+            try? await Task.sleep(for: sessionSearchDebounce)
             if Task.isCancelled { return }
         }
         loading = true
@@ -197,8 +196,7 @@ extension View {
     /// Hosts the ⌘K palette. Applied at each platform's signed-in root — macOS `RootView`
     /// (OrbitApp.swift) and iOS `RootView` (OrbitiOSApp.swift) — rather than inside a shell,
     /// because iPhone and iPad use different shells (`CompactShell` / `MainView`) and the palette
-    /// has to open from the menu command, the drawer button, the session list's search box and a
-    /// hardware ⌘K alike.
+    /// has to open from the menu command, the drawer button and a hardware ⌘K alike.
     func sessionSearchSheet(_ model: AppModel) -> some View {
         @Bindable var model = model
         return sheet(isPresented: $model.searchOpen) { SessionSearchView() }
