@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -129,6 +130,88 @@ func TestUpdateEngineSerializesWithInstalls(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("updateEngine never proceeded after the install released the lock")
+	}
+}
+
+// The pass, not the engine, is the unit that has to fit: the control plane retires a relay slot
+// after 12 minutes without knowing how many engines a machine has, and every update holds the
+// package-manager lock a session's on-demand install may be waiting on.
+func TestEngineUpdateBudgetBoundsTheWholePass(t *testing.T) {
+	if engineUpdateBudget > 12*time.Minute {
+		t.Fatalf("pass budget %v outlives the control plane's 12m relay timeout — a still-running pass would be declared failed", engineUpdateBudget)
+	}
+	// Otherwise the per-engine ceiling is the pass ceiling, and one wedged updater takes the
+	// whole budget with nothing left for the engines behind it.
+	if engineUpdateTimeout >= engineUpdateBudget {
+		t.Fatalf("per-engine ceiling %v leaves no budget for the other engines (pass budget %v)", engineUpdateTimeout, engineUpdateBudget)
+	}
+}
+
+func TestUpdateEnginesOutOfBudgetBlamesNoEngine(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	// A pass whose budget is already gone: nothing gets to run.
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+
+	lines := updateEngines(ctx, func(string) int { return 0 }, nil)
+
+	if len(lines) != len(engineSpecs) {
+		t.Fatalf("got %d lines for %d engines: %q", len(lines), len(engineSpecs), lines)
+	}
+	for _, l := range lines {
+		if !strings.Contains(l, "not reached") {
+			t.Errorf("line %q should say the engine was never reached", l)
+		}
+	}
+	// The point: an engine that never ran must not be recorded as a failure, or the row would
+	// wear a warning earned by a wedged neighbour.
+	if log := loadEngineUpdateLog(); len(log) != 0 {
+		t.Fatalf("out-of-budget pass recorded %v — unreached engines must file nothing", log)
+	}
+}
+
+func TestUpdateEnginesShutdownIsSilent(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	// Cancelled, not expired: the runner is going down. That is not news about this machine's
+	// engines, so it must not turn into a report claiming they were skipped.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if lines := updateEngines(ctx, func(string) int { return 0 }, nil); len(lines) != 0 {
+		t.Fatalf("shutdown produced %q, want silence", lines)
+	}
+	if log := loadEngineUpdateLog(); len(log) != 0 {
+		t.Fatalf("shutdown recorded %v, want nothing", log)
+	}
+}
+
+// The failure this reproduces: every installer forks, exec.CommandContext kills only the `sh`,
+// and the forked child keeps the output pipe open — so CombinedOutput blocks past the deadline
+// and the caller keeps engineInstall.mu. Observed live as an `opencode upgrade` still running
+// 14 minutes into a 5-minute ceiling, with the machine unable to install any engine behind it.
+func TestEngineCommandTimesOutDespiteForkedChild(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("needs a shell")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	// A child that outlives its shell and holds the inherited pipe — exactly what a forking
+	// installer does. Without the process-tree teardown, CombinedOutput waits on this sleep.
+	cmd := exec.CommandContext(ctx, "sh", "-c", "sleep 60 & sleep 60")
+	configureEngineCommandTree(cmd)
+
+	start := time.Now()
+	done := make(chan struct{})
+	go func() { defer close(done); _, _ = cmd.CombinedOutput() }()
+
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the command outlived its context — a forked child is holding the output pipe, and with it the package-manager lock")
+	}
+	// WaitDelay adds a few seconds of grace; anything near the child's 60s means it was awaited.
+	if elapsed := time.Since(start); elapsed > 15*time.Second {
+		t.Fatalf("took %v to give up on a 300ms deadline", elapsed)
 	}
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,21 @@ const (
 	// download over the network, so allow minutes — but never let a wedged updater (slow
 	// mirror, DNS black hole, an unexpected prompt) block the loop forever; without this
 	// the goroutine could hang and the 24h ticker would never fire again.
-	engineUpdateTimeout = 10 * time.Minute
+	engineUpdateTimeout = 5 * time.Minute
+	// Ceiling for a whole pass over every engine, which is the number that actually has to
+	// hold. Two things are measured against it, and neither knows how many engines a machine
+	// has:
+	//
+	//   - The control plane retires a relay slot still in flight after 12 minutes
+	//     (INSTALL_RELAY_TIMEOUT_MS). A pass that can outlast that gets declared "timed out"
+	//     while it is still working, and the row then flips back when the real result lands.
+	//   - Every update holds the package-manager lock, so a wedged updater is also time a
+	//     session's on-demand install spends waiting to install anything at all.
+	//
+	// Per-engine ceilings alone can't bound either one: four engines at 5 minutes each is 20.
+	// This caps the pass, and the per-engine ceiling then just decides how much of it one
+	// wedged updater may eat before the rest get their turn.
+	engineUpdateBudget = 10 * time.Minute
 )
 
 // engineUpdateLoop updates each installed engine in place, skipping any with a live
@@ -57,9 +72,22 @@ func engineUpdateLoop(ctx context.Context, activeCount func(string) int, proxyVa
 // had anything to say — the summary a browser-requested update reports back (the per-engine
 // record it leaves behind is engineUpdateLog's job).
 func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars []envVar) []string {
+	// One budget for the pass, not one per engine — see engineUpdateBudget. Each engine's own
+	// ceiling is derived from this context, so it is really min(engineUpdateTimeout, what's left).
+	ctx, cancel := context.WithTimeout(ctx, engineUpdateBudget)
+	defer cancel()
 	servicePath := serviceLoginPath()
 	var lines []string
 	for _, spec := range engineSpecs {
+		if err := ctx.Err(); err != nil {
+			// Out of budget. Said out loud, and deliberately not recorded: these commands never
+			// ran, and filing them as failures would put a warning on an engine that is fine.
+			if errors.Is(err, context.DeadlineExceeded) {
+				lines = append(lines, spec.name+" — not reached, the update pass ran out of time")
+				continue
+			}
+			break // runner shutting down; not this machine's news
+		}
 		if n := activeCount(spec.bin); n > 0 {
 			logln("engine-update:", spec.name, "skipped — session(s) active")
 			// Deliberately not recorded: a busy machine says nothing about whether updating
@@ -130,13 +158,24 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		env = append(env, v.K+"="+v.V)
 	}
 	cmd.Env = env
+	// Without this the timeout above is decorative. CommandContext kills the `sh` it started
+	// and nothing else, so an updater that forked (every one of them does) is reparented to
+	// init and keeps the output pipe open — and CombinedOutput blocks on that pipe forever,
+	// holding the lock taken above with it. Observed: an `opencode upgrade` still running 14
+	// minutes into a 5-minute ceiling, with the machine unable to install any engine behind it.
+	configureEngineCommandTree(cmd)
+	started := time.Now()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		switch cmdCtx.Err() {
 		case context.DeadlineExceeded:
-			logln("engine-update:", spec.name, "timed out after", engineUpdateTimeout)
-			rec := recordEngineUpdate(spec.bin, updateFailed, "`"+cmdStr+"` was still running after "+engineUpdateTimeout.String()+" and was stopped.")
-			return rec, spec.name + " — update timed out"
+			// How long it actually ran, not the ceiling: the pass budget can cut a command off
+			// long before its own, and "still running after 5m" would be a lie about a command
+			// that got 40 seconds because a wedged engine ahead of it ate the rest.
+			ran := time.Since(started).Round(time.Second)
+			logln("engine-update:", spec.name, "timed out after", ran)
+			rec := recordEngineUpdate(spec.bin, updateFailed, "`"+cmdStr+"` was still running after "+ran.String()+" and was stopped.")
+			return rec, spec.name + " — update timed out after " + ran.String()
 		case context.Canceled:
 			// Runner shutting down mid-update — not a failure, and not this machine's news.
 			return EngineUpdateReport{}, ""

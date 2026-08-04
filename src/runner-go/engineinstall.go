@@ -144,6 +144,20 @@ func (r *installRelay) startUpdate(activeCount func(string) int, proxyVars []env
 // with a broken relay is still fixable from a terminal.
 const engineUpdateManualCmd = "orbit engine-update"
 
+// configureEngineCommandTree makes a package-manager command killable as a whole.
+//
+// Every engine install/update runs as `sh -c "<installer>"`, and installers fork: npm spawns
+// node, `curl … | bash` spawns whatever it downloaded, `opencode upgrade` spawns its own
+// updater. exec.CommandContext kills only the `sh`, so on timeout the real work is reparented
+// to init and keeps running — and because it inherited the output pipe, CombinedOutput never
+// returns. The timeout is then decorative and the caller holds engineInstall.mu forever.
+//
+// Reuses the session runtime's process-tree teardown: same problem (a CLI whose descendants
+// escape their parent), same fix, and it already handles children that start a process group
+// of their own. WaitDelay is the backstop — if something still escapes, the pipe is force-closed
+// and the call returns instead of hanging the machine's only package-manager slot.
+func configureEngineCommandTree(cmd *exec.Cmd) { configureSessionProcessTree(cmd) }
+
 // stop waits for an install already under way. Nothing is cancelled — see the type comment.
 func (r *installRelay) stop() { r.wg.Wait() }
 
@@ -171,6 +185,9 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
 	}
+	// See configureEngineCommandTree: an installer that forks outlives the `sh` the context
+	// kills, and its open pipe would hold this timeout — and the lock above — open forever.
+	configureEngineCommandTree(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		logln("engine-install (requested):", spec.name, "failed:", firstLine(err.Error()), lastLine(string(out)))
@@ -238,6 +255,9 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
 	}
+	// This one is on a session's first turn: a forked installer that outlives its `sh` would
+	// hold the turn open past the timeout meant to bound it. See configureEngineCommandTree.
+	configureEngineCommandTree(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		logln("engine-install:", spec.name, "failed:", firstLine(err.Error()), lastLine(string(out)))
