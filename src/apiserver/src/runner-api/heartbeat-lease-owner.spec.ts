@@ -15,7 +15,6 @@ function harness(
 ) {
   const findManyWhere: unknown[] = [];
   const updateManyWhere: unknown[] = [];
-  const updateManyCalls: Array<{ where: any; data: any }> = [];
   const mergeDrainCalls: unknown[][] = [];
   const commitDrainCalls: unknown[][] = [];
   const prisma = {
@@ -28,9 +27,8 @@ function harness(
         findManyWhere.push(where);
         return matchingIds.map((id) => ({ id }));
       },
-      updateMany: async ({ where, data }: { where: any; data: any }) => {
+      updateMany: async ({ where }: { where: unknown }) => {
         updateManyWhere.push(where);
-        updateManyCalls.push({ where, data });
         return { count: 1 };
       },
     },
@@ -51,15 +49,10 @@ function harness(
     controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never),
     findManyWhere,
     updateManyWhere,
-    updateManyCalls,
     mergeDrainCalls,
     commitDrainCalls,
   };
 }
-
-/** The background-work sweep is the only heartbeat write that resets both running sets. */
-const sweepOf = (calls: Array<{ where: any; data: any }>) =>
-  calls.filter((c) => 'runningBgShells' in c.data);
 
 test('heartbeat cancels supervised sessions not owned by this process', async () => {
   const h = harness([SESSION_A]);
@@ -104,64 +97,8 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
     },
   );
 
-  // The heartbeat also sweeps stale background work; the live-diff write is the fenced one.
-  const liveDiff = h.updateManyCalls.filter((c) => c.where.inboxLeaseOwner !== undefined);
-  assert.equal(liveDiff.length, 1);
-  assert.equal(liveDiff[0].where.inboxLeaseOwner, OWNER);
-});
-
-test('heartbeat clears background work for sessions this process no longer supervises', async () => {
-  const h = harness([SESSION_A]);
-  await h.controller.heartbeat(
-    { id: RUNNER_ID, version: null },
-    {
-      status: RunnerStatus.ONLINE,
-      idleCapacity: 1,
-      leaseOwner: OWNER,
-      supervisedSessionIds: [SESSION_A],
-    },
-  );
-
-  const sweep = sweepOf(h.updateManyCalls);
-  assert.equal(sweep.length, 1);
-  assert.deepEqual(sweep[0].data, { runningBgShells: [], runningSubagents: [] });
-  assert.deepEqual(sweep[0].where, {
-    assignedRunnerId: RUNNER_ID,
-    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
-    id: { notIn: [SESSION_A] },
-    OR: [{ runningBgShells: { isEmpty: false } }, { runningSubagents: { isEmpty: false } }],
-  });
-});
-
-test('a runner supervising nothing still sweeps its parked sessions', async () => {
-  // The leak this heals: the runner was killed outright while a dev server was up and the
-  // session then parked, so no `init`/`resumed` handshake will ever follow to reset the set.
-  // `notIn: []` matches every row, so an empty supervisor list sweeps all of them.
-  const h = harness();
-  await h.controller.heartbeat(
-    { id: RUNNER_ID, version: null },
-    { status: RunnerStatus.ONLINE, idleCapacity: 1, leaseOwner: OWNER },
-  );
-
-  const sweep = sweepOf(h.updateManyCalls);
-  assert.equal(sweep.length, 1);
-  assert.deepEqual(sweep[0].where.id, { notIn: [] });
-});
-
-test('a legacy heartbeat never sweeps background work', async () => {
-  // No leaseOwner means no supervisor list either, so a sweep would clear sessions whose
-  // shells are genuinely running.
-  const legacy = harness();
-  await legacy.controller.heartbeat(
-    { id: RUNNER_ID, version: null },
-    {
-      status: RunnerStatus.ONLINE,
-      idleCapacity: 1,
-      supervisedSessionIds: [SESSION_A],
-    },
-  );
-
-  assert.deepEqual(sweepOf(legacy.updateManyCalls), []);
+  assert.equal(h.updateManyWhere.length, 1);
+  assert.equal((h.updateManyWhere[0] as { inboxLeaseOwner?: string }).inboxLeaseOwner, OWNER);
 });
 
 test('legacy heartbeat omits the owner fence', async () => {
