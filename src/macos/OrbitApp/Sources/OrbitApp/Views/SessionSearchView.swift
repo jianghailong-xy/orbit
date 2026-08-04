@@ -47,6 +47,10 @@ struct SessionSearchView: View {
     /// The query the currently displayed `hits` came from — what the snippets are highlighted
     /// against, so highlighting can't run ahead of the results while typing.
     @State private var shownQuery = ""
+    /// iOS only: opens with the field already active, so the session list's search box lands you
+    /// typing instead of one tap short of it. Cancelling just deactivates the field — the bar stays.
+    /// macOS has no such gap (the sheet's field takes key focus), so it keeps the plain form.
+    @State private var typing = true
 
     var body: some View {
         // NavigationStack so `.searchable` has a bar to live in — without one the field never
@@ -69,7 +73,11 @@ struct SessionSearchView: View {
                 }
                 footer
             }
+            #if os(iOS)
+            .searchable(text: $query, isPresented: $typing, prompt: "Search sessions")
+            #else
             .searchable(text: $query, prompt: "Search sessions")
+            #endif
             .navigationTitle("Search Sessions")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -189,7 +197,8 @@ extension View {
     /// Hosts the ⌘K palette. Applied at each platform's signed-in root — macOS `RootView`
     /// (OrbitApp.swift) and iOS `RootView` (OrbitiOSApp.swift) — rather than inside a shell,
     /// because iPhone and iPad use different shells (`CompactShell` / `MainView`) and the palette
-    /// has to open from the menu command, the drawer button and a hardware ⌘K alike.
+    /// has to open from the menu command, the drawer button, the session list's search box and a
+    /// hardware ⌘K alike.
     func sessionSearchSheet(_ model: AppModel) -> some View {
         @Bindable var model = model
         return sheet(isPresented: $model.searchOpen) { SessionSearchView() }
