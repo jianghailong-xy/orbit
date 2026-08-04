@@ -267,6 +267,9 @@ export interface RunnerHeartbeatRequest {
   planUsage?: PlanUsage;
   /** Runtime model catalog reported by this runner. Absent on older runners. */
   modelCatalog?: RunnerModelCatalog;
+  /** Per-engine health on this machine (installed / version / signed in). Absent on older
+   *  runners, which leaves the stored snapshot alone rather than claiming three unknowns. */
+  engines?: RunnerEngineHealth[];
   /** Effective defaults reported by local runtimes. Absent on older runners; an explicit empty
    *  object means no runtime currently exposes a default and replaces the previous snapshot. */
   runtimeDefaultModels?: RuntimeDefaultModels;
@@ -334,6 +337,9 @@ export interface RunnerHeartbeatResponse {
   /** One step of a browser-less runtime login the user started from the web. Absent on
    *  older control planes, and whenever no sign-in is in flight for this runner. */
   loginRequest?: LoginCommand;
+  /** An engine install the user started from the web. Absent on older control planes, and
+   *  whenever no install is in flight for this runner. */
+  installRequest?: InstallCommand;
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */
@@ -373,6 +379,55 @@ export interface LoginResult {
   /** The one-time code the user types on the sign-in page, for the device flow. */
   userCode?: string;
   message?: string;
+}
+
+/**
+ * One coding-engine CLI's health on a runner, reported each heartbeat.
+ *
+ * This is the same probe `orbit doctor` prints (the runner's checkEngine), which is why `auth`
+ * has three states rather than two: a CLI that won't answer must not be shown as signed in.
+ */
+export interface RunnerEngineHealth {
+  engine: LoginEngine;
+  installed: boolean;
+  /** Whatever `<engine> --version` printed. Absent when not installed or the CLI wouldn't say. */
+  version?: string;
+  /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
+  auth: 'yes' | 'no' | 'unknown';
+}
+
+/**
+ * Control plane → runner: install one engine CLI on the runner's own machine.
+ *
+ * Same shape as the sign-in relay: parked on the runner row, redelivered every heartbeat until
+ * the runner's status report moves the server on, so acting on it must be idempotent.
+ *
+ * Distinct from the runner's on-demand install (ensureEngine), which only ever runs for a machine
+ * that consented at register time. Pressing Install in the browser IS that consent, for one
+ * engine on one machine, so this path does not consult that flag.
+ */
+export interface InstallCommand {
+  engine: LoginEngine;
+  /** Identifies this install, so the runner can tell a redelivered request from a new one. */
+  attempt?: string;
+}
+
+/** Runner → control plane: progress of an engine install. */
+export interface InstallResult {
+  status: 'installing' | 'done' | 'failed';
+  /** The installer being run, so the UI can show it and offer it as a manual fallback. */
+  command?: string;
+  /** For `failed`: what the machine said, plus the alternative command to try by hand. */
+  message?: string;
+}
+
+/** Browser-facing view of a runner's engine-install relay, for the row that drives it. */
+export interface RunnerInstallState {
+  status: 'pending' | 'installing' | 'done' | 'failed' | null;
+  /** Which engine is being installed; null when nothing is in flight. */
+  engine: LoginEngine | null;
+  command: string | null;
+  message: string | null;
 }
 
 /** Browser-facing view of a runner's sign-in relay, for the card that drives it. */

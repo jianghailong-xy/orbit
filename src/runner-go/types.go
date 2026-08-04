@@ -62,6 +62,10 @@ type HeartbeatRequest struct {
 	PlanUsage *PlanUsage `json:"planUsage,omitempty"`
 	// Runtime model catalog for picker UIs. Nil on old runners / unavailable runtimes.
 	ModelCatalog *ModelCatalog `json:"modelCatalog,omitempty"`
+	// Per-engine health on this machine (installed / version / signed in), so the web can show
+	// and fix this runner's logins. Nil until the first probe completes — an omitted field
+	// leaves the server's last snapshot alone rather than claiming three unknowns.
+	Engines []EngineHealthReport `json:"engines,omitempty"`
 	// Effective default selected by each runtime on this machine. A non-nil empty map is sent as
 	// `{}` so the control plane can retire a previously reported default and fall back to the
 	// runtime catalog; nil is used only before the first probe completes.
@@ -69,6 +73,16 @@ type HeartbeatRequest struct {
 	// Sessions carries each running session's live worktree diff so the web status bar
 	// appears mid-turn, not just at turn-complete. Empty when no isolated session runs.
 	Sessions []SessionLiveState `json:"sessions,omitempty"`
+}
+
+// EngineHealthReport mirrors @orbit/shared RunnerEngineHealth: one coding-engine CLI's state on
+// this machine, from the same probe `orbit doctor` prints. Auth is a word, not a bool, because
+// some CLIs won't answer — and an engine that won't say must never be shown as signed in.
+type EngineHealthReport struct {
+	Engine    string `json:"engine"`
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
+	Auth      string `json:"auth"` // "yes" | "no" | "unknown"
 }
 
 // SessionLiveState is one running session's live worktree state, reported each heartbeat
@@ -157,6 +171,27 @@ type HeartbeatResponse struct {
 	// reply with the URL to approve), then `code` carrying what they pasted back. Nil on older
 	// control planes, and whenever no sign-in is in flight for this runner.
 	LoginRequest *LoginCommand `json:"loginRequest,omitempty"`
+	// An engine CLI the user asked to install from the web. Nil on older control planes, and
+	// whenever no install is in flight for this runner.
+	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
+}
+
+// InstallCommand mirrors @orbit/shared: install one engine's CLI on this machine. Redelivered
+// every heartbeat until our first status report moves the server on, so acting on it must be
+// idempotent.
+type InstallCommand struct {
+	Engine string `json:"engine"`
+	// Identifies this install, so a redelivered request can be told from a new one.
+	Attempt string `json:"attempt,omitempty"`
+}
+
+// InstallResultRequest is the runner's progress report for an install: the command it is running,
+// then whether it worked. `Message` carries the machine's own error, which is the only thing that
+// makes a failed install actionable from a browser.
+type InstallResultRequest struct {
+	Status  string `json:"status"` // "installing" | "done" | "failed"
+	Command string `json:"command,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // LoginCommand mirrors @orbit/shared: one step of the browser-less sign-in relay. Redelivered

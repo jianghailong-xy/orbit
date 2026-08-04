@@ -554,6 +554,12 @@ func runLoop(cfg *RunnerConfig) bool {
 	// that was collected there (see ensureEngine).
 	configureEngineInstall(cfg.AutoInstallEngines, doctorProxyVars(cfg.ServerURL))
 
+	// Which engine CLIs this machine has, and whether they're signed in — the Providers page's
+	// "On your runners" section. Probed in the background: it spawns a couple of processes per
+	// engine, so the heartbeat only ever reads the last completed snapshot.
+	engineHealth := &engineHealthProbe{}
+	go engineHealth.run(loopCtx)
+
 	telemetry := newHeartbeatTelemetryProbe(heartbeatTelemetryTimeout, nil)
 	go telemetry.run(loopCtx)
 
@@ -565,6 +571,7 @@ func runLoop(cfg *RunnerConfig) bool {
 	// already running before a self-update replaces this process image.
 	var heartbeatOps sync.WaitGroup
 	login := &loginRelay{}
+	install := &installRelay{}
 	go func() {
 		defer close(hbDone)
 		ticker := time.NewTicker(heartbeatInterval)
@@ -603,6 +610,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
+				Engines:              engineHealth.snapshotNow(),
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
@@ -823,6 +831,12 @@ func runLoop(cfg *RunnerConfig) bool {
 					if err := t.loginResult(res); err != nil {
 						logln("login-result POST failed:", err)
 					}
+					// A sign-in that just landed changes what the engine probe would say, and
+					// the Providers page shouldn't keep calling this engine signed out for the
+					// rest of the refresh interval.
+					if res.Status == loginDone {
+						go engineHealth.refresh()
+					}
 				}
 				switch lr.Action {
 				case "start":
@@ -830,6 +844,16 @@ func runLoop(cfg *RunnerConfig) bool {
 				case "code":
 					login.submitCode(lr.Code, report)
 				}
+			}
+			// Install an engine CLI the user asked for from the web. Idempotent for the same
+			// reason: the server redelivers until our first report moves it on, and the relay
+			// refuses to start a second installer while one is running.
+			if ir := resp.InstallRequest; ir != nil {
+				install.start(ir.Engine, func(res InstallResultRequest) {
+					if err := t.installResult(res); err != nil {
+						logln("install-result POST failed:", err)
+					}
+				}, engineHealth.refresh)
 			}
 		})
 	}()
@@ -1075,6 +1099,9 @@ func runLoop(cfg *RunnerConfig) bool {
 	<-hbDone
 	telemetry.wait()
 	login.stop()
+	// An installer already running is joined, not killed: a half-applied `curl | bash` is worse
+	// than one that finishes while the runner shuts down.
+	install.stop()
 	heartbeatOps.Wait()
 	// A SIGTERM delivered after update discovery still means "stop", not
 	// "install". Stop signal forwarding first so this final channel check cannot

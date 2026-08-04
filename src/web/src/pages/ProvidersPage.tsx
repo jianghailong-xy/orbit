@@ -5,12 +5,17 @@ import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
+import { RunnerEngines } from '../components/RunnerEngines';
 import { useToast } from '../lib/toast';
 
 /**
- * Model providers: every user's personal (BYOK) list — their own API key, visible only to them
- * (/providers/mine). Adding or editing one happens on its own page (ProviderConnectPage), so a
- * vendor's setup is deep-linkable.
+ * Where an agent's model comes from — two kinds of identity, in the order a new user has them.
+ *
+ * First the engines signed in on their own machines (RunnerEngines): those spend the subscription
+ * signed into that runner and need nothing pasted, which is what most sessions actually run on.
+ * Then their personal (BYOK) providers — an API key on the account, usable from every runner and
+ * billed per token. Adding or editing one of those happens on its own page (ProviderConnectPage),
+ * so a vendor's setup stays deep-linkable.
  */
 export function ProvidersPage() {
   const message = useToast();
@@ -87,12 +92,23 @@ export function ProvidersPage() {
             Providers
           </h1>
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Providers use your own API key and are visible only to you.
+            Where your agents&apos; models come from — the CLIs signed in on your machines, and the
+            API keys on your account.
           </div>
         </div>
+        {/* Still only about keys: an engine gets its identity from the Sign in on its own row. */}
         <Button type="primary" onClick={() => navigate('/providers/new')}>
           Add provider
         </Button>
+      </div>
+
+      <RunnerEngines />
+
+      <div className="re-sec-head" style={{ marginTop: 28 }}>
+        <h3>Your API keys</h3>
+        <span className="re-sec-sub">
+          On your account and usable from every runner — billed per token.
+        </span>
       </div>
 
       {providers.isLoading ? (
@@ -106,8 +122,8 @@ export function ProvidersPage() {
         />
       ) : (providers.data?.length ?? 0) === 0 ? (
         <div className="provider-empty">
-          <h3>Connect your first provider</h3>
-          <p>Pick a provider and paste your API key — that's it.</p>
+          <h3>No keys yet</h3>
+          <p>Pick a provider and paste your API key — or skip it and sign a runner in above.</p>
           <ProviderGallery />
         </div>
       ) : (

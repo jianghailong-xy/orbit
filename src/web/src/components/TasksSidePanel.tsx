@@ -18,6 +18,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useNavigate } from 'react-router-dom';
 import type {
   PlanUsage,
+  RunnerEngineHealth,
+  RunnerInstallState,
   RunnerModelCatalog,
   RuntimeDefaultModels,
   SlashCommandInfo,
@@ -81,6 +83,11 @@ export interface Runner {
   modelCatalog?: RunnerModelCatalog | null;
   // Effective default model reported by each built-in runtime on this runner.
   runtimeDefaultModels?: RuntimeDefaultModels;
+  // Per-engine health this runner reported (installed / version / signed in). null when it has
+  // never reported — which is not the same as "nothing installed", so the two stay distinct.
+  engines?: RunnerEngineHealth[] | null;
+  // The engine install this runner has in flight, if any.
+  install?: RunnerInstallState | null;
 }
 
 interface Agent {

@@ -47,7 +47,7 @@ const ENGINE_LABELS: Record<string, string> = {
 // A built-in engine has no ModelProvider row, so it has no preset to inherit a look from. Borrow
 // the vendor preset that ships the same mark: the engine and the BYOK provider are the same
 // company, and a user who sees both should see one logo.
-const ENGINE_PRESET: Record<string, string> = {
+export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.CLAUDE]: 'anthropic',
   [AgentProvider.CODEX]: 'openai',
   [AgentProvider.KIMI]: 'moonshot',

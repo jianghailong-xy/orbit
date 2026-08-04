@@ -5,8 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { LoginEngine, RunnerLoginState, SlashCommandInfo } from '@orbit/shared';
+import type {
+  LoginEngine,
+  RunnerInstallState,
+  RunnerLoginState,
+  SlashCommandInfo,
+} from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -71,6 +77,13 @@ export class RunnersService {
         // Runtime defaults reported by the runner heartbeat. This is capability state, not a
         // user-editable Runner setting.
         runtimeDefaultModels: true,
+        // Per-engine health, and any install the user started for one of them — both drive the
+        // Providers page's "On your runners" section.
+        engines: true,
+        installStatus: true,
+        installEngine: true,
+        installCommand: true,
+        installMessage: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
@@ -89,10 +102,24 @@ export class RunnersService {
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const staleBefore = Date.now() - OFFLINE_AFTER_MS;
-    return runners.map(({ availableCommands, availableSkills, runtimeDefaultModels, ...r }) => ({
+    return runners.map(({
+      availableCommands,
+      availableSkills,
+      runtimeDefaultModels,
+      engines,
+      installStatus,
+      installEngine,
+      installCommand,
+      installMessage,
+      ...r
+    }) => ({
       ...r,
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
+      // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
+      // installed" are different answers, and only one of them is ours to make up.
+      engines: sanitizeRunnerEngines(engines),
+      install: installStateOf({ installStatus, installEngine, installCommand, installMessage }),
       online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
@@ -344,6 +371,68 @@ export class RunnersService {
     return loginStateOf(r);
   }
 
+  /**
+   * Ask this runner to install one engine's CLI. The next heartbeat picks it up; the runner
+   * reports the command it is running, then whether it worked.
+   *
+   * This is deliberately not the same thing as the runner's on-demand install, which only runs
+   * on a machine that consented at register time (RunnerConfig.AutoInstallEngines) and otherwise
+   * fails the session with "not installed" and no way forward from the UI. Pressing Install here
+   * IS the consent, for this engine on this machine, so the runner honours it either way.
+   *
+   * One at a time per machine, like the sign-in relay: a second request replaces the first, since
+   * a user staring at a stuck row needs a way out that isn't waiting for a timeout.
+   */
+  async startInstall(ownerId: string, id: string, engine: LoginEngine): Promise<RunnerInstallState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.status === 'OFFLINE') {
+      throw new BadRequestException('Runner is offline — it can only install while connected');
+    }
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: {
+        installStatus: 'pending',
+        installEngine: engine,
+        installCommand: null,
+        installMessage: null,
+        installAt: new Date(),
+      },
+    });
+    return installStateOf(r);
+  }
+
+  /** Current install-relay state, for the row to poll. */
+  async getInstallState(ownerId: string, id: string): Promise<RunnerInstallState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    return installStateOf(runner);
+  }
+
+  /**
+   * Clear an install from the row so its state stops being reported.
+   *
+   * Note what this does not do: the installer already running on that machine keeps going —
+   * `sh -c "curl … | bash"` is not ours to interrupt halfway, and a half-installed CLI is worse
+   * than a finished one. This dismisses the row's state; the next heartbeat's engine probe
+   * reports whatever actually ended up on disk.
+   */
+  async cancelInstall(ownerId: string, id: string): Promise<RunnerInstallState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const r = await this.prisma.runner.update({
+      where: { id },
+      data: {
+        installStatus: null,
+        installEngine: null,
+        installCommand: null,
+        installMessage: null,
+        installAt: null,
+      },
+    });
+    return installStateOf(r);
+  }
+
   async rotateToken(ownerId: string, id: string) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
@@ -358,6 +447,21 @@ export class RunnersService {
     await this.prisma.runner.delete({ where: { id } });
     return { ok: true };
   }
+}
+
+/** Project a runner row onto the browser-facing install-relay view. */
+export function installStateOf(r: {
+  installStatus: string | null;
+  installEngine: string | null;
+  installCommand: string | null;
+  installMessage: string | null;
+}): RunnerInstallState {
+  return {
+    status: (r.installStatus as RunnerInstallState['status']) ?? null,
+    engine: r.installStatus ? ((r.installEngine as LoginEngine) ?? null) : null,
+    command: r.installCommand,
+    message: r.installMessage,
+  };
 }
 
 /** Project a runner row onto the browser-facing relay view (no code, ever). */

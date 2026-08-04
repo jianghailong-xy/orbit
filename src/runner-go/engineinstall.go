@@ -39,6 +39,116 @@ func configureEngineInstall(allowed bool, proxyVars []envVar) {
 	engineInstall.allowed, engineInstall.proxyVars = allowed, proxyVars
 }
 
+// Install relay statuses reported to the control plane. They mirror the `install_status` column.
+const (
+	installInstalling = "installing"
+	installDone       = "done"
+	installFailed     = "failed"
+)
+
+// installRelay drives one browser-requested engine install on this machine.
+//
+// One at a time, and — unlike the sign-in relay — a second request never preempts the first:
+// killing `curl … | bash` halfway leaves a worse machine than letting it finish, and the server
+// times the row out on its own. A redelivered request while one is running is a no-op.
+type installRelay struct {
+	mu      sync.Mutex
+	wg      sync.WaitGroup
+	running bool
+}
+
+// start runs the install for `engine` and reports progress through `report`, which is called off
+// the heartbeat goroutine (the installer takes minutes). `after` runs once the outcome is
+// reported, so the caller can re-probe what actually ended up on disk.
+func (r *installRelay) start(engine string, report func(InstallResultRequest), after func()) {
+	spec, ok := specFor(engine)
+	if !ok {
+		report(InstallResultRequest{Status: installFailed, Message: "unknown engine: " + engine})
+		return
+	}
+	r.mu.Lock()
+	if r.running {
+		r.mu.Unlock()
+		return // redelivered, or a second request while this one is still installing
+	}
+	r.running = true
+	r.wg.Add(1)
+	r.mu.Unlock()
+
+	go func() {
+		defer r.wg.Done()
+		defer func() {
+			r.mu.Lock()
+			r.running = false
+			r.mu.Unlock()
+			if after != nil {
+				after()
+			}
+		}()
+		// Publish what is about to run before running it: the install takes minutes, and the row
+		// showing the exact command is what makes the wait (and any failure) legible.
+		report(InstallResultRequest{Status: installInstalling, Command: spec.installCmd})
+		report(installEngineNow(spec))
+	}()
+}
+
+// stop waits for an install already under way. Nothing is cancelled — see the type comment.
+func (r *installRelay) stop() { r.wg.Wait() }
+
+// installEngineNow runs one engine's recommended installer and reports what happened.
+//
+// Same command ensureEngine uses, minus the register-time consent gate: pressing Install in the
+// browser IS that consent, for this engine on this machine, so a runner that declined blanket
+// auto-install can still be fixed from the UI instead of only from a terminal on that box.
+func installEngineNow(spec engineSpec) InstallResultRequest {
+	// Serialise with the on-demand installer: two package managers against the same global
+	// prefix at once is exactly what this lock exists to prevent.
+	engineInstall.mu.Lock()
+	proxyVars := engineInstall.proxyVars
+	defer engineInstall.mu.Unlock()
+	// Whoever got here first may have already installed it.
+	if _, ok := lookEngine(spec.bin); ok {
+		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+	}
+
+	logln("engine-install (requested):", spec.name, "->", spec.installCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", spec.installCmd)
+	cmd.Env = append(os.Environ(), "PATH="+serviceLoginPath())
+	for _, v := range proxyVars {
+		cmd.Env = append(cmd.Env, v.K+"="+v.V)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		logln("engine-install (requested):", spec.name, "failed:", firstLine(err.Error()), lastLine(string(out)))
+		return InstallResultRequest{
+			Status:  installFailed,
+			Command: spec.installCmd,
+			// The machine's own last words plus the alternative to run by hand — a failed
+			// install is only actionable from a browser if both make it back.
+			Message: firstLine(err.Error()) + ": " + lastLine(string(out)) +
+				"\nTry instead: " + spec.installAlt,
+		}
+	}
+	path, ok := lookEngine(spec.bin)
+	if !ok {
+		logln("engine-install (requested):", spec.name, "installer exited 0 but the binary is still not on PATH")
+		return InstallResultRequest{
+			Status:  installFailed,
+			Command: spec.installCmd,
+			Message: "the installer finished but `" + spec.bin + "` still isn't on this machine's service PATH.\nTry instead: " + spec.installAlt,
+		}
+	}
+	logln("engine-install (requested):", spec.name, "installed at", path)
+	// The runner's own PATH was fixed when the service started, and sessions exec the engine by
+	// name — so make the new binary's dir visible to everything spawned next (cf. ensureEngine).
+	if dir := filepath.Dir(path); !pathContains(os.Getenv("PATH"), dir) {
+		_ = os.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	}
+	return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+}
+
 // ensureEngine makes `bin` runnable for a session about to spawn, installing it if this
 // runner is allowed to and it isn't there yet. `notify` reports progress into the session
 // transcript — an install takes tens of seconds, and silence would read as a hung turn.

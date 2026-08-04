@@ -6,7 +6,9 @@ import { api } from '../api';
 
 const loginKey = (runnerId: string) => ['runner-login', runnerId] as const;
 
-const ENGINE_NAME: Record<LoginEngine, string> = {
+/** The CLI's own name, as its vendor spells it. Shared with the Providers page's engine rows so
+ *  the same machine never gets two names for the same binary. */
+export const ENGINE_NAME: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',

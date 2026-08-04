@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>UX sketch · Providers 页显示本机登录的 Claude / Codex / Kimi</title>
+<style>
+/* Tokens copied verbatim from src/web/src/index.css so the sketch is measurable against
+   the real app — do not invent colors here. */
+:root {
+  color-scheme: light;
+  --bg-base:#ffffff; --bg-raised:#ffffff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+  --bg-hover:#f5f6f7; --bg-hover-strong:#e3e6eb; --fill-muted:#f1f1f4;
+  --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3; --dot-idle:#c0c4cc;
+  --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-tint-hover:#e1ebff;
+  --brand-border:#bcd3ff;
+  --success:#1a7f37; --success-solid:#2ea121; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+  --error:#cf3b35; --error-solid:#d4380d; --error-bg:#fdeceb; --error-border:#ffccc7;
+  --warning:#c2710c; --warning-solid:#fa8c16; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  --invert-surface:#1f2329; --invert-surface-hover:#000000; --invert-text:#ffffff;
+  --page:#eef0f3; --frame-shadow:0 10px 34px rgba(20,24,31,.12);
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-base:#202023; --bg-raised:#2b2b2e; --bg-subtle:#252528; --bg-sunken:#17171a;
+  --bg-hover:#343437; --bg-hover-strong:#424246; --fill-muted:#38383c;
+  --border:#424246; --border-subtle:#343437;
+  --text-1:#c9ced5; --text-2:#a7adb6; --text-3:#8b9099; --text-4:#71767f; --dot-idle:#4a4e56;
+  --brand:#5b8cff; --brand-strong:#7aa2ff; --brand-tint:rgba(91,140,255,.16);
+  --brand-tint-hover:rgba(91,140,255,.24); --brand-border:rgba(91,140,255,.32);
+  --success:#4ac26b; --success-solid:#3fb45b; --success-bg:rgba(46,161,33,.18); --success-border:rgba(46,161,33,.35);
+  --error:#f0837b; --error-solid:#e5613c; --error-bg:rgba(245,74,69,.16); --error-border:rgba(245,74,69,.38);
+  --warning:#e0a23b; --warning-solid:#e0902b; --warning-bg:rgba(250,140,22,.15); --warning-border:rgba(250,140,22,.38);
+  --invert-surface:#e6e8eb; --invert-surface-hover:#ffffff; --invert-text:#16171a;
+  --page:#161619; --frame-shadow:0 10px 34px rgba(0,0,0,.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:var(--page); color:var(--text-1); padding:32px 28px 72px;
+  font:14px/1.5 -apple-system,"SF Pro Text","Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+.page-head { max-width:1180px; margin:0 auto 26px; display:flex; align-items:flex-start; gap:16px; }
+.page-head h1 { font-size:20px; font-weight:650; letter-spacing:-.01em; }
+.page-head p { color:var(--text-2); font-size:13px; margin-top:6px; max-width:820px; }
+.theme-btn {
+  margin-left:auto; flex:none; border:1px solid var(--border); background:var(--bg-raised);
+  color:var(--text-2); font-size:12px; padding:7px 13px; border-radius:8px; cursor:pointer;
+}
+.theme-btn:hover { background:var(--bg-hover); }
+
+.grid { max-width:1180px; margin:0 auto; display:grid; grid-template-columns:repeat(2,1fr); gap:30px 28px; }
+.cell.wide { grid-column:1 / -1; }
+.cap { font-size:13px; font-weight:600; margin-bottom:2px; }
+.cap b { color:var(--brand); font-weight:700; margin-right:6px; }
+.cap .rec { color:var(--success); font-weight:700; margin-left:6px; }
+.cap-sub { color:var(--text-3); font-size:12px; margin-bottom:10px; }
+.notes { margin-top:10px; color:var(--text-3); font-size:12px; line-height:1.75; }
+.notes li { margin-left:16px; }
+.cell.wide .notes { max-width:900px; }
+.notes b { color:var(--text-2); }
+.notes code, .cap-sub code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--text-2); }
+
+/* ---------- app frame: the /providers page ---------- */
+.frame {
+  background:var(--bg-base); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--frame-shadow); overflow:hidden; padding:22px 24px 24px;
+}
+.p-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.p-title { font-size:20px; font-weight:600; letter-spacing:-.01em; }
+.p-sub { font-size:12px; color:var(--text-3); margin-top:3px; }
+.btn {
+  border:1px solid var(--border); background:var(--bg-raised); color:var(--text-1);
+  font-size:12px; font-weight:500; padding:5px 11px; border-radius:7px; cursor:pointer; white-space:nowrap;
+}
+.btn:hover { background:var(--bg-hover); }
+.btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+.btn.solid { background:var(--invert-surface); border-color:var(--invert-surface); color:var(--invert-text); }
+.btn.link { border:0; background:none; color:var(--brand); padding:5px 2px; }
+.btn.off { opacity:.4; cursor:not-allowed; }
+.btn.sm { font-size:11.5px; padding:4px 9px; }
+
+/* section header — the one thing that tells the two identities apart */
+.sec { margin-top:24px; }
+.sec-head { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+.sec-title { font-size:14px; font-weight:650; color:var(--text-1); }
+.sec-sub { font-size:12px; color:var(--text-3); }
+.sec-count { margin-left:auto; font-size:11.5px; color:var(--text-4); white-space:nowrap; }
+
+/* ---------- runner card (variant A) ---------- */
+.rcard { border:1px solid var(--border); border-radius:12px; background:var(--bg-raised); overflow:hidden; }
+.rcard + .rcard { margin-top:10px; }
+.rcard.dim { background:var(--bg-subtle); }
+.rcard.dim .erow { opacity:.62; }
+.rc-head {
+  display:flex; align-items:center; gap:9px; padding:10px 14px;
+  background:var(--bg-subtle); border-bottom:1px solid var(--border-subtle);
+}
+.rcard.dim .rc-head { background:var(--fill-muted); }
+.rc-name { font-size:13px; font-weight:650; color:var(--text-1); }
+.rc-meta { font-size:11.5px; color:var(--text-3); }
+.rc-head .sp { flex:1; }
+.dot { width:7px; height:7px; border-radius:50%; flex:none; display:inline-block; }
+.dot.on { background:var(--success-solid); }
+.dot.offd { background:var(--dot-idle); }
+
+.erow {
+  display:grid; grid-template-columns:minmax(0,1fr) 108px 196px 116px;
+  align-items:center; gap:14px; padding:11px 14px;
+}
+.erow + .erow { border-top:1px solid var(--border-subtle); }
+.e-id { display:flex; align-items:center; gap:10px; min-width:0; }
+.e-name { font-size:13px; font-weight:600; color:var(--text-1); }
+.e-meta { font-size:11.5px; color:var(--text-3); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.e-act { display:flex; justify-content:flex-end; gap:6px; }
+
+.pill {
+  display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+  padding:2px 8px; border-radius:20px; border:1px solid; white-space:nowrap;
+}
+.pill.ok { color:var(--success); background:var(--success-bg); border-color:var(--success-border); }
+.pill.warn { color:var(--warning); background:var(--warning-bg); border-color:var(--warning-border); }
+.pill.mute { color:var(--text-3); background:var(--fill-muted); border-color:var(--border); }
+.pill.busy { color:var(--brand-strong); background:var(--brand-tint); border-color:var(--brand-border); }
+.pill.bad { color:var(--error); background:var(--error-bg); border-color:var(--error-border); }
+
+/* quota — same construction as .runner-util on the runner detail page */
+.q-head { display:flex; justify-content:space-between; align-items:baseline; font-size:11px; color:var(--text-3); }
+.q-head b { color:var(--text-2); font-weight:600; }
+.bar { margin-top:5px; height:4px; border-radius:2px; background:var(--border-subtle); overflow:hidden; }
+.bar span { display:block; height:100%; border-radius:2px; background:var(--brand); }
+.bar.full span { background:var(--warning-solid); }
+.q-none { font-size:11px; color:var(--text-4); }
+
+/* the sign-in relay, opened inline in the row it belongs to (today: only in Transcript) */
+.relay {
+  grid-column:1 / -1; margin-top:2px; padding:12px 13px; border-radius:10px;
+  background:var(--bg-subtle); border:1px solid var(--border-subtle);
+}
+.relay-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); }
+.relay-hint { font-size:11.5px; color:var(--text-3); margin-top:6px; }
+.relay-form { display:flex; gap:8px; margin-top:9px; max-width:420px; }
+.relay-input { flex:1; border:1px solid var(--border); border-radius:8px; background:var(--bg-raised); padding:6px 10px; font-size:12px; color:var(--text-4); }
+.relay-code {
+  margin-top:8px; display:inline-block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:17px; font-weight:600; letter-spacing:.16em; color:var(--text-1);
+  background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; padding:6px 13px;
+}
+.relay-link { color:var(--brand); font-size:12.5px; text-decoration:none; font-weight:500; }
+.spin { display:inline-block; width:11px; height:11px; border:2px solid var(--brand-border); border-top-color:var(--brand); border-radius:50%; }
+/* an install that failed: the machine's own error, plus the command to run by hand */
+.relay.bad { background:var(--error-bg); border-color:var(--error-border); }
+.relay.bad .relay-row { color:var(--error); font-weight:500; }
+.cmdline {
+  margin-top:8px; display:inline-flex; align-items:center; gap:10px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--text-2);
+  background:var(--bg-raised); border:1px solid var(--border); border-radius:8px; padding:6px 10px;
+}
+.cmdline .cp { color:var(--text-4); cursor:pointer; }
+.relay-btns { margin-top:10px; display:flex; gap:8px; }
+
+/* ---------- API-key table (today's page, unchanged except its heading) ---------- */
+.tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.tbl th {
+  text-align:left; font-size:12px; font-weight:600; color:var(--text-2);
+  padding:9px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
+}
+.tbl td { padding:11px 12px; border-bottom:1px solid var(--border-subtle); vertical-align:middle; }
+.tbl tr:last-child td { border-bottom:0; }
+.tbl .nm { font-weight:600; }
+.tbl code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--text-3); }
+.tag-on { display:inline-block; font-size:11.5px; color:var(--success); border:1px solid var(--success-border); background:var(--success-bg); border-radius:4px; padding:1px 7px; }
+.td-r { text-align:right; white-space:nowrap; }
+.td-r .btn + .btn { margin-left:6px; }
+.btn.danger { color:var(--error); border-color:var(--error-border); }
+
+/* ---------- gallery (existing .provider-card) ---------- */
+.gal { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.gcard {
+  display:flex; align-items:center; gap:11px; padding:12px;
+  background:var(--bg-raised); border:1px solid var(--border); border-radius:12px; cursor:pointer;
+}
+.gcard.connected { border-color:var(--success-border); }
+.gcard.custom { border-style:dashed; background:var(--bg-subtle); }
+.g-name { font-size:13px; font-weight:600; color:var(--text-1); }
+.g-sub { font-size:11.5px; color:var(--text-3); margin-top:1px; }
+.gcard.connected .g-sub { color:var(--success); font-weight:500; }
+.g-sub.local { color:var(--brand); font-weight:500; }
+
+/* ---------- logo tile — same construction as web ProviderTile ---------- */
+.tile { flex:none; display:grid; place-items:center; color:#fff; font-weight:700; position:relative; }
+.tile svg { fill:currentColor; }
+.tile.dash { background:var(--fill-muted); color:var(--text-3); border:1px dashed var(--border); font-weight:500; }
+.tile .ck {
+  position:absolute; right:-4px; bottom:-4px; width:15px; height:15px; border-radius:50%;
+  display:grid; place-items:center; background:var(--success-solid); color:#fff;
+  font-size:9px; border:2px solid var(--bg-raised); font-weight:700;
+}
+
+/* ---------- variant B: grouped by engine ---------- */
+.bgroup { border:1px solid var(--border); border-radius:12px; background:var(--bg-raised); }
+.bgroup + .bgroup { margin-top:10px; }
+.bg-head { display:flex; align-items:center; gap:11px; padding:12px 14px; cursor:pointer; }
+.bg-head.open { border-bottom:1px solid var(--border-subtle); }
+.bg-name { font-size:13.5px; font-weight:650; }
+.bg-sum { font-size:11.5px; color:var(--text-3); margin-top:1px; }
+.bg-chev { margin-left:auto; color:var(--text-3); font-size:11px; }
+.brow {
+  display:grid; grid-template-columns:minmax(0,1fr) 104px 150px 96px; align-items:center;
+  gap:12px; padding:9px 14px 9px 50px; font-size:12.5px;
+}
+.brow + .brow { border-top:1px solid var(--border-subtle); }
+.brow .rn { font-weight:500; color:var(--text-1); }
+.brow .rm { font-size:11px; color:var(--text-4); }
+
+/* ---------- variant C: matrix ---------- */
+.mx { width:100%; border-collapse:collapse; font-size:12.5px; }
+.mx th { font-size:11.5px; font-weight:600; color:var(--text-2); padding:8px 10px; border-bottom:1px solid var(--border); }
+.mx th.eng { text-align:center; }
+.mx th:first-child { text-align:left; }
+.mx td { padding:10px; border-bottom:1px solid var(--border-subtle); text-align:center; }
+.mx td:first-child { text-align:left; }
+.mx tr:last-child td { border-bottom:0; }
+.mx .rn { font-weight:600; color:var(--text-1); }
+.mx .rm { font-size:11px; color:var(--text-4); }
+.cellbtn {
+  display:inline-flex; flex-direction:column; align-items:center; gap:3px; padding:5px 9px;
+  border-radius:8px; border:1px solid transparent; cursor:pointer; min-width:78px;
+}
+.cellbtn:hover { background:var(--bg-hover); border-color:var(--border); }
+.cellbtn .lb { font-size:10.5px; color:var(--text-3); }
+.cellbtn .lb.ok { color:var(--success); }
+.cellbtn .lb.warn { color:var(--warning); }
+.big { font-size:13px; }
+.mx-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+
+/* ---------- empty state ---------- */
+.empty { padding:26px; border:1px solid var(--border); border-radius:14px; background:var(--bg-raised); text-align:center; }
+.empty h3 { font-size:16px; font-weight:600; margin-bottom:4px; }
+.empty p { font-size:13px; color:var(--text-3); margin-bottom:16px; }
+.empty .cmd {
+  display:inline-block; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+  background:var(--bg-sunken); border:1px solid var(--border); border-radius:8px;
+  padding:8px 14px; color:var(--text-2);
+}
+
+.legend { max-width:1180px; margin:34px auto 0; border-top:1px solid var(--border); padding-top:20px; }
+.legend h2 { font-size:14px; font-weight:650; margin-bottom:10px; }
+.legend h2:not(:first-child) { margin-top:26px; }
+.legend table { width:100%; border-collapse:collapse; font-size:12.5px; }
+.legend td { padding:7px 10px 7px 0; vertical-align:top; border-bottom:1px solid var(--border-subtle); color:var(--text-2); }
+.legend td:first-child { width:210px; color:var(--text-1); font-weight:600; }
+.legend code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--text-1); background:var(--fill-muted); padding:1px 5px; border-radius:4px; }
+.legend .new { color:var(--warning); font-weight:700; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <div>
+    <h1>Providers · 把「本机登录的 Claude / Codex / Kimi」放进来</h1>
+    <p>今天 <code>/providers</code> 只回答一个问题:<b>我贴过哪些 API key</b>。但 Orbit 绝大多数会话跑的是另一种身份 ——
+      runner 机器上<b>用订阅登录</b>的 <code>claude</code> / <code>codex</code> / <code>kimi</code> CLI。它们在这一页完全不可见,于是:
+      新用户看到 “Anthropic (Claude)” 卡片就去申请 API key(其实订阅已经够用);引擎掉登录只能靠发消息撞错误卡才发现;
+      runner 已经上报的订阅额度无处可看。<br>
+      主张:这一页改成回答 <b>“我的 agent 的模型从哪来”</b>,分成两段 —— <b>On your runners</b>(登录来的,按机器生效,花订阅)
+      / <b>Your API keys</b>(贴进来的,全账号生效,按 token 计费)。前者放上面,因为那才是新用户手里已经有的东西。</p>
+  </div>
+  <button class="theme-btn" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme==='dark'?'light':'dark'">切换 Light / Dark</button>
+</div>
+
+<div class="grid">
+
+  <!-- ================= A1 完整页面 ================= -->
+  <div class="cell wide">
+    <div class="cap"><b>A1</b>完整页面 — 两段式 <span class="rec">✓ 推荐</span></div>
+    <div class="cap-sub">上段按 <b>runner 分组</b>(登录是按机器生效的,这是唯一诚实的分组方式),下段是今天已有的 key 表格 + 画廊,一行没动。</div>
+    <div class="frame" id="a1"></div>
+    <div class="notes">
+      <li><b>为什么按机器分组而不是按引擎</b>:一次 <code>claude auth login</code> 只写这台机器的 <code>~/.claude</code>。
+        “Claude 已登录” 这句话单独说是假的,必须带机器名才成立 —— 分组方式必须让这件事没法说错。</li>
+      <li><b>每行四列</b>:身份(logo + 引擎名 + CLI 版本/默认模型)· 状态 · 订阅额度 · 动作。额度用 runner 已经上报的
+        <code>planUsage</code>,不是新数据。</li>
+      <li><b>段落副标题各自把话说全</b>:上段 “spends the subscription you signed into on that machine”,
+        下段 “on your account, usable from every runner”。用户唯一在乎的差别是<b>在哪儿生效、谁付钱</b>,就写这两件事。</li>
+      <li><b>画廊卡片补一句本机提示</b>:Anthropic / OpenAI / Kimi 三张卡在对应引擎已登录时,副标题变成蓝色的
+        “Already signed in on mac-studio” —— 把用户从「多花一份钱」上拦一下,但卡片依然可点(第二把 key 是合法需求)。</li>
+      <li>右上角 <b>Add provider</b> 保持只管 key。给引擎加身份的入口是行内的 <b>Sign in</b>,不塞进那个按钮。</li>
+    </div>
+  </div>
+
+  <!-- ================= A2 状态全谱 ================= -->
+  <div class="cell wide">
+    <div class="cap"><b>A2</b>状态全谱 — 一行能落在的所有格子</div>
+    <div class="cap-sub">五种状态各自的措辞和动作。原则:<b>只有探针明确报 yes 才敢说 Signed in</b>。</div>
+    <div class="frame" style="padding:16px" id="a2"></div>
+    <div class="notes">
+      <li><b>Signed in</b> → 绿 pill + 计划名 + 额度条 + 重置时间;动作收进 <code>⋯</code>(Re-sign in / Sign out)。</li>
+      <li><b>Signed out</b> → 琥珀 pill + 主按钮 <b>Sign in</b>,直接走已有的浏览器中继(RunnerSignIn),不用去那台机器开终端。</li>
+      <li><b>Not installed</b> → 灰 pill + 主按钮 <b>Install</b>。这是全站唯一能主动装引擎的地方:按需安装
+        (<code>ensureEngine()</code>)只发生在 register 时同意过 <code>AutoInstallEngines</code> 的机器上,
+        <b>拒绝过的、以及在这个问题存在之前注册的老 runner(零值 = 不允许)</b>,会话会直接以
+        <code>engineMissingMessage</code> 失败,而用户在界面上无路可走。这个按钮就是那条路。</li>
+      <li><b>为什么 Install 不并进 Sign in</b>:① 两件事的失败原因不同 —— 装不上是网络/权限(EACCES、代理),
+        登不上是账号;合成一个按钮,错误就没法讲清楚是哪一步炸的。② <b>BYOK 也要这个 CLI</b> ——
+        preset 的 <code>runtime: 'claude' | 'codex'</code> 表示它借壳跑,Gemini / DeepSeek 的 key 在没装
+        <code>claude</code> / <code>codex</code> 的机器上一样跑不了,而那种情况<b>根本不需要登录</b>。
+        装完这一行自动翻成 Signed out、Sign in 就在原地,两步是连着的,不会多走冤枉路。</li>
+      <li><b>Installing…</b> → 蓝 pill,行内摊开正在跑的那条命令,给 Cancel。文案明说“可以离开这页” ——
+        装机是分钟级的,盯着看没意义。</li>
+      <li><b>Install failed</b> → 红 pill,把那台机器自己的报错<b>原样贴出来</b>(EACCES / 代理不通之类),给 Retry,
+        并附上 <code>engineSpec.installAlt</code> 里的备选命令可复制。只写一句“失败了”等于把人扔回终端。</li>
+      <li><b>Unknown</b> → CLI 的探针返回 <code>authUnknown</code>(三态里的第三态)。绝不猜成 Signed in;写 “Can't tell — run a session to find out”。</li>
+      <li><b>Runner offline</b> → 整卡降透明度,状态显示<b>最后一次心跳的快照</b>并标 “as of 2h ago”,按钮全部禁用。
+        离线机器上的登录状态我们确实不知道,UI 不许假装知道。</li>
+    </div>
+  </div>
+
+  <!-- ================= A3 登录进行中 ================= -->
+  <div class="cell wide">
+    <div class="cap"><b>A3</b>登录进行中 — 中继直接在行内展开</div>
+    <div class="cap-sub">复用 <code>RunnerSignIn</code> 组件(今天只长在 Transcript 的报错卡里),两种流程两种形状。</div>
+    <div class="frame" style="padding:16px" id="a3"></div>
+    <div class="notes">
+      <li><b>claude</b>:回调地址是 Anthropic 托管的,页面会给一串 code,所以形状是「开页 → 粘贴 → Submit」。</li>
+      <li><b>codex / kimi</b>:device flow,一次性码显示在这里,让用户去页面上输,CLI 自己轮询批准 —— <b>没有可粘贴的东西</b>,
+        所以这里只能等。别给一个假的输入框。</li>
+      <li>两者都要预告延迟:runner 下一次心跳才接单,最坏半分钟。文案沿用现有的
+        “The runner picks it up on its next check-in”,不要在这里重新发明。</li>
+      <li>一台 runner 同时只能有一个中继在飞(<code>Runner.loginStatus</code> 是单槽)。所以进行中时,<b>同卡其它行的 Sign in 置灰</b>,
+        提示 “Another sign-in is running on this machine”。</li>
+    </div>
+  </div>
+
+  <!-- ================= B 按引擎分组 ================= -->
+  <div class="cell">
+    <div class="cap"><b>B</b>备选 — 按引擎分组</div>
+    <div class="cap-sub">和这一页“provider 列表”的语感更一致;机器多、引擎少的时候更短。</div>
+    <div class="frame" style="padding:16px" id="b1"></div>
+    <div class="notes">
+      <li>好处:和下面那段 key 列表长得像,一眼是同一页的两段。摘要行 “Signed in on 2 of 3 runners” 能一句话交代全局。</li>
+      <li>坏处:<b>把“登录是按机器的”这件事藏进折叠里</b> —— 恰恰是这一页最需要教会用户的一件事。默认折叠时
+        “Claude Code · Signed in” 会被读成账号级已就绪,而这正是今天误解的来源。</li>
+      <li>结论:除非 runner 数量常年 > 5,否则不选。真到那天,直接上 C。</li>
+    </div>
+  </div>
+
+  <!-- ================= C 矩阵 ================= -->
+  <div class="cell">
+    <div class="cap"><b>C</b>备选 — 矩阵(机器多时的收敛形态)</div>
+    <div class="cap-sub">行=runner,列=引擎。6 台以上机器时 A 会太长,这个形态一屏能看完。</div>
+    <div class="frame" style="padding:16px" id="c1"></div>
+    <div class="notes">
+      <li>格子点开是浮层,里面就是 A 的那一行(状态 + 额度 + 动作,含 <b>Install</b>),所以两个形态共用同一套行组件,不是两份实现。</li>
+      <li>缺点:额度条摆不下,只剩状态词;订阅还剩多少要多点一次才看得到。</li>
+      <li>建议:<b>runner ≤ 4 用 A,更多自动切 C</b>,不做手动切换开关 —— 这不是一个值得让用户选的选项。</li>
+    </div>
+  </div>
+
+  <!-- ================= D 空态 ================= -->
+  <div class="cell wide">
+    <div class="cap"><b>D</b>空态 — 一台 runner 都还没有</div>
+    <div class="cap-sub">这一页第一次被打开时的样子。不能上来就是空表格 + 一堆等着收钱的 logo。</div>
+    <div class="frame" id="d1"></div>
+    <div class="notes">
+      <li>先给<b>不花钱的那条路</b>:装 runner → 用你已有的 Claude / Codex / Kimi 订阅登录。API key 是并列的第二条路,不是第一条。</li>
+      <li>没有 runner 时上段只有这一块引导;<b>有 runner 但三个引擎都没装</b>时,卡片照常显示三行 “Not installed”,
+        因为那才是真话,而且 <b>Install</b> 按钮就在那儿,装完接着 Sign in。</li>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <h2>数据来源 — 这版设计要用的每一个字段</h2>
+  <table>
+    <tr><td>引擎已装 / 版本 / 是否登录</td><td><span class="new">需要新增</span> · runner 心跳补一个 <code>engines[]</code>。
+      <b>探针本身已经写好了</b>:<code>src/runner-go/doctor.go</code> 的 <code>checkEngine()</code> 已经产出
+      <code>{installed, path, version, auth}</code>,<code>auth</code> 就是 <code>authYes|authNo|authUnknown</code> 三态。
+      现在这些只打印给 <code>orbit doctor</code> 看,没有上报。改动 = 心跳带上 + <code>Runner.engines Json?</code> 一列 + <code>GET /runners</code> 透出。</td></tr>
+    <tr><td>订阅计划 / 额度 / 重置时间</td><td>已有 · <code>Runner.planUsage</code>(<code>PlanUsage.claude / codex / kimi</code>,每个是
+      <code>PlanUsageSnapshot</code>)。runner detail 页已经在渲染同一份数据,这里复用 <code>planUsageRows()</code>。</td></tr>
+    <tr><td>默认模型</td><td>已有 · <code>Runner.runtimeDefaultModels</code>(引擎自报的 effective default)+ <code>modelCatalog</code>。</td></tr>
+    <tr><td>引擎安装(Install 按钮)</td><td><span class="new">需要新增</span> · 一个和登录中继同形状的安装中继:
+      心跳下发 “装 X”,runner 跑完把结果(成功 / stderr 尾巴)回报。<b>要执行的东西全是现成的</b> ——
+      命令在 <code>engineSpec.installCmd / installAlt</code>(<code>doctor.go:54</code>),执行在
+      <code>runInstallCmd()</code> / <code>ensureEngine()</code>(<code>engineinstall.go</code>),
+      今天只是仅有“会话内按需触发”这一个入口,且被 <code>AutoInstallEngines</code> 一次性同意位挡着。
+      UI 上按下 Install <b>本身就是这一次的明确同意</b>,不该再受那个开关影响。</td></tr>
+    <tr><td>登录中继(A3)</td><td>已有 · <code>Runner.loginStatus / loginEngine / loginUrl / loginUserCode / loginMessage</code>,
+      加 <code>&lt;RunnerSignIn runnerId engine /&gt;</code>。组件不用改,换个挂载位置。</td></tr>
+    <tr><td>runner 在线 / 名字 / 版本</td><td>已有 · <code>GET /runners</code>(<code>online</code>、<code>displayName</code>、
+      <code>version</code>、<code>lastHeartbeatAt</code>)。</td></tr>
+    <tr><td>API key 段</td><td>已有 · <code>GET /providers/mine</code>,表格和画廊<b>一行不改</b>,只换段落标题和副标题。</td></tr>
+  </table>
+
+  <h2>取舍与边界</h2>
+  <table>
+    <tr><td>不做:引擎的开关</td><td>引擎不是 “enabled/disabled” 的资源 —— 装了且登录了就能用。加一个开关等于凭空造一层状态。</td></tr>
+    <tr><td>不做:在这页删登录</td><td>“Sign out” 收在 <code>⋯</code> 里,不给独立按钮。清掉一台机器的凭据是个破坏性动作,不该和 Edit/Delete 一样显眼。</td></tr>
+    <tr><td>老 runner 的兼容</td><td>没上报 <code>engines[]</code> 的旧 runner:整卡显示一行
+      “This runner is on v0.1.7x — update it to see engine status”,<b>不要拿三行 Unknown 糊过去</b>。</td></tr>
+    <tr><td>OpenCode 呢</td><td>不进这一段。它是第四个 <code>AgentProvider</code> 但不是 <code>LoginEngine</code>,没有可中继的登录流程,
+      放进来会多出一行永远只能显示 Unknown 的东西。</td></tr>
+    <tr><td>iOS / macOS</td><td>本稿只画 web。原生端如果跟,建议直接跟 <b>A</b> 的行组件(logo + 名 + 状态 pill + 额度条),
+      两端的 runner 详情页已经有同款额度条,视觉不用新造。</td></tr>
+  </table>
+</div>
+
+<script>
+/* Official vendor marks — copied from src/web/src/lib/providerGlyphs.ts (LobeHub icons, MIT). */
+const GLYPH = {
+  anthropic: '<path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"></path>',
+  openai: '<path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"></path>',
+  kimi: '<path d="M21.846 0a1.923 1.923 0 110 3.846H20.15a.226.226 0 01-.227-.226V1.923C19.923.861 20.784 0 21.846 0z"></path><path d="M11.065 11.199l7.257-7.2c.137-.136.06-.41-.116-.41H14.3a.164.164 0 00-.117.051l-7.82 7.756c-.122.12-.302.013-.302-.179V3.82c0-.127-.083-.23-.185-.23H3.186c-.103 0-.186.103-.186.23V19.77c0 .128.083.23.186.23h2.69c.103 0 .186-.102.186-.23v-3.25c0-.069.025-.135.069-.178l2.424-2.406a.158.158 0 01.205-.023l6.484 4.772a7.677 7.677 0 003.453 1.283c.108.012.2-.095.2-.23v-3.06c0-.117-.07-.212-.164-.227a5.028 5.028 0 01-2.027-.807l-5.613-4.064c-.117-.078-.132-.279-.028-.381z"></path>',
+  deepseek: '<path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z"></path>',
+  gemini: '<path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"></path>',
+  glm: '<path d="M11.991 23.503a.24.24 0 00-.244.248.24.24 0 00.244.249.24.24 0 00.245-.249.24.24 0 00-.22-.247l-.025-.001zM9.671 5.365a1.697 1.697 0 011.099 2.132l-.071.172-.016.04-.018.054c-.07.16-.104.32-.104.498-.035.71.47 1.279 1.186 1.314h.366c1.309.053 2.338 1.173 2.286 2.523-.052 1.332-1.152 2.38-2.478 2.327h-.174c-.715.018-1.274.64-1.239 1.368 0 .124.018.23.053.337.209.373.54.658.96.8.75.23 1.517-.125 1.9-.782l.018-.035c.402-.64 1.17-.96 1.92-.711.854.284 1.378 1.226 1.099 2.167a1.661 1.661 0 01-2.077 1.102 1.711 1.711 0 01-.907-.711l-.017-.035c-.2-.323-.463-.58-.851-.711l-.056-.018a1.646 1.646 0 00-1.954.746 1.66 1.66 0 01-1.065.764 1.677 1.677 0 01-1.989-1.279c-.209-.906.332-1.83 1.257-2.043a1.51 1.51 0 01.296-.035h.018c.68-.071 1.151-.622 1.116-1.333a1.307 1.307 0 00-.227-.693 2.515 2.515 0 01-.366-1.403 2.39 2.39 0 01.366-1.208c.14-.195.21-.444.227-.693.018-.71-.506-1.261-1.186-1.332l-.07-.018a1.43 1.43 0 01-.299-.07l-.05-.019a1.7 1.7 0 01-1.047-2.114 1.68 1.68 0 012.094-1.101zm-5.575 10.11c.26-.264.639-.367.994-.27.355.096.633.379.728.74.095.362-.007.748-.267 1.013-.402.41-1.053.41-1.455 0a1.062 1.062 0 010-1.482zm14.845-.294c.359-.09.738.024.992.297.254.274.344.665.237 1.025-.107.36-.396.634-.756.718-.551.128-1.1-.22-1.23-.781a1.05 1.05 0 01.757-1.26zm-.064-4.39c.314.32.49.753.49 1.206 0 .452-.176.886-.49 1.206-.315.32-.74.5-1.185.5-.444 0-.87-.18-1.184-.5a1.727 1.727 0 010-2.412 1.654 1.654 0 012.369 0zm-11.243.163c.364.484.447 1.128.218 1.691a1.665 1.665 0 01-2.188.923c-.855-.36-1.26-1.358-.907-2.228a1.68 1.68 0 011.33-1.038c.593-.08 1.183.169 1.547.652zm11.545-4.221c.368 0 .708.2.892.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.892.524c-.568 0-1.03-.47-1.03-1.048 0-.579.462-1.048 1.03-1.048zm-14.358 0c.368 0 .707.2.891.524.184.324.184.724 0 1.048a1.026 1.026 0 01-.891.524c-.569 0-1.03-.47-1.03-1.048 0-.579.461-1.048 1.03-1.048zm10.031-1.475c.925 0 1.675.764 1.675 1.706s-.75 1.705-1.675 1.705-1.674-.763-1.674-1.705c0-.942.75-1.706 1.674-1.706zm-2.626-.684c.362-.082.653-.356.761-.718a1.062 1.062 0 00-.238-1.028 1.017 1.017 0 00-.996-.294c-.547.14-.881.7-.752 1.257.13.558.675.907 1.225.783zm0 16.876c.359-.087.644-.36.75-.72a1.062 1.062 0 00-.237-1.019 1.018 1.018 0 00-.985-.301 1.037 1.037 0 00-.762.717c-.108.361-.017.754.239 1.028.245.263.606.377.953.305l.043-.01zM17.19 3.5a.631.631 0 00.628-.64c0-.355-.279-.64-.628-.64a.631.631 0 00-.628.64c0 .355.28.64.628.64zm-10.38 0a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64a.631.631 0 00-.628.64c0 .355.279.64.628.64zm-5.182 7.852a.631.631 0 00-.628.64c0 .354.28.639.628.639a.63.63 0 00.627-.606l.001-.034a.62.62 0 00-.628-.64zm5.182 9.13a.631.631 0 00-.628.64c0 .355.279.64.628.64a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64zm10.38.018a.631.631 0 00-.628.64c0 .355.28.64.628.64a.631.631 0 00.628-.64c0-.355-.279-.64-.628-.64zm5.182-9.148a.631.631 0 00-.628.64c0 .354.279.639.628.639a.631.631 0 00.628-.64c0-.355-.28-.64-.628-.64zm-.384-4.992a.24.24 0 00.244-.249.24.24 0 00-.244-.249.24.24 0 00-.244.249c0 .142.122.249.244.249zM11.991.497a.24.24 0 00.245-.248A.24.24 0 0011.99 0a.24.24 0 00-.244.249c0 .133.108.236.223.247l.021.001zM2.011 6.36a.24.24 0 00.245-.249.24.24 0 00-.244-.249.24.24 0 00-.244.249.24.24 0 00.244.249zm0 11.263a.24.24 0 00-.243.248.24.24 0 00.244.249.24.24 0 00.244-.249.252.252 0 00-.244-.248zm19.995-.018a.24.24 0 00-.245.248.24.24 0 00.245.25.24.24 0 00.244-.25.252.252 0 00-.244-.248z"></path>',
+};
+
+/* The three login engines (LoginEngine in @orbit/shared) borrow their vendor's mark and gradient
+   from PROVIDER_PRESETS — engine and BYOK provider are the same company, so one logo. */
+const ENG = {
+  claude: { name:'Claude Code', bin:'claude', g:'anthropic', from:'#d97757', to:'#c15f3c' },
+  codex:  { name:'Codex',       bin:'codex',  g:'openai',    from:'#4b5158', to:'#1f2226' },
+  kimi:   { name:'Kimi Code',   bin:'kimi',   g:'kimi',      from:'#3a3a3a', to:'#111111' },
+};
+
+function tile(g, from, to, size, check) {
+  const r = Math.round(size * 0.26), s = Math.round(size * 0.56);
+  return `<span class="tile" style="width:${size}px;height:${size}px;border-radius:${r}px;background:linear-gradient(135deg,${from},${to})">
+    <svg viewBox="0 0 24 24" width="${s}" height="${s}">${GLYPH[g] || ''}</svg>
+    ${check ? '<span class="ck">✓</span>' : ''}</span>`;
+}
+const engTile = (k, size = 28, check) => tile(ENG[k].g, ENG[k].from, ENG[k].to, size, check);
+
+/* One engine's row inside a runner card. `st` is the whole vocabulary this design has:
+   in | out | missing | unknown | old, plus `stale` for a runner we can't currently reach. */
+function engineRow(r) {
+  const e = ENG[r.engine];
+  const meta = r.meta !== undefined ? r.meta : (r.version ? `${e.bin} ${r.version}` : '');
+  const pill = {
+    in:        ['ok',   'Signed in'],
+    out:       ['warn', 'Signed out'],
+    missing:   ['mute', 'Not installed'],
+    unknown:   ['mute', 'Unknown'],
+    busy:      ['busy', 'Signing in…'],
+    installing:['busy', 'Installing…'],
+    failed:    ['bad',  'Install failed'],
+  }[r.st] || ['mute', r.st];
+
+  let quota = '<div class="q-none">—</div>';
+  if (r.plan) {
+    quota = `<div>
+      <div class="q-head"><b>${r.plan}</b><span>${r.pct}%</span></div>
+      <div class="bar${r.pct >= 80 ? ' full' : ''}"><span style="width:${r.pct}%"></span></div>
+      ${r.resets ? `<div class="q-head" style="margin-top:4px"><span>${r.resets}</span></div>` : ''}
+    </div>`;
+  } else if (r.note) {
+    quota = `<div class="q-none">${r.note}</div>`;
+  }
+
+  const act = {
+    in:        '<button class="btn sm">⋯</button>',
+    out:       '<button class="btn sm primary">Sign in</button>',
+    // Install is its own action, not folded into Sign in — see the notes under A2.
+    missing:   '<button class="btn sm primary">Install</button>',
+    unknown:   '<button class="btn sm">Sign in</button>',
+    busy:      '<button class="btn sm link">Cancel</button>',
+    installing:'<button class="btn sm link">Cancel</button>',
+    failed:    '<button class="btn sm">Retry</button>',
+  }[r.st] || '';
+
+  return `<div class="erow">
+    <div class="e-id">${engTile(r.engine, 28, r.st === 'in')}
+      <div style="min-width:0"><div class="e-name">${e.name}</div>
+        ${meta ? `<div class="e-meta">${meta}</div>` : ''}</div></div>
+    <div><span class="pill ${pill[0]}">${pill[1]}</span></div>
+    <div>${quota}</div>
+    <div class="e-act">${r.disabled ? '<button class="btn sm off">Sign in</button>' : act}</div>
+    ${r.relay || ''}
+  </div>`;
+}
+
+function runnerCard(o) {
+  return `<div class="rcard${o.offline ? ' dim' : ''}">
+    <div class="rc-head">
+      <span class="dot ${o.offline ? 'offd' : 'on'}"></span>
+      <span class="rc-name">${o.name}</span>
+      <span class="rc-meta">${o.meta}</span>
+      <span class="sp"></span>
+      ${o.headRight || '<button class="btn sm link">Manage runner →</button>'}
+    </div>
+    ${o.rows.map(engineRow).join('')}
+  </div>`;
+}
+
+const secHead = (title, sub, count) => `<div class="sec-head">
+  <span class="sec-title">${title}</span><span class="sec-sub">${sub}</span>
+  ${count ? `<span class="sec-count">${count}</span>` : ''}</div>`;
+
+/* ============================ A1 — the whole page ============================ */
+const galleryCards = [
+  { g:'anthropic', from:'#d97757', to:'#c15f3c', name:'Anthropic (Claude)', sub:'Anthropic-compatible', local:'Already signed in on mac-studio' },
+  { g:'openai',    from:'#4b5158', to:'#1f2226', name:'OpenAI (Codex)',     sub:'OpenAI-compatible',    local:'Already signed in on mac-studio' },
+  { g:'gemini',    from:'#4285f4', to:'#9b72cb', name:'Gemini',             sub:'OpenAI-compatible' },
+  { g:'deepseek',  from:'#5b7cff', to:'#3a57e8', name:'DeepSeek',           sub:'Anthropic-compatible', keyed:true },
+  { g:'kimi',      from:'#3a3a3a', to:'#111111', name:'Kimi (Moonshot)',    sub:'Anthropic-compatible', keyed:true },
+  { g:'glm',       from:'#33b6b0', to:'#1e8e8e', name:'Z.AI (GLM)',         sub:'Anthropic-compatible' },
+];
+/* `live` = the page as it looks once things are set up: a key on the card shows Connected, and a
+   local sign-in for the same vendor says so in brand blue. The empty state passes false. */
+function galleryHTML(live) {
+  return `<div class="gal">${galleryCards.map(c => {
+    const ok = live && c.keyed, loc = live && c.local;
+    return `<div class="gcard${ok ? ' connected' : ''}">${tile(c.g, c.from, c.to, 40, ok)}
+      <div style="min-width:0"><div class="g-name">${c.name}</div>
+        <div class="g-sub${loc ? ' local' : ''}">${ok ? 'Connected' : (loc || c.sub)}</div></div></div>`;
+  }).join('')}
+  <div class="gcard custom"><span class="tile dash" style="width:40px;height:40px;border-radius:10px;font-size:20px">+</span>
+    <div><div class="g-name">Custom</div><div class="g-sub">Manual endpoint</div></div></div></div>`;
+}
+
+document.getElementById('a1').innerHTML = `
+  <div class="p-head">
+    <div><div class="p-title">Providers</div>
+      <div class="p-sub">Where your agents' models come from — the CLIs signed in on your machines, and the API keys on your account.</div></div>
+    <button class="btn primary">Add provider</button>
+  </div>
+
+  <div class="sec">
+    ${secHead('On your runners',
+      'Signed in on the machine itself — a session spends that subscription, nothing to paste.',
+      '2 runners · 4 of 6 engines ready')}
+    ${runnerCard({
+      name:'mac-studio', meta:'macOS 15.4 · runner v0.1.74',
+      rows:[
+        { engine:'claude', st:'in',  version:'2.1.4', meta:'claude 2.1.4 · Claude Opus 5',   plan:'Max 20× · 5h', pct:62, resets:'Resets 21:00' },
+        { engine:'codex',  st:'in',  version:'0.58.0', meta:'codex 0.58.0 · gpt-5.6-sol',    plan:'Plus · weekly', pct:18 },
+        { engine:'kimi',   st:'out', version:'1.2.0',  meta:'kimi 1.2.0',                     note:'Sign in to see quota' },
+      ]})}
+    ${runnerCard({
+      name:'gpu-box', meta:'Ubuntu 24.04 · runner v0.1.74',
+      rows:[
+        { engine:'claude', st:'in',      version:'2.1.4', meta:'claude 2.1.4 · Claude Opus 5', plan:'Max 5× · 5h', pct:88, resets:'Resets 19:30' },
+        { engine:'codex',  st:'in',      version:'0.57.1', meta:'codex 0.57.1 · gpt-5.6-sol',  plan:'Pro · weekly', pct:41 },
+        { engine:'kimi',   st:'missing', meta:'Not installed — Orbit can install it here' },
+      ]})}
+  </div>
+
+  <div class="sec">
+    ${secHead('Your API keys', 'On your account and usable from every runner — billed per token.', '2 providers')}
+    <table class="tbl">
+      <tr><th>Provider</th><th>Models</th><th>Endpoint</th><th>Enabled</th><th></th></tr>
+      <tr><td><div style="display:flex;align-items:center;gap:10px">${tile('kimi','#3a3a3a','#111111',32)}<span class="nm">Kimi (Moonshot)</span></div></td>
+        <td>3</td><td><code>https://api.moonshot.ai/anthropic</code></td><td><span class="tag-on">Enabled</span></td>
+        <td class="td-r"><button class="btn sm">Edit</button><button class="btn sm danger">Delete</button></td></tr>
+      <tr><td><div style="display:flex;align-items:center;gap:10px">${tile('deepseek','#5b7cff','#3a57e8',32)}<span class="nm">DeepSeek</span></div></td>
+        <td>2</td><td><code>https://api.deepseek.com/anthropic</code></td><td><span class="tag-on">Enabled</span></td>
+        <td class="td-r"><button class="btn sm">Edit</button><button class="btn sm danger">Delete</button></td></tr>
+    </table>
+    <div style="margin-top:22px"><div class="sec-title" style="margin-bottom:10px">Connect another provider</div>${galleryHTML(true)}</div>
+  </div>`;
+
+/* ============================ A2 — every state ============================ */
+/* An install is a network fetch + a package manager on someone else's machine: it takes minutes
+   and it fails in ways only that machine knows. So it gets its own in-flight and failed states,
+   the same shape the sign-in relay uses. Commands come from engineSpec in doctor.go. */
+const installingRelay = `<div class="relay">
+  <div class="relay-row"><span class="spin"></span> Installing Kimi Code on build-mac…</div>
+  <div class="cmdline">curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash</div>
+  <div class="relay-hint">Usually under a minute. You can leave this page — it keeps running on the machine.</div>
+</div>`;
+const failedRelay = `<div class="relay bad">
+  <div class="relay-row">! Install failed — npm exited 243: EACCES on /usr/local/lib/node_modules</div>
+  <div class="relay-hint">Orbit ran <code>npm install -g @openai/codex</code>. Retry, or run the alternative yourself on that machine:</div>
+  <div class="cmdline">brew install codex<span class="cp">Copy</span></div>
+</div>`;
+
+document.getElementById('a2').innerHTML =
+  runnerCard({
+    name:'mac-studio', meta:'macOS 15.4 · runner v0.1.74',
+    rows:[
+      { engine:'claude', st:'in',      meta:'claude 2.1.4 · Claude Opus 5', plan:'Max 20× · 5h', pct:62, resets:'Resets 21:00' },
+      { engine:'codex',  st:'out',     meta:'codex 0.58.0',                 note:'Sign in to see quota' },
+      { engine:'kimi',   st:'missing', meta:'Not installed — Orbit can install it here' },
+    ]}) +
+  runnerCard({
+    name:'build-mac', meta:'macOS 15.4 · runner v0.1.74',
+    rows:[
+      { engine:'kimi',  st:'installing', meta:'Not installed yet', relay: installingRelay },
+      { engine:'codex', st:'failed',     meta:'Not installed', relay: failedRelay },
+    ]}) +
+  runnerCard({
+    name:'ci-linux', meta:'Ubuntu 24.04 · runner v0.1.74',
+    rows:[
+      { engine:'claude', st:'unknown', meta:'claude 2.0.9 · the CLI wouldn\'t say', note:'Run a session to find out' },
+    ]}) +
+  runnerCard({
+    name:'old-mini', meta:'Offline · last seen 2h ago', offline:true,
+    headRight:'<span class="pill mute">Offline</span>',
+    rows:[
+      { engine:'claude', st:'in',  meta:'as of last check-in', note:'Quota is 2h stale', disabled:true },
+      { engine:'codex',  st:'out', meta:'as of last check-in', disabled:true },
+    ]}) +
+  `<div class="rcard" style="margin-top:10px"><div class="rc-head">
+      <span class="dot on"></span><span class="rc-name">legacy-box</span>
+      <span class="rc-meta">runner v0.1.71</span><span class="sp"></span>
+      <button class="btn sm link">Update runner →</button></div>
+    <div style="padding:14px;font-size:12.5px;color:var(--text-3)">
+      This runner is too old to report engine status. Update it to v0.1.75 or newer to see and manage
+      sign-ins from here.</div></div>`;
+
+/* ============================ A3 — sign-in in flight ============================ */
+const claudeRelay = `<div class="relay">
+  <a class="relay-link" href="#">↗ Open the sign-in page</a>
+  <div class="relay-hint">Approve it there, then paste the code the page gives you:</div>
+  <div class="relay-form"><span class="relay-input">Paste the code</span><button class="btn primary sm">Submit</button></div>
+</div>`;
+const deviceRelay = `<div class="relay">
+  <a class="relay-link" href="#">↗ Open the sign-in page</a>
+  <div class="relay-hint">Sign in there, then enter this one-time code:</div>
+  <div class="relay-code">FJQX-7T2M</div>
+  <div class="relay-row" style="margin-top:9px"><span class="spin"></span> Waiting for you to approve it…</div>
+</div>`;
+document.getElementById('a3').innerHTML =
+  runnerCard({
+    name:'mac-studio', meta:'macOS 15.4 · claude — paste-a-code flow',
+    rows:[
+      { engine:'claude', st:'busy', meta:'claude 2.1.4', note:'', relay: claudeRelay },
+      { engine:'codex',  st:'in',   meta:'codex 0.58.0 · gpt-5.6-sol', plan:'Plus · weekly', pct:18 },
+      { engine:'kimi',   st:'out',  meta:'Another sign-in is running on this machine', disabled:true },
+    ]}) +
+  runnerCard({
+    name:'gpu-box', meta:'Ubuntu 24.04 · codex — device flow, nothing to paste',
+    rows:[
+      { engine:'codex', st:'busy', meta:'codex 0.57.1', relay: deviceRelay },
+    ]});
+
+/* ============================ B — grouped by engine ============================ */
+function bGroup(engine, sum, open, rows) {
+  const e = ENG[engine];
+  return `<div class="bgroup">
+    <div class="bg-head${open ? ' open' : ''}">${engTile(engine, 32, open)}
+      <div><div class="bg-name">${e.name}</div><div class="bg-sum">${sum}</div></div>
+      <span class="bg-chev">${open ? '▾' : '▸'}</span></div>
+    ${open ? rows.map(r => `<div class="brow">
+      <div><span class="rn">${r.n}</span> <span class="rm">· ${r.m}</span></div>
+      <div><span class="pill ${r.p[0]}">${r.p[1]}</span></div>
+      <div style="font-size:11.5px;color:var(--text-3)">${r.q}</div>
+      <div class="e-act">${r.a}</div></div>`).join('') : ''}
+  </div>`;
+}
+document.getElementById('b1').innerHTML =
+  bGroup('claude', 'Signed in on 2 of 3 runners', true, [
+    { n:'mac-studio', m:'macOS', p:['ok','Signed in'],  q:'Max 20× · 62%', a:'<button class="btn sm">⋯</button>' },
+    { n:'gpu-box',    m:'Linux', p:['warn','Signed out'], q:'—',            a:'<button class="btn sm primary">Sign in</button>' },
+    { n:'old-mini',   m:'Offline', p:['mute','Offline'], q:'as of 2h ago',  a:'<button class="btn sm off">Sign in</button>' },
+  ]) +
+  bGroup('codex', 'Signed in on 3 of 3 runners', false, []) +
+  bGroup('kimi', 'Not installed on any runner', false, []);
+
+/* ============================ C — matrix ============================ */
+const cellFor = (s) => ({
+  in:      '<span class="cellbtn"><span class="dot on"></span><span class="lb ok">Signed in</span></span>',
+  out:     '<span class="cellbtn"><span class="pill warn" style="padding:1px 6px">!</span><span class="lb warn">Signed out</span></span>',
+  missing: '<span class="cellbtn"><span class="dot offd"></span><span class="lb">Not installed</span></span>',
+  off:     '<span class="cellbtn"><span class="dot offd"></span><span class="lb">—</span></span>',
+}[s]);
+const mxRows = [
+  { n:'mac-studio', m:'macOS · online',   c:['in','in','out'] },
+  { n:'gpu-box',    m:'Linux · online',   c:['in','in','missing'] },
+  { n:'ci-linux',   m:'Linux · online',   c:['in','missing','missing'] },
+  { n:'build-mac',  m:'macOS · online',   c:['out','in','in'] },
+  { n:'old-mini',   m:'offline · 2h ago', c:['off','off','off'] },
+];
+document.getElementById('c1').innerHTML = `
+  <div class="mx-head"><span class="sec-title">On your runners</span>
+    <span class="sec-sub">5 runners</span></div>
+  <table class="mx">
+    <tr><th>Runner</th>
+      ${Object.keys(ENG).map(k => `<th class="eng"><div style="display:flex;align-items:center;gap:7px;justify-content:center">
+        ${engTile(k, 20)}<span>${ENG[k].name}</span></div></th>`).join('')}</tr>
+    ${mxRows.map(r => `<tr>
+      <td><div class="rn">${r.n}</div><div class="rm">${r.m}</div></td>
+      ${r.c.map(c => `<td>${cellFor(c)}</td>`).join('')}</tr>`).join('')}
+  </table>`;
+
+/* ============================ D — empty ============================ */
+document.getElementById('d1').innerHTML = `
+  <div class="p-head">
+    <div><div class="p-title">Providers</div>
+      <div class="p-sub">Where your agents' models come from — the CLIs signed in on your machines, and the API keys on your account.</div></div>
+    <button class="btn primary">Add provider</button>
+  </div>
+  <div class="sec">
+    ${secHead('On your runners', 'Signed in on the machine itself — a session spends that subscription, nothing to paste.')}
+    <div class="empty">
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:14px">
+        ${engTile('claude', 44)}${engTile('codex', 44)}${engTile('kimi', 44)}</div>
+      <h3>Already pay for Claude, ChatGPT or Kimi?</h3>
+      <p>Add a runner and sign its CLIs in — your agents run on the subscription you already have.<br>No API key needed.</p>
+      <div class="cmd">curl -fsSL https://orbit.sh/install | sh &amp;&amp; orbit register</div>
+      <div style="margin-top:16px"><button class="btn solid">Add a runner</button></div>
+    </div>
+  </div>
+  <div class="sec">
+    ${secHead('Your API keys', 'On your account and usable from every runner — billed per token.')}
+    <div style="font-size:12.5px;color:var(--text-3);padding:2px 0 14px">
+      No keys yet. Pick a provider below and paste one — or skip this and use a runner sign-in above.</div>
+    ${galleryHTML(false)}
+  </div>`;
+</script>
+</body>
+</html>

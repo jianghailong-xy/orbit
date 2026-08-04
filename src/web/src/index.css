@@ -7326,6 +7326,246 @@ body {
   color: var(--text-2);
 }
 
+/* A vendor whose CLI is already signed in on one of the user's machines — the cheaper route,
+   pointed at in the brand colour so it reads as a hint rather than a status. */
+.provider-card .pc-sub.pc-local {
+  color: var(--brand);
+  font-weight: 500;
+}
+
+/* ============================================================================
+   Providers → "On your runners": the engine CLIs signed in on each machine.
+   A different kind of identity from the API keys below (one machine, one
+   subscription, nothing pasted), hence its own section rather than more rows.
+   ========================================================================== */
+.re-sec {
+  margin-top: 22px;
+}
+.re-sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.re-sec-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+.re-sec-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.re-sec-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.re-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.re-card + .re-card {
+  margin-top: 10px;
+}
+/* An offline runner's rows describe its last check-in, not its present state. */
+.re-card.offline {
+  background: var(--bg-subtle);
+}
+.re-card.offline .re-row {
+  opacity: 0.62;
+}
+.re-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.re-card.offline .re-head {
+  background: var(--fill-muted);
+}
+.re-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.re-dot.on {
+  background: var(--success-solid);
+}
+.re-runner {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+.re-runner-meta {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.re-head-sp {
+  flex: 1;
+}
+.re-manage {
+  font-size: 12px;
+  color: var(--brand);
+  white-space: nowrap;
+}
+
+.re-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px 190px 110px;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+}
+.re-row + .re-row {
+  border-top: 1px solid var(--border-subtle);
+}
+@media (max-width: 700px) {
+  /* Status and action stay together on the second line; the quota gauge is the one part
+     that can wait for a wider window. */
+  .re-row {
+    grid-template-columns: minmax(0, 1fr) 108px;
+  }
+  .re-quota {
+    display: none;
+  }
+}
+.re-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.re-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.re-meta {
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.re-quota-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-quota-head b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.re-quota .runner-util {
+  margin-top: 5px;
+  max-width: none;
+}
+.re-quota-none {
+  font-size: 11px;
+  color: var(--text-4);
+}
+.re-act {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* An install or a sign-in in flight, opened under the row it belongs to. */
+.re-panel {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+.re-panel.bad {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+.re-panel-row {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+.re-panel.bad .re-panel-row {
+  color: var(--error);
+  font-weight: 500;
+}
+.re-panel-hint {
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.re-cmd {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-2);
+  user-select: all;
+}
+.re-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--brand);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+/* The relay card spaces itself off the message above it in a transcript; in a panel of its
+   own that margin is doubled padding. */
+.re-panel .rsi {
+  margin-top: 0;
+}
+
+.re-unreported {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.re-empty {
+  padding: 26px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+}
+.re-empty-logos {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.re-empty h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.re-empty p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
 /* The connect page (/providers/new/:slug, /providers/:id): a narrow, numbered walkthrough. */
 .provider-form {
   max-width: 680px;

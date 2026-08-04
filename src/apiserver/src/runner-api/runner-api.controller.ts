@@ -50,6 +50,8 @@ import {
   RunInboxResponse,
   RunnerHeartbeatRequest,
   RunnerHeartbeatResponse,
+  InstallCommand,
+  InstallResult,
   LoginCommand,
   LoginResult,
   OrchestrationCredentialResponse,
@@ -97,6 +99,7 @@ import { hasSessionActivity } from './session-activity';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
+import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import {
   isTerminalResumeHandoffOwner,
@@ -112,6 +115,9 @@ import {
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
 const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
+// Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
+// heartbeat it takes to pick the request up.
+const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -391,6 +397,13 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
+        // malformed report can't be stored as a claim about this machine; an older runner omits
+        // the field entirely and keeps whatever was last known.
+        engines:
+          dto?.engines == null
+            ? undefined
+            : ((sanitizeRunnerEngines(dto.engines) ?? []) as unknown as Prisma.InputJsonValue),
         // Runtime-owned default snapshot. Omission means an older runner and preserves the
         // previous value; an explicit {} clears stale values so catalog/static fallback applies.
         runtimeDefaultModels:
@@ -399,6 +412,24 @@ export class RunnerApiController {
             : (sanitizeRuntimeDefaultModels(dto.runtimeDefaultModels) as Prisma.InputJsonValue),
       },
     });
+    // A finished install stops being news the moment the probe confirms it: clear the slot so the
+    // row goes back to speaking from engine health (which then says "signed out", with the sign-in
+    // that actually comes next) rather than sitting on a terminal status nobody has to act on.
+    if (updated.installStatus === 'done' && dto?.engines) {
+      const reported = sanitizeRunnerEngines(dto.engines) ?? [];
+      if (reported.some((e) => e.engine === updated.installEngine && e.installed)) {
+        await this.prisma.runner.update({
+          where: { id: runner.id },
+          data: {
+            installStatus: null,
+            installEngine: null,
+            installCommand: null,
+            installMessage: null,
+            installAt: null,
+          },
+        });
+      }
+    }
     // A cold supervisor never polls /inbox, so endpoint-level 409 fencing alone
     // cannot tell an overlapping old process to detach it. Echo every locally
     // supervised id and cancel anything that is no longer both open and owned by
@@ -470,6 +501,7 @@ export class RunnerApiController {
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
+    let installRequest: RunnerHeartbeatResponse['installRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -481,6 +513,7 @@ export class RunnerApiController {
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
       loginRequest = await this.drainLoginRequest(runner.id);
+      installRequest = await this.drainInstallRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -494,7 +527,60 @@ export class RunnerApiController {
       commitRequests,
       artifactRequests,
       loginRequest,
+      installRequest,
     };
+  }
+
+  /**
+   * The engine install this runner should be running, if one is in flight.
+   *
+   * `pending` re-delivers every heartbeat until the runner's first report moves the row to
+   * `installing` — the runner's own guard makes the repeat a no-op. An abandoned install is swept
+   * here for the same reason sign-ins are: the runner's installer times out on its own, so a row
+   * still in flight past that window has no process behind it and would block the next attempt.
+   */
+  private async drainInstallRequest(runnerId: string): Promise<InstallCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { installStatus: true, installEngine: true, installAt: true },
+    });
+    if (!r?.installStatus) return undefined;
+    const started = r.installAt?.getTime() ?? 0;
+    if (started && Date.now() - started > INSTALL_RELAY_TIMEOUT_MS) {
+      if (r.installStatus === 'pending' || r.installStatus === 'installing') {
+        await this.prisma.runner.update({
+          where: { id: runnerId },
+          data: {
+            installStatus: 'failed',
+            installMessage: 'Install timed out — start it again, or run the command by hand.',
+          },
+        });
+      }
+      return undefined;
+    }
+    if (r.installStatus !== 'pending' || !isLoginEngine(r.installEngine)) return undefined;
+    return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '' };
+  }
+
+  /** Runner → control plane: one step of the engine-install relay, scoped to the runner itself. */
+  @UseGuards(RunnerAuthGuard)
+  @Post('install-result')
+  @HttpCode(200)
+  async installResult(@CurrentRunner() runner: { id: string }, @Body() body: InstallResult) {
+    const status = body?.status;
+    if (status !== 'installing' && status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown install status');
+    }
+    await this.prisma.runner.update({
+      where: { id: runner.id },
+      data: {
+        installStatus: status,
+        // The command survives the outcome: on failure it is what the user runs by hand.
+        installCommand: body.command ?? undefined,
+        installMessage: body.message ?? null,
+      },
+    });
+    return { ok: true };
   }
 
   /**

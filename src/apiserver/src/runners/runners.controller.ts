@@ -13,6 +13,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   CreateEnrollmentTokenDto,
   ReorderRunnersDto,
+  StartInstallDto,
   StartLoginDto,
   SubmitLoginCodeDto,
   UpdateRunnerDto,
@@ -86,6 +87,27 @@ export class RunnersController {
   @Delete(':id/login')
   cancelLogin(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.runners.cancelLogin(user.userId, id);
+  }
+
+  // Engine-install relay for one runner, owner-scoped like the sign-in above: it runs an
+  // installer on that machine, so only the owner may start one.
+  @Get(':id/install')
+  installState(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.getInstallState(user.userId, id);
+  }
+
+  @Post(':id/install')
+  startInstall(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: StartInstallDto,
+  ) {
+    return this.runners.startInstall(user.userId, id, dto.engine);
+  }
+
+  @Delete(':id/install')
+  cancelInstall(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.runners.cancelInstall(user.userId, id);
   }
 
   @Post(':id/rotate-token')

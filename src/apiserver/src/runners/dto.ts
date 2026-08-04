@@ -40,3 +40,8 @@ export class SubmitLoginCodeDto {
 export class StartLoginDto {
   @IsOptional() @IsIn(['claude', 'codex', 'kimi']) engine?: LoginEngine;
 }
+
+/** Which CLI to install on the runner. Required — there is no historical default here. */
+export class StartInstallDto {
+  @IsIn(['claude', 'codex', 'kimi']) engine!: LoginEngine;
+}

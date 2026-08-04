@@ -41,6 +41,11 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
           planUsage: null,
           modelCatalog: null,
           runtimeDefaultModels: null,
+          engines: null,
+          installStatus: null,
+          installEngine: null,
+          installCommand: null,
+          installMessage: null,
         }));
       },
       update: async (args: { where: { id: string }; data: { position: number } }) => {
@@ -111,6 +116,11 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
       planUsage: true,
       modelCatalog: true,
       runtimeDefaultModels: true,
+      engines: true,
+      installStatus: true,
+      installEngine: true,
+      installCommand: true,
+      installMessage: true,
     },
   });
 });

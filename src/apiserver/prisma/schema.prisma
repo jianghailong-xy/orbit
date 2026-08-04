@@ -193,6 +193,22 @@ model Runner {
   // When the current relay started, so an abandoned one can be timed out.
   loginAt       DateTime? @map("login_at")
 
+  // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
+  // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
+  engines        Json?     @map("engines")
+
+  // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
+  // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
+  //   NULL       — nothing in flight
+  //   pending    — user asked; the next heartbeat tells the runner to start
+  //   installing — the runner started the installer; installCommand is what it is running
+  //   done | failed — terminal, installMessage explains a failure
+  installStatus  String?   @map("install_status")
+  installEngine  String?   @map("install_engine")
+  installCommand String?   @map("install_command")
+  installMessage String?   @map("install_message")
+  installAt      DateTime? @map("install_at")
+
   sessions Session[]
   // Agents `orbit register` minted for this machine (one per project dir + tool).
   agents   Agent[]

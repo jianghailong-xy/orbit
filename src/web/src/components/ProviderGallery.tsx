@@ -1,9 +1,18 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
+import { PROVIDER_PRESETS, type ProviderBrand, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
+import { runnersQuery } from '../lib/queries';
+import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
+
+/** Just the part of a runner this gallery reads: which engines it is signed into, and its name. */
+interface SignedInRunner {
+  name: string;
+  displayName?: string | null;
+  engines?: RunnerEngineHealth[] | null;
+}
 
 // The brand for a provider: presets ship one; a custom provider falls back to a neutral monogram
 // derived from its label.
@@ -84,12 +93,27 @@ export function ProviderGallery() {
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
   });
+  const runners = useQuery(runnersQuery());
   // How many of the user's providers each vendor accounts for. A row records the preset it was
   // created from, so a second Anthropic key — which lands on the slug "anthropic-2" — still counts
   // towards Anthropic.
   const connected = new Map<string, number>();
   for (const p of providers.data ?? []) {
     if (p.presetSlug) connected.set(p.presetSlug, (connected.get(p.presetSlug) ?? 0) + 1);
+  }
+  // Three of these vendors are also engines the user may already be signed into on a machine of
+  // their own. Say so on the card: buying a key for a subscription you already pay for is the one
+  // mistake this gallery can lead someone into. It stays a link — a key alongside a sign-in is a
+  // supported thing to want — it just no longer looks like the only way in.
+  const signedInOn = new Map<string, string>();
+  for (const runner of (runners.data ?? []) as SignedInRunner[]) {
+    for (const engine of runner.engines ?? []) {
+      const preset = ENGINE_PRESET[engine.engine];
+      if (!preset || signedInOn.has(preset)) continue;
+      if (engine.installed && engine.auth === 'yes') {
+        signedInOn.set(preset, runner.displayName || runner.name);
+      }
+    }
   }
 
   return (
@@ -114,11 +138,13 @@ export function ProviderGallery() {
             </span>
             <div style={{ minWidth: 0 }}>
               <div className="pc-name">{p.label}</div>
-              <div className="pc-sub">
+              <div className={`pc-sub${!count && signedInOn.has(p.slug) ? ' pc-local' : ''}`}>
                 {count === 0
-                  ? p.runtime === 'codex'
-                    ? 'OpenAI-compatible'
-                    : 'Anthropic-compatible'
+                  ? (signedInOn.get(p.slug)
+                      ? `Already signed in on ${signedInOn.get(p.slug)}`
+                      : p.runtime === 'codex'
+                        ? 'OpenAI-compatible'
+                        : 'Anthropic-compatible')
                   : count === 1
                     ? 'Connected'
                     : `Connected · ${count} keys`}

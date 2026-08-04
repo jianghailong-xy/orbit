@@ -428,6 +428,12 @@ func (t *Transport) loginResult(b LoginResultRequest) error {
 	return t.do(nil, "POST", "/runner/login-result", b, nil, 15*time.Second)
 }
 
+// installResult reports one step of a browser-requested engine install: the command being run,
+// then whether it worked.
+func (t *Transport) installResult(b InstallResultRequest) error {
+	return t.do(nil, "POST", "/runner/install-result", b, nil, 15*time.Second)
+}
+
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
 func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)
