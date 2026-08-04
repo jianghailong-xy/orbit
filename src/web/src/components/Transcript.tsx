@@ -730,11 +730,15 @@ function QuotaLimitCard({
         <div className="chat-quota-title">{gaveUp ? 'Auto-retry gave up' : window.title}</div>
       </div>
       <div className="chat-quota-msg">
+        {/* An unarmed card cannot tell WHY it is unarmed: "the user switched it off" and "no
+            reset time could be determined" are both spelled `quotaRetryAt: null`, and guessing
+            wrong tells the user their own click was a system limitation. So it states only what
+            is true either way, and the reason is visible in what they just did. */}
         {gaveUp
           ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
           : `${window.what} for ${help?.provider ?? 'this provider'}${
               help?.runnerName ? ` on “${help.runnerName}”` : ''
-            } is used up.${needsYou ? ' No reset time is known, so this can’t retry itself.' : ''}`}
+            } is used up.${needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
       {armed && (
         <>
