@@ -59,6 +59,23 @@ describe('what one engine row says', () => {
     expect(rowKindOf(undefined, installing, 'codex')).toBe('missing');
   });
 
+  it('drops a failure the probe has since contradicted', () => {
+    // The installer can land a binary and still be judged failed — a private install dir absent
+    // from the service PATH did exactly that to Kimi. Once a probe finds it, the row must speak
+    // from the machine, not from the stale attempt, or a working engine reads as broken.
+    expect(
+      rowKindOf(health({ auth: 'no' }), install({ status: 'failed', engine: 'claude' }), 'claude'),
+    ).toBe('out');
+    // Still genuinely missing: the failure is the whole story and must stay on screen.
+    expect(
+      rowKindOf(
+        health({ installed: false, auth: 'unknown' }),
+        install({ status: 'failed', engine: 'claude' }),
+        'claude',
+      ),
+    ).toBe('install-failed');
+  });
+
   it('hands a finished install back to the probe as soon as the probe agrees', () => {
     // Confirmed: the probe is newer than the relay, so the row speaks from it again.
     expect(

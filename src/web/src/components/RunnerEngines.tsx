@@ -54,7 +54,13 @@ export function rowKindOf(
 ): RowKind {
   if (install?.engine === engine) {
     if (install.status === 'pending' || install.status === 'installing') return 'installing';
-    if (install.status === 'failed') return 'install-failed';
+    // Both terminal outcomes only speak while the probe hasn't answered for itself: an install
+    // slot records what one attempt reported, and the machine's actual state outranks it. A
+    // failure the probe contradicts is a failure that stopped being true — the installer can
+    // land a binary and still be judged failed (an install dir missing from the service PATH
+    // does exactly that), and once a later probe finds it, insisting on the red panel leaves a
+    // working engine looking broken until someone presses Dismiss.
+    if (install.status === 'failed' && !health?.installed) return 'install-failed';
     // Finished, but the last heartbeat's probe still predates it. Saying "not installed" here
     // would offer to install what was just installed; the server clears this slot as soon as the
     // probe catches up, and the row then speaks from engine health again.
