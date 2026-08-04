@@ -144,6 +144,12 @@ struct AgentPanes: View {
         // Open/Tasks/Runners lists). The pull control shows its own spinner, so reload *without*
         // `reset:` to update the rows in place rather than blanking the list mid-gesture.
         .refreshable { await agents.loadSessions(agentID: agent.id, view: view) }
+        // The session list's own way into search, mirroring the box web keeps above its session
+        // column. Until now the palette was only reachable from inside the drawer (or ⌘K, which
+        // needs a keyboard), so on iPhone the session list itself looked like it had no search.
+        // Pinned above the rows via `safeAreaInset` rather than being a list row, so it stays put
+        // while the sections scroll — and the list keeps its own refresh/scroll behaviour.
+        .safeAreaInset(edge: .top, spacing: 0) { sessionSearchBar }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
         // external changes (new sessions, status transitions made from the web) show up without
@@ -265,6 +271,36 @@ struct AgentPanes: View {
         guard let f = tagFilter else { return agents.agentSessions }
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
     }
+
+    #if os(iOS)
+    /// The search box above the list. It *opens the palette* rather than being a `.searchable`
+    /// field over these rows: the palette spans every agent, runner and lifecycle scope and reaches
+    /// into message text, none of which this one-agent, one-scope list can show — dropping those
+    /// hits in here would read as a bug (see `SessionSearchView`'s header). Its own background is
+    /// opaque so rows scroll *under* it, not through it.
+    private var sessionSearchBar: some View {
+        Button { app.searchOpen = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                Text("Search sessions")
+                Spacer(minLength: 0)
+            }
+            .font(.orbitControl)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Search sessions")
+        // 16pt gutter — the plain list's own row inset, so the box lines up with the titles below.
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .background(.background)
+    }
+    #endif
 
     @ViewBuilder private func sessionRow(_ s: Session) -> some View {
         AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open).tag(s.id)
