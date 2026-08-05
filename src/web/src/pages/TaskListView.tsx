@@ -33,6 +33,14 @@ import { deleteTask, deleteTasks } from '../lib/taskDeletion';
 import { canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from '../lib/taskFilters';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import {
+  anchorAt,
+  dropAnchor,
+  EMPTY_SELECTION,
+  extendTo,
+  selectAll,
+  toggleOne,
+} from '../lib/taskSelection';
+import {
   compareTasksBy,
   DEFAULT_TASK_SORT_DIRECTION,
   DEFAULT_TASK_SORT_FIELD,
@@ -43,6 +51,21 @@ import {
 } from '../lib/taskSorting';
 import { useToast } from '../lib/toast';
 
+// A checkbox is focusable but is not text entry, and clicking a row's checkbox leaves the
+// focus sitting on it — so treating every <input> as "typing" would silence the whole list
+// the moment the user checks their first row.
+const NON_TEXT_INPUT_TYPES = new Set([
+  'checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'file', 'color',
+]);
+
+// The list's keyboard shortcuts are bound on window, so they have to stand down whenever
+// the user is actually typing somewhere.
+const isTypingTarget = (target: EventTarget | null): boolean => {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
+  return target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
+};
+
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
 // panel and batch-action modals. The task-list routes ("/tasks", "/lists/:key")
 // render it, so all of its state is scoped to this component.
@@ -51,10 +74,10 @@ export function TaskListView() {
   const message = useToast();
   const qc = useQueryClient();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  // Multi-select for batch actions, keyed by task id, scoped to the visible rows.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // Anchor for Shift-click range selection: the last checkbox toggled without Shift.
-  const [anchorId, setAnchorId] = useState<string | null>(null);
+  // Multi-select for batch actions, keyed by task id, scoped to the visible rows. Carries
+  // the anchor a Shift range is drawn from; see lib/taskSelection for the range semantics.
+  const [selection, setSelection] = useState(EMPTY_SELECTION);
+  const selectedIds = selection.ids;
   const [batchOpen, setBatchOpen] = useState(false);
   const [concurrency, setConcurrency] = useState(3);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -152,7 +175,10 @@ export function TaskListView() {
   // The selection is scoped to what's currently visible; reset it whenever that set
   // changes (different list/section, or a different status filter) to avoid running
   // tasks the user can no longer see.
-  useEffect(() => setSelectedIds(new Set()), [listId, loc.pathname, filter]);
+  useEffect(() => setSelection(EMPTY_SELECTION), [listId, loc.pathname, filter]);
+  // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
+  // the anchor: a range is defined by two rows' positions, which just moved under it.
+  useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
   const pageTitle = isListView ? (listQ.data?.title ?? '') : isUnlisted ? 'No list' : 'Active';
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
@@ -172,11 +198,12 @@ export function TaskListView() {
     onSuccess: async (_res, id) => {
       // A row can be both checked and open in the detail panel. Do not leave either bit of
       // local UI state pointing at an entity which no longer exists.
-      setSelectedIds((prev) => {
-        if (!prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
+      setSelection((prev) => {
+        if (!prev.ids.has(id)) return prev;
+        const ids = new Set(prev.ids);
+        ids.delete(id);
+        // The deleted row may have been the anchor; a range measured from it is meaningless.
+        return { ids, anchor: null, base: null };
       });
       setSelectedTaskId((current) => (current === id ? null : current));
       qc.removeQueries({ queryKey: ['task', id], exact: true });
@@ -204,7 +231,7 @@ export function TaskListView() {
       }),
     onSuccess: (res) => {
       setBatchOpen(false);
-      setSelectedIds(new Set());
+      setSelection(EMPTY_SELECTION);
       const parts = [`Triggered ${res.dispatched} task(s)`];
       if (res.failed.length) parts.push(`${res.failed.length} failed`);
       if (res.skipped.length) parts.push(`${res.skipped.length} skipped`);
@@ -220,7 +247,7 @@ export function TaskListView() {
         body,
       }),
     onSuccess: (res) => {
-      setSelectedIds(new Set());
+      setSelection(EMPTY_SELECTION);
       message[res.stopped ? 'success' : 'info'](
         res.stopped ? `Stopped ${res.stopped} run(s)` : 'No running tasks to stop',
       );
@@ -233,7 +260,7 @@ export function TaskListView() {
       api<{ updated: number }>('/tasks/batch-assign', { method: 'POST', body }),
     onSuccess: (res) => {
       setAssignOpen(false);
-      setSelectedIds(new Set());
+      setSelection(EMPTY_SELECTION);
       message.success(`Set assignee on ${res.updated} task(s)`);
       invalidate();
     },
@@ -243,7 +270,7 @@ export function TaskListView() {
     mutationFn: deleteTasks,
     onSuccess: async (res, ids) => {
       const deletedIds = new Set(ids);
-      setSelectedIds(new Set());
+      setSelection(EMPTY_SELECTION);
       setSelectedTaskId((current) => (current && deletedIds.has(current) ? null : current));
       for (const id of ids) qc.removeQueries({ queryKey: ['task', id], exact: true });
       message.success(`Deleted ${res.deleted} task${res.deleted === 1 ? '' : 's'}`);
@@ -368,10 +395,15 @@ export function TaskListView() {
   }, [counts, filter]);
 
   // ── Multi-select / batch-run derived state ──
+  // The rows the batch actions operate on. This — not selection.ids — is what the bulk bar
+  // counts: a polling refresh can drop a selected task out of the visible set (deleted, or
+  // filtered away by a status change), and a count that includes those ghosts disagrees
+  // with what Run/Delete would actually touch.
   const selectedRows = useMemo(
     () => rows.filter((r: any) => selectedIds.has(r.id)),
     [rows, selectedIds],
   );
+  const rowIds = useMemo(() => rows.map((r: any) => r.id as string), [rows]);
   const allSelected = rows.length > 0 && rows.every((r: any) => selectedIds.has(r.id));
   const someSelected = rows.some((r: any) => selectedIds.has(r.id));
   // A task can run only if it has a responsible agent bound to a runner.
@@ -380,30 +412,12 @@ export function TaskListView() {
     [selectedRows],
   );
 
-  // Toggle one row, or — with Shift held and an anchor set — add the whole contiguous range
-  // from the anchor to this row (in the current sort order). A plain click sets the anchor.
-  const toggleRow = (id: string, shift: boolean) => {
-    const idx = rows.findIndex((r: any) => r.id === id);
-    const a = anchorId ? rows.findIndex((r: any) => r.id === anchorId) : -1;
-    if (shift && a !== -1 && idx !== -1) {
-      const [lo, hi] = a < idx ? [a, idx] : [idx, a];
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        for (let i = lo; i <= hi; i++) next.add(rows[i].id);
-        return next;
-      });
-      return;
-    }
-    setAnchorId(id);
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const toggleAll = () =>
-    setSelectedIds(allSelected ? new Set() : new Set(rows.map((r: any) => r.id)));
+  // Check/uncheck one row (it becomes the anchor), or — with Shift — draw the range from
+  // the anchor to this row in the current sort order.
+  const pickRow = (id: string, shift: boolean) =>
+    setSelection((prev) => (shift ? extendTo(prev, id, rowIds) : toggleOne(prev, id)));
+  const toggleAll = () => setSelection(allSelected ? EMPTY_SELECTION : selectAll(rowIds));
+  const clearSelection = () => setSelection(EMPTY_SELECTION);
 
   const openBatch = () => {
     if (runnableRows.length === 0) {
@@ -423,21 +437,30 @@ export function TaskListView() {
     setAssignOpen(true);
   };
 
-  // Up/Down arrows step through the task rows, opening each like tabs — the same
-  // selection a click drives. Skipped while typing in an input/textarea (so the detail
-  // panel's comment box keeps its own arrows). With nothing selected, Down enters from
-  // the top, Up from the bottom.
+  // Keyboard driving of the list. Up/Down step the cursor, opening each task like tabs —
+  // the same selection a click drives; Shift+Up/Down extend the multi-selection as the
+  // cursor moves; Space checks the cursor row; Cmd/Ctrl+A checks everything visible. All
+  // skipped while typing, so the detail panel's comment box keeps its own keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      const el = document.activeElement;
-      if (
-        el instanceof HTMLElement &&
-        (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
-      )
-        return;
+      if (e.altKey || isTypingTarget(e.target)) return;
       if (rows.length === 0) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        setSelection(selectAll(rowIds));
+        return;
+      }
+      if (e.key === ' ') {
+        if (mod || e.shiftKey || !selectedTaskId) return;
+        // Space scrolls the detail panel when the focus is inside it; don't steal that.
+        if (document.activeElement?.closest('.task-detail-panel')) return;
+        e.preventDefault();
+        pickRow(selectedTaskId, false);
+        return;
+      }
+      if (mod) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       const cur = rows.findIndex((r: any) => r.id === selectedTaskId);
       let next: number;
       if (cur === -1) next = e.key === 'ArrowDown' ? 0 : rows.length - 1;
@@ -446,11 +469,33 @@ export function TaskListView() {
         if (next < 0 || next >= rows.length) return; // stop at the ends
       }
       e.preventDefault();
+      const from = rows[cur === -1 ? next : cur].id;
+      setSelection((prev) =>
+        e.shiftKey
+          ? // Grow from where the cursor already sits when no anchor has been set yet.
+            extendTo(prev.anchor ? prev : anchorAt(prev, from), rows[next].id, rowIds)
+          : // A plain move re-anchors, so a Shift-extend afterwards starts from here.
+            anchorAt(prev, rows[next].id),
+      );
       setSelectedTaskId(rows[next].id);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [rows, selectedTaskId]);
+  }, [rows, rowIds, selectedTaskId]);
+
+  // Esc clears a multi-selection first, and only falls through to the detail panel's own
+  // Esc (a window listener too, but in the bubble phase) once there is none left.
+  useEffect(() => {
+    if (selectedRows.length === 0) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || isTypingTarget(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      clearSelection();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [selectedRows.length]);
 
   // Keep the highlighted row in view when arrowing through a long list.
   useEffect(() => {
@@ -495,12 +540,27 @@ export function TaskListView() {
           selectedIds.has(r.id) ? ' checked' : ''
         }`}
         key={r.id}
-        onClick={() => setSelectedTaskId(r.id)}
+        // Shift/Cmd-clicking the row body drives the multi-selection, the way a file list
+        // does; a plain click still opens the task in the detail panel.
+        onMouseDown={(e) => {
+          // Shift-clicking would otherwise drag a native text selection across the list.
+          if (e.shiftKey) e.preventDefault();
+        }}
+        onClick={(e) => {
+          if (e.shiftKey || e.metaKey || e.ctrlKey) pickRow(r.id, e.shiftKey);
+          else setSelectedTaskId(r.id);
+        }}
       >
-        <div className="task-check" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="task-check"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => {
+            if (e.shiftKey) e.preventDefault();
+          }}
+        >
           <Checkbox
             checked={selectedIds.has(r.id)}
-            onChange={(e) => toggleRow(r.id, e.nativeEvent.shiftKey)}
+            onChange={(e) => pickRow(r.id, e.nativeEvent.shiftKey)}
           />
         </div>
         <div className="task-status-cell">
@@ -624,12 +684,12 @@ export function TaskListView() {
             )}
 
             <div className="tasks-toolbar">
-              {selectedIds.size > 0 ? (
+              {selectedRows.length > 0 ? (
                 // Selection mode: the batch-action bar takes over the whole toolbar row so it
                 // never has to share width with the filters (which made it wrap to a 2nd line).
                 // Clear restores the filter toolbar.
                 <div className="tasks-bulkbar">
-                  <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
+                  <span className="tasks-bulkbar-count">{selectedRows.length} selected</span>
                   <Button
                     type="primary"
                     size="small"
@@ -669,7 +729,7 @@ export function TaskListView() {
                       Delete
                     </Button>
                   </Popconfirm>
-                  <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
+                  <Button type="text" size="small" onClick={clearSelection}>
                     Clear
                   </Button>
                 </div>
