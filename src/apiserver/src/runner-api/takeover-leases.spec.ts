@@ -105,6 +105,19 @@ test('takeover clears background work left behind by the process it replaces', a
   assert.match(rotation, /"running_subagents" = '\{\}'::text\[\]/);
 });
 
+test('takeover clears the mid-turn engine flag the replaced process left set', async () => {
+  // A runner killed mid-turn emits no turn_end, so engineTurnActive stays true and the parked
+  // session keeps reading as generating — inflating the running set — until it is resumed.
+  const h = harness(OLD_OWNER, GENERATION);
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  assert.match(sql(h.executeCalls[1]), /"engine_turn_active" = false/);
+});
+
 test('an idempotent takeover leaves a live process its running background work', async () => {
   // Same owner means no handoff — the process that launched those shells is still supervising,
   // so clearing here would erase work that is genuinely running.

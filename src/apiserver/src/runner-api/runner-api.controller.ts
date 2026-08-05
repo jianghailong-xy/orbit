@@ -1052,12 +1052,18 @@ export class RunnerApiController {
       // resumed is never — leaving it reading "N background processes running" for the rest of
       // its life. Takeover is the one point where the handoff is observable without the user
       // having to touch the session.
+      //
+      // engineTurnActive is the same kind of claim about the predecessor's engine process, and
+      // dies with it for the same reason. A runner killed mid-turn (crash, restart, self-update)
+      // emits no turn_end, so the flag stays true and the session reads as generating forever —
+      // it is what makes a parked session count toward the running set in the UI.
       await tx.$executeRaw`
         UPDATE "session"
         SET "inbox_lease_generation" = ${fence}::uuid,
             "inbox_lease_owner" = ${leaseOwner}::uuid,
             "running_bg_shells" = '{}'::text[],
-            "running_subagents" = '{}'::text[]
+            "running_subagents" = '{}'::text[],
+            "engine_turn_active" = false
         WHERE id = ${sessionId}::uuid
       `;
       await tx.$executeRaw`
