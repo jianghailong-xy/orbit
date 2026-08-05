@@ -111,11 +111,13 @@ final class SessionLineTests: XCTestCase {
         // turn reached the server.
         XCTAssertEqual(SessionLine.make(for: session(status: .interrupted), live: true),
                        .init(text: "Interrupted", tone: .preview))
+        // Every deliberate end reads "Ended" — the reason that stopped the run is not a run
+        // outcome, so it no longer changes the word (see `SessionRunState`).
         XCTAssertEqual(SessionLine.make(for: session(status: .cancelled, endReason: "deleted"), live: true),
-                       .init(text: "Cancelled", tone: .preview))
+                       .init(text: "Ended", tone: .preview))
         // Trash (live: false) states the outcome the same way.
         XCTAssertEqual(SessionLine.make(for: session(status: .cancelled, endReason: "completed"), live: false),
-                       .init(text: "Completed", tone: .preview))
+                       .init(text: "Ended", tone: .preview))
     }
 
     /// The list payload's preview fields decode (server keys: lastAssistantText / lastToolUse /
