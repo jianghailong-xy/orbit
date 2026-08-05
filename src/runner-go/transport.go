@@ -708,6 +708,13 @@ func (t *Transport) createTask(agentID, sessionID string, body interface{}) (jso
 	return out, err
 }
 
+// createTasksBatch writes several tasks in one atomic call; body is {"tasks":[...]}.
+func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-create", body, &out, taskOpTimeout, taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

@@ -2,7 +2,13 @@ import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseG
 import { Runner } from '@prisma/client';
 import { CreateTaskListDto } from '../task-lists/dto';
 import { TaskListsService } from '../task-lists/task-lists.service';
-import { AddDependencyDto, CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from '../tasks/dto';
+import {
+  AddDependencyDto,
+  CreateTaskCommentDto,
+  CreateTaskDto,
+  CreateTasksBatchDto,
+  UpdateTaskDto,
+} from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -30,6 +36,18 @@ export class RunnerTasksController {
   ) {
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
+  }
+
+  // Literal path, declared before 'tasks/:id' so the param route can't shadow it.
+  @Post('tasks/batch-create')
+  async createTasks(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-agent-id') agentId: string | undefined,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Body() dto: CreateTasksBatchDto,
+  ) {
+    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
+    return this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
   }
 
   @Get('tasks')

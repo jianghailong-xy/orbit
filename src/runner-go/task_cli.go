@@ -16,6 +16,7 @@ Usage:
   orbit task list [--status STATUS] [--list-id ID] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
+  orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
   orbit task update [task-id] [options]
   orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
@@ -60,6 +61,26 @@ Options:
   --depends-on ID[,ID...]     Repeatable prerequisite task ids
   --auto-run-when-ready[=BOOL]
   --json
+`,
+	"create-batch": `orbit task create-batch — create several tasks in one atomic call
+
+Usage:
+  orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
+
+JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
+as 'orbit task create': title (required), description, assigneeId, listId, dueDate,
+provider, model, dependsOnTaskIds, autoRunWhenReady. Nothing is written unless every
+item is valid.
+
+To make one item depend on another item of the same batch — whose id does not exist
+yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
+
+  [{"title":"Build","ref":"build"},
+   {"title":"Deploy","dependsOnRefs":["build"]}]
+
+A ref must name an EARLIER item; "dependsOnTaskIds" still takes ids of tasks that
+already exist. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave an
+item unassigned). --tasks-file accepts only '-' (stdin).
 `,
 	"update": `orbit task update — update a task
 
@@ -158,6 +179,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskGet(args[1:], out)
 	case "create":
 		return cliTaskCreate(args[1:], in, out)
+	case "create-batch":
+		return cliTaskCreateBatch(args[1:], in, out)
 	case "update":
 		return cliTaskUpdate(args[1:], in, out)
 	case "delete":
@@ -487,6 +510,81 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
+	fs := newCLIFlagSet("orbit task create-batch")
+	tasks := fs.String("tasks", "", "JSON array of task objects")
+	tasksFile := fs.String("tasks-file", "", "read the JSON array from stdin (-)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	raw, rawSet, err := readCLIText(in, *tasks, flagWasSet(fs, "tasks"), *tasksFile, flagWasSet(fs, "tasks-file"), "tasks")
+	if err != nil {
+		return err
+	}
+	if !rawSet {
+		return fmt.Errorf("--tasks or --tasks-file is required")
+	}
+	items, err := parseTaskBatchItems(raw)
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	// Owner-wide credential, so no agent attribution header — same as `orbit task create`.
+	out2, err := t.createTasksBatch("", "", map[string]interface{}{"tasks": items})
+	if err != nil {
+		return fmt.Errorf("create tasks: %w", err)
+	}
+	return writeCLIRawJSON(out, out2, *jsonOut)
+}
+
+// parseTaskBatchItems accepts either a bare JSON array of task objects or the request
+// shape {"tasks": [...]}, and applies the same per-item defaults as `orbit task create`.
+func parseTaskBatchItems(raw string) ([]map[string]interface{}, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, fmt.Errorf("tasks is empty")
+	}
+	var items []map[string]interface{}
+	if trimmed[0] == '{' {
+		var wrapper struct {
+			Tasks []map[string]interface{} `json:"tasks"`
+		}
+		if err := json.Unmarshal([]byte(trimmed), &wrapper); err != nil {
+			return nil, fmt.Errorf("tasks must be a JSON array of task objects: %w", err)
+		}
+		items = wrapper.Tasks
+	} else if err := json.Unmarshal([]byte(trimmed), &items); err != nil {
+		return nil, fmt.Errorf("tasks must be a JSON array of task objects: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("tasks must contain at least one task")
+	}
+	if len(items) > maxTaskBatchCreate {
+		return nil, fmt.Errorf("tasks accepts at most %d items per call", maxTaskBatchCreate)
+	}
+	agentID := strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID"))
+	for i, item := range items {
+		if item == nil {
+			return nil, fmt.Errorf("tasks[%d] must be an object", i)
+		}
+		title, _ := item["title"].(string)
+		if strings.TrimSpace(title) == "" {
+			return nil, fmt.Errorf("tasks[%d]: title is required", i)
+		}
+		if _, ok := item["assigneeId"]; !ok && agentID != "" {
+			item["assigneeId"] = agentID
+		}
+	}
+	return items, nil
+}
+
 func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task update")
@@ -754,6 +852,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task as the runner owner. ORBIT_AGENT_ID is used only as the default assignee; runner-wide CLI credentials do not claim agent authorship. This only records the task; call task_start when it should run immediately.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call as the runner owner — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. ORBIT_AGENT_ID is used only as each item's default assignee; runner-wide CLI credentials do not claim agent authorship.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},

@@ -38,7 +38,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 9 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 10 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	if doc.Registered {
@@ -51,7 +51,9 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 		if capability.Description == "" || capability.MCPInputSchema == nil {
 			t.Fatalf("capability did not reuse MCP description/schema: %#v", capability)
 		}
-		if (capability.ID == "task_create" || capability.ID == "task_comment") && !strings.Contains(capability.Description, "runner owner") {
+		writesAsOwner := capability.ID == "task_create" || capability.ID == "task_create_batch" ||
+			capability.ID == "task_comment"
+		if writesAsOwner && !strings.Contains(capability.Description, "runner owner") {
 			t.Fatalf("CLI attribution is misleading: %#v", capability)
 		}
 		if len(capability.Arguments) == 0 {
@@ -142,6 +144,79 @@ func TestTaskCLICreateDefaultsAssigneeWithoutTrustingAttributionEnv(t *testing.T
 	}
 	if strings.TrimSpace(out.String()) != `{"id":"created-task"}` {
 		t.Fatalf("--json output = %q", out.String())
+	}
+}
+
+func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
+	var requests int
+	var gotHeader string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if r.Method != http.MethodPost || r.URL.Path != "/api/runner/tasks/batch-create" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		gotHeader = r.Header.Get("X-Orbit-Agent-Id")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`[{"id":"t1","ref":"build"},{"id":"t2"}]`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+
+	stdin := strings.NewReader(`[{"title":"Build","ref":"build"},
+	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null}]`)
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"create-batch", "--tasks-file", "-", "--json"}, stdin, &out); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 1 {
+		t.Fatalf("requests = %d, want a single batch call", requests)
+	}
+	if gotHeader != "" {
+		t.Fatalf("untrusted attribution header = %q", gotHeader)
+	}
+	tasks, _ := gotBody["tasks"].([]interface{})
+	if len(tasks) != 2 {
+		t.Fatalf("body = %#v", gotBody)
+	}
+	first, _ := tasks[0].(map[string]interface{})
+	second, _ := tasks[1].(map[string]interface{})
+	if first["assigneeId"] != "agent-1" || first["ref"] != "build" {
+		t.Fatalf("tasks[0] = %#v", first)
+	}
+	if assignee, present := second["assigneeId"]; !present || assignee != nil {
+		t.Fatalf("tasks[1] assigneeId = %#v, want an explicit null", second["assigneeId"])
+	}
+	if strings.TrimSpace(out.String()) != `[{"id":"t1","ref":"build"},{"id":"t2"}]` {
+		t.Fatalf("--json output = %q", out.String())
+	}
+}
+
+func TestTaskCLICreateBatchRejectsBadPayloadsBeforeCallingTheServer(t *testing.T) {
+	configureCLITestRunner(t, "http://127.0.0.1:1")
+	oversized := make([]string, maxTaskBatchCreate+1)
+	for i := range oversized {
+		oversized[i] = `{"title":"t"}`
+	}
+	cases := map[string]string{
+		"not json":  `nope`,
+		"empty":     `[]`,
+		"untitled":  `[{"description":"no title"}]`,
+		"oversized": "[" + strings.Join(oversized, ",") + "]",
+	}
+	for name, payload := range cases {
+		var out bytes.Buffer
+		if err := cmdTaskCLI([]string{"create-batch", "--tasks", payload}, strings.NewReader(""), &out); err == nil {
+			t.Fatalf("%s payload was accepted", name)
+		}
+	}
+	// The request shape {"tasks": [...]} is accepted too, so a caller can paste the API body.
+	if _, err := parseTaskBatchItems(`{"tasks":[{"title":"a"}]}`); err != nil {
+		t.Fatalf("wrapped payload rejected: %v", err)
 	}
 }
 

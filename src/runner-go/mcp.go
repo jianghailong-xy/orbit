@@ -187,6 +187,10 @@ const noTaskMsg = "no taskId given and no current task in context (ORBIT_TASK_ID
 
 const orchestrationOffMsg = "session orchestration is not enabled for this agent"
 
+// How many tasks one task_create_batch call may create. Mirrors the server's
+// TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
+const maxTaskBatchCreate = 50
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -273,6 +277,38 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.createTask(s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("create task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_create_batch":
+		items, _ := args["tasks"].([]interface{})
+		if len(items) == 0 {
+			return toolResult("tasks must be a non-empty array", true)
+		}
+		if len(items) > maxTaskBatchCreate {
+			return toolResult(fmt.Sprintf("tasks accepts at most %d items per call", maxTaskBatchCreate), true)
+		}
+		bodies := make([]map[string]interface{}, 0, len(items))
+		for i, raw := range items {
+			item, ok := raw.(map[string]interface{})
+			if !ok {
+				return toolResult(fmt.Sprintf("tasks[%d] must be an object", i), true)
+			}
+			title := getString(item, "title")
+			if title == "" {
+				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
+			}
+			body := map[string]interface{}{"title": title}
+			copyIfPresent(body, item, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "ref", "dependsOnRefs")
+			// Same assignee default as task_create: this agent unless the caller said otherwise.
+			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
+				body["assigneeId"] = s.agentID
+			}
+			bodies = append(bodies, body)
+		}
+		raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
+		if err != nil {
+			return toolResult("create tasks failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -692,6 +728,41 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		}
 		return schema
 	}
+	// The fields of one new task, shared by task_create and every task_create_batch item.
+	// A fresh map per call so a caller can extend its copy without touching the other's.
+	taskCreateProps := func() map[string]interface{} {
+		return map[string]interface{}{
+			"title":       str,
+			"description": promptDesc,
+			"listId":      map[string]interface{}{"type": []string{"string", "null"}},
+			"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
+			"dueDate":     str,
+			"provider":    providerProp,
+			"model":       modelProp,
+			"dependsOnTaskIds": map[string]interface{}{
+				"type":        "array",
+				"items":       str,
+				"description": "Prerequisite task ids this task waits on (each must be owned by the caller). The task is BLOCKED until every prerequisite is DONE, then runs. Use this instead of writing 'wait for X' preconditions into the description. Cannot form a cycle.",
+			},
+			"autoRunWhenReady": map[string]interface{}{
+				"type":        "boolean",
+				"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no prerequisites.",
+			},
+		}
+	}
+	taskBatchItemProps := func() map[string]interface{} {
+		props := taskCreateProps()
+		props["ref"] = map[string]interface{}{
+			"type":        "string",
+			"description": "A short label for this item, unique within the batch, so later items can depend on it via dependsOnRefs. Not stored — it only wires the batch together, and comes back on the created task so you can map it to the real id.",
+		}
+		props["dependsOnRefs"] = map[string]interface{}{
+			"type":        "array",
+			"items":       str,
+			"description": "Refs of EARLIER items in this same batch that must finish before this one runs. Use this for prerequisites created by this call (their ids don't exist yet) and dependsOnTaskIds for tasks that already exist.",
+		}
+		return props
+	}
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
@@ -736,25 +807,21 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create a task (attributed to this agent). This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Create tasks in dependency order so each can reference the ids returned by earlier calls (e.g. S1 dependsOn [S0], S2 dependsOn [S1]).",
+			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
+			"inputSchema": obj(taskCreateProps(), "title"),
+		},
+		{
+			"name":        "task_create_batch",
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
-				"title":       str,
-				"description": promptDesc,
-				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
-				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
-				"dueDate":     str,
-				"provider":    providerProp,
-				"model":       modelProp,
-				"dependsOnTaskIds": map[string]interface{}{
+				"tasks": map[string]interface{}{
 					"type":        "array",
-					"items":       str,
-					"description": "Prerequisite task ids this task waits on (each must be owned by the caller). The task is BLOCKED until every prerequisite is DONE, then runs. Use this instead of writing 'wait for X' preconditions into the description. Cannot form a cycle.",
+					"minItems":    1,
+					"maxItems":    maxTaskBatchCreate,
+					"items":       obj(taskBatchItemProps(), "title"),
+					"description": "The tasks to create, in dependency order (prerequisites first).",
 				},
-				"autoRunWhenReady": map[string]interface{}{
-					"type":        "boolean",
-					"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no dependsOnTaskIds.",
-				},
-			}, "title"),
+			}, "tasks"),
 		},
 		{
 			"name":        "task_update",

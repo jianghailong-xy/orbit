@@ -19,6 +19,7 @@ import {
   BatchStopDto,
   CreateTaskCommentDto,
   CreateTaskDto,
+  CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
   UpdateTaskDto,
@@ -105,6 +106,11 @@ export class TasksController {
   }
 
   // Declared before ':id/execute' so the literal path isn't shadowed by the param route.
+  @Post('batch-create')
+  batchCreate(@CurrentUser() user: AuthUser, @Body() dto: CreateTasksBatchDto) {
+    return this.tasks.createMany(user.userId, dto);
+  }
+
   @Post('batch-execute')
   batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
     return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent);

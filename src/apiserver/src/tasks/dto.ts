@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -14,6 +15,7 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 
@@ -40,6 +42,30 @@ export class CreateTaskDto {
   @IsOptional() @IsArray() @IsUUID('all', { each: true }) dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
+}
+
+/** How many tasks one batch-create call may write. Mirrored in the runner's MCP tool schema. */
+export const TASK_BATCH_CREATE_MAX = 50;
+
+export class CreateTaskBatchItemDto extends CreateTaskDto {
+  // Caller-supplied label for THIS item, used only to wire dependencies up inside the batch
+  // (see dependsOnRefs) since the real ids don't exist yet. Never stored.
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) ref?: string;
+
+  // Prerequisites created by this same batch, addressed by their `ref`. Each must belong to an
+  // EARLIER item, which keeps the batch acyclic by construction. Adds to dependsOnTaskIds,
+  // which stays reserved for tasks that already exist.
+  @IsOptional() @IsArray() @IsString({ each: true }) dependsOnRefs?: string[];
+}
+
+export class CreateTasksBatchDto {
+  // Created in order, all-or-nothing: if any item is invalid, no task is written.
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(TASK_BATCH_CREATE_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskBatchItemDto)
+  tasks!: CreateTaskBatchItemDto[];
 }
 
 export class UpdateTaskDto {

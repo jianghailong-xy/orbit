@@ -96,3 +96,35 @@ test('runner dependency routes expose bounded read and granular writes', () => {
     assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), method);
   }
 });
+
+test('createTasks batches through TasksService with the acting agent as creator', async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const created = [{ id: 'task-1', ref: 's0' }];
+  const tasks = {
+    resolveAgentCreator: async (...args: unknown[]) => {
+      calls.push({ method: 'resolveAgentCreator', args });
+      return { type: 'AGENT', id: 'agent-1' };
+    },
+    createMany: async (...args: unknown[]) => {
+      calls.push({ method: 'createMany', args });
+      return created;
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never);
+  const dto = { tasks: [{ title: 'S0', ref: 's0' }] } as never;
+
+  const result = await controller.createTasks(RUNNER, 'agent-1', 'session-1', dto);
+
+  assert.equal(result, created);
+  assert.deepEqual(calls[0], { method: 'resolveAgentCreator', args: ['owner-1', 'agent-1'] });
+  assert.deepEqual(calls[1], {
+    method: 'createMany',
+    args: ['owner-1', dto, { type: 'AGENT', id: 'agent-1' }, 'session-1'],
+  });
+});
+
+test('createTasks is exposed as POST tasks/batch-create', () => {
+  const handler = RunnerTasksController.prototype.createTasks;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'tasks/batch-create');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});

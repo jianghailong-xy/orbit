@@ -1,12 +1,18 @@
+// CreateTasksBatchDto's @Type decorator reads design-time metadata at import.
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { ValidationPipe } from '@nestjs/common';
 import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import {
   AddDependencyDto,
   BatchDeleteDto,
   CreateTaskDto,
+  CreateTasksBatchDto,
   ExpandDependencyGraphDto,
   RefreshDependencyGraphNodesDto,
+  TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
 
@@ -99,4 +105,57 @@ test('dependency node refresh DTO accepts duplicate UUIDs and caps request paylo
   assert.equal((await validate(valid)).length, 0);
   assert.notEqual((await validate(malformed)).length, 0);
   assert.notEqual((await validate(tooMany)).length, 0);
+});
+
+test('batch-create DTO validates each item and caps the batch size', async () => {
+  const batch = (tasks: unknown[]) => plainToInstance(CreateTasksBatchDto, { tasks });
+
+  assert.equal(
+    (await validate(batch([{ title: 'a', ref: 's0' }, { title: 'b', dependsOnRefs: ['s0'] }])))
+      .length,
+    0,
+  );
+  // An item that fails CreateTaskDto's own rules fails the batch (nested validation is on).
+  assert.notEqual((await validate(batch([{ title: '' }]))).length, 0);
+  assert.notEqual((await validate(batch([{ title: 'a', assigneeId: 'not-a-uuid' }]))).length, 0);
+  assert.notEqual((await validate(batch([]))).length, 0);
+  assert.notEqual(
+    (await validate(batch(Array.from({ length: TASK_BATCH_CREATE_MAX + 1 }, () => ({ title: 'a' })))))
+      .length,
+    0,
+  );
+});
+
+test('the app ValidationPipe keeps every batch field it is meant to forward', async () => {
+  // Exactly how main.ts configures it: whitelist strips undecorated keys, so a field the
+  // item DTO forgets to declare would be dropped between HTTP and TasksService.
+  const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
+  const payload = {
+    tasks: [
+      { title: 'S0', ref: 's0', description: 'first', autoRunWhenReady: false, unknown: 'drop me' },
+      { title: 'S1', dependsOnRefs: ['s0'], dependsOnTaskIds: [TASK_A], assigneeId: null },
+    ],
+  };
+
+  const value = (await pipe.transform(payload, {
+    type: 'body',
+    metatype: CreateTasksBatchDto,
+  })) as CreateTasksBatchDto;
+
+  const kept = (index: number) =>
+    Object.fromEntries(
+      Object.entries(value.tasks[index]).filter(([, field]) => field !== undefined),
+    );
+  assert.deepEqual(kept(0), {
+    title: 'S0',
+    ref: 's0',
+    description: 'first',
+    autoRunWhenReady: false,
+  });
+  assert.deepEqual(kept(1), {
+    title: 'S1',
+    dependsOnRefs: ['s0'],
+    dependsOnTaskIds: [TASK_A],
+    assigneeId: null,
+  });
 });

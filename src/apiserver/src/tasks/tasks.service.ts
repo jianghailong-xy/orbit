@@ -8,7 +8,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus, TaskComment } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus, Task, TaskComment } from '@prisma/client';
 import {
   AgentProvider,
   planUsageBlockedUntil,
@@ -22,7 +22,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { withSessionState } from '../sessions/session-state';
-import { CreateTaskCommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
+import {
+  CreateTaskCommentDto,
+  CreateTaskDto,
+  CreateTasksBatchDto,
+  TASK_BATCH_CREATE_MAX,
+  UpdateTaskDto,
+} from './dto';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
@@ -566,21 +572,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
     if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
-    const data = {
-      title: dto.title,
-      description: dto.description,
-      ownerId,
-      // Defaults to the human (user-facing API); the runner path passes the agent.
-      creatorType: creator?.type ?? CreatorType.USER,
-      creatorId: creator?.id ?? ownerId,
-      creatorSessionId: sessionId,
-      assigneeId: dto.assigneeId,
-      listId: dto.listId,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-      provider: dto.provider,
-      model: dto.model,
-      autoRunWhenReady: dto.autoRunWhenReady,
-    } satisfies Prisma.TaskUncheckedCreateInput;
+    const data = this.taskCreateData(ownerId, dto, creator, sessionId);
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
     // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
@@ -604,6 +596,119 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // SessionsService.create's publishSessionCreated.
     if (sessionId) this.realtime.publishTaskChanged(sessionId, task.id);
     return task;
+  }
+
+  /** The Task row one create DTO turns into. Shared by create and createMany so the two
+   *  write paths can never drift on a newly added field. */
+  private taskCreateData(
+    ownerId: string,
+    dto: CreateTaskDto,
+    creator: Creator | undefined,
+    sessionId: string | undefined,
+  ): Prisma.TaskUncheckedCreateInput {
+    return {
+      title: dto.title,
+      description: dto.description,
+      ownerId,
+      // Defaults to the human (user-facing API); the runner path passes the agent.
+      creatorType: creator?.type ?? CreatorType.USER,
+      creatorId: creator?.id ?? ownerId,
+      creatorSessionId: sessionId,
+      assigneeId: dto.assigneeId,
+      listId: dto.listId,
+      dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      provider: dto.provider,
+      model: dto.model,
+      autoRunWhenReady: dto.autoRunWhenReady,
+    };
+  }
+
+  /**
+   * Create several tasks in one call, all-or-nothing. An item may carry a `ref` and later items
+   * may list it in `dependsOnRefs`, so a whole dependency chain lands in a single round-trip
+   * instead of one create per node (previously the only way to build one, since each edge needs
+   * the id the previous call returned). Returns the created tasks in input order, echoing `ref`.
+   */
+  async createMany(
+    ownerId: string,
+    dto: CreateTasksBatchDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+  ) {
+    const items = dto.tasks ?? [];
+    if (!items.length) throw new BadRequestException('tasks is required');
+    if (items.length > TASK_BATCH_CREATE_MAX)
+      throw new BadRequestException(`at most ${TASK_BATCH_CREATE_MAX} tasks per batch`);
+
+    const positionByRef = new Map<string, number>();
+    items.forEach((item, index) => {
+      if (!item.title) throw new BadRequestException(`tasks[${index}]: title is required`);
+      if (item.ref === undefined) return;
+      if (positionByRef.has(item.ref))
+        throw new BadRequestException(`tasks[${index}]: duplicate ref "${item.ref}"`);
+      positionByRef.set(item.ref, index);
+    });
+    // Backward-only refs keep the batch acyclic by construction, so — as in create — no cycle
+    // check is needed: these tasks are brand new, nothing outside the batch can depend on them.
+    items.forEach((item, index) => {
+      for (const ref of item.dependsOnRefs ?? []) {
+        const position = positionByRef.get(ref);
+        if (position === undefined || position >= index)
+          throw new BadRequestException(
+            `tasks[${index}]: dependsOnRefs "${ref}" must name an earlier task in this batch`,
+          );
+      }
+    });
+
+    // Validate every referenced entity before writing anything, once per distinct value.
+    const distinct = (values: Array<string | null | undefined>) => [
+      ...new Set(values.filter((value): value is string => !!value)),
+    ];
+    for (const assigneeId of distinct(items.map((item) => item.assigneeId)))
+      await this.assertOwnedAgent(ownerId, assigneeId);
+    for (const listId of distinct(items.map((item) => item.listId)))
+      await this.assertOwnedList(ownerId, listId);
+    for (const provider of distinct(items.map((item) => item.provider)))
+      await this.assertUsableProvider(ownerId, provider);
+    const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
+    if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
+    const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
+
+    const hasDependencies = items.some(
+      (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
+    );
+    const created = await this.prisma.$transaction(async (tx) => {
+      // Same owner lock as create: the tasks and their edges must become visible together, or a
+      // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
+      if (hasDependencies) await this.lockDependencyGraph(tx, ownerId);
+      const idByRef = new Map<string, string>();
+      const rows: Array<Task & { ref?: string }> = [];
+      for (const item of items) {
+        const task = await tx.task.create({
+          data: this.taskCreateData(ownerId, item, creator, sessionId),
+        });
+        if (item.ref !== undefined) idByRef.set(item.ref, task.id);
+        const dependsOnTaskIds = [
+          ...new Set([
+            ...(item.dependsOnTaskIds ?? []),
+            // Non-null: every ref was proven to belong to an earlier, already-created item above.
+            ...(item.dependsOnRefs ?? []).map((ref) => idByRef.get(ref)!),
+          ]),
+        ];
+        if (dependsOnTaskIds.length)
+          await tx.taskDependency.createMany({
+            data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+              taskId: task.id,
+              dependsOnTaskId,
+            })),
+          });
+        rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
+      }
+      return rows;
+    });
+    // One control-plane nudge per task, exactly as create does (see its comment).
+    if (sessionId) for (const task of created) this.realtime.publishTaskChanged(sessionId, task.id);
+    return created;
   }
 
   /** Return the session id only if it exists under this owner; otherwise undefined. */

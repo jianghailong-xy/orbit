@@ -215,6 +215,87 @@ func TestMCPTaskUpdateCarriesDependencyReplacement(t *testing.T) {
 	}
 }
 
+func TestMCPTaskCreateBatchPostsEveryItemInOneCall(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "task_create_batch")
+	tasks, ok := props["tasks"].(map[string]interface{})
+	if !ok || tasks["type"] != "array" {
+		t.Fatalf("task_create_batch tasks schema = %#v", props["tasks"])
+	}
+	items, _ := tasks["items"].(map[string]interface{})
+	itemProps, _ := items["properties"].(map[string]interface{})
+	for _, field := range []string{"title", "description", "dependsOnTaskIds", "ref", "dependsOnRefs"} {
+		if itemProps[field] == nil {
+			t.Fatalf("task_create_batch item schema missing %q: %#v", field, itemProps)
+		}
+	}
+	// The single-task tool must not grow the batch-only wiring fields.
+	if single := mcpToolProps(toolDescriptors(false, false), "task_create"); single["ref"] != nil {
+		t.Fatalf("task_create leaked the batch-only ref field: %#v", single["ref"])
+	}
+
+	var gotMethod, gotPath, gotAgent string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`[{"id":"t1","ref":"s0"},{"id":"t2"}]`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{
+			map[string]interface{}{"title": "first", "ref": "s0"},
+			map[string]interface{}{"title": "second", "dependsOnRefs": []interface{}{"s0"}, "assigneeId": nil},
+		},
+	})
+	if res["isError"] == true {
+		t.Fatalf("task_create_batch returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/tasks/batch-create" {
+		t.Fatalf("task_create_batch hit %s %s", gotMethod, gotPath)
+	}
+	if gotAgent != "agent-1" {
+		t.Fatalf("agent header = %q", gotAgent)
+	}
+	sent, _ := gotBody["tasks"].([]interface{})
+	if len(sent) != 2 {
+		t.Fatalf("body = %#v, want two tasks in one request", gotBody)
+	}
+	first, _ := sent[0].(map[string]interface{})
+	second, _ := sent[1].(map[string]interface{})
+	// Omitted assignee defaults to this agent; an explicit null stays unassigned.
+	if first["assigneeId"] != "agent-1" || first["ref"] != "s0" {
+		t.Fatalf("tasks[0] = %#v", first)
+	}
+	if assignee, present := second["assigneeId"]; !present || assignee != nil {
+		t.Fatalf("tasks[1] assigneeId = %#v, want an explicit null", second["assigneeId"])
+	}
+	if refs, _ := second["dependsOnRefs"].([]interface{}); len(refs) != 1 || refs[0] != "s0" {
+		t.Fatalf("tasks[1] dependsOnRefs = %#v", second["dependsOnRefs"])
+	}
+}
+
+func TestMCPTaskCreateBatchRejectsBadInputBeforeTheRoundTrip(t *testing.T) {
+	mcp := &mcpServer{agentID: "agent-1", t: NewTransport("http://127.0.0.1:1", "tok")}
+	oversized := make([]interface{}, maxTaskBatchCreate+1)
+	for i := range oversized {
+		oversized[i] = map[string]interface{}{"title": "t"}
+	}
+	cases := map[string]interface{}{
+		"empty":      []interface{}{},
+		"untitled":   []interface{}{map[string]interface{}{"description": "no title"}},
+		"not object": []interface{}{"nope"},
+		"oversized":  oversized,
+	}
+	for name, tasks := range cases {
+		if res := mcp.callTool("task_create_batch", map[string]interface{}{"tasks": tasks}); res["isError"] != true {
+			t.Fatalf("%s batch isError = %#v", name, res["isError"])
+		}
+	}
+}
+
 func TestMCPTaskIDsCannotEscapeTaskRoute(t *testing.T) {
 	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
 	for _, tool := range []string{"task_get", "task_delete"} {
