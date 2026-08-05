@@ -2336,6 +2336,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: true,
         provider: true,
         model: true,
+        status: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2358,7 +2359,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       prompt,
       `执行任务：${task.title}`,
     );
+    if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
     return { ok: true, sessionId };
+  }
+
+  /**
+   * Drop a task's FAILED label once a retry has actually been dispatched for it. Without
+   * this the task keeps the status of the run that died: it stays counted under Failed and
+   * listed in that filter while its row shows a live "Running" pill — the retry looks like
+   * it never happened.
+   *
+   * IN_PROGRESS, not OPEN, is the target: it is the state reclaimStalledTask rewrites when
+   * a run ends badly, so a retry that fails again lands back at FAILED. Parking it at OPEN
+   * would silently swallow that second failure.
+   *
+   * The write is conditional on the task still being FAILED so a run that already reported
+   * its own outcome is never dragged backwards.
+   */
+  private async clearFailedForRetry(ownerId: string, taskId: string): Promise<void> {
+    const res = await this.prisma.task.updateMany({
+      where: { id: taskId, ownerId, status: TaskStatus.FAILED },
+      data: { status: TaskStatus.IN_PROGRESS },
+    });
+    if (res.count > 0) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
   }
 
   private buildExecutePrompt(task: { title: string; description?: string | null }): string {
@@ -2394,6 +2419,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: true,
         provider: true,
         model: true,
+        status: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2443,6 +2469,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `执行任务：${t.title}`,
           batch,
         );
+        if (t.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, t.id);
         return { id: t.id, ok: true as const, sessionId };
       } catch (e) {
         this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
