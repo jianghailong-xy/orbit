@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -71,6 +72,46 @@ func elevateUpgrade(exe string) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// resolvedExecutable returns this process's binary with symlinks resolved — the
+// path an update replaces, and whose directory must be writable to do so.
+func resolvedExecutable() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return exe, nil
+}
+
+// selfUpdateInstallable reports the install directory and whether an update
+// could actually be swapped into it. A runner installed under a root-owned
+// directory (the common `/usr/local/bin` case) can download a release but never
+// replace itself, so "a newer release exists" is not on its own a reason to
+// restart. A package var so tests can simulate an unwritable install.
+var selfUpdateInstallable = func() (string, bool) {
+	exe, err := resolvedExecutable()
+	if err != nil {
+		return "", false
+	}
+	dir := filepath.Dir(exe)
+	return dir, writable(dir)
+}
+
+var selfUpdateBlockedOnce sync.Once
+
+// warnSelfUpdateBlocked reports the one condition that otherwise pins a runner
+// to an old release with no trace. Logged once per process: it is a standing
+// state, not an event, and the check that finds it repeats every
+// selfUpdateCheckInterval.
+func warnSelfUpdateBlocked(remote, dir string) {
+	selfUpdateBlockedOnce.Do(func() {
+		logln(fmt.Sprintf("orbit %s available but cannot be installed: %s is not writable by this user; "+
+			"staying on %s — run `sudo orbit upgrade`", remote, dir, version))
+	})
 }
 
 // writable reports whether we can create files in dir (i.e. swap the binary there).
@@ -133,6 +174,9 @@ func publishedVersion(ctx context.Context, server string) (string, error) {
 // availableSelfUpdate reports the release that a running runner should drain
 // for. Errors are deliberately silent: the next periodic check will retry and
 // ordinary runner work must remain available through a control-plane hiccup.
+// An update this process could not install is not reported: draining for one
+// tears down live sessions mid-turn every check interval, forever, without the
+// version ever changing.
 func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
 	if !selfUpdateEnabled() {
 		return "", false
@@ -141,19 +185,20 @@ func availableSelfUpdate(ctx context.Context, server string) (string, bool) {
 	if err != nil || !isNewer(remote, version) {
 		return "", false
 	}
+	if dir, ok := selfUpdateInstallable(); !ok {
+		warnSelfUpdateBlocked(remote, dir)
+		return "", false
+	}
 	return remote, true
 }
 
 // downloadAndSwap fetches the published binary for `ver`, verifies it runs and
 // reports that version, then atomically swaps it over the current executable.
 func downloadAndSwap(server, key, ver string, logf func(string)) bool {
-	exe, err := os.Executable()
+	exe, err := resolvedExecutable()
 	if err != nil {
 		logf("cannot locate executable: " + err.Error() + "\n")
 		return false
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
 	}
 	// Fail fast (before downloading) if we can't write where the binary lives.
 	if dir := filepath.Dir(exe); !writable(dir) {
@@ -208,12 +253,9 @@ func downloadAndSwap(server, key, ver string, logf func(string)) bool {
 // used after a live-update attempt returns so a partially stopped runLoop is
 // never reused in-process.
 func execCurrentProcess() error {
-	exe, err := os.Executable()
+	exe, err := resolvedExecutable()
 	if err != nil {
 		return err
-	}
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
 	}
 	return syscall.Exec(exe, os.Args, os.Environ())
 }
@@ -233,7 +275,9 @@ func selfUpdate(server string) {
 	}
 
 	fmt.Printf("orbit %s -> %s: downloading update...\n", version, remote)
-	if !downloadAndSwap(server, key, remote, func(string) {}) {
+	// Never swallow the reason: a silent failure here leaves the runner pinned to
+	// an old release with nothing in the log but the line above.
+	if !downloadAndSwap(server, key, remote, func(s string) { fmt.Fprint(os.Stderr, s) }) {
 		return
 	}
 	fmt.Printf("orbit updated to %s; restarting...\n", remote)
