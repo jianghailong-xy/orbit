@@ -8,15 +8,19 @@ export interface FilterableTask {
   assignee?: { runner?: { id?: string | null } | null } | null;
 }
 
+/**
+ * Mirror of the conditions POST /tasks/execute and /tasks/batch-execute skip on: no
+ * responsible agent, that agent not bound to a runner, unmet prerequisites, or a run
+ * already in flight. Neither endpoint refuses a DONE task, so this doesn't either —
+ * it is what a batch's "will run N" preview must count to agree with the dispatch.
+ */
+export function canDispatchTask(task: FilterableTask): boolean {
+  return !!task.assignee?.runner?.id && !task.running && !task.queued && !task.blocked;
+}
+
 /** Keep the default task filter and the row-level Run action on one definition. */
 export function canStartTask(task: FilterableTask): boolean {
-  return (
-    task.status !== 'DONE' &&
-    !!task.assignee?.runner?.id &&
-    !task.running &&
-    !task.queued &&
-    !task.blocked
-  );
+  return task.status !== 'DONE' && canDispatchTask(task);
 }
 
 export function matchesTaskFilter(task: FilterableTask, filter: string): boolean {

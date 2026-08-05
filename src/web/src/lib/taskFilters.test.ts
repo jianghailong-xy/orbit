@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from './taskFilters';
+import { canDispatchTask, canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from './taskFilters';
 
 const runnable = {
   status: 'OPEN',
@@ -32,6 +32,22 @@ describe('task filters', () => {
 
   it('keeps cancelled tasks restartable, matching the existing Run action', () => {
     expect(canStartTask({ ...runnable, status: 'CANCELLED' })).toBe(true);
+  });
+
+  it.each([
+    ['unassigned', { assignee: null }],
+    ['without a runner', { assignee: { runner: null } }],
+    ['running', { running: true }],
+    ['queued', { queued: true }],
+    ['waiting on a prerequisite', { blocked: true }],
+  ])('will not dispatch a task that is %s', (_label, override) => {
+    expect(canDispatchTask({ ...runnable, ...override })).toBe(false);
+  });
+
+  it('still dispatches a done task, since neither execute endpoint refuses one', () => {
+    expect(canDispatchTask({ ...runnable, status: 'DONE' })).toBe(true);
+    // The row's Run button and the Ready filter do hide it — that's the only difference.
+    expect(canStartTask({ ...runnable, status: 'DONE' })).toBe(false);
   });
 
   it('matches the live execution overlay for the Running filter', () => {

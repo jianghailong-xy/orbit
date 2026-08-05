@@ -30,7 +30,12 @@ import { decodeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
-import { canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from '../lib/taskFilters';
+import {
+  canDispatchTask,
+  canStartTask,
+  DEFAULT_TASK_FILTER,
+  matchesTaskFilter,
+} from '../lib/taskFilters';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import {
   anchorAt,
@@ -64,6 +69,14 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
   return target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
+};
+
+// Collapse a batch's per-task skip reasons into one countable summary
+// ("Already running or queued ×2, No assignee ×1") for the result toast.
+const tallyReasons = (skipped: { reason: string }[]): string => {
+  const counts = new Map<string, number>();
+  for (const s of skipped) counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
+  return [...counts].map(([reason, n]) => (n > 1 ? `${reason} ×${n}` : reason)).join(', ');
 };
 
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
@@ -225,16 +238,18 @@ export function TaskListView() {
   });
   const batchRun = useMutation({
     mutationFn: (body: { taskIds: string[]; maxConcurrent: number }) =>
-      api<{ dispatched: number; failed: unknown[]; skipped: unknown[] }>('/tasks/batch-execute', {
-        method: 'POST',
-        body,
-      }),
+      api<{ dispatched: number; failed: unknown[]; skipped: { reason: string }[] }>(
+        '/tasks/batch-execute',
+        { method: 'POST', body },
+      ),
     onSuccess: (res) => {
       setBatchOpen(false);
       setSelection(EMPTY_SELECTION);
       const parts = [`Triggered ${res.dispatched} task(s)`];
       if (res.failed.length) parts.push(`${res.failed.length} failed`);
-      if (res.skipped.length) parts.push(`${res.skipped.length} skipped`);
+      // A bare skip count leaves the user with no idea why nothing ran — the endpoint
+      // reports a reason per task, so surface them tallied instead of dropping them.
+      if (res.skipped.length) parts.push(`${res.skipped.length} skipped (${tallyReasons(res.skipped)})`);
       message[res.dispatched ? 'success' : 'warning'](parts.join(', '));
       invalidate();
     },
@@ -406,11 +421,10 @@ export function TaskListView() {
   const rowIds = useMemo(() => rows.map((r: any) => r.id as string), [rows]);
   const allSelected = rows.length > 0 && rows.every((r: any) => selectedIds.has(r.id));
   const someSelected = rows.some((r: any) => selectedIds.has(r.id));
-  // A task can run only if it has a responsible agent bound to a runner.
-  const runnableRows = useMemo(
-    () => selectedRows.filter((r: any) => r.assignee?.runner?.id),
-    [selectedRows],
-  );
+  // What the batch will actually dispatch. This mirrors the endpoint's own skip rules
+  // (see canDispatchTask) rather than only checking the assignee, so the modal's "will
+  // run N" can't promise runs the backend is about to skip.
+  const runnableRows = useMemo(() => selectedRows.filter(canDispatchTask), [selectedRows]);
 
   // Check/uncheck one row (it becomes the anchor), or — with Shift — draw the range from
   // the anchor to this row in the current sort order.
@@ -421,7 +435,9 @@ export function TaskListView() {
 
   const openBatch = () => {
     if (runnableRows.length === 0) {
-      message.warning('None of the selected tasks have a runnable assignee (or no runner bound)');
+      message.warning(
+        'None of the selected tasks are ready to run (no assignee, no runner bound, unmet prerequisites, or already running)',
+      );
       return;
     }
     // Batch concurrency is its own knob (it doesn't touch any runner's cap); default to
@@ -854,7 +870,7 @@ export function TaskListView() {
         <p style={{ marginTop: 0 }}>
           Will run <b>{runnableRows.length}</b> selected task(s)
           {selectedRows.length > runnableRows.length
-            ? `, skipping ${selectedRows.length - runnableRows.length} (no assignee or no runner bound)`
+            ? `, skipping ${selectedRows.length - runnableRows.length} that aren't ready (no assignee, no runner bound, unmet prerequisites, or already running)`
             : ''}
           .
         </p>

@@ -15,7 +15,7 @@ async function waitUntil(predicate: () => boolean, message: string): Promise<voi
   throw new Error(message);
 }
 
-function makeService(count: number) {
+function makeService(count: number, sessions: { taskId: string; status: string }[] = []) {
   const tasks = Array.from({ length: count }, (_, index) => ({
     id: `task-${index}`,
     title: `Task ${index}`,
@@ -25,7 +25,14 @@ function makeService(count: number) {
   const prisma = {
     task: { findMany: async () => tasks },
     taskDependency: { findMany: async () => [] },
-    session: { findMany: async () => [] },
+    // Honour the status filter the caller asks for, so a test can assert *which* session
+    // states batchExecute counts as "already running" rather than trusting a fixed stub.
+    session: {
+      findMany: async (args: { where: { status: { in: string[] } } }) =>
+        sessions
+          .filter((s) => args.where.status.in.includes(s.status))
+          .map((s) => ({ taskId: s.taskId })),
+    },
   } as never;
   return new TasksService(prisma, {} as never, {} as never);
 }
@@ -74,6 +81,42 @@ test('batchExecute bounds session initialization independently of runtime maxCon
   assert.equal(result.maxConcurrent, 2);
   assert.equal(batches.length, total);
   assert.ok(batches.every((batch) => batch?.id === result.batchId && batch.maxConcurrent === 2));
+});
+
+/**
+ * Bulk Run and the single-task Run must mean the same thing. Only PENDING/RUNNING
+ * (SINGLE_RUN_DEDUP) counts as already-running: a session parked at AWAITING_INPUT /
+ * INTERRUPTED is idle, and the row's Run button, the Ready filter (runnableTaskWhere) and
+ * the detail panel all offer such a task as runnable, so the batch has to dispatch it too.
+ * Skipping it here made bulk Run silently no-op on exactly the tasks the list showed as ready.
+ */
+test('batchExecute dispatches parked sessions and skips only in-flight ones', async () => {
+  const service = makeService(5, [
+    { taskId: 'task-0', status: 'AWAITING_INPUT' },
+    { taskId: 'task-1', status: 'INTERRUPTED' },
+    { taskId: 'task-2', status: 'PENDING' },
+    { taskId: 'task-3', status: 'RUNNING' },
+    // task-4 has no session at all.
+  ]);
+  const dispatched: string[] = [];
+  (service as any).runAgentOnTask = async (...args: unknown[]) => {
+    const task = args[1] as { id: string };
+    dispatched.push(task.id);
+    return `session-${task.id}`;
+  };
+
+  const result = await service.batchExecute(
+    'owner-1',
+    Array.from({ length: 5 }, (_, index) => `task-${index}`),
+  );
+
+  assert.deepEqual(dispatched, ['task-0', 'task-1', 'task-4']);
+  assert.equal(result.dispatched, 3);
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.skipped, [
+    { id: 'task-2', title: 'Task 2', reason: 'Already running or queued' },
+    { id: 'task-3', title: 'Task 3', reason: 'Already running or queued' },
+  ]);
 });
 
 test('batchExecute preserves runnable order when collecting out-of-order failures', async () => {

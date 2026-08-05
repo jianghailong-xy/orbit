@@ -2425,13 +2425,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
 
     const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
-    // Tasks that already have a queued/live session: skip them so the batch doesn't
-    // double-queue a task that's already running (runAgentOnTask also guards this, but
-    // surfacing it here lets us report it as skipped rather than silently dispatched).
+    // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
+    // task that's already running (runAgentOnTask also guards this, but surfacing it here
+    // lets us report it as skipped rather than silently dispatched).
+    //
+    // SINGLE_RUN_DEDUP, not TASK_OCCUPYING: this must be the same "already running"
+    // predicate the single-task 开始执行 uses, or the two Run buttons mean different
+    // things. A session parked at AWAITING_INPUT/INTERRUPTED is idle — the row's Run
+    // button, the Ready filter (runnableTaskWhere) and the detail panel all treat such a
+    // task as runnable and nudge it with a new turn, so the batch must too. Widening to
+    // TASK_OCCUPYING (which exists to answer reclaimStalledTask's different question —
+    // "is anything still holding this task?") made bulk Run silently skip exactly the
+    // tasks the list was offering as ready.
     const occupied = new Set(
       (
         await this.prisma.session.findMany({
-          where: { taskId: { in: tasks.map((t) => t.id) }, status: { in: TASK_OCCUPYING } },
+          where: { taskId: { in: tasks.map((t) => t.id) }, status: { in: SINGLE_RUN_DEDUP } },
           select: { taskId: true },
         })
       ).map((s) => s.taskId),
@@ -2450,7 +2459,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           reason: state === 'BLOCKED_FAILED' ? 'Prerequisite cancelled' : 'Prerequisites not complete',
         });
       else if (occupied.has(t.id))
-        skipped.push({ id: t.id, title: t.title, reason: 'Already has an in-progress session' });
+        skipped.push({ id: t.id, title: t.title, reason: 'Already running or queued' });
       else runnable.push(t);
     }
     // taskIds with no matching owned task (deleted / not owned) are silently ignored.
