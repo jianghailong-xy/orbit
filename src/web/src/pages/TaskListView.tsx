@@ -584,182 +584,187 @@ export function TaskListView() {
   return (
     <>
       <main className="app-main">
-        <div className="app-view app-view--doc">
-          <h1 className="page-title">{pageTitle}</h1>
+        <div className="app-view app-view--doc app-view--tasks">
+          {/* Title · progress · filters stay put; only the rows below them scroll. */}
+          <div className="tasks-header">
+            <h1 className="page-title">{pageTitle}</h1>
 
-          {counts.total > 0 && (
-            <div className="task-progress">
-              <div className="task-progress-track">
-                <span
-                  className="task-progress-seg done"
-                  style={{ width: `${(counts.done / counts.total) * 100}%` }}
-                />
-                <span
-                  className="task-progress-seg ongoing"
-                  style={{ width: `${(counts.running / counts.total) * 100}%` }}
-                />
-              </div>
-              <div className="task-progress-text">
-                Done <b>{counts.done}</b> / {counts.total}
-                <span className="sep">·</span>Open {counts.open + counts.inProgress}
-                {counts.running > 0 && (
-                  <>
-                    <span className="sep">·</span>Running {counts.running}
-                  </>
-                )}
-                {counts.queued > 0 && (
-                  <>
-                    <span className="sep">·</span>Queued {counts.queued}
-                  </>
-                )}
-                {counts.failed > 0 && (
-                  <>
-                    <span className="sep">·</span>Failed {counts.failed}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="tasks-toolbar">
-            {selectedIds.size > 0 ? (
-              // Selection mode: the batch-action bar takes over the whole toolbar row so it
-              // never has to share width with the filters (which made it wrap to a 2nd line).
-              // Clear restores the filter toolbar.
-              <div className="tasks-bulkbar">
-                <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<PlayCircleOutlined />}
-                  onClick={openBatch}
-                >
-                  Run
-                </Button>
-                <Popconfirm
-                  title="Stop selected tasks?"
-                  description="Cancels each selected task's running or queued run."
-                  okText="Stop"
-                  okButtonProps={{ danger: true }}
-                  onConfirm={() => batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })}
-                >
-                  <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
-                    Stop
-                  </Button>
-                </Popconfirm>
-                <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
-                  Set assignee
-                </Button>
-                <Popconfirm
-                  title={`Delete ${selectedRows.length} selected task${selectedRows.length === 1 ? '' : 's'}?`}
-                  description="This action cannot be undone."
-                  okText="Delete"
-                  cancelText="Cancel"
-                  okButtonProps={{ danger: true, loading: batchDelete.isPending }}
-                  onConfirm={() => batchDelete.mutate(selectedRows.map((r: any) => r.id))}
-                >
-                  <Button
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    loading={batchDelete.isPending}
-                  >
-                    Delete
-                  </Button>
-                </Popconfirm>
-                <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
-                  Clear
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Segmented
-                  options={filterOptions}
-                  value={filter}
-                  onChange={(v) => setFilter(v as string)}
-                />
-                <Input
-                  className="tasks-search"
-                  size="small"
-                  allowClear
-                  prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
-                  placeholder="Search tasks"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-                {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
-                {uniformAssignee?.name && (
-                  <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
-                    <Avatar
-                      size={18}
-                      style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10, flex: 'none' }}
-                    >
-                      {uniformAssignee.name.trim().charAt(0).toUpperCase()}
-                    </Avatar>
-                    {uniformAssignee.name}
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-
-          {(isListView ? listQ.isLoading : tasks.isLoading) ? (
-            <div style={{ padding: 48, textAlign: 'center' }}>
-              <Spin />
-            </div>
-          ) : isListView && listQ.isError ? (
-            <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
-              This list could not be loaded.
-            </div>
-          ) : !isListView && tasks.isError ? (
-            <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
-              Tasks could not be loaded.
-            </div>
-          ) : (
-            <div className={`orbit-tasklist${showAssigneeCol ? '' : ' no-assignee'}`}>
-              <div className="col-head-row">
-                <div className="col-head task-check">
-                  <Checkbox
-                    checked={allSelected}
-                    indeterminate={someSelected && !allSelected}
-                    onChange={toggleAll}
-                    disabled={rows.length === 0}
+            {counts.total > 0 && (
+              <div className="task-progress">
+                <div className="task-progress-track">
+                  <span
+                    className="task-progress-seg done"
+                    style={{ width: `${(counts.done / counts.total) * 100}%` }}
+                  />
+                  <span
+                    className="task-progress-seg ongoing"
+                    style={{ width: `${(counts.running / counts.total) * 100}%` }}
                   />
                 </div>
-                {sortHead('status', 'Status')}
-                {sortHead('title', 'Task')}
-                {showAssigneeCol && sortHead('assignee', 'Assignee')}
-              </div>
-
-              {rows.length === 0 ? (
-                <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
-                  {query.trim()
-                    ? `No tasks match “${query.trim()}”.`
-                    : filter === 'RUNNABLE'
-                      ? 'No tasks are ready to run.'
-                      : filter === 'RUNNING'
-                        ? 'No tasks are running.'
-                      : isListView
-                      ? 'No tasks in this list yet.'
-                      : isUnlisted
-                        ? 'No tasks without a list yet.'
-                        : 'No tasks yet.'}
+                <div className="task-progress-text">
+                  Done <b>{counts.done}</b> / {counts.total}
+                  <span className="sep">·</span>Open {counts.open + counts.inProgress}
+                  {counts.running > 0 && (
+                    <>
+                      <span className="sep">·</span>Running {counts.running}
+                    </>
+                  )}
+                  {counts.queued > 0 && (
+                    <>
+                      <span className="sep">·</span>Queued {counts.queued}
+                    </>
+                  )}
+                  {counts.failed > 0 && (
+                    <>
+                      <span className="sep">·</span>Failed {counts.failed}
+                    </>
+                  )}
                 </div>
-              ) : (
-                rows.map((r: any) => renderRow(r))
-              )}
-              {!isListView && tasks.hasNextPage && (
-                <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center' }}>
+              </div>
+            )}
+
+            <div className="tasks-toolbar">
+              {selectedIds.size > 0 ? (
+                // Selection mode: the batch-action bar takes over the whole toolbar row so it
+                // never has to share width with the filters (which made it wrap to a 2nd line).
+                // Clear restores the filter toolbar.
+                <div className="tasks-bulkbar">
+                  <span className="tasks-bulkbar-count">{selectedIds.size} selected</span>
                   <Button
-                    loading={tasks.isFetchingNextPage}
-                    onClick={() => tasks.fetchNextPage()}
+                    type="primary"
+                    size="small"
+                    icon={<PlayCircleOutlined />}
+                    onClick={openBatch}
                   >
-                    Load more ({taskData.length} of {tasks.data?.pages[0]?.total ?? taskData.length})
+                    Run
+                  </Button>
+                  <Popconfirm
+                    title="Stop selected tasks?"
+                    description="Cancels each selected task's running or queued run."
+                    okText="Stop"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => batchStop.mutate({ taskIds: selectedRows.map((r: any) => r.id) })}
+                  >
+                    <Button size="small" danger icon={<StopOutlined />} loading={batchStop.isPending}>
+                      Stop
+                    </Button>
+                  </Popconfirm>
+                  <Button size="small" icon={<UserOutlined />} onClick={openAssign}>
+                    Set assignee
+                  </Button>
+                  <Popconfirm
+                    title={`Delete ${selectedRows.length} selected task${selectedRows.length === 1 ? '' : 's'}?`}
+                    description="This action cannot be undone."
+                    okText="Delete"
+                    cancelText="Cancel"
+                    okButtonProps={{ danger: true, loading: batchDelete.isPending }}
+                    onConfirm={() => batchDelete.mutate(selectedRows.map((r: any) => r.id))}
+                  >
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      loading={batchDelete.isPending}
+                    >
+                      Delete
+                    </Button>
+                  </Popconfirm>
+                  <Button type="text" size="small" onClick={() => setSelectedIds(new Set())}>
+                    Clear
                   </Button>
                 </div>
+              ) : (
+                <>
+                  <Segmented
+                    options={filterOptions}
+                    value={filter}
+                    onChange={(v) => setFilter(v as string)}
+                  />
+                  <Input
+                    className="tasks-search"
+                    size="small"
+                    allowClear
+                    prefix={<SearchOutlined style={{ color: 'var(--text-3)' }} />}
+                    placeholder="Search tasks"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                  {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
+                  {uniformAssignee?.name && (
+                    <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
+                      <Avatar
+                        size={18}
+                        style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10, flex: 'none' }}
+                      >
+                        {uniformAssignee.name.trim().charAt(0).toUpperCase()}
+                      </Avatar>
+                      {uniformAssignee.name}
+                    </span>
+                  )}
+                </>
               )}
             </div>
-          )}
+          </div>
+
+          <div className="tasks-body">
+            {(isListView ? listQ.isLoading : tasks.isLoading) ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <Spin />
+              </div>
+            ) : isListView && listQ.isError ? (
+              <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
+                This list could not be loaded.
+              </div>
+            ) : !isListView && tasks.isError ? (
+              <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
+                Tasks could not be loaded.
+              </div>
+            ) : (
+              <div className={`orbit-tasklist${showAssigneeCol ? '' : ' no-assignee'}`}>
+                <div className="col-head-row">
+                  <div className="col-head task-check">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
+                      onChange={toggleAll}
+                      disabled={rows.length === 0}
+                    />
+                  </div>
+                  {sortHead('status', 'Status')}
+                  {sortHead('title', 'Task')}
+                  {showAssigneeCol && sortHead('assignee', 'Assignee')}
+                </div>
+
+                {rows.length === 0 ? (
+                  <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
+                    {query.trim()
+                      ? `No tasks match “${query.trim()}”.`
+                      : filter === 'RUNNABLE'
+                        ? 'No tasks are ready to run.'
+                        : filter === 'RUNNING'
+                          ? 'No tasks are running.'
+                        : isListView
+                        ? 'No tasks in this list yet.'
+                        : isUnlisted
+                          ? 'No tasks without a list yet.'
+                          : 'No tasks yet.'}
+                  </div>
+                ) : (
+                  rows.map((r: any) => renderRow(r))
+                )}
+                {!isListView && tasks.hasNextPage && (
+                  <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center' }}>
+                    <Button
+                      loading={tasks.isFetchingNextPage}
+                      onClick={() => tasks.fetchNextPage()}
+                    >
+                      Load more ({taskData.length} of {tasks.data?.pages[0]?.total ?? taskData.length})
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 

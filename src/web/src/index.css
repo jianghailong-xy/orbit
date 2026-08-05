@@ -603,6 +603,13 @@ body {
   overflow: auto;
   padding: 24px 32px;
 }
+/* The task list splits that scroll in two: its header (title · progress · filters) is
+   pinned and only the rows below it scroll — see .tasks-header / .tasks-body. */
+.app-view--tasks {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
 /* Mobile chrome: a top bar with a hamburger that opens the off-canvas nav drawer, plus
    the drawer's backdrop. All hidden on desktop — the @media block at the foot of this
@@ -1057,6 +1064,16 @@ body {
 }
 
 /* ---- Tasks page ---- */
+/* Header block that stays put while the list scrolls; .tasks-body is the scroll
+   container the rows (and the sticky .col-head-row) live in. */
+.tasks-header {
+  flex: none;
+}
+.tasks-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 .page-title {
   font-size: 20px;
   font-weight: 600;
@@ -1779,7 +1796,7 @@ body {
   height: 38px;
   border-bottom: 1px solid var(--border-subtle);
   /* Pin the header so sort/select-all stay reachable while scrolling a long list.
-     .app-view--doc is the scroll container; an opaque bg + z-index occlude the rows
+     .tasks-body is the scroll container; an opaque bg + z-index occlude the rows
      passing underneath. */
   position: sticky;
   top: 0;
