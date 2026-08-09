@@ -4007,6 +4007,47 @@ body {
   text-align: center;
   opacity: 0.75;
 }
+/* Transcript placeholder while an unvisited session's tail page is in flight. Geometry tracks
+   .chat-user / .chat-assistant so the skeleton occupies the same columns the real messages will,
+   and the whole block pulses as one — per-line staggering reads as content arriving, which is
+   exactly the wrong promise while a single request is outstanding. */
+.chat-skeleton {
+  padding: 4px 0;
+  animation: chat-skeleton-pulse 1.6s ease-in-out infinite;
+}
+.chat-skeleton-user {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+  padding: 8px 12px;
+}
+.chat-skeleton-assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 20px;
+  padding: 0 12px;
+}
+.chat-skeleton-line {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+}
+@keyframes chat-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-skeleton {
+    animation: none;
+  }
+}
 .chat-msg {
   max-width: 80%;
   padding: 8px 12px;

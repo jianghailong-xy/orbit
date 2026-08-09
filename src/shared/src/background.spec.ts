@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { deriveBackgroundShells, type BgDeriveEvent } from './background';
+import {
+  deriveBackgroundShells,
+  selectBackgroundDerivationEvents,
+  type BgDeriveEvent,
+} from './background';
 import { RunEventType } from './enums';
 
 // Build the four event shapes the derivation reads. Mirrors what the runner persists for a
@@ -83,5 +87,67 @@ describe('deriveBackgroundShells', () => {
   it('ignores a launch whose tool_result never confirmed a background id', () => {
     const events: BgDeriveEvent[] = [launch(10, 'tu', 'echo hi', 'nope')];
     expect(deriveBackgroundShells(events, { sessionLive: true })).toHaveLength(0);
+  });
+});
+
+// Ordinary tool traffic — the bulk of a real session, and none of it readable by the derivation.
+// `content` stands in for the megabytes of file bodies these carry in production.
+const noise = (seq: number, id: string, name: string, input: unknown): BgDeriveEvent[] => [
+  { seq, type: RunEventType.TOOL_USE, payload: { id, name, input } },
+  { seq: seq + 1, type: RunEventType.TOOL_RESULT, payload: { toolUseId: id, content: 'x'.repeat(4096) } },
+];
+
+describe('selectBackgroundDerivationEvents', () => {
+  // A session shaped like the ones that made /background expensive: two real background shells
+  // buried in ordinary Read/Write/Bash/Grep traffic.
+  const path = '/tmp/tasks/bshell01.output';
+  const all: BgDeriveEvent[] = [
+    ...noise(1, 'tu_read_src', 'Read', { file_path: '/repo/src/index.ts' }),
+    launch(10, 'tu_bg1', 'npm run build', 'Build (background)'),
+    launchResult(11, 'tu_bg1', 'bshell01', path),
+    ...noise(20, 'tu_write', 'Write', { file_path: '/repo/a.ts', content: 'y'.repeat(2048) }),
+    ...noise(30, 'tu_bash', 'Bash', { command: 'git status' }), // foreground Bash
+    ...readPoll(40, 'tu_poll', path, 'build ok'),
+    ...noise(50, 'tu_grep', 'Grep', { pattern: 'TODO' }),
+    launch(60, 'tu_bg2', 'sleep 999', 'Watcher (background)'),
+    launchResult(61, 'tu_bg2', 'bshell02', '/tmp/tasks/bshell02.output'),
+    bgTask(70, 'tu_bg1', 'bshell01', 'completed'),
+  ];
+
+  it('derives exactly the same shells as scanning everything — the narrowing is lossless', () => {
+    const ctx = { sessionLive: false };
+    expect(deriveBackgroundShells(selectBackgroundDerivationEvents(all), ctx)).toEqual(
+      deriveBackgroundShells(all, ctx),
+    );
+    // Not vacuously equal: this fixture really does have shells to lose.
+    expect(deriveBackgroundShells(all, ctx).map((s) => s.shellId)).toEqual(['bshell01', 'bshell02']);
+  });
+
+  it('drops ordinary tool traffic — the payloads that made the whole-history scan expensive', () => {
+    const kept = selectBackgroundDerivationEvents(all);
+    const keptToolUseNames = kept
+      .filter((e) => e.type === RunEventType.TOOL_USE)
+      .map((e) => (e.payload as { name: string }).name);
+    // Only the background Bash launches and the .output Read poll survive.
+    expect(keptToolUseNames).toEqual(['Bash', 'Read', 'Bash']);
+    // A foreground Bash, a Write, a source-file Read and a Grep — plus all four results — are gone.
+    expect(kept.map((e) => e.seq)).toEqual([10, 11, 40, 41, 60, 61, 70]);
+  });
+
+  it('keeps a tool_result only when it answers one of the calls the derivation reads', () => {
+    const kept = selectBackgroundDerivationEvents(all);
+    const keptResultIds = kept
+      .filter((e) => e.type === RunEventType.TOOL_RESULT)
+      .map((e) => (e.payload as { toolUseId: string }).toolUseId);
+    expect(keptResultIds).toEqual(['tu_bg1', 'tu_poll', 'tu_bg2']);
+  });
+
+  it('keeps every background_* event — they are few and always relevant', () => {
+    const events: BgDeriveEvent[] = [
+      ...noise(1, 'tu', 'Read', { file_path: '/a.ts' }),
+      { seq: 5, type: RunEventType.BACKGROUND_TASK, payload: { shellId: 'b1', status: 'completed' } },
+      { seq: 6, type: RunEventType.BACKGROUND_OUTPUT, payload: { shellId: 'b1', content: 'tail' } },
+    ];
+    expect(selectBackgroundDerivationEvents(events).map((e) => e.seq)).toEqual([5, 6]);
   });
 });

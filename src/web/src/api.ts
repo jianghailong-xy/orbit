@@ -130,7 +130,14 @@ export async function logoutSession(): Promise<void> {
 
 export async function api<T = unknown>(
   path: string,
-  options: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+  options: {
+    method?: string;
+    body?: unknown;
+    headers?: Record<string, string>;
+    /** Cancels the request (and its 401 retry). Callers that fire a read on every selection
+     *  change pass one so a superseded request stops occupying a connection. */
+    signal?: AbortSignal;
+  } = {},
 ): Promise<T> {
   const res = await authedFetch(`/api${path}`, {
     method: options.method ?? 'GET',
@@ -139,6 +146,7 @@ export async function api<T = unknown>(
       ...options.headers,
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as {
@@ -193,14 +201,14 @@ export interface EventPage {
  *  long transcript open at the latest message instead of replaying its whole history over SSE. */
 export const getSessionEventPage = (
   id: string,
-  opts: { tail?: number; before?: number; limit?: number },
+  opts: { tail?: number; before?: number; limit?: number; signal?: AbortSignal },
 ): Promise<EventPage> => {
   const qs = new URLSearchParams();
   if (opts.tail != null) qs.set('tail', String(opts.tail));
   if (opts.before != null) qs.set('before', String(opts.before));
   if (opts.limit != null) qs.set('limit', String(opts.limit));
   qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
-  return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`);
+  return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
 };
 
 /** The untrimmed payload of one event, fetched when the user expands a card that arrived

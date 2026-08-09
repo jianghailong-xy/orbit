@@ -162,6 +162,7 @@ import {
 import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
+import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -727,6 +728,29 @@ function SessionStatusCard({ card }: { card: LocalStatusCard }) {
   );
 }
 
+// Placeholder for a session whose transcript hasn't arrived yet. Mirrors the real shapes — a
+// right-aligned user bubble, then a full-width assistant block — so the pane reads as a
+// conversation loading rather than as an empty one, and settles without a jarring reflow when
+// the events land. Static: it is on screen for a few hundred ms, so no measuring or randomness.
+function TranscriptSkeleton() {
+  return (
+    <div className="chat-skeleton" aria-busy="true" aria-label="Loading conversation">
+      {[0, 1].map((i) => (
+        <div key={i}>
+          <div className="chat-skeleton-user">
+            <span className="chat-skeleton-line" style={{ width: '58%' }} />
+          </div>
+          <div className="chat-skeleton-assistant">
+            <span className="chat-skeleton-line" style={{ width: '92%' }} />
+            <span className="chat-skeleton-line" style={{ width: '97%' }} />
+            <span className="chat-skeleton-line" style={{ width: '74%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Remembers the session the user last had open per agent (agent id → session id). Switching
 // away to another agent and back reopens that conversation instead of the agent's most-recent
 // one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
@@ -895,6 +919,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // already running instead of being told "no".
   const loadingOlderRef = useRef<Promise<boolean> | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  // True from the moment a session with no cached transcript is selected until its tail page
+  // lands (or gives up). Drives the skeleton: without it an unvisited session paints a blank
+  // pane for the whole fetch, since an ended session matches none of the empty-state notes.
+  const [seeding, setSeeding] = useState(false);
   // Set by loadOlder just before it prepends a page; a layout effect reads it to compensate
   // scrollTop so the viewport stays put instead of jumping when older content grows above.
   const prependAnchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
@@ -1822,6 +1850,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   const activeSlots =
     typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
   const slotWaitDescription = pendingSlotDescription(activeSlots, runner.maxConcurrent);
+  // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
+  // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
+  const placeholder = transcriptPlaceholder({
+    hasSession: !!selected,
+    trashed: selectedTrashed,
+    runState: selected ? sessionRunStateOf(selectedSession ?? selected) : null,
+    live: selected ? isSessionLive(selectedSession ?? selected) : false,
+    eventCount: events.length,
+    seeding,
+    streaming: !!streamingText || !!streamingThink,
+  });
 
   // Mirror the live composer text into a ref. Declared before the switch effect so that
   // on a commit changing both `text` and `draftKey` (e.g. send → navigate + clear) this
@@ -1875,6 +1914,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       seen.current = new Set();
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
+      setSeeding(false);
       return;
     }
     const isSeq = (s: unknown): s is number =>
@@ -1892,6 +1932,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     }
     accRef.current = cached;
     setEvents(cached);
+    setSeeding(cached.length === 0); // nothing to paint yet — show the skeleton, not a blank pane
     setServerBgShells([]); // clear the previous session's list until the fetch below repopulates it
     seen.current = new Set(cached.map((e) => e.seq).filter(isSeq));
     oldestSeqRef.current = entry ? entry.oldestSeq : null;
@@ -1917,10 +1958,18 @@ export function AgentView({ runner }: { runner: Runner }) {
         if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
       }
     };
+    const seedAbort = new AbortController();
+    // Pending release of the events the first paint held back (see firstPaintSlice).
+    let paintRest: ReturnType<typeof setTimeout> | undefined;
     const stop = (): void => {
       closed = true;
       if (retry) clearTimeout(retry);
+      if (paintRest) clearTimeout(paintRest);
       es?.close();
+      // Scrubbing the list fires one tail page per session passed through (they're no longer
+      // debounced — see below); aborting the superseded one keeps at most a single seed in
+      // flight instead of a burst the user will never look at.
+      seedAbort.abort();
     };
     const push = (ev: RunEvent): void => {
       accRef.current = [...accRef.current, ev];
@@ -2047,8 +2096,61 @@ export function AgentView({ runner }: { runner: Runner }) {
       fails = 0;
       connect();
     };
-    // Debounce the network work: scrubbing the list with the arrow keys shouldn't open
-    // (and tear down) a connection — nor re-fetch approvals/queued turns — for each
+    // Tail-first seed, fired NOW rather than from the debounced block below: on a cache miss it
+    // is the only request whose answer the transcript is waiting on, so making it wait out the
+    // debounce — behind a whole-history /background scan, no less — was pure dead time under a
+    // blank pane. What the debounce protected against is covered by the abort in stop() instead.
+    // Null on a cache hit, where the SSE's replay of the gap after the cached seq is enough. The
+    // debounced block awaits this before connect(), so the stream still opens at the seq the
+    // page established, however long it took.
+    const seed: Promise<void> | null =
+      cached.length === 0
+        ? (async () => {
+            // Retry the tail seed a few times before giving up. A transient failure here used to fall
+            // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
+            // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
+            for (let attempt = 0; attempt < 3; attempt++) {
+              try {
+                const page = await getSessionEventPage(selectedId, {
+                  tail: TAIL_PAGE,
+                  signal: seedAbort.signal,
+                });
+                if (closed) return;
+                accRef.current = page.events;
+                for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+                oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+                hasMoreOlderRef.current = page.hasMore;
+                lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+                // Paint the newest slice first and release the rest after the browser has drawn it:
+                // a full page is a few hundred Markdown bodies to parse and highlight in one
+                // synchronous burst, which the user would otherwise spend staring at the skeleton.
+                // accRef keeps the whole page throughout, so the SSE and the cache are unaffected,
+                // and the remainder lands above a viewport that stays pinned to the tail.
+                const { now, deferred } = firstPaintSlice(page.events);
+                setEvents(now);
+                setSeeding(false); // history is on screen — drop the skeleton
+                writeCache();
+                if (deferred) {
+                  // A macrotask, not rAF: rAF callbacks run BEFORE the paint they're queued for,
+                  // which would merge the two renders and defeat the split.
+                  paintRest = setTimeout(() => {
+                    if (!closed) setEvents(accRef.current);
+                  }, 0);
+                }
+                return;
+              } catch {
+                if (closed) return;
+                // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
+                if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+              }
+            }
+            // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
+            // replay below is the remaining path to content.
+            if (!closed) setSeeding(false);
+          })()
+        : null;
+    // Debounce the rest of the network work: scrubbing the list with the arrow keys shouldn't
+    // open (and tear down) a connection — nor re-fetch approvals/queued turns — for each
     // session skipped past. The cached transcript above is already on screen meanwhile.
     const start = setTimeout(() => {
       // Pending approvals aren't in the event stream (separate table) — fetch them so
@@ -2065,51 +2167,39 @@ export function AgentView({ runner }: { runner: Runner }) {
       // The complete background-shell list (all launches, output recovered from Read polls) —
       // the loaded event window only holds the most recent launches, so without this the tray
       // under-counts a long session. Merged with the live-derived overlay in the tray. Throttled
-      // per session (BG_TTL_MS): this is a whole-history scan, so a re-open within the window paints
-      // the cached shells instead of re-running it. A failed fetch isn't cached, so it retries next open.
-      const bgCached = bgCacheRef.current.get(selectedId);
-      if (bgCached && Date.now() - bgCached.at < BG_TTL_MS) {
-        setServerBgShells(bgCached.shells);
-      } else {
+      // per session (BG_TTL_MS): this scans the session's whole history, so a re-open within the
+      // window paints the cached shells instead of re-running it. A failed fetch isn't cached, so
+      // it retries next open.
+      const loadBackgroundShells = (): void => {
+        const bgCached = bgCacheRef.current.get(selectedId);
+        if (bgCached && Date.now() - bgCached.at < BG_TTL_MS) {
+          setServerBgShells(bgCached.shells);
+          return;
+        }
         getBackgroundShells(selectedId)
           .then((shells) => {
             bgCacheRef.current.set(selectedId, { at: Date.now(), shells });
-            setServerBgShells(shells);
+            // Still cache it above (it belongs to `selectedId`, whenever it lands), but only the
+            // open session may paint: this now runs after the transcript, so a slow scan can
+            // easily outlive the switch away — and `serverBgShells` is one slot, not per-session.
+            if (!closed) setServerBgShells(shells);
           })
           .catch(() => undefined);
-      }
-      // Tail-first: on a cache miss, fetch just the newest page so the transcript opens
-      // straight at the latest message, then open the SSE from that page's max seq so it
-      // streams only new events (no full-history replay). With a cached transcript already on
-      // screen, skip straight to the SSE, which replays only the gap after the cached seq.
-      const boot = async (): Promise<void> => {
-        if (cached.length === 0) {
-          // Retry the tail seed a few times before giving up. A transient failure here used to fall
-          // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
-          // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const page = await getSessionEventPage(selectedId, { tail: TAIL_PAGE });
-              if (closed) return;
-              accRef.current = page.events;
-              for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-              oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-              hasMoreOlderRef.current = page.hasMore;
-              lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-              setEvents(accRef.current);
-              writeCache();
-              break;
-            } catch {
-              if (closed) return;
-              // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
-              if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-            }
-          }
-          if (closed) return;
-        }
-        connect();
       };
-      void boot();
+      // Open the stream once the seed above has established the resume point, so the SSE
+      // streams only what's newer than the page (no full-history replay). The seed started at
+      // t=0 and this block at t=SWITCH_DEBOUNCE_MS, so on a cache hit — or a seed that already
+      // landed — this connects immediately.
+      void (async () => {
+        await seed;
+        if (closed) return;
+        connect();
+        // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
+        // whereas the scan behind it is the most expensive read on this path. Issuing it here
+        // rather than alongside the seed keeps it from competing for the connection — and, on the
+        // server, the event loop — with the one request the transcript is actually waiting for.
+        loadBackgroundShells();
+      })();
     }, SWITCH_DEBOUNCE_MS);
     return () => {
       resumeStreamRef.current = null;
@@ -4228,10 +4318,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           ) : selectedId ? (
             <div className="agent-sessions" ref={scrollRef}>
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
-              {selected &&
-                !selectedTrashed &&
-                sessionRunStateOf(selectedSession ?? selected) === 'QUEUED' &&
-                events.length === 0 && (
+              {placeholder === 'queued' && (
                 <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
@@ -4242,6 +4329,9 @@ export function AgentView({ runner }: { runner: Runner }) {
                   <div className="chat-queued-desc">{slotWaitDescription}</div>
                 </div>
               )}
+              {/* An unvisited session's history is still in flight: hold the shape of a
+                  conversation instead of a blank pane. */}
+              {placeholder === 'skeleton' && <TranscriptSkeleton />}
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
                 <EventFullCtx.Provider value={fetchEventFull}>
                   <AuthErrorCtx.Provider value={authErrorHelp}>
@@ -4308,13 +4398,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   </span>
                 </div>
               ))}
-              {selected &&
-                !selectedTrashed &&
-                isSessionLive(selectedSession ?? selected) &&
-                sessionRunStateOf(selectedSession ?? selected) !== 'QUEUED' &&
-                events.length === 0 &&
-                !streamingText &&
-                !streamingThink && <div className="chat-note">Waiting for the agent…</div>}
+              {placeholder === 'waiting' && <div className="chat-note">Waiting for the agent…</div>}
               {selected &&
                 selectedTrashed &&
                 (() => {

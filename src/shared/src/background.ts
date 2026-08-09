@@ -77,6 +77,47 @@ function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 
+/**
+ * The subset of a session's events that `deriveBackgroundShells` can actually read: the two
+ * `tool_use` shapes it inspects (a background `Bash` launch, a `Read` poll of an `.output` file),
+ * the `tool_result`s belonging to exactly those calls, and the background_* events. Everything
+ * else — every ordinary Read/Write/Grep/Bash and its (often huge) result — is inert here.
+ *
+ * Exists because the apiserver serves the authoritative list by scanning a session's WHOLE
+ * history: feeding it every tool event meant hauling megabytes of untruncated payloads out of
+ * Postgres to derive, usually, an empty list. `SessionsService.getBackgroundShells` applies this
+ * same rule in SQL so the rows never leave the database; keep the two in step — the spec proves
+ * the narrowing is lossless by deriving over both and comparing.
+ *
+ * Two-stage by necessity: whether a `tool_result` matters depends on which `tool_use` it answers,
+ * which isn't knowable from the result alone.
+ */
+export function selectBackgroundDerivationEvents<T extends BgDeriveEvent>(events: T[]): T[] {
+  const wantedToolUseIds = new Set<string>();
+  for (const ev of events) {
+    if (ev.type !== RunEventType.TOOL_USE || !isBackgroundToolUse(ev.payload)) continue;
+    const id = obj(ev.payload).id;
+    if (id != null) wantedToolUseIds.add(String(id));
+  }
+  return events.filter((ev) => {
+    if (ev.type === RunEventType.TOOL_USE) return isBackgroundToolUse(ev.payload);
+    if (ev.type === RunEventType.TOOL_RESULT) {
+      const id = obj(ev.payload).toolUseId;
+      return id != null && wantedToolUseIds.has(String(id));
+    }
+    return ev.type === RunEventType.BACKGROUND_OUTPUT || ev.type === RunEventType.BACKGROUND_TASK;
+  });
+}
+
+/** The two `tool_use` shapes the derivation reads — see the numbered branches below. */
+function isBackgroundToolUse(payload: unknown): boolean {
+  const p = obj(payload);
+  const input = obj(p.input);
+  if (p.name === 'Bash') return input.run_in_background === true;
+  if (p.name === 'Read') return String(input.file_path ?? '').endsWith('.output');
+  return false;
+}
+
 export function deriveBackgroundShells(
   events: BgDeriveEvent[],
   ctx: BgShellCtx = { sessionLive: true },
