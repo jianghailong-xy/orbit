@@ -54,16 +54,24 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sweep(now = new Date()): Promise<void> {
-    // AWAITING_INPUT only: the session parked waiting for someone to say something, and that
-    // someone is us. Anything live is already working, and anything trashed, completed or
-    // being cancelled has an owner who moved on.
+    // Parked waiting for someone to say something, and that someone is us. That state has two
+    // spellings. AWAITING_INPUT is the session that simply idled; FAILED is what a quota-killed
+    // turn actually settles as — turn-complete fails the run so the list shows the failure
+    // instead of a silent idle row, and sets cancelRequestedAt to reclaim the runner slot the
+    // still-running process holds. Both of those are set by the same event a retry is armed
+    // for, so matching only the first matched none of the sessions this service exists for. A
+    // FAILED session stays resumable (resume() revives it and clears the cancel), so the honest
+    // condition is "still in the state it was armed in", not "not failed". Anything live is
+    // already working, and anything trashed, completed or mid-cancel has an owner who moved on.
     const due = await this.prisma.session.findMany({
       where: {
         quotaRetryAt: { lte: now },
-        status: RunStatus.AWAITING_INPUT,
-        cancelRequestedAt: null,
         deletedAt: null,
         completedAt: null,
+        OR: [
+          { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+          { status: RunStatus.FAILED },
+        ],
       },
       orderBy: { quotaRetryAt: 'asc' },
       take: MAX_PER_SWEEP,
@@ -75,6 +83,7 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
         numTurns: true,
         quotaRetryAttempts: true,
         assignedRunnerId: true,
+        status: true,
         assignedRunner: { select: { planUsage: true } },
       },
     });
@@ -99,12 +108,12 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
           now,
         );
         if (blockedUntil) {
-          await this.rearm(session.id, blockedUntil, attempts);
+          await this.rearm(session.id, session.status, blockedUntil, attempts);
           continue;
         }
 
         if (attempts >= BACKOFF_MS.length) {
-          await this.disarm(session.id, `gave up after ${attempts} attempts`);
+          await this.disarm(session.id, session.status, `gave up after ${attempts} attempts`);
           continue;
         }
 
@@ -112,7 +121,7 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
         if (!content) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
-          await this.disarm(session.id, 'nothing to re-send');
+          await this.disarm(session.id, session.status, 'nothing to re-send');
           continue;
         }
 
@@ -140,7 +149,9 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
         // try again rather than dropping the retry: the message is still unanswered.
         const spent = attempts + 1;
         const delay = BACKOFF_MS[Math.min(spent, BACKOFF_MS.length) - 1];
-        await this.rearm(session.id, new Date(now.getTime() + delay), spent).catch(() => {});
+        await this.rearm(session.id, session.status, new Date(now.getTime() + delay), spent).catch(
+          () => {},
+        );
         this.log.warn(
           `quota retry of ${session.id} failed (attempt ${spent}): ${
             e instanceof Error ? e.message : e
@@ -171,19 +182,26 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
    * Push the retry out to `at`. Gated on the session still being parked rather than on it
    * still being armed: the failure path runs *after* the claim has already cleared
    * quotaRetryAt, so an "is it still armed" guard here would silently drop every backoff and
-   * strand the session forever. AWAITING_INPUT is the honest condition either way — a session
-   * whose user has since taken over is no longer waiting on us.
+   * strand the session forever. `parkedAs` is the status the sweep read, so the gate says "no
+   * one has taken over since" for either shape of parked — a session whose user has since
+   * replied is no longer waiting on us. Passing it in rather than re-asserting AWAITING_INPUT
+   * is what keeps a FAILED row's backoff from being dropped by a filter it can never satisfy.
    */
-  private async rearm(sessionId: string, at: Date, attempts: number): Promise<void> {
+  private async rearm(
+    sessionId: string,
+    parkedAs: RunStatus,
+    at: Date,
+    attempts: number,
+  ): Promise<void> {
     await this.prisma.session.updateMany({
-      where: { id: sessionId, status: RunStatus.AWAITING_INPUT },
+      where: { id: sessionId, status: parkedAs },
       data: { quotaRetryAt: at, quotaRetryAttempts: attempts },
     });
   }
 
   /**
-   * Stop retrying. The session keeps its transcript, stays AWAITING_INPUT and stays
-   * resumable; the card in the UI flips to a manual retry. `quotaRetryAttempts` is left
+   * Stop retrying. The session keeps its transcript, keeps the status it was parked in and
+   * stays resumable; the card in the UI flips to a manual retry. `quotaRetryAttempts` is left
    * where it stopped so the card can say how many tries it took to get here.
    *
    * A task-bound session is deliberately NOT failed here. That is what it already does
@@ -191,9 +209,9 @@ export class QuotaRetryService implements OnModuleInit, OnModuleDestroy {
    * (tasks.service quotaBlockedRunners) that resumes such work on its own, and failing the
    * task would hand it to the auto-run backoff — a second retry mechanism racing this one.
    */
-  private async disarm(sessionId: string, why: string): Promise<void> {
+  private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {
     await this.prisma.session.updateMany({
-      where: { id: sessionId, status: RunStatus.AWAITING_INPUT },
+      where: { id: sessionId, status: parkedAs },
       data: { quotaRetryAt: null },
     });
     this.log.warn(`quota retry of ${sessionId} disarmed: ${why}`);

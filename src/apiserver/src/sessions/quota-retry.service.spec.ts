@@ -24,7 +24,17 @@ function makeService(
   const resumed: Array<{ id: string; content: string }> = [];
   const prisma = {
     session: {
-      findMany: async () => rows,
+      // Honour the selection predicate rather than returning everything: the regression this
+      // service shipped was a `where` that matched none of the sessions it exists for, and a
+      // fake that ignores `where` cannot see that. Only the status/cancel branches are
+      // evaluated — `quotaRetryAt` deliberately is not, so a fixture can model a row that was
+      // armed when the query ran and lost the claim before this sweep reached it.
+      findMany: async (args: { where: { OR?: Array<Record<string, unknown>> } }) =>
+        rows.filter((r) =>
+          (args.where.OR ?? []).some((cond) =>
+            Object.entries(cond).every(([k, v]) => (r[k] ?? null) === v),
+          ),
+        ),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updates.push(args);
         // Honour the guards the service relies on: `quotaRetryAt: { not: null }` is the claim
@@ -148,4 +158,36 @@ test('loses the claim to a user message that lands first', async () => {
   const { service, resumed } = makeService([row({ quotaRetryAt: null })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'the user took over; a second turn must not appear behind them');
+});
+
+// A quota that kills a turn settles the run FAILED with cancelRequestedAt set (turn-complete
+// reclaims the runner slot that way), so this — not AWAITING_INPUT — is the state nearly every
+// armed retry is actually sitting in.
+test('retries a session the quota failure settled FAILED', async () => {
+  const { service, resumed } = makeService([
+    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original message' }]);
+});
+
+test('backs off a FAILED session instead of stranding it', async () => {
+  const { service, rows } = makeService([row({ status: RunStatus.FAILED, cancelRequestedAt: PAST })], {
+    resume: async () => {
+      throw new Error('runner offline');
+    },
+  });
+  await service.sweep(NOW);
+  assert.equal(rows[0].quotaRetryAttempts, 1);
+  assert.deepEqual(
+    rows[0].quotaRetryAt,
+    new Date(NOW.getTime() + 2 * 60_000),
+    're-armed under the status it was parked in, not one it can never satisfy',
+  );
+});
+
+test('skips an idle session that is being torn down', async () => {
+  const { service, resumed } = makeService([row({ cancelRequestedAt: PAST })]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'its owner asked for it to end; do not start a turn behind that');
 });
