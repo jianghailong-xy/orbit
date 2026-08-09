@@ -112,7 +112,7 @@ import {
   ApiError,
   type ApprovalInfo,
   completeSession,
-  cancelQuotaRetry,
+  cancelAutoRetry,
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
@@ -140,7 +140,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, ChatImage, EventFullCtx, MD, QuotaLimitCtx, type QuotaLimitHelp, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -3556,15 +3556,15 @@ export function AgentView({ runner }: { runner: Runner }) {
       navigate,
     ],
   );
-  // The same retry, plus the pending auto-retry, for the quota card. Disarming is a plain
-  // fire-and-forget: the detail query refetches on settle, and the card's own countdown is
-  // driven by the value it reads back.
-  const quotaLimitHelp: QuotaLimitHelp = useMemo(
+  // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
+  // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
+  // countdown is driven by the value it reads back.
+  const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
       provider: shownProvider,
       runnerName: runner.name,
-      retryAt: detailForSelected?.quotaRetryAt ?? null,
-      attempts: detailForSelected?.quotaRetryAttempts ?? 0,
+      retryAt: detailForSelected?.retryAt ?? null,
+      attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
           ? () => sendMutate({ content: retryText, images: [] })
@@ -3572,7 +3572,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       retryText,
       onCancelAuto: selected?.id
         ? () => {
-            cancelQuotaRetry(selected.id)
+            cancelAutoRetry(selected.id)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
               .catch((e: Error) => message.error(e.message));
           }
@@ -3581,8 +3581,8 @@ export function AgentView({ runner }: { runner: Runner }) {
     [
       shownProvider,
       runner.name,
-      detailForSelected?.quotaRetryAt,
-      detailForSelected?.quotaRetryAttempts,
+      detailForSelected?.retryAt,
+      detailForSelected?.retryAttempts,
       retryText,
       selectedTrashed,
       selectedMissing,
@@ -4365,9 +4365,9 @@ export function AgentView({ runner }: { runner: Runner }) {
               <SessionNavCtx.Provider value={(rawId) => navigate(`/sessions/${encodeId(rawId)}`)}>
                 <EventFullCtx.Provider value={fetchEventFull}>
                   <AuthErrorCtx.Provider value={authErrorHelp}>
-                    <QuotaLimitCtx.Provider value={quotaLimitHelp}>
+                    <AutoRetryCtx.Provider value={autoRetryHelp}>
                       <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
-                    </QuotaLimitCtx.Provider>
+                    </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>

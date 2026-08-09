@@ -243,12 +243,12 @@ export class SessionsController {
     return this.sessions.disableShare(user.userId, id);
   }
 
-  /** Turn off the pending "retry when the quota resets" on this session. There is no matching
-   *  POST: arming happens by itself when a quota kills a turn, and re-arming by hand would
-   *  need a reset time nobody has — once it is off, the way back is the card's Retry button. */
-  @Delete(':id/quota-retry')
-  cancelQuotaRetry(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
-    return this.sessions.cancelQuotaRetry(user.userId, id);
+  /** Turn off the pending auto-retry on this session. There is no matching POST: arming happens
+   *  by itself when a quota or a transient provider error kills a turn, and re-arming by hand
+   *  would need a moment nobody has — once it is off, the way back is the card's Retry button. */
+  @Delete(':id/auto-retry')
+  cancelAutoRetry(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+    return this.sessions.cancelAutoRetry(user.userId, id);
   }
 
   @Post(':id/complete')

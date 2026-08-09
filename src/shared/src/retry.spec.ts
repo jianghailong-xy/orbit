@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { lastUserMessageText, parseQuotaResetAt } from './retry';
+import {
+  API_ERROR_RETRY_BACKOFF_MS,
+  apiErrorRetryAt,
+  lastUserMessageText,
+  parseQuotaResetAt,
+} from './retry';
 
 describe('lastUserMessageText', () => {
   it('uses the latest emitted user message', () => {
@@ -20,6 +25,25 @@ describe('lastUserMessageText', () => {
 
   it('does not mistake the opening prompt for the latest message of an established session', () => {
     expect(lastUserMessageText([{ type: 'error', payload: {} }], 'old opening prompt', 2)).toBe('');
+  });
+});
+
+describe('apiErrorRetryAt', () => {
+  const now = new Date('2026-08-08T10:00:00Z');
+
+  it('steps through the backoff as attempts are spent', () => {
+    const at = (attempts: number) => apiErrorRetryAt(attempts, now, () => 0)!.getTime() - +now;
+    expect(API_ERROR_RETRY_BACKOFF_MS.map((_, i) => at(i))).toEqual(API_ERROR_RETRY_BACKOFF_MS);
+  });
+
+  it('hands back once the attempts are spent', () => {
+    expect(apiErrorRetryAt(API_ERROR_RETRY_BACKOFF_MS.length, now)).toBeNull();
+  });
+
+  it('scatters retries within a quarter of the step, never before it', () => {
+    const spread = apiErrorRetryAt(0, now, () => 0.999)!.getTime() - +now;
+    expect(spread).toBeGreaterThanOrEqual(API_ERROR_RETRY_BACKOFF_MS[0]);
+    expect(spread).toBeLessThanOrEqual(API_ERROR_RETRY_BACKOFF_MS[0] * 1.25);
   });
 });
 

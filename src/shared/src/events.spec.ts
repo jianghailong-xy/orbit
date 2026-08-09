@@ -4,6 +4,7 @@ import {
   isAsyncAgentLaunchAck,
   isAuthErrorText,
   isBenignEngineStderr,
+  isRetryableApiErrorText,
   isUsageLimitErrorText,
   toolResultText,
 } from './events';
@@ -58,6 +59,53 @@ describe('isApiErrorText', () => {
   it('ignores normal text', () => {
     expect(isApiErrorText('all good')).toBe(false);
     expect(isApiErrorText(null)).toBe(false);
+  });
+});
+
+describe('isRetryableApiErrorText', () => {
+  it('flags the provider being briefly unable to answer', () => {
+    expect(
+      isRetryableApiErrorText(
+        'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableApiErrorText(
+        'API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}',
+      ),
+    ).toBe(true);
+    expect(isRetryableApiErrorText('API Error: 503 Service Unavailable')).toBe(true);
+  });
+
+  it('flags a call that never reached a status code', () => {
+    // Verbatim from the turn-complete fixture — the stream died mid-reply.
+    expect(isRetryableApiErrorText('API Error: Connection closed mid-response.')).toBe(true);
+    expect(isRetryableApiErrorText('API Error: Connection error.')).toBe(true);
+    expect(isRetryableApiErrorText('API Error: Request timed out.')).toBe(true);
+  });
+
+  it('leaves alone the errors a re-send reproduces exactly', () => {
+    expect(
+      isRetryableApiErrorText(
+        'API Error: 400 {"type":"error","error":{"type":"invalid_request_error",' +
+          '"message":"prompt is too long: 234523 tokens > 200000 maximum"}}',
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableApiErrorText('API Error: 400 Output blocked by content filtering policy'),
+    ).toBe(false);
+    expect(isRetryableApiErrorText('API Error: 401 Unauthorized')).toBe(false);
+  });
+
+  // The status wins over anything the body happens to say: a 400 is a 400.
+  it('does not let body wording override the status', () => {
+    expect(isRetryableApiErrorText('API Error: 400 the request timed out earlier')).toBe(false);
+  });
+
+  it('does not retry what it cannot place', () => {
+    expect(isRetryableApiErrorText('API Error: something new nobody has seen')).toBe(false);
+    expect(isRetryableApiErrorText('all good')).toBe(false);
+    expect(isRetryableApiErrorText(null)).toBe(false);
   });
 });
 

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { AuthErrorCtx, MD, type RunEvent, Transcript } from './Transcript';
+import { AutoRetryCtx, type AutoRetryHelp, AuthErrorCtx, MD, type RunEvent, Transcript } from './Transcript';
 
 const AUTH_FAILED =
   'Failed to authenticate: Codex is installed on this runner but not signed in — sign in from here, or run `codex login` on that machine.';
@@ -47,6 +47,59 @@ describe('transcript sign-in cards', () => {
 
     expect(html).toContain('ship the thing');
     expect(html).toContain('Retry — re-send my last message');
+  });
+});
+
+// A provider that briefly cannot answer is a pause, not an error to act on: the transcript owes
+// the reader a pending retry, not a red line they have to do something about. The distinction is
+// made on the error text alone, so the two halves are tested together.
+describe('transient provider error card', () => {
+  const OVERLOADED =
+    'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}';
+  const TOO_LONG =
+    'API Error: 400 {"type":"error","error":{"type":"invalid_request_error",' +
+    '"message":"prompt is too long: 234523 tokens > 200000 maximum"}}';
+
+  const render = (text: string, help?: AutoRetryHelp) =>
+    renderToStaticMarkup(
+      <AutoRetryCtx.Provider value={help ?? null}>
+        <Transcript events={[{ seq: 1, type: 'assistant', payload: { text } }]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+  it('turns an overloaded API into a retry card carrying the error verbatim', () => {
+    const html = render(OVERLOADED);
+
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain('overloaded_error');
+    expect(html).not.toContain('chat-error');
+  });
+
+  it('leaves an error a re-send would reproduce as a plain error line', () => {
+    const html = render(TOO_LONG);
+
+    expect(html).toContain('chat-error');
+    expect(html).toContain('prompt is too long');
+    expect(html).not.toContain('Provider unavailable');
+  });
+
+  it('counts down to the armed retry', () => {
+    const html = render(OVERLOADED, {
+      provider: 'claude',
+      retryAt: new Date(Date.now() + 30_000).toISOString(),
+      attempts: 1,
+    });
+
+    expect(html).toContain('Retrying');
+    expect(html).toContain('sec');
+  });
+
+  it('says so once the attempts are spent, rather than showing a dead countdown', () => {
+    const html = render(OVERLOADED, { provider: 'claude', retryAt: null, attempts: 3 });
+
+    expect(html).toContain('Auto-retry gave up');
+    expect(html).toContain('the API is still failing');
   });
 });
 

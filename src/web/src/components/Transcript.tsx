@@ -28,7 +28,14 @@ import {
 import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { isApiErrorText, isAuthErrorText, isBenignEngineStderr, isUsageLimitErrorText } from '@orbit/shared';
+import {
+  isApiErrorText,
+  isAuthErrorText,
+  isBenignEngineStderr,
+  isRetryableApiErrorText,
+  isUsageLimitErrorText,
+  MAX_API_ERROR_RETRIES,
+} from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
@@ -233,9 +240,17 @@ type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
 type ErrorNode = { kind: 'error'; seq: number; message: string };
 type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
-// `stale` marks every quota card but the most recent one. The armed retry is a single value
-// on the session, so an older outage's card must not claim it — it reads as history.
-type QuotaLimitNode = { kind: 'quotaLimit'; seq: number; message: string; stale?: boolean };
+// A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
+// account's quota spent, or the provider briefly unable to answer. `stale` marks every such
+// card but the most recent one — the armed retry is a single value on the session, so an older
+// outage's card must not claim it; it reads as history.
+type AutoRetryNode = {
+  kind: 'autoRetry';
+  seq: number;
+  message: string;
+  variant: AutoRetryVariant;
+  stale?: boolean;
+};
 type Node =
   | ToolNode
   | TextNode
@@ -243,7 +258,7 @@ type Node =
   | MarkerNode
   | ErrorNode
   | AuthErrorNode
-  | QuotaLimitNode;
+  | AutoRetryNode;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
@@ -271,20 +286,25 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     if (prev?.kind === 'authError' && prev.message === message) return;
     list.push({ kind: 'authError', seq, message });
   };
-  // Only the latest quota card is live; the ones above it describe outages that are over.
+  // Only the latest auto-retry card is live; the ones above it describe outages that are over.
   // "Over" is decided by the next user message, whoever sent it: the retry firing, the user
   // retrying by hand, and the user typing something else all land as one. Without this, a
   // session that recovered would keep the card of the outage it recovered from, and — since
-  // the armed retry is cleared once it fires — render it as "no reset time known".
-  let liveQuota: QuotaLimitNode | undefined;
-  const quotaLimit = (parentId: string | undefined, seq: number, message: string) => {
-    if (liveQuota) liveQuota.stale = true;
-    liveQuota = { kind: 'quotaLimit', seq, message };
-    into(parentId).push(liveQuota);
+  // the armed retry is cleared once it fires — render it as "nothing pending".
+  let liveRetry: AutoRetryNode | undefined;
+  const autoRetry = (
+    parentId: string | undefined,
+    seq: number,
+    message: string,
+    variant: AutoRetryVariant,
+  ) => {
+    if (liveRetry) liveRetry.stale = true;
+    liveRetry = { kind: 'autoRetry', seq, message, variant };
+    into(parentId).push(liveRetry);
   };
-  const quotaOutageOver = () => {
-    if (liveQuota) liveQuota.stale = true;
-    liveQuota = undefined;
+  const outageOver = () => {
+    if (liveRetry) liveRetry.stale = true;
+    liveRetry = undefined;
   };
 
   for (const ev of events) {
@@ -292,7 +312,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     const parent: string | undefined = p.parentToolUseId;
     switch (ev.type) {
       case 'user': {
-        quotaOutageOver();
+        outageOver();
         // The composer's just-sent previews join in by turnId (instant, local object URLs);
         // the runner also echoes durable image refs in the event payload, used when there's
         // no local preview (after a reload, or the server-seeded first turn). An image-only
@@ -334,10 +354,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           // the same way but gets its own card: the fix is a human action, so a bare error
           // line would leave the user staring at a diagnosis with no remedy.
           if (isAuthErrorText(text)) authError(parent, ev.seq, text);
-          // A spent account quota arrives the same way again, and is the one of the three
-          // that fixes itself: the card carries the reset time and the pending auto-retry
-          // rather than an action for the user.
-          else if (isUsageLimitErrorText(text)) quotaLimit(parent, ev.seq, text);
+          // A spent account quota arrives the same way again, and so does the provider simply
+          // being unable to answer right now. Those two fix themselves: their card carries the
+          // pending auto-retry rather than an action for the user. Everything else keeps the
+          // bare error line — an API error we cannot place is one a re-send would reproduce.
+          else if (isUsageLimitErrorText(text)) autoRetry(parent, ev.seq, text, 'quota');
+          else if (isRetryableApiErrorText(text)) autoRetry(parent, ev.seq, text, 'apiError');
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else into(parent).push({ kind: 'assistant', seq: ev.seq, text });
         }
@@ -537,8 +559,15 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     case 'authError':
       return <AuthErrorCard message={node.message} seq={node.seq} />;
-    case 'quotaLimit':
-      return <QuotaLimitCard message={node.message} seq={node.seq} stale={node.stale} />;
+    case 'autoRetry':
+      return (
+        <AutoRetryCard
+          message={node.message}
+          seq={node.seq}
+          stale={node.stale}
+          variant={node.variant}
+        />
+      );
   }
 }
 
@@ -634,13 +663,17 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   );
 }
 
+/** Which self-healing failure the card is about. They differ only in wording and in how long
+ *  the server keeps trying; everything else about the card is identical. */
+export type AutoRetryVariant = 'quota' | 'apiError';
+
 /**
- * What a quota card needs beyond the message itself: when the pending retry fires, and how to
- * take it over. AgentView supplies this; the shared/public page leaves it null, so the card
- * there degrades to the diagnosis alone (a logged-out viewer can neither retry nor disarm).
+ * What an auto-retry card needs beyond the message itself: when the pending retry fires, and
+ * how to take it over. AgentView supplies this; the shared/public page leaves it null, so the
+ * card there degrades to the diagnosis alone (a logged-out viewer can neither retry nor disarm).
  */
-export interface QuotaLimitHelp {
-  /** Session's provider slug, for naming the quota that ran out. */
+export interface AutoRetryHelp {
+  /** Session's provider slug, for naming whose quota ran out / whose API failed. */
   provider: string;
   /** Runner display name, so the card names the machine whose account this is. */
   runnerName?: string;
@@ -655,10 +688,15 @@ export interface QuotaLimitHelp {
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
 }
-export const QuotaLimitCtx = createContext<QuotaLimitHelp | null>(null);
+export const AutoRetryCtx = createContext<AutoRetryHelp | null>(null);
 
-/** How many attempts the server spends before handing back (quota-retry.service BACKOFF_MS). */
-const QUOTA_RETRY_MAX_ATTEMPTS = 5;
+/** How many attempts the server spends before handing back. A quota is retried until its own
+ *  reported reset stops moving (auto-retry.service BACKOFF_MS); a provider error gets the
+ *  shorter API_ERROR_RETRY_BACKOFF_MS ladder. */
+const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
+  quota: 5,
+  apiError: MAX_API_ERROR_RETRIES,
+};
 
 /** The window that ran out, in the runtime's own terms. */
 function quotaWindow(message: string): { title: string; what: string } {
@@ -677,8 +715,11 @@ function formatResetAt(at: Date): string {
   return sameDay ? time : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
 }
 
-/** "in 11 min" / "in 2 hr" / "in 2 days" — the felt distance, next to the absolute time. */
+/** "in 27 sec" / "in 11 min" / "in 2 hr" / "in 2 days" — the felt distance, next to the absolute
+ *  time. Seconds matter: a provider-error retry is 30 seconds out, and rounding that up to
+ *  "in 1 min" reads as a countdown that isn't moving. */
 function formatCountdown(ms: number): string {
+  if (ms < 60_000) return `in ${Math.max(1, Math.ceil(ms / 1000))} sec`;
   const min = Math.ceil(ms / 60_000);
   if (min < 60) return `in ${min} min`;
   const hr = Math.round(min / 60);
@@ -687,21 +728,28 @@ function formatCountdown(ms: number): string {
 }
 
 /**
- * An exhausted account quota: not an error, a pause. While a retry is armed the card stays
- * visually neutral — the situation is handled and nothing is being asked of the reader. It
- * escalates to the warning tint only when the ball is back in their court: no reset time could
- * be determined, the retries ran out, or they switched it off themselves.
+ * A failure that fixes itself: not an error to act on, a pause. While a retry is armed the card
+ * stays visually neutral — the situation is handled and nothing is being asked of the reader. It
+ * escalates to the warning tint only when the ball is back in their court: no moment to retry at
+ * could be determined, the retries ran out, or they switched it off themselves.
+ *
+ * Both variants share this shape because they share the situation. Only the wording differs, and
+ * one detail beneath it: a quota card leads with when the window resets (a time the reader may
+ * need to plan around), while a provider error leads with the error itself, since "which one"
+ * is the only thing they can act on if it keeps happening.
  */
-function QuotaLimitCard({
+function AutoRetryCard({
   message,
   seq,
   stale,
+  variant,
 }: {
   message: string;
   seq?: number;
   stale?: boolean;
+  variant: AutoRetryVariant;
 }) {
-  const help = useContext(QuotaLimitCtx);
+  const help = useContext(AutoRetryCtx);
   const live = !stale && !!help;
   const retryAt = live && help?.retryAt ? new Date(help.retryAt) : null;
   // Re-render on a timer only while there is a countdown to move.
@@ -715,10 +763,11 @@ function QuotaLimitCard({
   const msLeft = retryAt ? retryAt.getTime() - now : 0;
   const armed = !!retryAt && msLeft > 0;
   const firing = !!retryAt && msLeft <= 0;
-  const gaveUp = live && !retryAt && (help?.attempts ?? 0) >= QUOTA_RETRY_MAX_ATTEMPTS;
+  const gaveUp = live && !retryAt && (help?.attempts ?? 0) >= MAX_ATTEMPTS[variant];
   // Escalate only when this outage is still open AND nothing is going to move it. A stale
   // card (the session went on) and a share-page one (no context) are history, not an alarm.
   const needsYou = live && !armed && !firing;
+  const quota = variant === 'quota';
   const window = quotaWindow(message);
 
   return (
@@ -729,28 +778,48 @@ function QuotaLimitCard({
         ) : (
           <ClockCircleFilled className="chat-quota-icon" />
         )}
-        <div className="chat-quota-title">{gaveUp ? 'Auto-retry gave up' : window.title}</div>
+        <div className="chat-quota-title">
+          {gaveUp ? 'Auto-retry gave up' : quota ? window.title : 'Provider unavailable'}
+        </div>
       </div>
       <div className="chat-quota-msg">
         {/* An unarmed card cannot tell WHY it is unarmed: "the user switched it off" and "no
-            reset time could be determined" are both spelled `quotaRetryAt: null`, and guessing
+            moment to retry at could be determined" are both spelled `retryAt: null`, and guessing
             wrong tells the user their own click was a system limitation. So it states only what
             is true either way, and the reason is visible in what they just did. */}
         {gaveUp
-          ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
-          : `${window.what} for ${help?.provider ?? 'this provider'}${
-              help?.runnerName ? ` on “${help.runnerName}”` : ''
-            } is used up.${needsYou ? ' Auto-retry is off.' : ''}`}
+          ? quota
+            ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
+            : `Tried ${help?.attempts} times — the API is still failing. Over to you.`
+          : quota
+            ? `${window.what} for ${help?.provider ?? 'this provider'}${
+                help?.runnerName ? ` on “${help.runnerName}”` : ''
+              } is used up.${needsYou ? ' Auto-retry is off.' : ''}`
+            : `The ${help?.provider ?? 'provider'} API could not answer — nothing about your
+               message caused it.${needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
+      {/* The error verbatim. Which one it was is the only actionable detail if it keeps
+          recurring, and unlike a quota's sentence it is not restated by anything above. */}
+      {!quota && <div className="chat-quota-err">{message}</div>}
       {armed && (
         <>
           <div className="chat-quota-when">
-            Resets <b>{formatResetAt(retryAt!)}</b>{' '}
-            <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
+            {quota ? (
+              <>
+                Resets <b>{formatResetAt(retryAt!)}</b>{' '}
+                <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
+              </>
+            ) : (
+              <>
+                Retrying <b>{formatCountdown(msLeft)}</b>
+              </>
+            )}
           </div>
           <div className="chat-quota-auto">
             <div className="chat-quota-auto-txt">
-              <div className="chat-quota-auto-l">Auto-retry when the quota resets</div>
+              <div className="chat-quota-auto-l">
+                {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
+              </div>
               <div className="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
             </div>
             {help?.onCancelAuto && (
@@ -787,7 +856,9 @@ function QuotaLimitCard({
             </button>
             {armed && (
               <span className="chat-quota-note">
-                The quota hasn’t reset yet — this will likely fail again.
+                {quota
+                  ? 'The quota hasn’t reset yet — this will likely fail again.'
+                  : 'The API may still be failing — this could fail again.'}
               </span>
             )}
           </div>

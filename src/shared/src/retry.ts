@@ -1,9 +1,10 @@
 /**
- * What a retry re-sends, and when a quota-blocked one may fire.
+ * What a retry re-sends, and when it may fire — for both failures that arm one: an exhausted
+ * account quota, and a transient provider error ("API Error: 529 … overloaded_error").
  *
- * Both halves are shared because two callers must agree on them: the transcript card (which
- * shows the user what will happen) and the server's quota sweeper (which does it). A card
- * promising one message while the server sends another is worse than no card.
+ * All of it is shared because two callers must agree on it: the transcript card (which shows
+ * the user what will happen) and the server's sweeper (which does it). A card promising one
+ * message while the server sends another is worse than no card.
  */
 
 /** The minimum an event needs for {@link lastUserMessageText} — RunEvent, structurally. */
@@ -31,6 +32,40 @@ export function lastUserMessageText(
     if (typeof text === 'string' && text.trim()) return text;
   }
   return numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '';
+}
+
+/**
+ * How long to wait before re-sending a message a transient provider error killed
+ * (`isRetryableApiErrorText`), indexed by how many auto-retries this run of failures has
+ * already spent.
+ *
+ * Seconds, not the quota's minutes: an overloaded API is usually back within one, and a
+ * failure the user is watching should not sit visibly idle for longer than the thing it is
+ * waiting on. The length is also the cap — an error that survived three spaced retries is not
+ * the transient kind this exists for, so the session goes back to the user rather than
+ * spending more of their quota on it.
+ */
+export const API_ERROR_RETRY_BACKOFF_MS = [30_000, 2 * 60_000, 5 * 60_000];
+
+/** How many auto-retries a transient provider error gets before it is handed back. */
+export const MAX_API_ERROR_RETRIES = API_ERROR_RETRY_BACKOFF_MS.length;
+
+/**
+ * When to re-send after a transient provider error, or null once the attempts are spent.
+ *
+ * The jitter is the same precaution as the quota retry's, for the same reason: an overload is
+ * a fact about the provider, so every session that hit it comes due at once and releasing them
+ * in lockstep reproduces it. Scaled to the step, so the 30-second one is not smeared into
+ * minutes.
+ */
+export function apiErrorRetryAt(
+  attempts: number,
+  now: Date,
+  rand: () => number = Math.random,
+): Date | null {
+  const step = API_ERROR_RETRY_BACKOFF_MS[attempts];
+  if (step === undefined) return null;
+  return new Date(now.getTime() + step + Math.floor(rand() * step * 0.25));
 }
 
 const MONTHS = [

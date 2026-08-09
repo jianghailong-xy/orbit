@@ -53,6 +53,59 @@ export function isApiErrorText(text: string | null | undefined): boolean {
 }
 
 /**
+ * HTTP statuses an `API Error:` line may carry that describe the *provider*, not this request:
+ * 529 is Anthropic's "overloaded", 500/502/503/504 are the generic upstream failures, and
+ * 408/429 mean the call was early, not wrong. Every one of them succeeds on a plain re-send
+ * once the far side recovers.
+ *
+ * Deliberately not listed: 400 (a prompt over the context limit, or output blocked by content
+ * filtering), 401/403 (credentials) and 404. Those are facts about the request that a re-send
+ * reproduces exactly — retrying them burns the account's quota and hides the error behind a
+ * spinner.
+ */
+const RETRYABLE_API_ERROR_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
+
+/**
+ * Transport-level `API Error:` phrasings that carry no status code — the call never reached a
+ * response to have one. As with {@link USAGE_LIMIT_ERROR_MARKERS}, only wording actually
+ * observed is listed: an unrecognized error is left alone rather than retried, so a missing
+ * entry costs a manual retry while a guessed one costs a silent retry loop.
+ *
+ * Plain lowercase substrings.
+ */
+export const RETRYABLE_API_ERROR_MARKERS = [
+  // The stream died between the request and the reply.
+  'connection closed mid-response',
+  // Claude Code's wrapper around a socket/DNS failure.
+  'connection error',
+  'timed out',
+  'timeout',
+  // A 529 body says `overloaded_error`; the status check already covers that one, but the
+  // runtime also prints the bare word when it has no response to read a status off.
+  'overloaded',
+];
+
+/**
+ * Is this API error the transient kind — the provider being briefly unable to answer, rather
+ * than anything about the message? Such a failure carries no information about the work: the
+ * same message sent a minute later usually succeeds, which is what makes it safe to re-send
+ * on the user's behalf (see the session's armed retry).
+ *
+ * Default is NOT retryable. An `API Error` line we cannot place stays a plain error in the
+ * transcript, because the failure mode of guessing wrong is an automatic loop that re-sends
+ * into a wall.
+ */
+export function isRetryableApiErrorText(text: string | null | undefined): boolean {
+  if (!isApiErrorText(text)) return false;
+  const lower = text!.toLowerCase();
+  // The status, when there is one, is authoritative: a 400 whose message happens to contain
+  // the word "timeout" is still a 400.
+  const status = lower.match(/^\s*api error:?\s*(\d{3})\b/);
+  if (status) return RETRYABLE_API_ERROR_STATUSES.has(Number(status[1]));
+  return RETRYABLE_API_ERROR_MARKERS.some((marker) => lower.includes(marker));
+}
+
+/**
  * Does an assistant message / result text carry a *sign-in* failure — the runtime's stored
  * credentials being gone, expired or rejected ("Failed to authenticate: OAuth session expired
  * and could not be refreshed")? Like an API error this arrives as plain `assistant` text with a

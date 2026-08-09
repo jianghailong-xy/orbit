@@ -1309,17 +1309,17 @@ export class SessionsService {
   }
 
   /**
-   * Stop the pending quota retry on this session. The user is saying they will decide when
+   * Stop the pending auto-retry on this session. The user is saying they will decide when
    * (or whether) to send this message again — the transcript card keeps its manual Retry.
    * Idempotent: a retry that already fired, or was never armed, is a no-op.
    */
-  async cancelQuotaRetry(ownerId: string, id: string): Promise<{ ok: true }> {
+  async cancelAutoRetry(ownerId: string, id: string): Promise<{ ok: true }> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    await this.prisma.session.update({ where: { id }, data: { quotaRetryAt: null } });
+    await this.prisma.session.update({ where: { id }, data: { retryAt: null } });
     return { ok: true };
   }
 
@@ -2163,11 +2163,11 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
-          // A message on this session disarms any quota retry waiting on it — whether it
+          // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
           // (the retry has now fired). Both routes into a new turn pass through here.
-          quotaRetryAt: null,
+          retryAt: null,
           ...(session.mergeStatus === 'pending'
             ? {
                 mergeStatus: null,
@@ -3000,8 +3000,8 @@ export class SessionsService {
           completedAt: null,
           archivedAt: null,
           // As in createTurn: a new message — the user's or the sweeper's own — disarms the
-          // quota retry. This is the route the sweeper itself takes for a parked session.
-          quotaRetryAt: null,
+          // auto-retry. This is the route the sweeper itself takes for a terminal session.
+          retryAt: null,
           ...(dto.model !== undefined ? { model: dto.model } : {}),
           ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),

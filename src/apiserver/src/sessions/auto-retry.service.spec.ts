@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
-import { QuotaRetryService } from './quota-retry.service';
+import { AutoRetryService } from './auto-retry.service';
 import type { SessionsService } from './sessions.service';
 
 const NOW = new Date('2026-08-03T16:25:00Z');
@@ -27,8 +27,8 @@ function makeService(
       // Honour the selection predicate rather than returning everything: the regression this
       // service shipped was a `where` that matched none of the sessions it exists for, and a
       // fake that ignores `where` cannot see that. Only the status/cancel branches are
-      // evaluated — `quotaRetryAt` deliberately is not, so a fixture can model a row that was
-      // armed when the query ran and lost the claim before this sweep reached it.
+      // evaluated — `retryAt` deliberately is not, so a fixture can model a row that was armed
+      // when the query ran and lost the claim before this sweep reached it.
       findMany: async (args: { where: { OR?: Array<Record<string, unknown>> } }) =>
         rows.filter((r) =>
           (args.where.OR ?? []).some((cond) =>
@@ -37,15 +37,15 @@ function makeService(
         ),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updates.push(args);
-        // Honour the guards the service relies on: `quotaRetryAt: { not: null }` is the claim
-        // (a fixture with quotaRetryAt null models a user message that already won it), and
-        // `status` is the "nobody has taken over" gate the backoff path uses.
+        // Honour the guards the service relies on: `retryAt: { not: null }` is the claim (a
+        // fixture with retryAt null models a user message that already won it), and `status`
+        // is the "nobody has taken over" gate the backoff path uses.
         const row = rows.find((r) => r.id === args.where.id);
-        const where = args.where as { status?: string; quotaRetryAt?: { not: null } };
+        const where = args.where as { status?: string; retryAt?: { not: null } };
         const hit =
           !!row &&
-          (where.quotaRetryAt === undefined || row.quotaRetryAt != null) &&
-          (where.status === undefined || row.status === where.status);
+          (where.retryAt === undefined || row.retryAt != null) &&
+          (where.status === undefined || where.status === row.status);
         if (hit) Object.assign(row as object, args.data);
         return { count: hit ? 1 : 0 };
       },
@@ -68,7 +68,7 @@ function makeService(
       return { turnId: 't', seq: 1 };
     },
   } as unknown as SessionsService;
-  const service = new QuotaRetryService(prisma as never, sessions);
+  const service = new AutoRetryService(prisma as never, sessions);
   return { service, updates, resumed, rows };
 }
 
@@ -79,8 +79,8 @@ function row(over: SessionRow = {}): SessionRow {
     provider: 'claude',
     prompt: 'opening prompt',
     numTurns: 3,
-    quotaRetryAt: PAST,
-    quotaRetryAttempts: 0,
+    retryAt: PAST,
+    retryAttempts: 0,
     assignedRunnerId: 'runner-1',
     assignedRunner: { planUsage: null },
     status: RunStatus.AWAITING_INPUT,
@@ -94,76 +94,10 @@ test('re-sends the last user message once the quota is back', async () => {
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original message' }]);
 });
 
-test('defers without spending an attempt while the snapshot still reports the quota spent', async () => {
-  const { service, resumed, rows } = makeService([
-    row({ assignedRunner: { planUsage: stillBlocked } }),
-  ]);
-  await service.sweep(NOW);
-  assert.deepEqual(resumed, [], 'must not burn a turn against a quota known to be spent');
-  assert.equal(rows[0].quotaRetryAttempts, 0, 'a deferral is not a failed attempt');
-  assert.deepEqual(rows[0].quotaRetryAt, new Date(FUTURE), 're-armed for the reported reset');
-});
-
-test('releases one session per (runner, provider) per sweep', async () => {
-  const { service, resumed } = makeService([
-    row({ id: 'a' }),
-    row({ id: 'b' }),
-    row({ id: 'c', assignedRunnerId: 'runner-2' }),
-    row({ id: 'd', provider: 'codex' }),
-  ]);
-  await service.sweep(NOW);
-  assert.deepEqual(
-    resumed.map((r) => r.id).sort(),
-    ['a', 'c', 'd'],
-    'b shares a quota with a and waits for the next sweep',
-  );
-});
-
-test('hands back to the user once the attempts are spent', async () => {
-  const { service, resumed, rows } = makeService([row({ quotaRetryAttempts: 5 })]);
-  await service.sweep(NOW);
-  assert.deepEqual(resumed, []);
-  assert.equal(rows[0].quotaRetryAt, null, 'disarmed');
-});
-
-test('backs off and stays armed when the resume itself fails', async () => {
-  const { service, rows } = makeService([row()], {
-    resume: async () => {
-      throw new Error('runner offline');
-    },
-  });
-  await service.sweep(NOW);
-  assert.equal(rows[0].quotaRetryAttempts, 1);
-  assert.deepEqual(
-    rows[0].quotaRetryAt,
-    new Date(NOW.getTime() + 2 * 60_000),
-    'first backoff step, measured from the sweep',
-  );
-});
-
-test('does not re-send when there is nothing to re-send', async () => {
-  const { service, resumed, rows } = makeService([row({ numTurns: 3 })], { events: [] });
-  await service.sweep(NOW);
-  assert.deepEqual(resumed, [], 'inventing a "continue" would be writing in the user’s voice');
-  assert.equal(rows[0].quotaRetryAt, null);
-});
-
-test('falls back to the opening prompt when the very first turn hit the limit', async () => {
-  const { service, resumed } = makeService([row({ numTurns: 0 })], { events: [] });
-  await service.sweep(NOW);
-  assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
-});
-
-test('loses the claim to a user message that lands first', async () => {
-  const { service, resumed } = makeService([row({ quotaRetryAt: null })]);
-  await service.sweep(NOW);
-  assert.deepEqual(resumed, [], 'the user took over; a second turn must not appear behind them');
-});
-
-// A quota that kills a turn settles the run FAILED with cancelRequestedAt set (turn-complete
-// reclaims the runner slot that way), so this — not AWAITING_INPUT — is the state nearly every
-// armed retry is actually sitting in.
-test('retries a session the quota failure settled FAILED', async () => {
+// Either failure can settle the run FAILED with cancelRequestedAt set — turn-complete reclaims
+// the runner slot that way — so this, not AWAITING_INPUT, is the state most armed retries are
+// actually sitting in. A sweep that also demands cancelRequestedAt: null finds none of them.
+test('retries a session the failure settled FAILED', async () => {
   const { service, resumed } = makeService([
     row({ status: RunStatus.FAILED, cancelRequestedAt: PAST }),
   ]);
@@ -178,9 +112,9 @@ test('backs off a FAILED session instead of stranding it', async () => {
     },
   });
   await service.sweep(NOW);
-  assert.equal(rows[0].quotaRetryAttempts, 1);
+  assert.equal(rows[0].retryAttempts, 1);
   assert.deepEqual(
-    rows[0].quotaRetryAt,
+    rows[0].retryAt,
     new Date(NOW.getTime() + 2 * 60_000),
     're-armed under the status it was parked in, not one it can never satisfy',
   );
@@ -190,4 +124,84 @@ test('skips an idle session that is being torn down', async () => {
   const { service, resumed } = makeService([row({ cancelRequestedAt: PAST })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'its owner asked for it to end; do not start a turn behind that');
+});
+
+test('leaves a live session alone', async () => {
+  const { service, resumed } = makeService([row({ status: RunStatus.RUNNING })]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'it is already working; nothing is waiting on us');
+});
+
+test('defers without spending an attempt while the snapshot still reports the quota spent', async () => {
+  const { service, resumed, rows } = makeService([
+    row({ assignedRunner: { planUsage: stillBlocked } }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'must not burn a turn against a quota known to be spent');
+  assert.equal(rows[0].retryAttempts, 0, 'a deferral is not a failed attempt');
+  assert.deepEqual(rows[0].retryAt, new Date(FUTURE), 're-armed for the reported reset');
+});
+
+test('releases one session per (runner, provider) per sweep', async () => {
+  const { service, resumed } = makeService([
+    row({ id: 'a' }),
+    row({ id: 'b' }),
+    row({ id: 'c', assignedRunnerId: 'runner-2' }),
+    row({ id: 'd', provider: 'codex' }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(
+    resumed.map((r) => r.id).sort(),
+    ['a', 'c', 'd'],
+    'b shares a provider with a and waits for the next sweep',
+  );
+});
+
+test('hands back to the user once the attempts are spent', async () => {
+  const { service, resumed, rows } = makeService([row({ retryAttempts: 5 })]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, []);
+  assert.equal(rows[0].retryAt, null, 'disarmed');
+});
+
+test('spends an attempt on every dispatch, so a repeating failure runs out', async () => {
+  // The count is reset only by a reply that is no longer one of these failures (on ingestion).
+  // Refunding it here would restart the backoff after every retry and loop forever.
+  const { service, rows } = makeService([row({ retryAttempts: 2 })]);
+  await service.sweep(NOW);
+  assert.equal(rows[0].retryAttempts, 3);
+});
+
+test('backs off and stays armed when the resume itself fails', async () => {
+  const { service, rows } = makeService([row()], {
+    resume: async () => {
+      throw new Error('runner offline');
+    },
+  });
+  await service.sweep(NOW);
+  assert.equal(rows[0].retryAttempts, 1);
+  assert.deepEqual(
+    rows[0].retryAt,
+    new Date(NOW.getTime() + 2 * 60_000),
+    'first backoff step, measured from the sweep',
+  );
+});
+
+test('does not re-send when there is nothing to re-send', async () => {
+  const { service, resumed, rows } = makeService([row({ numTurns: 3 })], { events: [] });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'inventing a "continue" would be writing in the user’s voice');
+  assert.equal(rows[0].retryAt, null);
+});
+
+test('falls back to the opening prompt when the very first turn hit the limit', async () => {
+  const { service, resumed } = makeService([row({ numTurns: 0 })], { events: [] });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'opening prompt' }]);
+});
+
+test('loses the claim to a user message that lands first', async () => {
+  const { service, resumed } = makeService([row({ retryAt: null })]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'the user took over; a second turn must not appear behind them');
 });

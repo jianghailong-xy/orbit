@@ -515,11 +515,11 @@ export const pinSession = (sessionId: string) =>
 export const unpinSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/pin`, { method: 'DELETE' });
 
-// Turn off the retry that an exhausted provider quota armed on this session. There is no
-// matching arm call — arming is automatic when a quota kills a turn, and re-arming by hand
-// would need a reset time nobody has.
-export const cancelQuotaRetry = (sessionId: string) =>
-  api(`/sessions/${sessionId}/quota-retry`, { method: 'DELETE' });
+// Turn off the retry armed on this session by a spent quota or a transient provider error.
+// There is no matching arm call — arming is automatic when one of those kills a turn, and
+// re-arming by hand would need a moment nobody has.
+export const cancelAutoRetry = (sessionId: string) =>
+  api(`/sessions/${sessionId}/auto-retry`, { method: 'DELETE' });
 
 // ── Public read-only sharing ──
 // Enable sharing mints (or returns) an unguessable token; the public link is `/s/<token>`.
@@ -637,10 +637,10 @@ export interface SessionDetail {
   source?: string | null;
   assignedRunnerId: string | null;
   provider?: string | null;
-  // When the retry armed by an exhausted provider quota fires (null = nothing armed), and how
-  // many attempts this outage has already spent. Drives the transcript's quota card.
-  quotaRetryAt?: string | null;
-  quotaRetryAttempts?: number;
+  // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
+  // failures has already spent. Drives the transcript's quota / provider-error card.
+  retryAt?: string | null;
+  retryAttempts?: number;
   // `defaultMergeTarget` is the branch this agent's sessions merge into by default,
   // remembered from the last target the user switched to in the merge dropdown (null = the
   // runner's auto-detected default). Agent-scoped, so it sticks across the agent's sessions.

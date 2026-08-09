@@ -589,19 +589,22 @@ model Session {
   // exposed via the token (see SharedController) — never ownership/billing/runner internals.
   shareToken           String?   @unique @map("share_token")
   sharedAt             DateTime? @map("shared_at")
-  // ── Provider quota exhausted → retry when it resets ─────────────────────────
-  // A turn killed by the account's provider quota ("You've hit your session limit · resets
-  // 6:20pm (Europe/Berlin)") says nothing about the work: the same message will succeed once
-  // the window rolls over. quotaRetryAt is when to re-send it — set on event ingestion the
-  // moment such a reply lands, and cleared by anything that means nobody is waiting on it
-  // any more (the retry fired, the user sent their own message, the session ended, or the
-  // user switched auto-retry off). null = no armed retry, which is also how "the user
-  // declined" and "no reset time could be determined" are both spelled.
-  quotaRetryAt         DateTime? @map("quota_retry_at")
-  // Attempts already spent on the current outage, so a quota that reports itself spent past
-  // its own reset time backs off and eventually hands back to the user instead of re-sending
-  // forever. Reset to 0 on a successful resume.
-  quotaRetryAttempts   Int       @default(0) @map("quota_retry_attempts")
+  // ── A failure that fixes itself → re-send when it will work ─────────────────
+  // Two failures say nothing about the work and succeed on a plain re-send: the account's
+  // provider quota running out ("You've hit your session limit · resets 6:20pm
+  // (Europe/Berlin)"), and the provider being briefly unable to answer ("API Error: 529 …
+  // overloaded_error"). retryAt is when to re-send — set on event ingestion the moment such a
+  // reply lands, and cleared by anything that means nobody is waiting on it any more (the
+  // retry fired, the user sent their own message, the session ended, or the user switched
+  // auto-retry off). null = no armed retry, which is also how "the user declined" and "no
+  // reset time could be determined" are both spelled.
+  retryAt              DateTime? @map("retry_at")
+  // Auto-retries already spent on the current run of failures: what the API-error backoff
+  // steps through, and what makes a quota that keeps reporting itself spent past its own reset
+  // time hand back to the user instead of re-sending forever. Reset to 0 when a turn finally
+  // answers with something that is not one of those failures — not merely when a retry is
+  // dispatched, which would let a provider that fails identically every time loop unbounded.
+  retryAttempts        Int       @default(0) @map("retry_attempts")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
@@ -624,8 +627,8 @@ model Session {
   @@index([ownerId])
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])
-  // The quota sweeper's only query: armed retries that have come due.
-  @@index([quotaRetryAt])
+  // The auto-retry sweeper's only query: armed retries that have come due.
+  @@index([retryAt])
   @@map("session")
 }
 

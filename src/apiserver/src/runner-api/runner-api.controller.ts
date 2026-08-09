@@ -34,7 +34,9 @@ import {
   DevicePollResponse,
   DeviceStartRequest,
   DeviceStartResponse,
+  apiErrorRetryAt,
   isAsyncAgentLaunchAck,
+  isRetryableApiErrorText,
   isUsageLimitErrorText,
   parseQuotaResetAt,
   planUsageBlockedUntil,
@@ -131,7 +133,7 @@ const INBOX_LEASE_MS = 300_000;
 // until a human decides. DB-polled (approvals are low-frequency; no NOTIFY needed).
 const APPROVAL_LONG_POLL_MS = 25_000;
 const APPROVAL_POLL_INTERVAL_MS = 1_500;
-// Spread over which quota retries are scattered past their reset. See quotaRetryAtFor.
+// Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
@@ -1964,15 +1966,14 @@ export class RunnerApiController {
         }
         frontier = { seq: e.seq, tool };
       }
-      // A reply that is only the provider saying the account's quota is spent ("You've hit
-      // your session limit · resets 6:20pm (Europe/Berlin)") is the one failure that fixes
-      // itself: the same message succeeds once the window rolls over. Arm a retry for that
-      // moment. Detected here rather than in the runner so it also covers runners too old to
-      // know about this — they self-update on their own schedule and outlive a release.
-      const quotaRetryAt =
-        lastAssistant && isUsageLimitErrorText(lastAssistant.text)
-          ? await this.quotaRetryAtFor(tx, sessionId, runner.id, lastAssistant.text)
-          : null;
+      // A reply that is only the provider saying it cannot answer right now — the account's
+      // quota spent, or the API overloaded — is the failure that fixes itself: the same
+      // message succeeds once the window rolls over or the far side recovers. Arm a retry for
+      // that moment. Detected here rather than in the runner so it also covers runners too old
+      // to know about this — they self-update on their own schedule and outlive a release.
+      const retry = lastAssistant
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text)
+        : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
       // finishing clears lastToolUse but the turn runs on) and because `status` cannot answer
@@ -1989,7 +1990,7 @@ export class RunnerApiController {
             // undefined = nothing in this batch either asked or answered; keep the stored
             // message rather than writing null over it.
             ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
-            ...(quotaRetryAt ? { quotaRetryAt } : {}),
+            ...retry,
           },
         });
       }
@@ -2616,36 +2617,62 @@ export class RunnerApiController {
   }
 
   /**
-   * When to re-send the message an exhausted quota just killed, or null when no defensible
-   * moment exists (in which case nothing is armed and the card offers a manual retry only).
+   * What this reply does to the session's armed retry — the fields to write, or `{}` to leave
+   * both where they are. `text` is the turn's latest assistant message, which for both
+   * self-healing failures is the entire reply.
    *
-   * Two sources, in this order. The runtime's own sentence is available on the spot but is
-   * prose ("resets 6:20pm (Europe/Berlin)") and Codex's phrasing pins no time zone at all;
-   * the runner's quota snapshot is machine-readable but refreshes on its own cadence, so it
-   * can still be describing the pre-limit world at this instant. Text first for immediacy,
-   * snapshot as the fallback — and the sweeper re-checks the snapshot before it actually
-   * fires, so a wrong-but-early guess costs a deferral, never a wasted turn.
-   *
-   * The jitter is not cosmetic: a quota is an *account*-wide fact, so every session that hit
-   * it comes due at the same instant, and releasing them together would reproduce the outage
-   * against the freshly reset window.
+   * Three outcomes:
+   *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
+   *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
+   *  - a transient provider error → arm for one backoff step out, or hand back once the steps
+   *    are spent. Task-bound sessions are excluded: such a turn also fails their task, which
+   *    has its own retry budget (tasks.service AUTO_RUN_RETRY_BACKOFF_MS), and two schedulers
+   *    reviving one task is how you get two runs of it.
+   *  - anything else, including an error a re-send would reproduce → the run of failures is
+   *    over, so clear the count. This is the ONLY thing that clears it: doing it when a retry
+   *    is dispatched instead would restart the backoff at every attempt, and a provider that
+   *    fails identically every time would be re-sent to forever.
    */
-  private async quotaRetryAtFor(
+  private async retryPlanFor(
     tx: Prisma.TransactionClient,
     sessionId: string,
     runnerId: string,
     text: string,
-  ): Promise<Date | null> {
+  ): Promise<{ retryAt?: Date | null; retryAttempts?: number }> {
+    const quotaSpent = isUsageLimitErrorText(text);
+    if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     const now = new Date();
     const [session, runner] = await Promise.all([
-      tx.session.findUnique({ where: { id: sessionId }, select: { provider: true } }),
-      tx.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } }),
+      tx.session.findUnique({
+        where: { id: sessionId },
+        select: { provider: true, taskId: true, retryAttempts: true },
+      }),
+      quotaSpent
+        ? tx.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } })
+        : null,
     ]);
-    if (!session) return null;
+    if (!session) return {};
+    if (!quotaSpent) {
+      if (session.taskId) return {};
+      return { retryAt: apiErrorRetryAt(session.retryAttempts, now) };
+    }
+    // When the quota comes back, from two sources in this order. The runtime's own sentence is
+    // available on the spot but is prose ("resets 6:20pm (Europe/Berlin)") and Codex's phrasing
+    // pins no time zone at all; the runner's quota snapshot is machine-readable but refreshes on
+    // its own cadence, so it can still be describing the pre-limit world at this instant. Text
+    // first for immediacy, snapshot as the fallback — and the sweeper re-checks the snapshot
+    // before it fires, so a wrong-but-early guess costs a deferral, never a wasted turn.
+    //
+    // The jitter is not cosmetic: a quota is an *account*-wide fact, so every session that hit
+    // it comes due at the same instant, and releasing them together would reproduce the outage
+    // against the freshly reset window.
     const at =
       parseQuotaResetAt(text, now) ??
       planUsageBlockedUntil(runner?.planUsage as PlanUsage | null, session.provider, now);
-    return at && new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS));
+    // No defensible moment → leave any earlier arming standing rather than replacing it with
+    // nothing; the card falls back to a manual retry.
+    if (!at) return {};
+    return { retryAt: new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) };
   }
 
   private async assertSessionOwnership(sessionId: string, runnerId: string) {

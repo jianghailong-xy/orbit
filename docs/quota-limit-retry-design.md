@@ -5,6 +5,15 @@
 
 > **实施记录（2026-08-03）**：v1 已实现，与本文最初的设计有六处偏离，都在 §8 列明并说明理由。
 > 读本文时以 §8 为准。
+>
+> **泛化（2026-08-09）**：同一套机制现在也接管"provider 一时答不了"（`API Error: 529 …
+> overloaded_error`），因为那和配额撞限同构——都与这次的活儿无关，原样重发就能成。因此：
+> `quotaRetryAt`/`quotaRetryAttempts` 改名为 `retryAt`/`retryAttempts`（迁移 0086），
+> `QuotaRetryService` 改名为 `AutoRetryService` 且扫描范围加上 FAILED（API 错误会把 run 落
+> FAILED，配额则是停在 AWAITING_INPUT），退避另用一条秒级梯子
+> （`API_ERROR_RETRY_BACKOFF_MS`）。另有一处行为修正：attempts 不再在"重发派出去"时清零，
+> 只在真收到一条不是这两种失败的回复时清零——否则每次重试都把退避重置，一个稳定失败的
+> provider 会被无限重发。本文正文里的旧字段名按此对照阅读。
 
 ---
 
