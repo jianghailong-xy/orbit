@@ -91,6 +91,14 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let modelCatalog: RunnerModelCatalog?
     /// Effective defaults reported by the local runtimes on the latest runner heartbeat.
     public let runtimeDefaultModels: [String: String]?
+    /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
+    /// Absent from an older server, and from a runner that hasn't reported one.
+    public let engines: [RunnerEngineHealth]?
+
+    /// This runner's last probe of one engine, if it reported that engine at all.
+    public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
+        engines?.first { $0.engine == engine.rawValue }
+    }
 }
 
 /// Why an ended session cannot currently be resumed on its original runner. Unknown values stay

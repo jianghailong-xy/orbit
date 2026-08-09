@@ -13,6 +13,10 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     case toolCall(ToolCard)
     case interrupt(id: String, seq: Int)
     case error(id: String, message: String)
+    /// A sign-in failure, rendered as a remedy card rather than an error line: the runtime reports
+    /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
+    /// the fix is a human action — so the transcript offers the sign-in instead of a diagnosis.
+    case authError(id: String, message: String)
 
     public var id: String {
         switch self {
@@ -22,6 +26,7 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .toolCall(let c): return c.id
         case .interrupt(let id, _): return id
         case .error(let id, _): return id
+        case .authError(let id, _): return id
         }
     }
 }

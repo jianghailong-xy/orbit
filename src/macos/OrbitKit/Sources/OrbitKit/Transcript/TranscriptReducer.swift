@@ -241,6 +241,23 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?) {
+        // A sign-in failure arrives as an ordinary assistant reply. Raise it as a remedy card
+        // instead of prose the reader can only stare at (web parity: `isAuthErrorText` → authError).
+        // Classify the text the turn actually ends with: an `assistant` event carrying no text of
+        // its own finalizes whatever streamed into the open bubble.
+        var streamed = ""
+        if let i = openAssistant, case .assistant(let b) = state.items[i] { streamed = b.streamingText }
+        let settled = full.isEmpty ? streamed : full
+        if EngineAuth.isAuthErrorText(settled) {
+            // Drop the streaming bubble that was carrying the same text — it is always the tail
+            // while open, so removing it can't disturb another open block's index.
+            if let i = openAssistant, i == state.items.count - 1, case .assistant = state.items[i] {
+                state.items.remove(at: i)
+            }
+            openAssistant = nil
+            appendAuthError(settled)
+            return
+        }
         if let i = openAssistant, case .assistant(var b) = state.items[i] {
             b.text = full.isEmpty ? b.streamingText : full
             b.streamingText = ""
@@ -406,7 +423,20 @@ public struct TranscriptReducer: Sendable, Codable {
 
     private mutating func appendError(_ ev: RunEvent) {
         let msg = str(ev, "message") ?? str(ev, "error") ?? str(ev, "text") ?? "error"
+        // A signed-out engine is reported as an error event rather than assistant text (there is no
+        // model in the loop yet — it never got to spawn), but the remedy is the same human action,
+        // so it earns the same card instead of a bare error line (web parity).
+        if EngineAuth.isAuthErrorText(msg) { appendAuthError(msg); return }
         state.items.append(.error(id: nextID(), message: msg))
+    }
+
+    /// A sign-in failure is reported once per dispatch, so a session picked up again reports the
+    /// identical one seconds later. That card is a remedy, not a log line: two of them say nothing
+    /// new and put two live copies of a sign-in there is only one of on screen — with two codes to
+    /// read and two Cancels for the same relay. A repeat folds into the card above it (web parity).
+    private mutating func appendAuthError(_ message: String) {
+        if case .authError(_, let previous)? = state.items.last, previous == message { return }
+        state.items.append(.authError(id: nextID(), message: message))
     }
 
     // MARK: - approvals (live-only; durable truth is GET /approvals)

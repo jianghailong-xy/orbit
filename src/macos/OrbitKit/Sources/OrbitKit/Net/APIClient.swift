@@ -281,6 +281,26 @@ public final class APIClient: @unchecked Sendable {
     public func createEnrollmentToken(_ req: CreateEnrollmentTokenRequest) async throws -> EnrollmentTokenInfo { try await post("runners/enrollment-tokens", body: req) }
     public func enrollmentTokens() async throws -> [EnrollmentTokenInfo] { try await get("runners/enrollment-tokens") }
 
+    // MARK: engine sign-in relay
+
+    /// Sign an engine CLI back in on the runner's own machine, without a terminal on that box: the
+    /// runner drives the CLI's sign-in and reports back what the user has to do. A runner runs one
+    /// relay at a time, so all four calls read/write the same slot on that runner's row.
+    public func runnerLoginState(_ id: String) async throws -> RunnerLoginState {
+        try await get("runners/\(id)/login")
+    }
+    public func startRunnerLogin(_ id: String, engine: LoginEngine) async throws -> RunnerLoginState {
+        try await post("runners/\(id)/login", body: StartLoginRequest(engine: engine))
+    }
+    /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
+    /// flow). Useless without the PKCE verifier that never leaves the runner process.
+    public func submitRunnerLoginCode(_ id: String, code: String) async throws -> RunnerLoginState {
+        try await post("runners/\(id)/login/code", body: SubmitLoginCodeRequest(code: code))
+    }
+    public func cancelRunnerLogin(_ id: String) async throws -> RunnerLoginState {
+        try await delete("runners/\(id)/login")
+    }
+
     // MARK: runner enrollment (Phase 4 — one-app device flow)
 
     /// Start a device enrollment (acts as the would-be runner; this endpoint needs no auth).
@@ -390,6 +410,12 @@ public final class APIClient: @unchecked Sendable {
 
     private func deleteRaw(_ path: String) async throws {
         _ = try await send(makeRequest(path, method: "DELETE", body: Optional<Empty>.none))
+    }
+
+    /// DELETE with a decoded response (e.g. cancelling a sign-in, which answers with the cleared state).
+    private func delete<T: Decodable>(_ path: String) async throws -> T {
+        let data = try await send(makeRequest(path, method: "DELETE", body: Optional<Empty>.none))
+        return try decoder.decode(T.self, from: data)
     }
 
     /// POST with no request body but a decoded response (e.g. rotate-token).

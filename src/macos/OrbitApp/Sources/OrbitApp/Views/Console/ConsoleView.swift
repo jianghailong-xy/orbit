@@ -230,7 +230,7 @@ struct TranscriptView: View {
                     // the interactive card until it resolves, then this card becomes the historical
                     // record (web parity: Transcript.tsx hides the read-only copy while `live && !result`).
                     if !Approvals.duplicatesPendingApproval(item, pendingApprovals: console.state.pendingApprovals) {
-                        TranscriptItemView(item: item, fullPayload: console.fullPayload)
+                        TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                             .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
                             // Row-level preferences must sit OUTSIDE `AnchorRow`: it wraps content in an
                             // `if #available` (`_ConditionalContent`), and `listRow*` set inside that branch
@@ -857,6 +857,9 @@ struct TranscriptItemView: View {
     let item: TranscriptItem
     /// Refetch for a tool card the server clipped to a preview (ConsoleModel.fullPayload).
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
+    /// The owning console, for the rows that can act on the session — the sign-in card signs this
+    /// session's runner back in and re-sends the message its failure ate.
+    var console: ConsoleModel? = nil
     var body: some View {
         switch item {
         case .user(let b):      UserBubbleView(bubble: b)
@@ -868,6 +871,15 @@ struct TranscriptItemView: View {
         case .error(_, let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red).textSelection(.enabled)
+        case .authError(_, let message):
+            if let console {
+                AuthErrorCardView(console: console, message: message)
+            } else {
+                // No console to act through (a preview / detached render): the diagnosis alone,
+                // which is what the runtime said in the first place.
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
     }
 }

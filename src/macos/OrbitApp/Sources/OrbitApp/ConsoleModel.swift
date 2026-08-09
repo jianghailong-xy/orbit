@@ -127,6 +127,11 @@ final class ConsoleModel {
     // Owning agent's name + the runner's provider quota, shown in the composer footer;
     // loaded once when the console opens.
     private(set) var agentName: String?
+    /// The machine this session runs on. A sign-in failure is fixed on that runner specifically, so
+    /// the transcript's sign-in card needs its id to drive the relay (and its name to say whose
+    /// credentials expired). Loaded with the footer context.
+    private(set) var runnerID: String?
+    private(set) var runnerName: String?
     private(set) var planUsage: PlanUsageSnapshot?
     private(set) var modelCatalog: RunnerModelCatalog?
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime) — this
@@ -573,7 +578,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError: return true   // the agent still owes a reply
         }
     }
 
@@ -623,10 +628,12 @@ final class ConsoleModel {
         // merely unavailable data and must retain the model already on screen.
         var sessionRunner: Runner?
         var runnerSnapshotLoaded = false
+        runnerID = s.assignedRunnerId
         if let rid = s.assignedRunnerId, let rows = try? await api.runners() {
             if let r = rows.first(where: { $0.id == rid }) {
                 sessionRunner = r
                 runnerSnapshotLoaded = true
+                runnerName = r.displayName?.isEmpty == false ? r.displayName : r.name
                 planUsage = r.planUsage?.snapshot(for: provider)
                 modelCatalog = r.modelCatalog
             } else {
@@ -949,6 +956,35 @@ final class ConsoleModel {
             composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
             pendingAttachments = staged + pendingAttachments
             statusMessage = ComposerLogic.sendFailureMessage(error)
+        }
+    }
+
+    /// What a retry after a sign-in failure would re-send: the latest user turn in the transcript.
+    /// Empty when the failure landed before any user message — a first run, whose opening prompt was
+    /// seeded server-side and never became a transcript item — and the card then offers the sign-in
+    /// alone rather than a button that would send nothing.
+    var lastUserMessageText: String {
+        for item in state.items.reversed() {
+            if case .user(let b) = item, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return b.text
+            }
+        }
+        return ""
+    }
+
+    /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
+    /// message"). Routed through the composer so the retry obeys the same gating, queueing and
+    /// failure handling as anything else sent from here.
+    func retryLastMessage() async {
+        let text = lastUserMessageText
+        guard !text.isEmpty, !sending else { return }
+        // Anything the user had typed goes back on top afterwards: send() clears the composer when
+        // the message goes out and hands it back when it doesn't, so this is that draft's only copy.
+        let draft = composerText
+        composerText = text
+        await send()
+        if !draft.isEmpty {
+            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
         }
     }
 

@@ -125,6 +125,89 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
+/// One coding-engine CLI's health on a runner, reported each heartbeat (shared `RunnerEngineHealth`).
+/// `engine` stays a raw string rather than `LoginEngine`: a server that starts reporting a fourth
+/// engine must not fail the decode of the whole runner row and blank the list.
+public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
+    public let engine: String
+    public let installed: Bool?
+    /// Whatever `<engine> --version` printed; absent when not installed or the CLI wouldn't say.
+    public let version: String?
+    /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
+    public let auth: String?
+    public var id: String { engine }
+    /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
+    /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
+    public var signedIn: Bool { auth == "yes" }
+
+    public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil) {
+        self.engine = engine
+        self.installed = installed
+        self.version = version
+        self.auth = auth
+    }
+}
+
+/// Where a runner's sign-in relay has got to (shared `RunnerLoginState`).
+public enum RunnerLoginStatus: String, Codable, Equatable, Sendable {
+    case pending
+    case awaitingCode = "awaiting_code"
+    case awaitingApproval = "awaiting_approval"
+    case done
+    case failed
+
+    /// A sign-in still under way — what the card polls on, and what makes an outcome that follows
+    /// this card's own news rather than a leftover from an earlier attempt.
+    public var inFlight: Bool {
+        self == .pending || self == .awaitingCode || self == .awaitingApproval
+    }
+}
+
+/// GET/POST/DELETE /runners/:id/login — the client-facing view of that relay. An unrecognized
+/// status decodes as nil (nothing in flight) rather than throwing.
+public struct RunnerLoginState: Codable, Equatable, Sendable {
+    public let status: RunnerLoginStatus?
+    /// Which engine this relay is signing in; nil when nothing is in flight.
+    public let engine: String?
+    public let url: String?
+    /// Set with `awaitingApproval`: the code to type on the page at `url` (device flow).
+    public let userCode: String?
+    public let message: String?
+
+    public init(status: RunnerLoginStatus? = nil, engine: String? = nil, url: String? = nil,
+                userCode: String? = nil, message: String? = nil) {
+        self.status = status
+        self.engine = engine
+        self.url = url
+        self.userCode = userCode
+        self.message = message
+    }
+
+    private enum CodingKeys: String, CodingKey { case status, engine, url, userCode, message }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = (try? c.decodeIfPresent(String.self, forKey: .status))
+            .flatMap { $0 }
+            .flatMap(RunnerLoginStatus.init(rawValue:))
+        engine = try? c.decodeIfPresent(String.self, forKey: .engine)
+        url = try? c.decodeIfPresent(String.self, forKey: .url)
+        userCode = try? c.decodeIfPresent(String.self, forKey: .userCode)
+        message = try? c.decodeIfPresent(String.self, forKey: .message)
+    }
+}
+
+/// POST /runners/:id/login — start the sign-in for one engine on that machine.
+public struct StartLoginRequest: Encodable, Sendable {
+    public let engine: String
+    public init(engine: LoginEngine) { self.engine = engine.rawValue }
+}
+
+/// POST /runners/:id/login/code — hand back the code the sign-in page gave the user.
+public struct SubmitLoginCodeRequest: Encodable, Sendable {
+    public let code: String
+    public init(code: String) { self.code = code }
+}
+
 /// Enrollment token. `token` is present only on create (one-shot); the list omits it.
 public struct EnrollmentTokenInfo: Codable, Equatable, Sendable {
     public let id: String?

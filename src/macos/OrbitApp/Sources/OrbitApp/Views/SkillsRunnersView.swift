@@ -166,6 +166,9 @@ struct RunnerDetailContent: View {
     let runner: Runner
     @State private var maxConc = 1
     @State private var renameText = ""
+    /// Which engine's sign-in card is open, if any. One at a time — the runner runs one sign-in
+    /// relay at a time, so two open cards would be two views of the same thing.
+    @State private var signingIn: LoginEngine?
 
     var body: some View {
         Form {
@@ -193,6 +196,45 @@ struct RunnerDetailContent: View {
                 HStack {
                     TextField("Display name", text: $renameText)
                     Button("Rename") { Task { await runners.rename(runner.id, renameText) } }
+                }
+            }
+
+            // Signing an engine in here, rather than only after a session has failed on it: the
+            // credentials live on that machine, and until now these clients had no way to renew
+            // them without a terminal on it (the web's Providers page is the other one).
+            Section("Engines") {
+                ForEach(LoginEngine.allCases) { engine in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(engine.displayName)
+                                // The status line reads the last heartbeat's probe, which the
+                                // runner only re-runs once the CLI exits — so while a sign-in is
+                                // open the card is the newer truth and this would contradict it.
+                                if signingIn != engine {
+                                    Text(engineStatus(engine)).font(.orbitLabel).foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            if signingIn != engine {
+                                Button(runner.engineHealth(engine)?.signedIn == true ? "Sign in again" : "Sign in") {
+                                    signingIn = engine
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        if signingIn == engine {
+                            RunnerSignInView(runnerID: runner.id, engine: engine)
+                            // Re-read the list on the way out so the row speaks from that
+                            // machine's own probe again, rather than the state it was opened on.
+                            Button("Close") {
+                                signingIn = nil
+                                Task { await runners.load() }
+                            }
+                            .buttonStyle(.borderless).font(.orbitLabel)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
             }
 
@@ -230,6 +272,19 @@ struct RunnerDetailContent: View {
         .onAppear {
             maxConc = runner.maxConcurrent ?? 1
             renameText = runner.displayName ?? ""
+        }
+    }
+
+    /// What this machine's last heartbeat probe said about one engine. "Unknown" is not a yes — a
+    /// CLI that wouldn't answer must never read as signed in (web parity: `rowKindOf`).
+    private func engineStatus(_ engine: LoginEngine) -> String {
+        guard let health = runner.engineHealth(engine) else { return "Not reported yet" }
+        guard health.installed == true else { return "Not installed" }
+        let version = health.version.map { " · v\($0)" } ?? ""
+        switch health.auth {
+        case "yes": return "Signed in" + version
+        case "no":  return "Signed out" + version
+        default:    return "Sign-in state unknown" + version
         }
     }
 
