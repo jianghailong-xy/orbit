@@ -37,6 +37,7 @@ import {
 } from './dto';
 import { SessionsService } from './sessions.service';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
+import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
 
 /** ~20s data-plane keepalive (mirrors EventsController): a `ping` data frame — Nest's @Sse can't
  *  emit raw `:` comments — sent on the per-session transcript stream so an *idle* session (one
@@ -445,7 +446,9 @@ export class SessionsController {
             ${limit}
           `,
         ).pipe(concatMap((rows) => from(capped ? [...rows].reverse() : rows)));
-        const live$ = this.realtime.streamForRun(id);
+        // Only the live half can contain deltas — they are broadcast-only and never persisted, so
+        // a replay never carries them and the history stream is left exactly as it was.
+        const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());
         return concat(history$, live$);
       }),
       map((e: {
@@ -459,6 +462,15 @@ export class SessionsController {
         const cut = cap
           ? truncatePayload(e.type, e.payload, cap)
           : { payload: e.payload, truncated: false };
+        // Streaming deltas ship a reduced envelope. They are pure animation — every client reads
+        // only `payload.text` and returns before the seq dedup — so `turnId` (a 36-char UUID) and
+        // `ts` (24 chars) were ~78 of the ~142 bytes on a token-sized message, repeated per
+        // message. Both are optional on the native decoders, so dropping them is safe for already
+        // shipped builds; `seq` stays, because it is 8 bytes and older strict decoders would drop
+        // the whole event without it.
+        if (isStreamingDelta(e.type)) {
+          return { data: { seq: e.seq, type: e.type, payload: cut.payload } } as MessageEvent;
+        }
         return {
           data: {
             seq: e.seq,
