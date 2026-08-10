@@ -152,7 +152,7 @@ private struct ConsoleNavTitle: View {
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
-    private let bottomID = "transcript-bottom"
+    private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
@@ -198,98 +198,25 @@ struct TranscriptView: View {
         // recycling List: a single one-shot scroll per change, not the per-frame *animated* scroll
         // that froze the old LazyVStack build.
         ScrollViewReader { proxy in
+            // ONE flat `ForEach` over pre-assembled rows — never nested `ForEach`es or an inline
+            // `if` inside a row loop. Those let a single `ForEach` element yield 0, 1 or N rows,
+            // and a count that moves while other rows are inserted in the same update is what made
+            // SwiftUI's UICollectionView-backed List abort a batch update
+            // (NSInternalInconsistencyException, "invalid number of items in section" — the two
+            // 0.1.2 (1299) TestFlight crashes). `TranscriptRows.build` is the single, unit-tested
+            // place that decides row order and identity; keep the view a pure switch over it.
             List {
-                // Scroll-up history paging (web's loadOlder): while older pages remain on the
-                // server, the transcript's first row is a spinner that pulls the previous page in
-                // when it scrolls into view. List laziness keeps it un-materialized — and the
-                // fetch un-fired — while the user stays at the tail; its id changes with each
-                // grafted page, so a page too short to push it off-screen re-materializes the row
-                // and chains the next fetch until the viewport fills or history is exhausted.
-                // (Bool-gated via `canPageOlder`, not an inline `if #available` — listRow* set
-                // inside a _ConditionalContent branch aren't hoisted on iOS, see AnchorRow.)
-                if canPageOlder {
-                    HStack {
-                        Spacer()
-                        ProgressView().controlSize(.small)
-                        Spacer()
-                    }
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .id("load-older-\(console.state.oldestSeq ?? 0)")
-                    .onAppear { Task { await console.loadOlder() } }
-                }
-                // A command run before the first transcript event belongs above events that arrive
-                // later. Drafts use the same nil anchor but render in NewSessionView below.
-                ForEach(console.localStatusCards.filter { $0.afterItemID == nil }) { card in
-                    statusCardRow(card)
-                }
-                ForEach(console.state.items) { item in
-                    // An AskUserQuestion / ExitPlanMode tool card duplicates the live interactive
-                    // ApprovalCard rendered below while the prompt still awaits an answer — show only
-                    // the interactive card until it resolves, then this card becomes the historical
-                    // record (web parity: Transcript.tsx hides the read-only copy while `live && !result`).
-                    if !Approvals.duplicatesPendingApproval(item, pendingApprovals: console.state.pendingApprovals) {
-                        TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
-                            .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
-                            // Row-level preferences must sit OUTSIDE `AnchorRow`: it wraps content in an
-                            // `if #available` (`_ConditionalContent`), and `listRow*` set inside that branch
-                            // aren't hoisted to the List on iOS — the separators leaked back in. Applied here,
-                            // on the outermost row view, they propagate reliably (a chat flow, no hairlines).
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                    // `/status` never enters the runner event stream. Attach its local card after
-                    // the item that was last at invocation time so later events remain later.
-                    ForEach(console.localStatusCards.filter { $0.afterItemID == item.id }) { card in
-                        statusCardRow(card)
-                    }
-                }
-                // Pending approvals render inline as the agent's latest turn — web's AgentView places
-                // the ApprovalPanel right after the messages, so the card scrolls with the conversation
-                // and a long AskUserQuestion form wraps + scrolls in the transcript instead of being
-                // crushed into a fixed panel above the composer. After items, before queued (web order).
-                // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
-                ForEach(console.state.pendingApprovals) { approval in
-                    ApprovalCard(console: console, approval: approval)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                ForEach(rows) { row in
+                    transcriptRow(row)
+                        // Row-level preferences must sit OUT here, not inside `transcriptRow`'s
+                        // switch (or inside `AnchorRow`'s `if #available`): `listRow*` set inside a
+                        // `_ConditionalContent` branch aren't hoisted to the List on iOS — the
+                        // separators leaked back in. On the outermost row view they propagate
+                        // reliably (a chat flow, no hairlines).
+                        .listRowInsets(rowInsets(row))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
-                // "Working" indicator: while the agent owes a reply it hasn't begun to stream (the
-                // send→first-token gap), animated dots show immediate, continuous feedback instead of
-                // the page looking inert, and hand off seamlessly to the streaming reply's own dots
-                // (see showWorkingIndicator). It belongs to the RUNNING turn, so it renders ABOVE any
-                // `queued` follow-ups (which wait behind that turn) — otherwise the dots sit under the
-                // queued bubble, reading as "working on the queued message," and jump when the running
-                // reply streams in above it. With no queued/approvals it's still effectively the tail.
-                if console.showWorkingIndicator {
-                    WorkingIndicatorView()
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .id("working-indicator")
-                }
-                // Messages sent while a turn is in flight wait their turn: render them AFTER the
-                // transcript (and the running turn's working indicator) so a mid-turn send is never
-                // interleaved into the running reply (web's trailing `queued` bubbles). No `AnchorRow`
-                // — they haven't been asked yet, so they're never the sticky "Your question" (web's
-                // `:not(.chat-queued)`).
-                ForEach(console.state.queued, id: \.id) { bubble in
-                    UserBubbleView(bubble: bubble,
-                                   onCancelQueued: { Task { await console.cancelQueued(bubble) } })
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                }
-                // Zero-height tail row: a stable `scrollTo` target that always sits below the last
-                // message (the last item's own id moves as it streams).
-                Color.clear.frame(height: 1)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .id(bottomID)
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
@@ -418,12 +345,55 @@ struct TranscriptView: View {
         return nil
     }
 
-    private func statusCardRow(_ card: LocalStatusCard) -> some View {
-        SessionStatusCardView(card: card)
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
-            .id("local-status-\(card.id)")
+    /// The List's rows, assembled from ONE read of each source so the snapshot the List diffs is
+    /// always internally consistent (`console.state` publishes on a 200ms coalescing timer while
+    /// `localStatusCards` / `showWorkingIndicator` publish immediately).
+    private var rows: [TranscriptRow] {
+        TranscriptRows.build(state: console.state,
+                             statusCards: console.localStatusCards,
+                             canPageOlder: canPageOlder,
+                             showWorkingIndicator: console.showWorkingIndicator)
+    }
+
+    /// Only the load-earlier spinner and the zero-height tail row differ from the chat-flow insets.
+    private func rowInsets(_ row: TranscriptRow) -> EdgeInsets {
+        switch row {
+        case .loadOlder: return EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+        case .bottom:    return EdgeInsets()
+        default:         return EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16)
+        }
+    }
+
+    @ViewBuilder
+    private func transcriptRow(_ row: TranscriptRow) -> some View {
+        switch row {
+        case .loadOlder:
+            // List laziness keeps this un-materialized — and the fetch un-fired — while the user
+            // stays at the tail.
+            HStack {
+                Spacer()
+                ProgressView().controlSize(.small)
+                Spacer()
+            }
+            .onAppear { Task { await console.loadOlder() } }
+        case .item(let item):
+            TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
+                .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+        case .statusCard(let card):
+            SessionStatusCardView(card: card)
+        case .approval(let approval):
+            // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
+            ApprovalCard(console: console, approval: approval)
+        case .working:
+            WorkingIndicatorView()
+        case .queued(let bubble):
+            // No `AnchorRow` — a queued turn hasn't been asked yet, so it's never the sticky
+            // "Your question" (web's `:not(.chat-queued)`).
+            UserBubbleView(bubble: bubble,
+                           onCancelQueued: { Task { await console.cancelQueued(bubble) } })
+        case .bottom:
+            Color.clear.frame(height: 1)
+        }
     }
 
     // Sticky header that names the last question and scrolls back to it — web's `.chat-sticky-question`

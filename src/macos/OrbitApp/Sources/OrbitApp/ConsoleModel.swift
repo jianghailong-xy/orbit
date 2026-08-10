@@ -35,21 +35,8 @@ struct QuestionReply: Equatable, Sendable {
     let question: String
 }
 
-/// A local-only command result rendered inline with the conversation. It deliberately stays out of
-/// `TranscriptState`: `/status` never reaches the runner and therefore has no durable server event.
-struct LocalStatusCard: Identifiable, Equatable, Sendable {
-    let id: UUID
-    let rows: [ComposerStatusRow]
-    /// The transcript item that was last when the command ran. Rendering after this stable id keeps
-    /// later runner messages below the card instead of moving an old local result back to the tail.
-    let afterItemID: String?
-
-    init(id: UUID = UUID(), rows: [ComposerStatusRow], afterItemID: String? = nil) {
-        self.id = id
-        self.rows = rows
-        self.afterItemID = afterItemID
-    }
-}
+// `LocalStatusCard` lives in OrbitKit (Transcript/TranscriptRows.swift) — the transcript's row
+// assembly is unit-tested there and needs it.
 
 // One connection attempt's outcome is OrbitKit's `StreamOutcome`; the wait/stop decision after
 // each attempt is the unit-tested `ReconnectPolicy` (see `run()`).
