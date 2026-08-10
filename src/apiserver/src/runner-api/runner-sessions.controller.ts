@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Runner, RunStatus } from '@prisma/client';
+import { Base62UuidPipe, OptionalBase62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdBodyPipe } from '../common/public-id';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-auth.guard';
@@ -93,7 +95,10 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') parentSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Body() dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
+    // Inline type — nothing validates it, and `agentId` is exactly what a model copies out of an
+    // Orbit URL when told to "run this under that agent".
+    @Body(new PublicIdBodyPipe(['agentId']))
+    dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ) {
     if (isHeadlessCaller(parentSessionId)) {
       const scope = this.headlessScope(runner, grant, 'session:create');
@@ -121,7 +126,7 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Query('status') status: string | undefined,
-    @Query('parentSessionId') parentSessionId: string | undefined,
+    @Query('parentSessionId', OptionalBase62UuidPipe) parentSessionId: string | undefined,
   ) {
     // Ignore an unknown status rather than letting Prisma 500 on a bad enum value.
     const s =
@@ -164,7 +169,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
   ) {
     if (isHeadlessCaller(callingSessionId)) {
       return this.sessions.getForOrchestration(
@@ -184,7 +189,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: { message: string },
   ) {
     if (isHeadlessCaller(callingSessionId)) {
@@ -213,7 +218,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
@@ -226,7 +231,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: { targetBranch?: string },
   ) {
     this.assertNoServiceToken(grant);
@@ -240,7 +245,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
@@ -256,7 +261,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
@@ -270,7 +275,7 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
   ) {
     return this.completeSession(runner, grant, callingSessionId, orchestrationToken, id);
   }

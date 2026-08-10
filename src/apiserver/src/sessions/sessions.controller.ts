@@ -21,7 +21,8 @@ import { ApprovalDecisionRequest } from '@orbit/shared';
 import { notNoiseSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { Base62UuidPipe, OptionalBase62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdBodyPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -65,17 +66,24 @@ export class SessionsController {
     private readonly tags: SessionTagsService,
   ) {}
 
+  // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
+  // reach Prisma raw. These three are the ones a caller types or pastes — an agent or runner
+  // copied out of a client URL, a task id from a tool result — so they arrive base62 as often
+  // as not.
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreateSessionDto) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body(new PublicIdBodyPipe(['agentId', 'assignedRunnerId', 'taskId'])) dto: CreateSessionDto,
+  ) {
     return this.sessions.create(user.userId, dto);
   }
 
   @Get()
   list(
     @CurrentUser() user: AuthUser,
-    @Query('runnerId') runnerId?: string,
-    @Query('agentId') agentId?: string,
-    @Query('tagId') tagId?: string,
+    @Query('runnerId', OptionalBase62UuidPipe) runnerId?: string,
+    @Query('agentId', OptionalBase62UuidPipe) agentId?: string,
+    @Query('tagId', OptionalBase62UuidPipe) tagId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
     // answers it with an empty list rather than accidentally falling through to Open.
     @Query('view')
@@ -164,7 +172,7 @@ export class SessionsController {
   cancelTurn(
     @CurrentUser() user: AuthUser,
     @Param('id', Base62UuidPipe) id: string,
-    @Param('turnId') turnId: string,
+    @Param('turnId', Base62UuidPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
   }
@@ -318,7 +326,7 @@ export class SessionsController {
   decideApproval(
     @CurrentUser() user: AuthUser,
     @Param('id', Base62UuidPipe) id: string,
-    @Param('approvalId') approvalId: string,
+    @Param('approvalId', Base62UuidPipe) approvalId: string,
     @Body() dto: ApprovalDecisionRequest,
   ) {
     return this.sessions.decideApproval(user.userId, id, approvalId, dto);

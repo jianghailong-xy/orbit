@@ -9,6 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { PermissionMode } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 const PERMISSION_MODES = Object.values(PermissionMode);
 
@@ -35,11 +36,11 @@ export class CreateAgentDto {
   @IsOptional() @IsNumber() maxTurns?: number;
   @IsOptional() @IsNumber() maxBudgetUsd?: number;
   @IsOptional() @IsObject() mcpConfig?: Record<string, unknown>;
-  @IsOptional() @IsString() targetRunnerId?: string;
+  @IsOptional() @IsPublicId() targetRunnerId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) targetLabels?: string[];
   // The runner this agent belongs to (set when adding an agent under a runner) and
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
-  @IsOptional() @IsString() runnerId?: string;
+  @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
@@ -67,9 +68,9 @@ export class UpdateAgentDto {
   @IsOptional() @IsNumber() maxTurns?: number;
   @IsOptional() @IsNumber() maxBudgetUsd?: number;
   @IsOptional() @IsObject() mcpConfig?: Record<string, unknown>;
-  @IsOptional() @IsString() targetRunnerId?: string;
+  @IsOptional() @IsPublicId() targetRunnerId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) targetLabels?: string[];
-  @IsOptional() @IsString() runnerId?: string;
+  @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;

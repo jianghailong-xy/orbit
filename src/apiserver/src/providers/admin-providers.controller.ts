@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
@@ -25,12 +26,12 @@ export class AdminProvidersController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateModelProviderDto) {
+  update(@Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateModelProviderDto) {
     return this.providers.update(null, id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', Base62UuidPipe) id: string) {
     return this.providers.remove(null, id);
   }
 }

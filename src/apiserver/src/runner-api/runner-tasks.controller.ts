@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
+import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { CreateTaskListDto } from '../task-lists/dto';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import {
@@ -56,14 +57,14 @@ export class RunnerTasksController {
   }
 
   @Get('tasks/:id')
-  getTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+  getTask(@CurrentRunner() runner: Runner, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.get(runner.ownerId, id);
   }
 
   @Get('tasks/:id/dependency-graph')
   getTaskDependencyGraph(
     @CurrentRunner() runner: Runner,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Query('maxDepth') maxDepth?: string,
     @Query('maxNodes') maxNodes?: string,
   ) {
@@ -71,24 +72,28 @@ export class RunnerTasksController {
   }
 
   @Patch('tasks/:id')
-  updateTask(@CurrentRunner() runner: Runner, @Param('id') id: string, @Body() dto: UpdateTaskDto) {
+  updateTask(
+    @CurrentRunner() runner: Runner,
+    @Param('id', Base62UuidPipe) id: string,
+    @Body() dto: UpdateTaskDto,
+  ) {
     return this.tasks.update(runner.ownerId, id, dto);
   }
 
   @Delete('tasks/:id')
-  deleteTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+  deleteTask(@CurrentRunner() runner: Runner, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.remove(runner.ownerId, id);
   }
 
   @Post('tasks/:id/execute')
-  executeTask(@CurrentRunner() runner: Runner, @Param('id') id: string) {
+  executeTask(@CurrentRunner() runner: Runner, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.execute(runner.ownerId, id);
   }
 
   @Post('tasks/:id/dependencies')
   addTaskDependency(
     @CurrentRunner() runner: Runner,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: AddDependencyDto,
   ) {
     return this.tasks.addDependency(runner.ownerId, id, dto.dependsOnTaskId);
@@ -97,8 +102,8 @@ export class RunnerTasksController {
   @Delete('tasks/:id/dependencies/:dependsOnTaskId')
   removeTaskDependency(
     @CurrentRunner() runner: Runner,
-    @Param('id') id: string,
-    @Param('dependsOnTaskId') dependsOnTaskId: string,
+    @Param('id', Base62UuidPipe) id: string,
+    @Param('dependsOnTaskId', Base62UuidPipe) dependsOnTaskId: string,
   ) {
     return this.tasks.removeDependency(runner.ownerId, id, dependsOnTaskId);
   }
@@ -107,7 +112,7 @@ export class RunnerTasksController {
   async addComment(
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-agent-id') agentId: string | undefined,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: CreateTaskCommentDto,
   ) {
     const author = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);

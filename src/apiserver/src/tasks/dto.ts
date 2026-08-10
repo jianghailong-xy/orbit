@@ -9,7 +9,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -18,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 
@@ -28,9 +28,9 @@ export class CreateTaskDto {
 
   @IsOptional() @IsString() description?: string;
   // The agent assigned to execute the task. Must be owned by the caller.
-  @IsOptional() @IsUUID() assigneeId?: string;
+  @IsOptional() @IsPublicId() assigneeId?: string;
   // The list this task belongs to. Must be owned by the caller.
-  @IsOptional() @IsUUID() listId?: string;
+  @IsOptional() @IsPublicId() listId?: string;
   @IsOptional() @IsDateString() dueDate?: string;
   // Provider/model this task's runs use, overriding the assignee agent's own. The provider must
   // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
@@ -39,7 +39,7 @@ export class CreateTaskDto {
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Prerequisite task ids this new task should wait on (each must be owned by the
   // caller). The task only runs once they're all DONE.
-  @IsOptional() @IsArray() @IsUUID('all', { each: true }) dependsOnTaskIds?: string[];
+  @IsOptional() @IsArray() @IsPublicId({ each: true }) dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
 }
@@ -73,9 +73,9 @@ export class UpdateTaskDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(TASK_STATUSES) status?: TaskStatus;
   // null clears the assignment; a string (re)assigns to that agent.
-  @IsOptional() @IsUUID() assigneeId?: string | null;
+  @IsOptional() @IsPublicId() assigneeId?: string | null;
   // null detaches from its list; a string (re)assigns to that list.
-  @IsOptional() @IsUUID() listId?: string | null;
+  @IsOptional() @IsPublicId() listId?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // null goes back to inheriting the assignee agent's provider/model; a string pins this task's
   // runs to that provider / model id. Omit to leave the current pin alone.
@@ -85,7 +85,7 @@ export class UpdateTaskDto {
   // pass [] to clear them all.
   @ValidateIf((_dto, value) => value !== undefined)
   @IsArray()
-  @IsUUID('all', { each: true })
+  @IsPublicId({ each: true })
   dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
@@ -94,12 +94,12 @@ export class UpdateTaskDto {
 export class AddDependencyDto {
   // The prerequisite task this task should wait on. Must be owned by the caller, differ
   // from the task itself, and not introduce a dependency cycle.
-  @IsUUID('all') dependsOnTaskId!: string;
+  @IsPublicId() dependsOnTaskId!: string;
 }
 
 export class ExpandDependencyGraphDto {
   /** The visible task whose prerequisite or dependent branch should be expanded. */
-  @IsUUID('all') anchorTaskId!: string;
+  @IsPublicId() anchorTaskId!: string;
 
   @IsIn(['prerequisites', 'dependents'])
   direction!: 'prerequisites' | 'dependents';
@@ -108,7 +108,7 @@ export class ExpandDependencyGraphDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(1000)
-  @IsUUID('all', { each: true })
+  @IsPublicId({ each: true })
   knownTaskIds!: string[];
 
   /**
@@ -118,7 +118,7 @@ export class ExpandDependencyGraphDto {
    */
   @IsArray()
   @ArrayMaxSize(1000)
-  @IsUUID('all', { each: true })
+  @IsPublicId({ each: true })
   loadedNeighborTaskIds!: string[];
 
   @IsOptional() @IsInt() @Min(1) @Max(100) limit?: number;
@@ -132,7 +132,7 @@ export class RefreshDependencyGraphNodesDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(1000)
-  @IsUUID('all', { each: true })
+  @IsPublicId({ each: true })
   taskIds!: string[];
 }
 
@@ -156,7 +156,7 @@ export class BatchStopDto {
 export class BatchDeleteDto {
   // Hard-delete the caller's matching tasks. Unknown and cross-tenant ids are ignored;
   // duplicates are collapsed by TasksService before reaching PostgreSQL.
-  @IsArray() @IsUUID('all', { each: true }) taskIds!: string[];
+  @IsArray() @IsPublicId({ each: true }) taskIds!: string[];
 }
 
 export class BatchAssignDto {

@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
@@ -32,7 +33,7 @@ export class ProvidersController {
   // The stored key of one of the caller's own providers, in the clear — what the edit form fills
   // its key field from. Owner-scoped: there is no route here that reveals a shared provider's key.
   @Get('mine/:id/key')
-  revealMineKey(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  revealMineKey(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.providers.revealKey(user.userId, id);
   }
 
@@ -56,12 +57,12 @@ export class ProvidersController {
   }
 
   @Patch('mine/:id')
-  updateMine(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateModelProviderDto) {
+  updateMine(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateModelProviderDto) {
     return this.providers.update(user.userId, id, dto);
   }
 
   @Delete('mine/:id')
-  removeMine(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  removeMine(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.providers.remove(user.userId, id);
   }
 }

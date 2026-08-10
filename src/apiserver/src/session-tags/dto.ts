@@ -1,4 +1,5 @@
 import { ArrayUnique, IsArray, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 
 // A #RRGGBB hex color from the shared palette (the picker only offers palette swatches; the
 // server just enforces the format so a stray value can't land in the column).
@@ -16,5 +17,5 @@ export class UpdateSessionTagDto {
 
 // Replace the full set of tags on a session (the picker sends the current selection). Idempotent.
 export class SetSessionTagsDto {
-  @IsArray() @ArrayUnique() @IsString({ each: true }) tagIds!: string[];
+  @IsArray() @ArrayUnique() @IsPublicId({ each: true }) tagIds!: string[];
 }

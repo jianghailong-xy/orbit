@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Base62UuidPipe, OptionalBase62UuidPipe } from '../common/base62-uuid.pipe';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
@@ -48,8 +49,8 @@ export class TasksController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
-    @Query('listId') listId?: string,
-    @Query('assigneeId') assigneeId?: string,
+    @Query('listId', OptionalBase62UuidPipe) listId?: string,
+    @Query('assigneeId', OptionalBase62UuidPipe) assigneeId?: string,
     @Query('q') q?: string,
     @Query('counts') counts?: string,
   ) {
@@ -67,7 +68,7 @@ export class TasksController {
   @Get(':id/dependency-graph')
   dependencyGraph(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Query('direction') direction?: string,
     @Query('maxDepth') maxDepth?: string,
     @Query('maxNodes') maxNodes?: string,
@@ -84,7 +85,7 @@ export class TasksController {
   @Post(':id/dependency-graph/expand')
   expandDependencyGraph(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: ExpandDependencyGraphDto,
   ) {
     return this.tasks.expandDependencyGraph(user.userId, id, dto);
@@ -93,24 +94,24 @@ export class TasksController {
   @Post(':id/dependency-graph/nodes')
   dependencyGraphNodes(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: RefreshDependencyGraphNodesDto,
   ) {
     return this.tasks.dependencyGraphNodes(user.userId, id, dto.taskIds);
   }
 
   @Get(':id')
-  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  get(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.get(user.userId, id);
   }
 
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateTaskDto) {
+  update(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateTaskDto) {
     return this.tasks.update(user.userId, id, dto);
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.remove(user.userId, id);
   }
 
@@ -141,14 +142,14 @@ export class TasksController {
   }
 
   @Post(':id/execute')
-  execute(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  execute(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
     return this.tasks.execute(user.userId, id);
   }
 
   @Post(':id/comments')
   addComment(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: CreateTaskCommentDto,
   ) {
     return this.tasks.addComment(user.userId, id, dto);
@@ -157,8 +158,8 @@ export class TasksController {
   @Delete(':id/comments/:commentId')
   removeComment(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Param('commentId') commentId: string,
+    @Param('id', Base62UuidPipe) id: string,
+    @Param('commentId', Base62UuidPipe) commentId: string,
   ) {
     return this.tasks.removeComment(user.userId, id, commentId);
   }
@@ -166,7 +167,7 @@ export class TasksController {
   @Post(':id/dependencies')
   addDependency(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
+    @Param('id', Base62UuidPipe) id: string,
     @Body() dto: AddDependencyDto,
   ) {
     return this.tasks.addDependency(user.userId, id, dto.dependsOnTaskId);
@@ -175,8 +176,8 @@ export class TasksController {
   @Delete(':id/dependencies/:dependsOnTaskId')
   removeDependency(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Param('dependsOnTaskId') dependsOnTaskId: string,
+    @Param('id', Base62UuidPipe) id: string,
+    @Param('dependsOnTaskId', Base62UuidPipe) dependsOnTaskId: string,
   ) {
     return this.tasks.removeDependency(user.userId, id, dependsOnTaskId);
   }
