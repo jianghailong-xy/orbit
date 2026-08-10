@@ -324,7 +324,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     queryFn: () => api<TaskPage>(taskPagePath({ limit: 1, listId: 'none' })),
     refetchInterval: 15_000,
   });
-  const unlistedCount = unlistedTasks.data?.counts.total ?? 0;
+  const unlistedCount = unlistedTasks.data?.counts?.total ?? 0;
 
   // Per-agent Open-session tallies, counted server-side. Polls faster while anything is live.
   // This used to fetch every open session and tally them here, which on an account with

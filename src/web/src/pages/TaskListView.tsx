@@ -153,6 +153,10 @@ export function TaskListView() {
           status: filter,
           listId: isUnlisted ? 'none' : undefined,
           q: query,
+          // Only page 1 carries the tab badges; the counts are scope-wide, so asking for them
+          // again on every subsequent page (and on every poll, which refetches all loaded
+          // pages) re-runs the request's most expensive queries for numbers already in hand.
+          counts: pageParam ? 'none' : undefined,
         }),
       ),
     initialPageParam: null as string | null,

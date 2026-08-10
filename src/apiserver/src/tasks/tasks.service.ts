@@ -61,21 +61,84 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 
-/** Database-side mirror of the task row's Run/Retry visibility predicate. */
-function runnableTaskWhere(scope: Prisma.TaskWhereInput): Prisma.TaskWhereInput {
-  return {
-    AND: [
-      scope,
-      { status: { not: TaskStatus.DONE } },
-      { assignee: { is: { runnerId: { not: null } } } },
-      { sessions: { none: { status: { in: SINGLE_RUN_DEDUP } } } },
-      {
-        dependsOn: {
-          none: { dependsOnTask: { status: { not: TaskStatus.DONE } } },
-        },
-      },
-    ],
-  };
+/**
+ * What a task LIST row needs: every scalar column except `description`, plus the assignee
+ * (with its runner, for the batch-run modal) and the comment tally. No client renders a
+ * description in a list row — the detail panel fetches `GET /tasks/:id` for that — and it
+ * averages ~500 bytes per task, so including it here inflated a 200-row page by ~46% and a
+ * 701-task list view by ~440KB for bytes that were parsed and thrown away.
+ */
+export const TASK_LIST_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  ownerId: true,
+  creatorType: true,
+  creatorId: true,
+  assigneeId: true,
+  dueDate: true,
+  createdAt: true,
+  updatedAt: true,
+  listId: true,
+  creatorSessionId: true,
+  autoRunWhenReady: true,
+  provider: true,
+  model: true,
+  assignee: {
+    select: {
+      id: true,
+      name: true,
+      model: true,
+      runnerId: true,
+      runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
+    },
+  },
+  _count: { select: { comments: true } },
+} satisfies Prisma.TaskSelect;
+
+/**
+ * Database-side mirror of the task row's Run/Retry visibility predicate, correlated to an
+ * outer `task t`: not finished, assigned to an agent that has a runner, no run already in
+ * flight, and no prerequisite still outstanding.
+ *
+ * Spelled as `NOT EXISTS` rather than Prisma relation filters (`sessions: { none }`,
+ * `dependsOn: { none }`) on purpose. Prisma compiles those into `id NOT IN (SELECT …)`,
+ * which makes PostgreSQL hash *every* dependency edge in the account before it can return
+ * a single row — on a 56k-task/55k-edge account that is ~200ms, paid on every list request
+ * and every poll. `NOT EXISTS` is index-driven and short-circuits per row, so an ordered
+ * page stops as soon as it has enough rows: measured 200ms -> 13ms for one 200-row page.
+ *
+ * Kept literally in step with the Run button's own gate (see `canRun` and the execute
+ * path) — the Ready tab must never offer a run the API would reject.
+ */
+const RUNNABLE_TASK_SQL = Prisma.sql`
+  t.status <> 'DONE'::task_status
+  AND EXISTS (SELECT 1 FROM agent a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependency d
+    JOIN task p ON p.id = d.depends_on_task_id
+    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
+  )`;
+
+/**
+ * SQL mirror of the `{ ownerId, listId?, assigneeId? }` scope the Prisma queries are built
+ * from. Derived from that same object rather than re-read from the query string, so the two
+ * spellings of the scope cannot drift.
+ */
+function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [Prisma.sql`t.owner_id = ${scope.ownerId as string}::uuid`];
+  if (scope.listId === null) clauses.push(Prisma.sql`t.list_id IS NULL`);
+  else if (typeof scope.listId === 'string') {
+    clauses.push(Prisma.sql`t.list_id = ${scope.listId}::uuid`);
+  }
+  if (typeof scope.assigneeId === 'string') {
+    clauses.push(Prisma.sql`t.assignee_id = ${scope.assigneeId}::uuid`);
+  }
+  return Prisma.join(clauses, ' AND ');
 }
 
 // How often the auto-run reconciler re-checks for ready-but-unstarted tasks (see
@@ -130,6 +193,8 @@ export interface ListTasksPageQuery {
   listId?: string;
   assigneeId?: string;
   q?: string;
+  /** `'none'` drops the aggregate block (and `total`) from the response. Omitted = include it. */
+  counts?: string;
 }
 
 export interface DependencyGraphQuery {
@@ -761,6 +826,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException(`limit must be an integer from 1 to ${MAX_TASK_PAGE_SIZE}`);
     }
 
+    const countsMode = query.counts?.trim().toLowerCase();
+    if (countsMode !== undefined && countsMode !== 'none') {
+      throw new BadRequestException("counts must be 'none' when set");
+    }
+
     const status = query.status?.trim().toUpperCase();
     const runnableOnly = status === 'RUNNABLE';
     const runningOnly = status === 'RUNNING';
@@ -784,14 +854,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       scopedWhere.assigneeId = query.assigneeId;
     }
 
-    const filteredWhere: Prisma.TaskWhereInput = runnableOnly
-      ? runnableTaskWhere(scopedWhere)
-      : runningOnly
-        ? { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } }
-        : { ...scopedWhere };
+    // The Ready tab is served by RUNNABLE_TASK_SQL, not a Prisma where — see that constant for
+    // why. Every other tab keeps its Prisma filter.
+    const filteredWhere: Prisma.TaskWhereInput = runningOnly
+      ? { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } }
+      : { ...scopedWhere };
     if (statuses) filteredWhere.status = { in: statuses };
-    const search = query.q?.trim();
-    if (search) filteredWhere.title = { contains: search.slice(0, 200), mode: 'insensitive' };
+    const search = query.q?.trim().slice(0, 200);
+    if (search) filteredWhere.title = { contains: search, mode: 'insensitive' };
 
     const cursor = query.cursor ? decodeTaskPageCursor(query.cursor) : undefined;
     const pageWhere: Prisma.TaskWhereInput = cursor
@@ -808,41 +878,46 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       : filteredWhere;
 
-    const [rows, filteredTotal, statusGroups, running, queued, runnable] = await Promise.all([
-      this.prisma.task.findMany({
-        where: pageWhere,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: limit + 1,
-        include: {
-          assignee: {
-            select: {
-              id: true,
-              name: true,
-              model: true,
-              runnerId: true,
-              runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
+    // `counts=none` drops the whole aggregate block. The counts describe the scope, not the
+    // page, so every page after the first recomputes numbers the client already has — and the
+    // client only ever reads them off page 1. Opt-in (rather than "skip when a cursor is set")
+    // because `counts` is a required field for already-shipped native clients.
+    const wantCounts = countsMode !== 'none';
+    // On the Ready tab the filtered total IS the runnable count; count it once and share it.
+    // A title search narrows the filtered total but deliberately not the tab badge, so that
+    // case still needs its own count.
+    const [rows, ownFilteredTotal, statusGroups, running, queued, runnable] = await Promise.all([
+      runnableOnly
+        ? this.runnableTaskPage(scopedWhere, { search, cursor, take: limit + 1 })
+        : this.prisma.task.findMany({
+            where: pageWhere,
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: limit + 1,
+            select: TASK_LIST_SELECT,
+          }),
+      !wantCounts || (runnableOnly && !search)
+        ? undefined
+        : runnableOnly
+          ? this.runnableTaskCount(scopedWhere, search)
+          : this.prisma.task.count({ where: filteredWhere }),
+      wantCounts
+        ? this.prisma.task.groupBy({ by: ['status'], where: scopedWhere, _count: { _all: true } })
+        : undefined,
+      wantCounts
+        ? this.prisma.task.count({
+            where: { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } },
+          })
+        : undefined,
+      wantCounts
+        ? this.prisma.task.count({
+            where: {
+              ...scopedWhere,
+              sessions: { some: { status: RunStatus.PENDING } },
+              NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
             },
-          },
-          _count: { select: { comments: true } },
-        },
-      }),
-      this.prisma.task.count({ where: filteredWhere }),
-      this.prisma.task.groupBy({
-        by: ['status'],
-        where: scopedWhere,
-        _count: { _all: true },
-      }),
-      this.prisma.task.count({
-        where: { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } },
-      }),
-      this.prisma.task.count({
-        where: {
-          ...scopedWhere,
-          sessions: { some: { status: RunStatus.PENDING } },
-          NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
-        },
-      }),
-      this.prisma.task.count({ where: runnableTaskWhere(scopedWhere) }),
+          })
+        : undefined,
+      wantCounts ? this.runnableTaskCount(scopedWhere) : undefined,
     ]);
 
     const hasMore = rows.length > limit;
@@ -855,25 +930,75 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const dependencyState = states.get(task.id) ?? 'NONE';
       return { ...task, dependencyState, blocked: !canRun(dependencyState) };
     });
-    const byStatus = new Map(statusGroups.map((group) => [group.status, group._count._all]));
+    const nextCursor =
+      hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null;
+    if (!wantCounts) return { items, nextCursor };
+
+    const groups = statusGroups ?? [];
+    const byStatus = new Map(groups.map((group) => [group.status, group._count._all]));
     const counts = {
-      total: statusGroups.reduce((sum, group) => sum + group._count._all, 0),
+      total: groups.reduce((sum, group) => sum + group._count._all, 0),
       open: byStatus.get(TaskStatus.OPEN) ?? 0,
       inProgress: byStatus.get(TaskStatus.IN_PROGRESS) ?? 0,
       done: byStatus.get(TaskStatus.DONE) ?? 0,
       failed: byStatus.get(TaskStatus.FAILED) ?? 0,
       cancelled: byStatus.get(TaskStatus.CANCELLED) ?? 0,
-      running,
-      queued,
-      runnable,
+      running: running ?? 0,
+      queued: queued ?? 0,
+      runnable: runnable ?? 0,
     };
 
-    return {
-      items,
-      nextCursor: hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null,
-      total: filteredTotal,
-      counts,
-    };
+    return { items, nextCursor, total: ownFilteredTotal ?? counts.runnable, counts };
+  }
+
+  /**
+   * One page of Ready-tab rows, newest first. Ranks the ids with the index-driven runnable
+   * predicate, then hydrates just those rows through Prisma so the payload shape stays
+   * identical to every other tab's.
+   */
+  private async runnableTaskPage(
+    scope: Prisma.TaskWhereInput,
+    opts: { search?: string; cursor?: { createdAt: Date; id: string }; take: number },
+  ) {
+    const clauses: Prisma.Sql[] = [taskScopeSql(scope), RUNNABLE_TASK_SQL];
+    if (opts.search) clauses.push(Prisma.sql`t.title ILIKE '%' || ${opts.search} || '%'`);
+    if (opts.cursor) {
+      // Bound as a naive timestamp to match the column's type: `created_at` is
+      // `timestamp(3) without time zone` holding UTC, and an ISO string casts to exactly
+      // the instant Prisma stored, whatever the server's timezone is.
+      const at = opts.cursor.createdAt.toISOString();
+      clauses.push(
+        Prisma.sql`(t.created_at < ${at}::timestamp
+          OR (t.created_at = ${at}::timestamp AND t.id < ${opts.cursor.id}::uuid))`,
+      );
+    }
+    const ranked = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT t.id FROM task t
+      WHERE ${Prisma.join(clauses, ' AND ')}
+      ORDER BY t.created_at DESC, t.id DESC
+      LIMIT ${opts.take}`;
+    if (ranked.length === 0) return [];
+    const rows = await this.prisma.task.findMany({
+      where: { id: { in: ranked.map((row) => row.id) } },
+      select: TASK_LIST_SELECT,
+    });
+    // findMany does not preserve the ranked order, and the cursor is cut from the last row.
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ranked
+      .map((row) => byId.get(row.id))
+      .filter((row): row is (typeof rows)[number] => row !== undefined);
+  }
+
+  /** How many tasks in this scope are ready to run — the Ready tab's badge. */
+  private async runnableTaskCount(
+    scope: Prisma.TaskWhereInput,
+    search?: string,
+  ): Promise<number> {
+    const clauses: Prisma.Sql[] = [taskScopeSql(scope), RUNNABLE_TASK_SQL];
+    if (search) clauses.push(Prisma.sql`t.title ILIKE '%' || ${search} || '%'`);
+    const [row] = await this.prisma.$queryRaw<{ count: number }[]>`
+      SELECT count(*)::int AS count FROM task t WHERE ${Prisma.join(clauses, ' AND ')}`;
+    return row?.count ?? 0;
   }
 
   /**

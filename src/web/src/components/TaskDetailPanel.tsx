@@ -384,7 +384,8 @@ export function TaskDetailPanel({
   const [dependencyQuery, setDependencyQuery] = useState('');
   const dependencyTasksQ = useQuery({
     queryKey: ['tasks', 'dependency-search', dependencyQuery],
-    queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery })),
+    // Only the options list is read, and this refires on every keystroke — skip the counts.
+    queryFn: () => api<TaskPage>(taskPagePath({ limit: 50, q: dependencyQuery, counts: 'none' })),
   });
 
   // After any dependency/auto-run/mark-done change, refresh this panel and the list (its

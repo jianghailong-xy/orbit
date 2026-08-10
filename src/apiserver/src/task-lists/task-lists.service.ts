@@ -4,6 +4,7 @@ import { RunEventType, TaskStatus as SharedTaskStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { canRun, computeDependencyState } from '../tasks/task-dependencies';
+import { TASK_LIST_SELECT } from '../tasks/tasks.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
 @Injectable()
@@ -67,22 +68,8 @@ export class TaskListsService {
     const list = await this.prisma.taskList.findFirst({
       where: { id, ownerId },
       include: {
-        // Mirror TasksService.list()'s shape so the frontend can reuse the row.
-        tasks: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            assignee: {
-              select: {
-                id: true,
-                name: true,
-                model: true,
-                runnerId: true,
-                runner: { select: { id: true, name: true, displayName: true, maxConcurrent: true } },
-              },
-            },
-            _count: { select: { comments: true } },
-          },
-        },
+        // Mirror TasksService.listPage()'s row shape so the frontend can reuse the row.
+        tasks: { orderBy: { createdAt: 'desc' }, select: TASK_LIST_SELECT },
       },
     });
     if (!list) throw new NotFoundException('task list not found');

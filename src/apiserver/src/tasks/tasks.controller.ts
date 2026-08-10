@@ -51,8 +51,17 @@ export class TasksController {
     @Query('listId') listId?: string,
     @Query('assigneeId') assigneeId?: string,
     @Query('q') q?: string,
+    @Query('counts') counts?: string,
   ) {
-    return this.tasks.listPage(user.userId, { cursor, limit, status, listId, assigneeId, q });
+    return this.tasks.listPage(user.userId, {
+      cursor,
+      limit,
+      status,
+      listId,
+      assigneeId,
+      q,
+      counts,
+    });
   }
 
   @Get(':id/dependency-graph')
