@@ -1,4 +1,5 @@
 import type { BgShell, SessionCapabilities } from '@orbit/shared';
+import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
@@ -16,6 +17,10 @@ export const setSession = (s: { accessToken: string; refreshToken: string }): vo
   localStorage.setItem(TOKEN_KEY, s.accessToken);
   localStorage.setItem(REFRESH_KEY, s.refreshToken);
   scheduleProactiveRefresh();
+  // Scope the persistent transcript cache to whoever this token belongs to. Done here rather than
+  // from the `me` query so it is bound before the first read: the token itself names the user, so
+  // no round trip is needed, and no window exists where a cache read is unscoped.
+  setTranscriptUser(jwtSubject(s.accessToken));
 };
 
 /** Clear the whole session (access + refresh). Used on sign-out and on an unrecoverable 401. */
@@ -26,6 +31,9 @@ export const clearToken = (): void => {
     clearTimeout(refreshTimer);
     refreshTimer = undefined;
   }
+  // Signing out has to take the stored transcripts with it — otherwise the full text of every
+  // conversation stays readable on disk to the next person to use this browser.
+  clearTranscriptStore();
 };
 
 // ── Token auto-refresh ──────────────────────────────────────────────────────────────────────
@@ -76,12 +84,30 @@ function jwtExp(token: string): number | null {
   }
 }
 
+/** Decode a JWT's `sub` (the user id), or null if it can't be read. Same base64url handling as
+ *  jwtExp above. Only used to scope local caches — the server re-verifies the token regardless,
+ *  so reading it unverified here grants nothing. */
+function jwtSubject(token: string): string | null {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { sub } = JSON.parse(atob(b64)) as { sub?: string };
+    return typeof sub === 'string' ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
 /** (Re)arm a timer to refresh ~1 min before the current access token expires. Called on boot, after
- *  login, and after each refresh. Safe to call repeatedly (replaces any pending timer). */
+ *  login, and after each refresh. Safe to call repeatedly (replaces any pending timer).
+ *
+ *  Also the boot-time hook that binds the persistent transcript cache to the stored session: this
+ *  runs from main.tsx before the first render, so a reload has its user scope set before AgentView
+ *  reads anything. */
 export function scheduleProactiveRefresh(): void {
   if (refreshTimer !== undefined) clearTimeout(refreshTimer);
   refreshTimer = undefined;
   const token = getToken();
+  setTranscriptUser(token ? jwtSubject(token) : null);
   if (!token || !getRefreshToken()) return;
   const exp = jwtExp(token);
   if (exp == null) return;

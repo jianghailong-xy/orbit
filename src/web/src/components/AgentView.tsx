@@ -163,6 +163,7 @@ import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivit
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
 import { firstPaintSlice, transcriptPlaceholder } from '../lib/transcriptPaint';
+import { loadTranscript, saveTranscript } from '../lib/transcriptStore';
 import {
   isCompleteShortcutEligible,
   scopedAttachmentCreateBlockedMessage,
@@ -1948,15 +1949,20 @@ export function AgentView({ runner }: { runner: Runner }) {
     // Resume just past what's loaded so only the gap is streamed, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
     const writeCache = (): void => {
-      cache.set(selectedId, {
+      const snapshot = {
         events: accRef.current,
         oldestSeq: oldestSeqRef.current,
         hasMoreOlder: hasMoreOlderRef.current,
-      });
+      };
+      cache.set(selectedId, snapshot);
       if (cache.size > TRANSCRIPT_CACHE_MAX) {
         const oldest = cache.keys().next().value;
         if (oldest !== undefined && oldest !== selectedId) cache.delete(oldest);
       }
+      // Mirror into the persistent L2 so the same transcript survives a reload. Returns at once —
+      // this runs on every appended event, and the store batches the actual write into an idle
+      // callback rather than opening a transaction per token.
+      saveTranscript(selectedId, snapshot);
     };
     const seedAbort = new AbortController();
     // Pending release of the events the first paint held back (see firstPaintSlice).
@@ -2106,6 +2112,30 @@ export function AgentView({ runner }: { runner: Runner }) {
     const seed: Promise<void> | null =
       cached.length === 0
         ? (async () => {
+            // L2 first: the same transcript, kept in IndexedDB so it outlives the page. A hit skips
+            // the tail page entirely — the SSE resumes from the stored max seq and replays only what
+            // happened since, exactly as an L1 hit does. A miss (or any error) returns null and falls
+            // through to the network below, so this can only save a request, never cost correctness.
+            const stored = await loadTranscript(selectedId);
+            if (closed) return;
+            if (stored && stored.events.length > 0) {
+              accRef.current = stored.events;
+              for (const e of stored.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+              oldestSeqRef.current = stored.oldestSeq;
+              hasMoreOlderRef.current = stored.hasMoreOlder;
+              lastSeq = stored.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+              const { now, deferred } = firstPaintSlice(stored.events);
+              setEvents(now);
+              setSeeding(false);
+              // Into L1 too, so switching away and back in this page load is synchronous again.
+              cache.set(selectedId, stored);
+              if (deferred) {
+                paintRest = setTimeout(() => {
+                  if (!closed) setEvents(accRef.current);
+                }, 0);
+              }
+              return;
+            }
             // Retry the tail seed a few times before giving up. A transient failure here used to fall
             // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
             // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
