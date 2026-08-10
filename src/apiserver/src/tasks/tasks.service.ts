@@ -125,6 +125,48 @@ const RUNNABLE_TASK_SQL = Prisma.sql`
   )`;
 
 /**
+ * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer
+ * `task t`. Deliberately NOT the same predicate as RUNNABLE_TASK_SQL, and the two must not be
+ * merged: this one is deployment-wide (no owner scope), requires status exactly OPEN rather
+ * than "not DONE", only considers tasks opted into auto-run, requires the task to HAVE
+ * prerequisites (a dependency-free task is never auto-run), and counts the wider
+ * TASK_OCCUPYING set — which includes idle-but-live AWAITING_INPUT/INTERRUPTED sessions — as
+ * "already being worked".
+ *
+ * The "has at least one DONE prerequisite" clause is logically implied by the two around it
+ * (having prerequisites + none outstanding means they are all DONE), and is stated anyway
+ * because it is the only *selective* entry point the planner has. Without it this predicate
+ * is `status = OPEN AND auto_run_when_ready`, which on a real backlog is nearly every task in
+ * the deployment, so PostgreSQL hash-joins all 55k dependency edges once a minute (measured
+ * 264ms per sweep, and rewriting the anti-joins as NOT EXISTS alone only got it to 199ms —
+ * with no LIMIT to stop at, the planner picks a hash anti-join either way). Anchored on DONE
+ * prerequisites instead it seeks the few hundred finished tasks through
+ * `task_dependency_depends_on_task_id_idx`: 264ms -> 32ms.
+ */
+const AUTO_RUN_READY_SQL = Prisma.sql`
+  t.status = 'OPEN'::task_status
+  AND t.auto_run_when_ready = true
+  AND EXISTS (SELECT 1 FROM agent a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND EXISTS (
+    SELECT 1 FROM task_dependency d
+    JOIN task p ON p.id = d.depends_on_task_id
+    WHERE d.task_id = t.id AND p.status = 'DONE'::task_status
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependency d
+    JOIN task p ON p.id = d.depends_on_task_id
+    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id
+      AND s.status IN (${Prisma.join(
+        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+        ', ',
+      )})
+  )`;
+
+/**
  * SQL mirror of the `{ ownerId, listId?, assigneeId? }` scope the Prisma queries are built
  * from. Derived from that same object rather than re-read from the query string, so the two
  * spellings of the scope cannot drift.
@@ -2094,33 +2136,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * backoff below are what bound that — without them this is an unbounded respawn loop.
    */
   private async reconcileReadyTasks(): Promise<void> {
-    const ready = await this.prisma.task.findMany({
-      where: {
-        status: TaskStatus.OPEN,
-        autoRunWhenReady: true,
-        // Assignee bound to a runner — the exact gap triggerDependents skips ("stays ready
-        // for later"). Once a runner is attached, the task becomes eligible here.
-        assignee: { runnerId: { not: null } },
-        // READY, resolved database-side: the task HAS prerequisites (a dependency-free task
-        // is never auto-run) and none of them is unfinished. Same predicate as
-        // computeDependencyState's READY — BLOCKED and BLOCKED_FAILED alike have a
-        // prerequisite that is `not DONE` and drop out here. Filtering in SQL rather than in
-        // memory is what keeps this sweep proportional to the work: a backlog is
-        // overwhelmingly BLOCKED tasks waiting their turn, and loading all of them (plus
-        // every one of their dependency edges) once a minute only to discard them dwarfs
-        // the dispatch it exists to do.
-        dependsOn: { some: {}, none: { dependsOnTask: { status: { not: TaskStatus.DONE } } } },
-        // Not already being worked or queued: don't double-dispatch, and don't re-poke an
-        // idle AWAITING_INPUT/INTERRUPTED session every pass. Same set as reclaimStalledTask.
-        sessions: { none: { status: { in: TASK_OCCUPYING } } },
-      },
-      select: {
-        id: true,
-        ownerId: true,
-        assignee: { select: { provider: true, runnerId: true } },
-      },
-    });
-    if (ready.length === 0) return;
+    // AUTO_RUN_READY_SQL resolves READY database-side — the task HAS prerequisites and none of
+    // them is unfinished, the same predicate as computeDependencyState's READY, so BLOCKED and
+    // BLOCKED_FAILED alike drop out. Filtering in SQL rather than in memory is what keeps this
+    // sweep proportional to the work: a backlog is overwhelmingly BLOCKED tasks waiting their
+    // turn, and loading all of them (plus every one of their dependency edges) once a minute
+    // only to discard them dwarfs the dispatch it exists to do.
+    const rows = await this.prisma.$queryRaw<
+      { id: string; ownerId: string; provider: string; runnerId: string | null }[]
+    >`
+      SELECT t.id, t.owner_id AS "ownerId", a.provider, a.runner_id AS "runnerId"
+      FROM task t
+      LEFT JOIN agent a ON a.id = t.assignee_id
+      WHERE ${AUTO_RUN_READY_SQL}`;
+    if (rows.length === 0) return;
+    // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
+    // can only match (the predicate requires an assignee with a runner), so assignee is never
+    // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
+    const ready = rows.map((row) => ({
+      id: row.id,
+      ownerId: row.ownerId,
+      assignee: { provider: row.provider, runnerId: row.runnerId },
+    }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
     const quotaBlocked = await this.quotaBlockedRunners(ready);

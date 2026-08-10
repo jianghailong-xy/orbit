@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Prisma } from '@prisma/client';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   TasksService,
 } from './tasks.service';
+import { TASK_OCCUPYING } from './reclaim-stalled-task';
 
 interface FailureHistory {
   taskId: string;
@@ -31,9 +33,10 @@ type GroupByArgs = {
 
 /**
  * One OPEN, auto-run, runner-bound task per entry in `history` plus `readyTaskIds` with no
- * failures at all. READY is resolved in SQL now, so the task stub simply returns the rows the
- * sweep's own `where` would have selected; what these tests exercise is everything the sweep
- * decides *after* that. execute() records what it dispatched.
+ * failures at all. READY is resolved in SQL now, so the candidate stub simply returns the rows
+ * AUTO_RUN_READY_SQL would have selected — flat, the shape `$queryRaw` hands back; what these
+ * tests exercise is everything the sweep decides *after* that. execute() records what it
+ * dispatched.
  *
  * The session.groupBy stub honours the caller's exclusion filter rather than ignoring the
  * `where`, so a test can assert which failures are counted — that filter is the contract.
@@ -42,14 +45,13 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
   const taskIds = [...readyTaskIds, ...history.map((h) => h.taskId)];
   const executed: string[] = [];
   const prisma = {
-    task: {
-      findMany: async () =>
-        taskIds.map((id) => ({
-          id,
-          ownerId: 'owner-1',
-          assignee: { provider: options.provider ?? 'codex', runnerId: 'runner-1' },
-        })),
-    },
+    $queryRaw: async () =>
+      taskIds.map((id) => ({
+        id,
+        ownerId: 'owner-1',
+        provider: options.provider ?? 'codex',
+        runnerId: 'runner-1',
+      })),
     runner: {
       findMany: async () => [{ id: 'runner-1', planUsage: options.planUsage ?? null }],
     },
@@ -232,4 +234,27 @@ test('a genuine failure still counts when quota failures are mixed in', async ()
   await sweep(service);
   // One real failure 30s ago -> still inside the first backoff window.
   assert.deepEqual(executed, []);
+});
+
+test('the sweep selects candidates on all five READY conditions, anchored on a DONE prerequisite', async () => {
+  let sql = '';
+  const prisma = {
+    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
+      sql = Prisma.sql(strings, ...(bound as never[])).text;
+      return [];
+    },
+  } as never;
+  await sweep(new TasksService(prisma, {} as never, {} as never));
+
+  assert.match(sql, /t\.status = 'OPEN'::task_status/);
+  assert.match(sql, /t\.auto_run_when_ready = true/);
+  assert.match(sql, /EXISTS \(SELECT 1 FROM agent a[\s\S]*a\.runner_id IS NOT NULL\)/);
+  assert.match(sql, /NOT EXISTS \([\s\S]*p\.status <> 'DONE'::task_status[\s\S]*\)/);
+  // Load-bearing despite being logically implied by the two clauses around it: it is the only
+  // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
+  // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).
+  assert.match(sql, /EXISTS \([\s\S]*p\.status = 'DONE'::task_status[\s\S]*\)/);
+  // The occupied-session set is the wider TASK_OCCUPYING (incl. idle-but-live AWAITING_INPUT /
+  // INTERRUPTED), not the two states the Ready tab's own predicate uses.
+  assert.equal((sql.match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
 });
