@@ -167,16 +167,20 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(ComposerLogic.blockedMessage(status: .running, capabilities: ending),
                        "This session is ending and cannot accept messages right now.")
 
-        // If only the local terminal bit is stale, do not silently reinterpret a denied resume as
-        // a normal turn; surface the server's NOT_TERMINAL explanation and wait for reconciliation.
+        // If only the local terminal bit is stale, the denied resume becomes a normal turn — the
+        // server is saying the session is live, and it is the one that knows. Blocking instead
+        // wedged the composer for good: the stream latches terminal on a FAILED turn_end (a
+        // sign-in that expired mid-session is how this is reached in practice), the live→terminal
+        // →live transitions are never replayed, and `reconcileStatus` only moves toward terminal —
+        // so the disagreement could not resolve and every send was refused. Web, which dispatches
+        // off the fetched record, sends here too.
         let stillLive = SessionCapabilities(canSend: true, canResume: false,
                                             resumeBlockedReason: .notTerminal,
                                             canComplete: true, canRestore: false)
         XCTAssertEqual(ComposerLogic.availability(status: .failed,
-                                                  capabilities: stillLive), .blocked)
+                                                  capabilities: stillLive), .sendNow)
         XCTAssertFalse(ComposerLogic.shouldResume(status: .failed, capabilities: stillLive))
-        XCTAssertEqual(ComposerLogic.blockedMessage(status: .failed, capabilities: stillLive),
-                       "This session is still active and does not need to be resumed.")
+        XCTAssertNil(ComposerLogic.blockedMessage(status: .failed, capabilities: stillLive))
     }
 
     func testCapabilitiesKeepLegacyFallbackAndForwardCompatibleCopy() {
