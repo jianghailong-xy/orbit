@@ -354,6 +354,45 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.queued, false)
     }
 
+    /// Regression (the reported iOS bug): an expired sign-in fails the run *before* the runner feeds
+    /// the message to the agent, so no durable `user` event is ever emitted for it and the server
+    /// drains the queued turn silently. The bubble used to sit on "Sending…" for the life of the
+    /// session — a message that was going nowhere, looking like it was still on its way. The terminal
+    /// status is the signal: anything still pending when the run settles was never taken.
+    func testTerminalStatusMarksUnconfirmedSendsUndelivered() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "什么是 icr")
+        r.addOptimisticUser(clientTurnId: "c2", text: "and this too", queued: true)
+        // The signed-out engine reports itself as an error event → the sign-in remedy card.
+        r.apply(RunEvent(seq: 10, type: .error, payload: .object([
+            "message": .string("Failed to authenticate: Claude Code is installed on this runner but not signed in."),
+        ])))
+        r.apply(RunEvent(seq: 11, type: .turnEnd, payload: .object(["status": .string("FAILED")])))
+
+        XCTAssertEqual(r.state.status, .failed)
+        XCTAssertEqual(r.state.items[0].asUser?.pending, false)
+        XCTAssertEqual(r.state.items[0].asUser?.undelivered, true)
+        XCTAssertEqual(r.state.items[0].asUser?.text, "什么是 icr", "the text stays — the card's Retry re-sends it")
+        XCTAssertEqual(r.state.queued[0].undelivered, true, "a queued turn is drained by the same end")
+    }
+
+    /// The mark applies only to turns the server never echoed, and only when the run actually ends.
+    func testUndeliveredMarkSparesConfirmedTurnsAndLiveStatuses() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "ship it")
+        r.apply(RunEvent(seq: 10, type: .user, payload: .object(["text": .string("ship it"),
+                                                                 "clientTurnId": .string("c1")])))
+        r.apply(RunEvent(seq: 11, type: .turnEnd, payload: .object(["status": .string("FAILED")])))
+        XCTAssertEqual(r.state.items[0].asUser?.undelivered, false,
+                       "this turn WAS delivered — the run failed afterwards, which the error row says")
+
+        var live = TranscriptReducer()
+        live.addOptimisticUser(clientTurnId: "c2", text: "still going")
+        live.apply(RunEvent(seq: 10, type: .turnEnd, payload: .object(["status": .string("AWAITING_INPUT")])))
+        XCTAssertEqual(live.state.items[0].asUser?.pending, true, "a live session's send is still on its way")
+        XCTAssertEqual(live.state.items[0].asUser?.undelivered, false)
+    }
+
     /// Regression (the reported iOS bug): a message sent mid-stream must NOT be spliced into the
     /// middle of the reply. The assistant keeps streaming after the send — the queued bubble stays
     /// apart in `state.queued`, and the open assistant bubble keeps growing in place, unsplit.

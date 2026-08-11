@@ -60,12 +60,7 @@ public enum ComposerLogic {
 
     /// True when a terminal-but-resumable session should be revived via POST /resume rather
     /// than POST /turns.
-    public static func shouldResume(status: RunStatus) -> Bool {
-        switch status {
-        case .succeeded, .failed, .cancelled: return true
-        default: return false
-        }
-    }
+    public static func shouldResume(status: RunStatus) -> Bool { status.isTerminal }
 
     /// Server capability wins when present, but execution state still chooses the endpoint:
     /// terminal + resumable uses `/resume`; a live send always uses `/turns`.

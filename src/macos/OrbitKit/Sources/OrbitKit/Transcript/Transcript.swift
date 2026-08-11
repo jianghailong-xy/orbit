@@ -68,9 +68,15 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// rather than being delivered immediately — drives a "Queued" indicator instead of "Sending…"
     /// (web parity). Captured once at send time; only read while `pending`.
     public var queued: Bool
+    /// The run ended before this message was ever handed to the agent, so it never will be — the
+    /// server drains still-queued turns when a session settles terminal, and says so with no event
+    /// of its own. Replaces the "Sending…"/"Queued" indicator with "Not delivered" instead of
+    /// leaving a message that is going nowhere looking like it is still on its way.
+    public var undelivered: Bool
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
-                clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false) {
+                clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
+                undelivered: Bool = false) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -79,11 +85,14 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.turnId = turnId
         self.pending = pending
         self.queued = queued
+        self.undelivered = undelivered
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
-    enum CodingKeys: String, CodingKey { case id, text, attachments, ts, clientTurnId, turnId, pending, queued }
+    enum CodingKeys: String, CodingKey {
+        case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
@@ -94,6 +103,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         turnId = try? c.decodeIfPresent(String.self, forKey: .turnId)
         pending = (try? c.decodeIfPresent(Bool.self, forKey: .pending)) ?? false
         queued = (try? c.decodeIfPresent(Bool.self, forKey: .queued)) ?? false
+        undelivered = (try? c.decodeIfPresent(Bool.self, forKey: .undelivered)) ?? false
     }
 }
 
