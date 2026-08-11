@@ -170,6 +170,22 @@ describe('isUsageLimitErrorText', () => {
     expect(isUsageLimitErrorText('run failed')).toBe(false);
     expect(isUsageLimitErrorText(null)).toBe(false);
   });
+  // A reply that investigates a quota outage quotes the provider's sentence mid-paragraph.
+  // Reading that as the provider refusing to answer replaced the answer, in the transcript,
+  // with a card announcing a limit the account had not hit.
+  it('does not mistake an answer *about* a quota outage for one', () => {
+    expect(
+      isUsageLimitErrorText(
+        '27 of the 28 runs failed, all with the same error from codex: ' + `"${codex}"`,
+      ),
+    ).toBe(false);
+  });
+  it('still reads a reply whose sentence is only led into', () => {
+    expect(isUsageLimitErrorText('\n\n' + codex)).toBe(true);
+    expect(isUsageLimitErrorText('You have hit your weekly limit · resets 1pm (Europe/Berlin)')).toBe(
+      true,
+    );
+  });
 });
 
 describe('isBenignEngineStderr', () => {

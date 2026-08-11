@@ -150,16 +150,31 @@ export const USAGE_LIMIT_ERROR_MARKERS = [
 ];
 
 /**
+ * How far into a reply the quota sentence may begin. Every phrasing above leads with
+ * "You've " and nothing else, so this is an allowance for a variant lead-in ("You have ", a
+ * bullet), not a search window: past it the marker is the model *quoting* a quota error — an
+ * answer that mentions one is an ordinary reply, and rendering it as the provider refusing
+ * to answer replaces it with a card that says the opposite of what it says.
+ */
+const USAGE_LIMIT_MARKER_MAX_OFFSET = 40;
+
+/**
  * Was this run killed by the account's provider quota running out? Such a failure says
  * nothing about the task — every retry fails identically until the quota window resets — so
  * schedulers must not hold it against the task. Classifies a failure *after* the fact; the
  * authoritative answer to "when can work resume" is the runner's own quota snapshot
  * (`planUsageBlockedUntil`), which reports a machine-readable reset time.
+ *
+ * The reply must *open* with the provider's sentence, not merely contain it: a spent quota is
+ * the entire reply, whereas an answer that investigates one quotes it mid-paragraph.
  */
 export function isUsageLimitErrorText(text: string | null | undefined): boolean {
   if (!text) return false;
-  const lower = text.toLowerCase();
-  return USAGE_LIMIT_ERROR_MARKERS.some((marker) => lower.includes(marker));
+  const lower = text.trimStart().toLowerCase();
+  return USAGE_LIMIT_ERROR_MARKERS.some((marker) => {
+    const at = lower.indexOf(marker);
+    return at >= 0 && at <= USAGE_LIMIT_MARKER_MAX_OFFSET;
+  });
 }
 
 /**

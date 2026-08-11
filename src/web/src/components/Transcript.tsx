@@ -698,12 +698,15 @@ const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
   apiError: MAX_API_ERROR_RETRIES,
 };
 
-/** The window that ran out, in the runtime's own terms. */
+/** The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
+ *  uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
+ *  window tells the user to wait days for a quota that comes back in hours. Codex names no
+ *  window at all, and falls through to the generic wording. */
 function quotaWindow(message: string): { title: string; what: string } {
   const m = message.toLowerCase();
-  if (m.includes('session limit'))
+  if (m.includes('hit your session limit'))
     return { title: 'Session limit reached', what: 'The 5-hour quota' };
-  if (m.includes('weekly limit'))
+  if (m.includes('hit your weekly limit'))
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
 }

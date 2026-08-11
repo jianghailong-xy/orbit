@@ -103,6 +103,45 @@ describe('transient provider error card', () => {
   });
 });
 
+// Which window ran out is the whole point of the card: a 5-hour quota named as the weekly one
+// tells the reader to come back in days for something that returns this evening.
+describe('spent quota card', () => {
+  const render = (text: string) =>
+    renderToStaticMarkup(
+      <AutoRetryCtx.Provider value={{ provider: 'claude', runnerName: 'wikova' }}>
+        <Transcript events={[{ seq: 1, type: 'assistant', payload: { text } }]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+  it('names the rolling window the runtime actually named', () => {
+    const html = render("You've hit your session limit · resets 8:20pm (Europe/Berlin)");
+
+    expect(html).toContain('Session limit reached');
+    expect(html).toContain('The 5-hour quota');
+    expect(html).not.toContain('Weekly limit');
+  });
+
+  it('names the weekly window only when the runtime does', () => {
+    const html = render("You've hit your weekly limit · resets Aug 3, 1pm (Europe/Berlin)");
+
+    expect(html).toContain('Weekly limit reached');
+  });
+
+  // The reply that surfaced this was an *answer* about a quota outage — it quoted the Codex
+  // wording while explaining why a task had run 28 times. Read as the provider refusing to
+  // answer, it vanished from the transcript behind a card announcing a limit nobody had hit.
+  it('leaves an answer that merely quotes a quota error as the answer', () => {
+    const html = render(
+      'All 27 failed with the same codex error: "You\'ve hit your usage limit. Visit ' +
+        'https://chatgpt.com/codex/settings/usage to purchase more credits." The weekly limit ' +
+        'is not what stopped them.',
+    );
+
+    expect(html).not.toContain('chat-quota');
+    expect(html).toContain('All 27 failed');
+  });
+});
+
 describe('engine stderr', () => {
   const stderrEvent = (seq: number, stderr: string): RunEvent => ({
     seq,
