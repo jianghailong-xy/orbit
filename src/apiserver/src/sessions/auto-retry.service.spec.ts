@@ -57,8 +57,14 @@ function makeService(
       },
     },
     runEvent: {
-      findMany: async () =>
-        [...(opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }])].reverse(),
+      // Honour `where.type` and `take`: what stranded these sessions was reading a fixed
+      // window of the stream's end, which on a long turn holds no user event at all. A fake
+      // that hands back the user events regardless of what was asked for cannot see that.
+      findMany: async (args: { where: { type?: string }; take: number }) => {
+        const all = opts.events ?? [{ type: 'user', payload: { text: 'the original message' } }];
+        const matching = args.where.type ? all.filter((e) => e.type === args.where.type) : all;
+        return matching.slice(-args.take).reverse();
+      },
     },
   };
   const sessions = {
@@ -192,6 +198,21 @@ test('does not re-send when there is nothing to re-send', async () => {
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'inventing a "continue" would be writing in the user’s voice');
   assert.equal(rows[0].retryAt, null);
+});
+
+// The message a retry re-sends sits behind everything the agent did in response to it. Two
+// real sessions were disarmed as "nothing to re-send" at the moment their quota came back,
+// with the user's message 400+ events up the stream — while the transcript card, which reads
+// the whole stream, went on offering to re-send exactly that message.
+test('finds the user message behind a long turn', async () => {
+  const buried = [
+    { type: 'user' as const, payload: { text: 'the original message' } },
+    ...Array.from({ length: 500 }, () => ({ type: 'tool_use' as const, payload: { name: 'Bash' } })),
+    { type: 'assistant' as const, payload: { text: "You've hit your session limit" } },
+  ];
+  const { service, resumed } = makeService([row()], { events: buried });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original message' }]);
 });
 
 test('falls back to the opening prompt when the very first turn hit the limit', async () => {

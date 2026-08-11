@@ -1,6 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { lastUserMessageText, planUsageBlockedUntil, type PlanUsage } from '@orbit/shared';
+import {
+  RunEventType,
+  lastUserMessageText,
+  planUsageBlockedUntil,
+  type PlanUsage,
+} from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from './sessions.service';
@@ -175,15 +180,19 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     prompt: string,
     numTurns: number,
   ): Promise<string> {
-    // Bounded tail rather than the whole stream: the latest user event is near the end by
-    // construction, and a long session's events are the largest rows in the database.
-    const tail = await this.prisma.runEvent.findMany({
-      where: { sessionId },
+    // The user events themselves, not a tail of the whole stream: the latest one is near the
+    // end only on a short turn. One agent turn emits hundreds of tool/system events after the
+    // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
+    // of the end misses the very message a retry exists to re-send, and the session is
+    // disarmed as "nothing to re-send" while the card, which reads the entire stream, is still
+    // promising it. A handful of events covers a run of image-only turns, which carry no text.
+    const recent = await this.prisma.runEvent.findMany({
+      where: { sessionId, type: RunEventType.USER },
       orderBy: { seq: 'desc' },
-      take: 200,
+      take: 20,
       select: { type: true, payload: true },
     });
-    return lastUserMessageText(tail.reverse(), prompt, numTurns);
+    return lastUserMessageText(recent.reverse(), prompt, numTurns);
   }
 
   /**
