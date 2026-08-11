@@ -22,6 +22,15 @@ public enum RunStatus: String, Codable, Sendable {
         default: return false
         }
     }
+
+    /// The run is over: nothing more can be delivered to it without a resume. Not the inverse of
+    /// `isLive` — `pending` is neither (the session is queued, waiting for a runner).
+    public var isTerminal: Bool {
+        switch self {
+        case .succeeded, .failed, .cancelled: return true
+        default: return false
+        }
+    }
 }
 
 /// Product-facing execution state. Unlike ``SessionState``, this dimension says only what the

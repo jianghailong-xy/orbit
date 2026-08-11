@@ -203,13 +203,16 @@ public struct TranscriptReducer: Sendable, Codable {
 
     /// Drop an optimistic bubble whose send ultimately failed, so a message that never reached the
     /// server doesn't sit in the transcript looking delivered (the composer hands its text back
-    /// instead — see `ConsoleModel.send`). Matched by `clientTurnId`, and only while still `pending`:
+    /// instead — see `ConsoleModel.send`). Matched by `clientTurnId`, and only while unconfirmed:
     /// a bubble the durable `user` event already reconciled belongs to a turn that DID land — the
-    /// response to it was merely lost — and must stay.
+    /// response to it was merely lost — and must stay. `undelivered` counts as unconfirmed (the run
+    /// ended under a send still retrying its POST), or the composer would hand the text back AND
+    /// leave the bubble behind.
     public mutating func removeOptimisticUser(clientTurnId: String) {
-        state.queued.removeAll { $0.clientTurnId == clientTurnId && $0.pending }
+        func unconfirmed(_ b: UserBubble) -> Bool { b.pending || b.undelivered }
+        state.queued.removeAll { $0.clientTurnId == clientTurnId && unconfirmed($0) }
         guard let i = state.items.firstIndex(where: {
-            if case .user(let b) = $0 { return b.clientTurnId == clientTurnId && b.pending }
+            if case .user(let b) = $0 { return b.clientTurnId == clientTurnId && unconfirmed(b) }
             return false
         }) else { return }
         state.items.remove(at: i)
@@ -363,9 +366,33 @@ public struct TranscriptReducer: Sendable, Codable {
     private mutating func endTurn(_ ev: RunEvent) {
         flushStreaming()
         if let s = str(ev, "status"), let st = RunStatus(rawValue: s) {
-            state.status = st
+            setStatus(st)
         } else {
-            state.status = .awaitingInput
+            setStatus(.awaitingInput)
+        }
+    }
+
+    /// Adopt a run-status transition, and settle anything the transition strands.
+    ///
+    /// A message is only un-pended by its own durable `user` event, which the runner emits when it
+    /// hands the text to the agent. If the run settles terminal first — an expired sign-in is the
+    /// common way, since the runner's auth preflight fails *before* it feeds the turn — that event
+    /// never comes: the server drains the still-queued turns (`status: ANSWERED`) and broadcasts no
+    /// event saying so. The bubble would then sit on "Sending…" for the life of the session, and a
+    /// resume can't rescue it either (that turn is spent; a retry is a new one). Terminal is the
+    /// signal, so mark them here — anything still pending at this point was never taken.
+    private mutating func setStatus(_ status: RunStatus) {
+        state.status = status
+        guard status.isTerminal else { return }
+        for i in state.items.indices {
+            guard case .user(var b) = state.items[i], b.pending else { continue }
+            b.pending = false
+            b.undelivered = true
+            state.items[i] = .user(b)
+        }
+        for i in state.queued.indices where state.queued[i].pending {
+            state.queued[i].pending = false
+            state.queued[i].undelivered = true
         }
     }
 
@@ -552,7 +579,7 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func applyStatus(_ ev: RunEvent) {
-        if let s = str(ev, "status"), let st = RunStatus(rawValue: s) { state.status = st }
+        if let s = str(ev, "status"), let st = RunStatus(rawValue: s) { setStatus(st) }
     }
 
     // MARK: - helpers
