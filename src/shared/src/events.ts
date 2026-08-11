@@ -74,8 +74,12 @@ const RETRYABLE_API_ERROR_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]
  * Plain lowercase substrings.
  */
 export const RETRYABLE_API_ERROR_MARKERS = [
-  // The stream died between the request and the reply.
-  'connection closed mid-response',
+  // The stream died between the request and the reply. The runtime has several wordings for
+  // the one event ("connection closed mid-response", "connection lost mid-response",
+  // "response stalled mid-stream"), so key on the part they share rather than enumerating
+  // them — both fragments only ever appear in this failure.
+  'mid-response',
+  'mid-stream',
   // Claude Code's wrapper around a socket/DNS failure.
   'connection error',
   'timed out',

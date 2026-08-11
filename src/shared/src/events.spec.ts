@@ -78,8 +78,19 @@ describe('isRetryableApiErrorText', () => {
   });
 
   it('flags a call that never reached a status code', () => {
-    // Verbatim from the turn-complete fixture — the stream died mid-reply.
+    // Verbatim from the turn-complete fixture — the stream died mid-reply. All three wordings
+    // have been observed on FAILED sessions.
     expect(isRetryableApiErrorText('API Error: Connection closed mid-response.')).toBe(true);
+    expect(
+      isRetryableApiErrorText(
+        'API Error: Connection lost mid-response. The response above may be incomplete.',
+      ),
+    ).toBe(true);
+    expect(
+      isRetryableApiErrorText(
+        'API Error: Response stalled mid-stream. The response above may be incomplete.',
+      ),
+    ).toBe(true);
     expect(isRetryableApiErrorText('API Error: Connection error.')).toBe(true);
     expect(isRetryableApiErrorText('API Error: Request timed out.')).toBe(true);
   });
