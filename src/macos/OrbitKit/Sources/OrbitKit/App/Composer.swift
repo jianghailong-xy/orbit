@@ -38,13 +38,23 @@ public enum ComposerLogic {
 
     /// Capability-aware send availability. A new server is authoritative about whether this
     /// exact session can accept another message; nil preserves the old status-only behavior.
-    /// Terminal sessions additionally need resume permission — never reinterpret a denied resume
-    /// as permission to POST a normal turn against a stale lifecycle snapshot.
+    ///
+    /// `canSend` is the umbrella and the ONLY gate: the server already folds "terminal but not
+    /// resumable" into it (`canSend = !trashed && !ending && (!terminal || canResume)`), so a
+    /// terminal session whose context is gone / whose runner is offline is blocked here too. The
+    /// one case where `canSend` is true while `canResume` is false is NOT_TERMINAL — the server
+    /// saying the session is *live*, i.e. that our terminal belief is the stale one. Blocking on
+    /// that used to wedge the composer permanently: the stream latches terminal (a `turn_end`
+    /// with status FAILED), the un-replayable live→terminal→live transitions never come back, and
+    /// `reconcileStatus` only ever moves *toward* terminal — so nothing could clear the belief and
+    /// every send was refused with "this session is still active". Web has no such latch (it
+    /// dispatches straight off the fetched record — `sessionSendDispositionOf`), which is why the
+    /// same session kept working there. Send normally instead; `shouldResume` already routes it to
+    /// POST /turns, and the turn's own events re-sync the stream status.
     public static func availability(status: RunStatus,
                                     capabilities: SessionCapabilities?) -> SendAvailability {
         guard let capabilities else { return availability(status: status) }
         guard capabilities.canSend else { return .blocked }
-        if shouldResume(status: status), !capabilities.canResume { return .blocked }
         return availability(status: status)
     }
 
@@ -68,20 +78,19 @@ public enum ComposerLogic {
 
     /// User-facing explanation for a send that capabilities prohibit. nil means it is safe to
     /// proceed (or no capability object was supplied, so the legacy status inference applies).
+    /// Keyed on `canSend` for the same reason `availability` is: a NOT_TERMINAL denial is the
+    /// server telling us the session is fine, not a reason to stop the user sending — and showing
+    /// it as a standing banner made a recoverable disagreement look like a dead session.
     public static func blockedMessage(status: RunStatus,
                                       capabilities: SessionCapabilities?) -> String? {
-        guard let capabilities else { return nil }
+        guard let capabilities, !capabilities.canSend else { return nil }
+        // Resume-flavoured copy while the session looks terminal to us ("…cannot be resumed"),
+        // send-flavoured while it looks live ("…cannot accept messages").
         if shouldResume(status: status) {
-            guard capabilities.canSend && capabilities.canResume else {
-                return resumeBlockedMessage(reason: capabilities.resumeBlockedReason)
-                    ?? "This session cannot be resumed right now."
-            }
-            return nil
+            return resumeBlockedMessage(reason: capabilities.resumeBlockedReason)
+                ?? "This session cannot be resumed right now."
         }
-        guard capabilities.canSend else {
-            return sendBlockedMessage(reason: capabilities.resumeBlockedReason)
-        }
-        return nil
+        return sendBlockedMessage(reason: capabilities.resumeBlockedReason)
     }
 
     /// Detailed explanation for why an existing runner context cannot be resumed.
