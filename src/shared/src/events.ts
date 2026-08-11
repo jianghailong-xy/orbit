@@ -84,6 +84,9 @@ export const RETRYABLE_API_ERROR_MARKERS = [
   'connection error',
   'timed out',
   'timeout',
+  // A 500 in prose. The runtime prints the status when it has a response to read one off and
+  // just this sentence when it does not, so the codeless spelling needs its own entry.
+  'internal server error',
   // A 529 body says `overloaded_error`; the status check already covers that one, but the
   // runtime also prints the bare word when it has no response to read a status off.
   'overloaded',

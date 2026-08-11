@@ -118,6 +118,24 @@ describe('isRetryableApiErrorText', () => {
     expect(isRetryableApiErrorText('all good')).toBe(false);
     expect(isRetryableApiErrorText(null)).toBe(false);
   });
+
+  // Every distinct `API Error:` reply in the production database, verbatim, with the call this
+  // classifier has to make on each. Guessing at wording is what the marker list forbids, so the
+  // list of things actually seen in the wild is the test: a new one shows up here first.
+  it.each([
+    ['API Error: 400 Output blocked by content filtering policy', false],
+    ['API Error: Output blocked by content filtering policy', false],
+    ['API Error: 402 Insufficient Balance', false],
+    ['API Error: an image in the conversation could not be processed and was removed.', false],
+    ['API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again', true],
+    ['API Error: Overloaded', true],
+    ['API Error: 500 Internal server error. This is a server-side issue, usually temporary', true],
+    // The same failure without a status: the runtime prints one only when it got a response.
+    ['API Error: Internal server error', true],
+    ['API Error: Connection closed mid-response. The response above may be incomplete.', true],
+  ])('%s → retryable: %s', (text, retryable) => {
+    expect(isRetryableApiErrorText(text as string)).toBe(retryable);
+  });
 });
 
 describe('isAuthErrorText', () => {
