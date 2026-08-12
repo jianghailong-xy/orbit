@@ -104,7 +104,11 @@ import {
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
-import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
+import {
+  currentProviderChoice,
+  providerChoices,
+  sameRuntimeChoices,
+} from '../lib/sessionProviderChoices';
 import { BackgroundShellsTray } from './BackgroundShellsTray';
 import type { BgShell } from '../lib/backgroundShells';
 import {
@@ -1690,10 +1694,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     configuredProvidersLoaded,
   );
 
-  // What the New Session hero offers, and what it shows as current. Engines first — only the ones
-  // this runner reported as installed, since the session runs on that machine — then this
-  // account's providers.
-  const providerChoicesForDraft = useMemo(
+  // Everything that could run a session on this machine: engines first — with the health this
+  // runner reported, since the session runs there — then this account's providers. The New
+  // Session hero offers all of it; the composer's Provider pill offers the same-runtime slice.
+  const providerChoicesForRunner = useMemo(
     () =>
       providerChoices(
         configuredProviders,
@@ -1707,14 +1711,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     () =>
       currentProviderChoice(
         pickedProvider,
-        providerChoicesForDraft,
+        providerChoicesForRunner,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
       ),
     [
       pickedProvider,
-      providerChoicesForDraft,
+      providerChoicesForRunner,
       runner.modelCatalog,
       configuredProviders,
       runner.runtimeDefaultModels,
@@ -1727,7 +1731,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => () => { if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current); }, []);
   const pickDraftProvider = (slug: string): void => {
     setDraftProviderPick({ agentId, provider: slug });
-    const picked = providerChoicesForDraft.find((c) => c.slug === slug);
+    const picked = providerChoicesForRunner.find((c) => c.slug === slug);
     // The pick binds this session and nothing else. Later sessions follow it only because the
     // default is read back from what this project last ran — no config is being rewritten.
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
@@ -2995,13 +2999,17 @@ export function AgentView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
-  // Change a LIVE session's model / mode between turns. Optimistically patch the
+  // Change a LIVE session's model / mode / provider between turns. Optimistically patch the
   // cached session so the pill updates instantly; server-side the runner re-spawns
   // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
   // effectiveView to match the (view-scoped) sessions query that renders the list.
   const configMut = useMutation({
-    mutationFn: (cfg: { model?: string; permissionMode?: string; effort?: string }) =>
-      updateSessionConfig(selected!.id, cfg),
+    mutationFn: (cfg: {
+      model?: string;
+      permissionMode?: string;
+      effort?: string;
+      provider?: string;
+    }) => updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
       await qc.cancelQueries({ queryKey: sessionsKey });
       const prev = qc.getQueryData<any[]>(sessionsKey);
@@ -3505,6 +3513,31 @@ export function AgentView({ runner }: { runner: Runner }) {
         ...catalogModelOptions,
       ];
   const shownPlanUsage = sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+  // Where this session could move without changing CLI. Only for a session that is still open:
+  // a draft picks its provider in the hero above (which offers every runtime, not one), and an
+  // ended session has no config to change — a PATCH would be refused. A single entry means there
+  // is nowhere to go, and the pill stays out of the composer entirely — the common case, one
+  // Claude sign-in and no configured providers.
+  const providerSwitchChoices = useMemo(
+    () =>
+      live
+        ? sameRuntimeChoices(
+            shownProvider,
+            providerChoicesForRunner,
+            configuredProviders,
+            runner.modelCatalog,
+            runner.runtimeDefaultModels,
+          )
+        : [],
+    [
+      live,
+      shownProvider,
+      providerChoicesForRunner,
+      configuredProviders,
+      runner.modelCatalog,
+      runner.runtimeDefaultModels,
+    ],
+  );
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
@@ -4481,7 +4514,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             >
               <NewSessionProviderHero
                 current={currentProviderChoiceForDraft}
-                choices={providerChoicesForDraft}
+                choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
                 runnerId={runner.id}
                 // Nothing to choose until we know which agent (and so which project) this runs in.
@@ -5005,6 +5038,56 @@ export function AgentView({ runner }: { runner: Runner }) {
             </span>
           </Tooltip>
           <span className="composer-pill-spacer" />
+          {providerSwitchChoices.length > 1 && (
+            <Tooltip title={configHint || 'Provider'} open={hoverTipOpen}>
+              <span className="composer-pill">
+                <Select
+                  size="small"
+                  variant="borderless"
+                  suffixIcon={null}
+                  value={shownProvider}
+                  onChange={(v) => {
+                    // Each provider owns its model space, so carry the running model only when
+                    // the new one offers it (two Anthropic accounts do; a third-party endpoint
+                    // with its own list does not) and otherwise take that provider's default.
+                    // Mode and effort follow the model, exactly as a model switch makes them.
+                    const nextModel = modelOptionsForProvider(
+                      v,
+                      runner.modelCatalog,
+                      configuredProviders,
+                    ).some((option) => option.value === shownModel)
+                      ? shownModel
+                      : defaultModelForProvider(
+                          v,
+                          runner.modelCatalog,
+                          configuredProviders,
+                          runner.runtimeDefaultModels,
+                        );
+                    const drop =
+                      shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders);
+                    const nextEffort = normalizeEffortForProvider(
+                      v,
+                      effectiveEffort,
+                      nextModel,
+                      runner.modelCatalog,
+                    );
+                    configMut.mutate({
+                      provider: v,
+                      ...(nextModel !== shownModel ? { model: nextModel } : {}),
+                      ...(drop ? { permissionMode: 'default' } : {}),
+                      ...(nextEffort !== effectiveEffort ? { effort: nextEffort } : {}),
+                    });
+                  }}
+                  options={providerSwitchChoices.map((choice) => ({
+                    value: choice.slug,
+                    label: choice.label,
+                  }))}
+                  disabled={!configEditable}
+                  popupMatchSelectWidth={false}
+                />
+              </span>
+            </Tooltip>
+          )}
           <Tooltip
             title={
               !shownProviderCapabilitiesResolved

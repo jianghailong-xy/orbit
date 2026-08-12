@@ -35,6 +35,27 @@ function runtimeOf(row: ModelProviderRow): AgentProvider {
   return AgentProvider.CLAUDE;
 }
 
+/**
+ * The built-in runtime that will actually execute a provider identity: a live configured row's
+ * borrowed runtime, else the built-in ladder (with the same Claude fallback a
+ * deleted/disabled slug dispatches under). This is exactly `resolveProviderExec`'s `provider`,
+ * answered without resolving a model or decrypting a key — the question a provider switch asks
+ * of both sides before deciding whether the session may move.
+ */
+export function execRuntime(args: {
+  declaredProvider?: string | null;
+  declaredProviderBuiltin?: boolean;
+  customRow: ModelProviderRow | null;
+}): AgentProvider {
+  if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
+  if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
+  if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
+  if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
+    return AgentProvider.KIMI;
+  }
+  return AgentProvider.CLAUDE;
+}
+
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →
 // Anthropic-compatible vars (Phase 1); codex runtime → OpenAI-compatible (Phase 2); kimi runtime →
 // the Kimi CLI's own KIMI_MODEL_* provider.
@@ -105,7 +126,7 @@ export function resolveProviderExec(args: {
   const { customRow, sessionModel, agentModel, agentEnv } = args;
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
-    const runtime = runtimeOf(customRow);
+    const runtime = execRuntime(args);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
@@ -125,14 +146,7 @@ export function resolveProviderExec(args: {
   // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
-  const provider =
-    args.declaredProvider === AgentProvider.CODEX
-      ? AgentProvider.CODEX
-      : args.declaredProvider === AgentProvider.OPENCODE
-        ? AgentProvider.OPENCODE
-        : args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false
-          ? AgentProvider.KIMI
-          : AgentProvider.CLAUDE;
+  const provider = execRuntime(args);
   const env = agentEnv ?? undefined;
   const explicitSessionModel = firstNonBlank(sessionModel);
   // An explicit per-session selection retains the historical safety behavior: a clearly

@@ -76,7 +76,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 	}()
 
 	var pendingShellCtx []string
-	var pendingReloads []string
+	var pendingReloads []*RunInboxResponse
 	var queued []*RunInboxResponse
 	seen := map[string]bool{}
 	queuedIDs := map[string]bool{}
@@ -192,8 +192,9 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 		activeDone = nil
 		setTurn("")
 		if len(pendingReloads) > 0 {
-			for _, content := range pendingReloads {
-				applyRuntimeReload(job, content)
+			for _, reload := range pendingReloads {
+				applyRuntimeReload(job, reload.Content)
+				applyProviderEnv(job, reload)
 			}
 			pendingReloads = nil
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
@@ -229,6 +230,9 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			emit(evInterrupt, map[string]interface{}{})
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
+			// No re-spawn: OpenCode runs one child per turn, so the next one is already
+			// launched with whatever environment job.Agent holds by then.
+			applyProviderEnv(job, resp)
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 		case "diff":
 			reportOpenCodeDiff(inboxCtx, t, job)
@@ -315,7 +319,7 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 				// The active child reads job.Agent while it builds args/config. Defer
 				// mutations until it finishes so this turn has one immutable snapshot
 				// and the next turn receives every queued partial reload in order.
-				pendingReloads = append(pendingReloads, resp.Content)
+				pendingReloads = append(pendingReloads, resp)
 			case "diff":
 				reportOpenCodeDiff(inboxCtx, t, job)
 			case "message", "shell":

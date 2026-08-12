@@ -178,6 +178,42 @@ export function providerChoices(
 }
 
 /**
+ * The providers a session that is already running may be moved to: the ones that borrow the same
+ * runtime CLI it was started on.
+ *
+ * That is the whole rule, and it is the session's own history that imposes it — the transcript,
+ * the resume id and the wire protocol belong to the CLI that started the conversation, so
+ * claude→codex is a new session rather than a setting. Two Anthropic accounts, or an account and
+ * a compatible endpoint, are the same CLI with different credentials: the engine re-spawns with
+ * `--resume` and the conversation carries over. The backend enforces the same rule
+ * (SessionsService.updateConfig); this is what keeps the picker from offering a rejected move.
+ *
+ * The running provider is always included, even when it is unavailable or no longer configured —
+ * it is what the pill has to display. Everything else that can't run here is dropped rather than
+ * greyed: unlike the New Session picker, this list is only worth showing when it holds somewhere
+ * to go.
+ */
+export function sameRuntimeChoices(
+  provider: string,
+  choices: ProviderChoice[],
+  configured: ConfiguredProvider[],
+  modelCatalog?: RunnerModelCatalog | null,
+  runtimeDefaultModels?: RuntimeDefaultModels,
+): ProviderChoice[] {
+  const runtime = runtimeForProvider(provider, configured);
+  const movable = choices.filter(
+    (choice) =>
+      choice.slug !== provider &&
+      !choice.unavailable &&
+      runtimeForProvider(choice.slug, configured) === runtime,
+  );
+  const current =
+    choices.find((choice) => choice.slug === provider) ??
+    currentProviderChoice(provider, choices, modelCatalog, configured, runtimeDefaultModels);
+  return [current, ...movable];
+}
+
+/**
  * The choice to show as current. The agent's own provider normally resolves to a row above, but
  * two cases don't: an agent set to `opencode`, and one pointing at a provider that has since been
  * removed or disabled. Both still have to render something truthful rather than silently reading

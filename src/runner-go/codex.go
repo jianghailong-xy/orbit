@@ -173,6 +173,9 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
+			// No re-spawn: each turn is its own `codex exec`, launched with the environment
+			// job.Agent holds at that point.
+			applyProviderEnv(job, resp)
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
 
 		case "diff":
@@ -217,6 +220,20 @@ func applyRuntimeReload(job *ClaimedSession, content string) {
 	if cfg.Effort != nil {
 		job.Agent.Effort = *cfg.Effort
 	}
+}
+
+// applyProviderEnv installs the environment a reload carries and reports whether the engine has
+// to be re-spawned to pick it up. Env arrives only when the session's provider changed (same
+// runtime CLI, different account or endpoint), and it reaches the CLI at spawn — so a runtime
+// that keeps one long-lived process has to restart, while one that spawns per turn is already
+// done once job.Agent holds the new map. Replaces rather than merges: the variables the previous
+// provider injected must not survive the move.
+func applyProviderEnv(job *ClaimedSession, resp *RunInboxResponse) bool {
+	if resp.Env == nil {
+		return false
+	}
+	job.Agent.Env = resp.Env
+	return true
 }
 
 func prepareCodexTurn(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, pendingShellCtx []string) codexPreparedTurn {

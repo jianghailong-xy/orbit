@@ -1490,6 +1490,13 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 
 			case "reload":
 				applyRuntimeReload(job, resp.Content)
+				if applyProviderEnv(job, resp) {
+					// KIMI_MODEL_* is read when the CLI starts — it is what makes the ACP
+					// process talk to this provider at all — so a switch cannot be
+					// reconfigured into the running session. Re-spawn instead; the ACP
+					// session id is on the job and the conversation resumes with it.
+					return stCancelled, false, true
+				}
 				if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
 					emit(evError, map[string]interface{}{"message": "failed to reconfigure Kimi session: " + err.Error()})
 				} else {

@@ -465,6 +465,12 @@ type RunInboxResponse struct {
 	// Attachments for this (message) turn; the runner fetches each blob and dispatches on
 	// its type (image/PDF → content block, else → written to the worktree). Nil if none.
 	Attachments []TurnAttachment `json:"attachments,omitempty"`
+	// Env is the process environment to re-spawn the engine with, sent only on a `reload` that
+	// moved the session to another provider on the same runtime (a second account with the same
+	// vendor, say). It REPLACES job.Agent.Env, so the previous provider's variables go with it —
+	// an empty (non-nil) map is how a move onto a self-authenticating built-in engine arrives.
+	// Nil on every other reload, meaning the environment did not change.
+	Env map[string]string `json:"env,omitempty"`
 }
 
 type ReclaimSession struct {

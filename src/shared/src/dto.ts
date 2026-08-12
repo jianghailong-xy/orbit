@@ -712,6 +712,11 @@ export interface RunInboxResponse {
    *  runner-scoped `GET /runner/sessions/:id/attachments/:attId`, base64-encodes it, and
    *  adds an `image` content block alongside the text. Omitted for text-only/control turns. */
   attachments?: TurnAttachment[];
+  /** The process environment to re-spawn the engine with, present only on a `reload` that moved
+   *  the session to another provider on the same runtime. It carries the new provider's decrypted
+   *  key, so it is resolved here at delivery — the queued turn stores the provider's slug and
+   *  nothing else, keeping the credential out of `conversation_turn`. */
+  env?: Record<string, string>;
 }
 
 /** Runner → control plane: expire only leases owned by one dead engine process.

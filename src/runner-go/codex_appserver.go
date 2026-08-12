@@ -531,6 +531,13 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 
 		case "reload":
 			applyRuntimeReload(job, resp.Content)
+			if applyProviderEnv(job, resp) {
+				// Model and effort are per-turn request params, but the endpoint and key are
+				// this app-server process's environment. Hand the outer loop a re-spawn so the
+				// next turn actually reaches the provider the session was just moved to; the
+				// thread id is on the job, so it comes back on the same conversation.
+				return stCancelled, false, true
+			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed", "runtime": "app-server"})
 
 		case "diff":

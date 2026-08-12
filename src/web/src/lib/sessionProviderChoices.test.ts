@@ -4,6 +4,7 @@ import {
   currentProviderChoice,
   defaultModelLabel,
   providerChoices,
+  sameRuntimeChoices,
 } from './sessionProviderChoices';
 import type { ConfiguredProvider } from './agentDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
@@ -218,5 +219,79 @@ describe('defaultModelLabel', () => {
 
   it('falls back to the raw id when the catalogue does not name it', () => {
     expect(defaultModelLabel('kimi', catalog, [])).toBe('Kimi for Coding');
+  });
+});
+
+describe('sameRuntimeChoices', () => {
+  const anthropic: ConfiguredProvider = {
+    slug: 'anthropic',
+    label: 'Anthropic (Claude)',
+    runtime: 'claude',
+    models: [],
+    defaultModel: 'claude-opus-5',
+    presetSlug: 'anthropic',
+    modelsFromRuntime: true,
+  };
+  const anthropic2: ConfiguredProvider = { ...anthropic, slug: 'anthropic-2', label: 'Work account' };
+  const configured = [anthropic, anthropic2, deepseek, moonshot];
+
+  it('offers the second Anthropic account, and the engine, to a claude session', () => {
+    const choices = sameRuntimeChoices(
+      'anthropic',
+      providerChoices(configured, catalog),
+      configured,
+    );
+    expect(choices[0].slug).toBe('anthropic');
+    expect(choices.map((c) => c.slug).sort()).toEqual(
+      ['anthropic', 'anthropic-2', 'claude', 'deepseek'].sort(),
+    );
+  });
+
+  it('never offers another runtime — codex and kimi are a different session', () => {
+    const choices = sameRuntimeChoices('claude', providerChoices(configured, catalog), configured);
+    expect(choices.map((c) => c.slug)).not.toContain('codex');
+    expect(choices.map((c) => c.slug)).not.toContain('kimi');
+    expect(choices.map((c) => c.slug)).not.toContain('moonshot');
+  });
+
+  it('leaves a lone provider alone, so the composer can hide the pill', () => {
+    expect(sameRuntimeChoices('kimi', providerChoices([], catalog), [])).toHaveLength(1);
+    expect(sameRuntimeChoices('opencode', providerChoices([], catalog), [])).toHaveLength(1);
+  });
+
+  it('drops a target this machine cannot run', () => {
+    // The engine is installed but signed out, so it cannot host a session; the BYOK rows on the
+    // same CLI can, because the key they carry is the credential.
+    const rows = [anthropic, anthropic2];
+    const choices = sameRuntimeChoices(
+      'anthropic',
+      providerChoices(rows, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]),
+      rows,
+    );
+    expect(choices.map((c) => c.slug)).toEqual(['anthropic', 'anthropic-2']);
+  });
+
+  it('keeps the running provider even when nothing on that CLI can run', () => {
+    // No claude CLI on the machine: every row on it is blocked, including the one in use. The
+    // session still has to render what it is, so the current entry survives alone.
+    const rows = [anthropic, anthropic2];
+    const choices = sameRuntimeChoices(
+      'anthropic',
+      providerChoices(rows, catalog, undefined, [
+        { engine: 'claude', installed: false, auth: 'unknown' },
+      ]),
+      rows,
+    );
+    expect(choices.map((c) => c.slug)).toEqual(['anthropic']);
+  });
+
+  it('still shows a session whose provider was removed as its current entry', () => {
+    const choices = sameRuntimeChoices(
+      'gone-away',
+      providerChoices([anthropic], catalog),
+      [anthropic],
+    );
+    expect(choices[0].slug).toBe('gone-away');
+    expect(choices.map((c) => c.slug)).toContain('anthropic');
   });
 });

@@ -1373,13 +1373,15 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				_ = writeStdin(string(ctrl) + "\n")
 				emit(evInterrupt, map[string]interface{}{})
 			case "reload":
-				// Model / permission-mode / effort changed on this idle session.
+				// Model / permission-mode / effort / provider changed on this idle session.
 				// --model, --permission-mode and --effort are spawn flags, so we apply
 				// the new values to job.Agent and tear claude down; the outer loop
 				// re-spawns with --resume + the new flags (full context preserved).
 				// Only the changed fields are carried, so an untouched field keeps its
 				// running value. Effort is a *string so present-but-empty can clear it
 				// back to the model default (drop --effort) — "" that model/mode can't.
+				// A provider switch arrives as a new environment, applied the same way:
+				// the process it belongs to is the one this re-spawn creates.
 				var cfg struct {
 					Model          string  `json:"model"`
 					PermissionMode string  `json:"permissionMode"`
@@ -1396,6 +1398,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						job.Agent.Effort = *cfg.Effort
 					}
 				}
+				applyProviderEnv(job, resp)
 				reloadRequested.Store(true)
 				procCancel() // kill claude; the main loop returns reload=true to re-spawn
 				return

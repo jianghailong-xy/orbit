@@ -451,7 +451,7 @@ export const decideApproval = (
  *  runner re-spawns claude with --resume so the change takes effect on the next turn. */
 export const updateSessionConfig = (
   sessionId: string,
-  config: { model?: string; permissionMode?: string; effort?: string },
+  config: { model?: string; permissionMode?: string; effort?: string; provider?: string },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
 /** Rename a session's display title. Works on any session (live or ended) and never

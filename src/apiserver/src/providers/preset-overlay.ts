@@ -53,3 +53,26 @@ export function withPreset<T extends PresetBackedRow>(row: T): T {
     modelsFromRuntime: preset.modelsFromRuntime ?? false,
   } as T;
 }
+
+/**
+ * Whether this row's model space contains `model` — what a provider switch on a live session asks
+ * before deciding whether the session keeps the model it is running or restarts on the new
+ * provider's default.
+ *
+ * A row whose vendor IS the runtime CLI's own endpoint has no list to check: its space is whatever
+ * that CLI reports, the same space the built-in engine draws from, so every model in it survives
+ * the move. That is the case this exists for — two Anthropic accounts, one model.
+ */
+export function ownsModel(row: PresetBackedRow, model: string): boolean {
+  if (!model) return false;
+  const preset = governing(row);
+  if (preset?.modelsFromRuntime) return true;
+  const models = preset ? catalogModels(preset) : row.models;
+  return (
+    Array.isArray(models) &&
+    models.some(
+      (entry) =>
+        !!entry && typeof entry === 'object' && (entry as { value?: unknown }).value === model,
+    )
+  );
+}

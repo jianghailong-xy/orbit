@@ -1539,8 +1539,68 @@ export class RunnerApiController {
         kind: t.kind as ConversationTurnKind,
         content,
         attachments,
+        env: t.kind === 'reload' ? await this.reloadProviderEnv(tx, sessionId, t.content) : undefined,
       };
     });
+  }
+
+  /**
+   * The environment a `reload` re-spawns with, for the one reload that needs it: a provider switch
+   * (see SessionsService.updateConfig). Every other reload — model, permission mode, effort — runs
+   * on the environment the engine already has, and returns undefined so the runner leaves its
+   * process alone beyond the flags.
+   *
+   * Resolved here rather than stored on the turn: the injected environment carries the provider's
+   * decrypted key, and `conversation_turn.content` is neither encrypted nor short-lived. The queued
+   * turn names the provider; this reads the session as it stands now and builds the rest.
+   */
+  private async reloadProviderEnv(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    content: string | null,
+  ): Promise<Record<string, string> | undefined> {
+    let declared: unknown;
+    try {
+      declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
+    } catch {
+      return undefined;
+    }
+    if (typeof declared !== 'string' || !declared) return undefined;
+    const session = await tx.session.findUnique({
+      where: { id: sessionId },
+      select: {
+        ownerId: true,
+        model: true,
+        provider: true,
+        providerBuiltin: true,
+        usesRuntimeDefaultModel: true,
+        agent: { select: { model: true, env: true } },
+        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+      },
+    });
+    if (!session) return undefined;
+    const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
+      ? null
+      : await tx.modelProvider.findFirst({
+          where: {
+            slug: session.provider!,
+            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+          },
+        });
+    const exec = resolveProviderExec({
+      declaredProvider: session.provider,
+      declaredProviderBuiltin: session.providerBuiltin,
+      customRow,
+      sessionModel: session.model,
+      usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
+      runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
+      agentModel: session.agent?.model,
+      modelCatalog: session.assignedRunner?.modelCatalog,
+      agentEnv: session.agent?.env as Record<string, string> | null,
+    });
+    // A built-in engine authenticates itself, so moving onto one injects nothing — but the
+    // previous provider's variables must still go, which an empty map is how the runner is told.
+    return exec.env ?? {};
   }
 
   /**

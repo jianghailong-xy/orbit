@@ -81,4 +81,9 @@ export interface SessionConfigDto {
   model?: string;
   permissionMode?: string;
   effort?: string;
+  /** Re-point the session at another provider identity — a second account with the same vendor,
+   *  or another endpoint — that runs on the SAME built-in runtime. Cross-runtime is rejected:
+   *  the transcript, the resume id and the wire protocol belong to the CLI that started the
+   *  session. Omitted keeps the current provider. */
+  provider?: string;
 }
