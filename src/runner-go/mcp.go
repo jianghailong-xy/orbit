@@ -392,7 +392,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("prompt is required", true)
 		}
 		body := map[string]interface{}{"prompt": prompt}
-		copyIfPresent(body, args, "title", "model")
+		copyIfPresent(body, args, "title", "model", "provider")
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -540,7 +540,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("name is required", true)
 		}
 		body := map[string]interface{}{"name": name}
-		copyIfPresent(body, args, "description", "provider", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -556,7 +556,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("agentId is required", true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "name", "description", "provider", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "name", "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -715,11 +715,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	status := map[string]interface{}{"type": "string", "enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED"}}
 	providerProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
-		"description": "Run this task on a specific provider instead of whatever its assignee agent uses: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to inherit from the assignee, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
+		"description": "Run this task on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
 	}
 	modelProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
-		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to inherit the assignee agent's model. An id the provider doesn't have will fail at run time, not here.",
+		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
 	}
 	obj := func(props map[string]interface{}, required ...string) map[string]interface{} {
 		schema := map[string]interface{}{"type": "object", "properties": props}
@@ -902,6 +902,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"agentName": map[string]interface{}{"type": "string", "description": "Route to an agent by name (e.g. from an @mention). Resolved to that owner's agent; ignored if agentId is set."},
 					"title":     str,
 					"model":     str,
+					"provider":  map[string]interface{}{"type": "string", "description": "Run this session on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit to start where the target agent's project last started — an agent has no provider of its own."},
 					"wait":      map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
 				}, "prompt"),
 			},
@@ -950,16 +951,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_list",
-				"description": "List this owner's agents (id, name, runtime provider, workDir, runner). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"description": "List this owner's agents (id, name, workDir, runner, and the provider the project last ran on). Use to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
 				"inputSchema": obj(map[string]interface{}{}),
 			},
 			map[string]interface{}{
 				"name":        "agent_create",
-				"description": "Create a new agent under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"description": "Create a new agent under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent is a machine plus a project directory: it has no provider of its own, so pass `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
-					"provider":           map[string]interface{}{"type": "string", "description": "claude | codex | kimi | opencode | a configured provider slug. Defaults to claude."},
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            map[string]interface{}{"type": "string", "description": "Project directory on the runner the agent runs in."},
@@ -972,12 +972,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, runtime provider, system prompt, workDir, etc.). Cannot change the orchestration permission (human-only, web UI).",
+				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no provider to set — that is per session. Cannot change the orchestration permission (human-only, web UI).",
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,
 					"description":        str,
-					"provider":           str,
 					"systemPrompt":       str,
 					"appendSystemPrompt": str,
 					"workDir":            str,

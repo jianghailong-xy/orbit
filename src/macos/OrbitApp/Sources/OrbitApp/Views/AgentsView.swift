@@ -32,7 +32,7 @@ struct AgentRowView: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
-                Text(AgentDefaults.providerName(agent.provider ?? "claude", configured: configuredProviders)
+                Text(AgentDefaults.providerName(agent.defaultProvider, configured: configuredProviders)
                      + (agent.workDir.map { " · \($0)" } ?? ""))
                     .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
             }
@@ -398,7 +398,7 @@ struct AgentSettingsSheet: View {
 /// content column — mirroring how Open renders ConsoleView in its detail pane.
 func newSessionDraftIdentity(_ agent: Agent) -> String {
     [
-        agent.id, agent.provider ?? "claude", agent.permissionMode ?? "dontAsk",
+        agent.id, agent.defaultProvider, agent.permissionMode ?? "dontAsk",
         agent.effort ?? "", agent.runnerId ?? "host",
     ].joined(separator: "|")
 }
@@ -810,8 +810,9 @@ private struct SpinnerGlyph: View {
     }
 }
 
-/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, runtime, permission
-/// mode, Instructions (appendSystemPrompt), working directory, enabled. Empty Instructions /
+/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, permission mode,
+/// Instructions (appendSystemPrompt), working directory, enabled. There is no runtime field — an
+/// agent holds no provider; that is picked per session in the composer. Empty Instructions /
 /// workDir omit the key (no change) — matching the web, which sends `undefined` when blank.
 struct AgentFormContent: View {
     let agents: AgentsModel
@@ -819,7 +820,6 @@ struct AgentFormContent: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var provider = "claude"
     @State private var mode: PermissionMode = .dontAsk
     @State private var effort: Effort = .default
     @State private var instructions = ""
@@ -827,10 +827,11 @@ struct AgentFormContent: View {
     @State private var enabled = true
     @State private var confirmingDelete = false
 
-    /// Runtime options: the built-ins plus the control-plane–configured providers.
-    private var providerOptions: [ProviderOption] {
-        AgentDefaults.providers(configured: agents.configuredProviders)
-    }
+    /// Not an editable field: an agent holds no provider. This is what the project last ran on,
+    /// and it is here only because the effort vocabulary and the permission modes below genuinely
+    /// differ by runtime. The choice itself lives in the composer, per session.
+    private var provider: String { agent.defaultProvider }
+
     private var effortOptions: [Effort] {
         // `model` / `modelCatalog` were dropped when agents stopped storing a model default; the
         // Runtime-resolved `effectiveModel` and the runner's own catalog replace them (same pair the
@@ -863,37 +864,6 @@ struct AgentFormContent: View {
         Form {
             Section {
                 TextField("Name", text: $name, prompt: Text("e.g. tea-cli builder"))
-
-                Picker("Runtime", selection: Binding(
-                    get: { provider },
-                    set: { new in
-                        provider = new
-                        let nextModel = agents.effectiveDefaultModel(
-                            for: new, runnerId: agent.runnerId)
-                        // Effort vocabularies still differ by runtime even though the default model
-                        // itself now comes from the Runtime heartbeat, and Kimi's differ per model
-                        // — so validate against the model this Runtime will actually provide.
-                        effort = AgentDefaults.normalizedEffort(
-                            effort, for: new, model: nextModel,
-                            catalog: agents.modelCatalog(for: agent.runnerId))
-                        // OpenCode picks its own model, so a runtime switch has no catalog row to
-                        // validate the old value against — reset rather than carry it over.
-                        if new == "opencode" {
-                            effort = .default
-                        }
-                        mode = AgentDefaults.clampPermissionMode(
-                            mode, for: nextModel, provider: new,
-                            configured: agents.configuredProviders)
-                    }
-                )) {
-                    // Surface a saved provider missing from the list (a removed/disabled configured
-                    // provider) as its raw slug so the picker still shows the current value.
-                    if !providerOptions.contains(where: { $0.id == provider }) {
-                        Text(AgentDefaults.providerName(provider, configured: agents.configuredProviders))
-                            .tag(provider)
-                    }
-                    ForEach(providerOptions) { Text($0.name).tag($0.id) }
-                }
 
                 Picker("Permission mode", selection: $mode) {
                     ForEach(permissionModeOptions, id: \.self) {
@@ -984,7 +954,6 @@ struct AgentFormContent: View {
 
     private func prefill() {
         name = agent.name
-        provider = agent.provider ?? "claude"
         let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         mode = providerResolved
             ? AgentDefaults.clampPermissionMode(
@@ -1001,12 +970,11 @@ struct AgentFormContent: View {
     /// for field so a look-and-close never fires a needless PATCH.
     private var prefilledEffort: Effort {
         let saved = Effort(rawValue: agent.effort ?? "") ?? .default
-        return AgentDefaults.normalizeEffort(saved, for: agent.provider ?? "claude")
+        return AgentDefaults.normalizeEffort(saved, for: provider)
     }
 
     private var isDirty: Bool {
         name != agent.name
-        || provider != (agent.provider ?? "claude")
         || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
         || effort != prefilledEffort
         || instructions != (agent.appendSystemPrompt ?? "")
@@ -1026,7 +994,6 @@ struct AgentFormContent: View {
     private func save() {
         let req = UpdateAgentRequest(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-            provider: provider,
             appendSystemPrompt: instructions.isEmpty ? nil : instructions,
             permissionMode: mode.rawValue,
             // Always send the raw value ("" for Default) so picking Default actually clears a

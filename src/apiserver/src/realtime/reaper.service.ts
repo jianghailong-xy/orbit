@@ -101,7 +101,6 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         cancelRequestedAt: true,
         endReason: true,
         task: { select: { status: true } },
-        agent: { select: { provider: true, providerBuiltin: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
     });
@@ -151,10 +150,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        const provider = normalizeRuntimeProvider(
-          s.provider ?? s.agent?.provider,
-          s.providerBuiltin ?? s.agent?.providerBuiltin ?? true,
-        );
+        // Session.provider is NOT NULL, so there is nothing to inherit here — and an agent
+        // holds no provider to inherit from (agent-provider.ts).
+        const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
           provider === AgentProvider.CODEX

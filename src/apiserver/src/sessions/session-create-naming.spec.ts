@@ -47,12 +47,12 @@ function makeService(enableWorktree = true) {
       findFirst: async () => ({
         id: 'agent-1',
         runnerId: 'runner-1',
-        provider: 'codex',
-        providerBuiltin: true,
         enableWorktree,
         permissionMode: null,
       }),
     },
+    // The provider a new session inherits now comes from the project's last interactive run.
+    $queryRaw: async () => [{ agent_id: 'agent-1', provider: 'codex', provider_builtin: true }],
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
     task: { findFirst: async () => ({ id: 'task-1' }) },
     session: {

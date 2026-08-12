@@ -96,7 +96,7 @@ import {
   type ComposerSlashItem,
   type LocalStatusRow,
 } from '../lib/slashCommands';
-import { planUsageSnapshotForProvider } from '../lib/planUsage';
+import { sessionPlanUsage } from '../lib/planUsage';
 import {
   decideContextSeed,
   dirtyContextSeed,
@@ -1601,18 +1601,18 @@ export function AgentView({ runner }: { runner: Runner }) {
   } | null>(null);
   const draftProvider =
     draftProviderPick && draftProviderPick.agentId === agentId ? draftProviderPick.provider : null;
-  // The provider a NEW session would run: an explicit pick, else the agent's own (which is what
-  // the pick is remembered as on send, so the two agree from the next session onwards).
-  const pickedProvider: string = draftProvider ?? pickedAgent?.provider ?? 'claude';
+  // The provider a NEW session would run: an explicit pick, else what this project last ran on.
+  // `lastProvider` is derived server-side from the agent's most recent interactive session — an
+  // agent holds no provider of its own (apiserver agents/agent-provider.ts). `provider` is the
+  // deprecated alias of the same derived value, still served for older native builds.
+  const pickedProvider: string =
+    draftProvider ?? pickedAgent?.lastProvider ?? pickedAgent?.provider ?? 'claude';
 
   // The provider this composer talks to: a live session's own, else the one picked for the draft.
   // Declared here (not next to its other consumers) because the `/` autocomplete memo below
   // needs it.
   const shownProvider: string = selected
-    ? (selected.provider ??
-        detailForSelected?.provider ??
-        detailForSelected?.agent?.provider ??
-        'claude')
+    ? (selected.provider ?? detailForSelected?.provider ?? 'claude')
     : pickedProvider;
   const shownProviderCapabilitiesResolved = providerIdentityResolved(
     shownProvider,
@@ -1727,12 +1727,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   const pickDraftProvider = (slug: string): void => {
     setDraftProviderPick({ agentId, provider: slug });
     const picked = providerChoicesForDraft.find((c) => c.slug === slug);
-    const agentName = pickedAgent?.name;
-    setProviderSwitchNote(
-      picked
-        ? `Model → ${picked.modelLabel}${agentName ? ` · saved as ${agentName}'s default on send` : ''}`
-        : null,
-    );
+    // The pick binds this session and nothing else. Later sessions follow it only because the
+    // default is read back from what this project last ran — no config is being rewritten.
+    setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
   };
@@ -2483,20 +2480,17 @@ export function AgentView({ runner }: { runner: Runner }) {
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
       });
-      // Report the provider actually sent (not the render-time state) so the write-back below
-      // can never remember a value this session didn't run with. Only an *edited* Mode is worth
-      // remembering: the untouched seed is the agent's own mode, possibly clamped for this
-      // provider (Auto -> Default on a model that can't run it), and writing that back would
-      // erase the agent's real default.
+      // Only an *edited* Mode is worth remembering on the agent: the untouched seed is the agent's
+      // own mode, possibly clamped for this provider (Auto -> Default on a model that can't run
+      // it), and writing that back would erase the agent's real default.
       return {
         id: created.id,
         created: true,
-        provider: draftProvider ?? undefined,
         permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, provider: sentProvider, permissionMode: sentMode },
+      { id, turnId, queuedItem, created, permissionMode: sentMode },
       vars,
     ) => {
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
@@ -2511,27 +2505,14 @@ export function AgentView({ runner }: { runner: Runner }) {
           assignedRunnerId: runner.id,
           agent: agentId ? { id: agentId } : null,
         });
-      // Remember the provider pick on the agent it was made under, so the next new session here
-      // opens on it. Same write-back the Model pill does, and best-effort for the same reason:
-      // the session already carries its own provider, so a failed PATCH costs a remembered
-      // default, never a wrong dispatch. Cleared either way — the pick has become the agent's.
-      if (created && sentProvider && agentId) {
-        const patchedAgentId = agentId;
-        const patchedProvider = sentProvider;
-        qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
-          old?.map((a) => (a.id === patchedAgentId ? { ...a, provider: patchedProvider } : a)),
-        );
-        setDraftProviderPick(null);
-        void api(`/agents/${patchedAgentId}`, {
-          method: 'PATCH',
-          body: { provider: patchedProvider },
-        })
-          .then(() => qc.invalidateQueries({ queryKey: agentsQuery().queryKey }))
-          .catch(() => {});
-      }
-      // Same for the Mode pick: without this it lived on that one session only, so the next new
-      // session here — and every task-launched run, which inherits agent.permissionMode server-side
-      // — fell back to the agent's old mode. Best-effort for the same reason as the provider above.
+      // The provider pick is deliberately not written back — see DRAFT_PROVIDER_PREFIX. The session
+      // carries its own binding, and the agent's default keeps meaning "what this project starts
+      // on", including for the runs nobody is watching.
+      //
+      // The Mode pick is different: without a write-back it lived on that one session only, so the
+      // next new session here — and every task-launched run, which inherits agent.permissionMode
+      // server-side — fell back to the agent's old mode. Best-effort: a failed PATCH costs a
+      // remembered default, never a wrong dispatch.
       if (created && sentMode && agentId) {
         const patchedAgentId = agentId;
         qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
@@ -3522,7 +3503,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         },
         ...catalogModelOptions,
       ];
-  const shownPlanUsage = planUsageSnapshotForProvider(runner.planUsage, shownProvider);
+  const shownPlanUsage = sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   const contextTokens = lastContextTokens(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing

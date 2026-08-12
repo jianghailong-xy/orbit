@@ -42,13 +42,14 @@ type OrchestratorAgentRecord = Pick<
   | 'id'
   | 'name'
   | 'description'
-  | 'provider'
   | 'workDir'
   | 'runnerId'
   | 'enableWorktree'
   | 'permissionMode'
   | 'defaultMergeTarget'
 > & {
+  /** Derived, not stored: what this project last ran on (agents/agent-provider.ts). */
+  lastProvider?: string;
   runner?: { id: string; name: string; displayName: string | null } | null;
 };
 
@@ -126,7 +127,7 @@ export class RunnerAgentsController {
       id: agent.id,
       name: agent.name,
       description: agent.description,
-      provider: agent.provider,
+      lastProvider: agent.lastProvider,
       workDir: agent.workDir,
       runnerId: agent.runnerId,
       enableWorktree: agent.enableWorktree,

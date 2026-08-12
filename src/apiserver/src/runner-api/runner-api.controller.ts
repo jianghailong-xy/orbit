@@ -804,8 +804,7 @@ export class RunnerApiController {
     });
     const openCodeSessions = sessions.filter(
       (session) =>
-        (session.provider ?? session.agent?.provider ?? AgentProvider.CLAUDE) ===
-        AgentProvider.OPENCODE,
+        (session.provider ?? AgentProvider.CLAUDE) === AgentProvider.OPENCODE,
     );
     const legacyOpenCode =
       openCodeSessions.length > 0 &&
@@ -838,7 +837,7 @@ export class RunnerApiController {
         continue;
       }
       const agent = s.agent;
-      const declared = s.provider ?? agent?.provider ?? null;
+      const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
       // scope mirrors the claim path: a personal provider resolves only for its owner's sessions.

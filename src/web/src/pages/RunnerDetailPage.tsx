@@ -39,6 +39,8 @@ interface Agent {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
+  /** What this project last ran on, derived server-side. `provider` is the deprecated alias. */
+  lastProvider?: string;
   provider?: string;
   workDir?: string | null;
   env?: Record<string, string> | null;
@@ -330,8 +332,10 @@ export function RunnerDetailPage() {
   // One agent row — shown on its own, or kept as the header above the in-place
   // editor. While this row is being edited, the pencil toggles the editor closed.
   const agentRow = (a: Agent) => {
+    // What this project last ran on — the same default a new session here would inherit.
+    const lastProvider = a.lastProvider ?? a.provider ?? 'claude';
     const effectiveModel = defaultModelForProvider(
-      a.provider ?? 'claude',
+      lastProvider,
       runner?.modelCatalog,
       configuredProviders,
       runner?.runtimeDefaultModels,
@@ -339,8 +343,8 @@ export function RunnerDetailPage() {
     // A configured provider shows its own label; fall back to the raw slug if it's since been
     // removed/disabled (so the row never silently mislabels it as Claude).
     const providerLabel =
-      mergedProviderOptions(configuredProviders).find((p) => p.value === (a.provider ?? 'claude'))
-        ?.label ?? a.provider ?? 'Claude';
+      mergedProviderOptions(configuredProviders).find((p) => p.value === lastProvider)?.label ??
+      lastProvider;
     return (
     <div key={a.id} className="rd-agent-row">
       <span className="rd-agent-ico">

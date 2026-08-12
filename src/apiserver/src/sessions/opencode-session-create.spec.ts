@@ -7,19 +7,17 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
   const previousNamingKey = process.env.DEEPSEEK_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
   let createdData: Record<string, unknown> | undefined;
-  const agent = {
-    id: 'agent-1',
-    provider: AgentProvider.OPENCODE,
-    enableWorktree: false,
-    permissionMode: 'acceptEdits',
-  };
+  const agent = { id: 'agent-1', enableWorktree: false, permissionMode: 'acceptEdits' };
   const prisma = {
     agent: { findFirst: async () => agent },
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
-    // The agent carries no providerBuiltin, i.e. a row written before that column existed. That
-    // is the case worth keeping here — it is the one create() resolves by looking the slug up in
-    // modelProvider — so the stub has to answer that lookup. No row matches "opencode", so no
-    // runtime is borrowed and the built-in OpenCode runtime stands.
+    // The project last ran on OpenCode, and that history row predates provider_builtin (false).
+    // That is the case worth keeping here — it is the one create() resolves by looking the slug
+    // up in modelProvider — so the stub has to answer that lookup. No row matches "opencode", so
+    // no runtime is borrowed and the built-in OpenCode runtime stands.
+    $queryRaw: async () => [
+      { agent_id: 'agent-1', provider: AgentProvider.OPENCODE, provider_builtin: false },
+    ],
     modelProvider: { findFirst: async () => null },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {

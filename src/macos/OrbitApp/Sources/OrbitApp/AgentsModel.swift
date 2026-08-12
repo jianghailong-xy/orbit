@@ -63,7 +63,7 @@ final class AgentsModel {
     /// The default used to seed a new-session draft. Configured providers keep their own model
     /// space/default; built-in providers use the owning runner's Runtime heartbeat snapshot.
     func effectiveDefaultModel(for agent: Agent) -> String {
-        return effectiveDefaultModel(for: agent.provider ?? "claude", runnerId: agent.runnerId)
+        return effectiveDefaultModel(for: agent.defaultProvider, runnerId: agent.runnerId)
     }
 
     /// The same resolver for an in-progress Agent edit, whose Runtime may differ from the saved

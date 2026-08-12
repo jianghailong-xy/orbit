@@ -339,5 +339,6 @@ test('session orchestration detail uses an explicit allowlist and never returns 
   for (const field of ['env', 'mcpConfig', 'systemPrompt', 'appendSystemPrompt', 'agentKey']) {
     assert.equal(agent?.select?.[field], undefined, `session detail exposed agent.${field}`);
   }
-  assert.deepEqual(agent?.select, { id: true, name: true, provider: true, model: true });
+  // No agent.provider to expose: an agent holds none, and the session's own is authoritative.
+  assert.deepEqual(agent?.select, { id: true, name: true, model: true });
 });

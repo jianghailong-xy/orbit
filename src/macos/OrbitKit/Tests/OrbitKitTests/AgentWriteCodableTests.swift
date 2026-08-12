@@ -40,27 +40,22 @@ final class AgentWriteCodableTests: XCTestCase {
     }
 
     func testCreateEncodes() throws {
-        let obj = try jsonObject(CreateAgentRequest(name: "dev", provider: "codex", model: "gpt-5.6-sol",
+        let obj = try jsonObject(CreateAgentRequest(name: "dev", model: "gpt-5.6-sol",
                                                     allowedTools: ["Bash"], env: ["K": "V"]))
         XCTAssertEqual(obj["name"] as? String, "dev")
-        XCTAssertEqual(obj["provider"] as? String, "codex")
         XCTAssertEqual(obj["model"] as? String, "gpt-5.6-sol")
         XCTAssertEqual(obj["allowedTools"] as? [String], ["Bash"])
         XCTAssertEqual((obj["env"] as? [String: String])?["K"], "V")
         XCTAssertFalse(obj.keys.contains("description"))
     }
 
-    func testUpdateEncodesProvider() throws {
-        let obj = try jsonObject(UpdateAgentRequest(provider: "codex", model: "gpt-5.6-sol"))
-        XCTAssertEqual(obj["provider"] as? String, "codex")
-        XCTAssertEqual(obj["model"] as? String, "gpt-5.6-sol")
-    }
-
-    /// A PATCH that doesn't touch the runtime must not send `provider` — otherwise every
-    /// unrelated edit would rewrite it.
-    func testUpdateOmitsProviderWhenNil() throws {
-        let obj = try jsonObject(UpdateAgentRequest(name: "new"))
-        XCTAssertFalse(obj.keys.contains("provider"))
+    /// An agent holds no provider, so no agent write may carry one — a client that still sent it
+    /// would be asking the server to ignore it.
+    func testAgentWritesNeverCarryAProvider() throws {
+        let created = try jsonObject(CreateAgentRequest(name: "dev", model: "gpt-5.6-sol"))
+        let updated = try jsonObject(UpdateAgentRequest(name: "new", model: "gpt-5.6-sol"))
+        XCTAssertFalse(created.keys.contains("provider"))
+        XCTAssertFalse(updated.keys.contains("provider"))
     }
 
     func testReorderEncodes() throws {

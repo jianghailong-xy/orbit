@@ -1,4 +1,11 @@
-import type { PlanUsage, PlanUsageRateLimit, PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
+import {
+  AgentProvider,
+  type PlanUsage,
+  type PlanUsageRateLimit,
+  type PlanUsageSnapshot,
+  type PlanUsageWindow,
+} from '@orbit/shared';
+import type { ConfiguredProvider } from './agentDefaults';
 
 export interface PlanUsageDisplayRow {
   key: string;
@@ -42,6 +49,28 @@ export function planUsageSnapshotForProvider(
     return !usage.provider || usage.provider === 'claude' ? usage : null;
   }
   return null;
+}
+
+/**
+ * The quota to show for a session running on `provider`.
+ *
+ * Quota belongs to the credential the session actually spends, so the lookup follows the same
+ * order dispatch does: a configured provider bills its own key and reports against that account,
+ * while a built-in engine runs on the runner's own login and reports through the heartbeat. A
+ * configured slug therefore never falls back to the runner's numbers — those are a different
+ * subscription — and simply has no gauge when its credential has no quota to report.
+ */
+export function sessionPlanUsage(
+  provider: string,
+  runnerUsage: PlanUsage | null | undefined,
+  configured?: ConfiguredProvider[] | null,
+): PlanUsageSnapshot | null {
+  // A configured row that shadows a built-in slug is not what dispatch runs (isBuiltinProvider
+  // wins), so its credential is not the one being spent either.
+  const builtin = Object.values(AgentProvider).some((p) => p === provider);
+  const row = builtin ? undefined : configured?.find((p) => p.slug === provider);
+  if (row) return row.planUsage ?? null;
+  return planUsageSnapshotForProvider(runnerUsage, provider);
 }
 
 /** Split a runner's possibly multi-runtime quota payload into display sections. */

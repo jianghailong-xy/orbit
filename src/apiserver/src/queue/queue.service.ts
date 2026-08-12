@@ -209,7 +209,7 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const agent = session.agent;
-    const declared = session.provider ?? agent?.provider ?? null;
+    const declared = session.provider ?? null;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
     // here, so the runner receives a plain claude/codex job and needs no changes. Ownership

@@ -31,6 +31,7 @@ import {
   SessionState,
   type SessionSearchHit,
 } from '@orbit/shared';
+import { agentProviderSeed } from '../agents/agent-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -167,7 +168,8 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // The session's provider identity: a built-in ("claude"/"codex"/"opencode") or a custom
-    // slug ("deepseek") inherited from the agent. Stored verbatim; runtime is derived below.
+    // slug ("deepseek"). Stored verbatim; runtime is derived below. An agent holds no provider of
+    // its own — absent an explicit pick this is seeded from what the project last ran on.
     let provider: string = AgentProvider.CLAUDE;
     let providerBuiltin = true;
     // Per-agent worktree toggle: default off. An agent with it turned off (the default)
@@ -185,31 +187,30 @@ export class SessionsService {
         where: { id: dto.agentId, ownerId, deletedAt: null },
         select: {
           runnerId: true,
-          provider: true,
-          providerBuiltin: true,
           enableWorktree: true,
           permissionMode: true,
         },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       assignedRunnerId = agent.runnerId ?? undefined;
-      provider = agent.provider ?? AgentProvider.CLAUDE;
-      providerBuiltin = agent.providerBuiltin;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { provider: true, providerBuiltin: true, enableWorktree: true, permissionMode: true },
+        select: { enableWorktree: true, permissionMode: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
-      provider = agent.provider ?? AgentProvider.CLAUDE;
-      providerBuiltin = agent.providerBuiltin;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
+    }
+    // No explicit pick: start where this project last started. Derived, not stored — see
+    // agent-provider.ts for why an agent holds no provider of its own.
+    if (!dto.provider && dto.agentId) {
+      ({ provider, providerBuiltin } = await agentProviderSeed(this.prisma, dto.agentId));
     }
     // The runtime a configured provider borrows, which is what decides the pre-generated session
     // id below — its slug says nothing about which CLI ends up running it.
@@ -219,10 +220,9 @@ export class SessionsService {
     // and anything else has to be a provider this caller can actually dispatch with.
     if (dto.provider) {
       provider = dto.provider;
-      // Same enum test the agent write path uses (agents.service create/update), NOT
-      // isBuiltinProvider() — that one reads `kimi` as custom unless told otherwise, and the
-      // picker's choice is later remembered on the agent. Both sides must agree, or a
-      // remembered `kimi` would land with a different providerBuiltin than the session it came from.
+      // Deliberately NOT isBuiltinProvider(): that one reads `kimi` as custom unless told
+      // otherwise. This test has to match the one the seed carries forward, or a session started
+      // from a `kimi` predecessor would land with a different providerBuiltin than it had.
       providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
       if (!providerBuiltin) {
         const configured = await this.prisma.modelProvider.findFirst({
@@ -379,7 +379,14 @@ export class SessionsService {
   async spawnFromSession(
     ownerId: string,
     parentSessionId: string,
-    dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
+    dto: {
+      prompt: string;
+      agentId?: string;
+      agentName?: string;
+      title?: string;
+      model?: string;
+      provider?: string;
+    },
   ): Promise<{
     id: string;
     status: RunStatus;
@@ -418,7 +425,9 @@ export class SessionsService {
     const effort = await this.resolveDefaultEffort(ownerId, agentId);
     const created = await this.create(
       ownerId,
-      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, effort },
+      // An explicit provider is the child's binding; create() checks the caller can dispatch it.
+      // Omitted, the child starts where the target project last started.
+      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, provider: dto.provider, effort },
       {
         // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
@@ -638,7 +647,7 @@ export class SessionsService {
         mergedAt: true,
         branchMerged: true,
         worktreeBranch: true,
-        agent: { select: { id: true, name: true, provider: true, model: true } },
+        agent: { select: { id: true, name: true, model: true } },
         assignedRunner: { select: { id: true, name: true } },
       },
     });
@@ -3084,7 +3093,7 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status)) {
         throw new ConflictException('the session has ended');
       }
-      const declared = session.provider ?? session.agent?.provider ?? null;
+      const declared = session.provider ?? null;
       const customRow = isBuiltinProvider(declared, session.providerBuiltin)
         ? null
         : await tx.modelProvider.findFirst({

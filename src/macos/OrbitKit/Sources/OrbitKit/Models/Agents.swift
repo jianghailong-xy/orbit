@@ -1,6 +1,9 @@
 import Foundation
 
-// Agent write DTOs mirroring src/apiserver/src/agents/dto.ts. The `Agent` response struct lives
+// Agent write DTOs mirroring src/apiserver/src/agents/dto.ts. There is no `provider` here: an
+// agent holds none — it is a per-session binding, chosen in the composer (or passed to
+// session_create), and the default a new session inherits is derived from what this project last
+// ran. The server ignores a `provider` an older client still sends. The `Agent` response struct lives
 // in DTOs.swift (extended with the form's fields). Update uses plain optionals: Swift's
 // synthesized `Encodable` emits optionals via `encodeIfPresent`, so `nil` omits the key — exactly
 // PATCH's "send only what changed". None of the agent fields need null=clear, so no FieldUpdate.
@@ -10,7 +13,6 @@ import Foundation
 public struct CreateAgentRequest: Encodable, Sendable {
     public let name: String
     public let description: String?
-    public let provider: String?
     public let model: String?
     public let appendSystemPrompt: String?
     public let systemPrompt: String?
@@ -28,7 +30,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
     public let enabled: Bool?
     public let autoInitGit: Bool?
 
-    public init(name: String, description: String? = nil, provider: String? = nil,
+    public init(name: String, description: String? = nil,
                 model: String? = nil,
                 appendSystemPrompt: String? = nil, systemPrompt: String? = nil,
                 allowedTools: [String]? = nil, disallowedTools: [String]? = nil,
@@ -39,7 +41,6 @@ public struct CreateAgentRequest: Encodable, Sendable {
                 enabled: Bool? = nil, autoInitGit: Bool? = nil) {
         self.name = name
         self.description = description
-        self.provider = provider
         self.model = model
         self.appendSystemPrompt = appendSystemPrompt
         self.systemPrompt = systemPrompt
@@ -63,7 +64,6 @@ public struct CreateAgentRequest: Encodable, Sendable {
 public struct UpdateAgentRequest: Encodable, Sendable {
     public var name: String?
     public var description: String?
-    public var provider: String?
     public var model: String?
     public var appendSystemPrompt: String?
     public var systemPrompt: String?
@@ -81,7 +81,7 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var enabled: Bool?
     public var autoInitGit: Bool?
 
-    public init(name: String? = nil, description: String? = nil, provider: String? = nil,
+    public init(name: String? = nil, description: String? = nil,
                 model: String? = nil,
                 appendSystemPrompt: String? = nil, systemPrompt: String? = nil,
                 allowedTools: [String]? = nil, disallowedTools: [String]? = nil,
@@ -92,7 +92,6 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 enabled: Bool? = nil, autoInitGit: Bool? = nil) {
         self.name = name
         self.description = description
-        self.provider = provider
         self.model = model
         self.appendSystemPrompt = appendSystemPrompt
         self.systemPrompt = systemPrompt

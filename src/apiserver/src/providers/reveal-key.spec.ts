@@ -17,6 +17,7 @@ const serviceFor = (row: unknown, wheres: unknown[]) =>
       },
     } as never,
     {} as never,
+    {} as never,
   );
 
 test('revealKey hands a personal provider key back in the clear', async () => {

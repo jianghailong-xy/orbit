@@ -14,7 +14,7 @@ test('provider catalogs hide the OpenCode rolling-compatibility row', async () =
       },
     },
   } as never;
-  const service = new ProvidersService(prisma, {} as never);
+  const service = new ProvidersService(prisma, {} as never, {} as never);
 
   await service.listPublic('owner-1');
   await service.listShared();

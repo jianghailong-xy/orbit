@@ -4,7 +4,7 @@ import { ProvidersService } from './providers.service';
 
 process.env.PROVIDER_SECRET_KEY = 'test-master-key';
 
-const svc = () => new ProvidersService({} as never, {} as never);
+const svc = () => new ProvidersService({} as never, {} as never, {} as never);
 
 /** Stand in for the endpoint under probe, capturing the request the service builds. */
 function stubFetch(reply: { status: number; body?: string }) {

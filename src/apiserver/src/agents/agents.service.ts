@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { lastProviderByAgent, withProviderSeed } from './agent-provider';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
 
 // The `orbit mcp` server is injected into every session, but under DONT_ASK its tools
@@ -28,14 +28,11 @@ export class AgentsService {
   async create(ownerId: string, dto: CreateAgentDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
-    const provider = dto.provider ?? AgentProvider.CLAUDE;
-    return this.prisma.agent.create({
+    const agent = await this.prisma.agent.create({
       data: {
         ownerId,
         name: dto.name,
         description: dto.description,
-        provider,
-        providerBuiltin: Object.values(AgentProvider).includes(provider as AgentProvider),
         // Runtime defaults are reported through the bound Runner. Keep the nullable column only for
         // old-client reads of agents created before migration 0079; never seed it from dto.model.
         model: null,
@@ -62,10 +59,12 @@ export class AgentsService {
         defaultMergeTarget: dto.defaultMergeTarget,
       },
     });
+    // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
+    return withProviderSeed([agent], new Map())[0];
   }
 
-  list(ownerId: string) {
-    return this.prisma.agent.findMany({
+  async list(ownerId: string) {
+    const agents = await this.prisma.agent.findMany({
       where: { ownerId, deletedAt: null },
       // Custom drag order first; never-reordered agents (position NULL) sort last by
       // creation time, so newly added agents append below the arranged ones.
@@ -73,6 +72,8 @@ export class AgentsService {
       // Expose the machine an agent belongs to so the UI can group/route by runner.
       include: { runner: { select: { id: true, name: true, displayName: true } } },
     });
+    // One indexed query for the whole list — the provider each project last ran on.
+    return withProviderSeed(agents, await lastProviderByAgent(this.prisma, agents.map((a) => a.id)));
   }
 
   /**
@@ -100,7 +101,7 @@ export class AgentsService {
       include: { runner: { select: { id: true, name: true, displayName: true } } },
     });
     if (!agent) throw new NotFoundException('agent not found');
-    return agent;
+    return withProviderSeed([agent], await lastProviderByAgent(this.prisma, [agent.id]))[0];
   }
 
   async update(ownerId: string, id: string, dto: UpdateAgentDto) {
@@ -114,14 +115,6 @@ export class AgentsService {
       systemPrompt: dto.systemPrompt,
       permissionMode: dto.permissionMode,
       effort: dto.effort,
-      provider: dto.provider,
-      ...(dto.provider !== undefined
-        ? {
-            providerBuiltin: Object.values(AgentProvider).includes(
-              dto.provider as AgentProvider,
-            ),
-          }
-        : {}),
       maxTurns: dto.maxTurns,
       maxBudgetUsd: dto.maxBudgetUsd,
       workDir: dto.workDir,
@@ -141,7 +134,8 @@ export class AgentsService {
     if (dto.runnerId !== undefined) {
       data.runner = dto.runnerId ? { connect: { id: dto.runnerId } } : { disconnect: true };
     }
-    return this.prisma.agent.update({ where: { id }, data });
+    const agent = await this.prisma.agent.update({ where: { id }, data });
+    return withProviderSeed([agent], await lastProviderByAgent(this.prisma, [id]))[0];
   }
 
   async remove(ownerId: string, id: string) {

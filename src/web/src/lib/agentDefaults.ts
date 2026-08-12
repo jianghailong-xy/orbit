@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
 } from '@orbit/shared';
@@ -32,6 +33,10 @@ export interface ConfiguredProvider {
   /** True when this vendor's endpoint is the runtime CLI's own (Anthropic for claude, OpenAI for
    *  codex), so the runner's live catalogue describes it and `models` is only a fallback. */
   modelsFromRuntime?: boolean;
+  /** Subscription quota for *this row's credential*, when it has one to report (an Anthropic
+   *  endpoint reached with a subscription token). Null for a metered API key or a third-party
+   *  endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers. */
+  planUsage?: PlanUsageSnapshot | null;
 }
 
 /** Resolve a configured provider by slug — built-in slugs never match. */

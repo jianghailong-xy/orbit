@@ -49,6 +49,12 @@ public struct SetupStatus: Codable, Sendable {
 public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String
+    /// What this project last ran on — derived server-side from the agent's most recent
+    /// interactive session. An agent stores no provider of its own: it names a machine and a
+    /// directory, while the provider is a per-session binding.
+    public let lastProvider: String?
+    /// @deprecated The same derived value under its old name, served for builds that predate
+    /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
@@ -71,6 +77,11 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
+}
+
+extension Agent {
+    /// The provider a new session here starts on, unless the composer picks another.
+    public var defaultProvider: String { lastProvider ?? provider ?? "claude" }
 }
 
 public struct Runner: Codable, Equatable, Sendable, Identifiable {
@@ -345,6 +356,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
 public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let name: String?
+    /// @deprecated No longer served — an agent holds no provider. Read the session's own
+    /// `provider`, which is always set and is what the session actually ran on.
     public let provider: String?
     public let model: String?
     public let effort: String?
@@ -423,8 +436,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let agentId: String?
     public let assignedRunnerId: String?
     /// Provider picked on the new-session screen: a built-in engine slug or one of this account's
-    /// configured providers. Nil omits the field, so the session inherits its agent's provider —
-    /// the behaviour every client had before the picker existed.
+    /// configured providers. Nil omits the field, so the session starts where this project last
+    /// started — the behaviour every client had before the picker existed.
     public let provider: String?
     public let model: String?
     public let permissionMode: String?

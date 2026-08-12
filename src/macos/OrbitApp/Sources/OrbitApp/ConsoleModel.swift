@@ -208,7 +208,7 @@ final class ConsoleModel {
         // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
         self.agentName = agent.name
-        self.provider = agent.provider ?? "claude"
+        self.provider = agent.defaultProvider
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
         self.modelID = defaultModel
@@ -587,7 +587,7 @@ final class ConsoleModel {
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
-        provider = s.provider ?? s.agent?.provider ?? "claude"
+        provider = s.provider ?? "claude"
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1067,8 +1067,8 @@ final class ConsoleModel {
                 // a placeholder. Omit it so the server applies the configured provider's own
                 // default instead of persisting a guessed Claude model.
                 prompt: text, agentId: agent.id,
-                // Only an explicit hero pick travels: omitting it keeps the server's
-                // inherit-from-agent path, so an untouched draft behaves exactly as before.
+                // Only an explicit hero pick travels: omitting it lets the server start the
+                // session where this project last started, as an untouched draft always did.
                 provider: draftProviderOverride,
                 model: providerCapabilitiesResolved ? modelID : nil,
                 permissionMode: permissionMode.rawValue, effort: effort.rawValue,
@@ -1076,23 +1076,13 @@ final class ConsoleModel {
                 attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             composerText = ""
             pendingAttachments = []
-            rememberProviderPick(agentID: agent.id)
+            // The pick was this session's binding; nothing to write back. The next draft here
+            // opens on it anyway, because the default is read from what the project last ran.
+            draftProviderOverride = nil
             onSessionCreated?(session)
         } catch {
             statusMessage = "Couldn't start the session — \(error)"
         }
-    }
-
-    /// Remember a hero provider pick as the agent's default, so the next draft here opens on it.
-    /// Detached from the send: the created session already carries its own provider, so this must
-    /// not hold up opening it. Best-effort for the same reason — a failed PATCH costs a remembered
-    /// default, never a wrong dispatch. Cleared either way: from here on the pick is (or was meant
-    /// to be) the agent's own rather than this draft's override.
-    private func rememberProviderPick(agentID: String) {
-        guard let slug = draftProviderOverride else { return }
-        draftProviderOverride = nil
-        let api = self.api
-        Task { _ = try? await api.updateAgent(agentID, UpdateAgentRequest(provider: slug)) }
     }
 
     /// Draft footer/slash seed (no stream): load the `/` command + skill set for the agent and,

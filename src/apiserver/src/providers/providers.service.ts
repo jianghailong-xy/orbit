@@ -6,6 +6,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { CreateModelProviderDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
+import { ProviderPlanUsageService } from './plan-usage.service';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
@@ -16,6 +17,7 @@ export class ProvidersService {
     // @Global RealtimeModule. Providers back every client's model picker, so a change pushes to
     // the owner (a personal BYOK row) or to everyone (a shared, admin-owned one).
     private readonly realtime: RealtimeService,
+    private readonly planUsage: ProviderPlanUsageService,
   ) {}
 
   /** De-sensitized picker catalog (no key, no baseUrl): the shared providers plus the
@@ -29,6 +31,10 @@ export class ProvidersService {
       },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       select: {
+        id: true,
+        ownerId: true,
+        baseUrl: true,
+        apiKeyEnc: true,
         slug: true,
         label: true,
         runtime: true,
@@ -40,7 +46,15 @@ export class ProvidersService {
     });
     // Every client — web, iOS, macOS — reads its model list from here, so resolving the preset
     // once on this side is what keeps a catalogue update from needing a client release.
-    return rows.map((r) => withPreset(r));
+    //
+    // The quota rides along because it belongs to the credential this row holds, not to the
+    // machine running the session: a runner reports the account its own CLI is logged into, which
+    // is a different account from a BYOK key. id/ownerId/baseUrl/apiKeyEnc are selected only to
+    // ask that credential and are dropped here — this payload stays keyless and endpointless.
+    return rows.map(({ id, ownerId, baseUrl, apiKeyEnc, ...picker }) => ({
+      ...withPreset(picker),
+      planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
+    }));
   }
 
   /** Admin management list: the SHARED (ownerId null) providers only — never another

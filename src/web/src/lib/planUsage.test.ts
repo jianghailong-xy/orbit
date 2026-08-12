@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { planUsageRows, planUsageSnapshotForProvider, planUsageSnapshots } from './planUsage';
+import {
+  planUsageRows,
+  planUsageSnapshotForProvider,
+  planUsageSnapshots,
+  sessionPlanUsage,
+} from './planUsage';
 
 describe('planUsageRows', () => {
   it('matches Codex TUI items while retaining Orbit utilization semantics', () => {
@@ -62,5 +67,36 @@ describe('planUsageRows', () => {
     expect(planUsageSnapshotForProvider(flatKimi, 'kimi')).toBe(flatKimi);
     expect(planUsageSnapshotForProvider(flatKimi, 'claude')).toBeNull();
     expect(planUsageSnapshotForProvider(flatKimi, 'codex')).toBeNull();
+  });
+});
+
+describe('sessionPlanUsage', () => {
+  const runner = { claude: { fiveHour: { utilization: 100 } }, codex: { primary: { utilization: 4 } } };
+
+  it('shows a built-in engine the quota of the login the runner reported', () => {
+    expect(sessionPlanUsage('claude', runner)?.fiveHour?.utilization).toBe(100);
+    expect(sessionPlanUsage('codex', runner)?.primary?.utilization).toBe(4);
+  });
+
+  it('shows a configured provider the quota of its own credential', () => {
+    const configured = [
+      { slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 12 } } },
+    ];
+    expect(sessionPlanUsage('anthropic', runner, configured)?.fiveHour?.utilization).toBe(12);
+  });
+
+  it('never lets a configured provider inherit the runner login it does not bill', () => {
+    const configured = [{ slug: 'anthropic', label: 'Anthropic', runtime: 'claude', models: [] }];
+    expect(sessionPlanUsage('anthropic', runner, configured)).toBeNull();
+    // Unknown slug (a row since deleted) resolves the same way, not to the runner's numbers.
+    expect(sessionPlanUsage('anthropic', runner, [])).toBeNull();
+  });
+
+  it('keeps a row that shadows a built-in slug out of the way of the engine it shadows', () => {
+    const shadow = [
+      { slug: 'claude', label: 'Claude', runtime: 'claude', models: [], planUsage: { fiveHour: { utilization: 1 } } },
+    ];
+    // isBuiltinProvider wins at dispatch, so the runner's login is the credential being spent.
+    expect(sessionPlanUsage('claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
   });
 });

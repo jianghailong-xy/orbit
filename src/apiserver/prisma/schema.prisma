@@ -312,12 +312,9 @@ model Agent {
   id                  String    @id @default(uuid(7)) @db.Uuid
   name                String
   description         String?
-  // Which local coding runtime drives this agent: "claude", "codex", "kimi", "opencode", or a
-  // configured ModelProvider slug that resolves to a configurable runtime at dispatch.
-  provider            String    @default("claude")
-  // Disambiguates the newly reserved `kimi` wire id from a stale pre-0077 custom-provider
-  // write during a rolling deployment. Old replicas omit this column and therefore write false.
-  providerBuiltin     Boolean   @default(false) @map("provider_builtin")
+  // An agent holds no provider: it names a machine and a project directory, while the provider is
+  // a per-session binding (Session.provider, fixed for that session's lifetime). The default a new
+  // session inherits is derived from what this project last ran — see agents/agent-provider.ts.
   // Legacy per-agent model pin. New sessions resolve from their Runtime/ModelProvider; migration
   // 0079 copied old pins into existing sessions. Temporarily retained as a rolling-deploy bridge
   // for model-less sessions written by old replicas; first claim snapshots it onto Session.model.
@@ -622,6 +619,9 @@ model Session {
   tagLinks              SessionTagLink[]
 
   @@index([assignedRunnerId, status])
+  // "what did this project last run on", the derived seed a new session inherits when the caller
+  // names no provider (agents/agent-provider.ts).
+  @@index([agentId, createdAt(sort: Desc)])
   @@index([batchId, status])
   @@index([parentSessionId])
   @@index([ownerId])

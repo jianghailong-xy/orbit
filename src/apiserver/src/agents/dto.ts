@@ -19,9 +19,8 @@ export class CreateAgentDto {
   name!: string;
 
   @IsOptional() @IsString() description?: string;
-  // A built-in provider ("claude"/"codex"/"kimi"/"opencode") or a configured ModelProvider slug.
-  // Kept a plain string (not @IsIn a fixed enum) so custom providers pass; an unknown slug
-  // simply falls back to the claude runtime at dispatch (resolveProviderExec).
+  /** @deprecated Accepted for old clients, but an agent no longer holds a provider — it is a
+   *  per-session binding, defaulted from what this project last ran on (agent-provider.ts). */
   @IsOptional() @IsString() provider?: string;
   /** @deprecated Accepted for old clients, but runtime defaults are no longer stored per agent. */
   @IsOptional() @IsString() model?: string;
@@ -56,6 +55,7 @@ export class CreateAgentDto {
 export class UpdateAgentDto {
   @IsOptional() @IsString() @MinLength(1) name?: string;
   @IsOptional() @IsString() description?: string;
+  /** @deprecated Accepted for old clients, but ignored — see CreateAgentDto.provider. */
   @IsOptional() @IsString() provider?: string;
   /** @deprecated Accepted for old clients, but ignored by agent updates. */
   @IsOptional() @IsString() model?: string;

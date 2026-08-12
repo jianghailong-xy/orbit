@@ -97,7 +97,14 @@ export class RunnerSessionsController {
     // Inline type — nothing validates it, and `agentId` is exactly what a model copies out of an
     // Orbit URL when told to "run this under that agent".
     @Body(PublicIdPipe.forFields('agentId'))
-    dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
+    dto: {
+      prompt: string;
+      agentId?: string;
+      agentName?: string;
+      title?: string;
+      model?: string;
+      provider?: string;
+    },
   ) {
     if (isHeadlessCaller(parentSessionId)) {
       const scope = this.headlessScope(runner, grant, 'session:create');

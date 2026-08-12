@@ -55,7 +55,8 @@ public struct Effort: RawRepresentable, CaseIterable, Hashable, Sendable, Identi
 }
 
 public enum AgentDefaults {
-    /// Provider runtimes an agent can target. Mirrors web's PROVIDER_OPTIONS.
+    /// The built-in runtimes a session (or a pinned task) can run on. Mirrors web's
+    /// PROVIDER_OPTIONS. Not an agent-level choice — an agent holds no provider.
     public static let providers: [ProviderOption] = [
         ProviderOption(id: "claude", name: "Claude"),
         ProviderOption(id: "codex", name: "Codex"),

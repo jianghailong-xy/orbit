@@ -22,7 +22,8 @@ function makeController() {
     id: 'a1',
     name: 'agent',
     description: 'safe description',
-    provider: 'codex',
+    // Derived, not stored — what this project last ran on (agents/agent-provider.ts).
+    lastProvider: 'codex',
     model: 'gpt-safe',
     workDir: '/work/repo',
     runnerId: 'r1',
@@ -82,7 +83,7 @@ test('list forwards the session credential to the orchestration authorizer', asy
       id: 'a1',
       name: 'agent',
       description: 'safe description',
-      provider: 'codex',
+      lastProvider: 'codex',
       workDir: '/work/repo',
       runnerId: 'r1',
       enableWorktree: true,

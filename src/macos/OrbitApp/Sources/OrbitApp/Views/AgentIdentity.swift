@@ -157,11 +157,11 @@ struct AgentSwitchSheet: View {
                     if agent.id != currentID { onSelect(agent.id) }
                 } label: {
                     HStack(spacing: 12) {
-                        AgentAvatar(provider: agent.provider, size: 38)
+                        AgentAvatar(provider: agent.defaultProvider, size: 38)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(agent.name).foregroundStyle(.primary).lineLimit(1)
                             Text(AgentDefaults.providerName(
-                                agent.provider ?? "claude", configured: configuredProviders))
+                                agent.defaultProvider, configured: configuredProviders))
                                 .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 8)
