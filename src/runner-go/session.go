@@ -370,7 +370,22 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			logln("event flush failed for", sessionID+":", err)
 		}
 	}
+	// The reason a run failed is emitted as an error event and, until now, went no
+	// further: a session that died in the auth preflight showed FAILED with
+	// `error: null` on its record, so the CLI and UI reported an unexplained
+	// failure for something as actionable as "signed out". Measured on this
+	// runner: 101 sessions failed that way and all 101 had a null error while
+	// run_event held the message. Keep the last one so finalize can carry it.
+	var lastErrMu sync.Mutex
+	lastErrorMessage := ""
 	emit := func(eventType string, payload map[string]interface{}) {
+		if eventType == evError {
+			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
+				lastErrMu.Lock()
+				lastErrorMessage = msg
+				lastErrMu.Unlock()
+			}
+		}
 		emissionGate.run(func() {
 			seqMu.Lock()
 			s := seq
@@ -828,6 +843,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// checkpoint* for a resumable end —
 	// tagged for undo-on-resume rather than permanent.
 	finalizeRequest := RunFinalizeRequest{Status: status, IsolationStatus: job.IsolationStatus, RuntimeSessionID: currentRuntimeSessionID(job)}
+	// Carry the failure reason onto the session record. Only on failure: the
+	// apiserver writes `error` straight through, so attaching a recovered-from
+	// error to a successful run would mislabel it.
+	if status == stFailed {
+		lastErrMu.Lock()
+		finalizeRequest.Error = lastErrorMessage
+		lastErrMu.Unlock()
+	}
 	if runtimeProvider(job) == providerClaude {
 		finalizeRequest.ClaudeSessionID = job.SessionUUID
 	}
