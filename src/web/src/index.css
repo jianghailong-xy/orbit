@@ -13,6 +13,11 @@
   --bg-hover: #f5f6f7;
   --bg-hover-strong: #e3e6eb;
   --fill-muted: #f1f1f4;
+  /* A panel sunk into whatever surface it sits on. Deliberately translucent, unlike --bg-sunken:
+     the opaque one only reads as recessed against the one surface it was picked for, and lands
+     as a bright hole on any tinted card (a warning's amber, notably). Alpha per theme because
+     one value cannot span "white page" and "dark card". */
+  --fill-inset: rgba(0, 0, 0, 0.05);
   --border: #dee0e3;
   --border-subtle: #eceef1;
   --scrollbar-hover: #c9cdd4;
@@ -56,6 +61,9 @@
   --bg-hover: #343437;
   --bg-hover-strong: #424246;
   --fill-muted: #38383c;
+  /* 0.25 so a panel on --bg-raised lands where --bg-base used to: the depth dark mode already
+     had, now reproduced on tinted cards too. */
+  --fill-inset: rgba(0, 0, 0, 0.25);
   --border: #424246;
   --border-subtle: #343437;
   --scrollbar-hover: #565a62;
@@ -4690,7 +4698,9 @@ body {
 /* The message the retry would re-send, quoted. Clamped: it can be a whole pasted prompt, and
    this is a label for the button under it, not a second copy of the conversation. Panelled like
    the sign-in box above it — on the card's warm background a quote rule alone left it reading as
-   more of the card's own prose, when it is the one thing here the user didn't write just now. */
+   more of the card's own prose, when it is the one thing here the user didn't write just now.
+   Sunk into that warm background rather than filled over it: this card is always warning-tinted,
+   and an opaque fill on a tint is a bright hole that outranks the button it introduces. */
 .chat-authfix-last {
   /* Shown whole: three clamped lines cut the message off mid-sentence, and a quote you can't
      read to the end doesn't answer the question it is here for — "is this what gets re-sent?".
@@ -4702,7 +4712,7 @@ body {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-raised);
+  background: var(--fill-inset);
   color: var(--text-2);
   font-size: 12.5px;
   line-height: 1.5;
@@ -4765,15 +4775,20 @@ body {
 }
 /* The provider's error verbatim (transient-API-error variant only). Monospace and clipped to a
    few lines: it is a machine string worth copying exactly, but a JSON body must not push the
-   countdown and the retry button below the fold. */
+   countdown and the retry button below the fold. Bordered as well as filled — the fill alone is
+   a couple of percent, which in light mode left this as unexplained floating monospace. */
 .chat-quota-err {
   max-height: 6em;
   overflow-y: auto;
   margin: 8px 0 0;
   padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--bg-base);
-  color: var(--text-3);
+  background: var(--fill-inset);
+  /* --text-2, not the --text-3 a machine string would otherwise get: sinking the panel darkened
+     what is behind this text, and leaving it one step paler than the body copy on a darker
+     ground would have taken it from 3:1 to 2.7:1 in light mode. */
+  color: var(--text-2);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
   line-height: 1.45;
@@ -4787,8 +4802,10 @@ body {
   color: var(--text-1);
   font-size: 13px;
 }
+/* Quieter than the absolute time beside it, but only one step: at --text-3 the countdown was the
+   palest thing on the card (3:1 on white) while being what most readers actually look for. */
 .chat-quota-in {
-  color: var(--text-3);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 /* What happens next, and the one switch that stops it. Boxed because it is the only thing in
@@ -4801,7 +4818,7 @@ body {
   padding: 9px 11px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--bg-base);
+  background: var(--fill-inset);
 }
 .chat-quota-auto-txt {
   flex: 1;
@@ -4847,7 +4864,9 @@ body {
 }
 /* The message the retry would re-send, quoted — same panel and same reason as
    .chat-authfix-last: by now it has scrolled away, and on a first-turn limit it was never in
-   the transcript at all. */
+   the transcript at all. One fill for both of this card's tints: --fill-inset darkens whatever
+   is under it, so the neutral card and the escalated one both get a recess instead of the
+   escalated one getting a bright hole. */
 .chat-quota-last {
   max-height: 13em;
   overflow-y: auto;
@@ -4855,15 +4874,12 @@ body {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg-raised);
+  background: var(--fill-inset);
   color: var(--text-2);
   font-size: 12.5px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-}
-.chat-quota[data-needs-you='true'] .chat-quota-last {
-  background: var(--bg-base);
 }
 .chat-quota-lastl {
   margin: 10px 0 -4px;

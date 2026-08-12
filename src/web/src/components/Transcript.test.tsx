@@ -113,11 +113,14 @@ describe('spent quota card', () => {
       </AutoRetryCtx.Provider>,
     );
 
+  // ...and titled by its length, never by the runtime's word for it: "Session limit reached"
+  // in a product whose sessions are the thing on screen reads as a limit on this session.
   it('names the rolling window the runtime actually named', () => {
     const html = render("You've hit your session limit · resets 8:20pm (Europe/Berlin)");
 
-    expect(html).toContain('Session limit reached');
+    expect(html).toContain('5-hour limit reached');
     expect(html).toContain('The 5-hour quota');
+    expect(html).not.toContain('Session limit');
     expect(html).not.toContain('Weekly limit');
   });
 
@@ -125,6 +128,75 @@ describe('spent quota card', () => {
     const html = render("You've hit your weekly limit · resets Aug 3, 1pm (Europe/Berlin)");
 
     expect(html).toContain('Weekly limit reached');
+  });
+
+  // The quote of what a retry would re-send earns its space when that message has scrolled
+  // away. When the bubble is the line directly above the card — the usual case, since a quota
+  // is spent on the message that just went out — it is the same sentence twice, and it is the
+  // tallest thing in the card.
+  const LIMIT = "You've hit your session limit · resets 8:20pm (Europe/Berlin)";
+  const withRetry = (events: RunEvent[]) =>
+    renderToStaticMarkup(
+      <AutoRetryCtx.Provider value={{ provider: 'claude', onRetry: () => {}, retryText: 'ship it' }}>
+        <Transcript events={events} />
+      </AutoRetryCtx.Provider>,
+    );
+
+  it('drops the quoted message when the bubble it would quote is right above', () => {
+    const html = withRetry([
+      { seq: 1, type: 'user', payload: { text: 'ship it' } },
+      { seq: 2, type: 'assistant', payload: { text: LIMIT } },
+    ]);
+
+    expect(html).not.toContain('Will re-send');
+    expect(html).toContain('Retry now');
+  });
+
+  it('quotes it when the failure landed deeper into the turn', () => {
+    const html = withRetry([
+      { seq: 1, type: 'user', payload: { text: 'ship it' } },
+      { seq: 2, type: 'assistant', payload: { text: 'On it.' } },
+      { seq: 3, type: 'assistant', payload: { text: LIMIT } },
+    ]);
+
+    expect(html).toContain('Will re-send');
+  });
+
+  // Switching auto-retry off used to unmount the row it lived in, so the click read as the card
+  // breaking rather than as a setting changing. The switch stays, off, and flips back — which is
+  // only offerable when the reply named a time to flip back *to*.
+  const offCard = (text: string, help: Partial<AutoRetryHelp> = {}) =>
+    renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{ provider: 'claude', retryAt: null, attempts: 0, onArmAuto: () => {}, ...help }}
+      >
+        <Transcript events={[{ seq: 1, type: 'assistant', payload: { text } }]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+  it('keeps the switch on the card when auto-retry is off, in the off position', () => {
+    const html = offCard(LIMIT);
+
+    expect(html).toContain('data-on="false"');
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain('Off — nothing will re-send until you do.');
+  });
+
+  it('offers no switch when the runtime named no time to re-arm for', () => {
+    const html = offCard(
+      "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to " +
+        'purchase more credits.',
+    );
+
+    expect(html).toContain('chat-quota');
+    expect(html).not.toContain('class="sw"');
+  });
+
+  it('gives up rather than offering to re-arm once the attempts are spent', () => {
+    const html = offCard(LIMIT, { attempts: 5 });
+
+    expect(html).toContain('Auto-retry gave up');
+    expect(html).not.toContain('class="sw"');
   });
 
   // The reply that surfaced this was an *answer* about a quota outage — it quoted the Codex

@@ -29,12 +29,14 @@ import { Image } from 'antd';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  apiErrorRetryAt,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
   isRetryableApiErrorText,
   isUsageLimitErrorText,
   MAX_API_ERROR_RETRIES,
+  parseQuotaResetAt,
 } from '@orbit/shared';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
@@ -252,6 +254,9 @@ type AutoRetryNode = {
   message: string;
   variant: AutoRetryVariant;
   stale?: boolean;
+  // The message a retry would re-send is the bubble directly above this card, so the card
+  // needn't quote it back.
+  afterUserMsg?: boolean;
 };
 type Node =
   | ToolNode
@@ -305,8 +310,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     variant: AutoRetryVariant,
   ) => {
     if (liveRetry) liveRetry.stale = true;
-    liveRetry = { kind: 'autoRetry', seq, message, variant };
-    into(parentId).push(liveRetry);
+    const list = into(parentId);
+    // A quota is usually spent on the message that just went out, which puts that bubble
+    // directly above the card — quoting it there is the same sentence twice, and it is the
+    // tallest thing in the card. A textless bubble (image-only turn) is not what
+    // `lastUserMessageText` would re-send, so it doesn't count as the message being above.
+    const prev = list[list.length - 1];
+    const afterUserMsg = prev?.kind === 'user' && !!prev.text.trim();
+    liveRetry = { kind: 'autoRetry', seq, message, variant, afterUserMsg };
+    list.push(liveRetry);
   };
   const outageOver = () => {
     if (liveRetry) liveRetry.stale = true;
@@ -601,6 +613,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
     case 'autoRetry':
       return (
         <AutoRetryCard
+          afterUserMsg={node.afterUserMsg}
           message={node.message}
           seq={node.seq}
           stale={node.stale}
@@ -726,6 +739,8 @@ export interface AutoRetryHelp {
   retryText?: string;
   /** Turn the pending auto-retry off. */
   onCancelAuto?: () => void;
+  /** Put it back, at the instant the card re-derived from the failing reply. */
+  onArmAuto?: (at: Date) => void;
 }
 export const AutoRetryCtx = createContext<AutoRetryHelp | null>(null);
 
@@ -740,11 +755,15 @@ const MAX_ATTEMPTS: Record<AutoRetryVariant, number> = {
 /** The window that ran out, in the runtime's own terms. Keyed on the whole phrase the runtime
  *  uses ("hit your weekly limit"), not on "weekly limit" loose in the text: naming the wrong
  *  window tells the user to wait days for a quota that comes back in hours. Codex names no
- *  window at all, and falls through to the generic wording. */
+ *  window at all, and falls through to the generic wording.
+ *
+ *  The runtime calls its 5-hour window a "session limit", but here that reads as a limit on the
+ *  Orbit session the card is sitting in — the one noun this product uses for something else
+ *  entirely. Titled by its length instead; the runtime's own phrasing survives in the body. */
 function quotaWindow(message: string): { title: string; what: string } {
   const m = message.toLowerCase();
   if (m.includes('hit your session limit'))
-    return { title: 'Session limit reached', what: 'The 5-hour quota' };
+    return { title: '5-hour limit reached', what: 'The 5-hour quota' };
   if (m.includes('hit your weekly limit'))
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
@@ -781,11 +800,13 @@ function formatCountdown(ms: number): string {
  * is the only thing they can act on if it keeps happening.
  */
 function AutoRetryCard({
+  afterUserMsg,
   message,
   seq,
   stale,
   variant,
 }: {
+  afterUserMsg?: boolean;
   message: string;
   seq?: number;
   stale?: boolean;
@@ -811,6 +832,15 @@ function AutoRetryCard({
   const needsYou = live && !armed && !firing;
   const quota = variant === 'quota';
   const window = quotaWindow(message);
+  // The instant a re-armed retry would fire, re-derived from the same two things the server used
+  // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
+  // backoff ladder (provider error). Null when the runtime named no time — Codex quota messages
+  // don't — and then the switch is not offered rather than offered dead.
+  const rearmAt = (): Date | null =>
+    quota ? parseQuotaResetAt(message, new Date()) : apiErrorRetryAt(help?.attempts ?? 0, new Date());
+  // Off, but flippable: the row stays so the click has a visible result, and so the state the
+  // user just chose is legible instead of vanishing with the control that set it.
+  const canArm = live && !armed && !firing && !gaveUp && !!help?.onArmAuto && !!rearmAt();
 
   return (
     <div className="chat-quota" data-seq={seq} data-needs-you={needsYou}>
@@ -844,37 +874,50 @@ function AutoRetryCard({
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
       {!quota && <div className="chat-quota-err">{message}</div>}
       {armed && (
-        <>
-          <div className="chat-quota-when">
-            {quota ? (
-              <>
-                Resets <b>{formatResetAt(retryAt!)}</b>{' '}
-                <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
-              </>
-            ) : (
-              <>
-                Retrying <b>{formatCountdown(msLeft)}</b>
-              </>
-            )}
-          </div>
-          <div className="chat-quota-auto">
-            <div className="chat-quota-auto-txt">
-              <div className="chat-quota-auto-l">
-                {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
-              </div>
-              <div className="chat-quota-auto-d">Runs on the server — you can close this tab.</div>
+        <div className="chat-quota-when">
+          {quota ? (
+            <>
+              Resets <b>{formatResetAt(retryAt!)}</b>{' '}
+              <span className="chat-quota-in">· {formatCountdown(msLeft)}</span>
+            </>
+          ) : (
+            <>
+              Retrying <b>{formatCountdown(msLeft)}</b>
+            </>
+          )}
+        </div>
+      )}
+      {(armed || canArm) && (
+        <div className="chat-quota-auto">
+          <div className="chat-quota-auto-txt">
+            <div className="chat-quota-auto-l">
+              {quota ? 'Auto-retry when the quota resets' : 'Auto-retry — this usually clears'}
             </div>
-            {help?.onCancelAuto && (
-              <button
-                className="sw"
-                data-on="true"
-                onClick={help.onCancelAuto}
-                type="button"
-                aria-label="Turn off auto-retry"
-              />
-            )}
+            <div className="chat-quota-auto-d">
+              {armed
+                ? 'Runs on the server — you can close this tab.'
+                : 'Off — nothing will re-send until you do.'}
+            </div>
           </div>
-        </>
+          {/* A real two-state switch: off is rendered, not just implied by the row disappearing,
+              and flipping it back on re-arms at `rearmAt()`. `role=switch` because a bare button
+              with an aria-label would announce an action, and this reports a state. */}
+          {(armed ? help?.onCancelAuto : help?.onArmAuto) && (
+            <button
+              className="sw"
+              data-on={armed}
+              role="switch"
+              aria-checked={armed}
+              onClick={() => {
+                if (armed) return help?.onCancelAuto?.();
+                const at = rearmAt();
+                if (at) help?.onArmAuto?.(at);
+              }}
+              type="button"
+              aria-label="Auto-retry"
+            />
+          )}
+        </div>
       )}
       {firing && (
         <div className="chat-quota-run">
@@ -884,9 +927,14 @@ function AutoRetryCard({
       {live && !firing && help?.onRetry && help.retryText && (
         <>
           {/* Quoted for the same reason as the sign-in card's: by now it has scrolled away,
-              and on a first-turn limit it was never in the transcript at all. */}
-          <div className="chat-quota-lastl">Will re-send:</div>
-          <div className="chat-quota-last">{help.retryText}</div>
+              and on a first-turn limit it was never in the transcript at all. When the bubble
+              is the line directly above, it is neither — see `afterUserMsg`. */}
+          {!afterUserMsg && (
+            <>
+              <div className="chat-quota-lastl">Will re-send:</div>
+              <div className="chat-quota-last">{help.retryText}</div>
+            </>
+          )}
           <div className="chat-quota-actions">
             <button
               className="chat-quota-retry"

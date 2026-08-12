@@ -515,11 +515,18 @@ export const pinSession = (sessionId: string) =>
 export const unpinSession = (sessionId: string) =>
   api(`/sessions/${sessionId}/pin`, { method: 'DELETE' });
 
-// Turn off the retry armed on this session by a spent quota or a transient provider error.
-// There is no matching arm call — arming is automatic when one of those kills a turn, and
-// re-arming by hand would need a moment nobody has.
+// Turn off / put back the retry armed on this session by a spent quota or a transient provider
+// error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
+// switch can be flipped both ways, and carries the instant because the server dropped its copy
+// when the retry was cancelled (the caller re-derives it with `parseQuotaResetAt`).
 export const cancelAutoRetry = (sessionId: string) =>
   api(`/sessions/${sessionId}/auto-retry`, { method: 'DELETE' });
+
+export const armAutoRetry = (sessionId: string, retryAt: Date) =>
+  api<{ retryAt: string }>(`/sessions/${sessionId}/auto-retry`, {
+    method: 'POST',
+    body: { retryAt: retryAt.toISOString() },
+  });
 
 // ── Public read-only sharing ──
 // Enable sharing mints (or returns) an unguessable token; the public link is `/s/<token>`.

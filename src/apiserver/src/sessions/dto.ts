@@ -58,6 +58,15 @@ export interface MergeToMainDto {
   targetBranch?: string;
 }
 
+export interface SessionArmRetryDto {
+  /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
+   *  only copy the server had; the client re-derives it from the failing reply with the same
+   *  `parseQuotaResetAt` the ingestion path used. Must be in the future and inside
+   *  MAX_ARM_AHEAD_MS — see sessions.service.armAutoRetry for why a caller-chosen instant is
+   *  not a privilege escalation. */
+  retryAt: string;
+}
+
 export interface SessionRenameDto {
   /** New display title for the session. Trimmed; must be non-empty. Renaming works on any
    *  session regardless of status and never touches the runner. */

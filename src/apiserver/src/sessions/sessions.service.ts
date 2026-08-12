@@ -60,6 +60,11 @@ import {
   withSessionState,
 } from './session-state';
 
+// The furthest ahead a hand-armed retry may be scheduled (armAutoRetry). Just past the longest
+// window a provider actually reports — a weekly quota — so a bad clock parks a session for days
+// at worst, never indefinitely.
+const MAX_ARM_AHEAD_MS = 8 * 24 * 60 * 60 * 1000;
+
 // A single prompt / turn message past this size freezes the web & macOS clients (one giant
 // text node lays out synchronously on the main thread), so reject it here as the server-side
 // backstop to the composer's own client-side cap.
@@ -1330,6 +1335,43 @@ export class SessionsService {
     if (!session) throw new NotFoundException('session not found');
     await this.prisma.session.update({ where: { id }, data: { retryAt: null } });
     return { ok: true };
+  }
+
+  /**
+   * Arm it again — the other half of the card's switch.
+   *
+   * The instant comes from the caller because disarming cleared the only copy the server kept,
+   * and re-deriving it here would mean a second implementation of the ingestion path's
+   * `retryPlanFor` to drift against. That is safe rather than lax: the same owner can already
+   * re-send this message *right now* with the card's Retry button, so an instant they choose can
+   * only ever make the re-send happen later than one they can already trigger by hand. The cap
+   * is there so a bad clock or a typo can't park a session a year out.
+   *
+   * Gated on the session still being parked the way the sweeper requires (auto-retry.service):
+   * arming one that has since been resumed would drop a re-send into a live conversation.
+   */
+  async armAutoRetry(ownerId: string, id: string, retryAt: string): Promise<{ retryAt: Date }> {
+    const at = new Date(retryAt);
+    const now = Date.now();
+    if (Number.isNaN(at.getTime()) || at.getTime() <= now)
+      throw new BadRequestException('retryAt must be a future instant');
+    if (at.getTime() - now > MAX_ARM_AHEAD_MS)
+      throw new BadRequestException('retryAt is too far out');
+    const armed = await this.prisma.session.updateMany({
+      where: {
+        id,
+        ownerId,
+        deletedAt: null,
+        completedAt: null,
+        OR: [
+          { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+          { status: RunStatus.FAILED },
+        ],
+      },
+      data: { retryAt: at },
+    });
+    if (!armed.count) throw new BadRequestException('session is not waiting on a retry');
+    return { retryAt: at };
   }
 
   /**

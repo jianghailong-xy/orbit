@@ -30,6 +30,7 @@ import { SessionTagsService } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
   MergeToMainDto,
+  SessionArmRetryDto,
   SessionConfigDto,
   SessionRenameDto,
   SessionResumeDto,
@@ -251,12 +252,21 @@ export class SessionsController {
     return this.sessions.disableShare(user.userId, id);
   }
 
-  /** Turn off the pending auto-retry on this session. There is no matching POST: arming happens
-   *  by itself when a quota or a transient provider error kills a turn, and re-arming by hand
-   *  would need a moment nobody has — once it is off, the way back is the card's Retry button. */
+  /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
+   *  transient provider error kills a turn; the POST below is only for putting back what this
+   *  took away, so the card's switch is a switch and not a one-way trapdoor. */
   @Delete(':id/auto-retry')
   cancelAutoRetry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.cancelAutoRetry(user.userId, id);
+  }
+
+  @Post(':id/auto-retry')
+  armAutoRetry(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SessionArmRetryDto,
+  ) {
+    return this.sessions.armAutoRetry(user.userId, id, dto.retryAt);
   }
 
   @Post(':id/complete')

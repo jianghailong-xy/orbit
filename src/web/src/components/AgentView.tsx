@@ -111,6 +111,7 @@ import {
   api,
   ApiError,
   type ApprovalInfo,
+  armAutoRetry,
   completeSession,
   cancelAutoRetry,
   cancelQueuedTurn,
@@ -3554,6 +3555,13 @@ export function AgentView({ runner }: { runner: Runner }) {
       onCancelAuto: selected?.id
         ? () => {
             cancelAutoRetry(selected.id)
+              .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
+              .catch((e: Error) => message.error(e.message));
+          }
+        : undefined,
+      onArmAuto: selected?.id
+        ? (at: Date) => {
+            armAutoRetry(selected.id, at)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
               .catch((e: Error) => message.error(e.message));
           }
