@@ -167,15 +167,20 @@ describe('Runtime-reported default models', () => {
     const configured: ConfiguredProvider[] = [
       { slug: 'moonshot', label: 'Kimi (Moonshot)', runtime: 'kimi', models: [] },
       { slug: 'local-codex', label: 'Local Codex', runtime: 'codex', models: [] },
+      { slug: 'deepseek', label: 'DeepSeek', runtime: 'claude', models: [] },
       { slug: 'local-legacy', label: 'Legacy', runtime: 'nonsense', models: [] },
     ];
 
     // Kimi's Auto is a runtime-wide mode, so it holds for this vendor's model ids too.
     expect(supportsAuto('kimi-k2.7-code', 'moonshot', configured)).toBe(true);
     expect(supportsAuto('claude-opus-5', 'local-codex', configured)).toBe(false);
-    // An unreadable runtime keeps the backend's Claude fallback, model rules and all.
+    // A configured provider on the Claude runtime owns its model space: the static Claude
+    // allow-list can't cover vendor ids (e.g. DeepSeek), so the CLI decides for itself.
+    expect(supportsAuto('deepseek-v4', 'deepseek', configured)).toBe(true);
+    // An unreadable runtime keeps the backend's Claude fallback — but Auto still follows the
+    // configured-provider rule, not the Claude model allow-list.
     expect(supportsAuto('claude-opus-5', 'local-legacy', configured)).toBe(true);
-    expect(supportsAuto('some-alias', 'local-legacy', configured)).toBe(false);
+    expect(supportsAuto('some-alias', 'local-legacy', configured)).toBe(true);
   });
 
   it('does not leak Claude picker rows into an empty custom model space', () => {
