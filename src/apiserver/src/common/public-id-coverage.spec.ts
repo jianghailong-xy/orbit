@@ -5,8 +5,7 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { uuidToBase62 } from '@orbit/shared';
-import { Base62UuidPipe, OptionalBase62UuidPipe } from './base62-uuid.pipe';
-import { PublicIdBodyPipe } from './public-id';
+import { PublicIdPipe } from './public-id';
 import { CreateTaskDto } from '../tasks/dto';
 import { AgentsController } from '../agents/agents.controller';
 import { AttachmentsController } from '../attachments/attachments.controller';
@@ -29,7 +28,7 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
 // `@db.Uuid`, so an id that isn't one reaches Prisma as an unhandled P2023 (or, in the raw-SQL
 // list queries, `invalid input syntax for type uuid`) and the caller gets a bare 500 it cannot act
-// on. Base62UuidPipe is the single gate: it resolves the base62 short id the clients put in URLs,
+// on. PublicIdPipe is the single gate: it resolves the base62 short id the clients put in URLs,
 // passes a raw UUID through, and turns everything else into a 400.
 //
 // Names that are NOT ids: `token` (share token), `userCode` (device pairing code), `seq` (an
@@ -96,60 +95,62 @@ function inspect(controller: new (...args: never[]) => unknown) {
       const name = arg.data;
       if (typeof name !== 'string') continue;
       const wanted =
-        kind === PARAM && !NON_ID_PARAMS.has(name)
-          ? Base62UuidPipe
-          : kind === QUERY && ID_QUERIES.has(name)
-            ? OptionalBase62UuidPipe
-            : null;
+        (kind === PARAM && !NON_ID_PARAMS.has(name)) || (kind === QUERY && ID_QUERIES.has(name));
       if (!wanted) continue;
       seen.push(`${method}(${name})`);
-      if (!(arg.pipes ?? []).includes(wanted)) missing.push(`${method}(${name})`);
+      if (!(arg.pipes ?? []).includes(PublicIdPipe)) missing.push(`${method}(${name})`);
     }
   }
   return { seen, missing };
 }
 
 for (const controller of CONTROLLERS) {
-  test(`${controller.name} resolves every id it accepts through Base62UuidPipe`, () => {
+  test(`${controller.name} resolves every id it accepts through PublicIdPipe`, () => {
     const { seen, missing } = inspect(controller as never);
     assert.ok(seen.length > 0, 'found no id args — the metadata shape changed, not the routes');
     assert.deepEqual(missing, []);
   });
 }
 
-test('Base62UuidPipe accepts the short id the clients put in URLs', () => {
-  const uuid = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
-  assert.equal(new Base62UuidPipe().transform(uuidToBase62(uuid)), uuid);
-  assert.equal(new Base62UuidPipe().transform(uuid), uuid);
-  assert.equal(new Base62UuidPipe().transform(uuid.toUpperCase()), uuid);
+// ── The rule itself ───────────────────────────────────────────────────────────────────────────
+const UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
+const B62 = uuidToBase62(UUID);
+const asParam = { type: 'param', data: 'id' } as const;
+const asQuery = { type: 'query', data: 'agentId' } as const;
+
+test('PublicIdPipe accepts both spellings of a public id', () => {
+  const pipe = new PublicIdPipe();
+  assert.equal(pipe.transform(B62, asParam), UUID);
+  assert.equal(pipe.transform(UUID, asParam), UUID);
+  assert.equal(pipe.transform(UUID.toUpperCase(), asParam), UUID);
 });
 
-test('Base62UuidPipe rejects an id Prisma would 500 on, and names it', () => {
-  for (const bad of ['not a uuid', 'abc-def', '']) {
-    assert.throws(() => new Base62UuidPipe().transform(bad), BadRequestException);
+test('PublicIdPipe rejects an id Prisma would 500 on, and names it', () => {
+  const pipe = new PublicIdPipe();
+  for (const bad of ['not a uuid', 'abc-def']) {
+    assert.throws(() => pipe.transform(bad, asParam), BadRequestException);
   }
-  assert.throws(() => new Base62UuidPipe().transform('no-pe', { type: 'param', data: 'tagId' }), {
+  assert.throws(() => pipe.transform('no-pe', { type: 'param', data: 'tagId' }), {
     message: 'invalid tagId',
   });
   // Base62's alphabet is every alnum, so a short all-alnum word IS a valid public id — it just
   // decodes to a uuid nothing is filed under. That's a 404's job, not the pipe's.
-  assert.equal(new Base62UuidPipe().transform('nope'), '00000000-0000-0000-0000-000000b52cc2');
+  assert.equal(pipe.transform('nope', asParam), '00000000-0000-0000-0000-000000b52cc2');
 });
 
-// A filter is optional, so absent stays absent — but a present one that won't parse is refused
-// rather than dropped. Dropping it would answer "my children" with every session the owner has.
-test('OptionalBase62UuidPipe passes absence through and still refuses garbage', () => {
-  const uuid = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
-  const pipe = new OptionalBase62UuidPipe();
-  assert.equal(pipe.transform(undefined), undefined);
-  assert.equal(pipe.transform('  '), undefined);
-  assert.equal(pipe.transform(uuidToBase62(uuid)), uuid);
-  assert.throws(() => pipe.transform('not a uuid'), BadRequestException);
+// The one behaviour that differs by position, and the reason it isn't a caller's choice: a
+// missing PARAM must fail. Handing `undefined` to Prisma drops the id from the WHERE clause
+// entirely, so `findFirst({ id: undefined, ownerId })` would answer with an arbitrary row of
+// that owner's. A missing QUERY is just an unfiltered list, which is a real request.
+test('PublicIdPipe requires a param and tolerates an absent query', () => {
+  const pipe = new PublicIdPipe();
+  for (const absent of [undefined, '', '  ']) {
+    assert.throws(() => pipe.transform(absent, asParam), BadRequestException, `param ${absent}`);
+    assert.equal(pipe.transform(absent, asQuery), undefined, `query ${absent}`);
+  }
+  assert.equal(pipe.transform(B62, asQuery), UUID);
+  assert.throws(() => pipe.transform('not a uuid', asQuery), BadRequestException);
 });
-
-// ── Body ids ──────────────────────────────────────────────────────────────────────────────────
-const UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
-const B62 = uuidToBase62(UUID);
 
 test('IsPublicId normalizes a base62 body id before validating it', async () => {
   const dto = plainToInstance(CreateTaskDto, {
@@ -172,14 +173,33 @@ test('IsPublicId still rejects a body id that is neither spelling', async () => 
   );
 });
 
-test('PublicIdBodyPipe normalizes only the fields it was given', () => {
-  const pipe = new PublicIdBodyPipe(['agentId', 'taskId']);
-  const body = pipe.transform({ prompt: 'go', agentId: B62, taskId: UUID, title: 'zzz' });
-  assert.deepEqual(body, { prompt: 'go', agentId: UUID, taskId: UUID, title: 'zzz' });
+// Why the rule is declared per field instead of inferred from the name: the wire is full of
+// id-NAMED fields that are not public ids. `toolUseId` (`toolu_01…`) and `bundleId`
+// (`com.orbit.ios`) aren't even base62, so a name-matching rule would 400 them; `clientTurnId` is
+// a free-form idempotency key that must survive byte-for-byte or a retry stops deduping. Several
+// ride the runner protocol, where a wrong 400 breaks runners that are already installed.
+test('PublicIdPipe normalizes only the fields it was given', () => {
+  const pipe = new PublicIdPipe(['agentId', 'taskId']);
+  const body = pipe.transform({
+    prompt: 'go',
+    agentId: B62,
+    taskId: UUID,
+    clientTurnId: 'RETRY-KEY-1',
+    toolUseId: 'toolu_01ABC',
+    bundleId: 'com.orbit.ios',
+  });
+  assert.deepEqual(body, {
+    prompt: 'go',
+    agentId: UUID,
+    taskId: UUID,
+    clientTurnId: 'RETRY-KEY-1',
+    toolUseId: 'toolu_01ABC',
+    bundleId: 'com.orbit.ios',
+  });
 });
 
-test('PublicIdBodyPipe refuses an undecodable id and ignores absent ones', () => {
-  const pipe = new PublicIdBodyPipe(['agentId']);
+test('PublicIdPipe refuses an undecodable id and ignores absent ones', () => {
+  const pipe = new PublicIdPipe(['agentId']);
   assert.deepEqual(pipe.transform({ prompt: 'go' }), { prompt: 'go' });
   assert.deepEqual(pipe.transform({ prompt: 'go', agentId: '' }), { prompt: 'go', agentId: '' });
   assert.throws(() => pipe.transform({ agentId: 'no-pe' }), { message: 'invalid agentId' });

@@ -8,7 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
@@ -30,17 +30,17 @@ export class TaskListsController {
   }
 
   @Get(':id')
-  get(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.taskLists.get(user.userId, id);
   }
 
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateTaskListDto) {
+  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateTaskListDto) {
     return this.taskLists.update(user.userId, id, dto);
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.taskLists.remove(user.userId, id);
   }
 }

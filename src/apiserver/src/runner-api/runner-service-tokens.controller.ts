@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { Runner } from '@prisma/client';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -31,7 +31,7 @@ export class RunnerServiceTokensController {
   }
 
   @Delete(':id')
-  revoke(@CurrentRunner() runner: Runner, @Param('id', Base62UuidPipe) id: string) {
+  revoke(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.serviceTokens.revoke(runner, id);
   }
 }

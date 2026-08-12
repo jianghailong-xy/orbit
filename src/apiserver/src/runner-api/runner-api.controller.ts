@@ -17,6 +17,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { PublicIdPipe } from '../common/public-id';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -73,7 +74,6 @@ import {
   WorktreesRemovableResponse,
   gracefulEndStatus,
 } from '@orbit/shared';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -963,7 +963,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async takeoverLeases(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: TakeoverTurnLeasesRequest,
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<TakeoverTurnLeasesResponse> {
@@ -1087,7 +1087,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async activateLeases(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ActivateTurnLeasesRequest,
   ): Promise<{ ok: true }> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
@@ -1205,7 +1205,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async releaseLeases(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto?: ReleaseTurnLeasesRequest,
   ): Promise<{ ok: true }> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
@@ -1263,7 +1263,7 @@ export class RunnerApiController {
   @HttpCode(200)
   async refreshOrchestrationCredential(
     @CurrentRunner() runner: { id: string; ownerId: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
   ): Promise<OrchestrationCredentialResponse> {
     return { orchestrationToken: await this.orchestration.reissue(runner, sessionId) };
   }
@@ -1273,7 +1273,7 @@ export class RunnerApiController {
   @Get('sessions/:id/inbox')
   async inbox(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Query('leaseGeneration') leaseGeneration?: string,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
@@ -1297,8 +1297,8 @@ export class RunnerApiController {
   @Get('sessions/:id/attachments/:attId')
   async attachment(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
-    @Param('attId', Base62UuidPipe) attId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('attId', PublicIdPipe) attId: string,
   ): Promise<StreamableFile> {
     await this.assertSessionOwnership(sessionId, runner.id);
     const att = await this.prisma.attachment.findFirst({
@@ -1324,7 +1324,7 @@ export class RunnerApiController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async uploadAttachment(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: UploadedFile | undefined,
   ): Promise<{ id: string }> {
     const session = await this.assertSessionOwnership(sessionId, runner.id);
@@ -1348,7 +1348,7 @@ export class RunnerApiController {
   @Post('sessions/:id/artifacts/result')
   async artifactResult(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ArtifactResultRequest,
   ): Promise<{ ok: true }> {
     await this.assertSessionOwnership(sessionId, runner.id);
@@ -1534,7 +1534,7 @@ export class RunnerApiController {
   @Post('sessions/:id/approvals')
   async createApproval(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
     await this.assertSessionOwnership(sessionId, runner.id);
@@ -1579,8 +1579,8 @@ export class RunnerApiController {
   @Get('sessions/:id/approvals/:approvalId')
   async pollApproval(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
-    @Param('approvalId', Base62UuidPipe) approvalId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
+    @Param('approvalId', PublicIdPipe) approvalId: string,
   ): Promise<ApprovalDecisionResponse> {
     await this.assertSessionOwnership(sessionId, runner.id);
     const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
@@ -1615,7 +1615,7 @@ export class RunnerApiController {
   @Post('sessions/:id/turn-complete')
   async turnComplete(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: TurnCompleteRequest,
   ) {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
@@ -1835,7 +1835,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/events')
   @HttpCode(202)
-  async events(@CurrentRunner() runner: { id: string }, @Param('id', Base62UuidPipe) sessionId: string, @Body() batch: RunEventBatch) {
+  async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     const events = batch?.events ?? [];
 
@@ -2143,7 +2143,7 @@ export class RunnerApiController {
   @Post('sessions/:id/finalize')
   async finalize(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
@@ -2270,7 +2270,7 @@ export class RunnerApiController {
   @Post('sessions/:id/complete')
   complete(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
     return this.finalize(runner, sessionId, dto);
@@ -2312,7 +2312,7 @@ export class RunnerApiController {
   @Post('sessions/:id/merge-result')
   async mergeResult(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionMergeResultRequest,
   ) {
     if (dto?.status !== 'merged' && dto?.status !== 'conflict' && dto?.status !== 'error') {
@@ -2394,7 +2394,7 @@ export class RunnerApiController {
   @Post('sessions/:id/commit-result')
   async commitResult(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionCommitResultRequest,
   ) {
     if (dto?.status !== 'committed' && dto?.status !== 'nochange' && dto?.status !== 'error') {
@@ -2471,7 +2471,7 @@ export class RunnerApiController {
   @HttpCode(202)
   async diffResult(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionDiffResultRequest,
   ) {
     await this.assertSessionOwnership(sessionId, runner.id);
@@ -2523,7 +2523,7 @@ export class RunnerApiController {
   @Get('sessions/:id/meta')
   async getSessionMeta(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
   ): Promise<{
     provider: AgentProvider;
     sessionUuid: string;
@@ -2561,7 +2561,7 @@ export class RunnerApiController {
   @Get('sessions/:id/events')
   async sessionEvents(
     @CurrentRunner() runner: { id: string },
-    @Param('id', Base62UuidPipe) sessionId: string,
+    @Param('id', PublicIdPipe) sessionId: string,
     @Query('after') after?: string,
     @Query('limit') limit?: string,
   ): Promise<{

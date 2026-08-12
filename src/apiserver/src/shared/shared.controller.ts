@@ -1,5 +1,5 @@
 import { Controller, Get, Param, Query, StreamableFile } from '@nestjs/common';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { SessionsService } from '../sessions/sessions.service';
 
@@ -26,7 +26,7 @@ export class SharedController {
   @Get(':token/attachments/:id')
   async attachment(
     @Param('token') token: string,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
   ): Promise<StreamableFile> {
     const { data, mimeType } = await this.attachments.getForSharedSession(token, id);
     return new StreamableFile(data, { type: mimeType, disposition: 'inline', length: data.length });

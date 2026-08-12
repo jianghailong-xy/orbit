@@ -9,7 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Base62UuidPipe, OptionalBase62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -29,7 +29,7 @@ export class AttachmentsController {
   upload(
     @CurrentUser() user: AuthUser,
     @UploadedFileParam() file: UploadedFile | undefined,
-    @Query('sessionId', OptionalBase62UuidPipe) sessionId?: string,
+    @Query('sessionId', PublicIdPipe) sessionId?: string,
   ): Promise<{ id: string }> {
     return this.attachments.create(user.userId, sessionId, file);
   }
@@ -37,7 +37,7 @@ export class AttachmentsController {
   @Get(':id')
   async download(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
   ): Promise<StreamableFile> {
     const { data, mimeType } = await this.attachments.getForOwner(user.userId, id);
     return new StreamableFile(data, { type: mimeType, disposition: 'inline', length: data.length });

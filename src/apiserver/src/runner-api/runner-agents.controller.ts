@@ -9,11 +9,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { PublicIdPipe } from '../common/public-id';
 import { Agent, Runner } from '@prisma/client';
 import { PermissionMode } from '@orbit/shared';
 import { AgentsService } from '../agents/agents.service';
 import { CreateAgentDto, UpdateAgentDto } from '../agents/dto';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -107,7 +107,7 @@ export class RunnerAgentsController {
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);

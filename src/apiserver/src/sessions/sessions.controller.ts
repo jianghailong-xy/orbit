@@ -15,14 +15,13 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { PublicIdPipe } from '../common/public-id';
 import { Prisma } from '@prisma/client';
 import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
 import { ApprovalDecisionRequest } from '@orbit/shared';
 import { notNoiseSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Base62UuidPipe, OptionalBase62UuidPipe } from '../common/base62-uuid.pipe';
-import { PublicIdBodyPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -73,7 +72,7 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(new PublicIdBodyPipe(['agentId', 'assignedRunnerId', 'taskId'])) dto: CreateSessionDto,
+    @Body(new PublicIdPipe(['agentId', 'assignedRunnerId', 'taskId'])) dto: CreateSessionDto,
   ) {
     return this.sessions.create(user.userId, dto);
   }
@@ -81,9 +80,9 @@ export class SessionsController {
   @Get()
   list(
     @CurrentUser() user: AuthUser,
-    @Query('runnerId', OptionalBase62UuidPipe) runnerId?: string,
-    @Query('agentId', OptionalBase62UuidPipe) agentId?: string,
-    @Query('tagId', OptionalBase62UuidPipe) tagId?: string,
+    @Query('runnerId', PublicIdPipe) runnerId?: string,
+    @Query('agentId', PublicIdPipe) agentId?: string,
+    @Query('tagId', PublicIdPipe) tagId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
     // answers it with an empty list rather than accidentally falling through to Open.
     @Query('view')
@@ -121,14 +120,14 @@ export class SessionsController {
   }
 
   @Get(':id')
-  get(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.get(user.userId, id);
   }
 
   @Get(':id/artifacts')
   async artifact(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Query('path') artifactPath?: string,
   ): Promise<StreamableFile> {
     const { data, mimeType, disposition } = await this.sessions.getLegacyArtifactForOwner(user.userId, id, artifactPath);
@@ -138,7 +137,7 @@ export class SessionsController {
   // Per-file unified diffs for this session's worktree changes, fetched on demand when a
   // file's diff is opened (kept off the session payload — see SessionsService.getDiff).
   @Get(':id/diff')
-  diff(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  diff(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getDiff(user.userId, id);
   }
 
@@ -146,14 +145,14 @@ export class SessionsController {
   // patch lagged the live worktree (the heartbeat refreshes the file list but not the patch
   // text) gets its diff. No-op for a non-live session — see requestDiffRefresh.
   @Post(':id/diff/refresh')
-  refreshDiff(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  refreshDiff(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.requestDiffRefresh(user.userId, id);
   }
 
   @Post(':id/turns')
   turn(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionTurnDto,
   ) {
     return this.sessions.createTurn(user.userId, id, dto);
@@ -162,7 +161,7 @@ export class SessionsController {
   // Still-queued (PENDING) user messages, so reopening/deep-linking a running session
   // can restore the visible queue (these aren't in the event stream until delivered).
   @Get(':id/turns')
-  queuedTurns(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  queuedTurns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.listQueuedTurns(user.userId, id);
   }
 
@@ -171,8 +170,8 @@ export class SessionsController {
   @Delete(':id/turns/:turnId')
   cancelTurn(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
-    @Param('turnId', Base62UuidPipe) turnId: string,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
   }
@@ -180,7 +179,7 @@ export class SessionsController {
   @Post(':id/resume')
   resume(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionResumeDto,
   ) {
     return this.sessions.resume(user.userId, id, dto);
@@ -189,7 +188,7 @@ export class SessionsController {
   @Patch(':id/config')
   updateConfig(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionConfigDto,
   ) {
     return this.sessions.updateConfig(user.userId, id, dto);
@@ -200,19 +199,19 @@ export class SessionsController {
   @Patch(':id')
   rename(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: SessionRenameDto,
   ) {
     return this.sessions.rename(user.userId, id, dto.title);
   }
 
   @Post(':id/interrupt')
-  interrupt(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  interrupt(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.interrupt(user.userId, id);
   }
 
   @Post(':id/end')
-  end(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  end(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.end(user.userId, id);
   }
 
@@ -221,7 +220,7 @@ export class SessionsController {
   @Post(':id/merge')
   mergeToMain(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: MergeToMainDto,
   ) {
     return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch);
@@ -229,26 +228,26 @@ export class SessionsController {
 
   /** Ask the runner to commit this live session's uncommitted worktree changes onto its branch. */
   @Post(':id/commit')
-  commitWorktree(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  commitWorktree(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.commitWorktree(user.userId, id);
   }
 
   /** Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
    *  session's tracked branch, so Merge/diff act on the real work instead of a stale "In main". */
   @Post(':id/adopt-branch')
-  adoptWorktreeBranch(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  adoptWorktreeBranch(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.adoptWorktreeBranch(user.userId, id);
   }
 
   /** Enable a public read-only share link for this session (mints/returns its shareToken). */
   @Post(':id/share')
-  share(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  share(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.enableShare(user.userId, id);
   }
 
   /** Revoke the public share link (the token stops resolving). */
   @Delete(':id/share')
-  unshare(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  unshare(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.disableShare(user.userId, id);
   }
 
@@ -256,35 +255,35 @@ export class SessionsController {
    *  by itself when a quota or a transient provider error kills a turn, and re-arming by hand
    *  would need a moment nobody has — once it is off, the way back is the card's Retry button. */
   @Delete(':id/auto-retry')
-  cancelAutoRetry(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  cancelAutoRetry(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.cancelAutoRetry(user.userId, id);
   }
 
   @Post(':id/complete')
-  complete(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  complete(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.complete(user.userId, id);
   }
 
   /** @deprecated Compatibility route for clients deployed before Complete was canonical. */
   @Post(':id/archive')
-  archiveCompatibility(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  archiveCompatibility(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.complete(user.userId, id);
   }
 
   @Post(':id/restore')
-  restore(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  restore(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.restore(user.userId, id);
   }
 
   /** Pin this session to the top of the list (personal ordering). */
   @Post(':id/pin')
-  pin(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  pin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.pin(user.userId, id);
   }
 
   /** Remove this session's pin. */
   @Delete(':id/pin')
-  unpin(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
   }
 
@@ -293,7 +292,7 @@ export class SessionsController {
   @Put(':id/tags')
   setTags(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Body() dto: SetSessionTagsDto,
   ) {
     return this.tags.setForSession(user.userId, id, dto.tagIds);
@@ -301,13 +300,13 @@ export class SessionsController {
 
   // Soft-delete: moves the session to the trash (deletedAt), retaining all data.
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.remove(user.userId, id);
   }
 
   // Hard-delete: permanently remove a trashed session and all its data (irreversible).
   @Delete(':id/purge')
-  purge(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  purge(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.purge(user.userId, id);
   }
 
@@ -315,7 +314,7 @@ export class SessionsController {
   @Get(':id/approvals')
   approvals(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Query('status') status?: string,
   ) {
     return this.sessions.listApprovals(user.userId, id, status);
@@ -325,8 +324,8 @@ export class SessionsController {
   @Post(':id/approvals/:approvalId/decision')
   decideApproval(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
-    @Param('approvalId', Base62UuidPipe) approvalId: string,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('approvalId', PublicIdPipe) approvalId: string,
     @Body() dto: ApprovalDecisionRequest,
   ) {
     return this.sessions.decideApproval(user.userId, id, approvalId, dto);
@@ -340,7 +339,7 @@ export class SessionsController {
    * overlay for the freshest tail of anything still running.
    */
   @Get(':id/background')
-  backgroundShells(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  backgroundShells(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.getBackgroundShells(user.userId, id);
   }
 
@@ -355,7 +354,7 @@ export class SessionsController {
   @Get(':id/events/page')
   eventPage(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Query('tail') tail?: string,
     @Query('before') before?: string,
     @Query('limit') limit?: string,
@@ -382,7 +381,7 @@ export class SessionsController {
   @Get(':id/events/search')
   eventSearch(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
   ) {
@@ -396,7 +395,7 @@ export class SessionsController {
   @Get(':id/events/:seq/full')
   eventFull(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Param('seq') seq: string,
   ) {
     const n = Number(seq);
@@ -411,7 +410,7 @@ export class SessionsController {
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,
-    @Param('id', Base62UuidPipe) id: string,
+    @Param('id', PublicIdPipe) id: string,
     @Query('sinceSeq') sinceSeq?: string,
     @Query('maxPayload') maxPayload?: string,
   ): Observable<MessageEvent> {

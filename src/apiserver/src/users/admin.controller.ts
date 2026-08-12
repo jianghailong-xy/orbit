@@ -10,7 +10,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -44,7 +44,7 @@ export class AdminController {
   }
 
   @Patch('users/:id/role')
-  async setRole(@Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateRoleDto) {
+  async setRole(@Param('id', PublicIdPipe) id: string, @Body() dto: UpdateRoleDto) {
     // Never let the last admin be demoted — that would lock everyone out of this area.
     if (dto.role !== 'ADMIN') {
       const target = await this.prisma.user.findUnique({ where: { id }, select: { role: true } });
@@ -61,7 +61,7 @@ export class AdminController {
   }
 
   @Delete('users/:id')
-  async deleteUser(@CurrentUser() me: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  async deleteUser(@CurrentUser() me: AuthUser, @Param('id', PublicIdPipe) id: string) {
     if (id === me.userId) throw new BadRequestException('you cannot delete your own account');
     const target = await this.prisma.user.findUnique({ where: { id }, select: { role: true } });
     if (!target) return { id, deleted: false };

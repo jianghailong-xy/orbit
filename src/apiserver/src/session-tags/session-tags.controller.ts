@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { Base62UuidPipe } from '../common/base62-uuid.pipe';
+import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { CreateSessionTagDto, UpdateSessionTagDto } from './dto';
@@ -23,13 +23,13 @@ export class SessionTagsController {
 
   /** Rename or recolor a custom tag (system tags are rejected). */
   @Patch(':id')
-  update(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string, @Body() dto: UpdateSessionTagDto) {
+  update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateSessionTagDto) {
     return this.tags.update(user.userId, id, dto);
   }
 
   /** Delete a custom tag (system tags are rejected); its links cascade away. */
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', Base62UuidPipe) id: string) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tags.remove(user.userId, id);
   }
 }
