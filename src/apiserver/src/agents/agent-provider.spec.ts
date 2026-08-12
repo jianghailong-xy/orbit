@@ -25,8 +25,11 @@ function prismaStub(rows: unknown[] = []) {
 test('the seed is read from the project history, newest first, one row per agent', async () => {
   const { prisma, seen } = prismaStub();
   await lastProviderByAgent(prisma, ['a1', 'a2']);
-  assert.match(seen.sql ?? '', /DISTINCT ON \(agent_id\)/);
-  assert.match(seen.sql ?? '', /ORDER BY agent_id, created_at DESC/);
+  // One indexed LIMIT 1 per agent. The DISTINCT ON form reads every session these agents own and
+  // sorts it — a sequential scan that grows with the table, on every client boot.
+  assert.match(seen.sql ?? '', /CROSS JOIN LATERAL/);
+  assert.match(seen.sql ?? '', /ORDER BY created_at DESC\s*LIMIT 1/);
+  assert.doesNotMatch(seen.sql ?? '', /DISTINCT ON/);
   assert.deepEqual(seen.values, ['a1', 'a2']);
 });
 

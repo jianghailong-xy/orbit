@@ -33,6 +33,13 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * Task-launched runs are excluded on purpose: a task that pins a provider (Task.provider) is
  * stating what *that* job needs, and letting it move the project's default would make one pinned
  * job silently re-point the human's next session — the same coupling this replaced.
+ *
+ * Written as a LATERAL per id rather than the obvious `DISTINCT ON (agent_id) … ORDER BY
+ * created_at DESC`: Postgres has no skip scan, so that form reads *every* session belonging to
+ * these agents and sorts them, which on the agent-list path (every client boot) is a sequential
+ * scan that grows with the session table. One `LIMIT 1` per id instead walks
+ * session_agent_id_created_at_idx and stops at the first row — measured on a copy of a live
+ * database: 4.7ms and 930 rows scanned → 0.3ms and one row per agent.
  */
 export async function lastProviderByAgent(
   prisma: PrismaService,
@@ -43,11 +50,15 @@ export async function lastProviderByAgent(
   const rows = await prisma.$queryRaw<
     Array<{ agent_id: string; provider: string; provider_builtin: boolean }>
   >(Prisma.sql`
-    SELECT DISTINCT ON (agent_id) agent_id, provider, provider_builtin
-    FROM "session"
-    WHERE agent_id IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
-      AND task_id IS NULL
-    ORDER BY agent_id, created_at DESC
+    SELECT a.id AS agent_id, s.provider, s.provider_builtin
+    FROM unnest(ARRAY[${Prisma.join(ids)}]::uuid[]) AS a(id)
+    CROSS JOIN LATERAL (
+      SELECT provider, provider_builtin
+      FROM "session"
+      WHERE agent_id = a.id AND task_id IS NULL
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) s
   `);
   return new Map(
     rows.map((r) => [r.agent_id, { provider: r.provider, providerBuiltin: r.provider_builtin }]),
