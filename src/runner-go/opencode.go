@@ -477,7 +477,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		scanner := bufio.NewScanner(stderr)
 		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for scanner.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": scanner.Text() + "\n"})
+			emit(evSystem, map[string]interface{}{"stderr": stripANSI(scanner.Text()) + "\n"})
 		}
 	}()
 

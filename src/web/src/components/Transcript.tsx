@@ -238,7 +238,9 @@ type TextNode = {
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
-type ErrorNode = { kind: 'error'; seq: number; message: string };
+// `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
+// means the line was seen once.
+type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
 type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
@@ -259,6 +261,10 @@ type Node =
   | ErrorNode
   | AuthErrorNode
   | AutoRetryNode;
+
+// The RFC3339 stamp a tracing-style logger opens each stderr line with ("2026-08-12T15:31:40.112363Z
+// ERROR codex_core::util: …"). Dropped when deciding whether two lines say the same thing.
+const LEADING_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z?\s*/;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
@@ -305,6 +311,29 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   const outageOver = () => {
     if (liveRetry) liveRetry.stale = true;
     liveRetry = undefined;
+  };
+  // An engine's stderr is its own running log, not this turn's. Codex re-reports
+  // "codex_core::util: Custom tool call output is missing for call id: …" on every request for
+  // the rest of a conversation whose history lost one tool result — 217 identical red lines in
+  // one observed session, one per turn, interleaved with the work being done. The line is still
+  // worth showing (a runtime's only account of why it failed to come up arrives on stderr), so a
+  // repeat folds into the first one's row as a count instead of taking a row of its own.
+  //
+  // Keyed on the line minus its leading timestamp: the engines that log at all stamp every line,
+  // so raw text is unique per occurrence and nothing would ever fold. Folding across parents
+  // (rather than per sub-agent) is deliberate — one process writes the stderr, and which tool
+  // call happened to be open when it flushed is incidental.
+  const stderrSeen = new Map<string, ErrorNode>();
+  const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
+    const key = line.replace(LEADING_TIMESTAMP, '');
+    const prev = stderrSeen.get(key);
+    if (prev) {
+      prev.repeats = (prev.repeats ?? 1) + 1;
+      return;
+    }
+    const node: ErrorNode = { kind: 'error', seq, message: line };
+    stderrSeen.set(key, node);
+    into(parentId).push(node);
   };
 
   for (const ev of events) {
@@ -411,7 +440,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // The runner reports a signed-out engine as an error event rather than assistant text
         // (there is no model in the loop yet — it never got to spawn), but the remedy is the
         // same human action, so it earns the same card instead of a bare error line.
-        const msg = String(p.message ?? 'error');
+        // stripAnsi: an engine that colours its output reaches here through the runner verbatim,
+        // and the ESC byte is invisible in HTML — what would show is literal "[31m" garbage.
+        const msg = stripAnsi(String(p.message ?? 'error'));
         if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
@@ -420,8 +451,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
         // an error so the user sees why the turn failed instead of a silent blank turn.
         // Except for the lines that are noise from Orbit's own env injection.
-        if (p.stderr && !isBenignEngineStderr(String(p.stderr)))
-          into(parent).push({ kind: 'error', seq: ev.seq, message: String(p.stderr).trim() });
+        //
+        // Stripped of ANSI on the way in: codex colours its stderr, and the codes have to be gone
+        // before two lines can be compared for folding, not just before they are displayed. The
+        // runner strips them at the source now (runner-go/ansi.go), but every event already
+        // stored carries them.
+        if (p.stderr) {
+          const line = stripAnsi(String(p.stderr)).trim();
+          if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
+        }
         break;
       default:
         break;
@@ -555,6 +593,7 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       return (
         <div className="chat-error" data-seq={node.seq}>
           ✖ {node.message}
+          {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
         </div>
       );
     case 'authError':

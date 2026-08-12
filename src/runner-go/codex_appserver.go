@@ -677,7 +677,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": s.Text() + "\n"})
+			emit(evSystem, map[string]interface{}{"stderr": stripANSI(s.Text()) + "\n"})
 		}
 	}()
 	return app, nil

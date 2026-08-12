@@ -610,7 +610,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		sc := bufio.NewScanner(stderr)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for sc.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": sc.Text() + "\n"})
+			emit(evSystem, map[string]interface{}{"stderr": stripANSI(sc.Text()) + "\n"})
 		}
 	}()
 	return app, nil

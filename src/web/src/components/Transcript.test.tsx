@@ -176,6 +176,54 @@ describe('engine stderr', () => {
 
     expect(html).toContain('No conversation found with session ID: abc');
   });
+
+  // codex colours its stderr with tracing's ANSI layer. The ESC byte is invisible in HTML, so
+  // an unstripped line reads as "[2m…[0m [31mERROR[0m" — every log line wrapped in garbage.
+  const codexLine = (ts: string, message: string) =>
+    `\x1b[2m${ts}\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2mcodex_core::util\x1b[0m\x1b[2m:\x1b[0m ${message}\n`;
+  const MISSING_OUTPUT = 'Custom tool call output is missing for call id: call_5zNG2';
+
+  it('strips the ANSI colouring off an engine’s log line', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT))]} />,
+    );
+
+    expect(html).toContain(`ERROR codex_core::util: ${MISSING_OUTPUT}`);
+    expect(html).not.toContain('[31m');
+    expect(html).not.toContain('[0m');
+  });
+
+  // The same complaint is re-logged on every request for the rest of the conversation — 217
+  // times in the session this came from, one per turn, between the turns doing the work.
+  it('folds a re-logged line into one row with a count', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT)),
+          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', MISSING_OUTPUT)),
+          stderrEvent(3, codexLine('2026-08-12T15:33:47.965544Z', MISSING_OUTPUT)),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-error"').length - 1).toBe(1);
+    expect(html).toContain('×3');
+  });
+
+  it('keeps a row per distinct line, and shows no count for a line seen once', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT)),
+          stderrEvent(2, codexLine('2026-08-12T15:32:38.753979Z', 'Codex could not find bubblewrap on PATH')),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-error"').length - 1).toBe(2);
+    expect(html).toContain('bubblewrap');
+    expect(html).not.toContain('chat-error-repeat');
+  });
 });
 
 describe('transcript Markdown links', () => {
