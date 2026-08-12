@@ -397,7 +397,10 @@ public enum AgentDefaults {
         switch runtime(for: provider, configured: configured) {
         case "kimi":  return true
         case "codex": return false
-        default:      return autoCapableModels.contains(model)
+        // A configured provider's model space is vendor-defined (e.g. DeepSeek), so the static
+        // Claude allow-list can't police it; the CLI decides for itself.
+        default:      return configuredProvider(provider, in: configured) != nil
+                          || autoCapableModels.contains(model)
         }
     }
 

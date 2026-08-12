@@ -915,7 +915,12 @@ export class RunnerApiController {
         systemPrompt: agent?.systemPrompt ?? undefined,
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
-        permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
+        permissionMode: normalizeBuiltinPermissionMode(
+          provider,
+          exec.model,
+          permissionMode,
+          customRow?.enabled === true,
+        ),
         // Per-session effort wins; otherwise use the agent's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
         // valid against the assigned runner's reported catalog for this model.

@@ -57,6 +57,33 @@ test('unsupported built-in models safely downgrade Auto permission mode', () => 
   );
 });
 
+test('configured providers keep Auto on the Claude runtime regardless of model id', () => {
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'deepseek-v4', PermissionMode.AUTO, true),
+    PermissionMode.AUTO,
+  );
+  // Claude's own ids through a configured provider follow the CLI too, not the allow-list.
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-haiku-4-5-20251001',
+      PermissionMode.AUTO,
+      true,
+    ),
+    PermissionMode.AUTO,
+  );
+  // Built-in Claude is unchanged: only the known capable families.
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'deepseek-v4', PermissionMode.AUTO),
+    PermissionMode.DEFAULT,
+  );
+  // Codex has no Auto even through a configured provider.
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CODEX, 'deepseek-v4', PermissionMode.AUTO, true),
+    PermissionMode.DEFAULT,
+  );
+});
+
 test('Codex and Kimi initialize their runtime id dynamically; Claude does not', () => {
   assert.equal(initializesRuntimeDynamically(AgentProvider.CODEX), true);
   assert.equal(initializesRuntimeDynamically(AgentProvider.KIMI), true);

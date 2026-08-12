@@ -402,6 +402,10 @@ export const supportsAuto = (
   // Kimi and OpenCode expose Auto as a runtime-wide mode, independent of the chosen model.
   if (runtime === 'kimi' || runtime === 'opencode') return true;
   if (runtime === 'codex') return false;
+  // A configured provider's model space is vendor-defined (e.g. DeepSeek), so the static Claude
+  // allow-list can't police it; the CLI decides for itself (it accepts Auto for models it
+  // doesn't recognize as unsupported).
+  if (configuredProvider(provider, configured)) return true;
   return AUTO_CAPABLE_MODELS.has(model);
 };
 export const clampPermissionModeForModel = (

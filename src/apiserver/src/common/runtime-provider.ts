@@ -4,6 +4,8 @@ import { runtimeCatalogReasoningLevels } from './runtime-model';
 // Keep this conservative Claude allow-list aligned with the clients. Claude Code rejects Auto
 // for unsupported models (notably Haiku). Kimi's and OpenCode's Auto are runtime-wide modes and
 // therefore do not depend on the configured default-model alias; Codex does not expose Auto at all.
+// A configured provider's model space is vendor-defined (e.g. DeepSeek), so the allow-list does
+// not apply there — see normalizeBuiltinPermissionMode.
 const AUTO_CAPABLE_CLAUDE_MODELS = new Set([
   'claude-opus-5',
   'claude-fable-5',
@@ -40,11 +42,15 @@ export function initializesRuntimeDynamically(provider?: string | null): boolean
   );
 }
 
-/** Prevent a runner from receiving a model/permission combination its built-in CLI rejects. */
+/** Prevent a runner from receiving a model/permission combination its built-in CLI rejects.
+ * `customProvider` is true when the model came from an enabled configured ModelProvider row; its
+ * model space is vendor-defined, so the static Claude allow-list cannot police it and the CLI
+ * decides for itself (it accepts Auto for any model it doesn't recognize as unsupported). */
 export function normalizeBuiltinPermissionMode(
   provider: AgentProvider,
   model: string,
   permissionMode: PermissionMode,
+  customProvider = false,
 ): PermissionMode {
   if (
     permissionMode !== PermissionMode.AUTO ||
@@ -53,7 +59,7 @@ export function normalizeBuiltinPermissionMode(
   ) {
     return permissionMode;
   }
-  if (provider === AgentProvider.CODEX || !AUTO_CAPABLE_CLAUDE_MODELS.has(model)) {
+  if (provider === AgentProvider.CODEX || (!customProvider && !AUTO_CAPABLE_CLAUDE_MODELS.has(model))) {
     return PermissionMode.DEFAULT;
   }
   return permissionMode;

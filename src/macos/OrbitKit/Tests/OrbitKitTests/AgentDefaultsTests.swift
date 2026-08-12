@@ -138,6 +138,13 @@ final class AgentDefaultsTests: XCTestCase {
             slug: "local-kimi", label: "Local Kimi", runtime: "kimi")]
         XCTAssertTrue(AgentDefaults.supportsAuto(
             "any-alias", provider: "local-kimi", configured: configured))
+
+        // A configured provider on the Claude runtime owns its model space: the static Claude
+        // allow-list can't cover vendor ids (e.g. DeepSeek), so the CLI decides for itself.
+        XCTAssertTrue(AgentDefaults.supportsAuto(
+            "deepseek-v4-pro", provider: "deepseek", configured: [deepseek]))
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(
+            .auto, for: "deepseek-v4-pro", provider: "deepseek", configured: [deepseek]), .auto)
     }
 
     // MARK: configured providers (control-plane custom slugs — GET /api/providers)

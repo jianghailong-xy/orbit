@@ -318,8 +318,14 @@ export class QueueService {
         allowedTools: (agent?.allowedTools as string[] | null) ?? [],
         disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
         // Configured providers still borrow one of these runtimes, so the same runtime-level
-        // guard applies to API/MCP/old-client input as it does to built-in identities.
-        permissionMode: normalizeBuiltinPermissionMode(provider, exec.model, permissionMode),
+        // guard applies to API/MCP/old-client input as it does to built-in identities; their
+        // vendor-defined model space is exempt from the Claude allow-list though.
+        permissionMode: normalizeBuiltinPermissionMode(
+          provider,
+          exec.model,
+          permissionMode,
+          customRow?.enabled === true,
+        ),
         // Per-session effort wins; otherwise use the agent's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime
