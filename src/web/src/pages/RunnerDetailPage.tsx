@@ -26,6 +26,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { providersQuery } from '../lib/queries';
+import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
 import {
@@ -462,6 +463,11 @@ export function RunnerDetailPage() {
           <RdField label="Enrolled" value={fmtTime(runner.enrolledAt)} />
         </div>
       </section>
+
+      {/* What software this machine runs and whether it's current — the same class of fact as the
+          runner version in Overview above, which is why updating them lives here and not on the
+          Providers page. */}
+      <RunnerEnginesSection runner={runner} />
 
       <section className="rd-section">
         <div className="rd-section-head">

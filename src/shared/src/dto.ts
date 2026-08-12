@@ -346,6 +346,14 @@ export interface RunnerHeartbeatResponse {
 export type LoginEngine = 'claude' | 'codex' | 'kimi';
 
 /**
+ * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
+ * OpenCode authenticates per-provider with no relayable flow, so it is never a sign-in row — but
+ * it is installed on the machine, it is updated by the same daily pass, and its version drifts
+ * like any other. Which of these a given page offers to sign in is that page's question.
+ */
+export type ReportedEngine = LoginEngine | 'opencode';
+
+/**
  * Control plane → runner: drive the interactive sign-in on the runner's own machine.
  *
  * `start` launches the engine's sign-in; the runner reports back what the user needs. The
@@ -388,7 +396,7 @@ export interface LoginResult {
  * has three states rather than two: a CLI that won't answer must not be shown as signed in.
  */
 export interface RunnerEngineHealth {
-  engine: LoginEngine;
+  engine: ReportedEngine;
   installed: boolean;
   /** Whatever `<engine> --version` printed. Absent when not installed or the CLI wouldn't say. */
   version?: string;

@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import type { RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
-import { RunnerEngines, rowKindOf, summaryOf, updateNoteOf } from './RunnerEngines';
+import { updateNoteOf } from '../lib/runnerEngines';
+import { RunnerEngines, rowKindOf, summaryOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 const health = (over: Partial<RunnerEngineHealth>): RunnerEngineHealth => ({
@@ -374,22 +375,22 @@ describe('the "On your runners" section', () => {
     expect(render([box])).not.toContain('focused');
   });
 
-  it('says who keeps these current, and offers the way to do it sooner', () => {
-    const html = render([
-      runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] }),
-    ]);
+  it('says who keeps these current without offering to do it here', () => {
+    const box = runner({ engines: [health({ engine: 'claude', version: '2.1.220' })] });
+    const html = render([box]);
     // The answer to "do I have to manage this?" — said once, at the top, not per row.
     expect(html).toContain('Orbit keeps these CLIs updated daily.');
-    expect(html).toContain('Update engines');
-  });
-
-  it("doesn't offer to update a machine that isn't there", () => {
-    const html = render([runner({ online: false, engines: [health({})] })]);
-    expect(html).toContain('Offline');
+    // But not the lever. `POST /runners/:id/engine-update` takes no engine: its object is the
+    // machine, and every other control on this page is scoped to one (runner, engine) pair. It
+    // lives on the machine's own page, which this card already links to.
     expect(html).not.toContain('Update engines');
+    expect(html).toContain(`/runners/${encodeId(box.id)}`);
   });
 
-  it('reports what an update actually did, including what it left alone', () => {
+  it('does not report an update run it no longer owns', () => {
+    // The report names every CLI the pass touched, OpenCode included — and this page has no
+    // OpenCode row. A machine-scoped summary on a page that shows a subset of the machine was
+    // the mismatch that put this whole panel on the wrong page.
     const html = render([
       runner({
         engines: [health({ engine: 'claude', version: '2.1.220' })],
@@ -399,37 +400,89 @@ describe('the "On your runners" section', () => {
           mode: 'update',
           command: 'orbit engine-update',
           message:
-            'Claude Code updated 2.1.219 → 2.1.220\nCodex — 2 sessions running, it\'ll update once they finish',
+            'Claude Code updated 2.1.219 → 2.1.220\nOpenCode — already up to date (1.18.16)',
         }),
       }),
     ]);
-    expect(html).toContain('2.1.219');
-    // The part a silent skip would have hidden: the button did less than it looked like it did.
-    expect(html).toContain('sessions running');
-    expect(html).toContain('Dismiss');
+    expect(html).not.toContain('2.1.219');
+    expect(html).not.toContain('OpenCode');
+    expect(html).not.toContain('Dismiss');
   });
 
-  it('shows a drifting engine the machine\'s own reason, and how to watch it fail', () => {
+  it('shows only the engines it can offer a sign-in for', () => {
+    // A runner reports every CLI on the machine. This page is about identity, and OpenCode has
+    // no relayable sign-in — a row nobody could act on is worse than no row.
     const html = render([
       runner({
         engines: [
-          health({
-            engine: 'codex',
-            version: '0.146.0',
-            update: {
-              status: 'failed',
-              at: new Date(Date.now() - 3600_000).toISOString(),
-              okAt: new Date(Date.now() - 20 * 86400_000).toISOString(),
-              message: 'npm error code EACCES: /usr/lib/node_modules/@openai/codex',
-            },
-          }),
+          health({ engine: 'claude', version: '2.1.228' }),
+          health({ engine: 'opencode', version: '1.18.16', auth: 'unknown' }),
         ],
       }),
     ]);
+    expect(html).toContain('Claude Code');
+    expect(html).not.toContain('OpenCode');
+  });
+
+  it('never summarizes a folded card with a problem the card cannot show', () => {
+    // Drift on OpenCode is real and worth saying — on the machine's page. Counting it here would
+    // put "1 engine not updating" on a card whose every row is fine, with nothing to unfold to.
+    // summaryOf reads the real clock (it renders, it isn't a pure rule), so these are real offsets.
+    const hAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+    const drifting = runner({
+      engines: [
+        health({
+          engine: 'claude',
+          version: '2.1.228',
+          update: { status: 'checked', at: hAgo(1), okAt: hAgo(1) },
+        }),
+        health({
+          engine: 'opencode',
+          version: '1.18.0',
+          auth: 'unknown',
+          update: { status: 'failed', at: hAgo(1), okAt: hAgo(30 * 24), message: 'EACCES' },
+        }),
+      ],
+    });
+    expect(summaryOf(drifting)).not.toContain('not updating');
+    // Sanity: the same record on an engine this page does show is still counted, so the filter
+    // is scoping the summary rather than disabling it.
+    const shown = runner({
+      engines: [
+        health({
+          engine: 'codex',
+          version: '0.146.0',
+          update: { status: 'failed', at: hAgo(1), okAt: hAgo(30 * 24), message: 'EACCES' },
+        }),
+      ],
+    });
+    expect(summaryOf(shown)).toBe('1 engine not updating');
+  });
+
+  it("shows a drifting engine the machine's own reason, and points at where to act", () => {
+    const box = runner({
+      engines: [
+        health({
+          engine: 'codex',
+          version: '0.146.0',
+          update: {
+            status: 'failed',
+            at: new Date(Date.now() - 3600_000).toISOString(),
+            okAt: new Date(Date.now() - 20 * 86400_000).toISOString(),
+            message: 'npm error code EACCES: /usr/lib/node_modules/@openai/codex',
+          },
+        }),
+      ],
+    });
+    const html = render([box]);
+    // The symptom stays on the row — it answers "is this row's version trustworthy", which is
+    // this page's business. Only the remedy moved.
     expect(html).toContain('not updated in 20d');
     expect(html).toContain('EACCES');
-    // No Retry: the same command will fail the same way. What's offered is the way to see it.
-    expect(html).toContain('orbit engine-update');
+    // No Retry: the same command will fail the same way. And no shell command either — telling
+    // someone to open a terminal for something the UI can do was a symptom of the misplacement.
+    expect(html).toContain(`/runners/${encodeId(box.id)}`);
+    expect(html).not.toContain('orbit engine-update');
     expect(html).not.toContain('Retry');
   });
 

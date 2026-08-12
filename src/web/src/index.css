@@ -1594,6 +1594,74 @@ body {
   border-radius: 10px;
   text-align: center;
 }
+/* The engine CLIs on this machine. Same panel-with-hairlines shape as the agent list below:
+   both answer "what is on this machine", so they read as one page rather than two widgets. */
+.rd-engine-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.rd-engine-list > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-engine-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 16px;
+}
+.rd-engine-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.rd-engine-version {
+  font-size: 12.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Same amber as the Providers row's note, for the same reason: drift needs a person eventually,
+   which is not the same as being down. */
+.rd-engine-note {
+  font-size: 12.5px;
+  color: var(--text-4);
+}
+.rd-engine-note.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+/* The run's report sits above the rows it summarizes, not inside any one of them. */
+.rd-engine-relay {
+  margin-bottom: 12px;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+.rd-engine-relay.bad {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+.rd-engine-relay-row {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+}
+.rd-engine-relay.bad .rd-engine-relay-row {
+  color: var(--error);
+  font-weight: 500;
+}
+.rd-engine-relay-hint {
+  margin-top: 7px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
 .rd-agent-list {
   display: flex;
   flex-direction: column;
@@ -7590,10 +7658,6 @@ body {
 .re-panel.warn {
   background: var(--warning-bg);
   border-color: var(--warning-border);
-}
-/* A machine-level report belongs above the rows it summarizes, not inside any one of them. */
-.re-relay {
-  margin: 10px 14px 0;
 }
 .re-panel-row {
   font-size: 12.5px;

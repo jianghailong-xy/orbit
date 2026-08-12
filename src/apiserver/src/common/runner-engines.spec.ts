@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sanitizeRunnerEngines } from './runner-engines';
+import { isLoginEngine, isReportedEngine, sanitizeRunnerEngines } from './runner-engines';
 
-test('engine health is normalized to the login engines, in display order', () => {
+test('engine health is normalized to the engines a runner reports, in display order', () => {
   assert.deepEqual(
     sanitizeRunnerEngines([
       { engine: 'kimi', installed: false, auth: 'no' },
@@ -20,7 +20,9 @@ test('anything that is not a recognizable entry is dropped, not repaired', () =>
     sanitizeRunnerEngines([
       null,
       'claude',
-      { engine: 'opencode', installed: true, auth: 'yes' },
+      // Not one of ours. `opencode` used to sit here, back when only sign-in engines were
+      // reported — it is a real engine on the machine and is now carried like the rest.
+      { engine: 'aider', installed: true, auth: 'yes' },
       { installed: true, auth: 'yes' },
       { engine: 'codex', installed: true, auth: 'yes' },
       // A second report for the same engine loses to the first.
@@ -156,4 +158,24 @@ test('both halves of the split status are accepted, and so is the one they repla
   // update column on every machine mid-rollout, which reads as "Orbit stopped updating this".
   assert.equal(status('ok'), 'ok');
   assert.equal(status('fetched'), undefined);
+});
+
+test('OpenCode is reported like any other engine, and sign-in stays a narrower question', () => {
+  const engines = sanitizeRunnerEngines([
+    { engine: 'opencode', installed: true, auth: 'unknown', version: '1.18.16' },
+    { engine: 'claude', installed: true, auth: 'yes', version: '2.1.228' },
+  ])!;
+  // Dropped here, the runner's own update summary described an engine the control plane had no
+  // record of — the pass updates four CLIs and named all four.
+  assert.deepEqual(
+    engines.map((e) => e.engine),
+    ['claude', 'opencode'],
+    'reported in REPORTED_ENGINES order, sign-in engines first',
+  );
+  // Being reportable is not being signable-in: that gate is isLoginEngine's, where the relay
+  // needs it, and it has not moved.
+  assert.equal(isLoginEngine('opencode'), false);
+  assert.equal(isReportedEngine('opencode'), true);
+  // Anything outside both sets is still dropped rather than half-read.
+  assert.equal(sanitizeRunnerEngines([{ engine: 'aider', installed: true, auth: 'yes' }]), null);
 });

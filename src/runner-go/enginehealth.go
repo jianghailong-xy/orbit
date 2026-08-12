@@ -6,10 +6,14 @@ import (
 	"time"
 )
 
-// The engines a user can sign into from the web (LoginEngine in @orbit/shared), in display
-// order. OpenCode is a fourth engine spec but authenticates per-provider with no relayable
-// flow, so it is not reported here — a row nobody could ever act on is worse than no row.
-var loginEngineBins = []string{providerClaude, providerCodex, providerKimi}
+// Every engine CLI on this machine is reported, engineSpecs order — including OpenCode, which
+// has no relayable sign-in flow.
+//
+// It used to be only the three a user can sign into, on the reasoning that a row nobody could act
+// on is worse than no row. That reasoning belongs to the Providers page, and it silently became
+// the whole report: the daily pass updates four engines and its own summary names all four, so
+// the machine's update report described software the control plane had never been told existed.
+// Which engines you can sign into is the reader's question to ask, not this probe's to decide.
 
 // How often the engine probe re-runs. It spawns a couple of subprocesses per engine (`--version`
 // plus the CLI's own auth status), so it must not run on every 30s heartbeat; five minutes keeps
@@ -34,22 +38,18 @@ func probeEngineHealth() []EngineHealthReport {
 	// What the updater last managed to do here, read fresh each probe: the daily loop and
 	// `orbit engine-update` both write it, and neither can reach into this snapshot.
 	updates := loadEngineUpdateLog()
-	out := make([]EngineHealthReport, 0, len(loginEngineBins))
-	for _, bin := range loginEngineBins {
-		spec, ok := specFor(bin)
-		if !ok {
-			continue
-		}
+	out := make([]EngineHealthReport, 0, len(engineSpecs))
+	for _, spec := range engineSpecs {
 		h := checkEngine(spec, servicePath)
 		report := EngineHealthReport{
-			Engine:    bin,
+			Engine:    spec.bin,
 			Installed: h.installed,
 			Version:   h.version,
 			Auth:      authWord(h.auth),
 		}
 		// An engine that isn't here has no update state worth reporting — the record is about
 		// a binary, and a stale one left by an uninstall would describe something gone.
-		if rec, ok := updates[bin]; ok && h.installed && rec.Status != "" {
+		if rec, ok := updates[spec.bin]; ok && h.installed && rec.Status != "" {
 			report.Update = &rec
 		}
 		out = append(out, report)

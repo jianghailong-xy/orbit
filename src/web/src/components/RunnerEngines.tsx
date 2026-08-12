@@ -2,16 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
-import type {
-  LoginEngine,
-  RunnerEngineHealth,
-  RunnerEngineUpdate,
-  RunnerInstallState,
-} from '@orbit/shared';
+import type { LoginEngine, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
+import { updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
@@ -74,93 +70,6 @@ export function rowKindOf(
   return 'unknown';
 }
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-/** How long an engine may go without a successful update before that becomes the row's problem.
- *  Orbit tries daily, so a week is six missed passes — well past a bad night on the network. */
-const STALE_UPDATE_MS = 7 * DAY;
-
-function ago(iso: string, now: number): string {
-  const diff = now - Date.parse(iso);
-  if (!Number.isFinite(diff) || diff < 0) return 'just now';
-  if (diff < MINUTE) return 'just now';
-  if (diff < HOUR) return `${Math.floor(diff / MINUTE)}m ago`;
-  if (diff < DAY) return `${Math.floor(diff / HOUR)}h ago`;
-  return `${Math.floor(diff / DAY)}d ago`;
-}
-
-/**
- * What a row says about being kept current — the answer to a question a version number can't
- * settle on its own ("is 2.1.220 the new one?" is unanswerable; "9d behind 2.1.228" isn't).
- *
- * `quiet` is a footnote in the meta line. `warn` means this machine has actually drifted and only
- * a person can say why, so it earns colour and a panel. Everything routine stays quiet — a daily
- * job that reports success loudly is a daily job people learn to stop reading.
- */
-export function updateNoteOf(
-  update: RunnerEngineUpdate | undefined,
-  now: number = Date.now(),
-): { tone: 'quiet' | 'warn'; text: string } | null {
-  if (!update) return null;
-  // Not a failure, and not fixable by pressing anything: this install belongs to a package
-  // manager and Orbit deliberately won't install a second copy beside it. Saying whose job it
-  // is IS the fix — retrying would do nothing, so this must never be dressed up as an error.
-  // Orbit deliberately isn't updating this one. There is more than one reason it might not be
-  // — a package manager owns the install, or it belongs to a user this runner isn't — and this
-  // line is too short to hold either. So it states only the part that is true of all of them,
-  // and the runner's own sentence (which names the path and the owner) rides along as a tooltip.
-  // Naming one reason here was worse than naming none: a Kimi skipped for permissions still read
-  // "updated by its package manager", promising an updater that did not exist.
-  if (update.status === 'skipped') return { tone: 'quiet', text: 'not auto-updated' };
-  // Drift decides first, because it is the reading taken on the binary. The rule underneath used
-  // to be "a clean run in the last week means updating works here", and it was wrong in the one
-  // case that matters: a machine that can't download anything still runs clean every day nothing
-  // is published, so its week never expired and the row stayed quiet for as long as the release
-  // schedule was quiet. Being behind is true regardless of what the last command returned.
-  const behindSince = update.behindSince ? Date.parse(update.behindSince) : NaN;
-  if (!Number.isNaN(behindSince)) {
-    const days = Math.max(1, Math.floor((now - behindSince) / DAY));
-    if (now - behindSince > STALE_UPDATE_MS) {
-      return { tone: 'warn', text: `${days}d behind${update.latest ? ` ${update.latest}` : ''}` };
-    }
-    // Behind, but only just — which is the normal state of an engine that ships most days. Worth
-    // a footnote naming what's coming, not an alarm.
-    return {
-      tone: 'quiet',
-      text:
-        update.status === 'failed'
-          ? 'last update failed · retrying daily'
-          : update.latest
-            ? `updating to ${update.latest}`
-            : 'update pending',
-    };
-  }
-  const parsed = update.okAt ? Date.parse(update.okAt) : NaN;
-  const lastOk = Number.isNaN(parsed) ? null : parsed;
-  if (lastOk !== null && now - lastOk <= STALE_UPDATE_MS) {
-    // Current, or nothing to compare against. A failure since the last clean run is worth a word
-    // but not an alarm: the daily pass retries on its own, and most of these are a network blip.
-    if (update.status === 'failed') return { tone: 'quiet', text: 'last update failed · retrying daily' };
-    // "checked" and "updated" are different claims and are worth different words — the whole
-    // point of splitting them is that a row can no longer say "updated 5m ago" about a pass that
-    // did nothing but ask.
-    return {
-      tone: 'quiet',
-      text: `${update.status === 'checked' ? 'checked' : 'updated'} ${ago(update.at, now)}`,
-    };
-  }
-  // Nothing has landed in a week and no drift is being measured — an old runner, or one whose
-  // release feed it can't reach. Erroring every night and never running at all look the same from
-  // here and have the same consequence: a CLI drifting behind the models it's handed.
-  return {
-    tone: 'warn',
-    text:
-      lastOk === null
-        ? 'never updated'
-        : `not updated in ${Math.max(1, Math.floor((now - lastOk) / DAY))}d`,
-  };
-}
 
 const STATUS_TAG: Record<RowKind, { color: string; label: string }> = {
   in: { color: 'green', label: 'Signed in' },
@@ -362,9 +271,12 @@ function EngineRow({
           <div className="re-panel-row">
             {health?.update?.message || `Orbit hasn't managed to update ${ENGINE_NAME[engine]} here.`}
           </div>
+          {/* Points at the machine rather than naming a shell command: that is where updating
+              lives now, and telling someone to open a terminal for something the UI can do was
+              only ever a symptom of the button being on the wrong page. */}
           <div className="re-panel-hint">
-            Orbit tries daily. To watch it try now, run{' '}
-            <code className="re-cmd">orbit engine-update</code> on this machine.
+            Orbit tries daily.{' '}
+            <Link to={`/runners/${encodeId(runner.id)}`}>Update this machine’s engines →</Link>
           </div>
         </div>
       )}
@@ -386,15 +298,17 @@ export function summaryOf(runner: Runner): string {
     return updating ? 'Updating…' : 'Installing…';
   }
   if (!runner.engines) return 'Engines not reported';
+  // Only the engines this card actually renders. A runner reports every CLI on the machine,
+  // OpenCode included, but a summary that counted those would put a problem on a folded card
+  // that unfolding never reveals — the row it refers to isn't on this page.
+  const shown = runner.engines.filter((e) => ENGINES.some((engine) => engine === e.engine));
   // An engine nothing has updated in a week is exactly the kind of quiet drift folding a card
   // would otherwise bury — it outranks the sign-in count, which is the good news.
-  const stale = runner.engines.filter(
-    (e) => e.installed && updateNoteOf(e.update)?.tone === 'warn',
-  ).length;
+  const stale = shown.filter((e) => e.installed && updateNoteOf(e.update)?.tone === 'warn').length;
   if (stale && runner.online) {
     return stale === 1 ? '1 engine not updating' : `${stale} engines not updating`;
   }
-  const signedIn = runner.engines.filter((e) => e.installed && e.auth === 'yes').length;
+  const signedIn = shown.filter((e) => e.installed && e.auth === 'yes').length;
   return signedIn === ENGINES.length
     ? 'All signed in'
     : `${signedIn} of ${ENGINES.length} signed in`;
@@ -412,26 +326,8 @@ function RunnerEngineCard({
   /** The engine a deep link named for this runner, if this is the runner it named. */
   focusEngine?: LoginEngine | null;
 }) {
-  const message = useToast();
-  const qc = useQueryClient();
   const [signIn, setSignIn] = useState<LoginEngine | null>(null);
   const engines = runner.engines ?? null;
-  const relay = runner.install;
-  const updating = relay?.mode === 'update';
-  const inFlight = relay?.status === 'pending' || relay?.status === 'installing';
-
-  // Updating is the machine's business, not one engine's: it does every CLI on it, the way the
-  // daily pass does. A per-row button would be four buttons for one job — and would sit where
-  // each row's own unfinished business (Install, Sign in) belongs.
-  const startUpdate = useMutation({
-    mutationFn: () => api(`/runners/${runner.id}/engine-update`, { method: 'POST' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the update'),
-  });
-  const dismiss = useMutation({
-    mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-  });
 
   return (
     <div className={`re-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
@@ -458,49 +354,14 @@ function RunnerEngineCard({
         </button>
         <span className="re-head-sp" />
         {!runner.online && <Tag>Offline</Tag>}
-        {/* Deliberately understated, and deliberately not in any row: Orbit already does this
-            every day, so this is the escape hatch for when that isn't soon enough — not the
-            way the CLIs are meant to stay current. */}
-        {runner.online && (
-          <button
-            className="re-link"
-            type="button"
-            disabled={inFlight || startUpdate.isPending}
-            onClick={() => startUpdate.mutate()}
-          >
-            {inFlight && updating ? 'Updating…' : 'Update engines'}
-          </button>
-        )}
+        {/* Updating the engine CLIs is not here, on purpose. It takes no engine — it does every
+            CLI on the machine — so its object is the runner, and this is a page about identity
+            where everything else is scoped to one (runner, engine) pair. It lives behind this
+            link, next to the machine's own version and slots. */}
         <Link className="re-manage" to={`/runners/${encodeId(runner.id)}`}>
           Manage runner →
         </Link>
       </div>
-      {/* An update's report is the machine's, not any one row's — and unlike an install it is
-          not retired by the next probe, because the summary (what moved, what was skipped and
-          why) exists nowhere else once it's gone. */}
-      {!collapsed && updating && relay?.status && (
-        <div className={`re-panel re-relay${relay.status === 'failed' ? ' bad' : ''}`}>
-          <div className="re-panel-row">
-            {relay.status === 'pending'
-              ? 'Queued — the runner picks this up on its next check-in.'
-              : relay.status === 'installing'
-                ? 'Updating this machine’s engine CLIs…'
-                : relay.message || 'Nothing to update.'}
-          </div>
-          {relay.status !== 'pending' && relay.command && (
-            <div className="re-panel-hint">
-              Orbit ran <code className="re-cmd">{relay.command}</code>
-            </div>
-          )}
-          {(relay.status === 'done' || relay.status === 'failed') && (
-            <div className="re-panel-hint">
-              <button className="re-link" type="button" onClick={() => dismiss.mutate()}>
-                Dismiss
-              </button>
-            </div>
-          )}
-        </div>
-      )}
       {collapsed ? null : engines ? (
         ENGINES.map((engine) => (
           <EngineRow
@@ -577,8 +438,15 @@ export function RunnerEngines() {
         : false,
   });
   const list = (runners.data ?? []) as Runner[];
+  // Counted over the engines this section renders, not everything the runner reports: a machine
+  // reports every CLI on it, and a count that included one without a row here would never add up
+  // against what the page shows.
   const ready = list.reduce(
-    (n, r) => n + (r.engines ?? []).filter((e) => e.installed && e.auth === 'yes').length,
+    (n, r) =>
+      n +
+      (r.engines ?? []).filter(
+        (e) => e.installed && e.auth === 'yes' && ENGINES.some((engine) => engine === e.engine),
+      ).length,
     0,
   );
 
