@@ -404,18 +404,36 @@ export interface RunnerEngineHealth {
  *
  * Orbit updates these CLIs itself, daily. That is invisible without this: a version string alone
  * can't say whether it is the newest one, so the useful question is not "which version is this"
- * but "is this machine still being kept current" — which only the updater can answer.
+ * but "is this machine still being kept current" — which the runner answers by asking each
+ * engine's release feed what is published and comparing it against the binary on disk.
  */
 export interface RunnerEngineUpdate {
-  /** `ok` — the update ran clean (finding nothing to do counts: the path works).
+  /** `updated` — a newer version actually landed on this machine.
+   *  `checked` — Orbit asked and there was nothing to fetch.
    *  `failed` — it ran and errored; `message` is the machine's own words.
-   *  `skipped` — Orbit deliberately won't touch this install; `message` says why. */
-  status: 'ok' | 'failed' | 'skipped';
+   *  `skipped` — Orbit deliberately won't touch this install; `message` says why.
+   *  `ok` is the pre-split value, still sent by runners that haven't self-updated yet.
+   *
+   *  `updated` and `checked` were one word until finding nothing to do was taken as proof the
+   *  update path works. It isn't: a machine that can no longer download anything answers
+   *  "nothing to fetch" on every day no release ships, and reads healthy right up until one does. */
+  status: 'updated' | 'checked' | 'failed' | 'skipped' | 'ok';
   /** ISO time of the attempt this describes. */
   at: string;
   /** ISO time of the last attempt that succeeded, kept across later failures. Absent if one
    *  never has — which is a louder fact than a recent failure, not a quieter one. */
   okAt?: string;
+  /** ISO time a newer version last actually landed. Unlike `okAt`, a pass that found nothing to
+   *  do cannot set it. */
+  updatedAt?: string;
+  /** Newest version the runner could see published. Absent until one probe succeeds. */
+  latest?: string;
+  /** ISO time this machine was first seen behind `latest`, cleared the moment it catches up.
+   *
+   *  The alarm is built on this rather than on `okAt`, because it is the only reading taken on
+   *  the binary itself: an engine drifts whether its updater errors nightly, is skipped every
+   *  pass for being busy, or exits 0 while writing to a copy nothing execs. */
+  behindSince?: string;
   message?: string;
 }
 

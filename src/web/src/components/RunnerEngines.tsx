@@ -92,7 +92,7 @@ function ago(iso: string, now: number): string {
 
 /**
  * What a row says about being kept current — the answer to a question a version number can't
- * settle on its own ("is 2.1.220 the new one?" is unanswerable; "updated 6h ago" isn't).
+ * settle on its own ("is 2.1.220 the new one?" is unanswerable; "9d behind 2.1.228" isn't).
  *
  * `quiet` is a footnote in the meta line. `warn` means this machine has actually drifted and only
  * a person can say why, so it earns colour and a panel. Everything routine stays quiet — a daily
@@ -113,17 +113,46 @@ export function updateNoteOf(
   // Naming one reason here was worse than naming none: a Kimi skipped for permissions still read
   // "updated by its package manager", promising an updater that did not exist.
   if (update.status === 'skipped') return { tone: 'quiet', text: 'not auto-updated' };
+  // Drift decides first, because it is the reading taken on the binary. The rule underneath used
+  // to be "a clean run in the last week means updating works here", and it was wrong in the one
+  // case that matters: a machine that can't download anything still runs clean every day nothing
+  // is published, so its week never expired and the row stayed quiet for as long as the release
+  // schedule was quiet. Being behind is true regardless of what the last command returned.
+  const behindSince = update.behindSince ? Date.parse(update.behindSince) : NaN;
+  if (!Number.isNaN(behindSince)) {
+    const days = Math.max(1, Math.floor((now - behindSince) / DAY));
+    if (now - behindSince > STALE_UPDATE_MS) {
+      return { tone: 'warn', text: `${days}d behind${update.latest ? ` ${update.latest}` : ''}` };
+    }
+    // Behind, but only just — which is the normal state of an engine that ships most days. Worth
+    // a footnote naming what's coming, not an alarm.
+    return {
+      tone: 'quiet',
+      text:
+        update.status === 'failed'
+          ? 'last update failed · retrying daily'
+          : update.latest
+            ? `updating to ${update.latest}`
+            : 'update pending',
+    };
+  }
   const parsed = update.okAt ? Date.parse(update.okAt) : NaN;
   const lastOk = Number.isNaN(parsed) ? null : parsed;
   if (lastOk !== null && now - lastOk <= STALE_UPDATE_MS) {
-    // Updating works here. A failure since then is worth a word but not an alarm: the daily pass
-    // retries on its own, and most of these are a network blip that fixes itself overnight.
-    return update.status === 'failed'
-      ? { tone: 'quiet', text: 'last update failed · retrying daily' }
-      : { tone: 'quiet', text: `updated ${ago(update.at, now)}` };
+    // Current, or nothing to compare against. A failure since the last clean run is worth a word
+    // but not an alarm: the daily pass retries on its own, and most of these are a network blip.
+    if (update.status === 'failed') return { tone: 'quiet', text: 'last update failed · retrying daily' };
+    // "checked" and "updated" are different claims and are worth different words — the whole
+    // point of splitting them is that a row can no longer say "updated 5m ago" about a pass that
+    // did nothing but ask.
+    return {
+      tone: 'quiet',
+      text: `${update.status === 'checked' ? 'checked' : 'updated'} ${ago(update.at, now)}`,
+    };
   }
-  // Nothing has landed in a week. Erroring every night and never running at all look the same
-  // from here and have the same consequence — a CLI drifting behind the models it's handed.
+  // Nothing has landed in a week and no drift is being measured — an old runner, or one whose
+  // release feed it can't reach. Erroring every night and never running at all look the same from
+  // here and have the same consequence: a CLI drifting behind the models it's handed.
   return {
     tone: 'warn',
     text:

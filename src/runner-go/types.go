@@ -95,16 +95,37 @@ type EngineHealthReport struct {
 // survives a restart, and `orbit engine-update` — a different process from `orbit run` — writes
 // the same record.
 type EngineUpdateReport struct {
-	// "ok" — the update command ran clean (a no-op counts: it proves the path works).
+	// "updated" — a newer version actually landed on this machine.
+	// "checked" — asked, and there was nothing to fetch.
 	// "failed" — it ran and errored; Message is the machine's own words.
 	// "skipped" — Orbit deliberately won't touch this install; Message says why.
+	//
+	// "updated" and "checked" used to be one word, "ok", on the reasoning that a no-op proves the
+	// path works. It doesn't: finding nothing to fetch only proves the version check works, and a
+	// machine that cannot download anything answers exactly that on every day no release happens
+	// to ship. Workstation reported green for two days that way, and only turned red when 2.1.227
+	// shipped and forced a real download — long after it had actually stopped being updatable.
 	Status string `json:"status"`
 	// RFC3339 time of the attempt this describes.
 	At string `json:"at"`
 	// RFC3339 time of the last attempt that succeeded, kept across later failures — the one
 	// thing that separates "erroring right now" from "hasn't worked in weeks".
-	OkAt    string `json:"okAt,omitempty"`
-	Message string `json:"message,omitempty"`
+	OkAt string `json:"okAt,omitempty"`
+	// RFC3339 time a newer version last actually landed. Unlike OkAt this cannot be set by a
+	// pass that had nothing to do, so it is the honest answer to "does updating work here".
+	UpdatedAt string `json:"updatedAt,omitempty"`
+	// Newest published version this machine could see, from the release feed rather than from
+	// the updater — a few kilobytes, asked before every update. Empty until one probe succeeds;
+	// carried forward when a later one can't ask.
+	Latest string `json:"latest,omitempty"`
+	// RFC3339 time this machine was first seen behind Latest, cleared the moment it catches up.
+	//
+	// This is the measurement the alarm is built on, because it is the only one taken on the
+	// binary itself: a machine drifts whether its updater errors nightly, is skipped for being
+	// busy, or exits 0 while writing to a copy nothing execs. Exit codes tell those apart; none
+	// of them tells you the CLI is three versions behind the models it is being handed.
+	BehindSince string `json:"behindSince,omitempty"`
+	Message     string `json:"message,omitempty"`
 }
 
 // SessionLiveState is one running session's live worktree state, reported each heartbeat

@@ -161,6 +161,64 @@ describe('what a row says about being kept current', () => {
       text: 'never updated',
     });
   });
+
+  it('tells a pass that fetched something from one that only asked', () => {
+    // Two different claims, and the row may only make the one it can back up.
+    expect(updateNoteOf({ status: 'updated', at: hoursAgo(6), okAt: hoursAgo(6), updatedAt: hoursAgo(6) }, NOW)?.text).toBe(
+      'updated 6h ago',
+    );
+    expect(updateNoteOf({ status: 'checked', at: hoursAgo(6), okAt: hoursAgo(6), updatedAt: daysAgo(3) }, NOW)?.text).toBe(
+      'checked 6h ago',
+    );
+  });
+
+  it('warns on measured drift even while every pass keeps reporting clean', () => {
+    // The regression this whole reading exists for. Workstation asked every day, was told
+    // 2.1.228 was published, could never fetch it — and because "asked and answered" kept
+    // stamping okAt, the old rule read a healthy week and stayed quiet. The clock that matters
+    // is the one on the binary: 9 days behind is 9 days behind whatever the commands returned.
+    expect(
+      updateNoteOf(
+        {
+          status: 'checked',
+          at: hoursAgo(1),
+          okAt: hoursAgo(1),
+          latest: '2.1.228',
+          behindSince: daysAgo(9),
+        },
+        NOW,
+      ),
+    ).toEqual({ tone: 'warn', text: '9d behind 2.1.228' });
+    // Same drift reached the other way — an updater that errors nightly rather than one that
+    // exits 0 without moving anything. Same consequence, so the same warning.
+    expect(
+      updateNoteOf(
+        { status: 'failed', at: hoursAgo(1), okAt: daysAgo(4), latest: '2.1.228', behindSince: daysAgo(9), message: 'timed out' },
+        NOW,
+      ),
+    ).toEqual({ tone: 'warn', text: '9d behind 2.1.228' });
+  });
+
+  it('stays quiet about drift a daily pass is expected to close', () => {
+    // These CLIs ship most days, so "behind" is the normal state of a healthy machine for a few
+    // hours. Warning here would mean warning on every runner, every release.
+    expect(
+      updateNoteOf({ status: 'checked', at: hoursAgo(2), okAt: hoursAgo(2), latest: '2.1.228', behindSince: hoursAgo(5) }, NOW),
+    ).toEqual({ tone: 'quiet', text: 'updating to 2.1.228' });
+    // A failure inside that window is still just a footnote — the pass retries on its own.
+    expect(
+      updateNoteOf({ status: 'failed', at: hoursAgo(2), okAt: daysAgo(1), latest: '2.1.228', behindSince: hoursAgo(5), message: 'blip' }, NOW),
+    ).toEqual({ tone: 'quiet', text: 'last update failed · retrying daily' });
+  });
+
+  it('falls back to the old reading for a runner that reports no drift at all', () => {
+    // Runners predating the release-feed probe send no behindSince, and neither does one that
+    // can't reach the feed. Their rows have to keep working rather than going blank.
+    expect(updateNoteOf({ status: 'ok', at: daysAgo(30), okAt: daysAgo(30) }, NOW)).toEqual({
+      tone: 'warn',
+      text: 'not updated in 30d',
+    });
+  });
 });
 
 const runner = (over: Partial<Runner>): Runner => ({

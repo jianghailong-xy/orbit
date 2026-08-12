@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +28,14 @@ func TestUpdateErrDetail(t *testing.T) {
 	// Falls back to the Go error when the command produced no output.
 	if got := updateErrDetail(errors.New(`exec: "sh": not found`), nil); got != `exec: "sh": not found` {
 		t.Fatalf("want error fallback, got %q", got)
+	}
+	// Output that names no cause at all: Kimi's installer dying under `set -euo pipefail` on a
+	// silent curl, whose last line is the step it was announcing, not the failure. Reported on
+	// its own it accuses a URL that is fine, so the exit status has to come with it.
+	kimiOut := "==> Detected linux-x64\n==> Resolving latest version from https://code.kimi.com/kimi-code/latest\n"
+	want := "exit status 6 — last output: ==> Resolving latest version from https://code.kimi.com/kimi-code/latest"
+	if got := updateErrDetail(errors.New("exit status 6"), []byte(kimiOut)); got != want {
+		t.Fatalf("want status plus last line, got %q", got)
 	}
 }
 
@@ -92,9 +102,9 @@ func TestEngineInstallerDirsAgreeWithServicePath(t *testing.T) {
 func TestRecordEngineUpdateCarriesLastSuccess(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 
-	ok := recordEngineUpdate(providerClaude, updateOK, "")
-	if ok.Status != updateOK || ok.At == "" || ok.OkAt != ok.At {
-		t.Fatalf("a clean update = %+v, want ok with okAt set to its own time", ok)
+	ok := recordEngineUpdate(providerClaude, updateUpdated, "", engineUpdateFacts{installed: "2.1.228", latest: "2.1.228"})
+	if ok.Status != updateUpdated || ok.At == "" || ok.OkAt != ok.At || ok.UpdatedAt != ok.At {
+		t.Fatalf("a real update = %+v, want updated with okAt and updatedAt set to its own time", ok)
 	}
 	if _, err := time.Parse(time.RFC3339, ok.At); err != nil {
 		t.Fatalf("At is not RFC3339: %v", err)
@@ -102,28 +112,97 @@ func TestRecordEngineUpdateCarriesLastSuccess(t *testing.T) {
 
 	// The point of the whole record: a failure today must not erase the fact that it worked
 	// yesterday, or "erroring right now" and "hasn't worked in weeks" render identically.
-	failed := recordEngineUpdate(providerClaude, updateFailed, "npm error code EACCES")
-	if failed.Status != updateFailed || failed.OkAt != ok.OkAt {
-		t.Fatalf("after a failure = %+v, want okAt %q preserved", failed, ok.OkAt)
+	failed := recordEngineUpdate(providerClaude, updateFailed, "npm error code EACCES", engineUpdateFacts{installed: "2.1.228", latest: "2.1.229"})
+	if failed.Status != updateFailed || failed.OkAt != ok.OkAt || failed.UpdatedAt != ok.UpdatedAt {
+		t.Fatalf("after a failure = %+v, want okAt %q and updatedAt %q preserved", failed, ok.OkAt, ok.UpdatedAt)
 	}
 	if failed.Message != "npm error code EACCES" {
 		t.Fatalf("message = %q, want the machine's own words", failed.Message)
 	}
 	// Same for a deliberate skip — it is not an attempt that failed, and not one that worked.
-	skipped := recordEngineUpdate(providerClaude, updateSkipped, "Installed by a package manager")
+	skipped := recordEngineUpdate(providerClaude, updateSkipped, "Installed by a package manager", engineUpdateFacts{})
 	if skipped.Status != updateSkipped || skipped.OkAt != ok.OkAt {
 		t.Fatalf("after a skip = %+v, want okAt %q preserved", skipped, ok.OkAt)
+	}
+	// A pass that found nothing to fetch must not be able to set updatedAt: that is the whole
+	// reason the two words exist. Workstation reported a green okAt for two days off no-ops
+	// while it had in fact stopped being able to download anything at all.
+	checked := recordEngineUpdate(providerClaude, updateChecked, "", engineUpdateFacts{installed: "2.1.228", latest: "2.1.228"})
+	if checked.Status != updateChecked || checked.UpdatedAt != ok.UpdatedAt || checked.OkAt != checked.At {
+		t.Fatalf("a no-op pass = %+v, want checked with updatedAt %q untouched", checked, ok.UpdatedAt)
 	}
 
 	// It survives the process that wrote it: this is what makes a restarted runner able to say
 	// "updated 6h ago" instead of going quiet for a day.
 	log := loadEngineUpdateLog()
-	if got := log[providerClaude]; got.Status != updateSkipped || got.OkAt != ok.OkAt {
+	if got := log[providerClaude]; got.Status != updateChecked || got.OkAt != checked.OkAt {
 		t.Fatalf("reloaded = %+v, want the last record with okAt intact", got)
 	}
 	// One engine's record says nothing about another's.
 	if _, ok := log[providerCodex]; ok {
 		t.Fatal("recording claude wrote a codex record")
+	}
+}
+
+// Drift is the reading the alarm is built on, so it has to survive every way a pass can decline to
+// do anything — and it has to stop the moment the machine catches up.
+func TestRecordEngineUpdateTracksDrift(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+
+	current := recordEngineUpdate(providerClaude, updateChecked, "", engineUpdateFacts{installed: "2.1.226 (Claude Code)", latest: "2.1.226"})
+	if current.BehindSince != "" {
+		t.Fatalf("a current engine = %+v, want no drift clock running", current)
+	}
+	// A release ships. The updater then fails — and the drift clock starts anyway, because being
+	// behind is a fact about the binary, not about what the last command returned.
+	behind := recordEngineUpdate(providerClaude, updateFailed, "timed out", engineUpdateFacts{installed: "2.1.226 (Claude Code)", latest: "2.1.228"})
+	if behind.BehindSince == "" || behind.Latest != "2.1.228" {
+		t.Fatalf("a machine left behind = %+v, want the drift clock started against 2.1.228", behind)
+	}
+	// It keeps running rather than restarting: "9d behind" is the number that makes this worth
+	// showing, and re-stamping it every night would pin it at "1d behind" forever.
+	still := recordEngineUpdate(providerClaude, updateFailed, "timed out again", engineUpdateFacts{installed: "2.1.226 (Claude Code)", latest: "2.1.228"})
+	if still.BehindSince != behind.BehindSince {
+		t.Fatalf("drift restarted: %q -> %q", behind.BehindSince, still.BehindSince)
+	}
+	// An unreachable release feed is not evidence of anything. Carrying the last known latest
+	// forward is what keeps the drift visible through a network blip.
+	blind := recordEngineUpdate(providerClaude, updateFailed, "no feed", engineUpdateFacts{installed: "2.1.226 (Claude Code)"})
+	if blind.BehindSince != behind.BehindSince || blind.Latest != "2.1.228" {
+		t.Fatalf("after an unreachable feed = %+v, want drift and latest carried", blind)
+	}
+	// Caught up: the clock clears, and only an actual version match may clear it.
+	caught := recordEngineUpdate(providerClaude, updateUpdated, "", engineUpdateFacts{installed: "2.1.228 (Claude Code)", latest: "2.1.228"})
+	if caught.BehindSince != "" {
+		t.Fatalf("after catching up = %+v, want the drift clock cleared", caught)
+	}
+}
+
+// The busiest runner is the one that skips every pass, and skipping is not recorded as an outcome
+// — so without this the machine most likely to drift is the one that says the least about it.
+func TestNoteEngineDriftRecordsWithoutClaimingAnAttempt(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '2.1.226 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.228\n"))
+	}))
+	defer feed.Close()
+
+	before := recordEngineUpdate(providerClaude, updateChecked, "nothing to do", engineUpdateFacts{})
+	noteEngineDrift(context.Background(), engineSpec{name: "Claude Code", bin: providerClaude, latestURL: feed.URL}, dir)
+
+	got := loadEngineUpdateLog()[providerClaude]
+	if got.BehindSince == "" || got.Latest != "2.1.228" {
+		t.Fatalf("a skipped-but-drifting engine = %+v, want the drift recorded", got)
+	}
+	// Nothing was attempted, so nothing may claim one: a skip that moved `at` would read as a
+	// pass that ran, and a skip that moved `okAt` would read as one that worked.
+	if got.Status != before.Status || got.At != before.At || got.OkAt != before.OkAt || got.Message != before.Message {
+		t.Fatalf("a drift note rewrote the last attempt: %+v, want %+v", got, before)
 	}
 }
 
@@ -355,5 +434,152 @@ func TestEngineSpecsUpdateCmd(t *testing.T) {
 		if s.updateCmd == "" && s.bin != providerKimi {
 			t.Errorf("%s has no updateCmd; the installCmd fallback can target a different install than PATH", s.name)
 		}
+	}
+}
+
+func TestLatestEngineVersion(t *testing.T) {
+	// A bare version body (Claude, Kimi) and a JSON field (the npm feeds Codex and OpenCode
+	// publish to) are the two shapes in use; both have to reduce to the same comparable number.
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.228\n"))
+	}))
+	defer plain.Close()
+	if got := latestEngineVersion(context.Background(), engineSpec{latestURL: plain.URL}); got != "2.1.228" {
+		t.Fatalf("plain feed = %q, want 2.1.228", got)
+	}
+	npm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"@openai/codex","version":"0.147.0"}`))
+	}))
+	defer npm.Close()
+	if got := latestEngineVersion(context.Background(), engineSpec{latestURL: npm.URL, latestField: "version"}); got != "0.147.0" {
+		t.Fatalf("npm feed = %q, want 0.147.0", got)
+	}
+
+	// Every way of not getting an answer has to come back empty rather than confidently wrong:
+	// an empty latest means "we don't know", and the caller then updates exactly as it always did.
+	// A feed answering with an HTML error page is the one that matters — CDNs do it constantly,
+	// and a version number scraped out of one would park a machine on a release that never shipped.
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("<html><body>502 1.2.3</body></html>"))
+	}))
+	defer bad.Close()
+	if got := latestEngineVersion(context.Background(), engineSpec{latestURL: bad.URL}); got != "" {
+		t.Fatalf("a 502 = %q, want no answer at all", got)
+	}
+	if got := latestEngineVersion(context.Background(), engineSpec{}); got != "" {
+		t.Fatalf("an engine with no feed = %q, want no answer", got)
+	}
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+	if got := latestEngineVersion(context.Background(), engineSpec{latestURL: dead.URL}); got != "" {
+		t.Fatalf("an unreachable feed = %q, want no answer", got)
+	}
+}
+
+func TestSameVersionComparesTheNumbers(t *testing.T) {
+	// What the CLIs actually print, against what the feeds actually return.
+	for _, c := range []struct {
+		installed, latest string
+		want              bool
+	}{
+		{"2.1.228 (Claude Code)", "2.1.228", true},
+		{"codex-cli 0.147.0", "0.147.0", true},
+		{"2.1.226 (Claude Code)", "2.1.228", false},
+		// Neither side parseable is "don't know", and don't-know must never read as "behind":
+		// a machine whose --version output we can't read has done nothing wrong.
+		{"", "2.1.228", false},
+		{"2.1.228 (Claude Code)", "", false},
+		{"some build", "another build", false},
+	} {
+		if got := sameVersion(c.installed, c.latest); got != c.want {
+			t.Errorf("sameVersion(%q, %q) = %v, want %v", c.installed, c.latest, got, c.want)
+		}
+	}
+}
+
+// Knowing what is published turns the daily pass into a decision. When there is nothing to fetch,
+// the right amount of package manager to run is none — it keeps the machine's one install slot
+// free and leaves the pass budget to the engines that do need it.
+func TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '2.1.228 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.228"))
+	}))
+	defer feed.Close()
+	ran := filepath.Join(dir, "the-updater-ran")
+
+	rec, line := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: "touch " + ran, latestURL: feed.URL,
+	}, dir, nil)
+
+	if _, err := os.Stat(ran); err == nil {
+		t.Fatal("ran the update command for a version that is already the newest one published")
+	}
+	if rec.Status != updateChecked || rec.UpdatedAt != "" || rec.BehindSince != "" {
+		t.Fatalf("record = %+v, want checked with no update claimed and no drift", rec)
+	}
+	if !strings.Contains(line, "already up to date") {
+		t.Fatalf("line = %q, want it to say there was nothing to fetch", line)
+	}
+}
+
+// The counterpart: a machine that is behind still runs its updater, and what it reports names the
+// version it was reaching for. "Update timed out" is unactionable; "2.1.226 → 2.1.228" is not.
+func TestUpdateEngineNamesTheVersionItWasFetching(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '2.1.226 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.228"))
+	}))
+	defer feed.Close()
+
+	rec, _ := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: "echo 'boom' >&2; exit 1", latestURL: feed.URL,
+	}, dir, nil)
+
+	if rec.Status != updateFailed || !strings.Contains(rec.Message, "2.1.226 → 2.1.228") {
+		t.Fatalf("record = %+v, want a failure naming the version step", rec)
+	}
+	if rec.BehindSince == "" || rec.Latest != "2.1.228" {
+		t.Fatalf("record = %+v, want the drift clock running against 2.1.228", rec)
+	}
+}
+
+func TestEngineOutputProgress(t *testing.T) {
+	// A command that was stopped having said nothing, versus one that was still talking. The
+	// stopwatch reads the same for both; the two need opposite responses, and this is the line
+	// that tells them apart.
+	silent := &engineOutput{}
+	if got := silent.progress(); got != "it printed nothing at all" {
+		t.Fatalf("silent progress = %q", got)
+	}
+	talking := &engineOutput{}
+	if _, err := talking.Write([]byte(strings.Repeat("x", 2048))); err != nil {
+		t.Fatal(err)
+	}
+	if got := talking.progress(); !strings.Contains(got, "2.0 KB") || !strings.Contains(got, "ago") {
+		t.Fatalf("talking progress = %q, want how much and how long ago", got)
+	}
+	// Bounded: the tail is what the error message reads, and an updater with a lot to say must
+	// not be able to hold all of it. The last lines are the ones that name the cause.
+	flood := &engineOutput{}
+	if _, err := flood.Write([]byte(strings.Repeat("a\n", engineOutputTail) + "npm error code EACCES\n")); err != nil {
+		t.Fatal(err)
+	}
+	if len(flood.bytes()) > engineOutputTail {
+		t.Fatalf("kept %d bytes, want at most %d", len(flood.bytes()), engineOutputTail)
+	}
+	if updateErrDetail(errors.New("exit status 1"), flood.bytes()) != "npm error code EACCES" {
+		t.Fatal("the tail dropped the line that names the cause")
 	}
 }

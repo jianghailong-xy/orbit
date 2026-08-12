@@ -58,16 +58,33 @@ function sanitizeEngineUpdate(value: unknown): RunnerEngineUpdate | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const raw = value as Record<string, unknown>;
   const status = raw.status;
-  if (status !== 'ok' && status !== 'failed' && status !== 'skipped') return undefined;
+  // `ok` is accepted for as long as runners predating the updated/checked split are still
+  // reporting — dropping it would blank the update column on every machine that hasn't picked up
+  // the new binary yet, which reads as "Orbit stopped updating this" rather than "not yet known".
+  if (status !== 'updated' && status !== 'checked' && status !== 'failed' && status !== 'skipped' && status !== 'ok') {
+    return undefined;
+  }
   const at = isoOrUndefined(raw.at);
   // Without a time this can't be aged, and "updated at some point" is not worth a line.
   if (!at) return undefined;
   const okAt = isoOrUndefined(raw.okAt);
+  const updatedAt = isoOrUndefined(raw.updatedAt);
+  const behindSince = isoOrUndefined(raw.behindSince);
+  const latest =
+    typeof raw.latest === 'string' && raw.latest.trim() ? raw.latest.trim().slice(0, 120) : undefined;
   const message =
     typeof raw.message === 'string' && raw.message.trim()
       ? raw.message.trim().slice(0, UPDATE_MESSAGE_MAX)
       : undefined;
-  return { status, at, ...(okAt ? { okAt } : {}), ...(message ? { message } : {}) };
+  return {
+    status,
+    at,
+    ...(okAt ? { okAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+    ...(latest ? { latest } : {}),
+    ...(behindSince ? { behindSince } : {}),
+    ...(message ? { message } : {}),
+  };
 }
 
 /** A timestamp is only useful here if it parses; anything else would render as "Invalid Date ago". */

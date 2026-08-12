@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +45,14 @@ const (
 	// This caps the pass, and the per-engine ceiling then just decides how much of it one
 	// wedged updater may eat before the rest get their turn.
 	engineUpdateBudget = 10 * time.Minute
+	// Ceiling for asking a release feed which version is newest. Kilobytes over HTTPS, so this
+	// is generous — but it must exist and it must be small: the whole value of asking first is
+	// that it can't itself become the thing that eats the pass.
+	engineLatestTimeout = 20 * time.Second
+	// How much of an updater's output is kept for the failure message. Everything used to be,
+	// which is unbounded by nothing but the updater's manners. The interesting lines — what it
+	// choked on, which path — are always the last ones.
+	engineOutputTail = 64 << 10
 )
 
 // engineUpdateLoop updates each installed engine in place, skipping any with a live
@@ -92,10 +103,12 @@ func updateEngines(ctx context.Context, activeCount func(string) int, proxyVars 
 		}
 		if n := activeCount(spec.bin); n > 0 {
 			logln("engine-update:", spec.name, "skipped — session(s) active")
-			// Deliberately not recorded: a busy machine says nothing about whether updating
-			// works here, and writing it would leave every well-used engine reading "skipped"
-			// until the next daily pass. It is worth saying out loud to whoever just pressed
-			// the button, though — silence there reads as "nothing happened".
+			// The outcome is deliberately not recorded: a busy machine says nothing about whether
+			// updating works here, and writing it would leave every well-used engine reading
+			// "skipped" until the next daily pass. How far behind it is, though, is true whoever
+			// is busy — and this is the machine that most needs it said. It is worth saying out
+			// loud to whoever just pressed the button, too: silence reads as "nothing happened".
+			noteEngineDrift(ctx, spec, servicePath)
 			lines = append(lines, spec.name+" — "+plural(n, "session")+" running, it'll update once they finish")
 			continue
 		}
@@ -111,6 +124,124 @@ func plural(n int, word string) string {
 		return "1 " + word
 	}
 	return strconv.Itoa(n) + " " + word + "s"
+}
+
+// latestEngineVersion asks the engine's release feed which version is newest.
+//
+// Cheap enough to ask before every update, and that changes what the updater is: a blind command
+// becomes a decision with the two numbers in hand. Nothing to fetch is then a fact we can record
+// without running a package manager or taking the machine's one install slot; something to fetch
+// is a specific version, which every message from here on can name — including, crucially, the
+// ones about failing to fetch it. "Update timed out" is unactionable; "2.1.226 → 2.1.228 timed
+// out" says what was being attempted and how far behind staying there leaves you.
+//
+// Best-effort by construction: an unreachable feed means we do not know, never that we are
+// current. The updater then runs exactly as it did before this existed.
+func latestEngineVersion(ctx context.Context, spec engineSpec) string {
+	if spec.latestURL == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, engineLatestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, spec.latestURL, nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logln("engine-update:", spec.name, "could not reach", spec.latestURL+":", firstLine(err.Error()))
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		logln("engine-update:", spec.name, "release feed answered", resp.Status)
+		return ""
+	}
+	// Bounded read: this is a version string, and an endpoint that answers with a login page or a
+	// CDN error must not be able to hand us a megabyte to parse.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+	if spec.latestField != "" {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(body, &fields) != nil {
+			return ""
+		}
+		var value string
+		if json.Unmarshal(fields[spec.latestField], &value) != nil {
+			return ""
+		}
+		return versionNumber(value)
+	}
+	return versionNumber(string(body))
+}
+
+// A CLI's --version line is prose around a number ("2.1.227 (Claude Code)", "codex-cli 0.147.0"),
+// and a release feed's answer is the number alone. Comparing them means comparing the numbers.
+var versionNumberRe = regexp.MustCompile(`\d+(?:\.\d+)+`)
+
+func versionNumber(s string) string { return versionNumberRe.FindString(s) }
+
+// sameVersion answers only when both sides really do carry a comparable number. Anything else is
+// "don't know" rather than "different" — a machine must never be called behind on the strength of
+// a version string nobody could parse.
+func sameVersion(installed, latest string) bool {
+	a, b := versionNumber(installed), versionNumber(latest)
+	return a != "" && a == b
+}
+
+// engineOutput is where an updater's output goes while it runs, replacing a plain buffer so that
+// a command which gets stopped still leaves behind evidence of what it was doing.
+//
+// A stopwatch cannot tell a slow download from a wedge — both are "still running after 5m" — and
+// the two need opposite responses: a bigger allowance versus somebody looking at the machine. The
+// cheap portable discriminator is whether the thing was still saying anything. So: how much it
+// wrote, and when it last wrote.
+type engineOutput struct {
+	mu       sync.Mutex
+	tail     []byte
+	written  int64
+	lastByte time.Time
+}
+
+func (o *engineOutput) Write(b []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.written += int64(len(b))
+	o.lastByte = time.Now()
+	o.tail = append(o.tail, b...)
+	if len(o.tail) > engineOutputTail {
+		o.tail = o.tail[len(o.tail)-engineOutputTail:]
+	}
+	return len(b), nil
+}
+
+func (o *engineOutput) bytes() []byte {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]byte(nil), o.tail...)
+}
+
+// progress is what the command had to show for itself, for the message that reports it stopped.
+func (o *engineOutput) progress() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.written == 0 {
+		return "it printed nothing at all"
+	}
+	return "it printed " + humanSize(o.written) + ", last " + time.Since(o.lastByte).Round(time.Second).String() + " ago"
+}
+
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<20:
+		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64) + " MB"
+	case n >= 1<<10:
+		return strconv.FormatFloat(float64(n)/(1<<10), 'f', 1, 64) + " KB"
+	default:
+		return strconv.FormatInt(n, 10) + " B"
+	}
 }
 
 // updateEngine runs one engine's in-place update. Claude/Codex use their own updater;
@@ -149,7 +280,8 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		// the fact that explains it. Reading "update failed" every day about a deliberate
 		// choice is how a real warning gets tuned out.
 		rec := recordEngineUpdate(spec.bin, updateSkipped,
-			"Installed by a package manager ("+binPath+") — Orbit updates it through that, rather than installing a second copy alongside it.")
+			"Installed by a package manager ("+binPath+") — Orbit updates it through that, rather than installing a second copy alongside it.",
+			engineUpdateFacts{installed: before})
 		return rec, spec.name + " — package-managed install, left alone"
 	}
 	// Same class of answer, found a different way: an install this runner has no permission to
@@ -160,8 +292,24 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 		logln("engine-update:", spec.name, "skipped — no permission to replace", real)
 		rec := recordEngineUpdate(spec.bin, updateSkipped,
 			"Installed at "+real+", which this runner can't replace — it runs as "+runnerUserLabel()+
-				" and that install belongs to another user. Update it as its owner, or install a copy this user owns.")
+				" and that install belongs to another user. Update it as its owner, or install a copy this user owns.",
+			engineUpdateFacts{installed: before})
 		return rec, spec.name + " — owned by another user, left alone"
+	}
+	// Ask what is published before running anything. When the answer is "what you already have",
+	// that is the whole job: recorded as `checked`, without a package manager, without the install
+	// lock, and without spending any of the pass budget the engines behind this one need.
+	latest := latestEngineVersion(ctx, spec)
+	facts := engineUpdateFacts{installed: before, latest: latest}
+	if latest != "" && sameVersion(before, latest) {
+		logln("engine-update:", spec.name, "already current ("+before+" at "+binPath+")")
+		return recordEngineUpdate(spec.bin, updateChecked, "", facts), spec.name + " — already up to date (" + before + ")"
+	}
+	// Named in every message from here down. A failure that says which version it was reaching for
+	// is a failure someone can act on; the same failure without it is a shrug.
+	step := ""
+	if latest != "" {
+		step = firstNonEmpty(versionNumber(before), before) + " → " + latest + ": "
 	}
 	cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
 	defer cancel()
@@ -173,12 +321,18 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	cmd.Env = env
 	// Without this the timeout above is decorative. CommandContext kills the `sh` it started
 	// and nothing else, so an updater that forked (every one of them does) is reparented to
-	// init and keeps the output pipe open — and CombinedOutput blocks on that pipe forever,
-	// holding the lock taken above with it. Observed: an `opencode upgrade` still running 14
-	// minutes into a 5-minute ceiling, with the machine unable to install any engine behind it.
+	// init and keeps the output pipe open — and the wait for that pipe never returns, holding
+	// the lock taken above with it. Observed: an `opencode upgrade` still running 14 minutes
+	// into a 5-minute ceiling, with the machine unable to install any engine behind it.
 	configureEngineCommandTree(cmd)
+	// Streamed rather than buffered whole, so that a command we stop still tells us whether it
+	// was getting anywhere. Both streams take the same writer value, which os/exec then serves
+	// from one pipe — no interleaving to reassemble, and the mutex is there because relying on
+	// that is relying on an implementation detail for memory safety.
+	out := &engineOutput{}
+	cmd.Stdout, cmd.Stderr = out, out
 	started := time.Now()
-	out, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
 		switch cmdCtx.Err() {
 		case context.DeadlineExceeded:
@@ -186,30 +340,33 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 			// long before its own, and "still running after 5m" would be a lie about a command
 			// that got 40 seconds because a wedged engine ahead of it ate the rest.
 			ran := time.Since(started).Round(time.Second)
-			logln("engine-update:", spec.name, "timed out after", ran)
-			rec := recordEngineUpdate(spec.bin, updateFailed, "`"+cmdStr+"` was still running after "+ran.String()+" and was stopped.")
+			progress := out.progress()
+			logln("engine-update:", spec.name, "timed out after", ran, "—", progress)
+			rec := recordEngineUpdate(spec.bin, updateFailed,
+				step+"`"+cmdStr+"` was still running after "+ran.String()+" and was stopped — "+progress+".", facts)
 			return rec, spec.name + " — update timed out after " + ran.String()
 		case context.Canceled:
 			// Runner shutting down mid-update — not a failure, and not this machine's news.
 			return EngineUpdateReport{}, ""
 		}
-		detail := updateErrDetail(err, out)
+		detail := updateErrDetail(err, out.bytes())
 		logln("engine-update:", spec.name, "failed:", detail)
-		rec := recordEngineUpdate(spec.bin, updateFailed, detail)
+		rec := recordEngineUpdate(spec.bin, updateFailed, step+detail, facts)
 		return rec, spec.name + " — update failed: " + detail
 	}
 	after := engineVersion(binPath)
+	facts.installed = after
 	if after != "" && after != before {
 		logln("engine-update:", spec.name, "updated", before, "->", after)
-		rec := recordEngineUpdate(spec.bin, updateOK, "")
+		rec := recordEngineUpdate(spec.bin, updateUpdated, "", facts)
 		return rec, spec.name + " updated " + before + " → " + after
 	}
-	// Name the binary we measured: an update that exits 0 without moving the version is
-	// usually one that wrote to a different install than the one PATH resolves.
+	// Exited 0 and moved nothing. Recorded as `checked` either way — but when the feed said there
+	// was something to fetch, BehindSince keeps running, and a week of that is the alarm. That is
+	// the case this used to be blindest to: an updater writing to a copy PATH doesn't resolve
+	// reports success forever while the binary the runner execs never moves.
 	logln("engine-update:", spec.name, "already up to date ("+before+" at "+binPath+")")
-	// Still `ok`: nothing moved because nothing had to. That is exactly the answer the page
-	// needs — the update path on this machine works.
-	rec := recordEngineUpdate(spec.bin, updateOK, "")
+	rec := recordEngineUpdate(spec.bin, updateChecked, "", facts)
 	return rec, spec.name + " — already up to date (" + before + ")"
 }
 
@@ -292,7 +449,13 @@ func updateErrDetail(err error, out []byte) string {
 		}
 	}
 	if len(clean) > 0 {
-		return clean[len(clean)-1]
+		// Nothing in the output names a cause, so the last line is not the error — it is whatever
+		// the installer had just announced it was about to do. Kimi's is the case that matters:
+		// it runs under `set -euo pipefail` and downloads with `curl --silent`, so a network
+		// failure kills the script with curl's status and prints nothing, leaving "==> Resolving
+		// latest version from <url>" as the final word. Reported alone that reads as "this URL is
+		// broken"; the exit status is the part that says what actually happened.
+		return firstLine(err.Error()) + " — last output: " + clean[len(clean)-1]
 	}
 	return firstLine(err.Error())
 }
@@ -312,12 +475,22 @@ func cmdEngineUpdate() {
 }
 
 // The states an engine's updater can leave behind. `skipped` is deliberately not a failure:
-// it means Orbit chose not to touch this install, and retrying would do nothing.
+// it means Orbit chose not to touch this install, and retrying would do nothing. `updated` and
+// `checked` are deliberately not the same word — see EngineUpdateReport.Status.
 const (
-	updateOK      = "ok"
+	updateUpdated = "updated"
+	updateChecked = "checked"
 	updateFailed  = "failed"
 	updateSkipped = "skipped"
 )
+
+// engineUpdateFacts is what the pass learned about the two versions that matter — the one on this
+// machine and the newest one published. Either may be unknown, and unknown has to stay distinct
+// from equal: it is the difference between "nothing to do" and "we couldn't find out".
+type engineUpdateFacts struct {
+	installed string
+	latest    string
+}
 
 // engineUpdateLog is the per-engine update record, kept next to the runner's config.
 //
@@ -349,22 +522,92 @@ func loadEngineUpdateLog() map[string]EngineUpdateReport {
 // recordEngineUpdate files one outcome and returns the record as reported. `okAt` is carried
 // forward across later failures — without it a machine that updated fine yesterday and errors
 // today is indistinguishable from one that has never managed it, and those need different words.
-func recordEngineUpdate(bin, status, message string) EngineUpdateReport {
+func recordEngineUpdate(bin, status, message string, facts engineUpdateFacts) EngineUpdateReport {
 	now := time.Now().UTC().Format(time.RFC3339)
 	engineUpdateLog.mu.Lock()
 	defer engineUpdateLog.mu.Unlock()
 	log := loadEngineUpdateLog()
-	rec := EngineUpdateReport{Status: status, At: now, OkAt: log[bin].OkAt, Message: message}
-	if status == updateOK {
+	prev := log[bin]
+	rec := EngineUpdateReport{
+		Status:      status,
+		At:          now,
+		OkAt:        prev.OkAt,
+		UpdatedAt:   prev.UpdatedAt,
+		BehindSince: prev.BehindSince,
+		// Carried when this pass couldn't ask: the newest version we ever saw is still the best
+		// answer to "what should be on this machine", and dropping it on one unreachable feed
+		// would quietly retire the drift this record exists to show.
+		Latest:  firstNonEmpty(facts.latest, prev.Latest),
+		Message: message,
+	}
+	if status == updateUpdated || status == updateChecked {
 		rec.OkAt = now
 	}
-	log[bin] = rec
-	if b, err := json.MarshalIndent(log, "", "  "); err == nil {
-		if err := os.MkdirAll(machineHome(), machineHomePerm); err == nil {
-			if err := os.WriteFile(engineUpdateLogPath(), b, configFilePerm); err != nil {
-				logln("engine-update: cannot record outcome:", err)
-			}
-		}
+	if status == updateUpdated {
+		rec.UpdatedAt = now
 	}
+	rec.BehindSince = driftSince(rec.BehindSince, facts.installed, rec.Latest, now)
+	log[bin] = rec
+	writeEngineUpdateLog(log)
 	return rec
+}
+
+// noteEngineDrift records how far behind an engine is without claiming the updater did anything.
+//
+// The pass skips a busy machine so a binary is never swapped mid-turn, and that skip is
+// deliberately not recorded as an outcome. But drift is not an outcome — it is a property of the
+// binary — and a machine busy enough to skip every pass is precisely the one that drifts. On this
+// runner Claude Code was skipped on all three passes today and last actually moved a day earlier;
+// with drift measured only when a command runs, a permanently busy machine can fall arbitrarily
+// far behind while its row says nothing at all.
+func noteEngineDrift(ctx context.Context, spec engineSpec, servicePath string) {
+	binPath, ok := lookPathIn(spec.bin, servicePath)
+	if !ok {
+		return
+	}
+	installed := engineVersion(binPath)
+	latest := latestEngineVersion(ctx, spec)
+	if installed == "" || latest == "" {
+		return
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	engineUpdateLog.mu.Lock()
+	defer engineUpdateLog.mu.Unlock()
+	log := loadEngineUpdateLog()
+	rec := log[spec.bin]
+	// Status, At and Message are left exactly as they were: nothing was attempted, and saying
+	// otherwise would date-stamp an attempt that never happened.
+	rec.Latest = latest
+	rec.BehindSince = driftSince(rec.BehindSince, installed, latest, now)
+	log[spec.bin] = rec
+	writeEngineUpdateLog(log)
+}
+
+// driftSince keeps the clock on "this machine is behind": started the first time it is seen
+// behind, kept running while it stays behind, cleared the moment it catches up, and left alone
+// whenever either version is unknown — because "we couldn't ask" must never read as "caught up".
+func driftSince(since, installed, latest, now string) string {
+	if installed == "" || latest == "" {
+		return since
+	}
+	if sameVersion(installed, latest) {
+		return ""
+	}
+	if since == "" {
+		return now
+	}
+	return since
+}
+
+func writeEngineUpdateLog(log map[string]EngineUpdateReport) {
+	b, err := json.MarshalIndent(log, "", "  ")
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(machineHome(), machineHomePerm); err != nil {
+		return
+	}
+	if err := os.WriteFile(engineUpdateLogPath(), b, configFilePerm); err != nil {
+		logln("engine-update: cannot record outcome:", err)
+	}
 }

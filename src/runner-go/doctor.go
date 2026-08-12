@@ -23,6 +23,13 @@ type engineSpec struct {
 	updateCmd  string   // in-place update run daily by engineUpdateLoop; empty => re-run installCmd (idempotent)
 	installAlt string   // alternative shown if the default install is declined/fails
 	loginArgs  []string // interactive sign-in argv
+	// latestURL names the newest published version in a few kilobytes, so it can be asked before
+	// every update. It has to be the same channel the updater follows, or the two disagree
+	// forever: Claude publishes both `stable` (2.1.221 today) and `latest` (2.1.228), and
+	// `claude update` takes `latest`. latestField is the JSON field holding it; empty means the
+	// response body is the bare version string.
+	latestURL   string
+	latestField string
 	// loginRemoteFlag switches that sign-in to a device-code flow for a machine whose
 	// browser the user can't reach. Empty when the default flow already works remotely.
 	loginRemoteFlag string
@@ -58,6 +65,7 @@ var engineSpecs = []engineSpec{
 		installCmd:    "curl -fsSL https://claude.ai/install.sh | bash",
 		updateCmd:     "claude update",
 		installAlt:    "npm install -g @anthropic-ai/claude-code",
+		latestURL:     "https://downloads.claude.ai/claude-code-releases/latest",
 		loginArgs:     []string{"auth", "login"},
 		loginHeadless: "claude setup-token",
 	},
@@ -72,7 +80,10 @@ var engineSpecs = []engineSpec{
 		// with EACCES when the service user doesn't own that prefix.
 		updateCmd:  "codex update",
 		installAlt: "brew install codex   (macOS)",
-		loginArgs:  []string{"login"},
+		// npm is where `codex update` reads its own newest version from, standalone install or not.
+		latestURL:   "https://registry.npmjs.org/@openai/codex/latest",
+		latestField: "version",
+		loginArgs:   []string{"login"},
 		// Plain `codex login` finishes on http://localhost:1455/auth/callback — a port on
 		// *this* machine, so approving the URL from a laptop's browser leaves the CLI
 		// waiting forever. `--device-auth` prints a code instead and works anywhere.
@@ -86,8 +97,12 @@ var engineSpecs = []engineSpec{
 		// `kimi update` deliberately becomes a read-only/manual hint without a
 		// TTY. The runner updater is unattended, so repeat the official
 		// idempotent installer instead (engineupdate.go's empty-command fallback).
-		updateCmd:     "",
-		installAlt:    "npm install -g @moonshot-ai/kimi-code",
+		updateCmd:  "",
+		installAlt: "npm install -g @moonshot-ai/kimi-code",
+		// The same endpoint the installer resolves against, asked directly — which is also the
+		// one that has been timing out and failing silently, so being able to say "we couldn't
+		// even ask" is worth as much here as the version itself.
+		latestURL:     "https://code.kimi.com/kimi-code/latest",
 		loginArgs:     []string{"login"},
 		loginHeadless: "kimi login",
 	},
@@ -97,6 +112,8 @@ var engineSpecs = []engineSpec{
 		installCmd:    "curl -fsSL https://opencode.ai/install | bash",
 		updateCmd:     "opencode upgrade",
 		installAlt:    "npm install -g opencode-ai",
+		latestURL:     "https://registry.npmjs.org/opencode-ai/latest",
+		latestField:   "version",
 		loginArgs:     []string{"auth", "login"},
 		loginHeadless: "opencode auth login",
 	},
