@@ -99,6 +99,7 @@ import { isBuiltinProvider, resolveProviderExec } from '../providers/custom-prov
 import { runtimeInitSessionId } from './runtime-init';
 import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
+import { stripNul } from './strip-nul';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
@@ -1837,7 +1838,11 @@ export class RunnerApiController {
   @HttpCode(202)
   async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
-    const events = batch?.events ?? [];
+    // Sanitized here, at the edge, so nothing downstream can carry a byte Postgres refuses:
+    // every write below — run_event.payload, tool_call, the denormalized preview columns — is
+    // derived from this array, and one NUL in one tool_result used to fail the batch and wedge
+    // the session's stream behind it for good. See strip-nul.ts.
+    const events = stripNul(batch?.events ?? []);
 
     // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
     // text_delta / thinking_delta are streaming-animation increments: broadcast them
