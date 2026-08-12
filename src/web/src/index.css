@@ -7802,9 +7802,11 @@ body {
   cursor: pointer;
 }
 /* One highlight, driven by the keyboard cursor — hover sets that cursor rather than painting a
-   second, competing highlight, so mouse and keyboard can never disagree about the Enter target. */
+   second, competing highlight, so mouse and keyboard can never disagree about the Enter target.
+   Brand tint rather than --bg-hover: in dark the modal surface IS --bg-hover (AntD's
+   colorBgElevated is pinned to the same #343437), so a hover-grey cursor was invisible there. */
 .ssearch-row.active {
-  background: var(--bg-hover);
+  background: var(--brand-tint);
 }
 .ssearch-body {
   flex: 1;
