@@ -41,3 +41,5 @@ DerivedData/
 
 # session upload artifacts the app drops into the worktree (inputs, not source)
 /orbit-uploads/
+
+.rebase-pc/
