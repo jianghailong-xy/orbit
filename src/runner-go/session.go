@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,39 @@ import (
 )
 
 const maxRespawns = 5
+
+// Consecutive 500s on the same event batch before it is given up as unacceptable. Retries cap at
+// idempotentRetryMaxDelay, so this is roughly a minute of a server that keeps throwing — far
+// longer than a deploy (which fails the connection or answers 502, neither of which counts here)
+// and far shorter than forever.
+const maxEventFlushServerRejections = 30
+
+// Whether a failed event flush is worth replaying, counting sustained server rejections through
+// serverRejections.
+//
+// A 500 means the control plane received the batch and its own handler threw. Unlike a network
+// error or the 502/503 of a restarting apiserver, that verdict does not change on replay — and
+// the event buffer is strictly ordered, so a batch the server will never accept parks every
+// later event for the session behind it. Not hypothetical: one tool_result carrying a NUL (an
+// agent read a binary file) was refused by Postgres, and with no ceiling here the flush replayed
+// it for 14 hours while the transcript sat frozen and neither side logged a word. Past the
+// ceiling the caller drops the batch: losing it costs a slice of transcript, keeping it costs
+// the rest of the session.
+func eventFlushRetryPolicy(serverRejections *int) func(error) bool {
+	return func(err error) bool {
+		if !isRetryableTransportError(err) {
+			return false
+		}
+		if !isTransportHTTPStatus(err, http.StatusInternalServerError) {
+			// Anything that can clear on its own (a restart, a timeout, a throttle) is retried as
+			// before, and is evidence that this batch is not the problem.
+			*serverRejections = 0
+			return true
+		}
+		*serverRejections++
+		return *serverRejections < maxEventFlushServerRejections
+	}
+}
 
 const (
 	leaseActivationTimeout    = 20 * time.Second
@@ -347,14 +381,21 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			events := buf
 			buf = nil
 			bufMu.Unlock()
+			serverRejections := 0
 			err := retryIdempotentWhile(flushCtx, func(attemptCtx context.Context) error {
 				return t.postEvents(attemptCtx, sessionID, RunEventBatch{Events: events})
-			}, isRetryableTransportError)
+			}, eventFlushRetryPolicy(&serverRejections))
 			if isLeaseOwnershipError(err) {
 				markOwnershipLost(err)
 				return err
 			}
 			if err != nil {
+				if serverRejections >= maxEventFlushServerRejections {
+					logln("dropping", len(events), "events for", sessionID,
+						fmt.Sprintf("(seq %d-%d)", events[0].Seq, events[len(events)-1].Seq),
+						"after", serverRejections, "server rejections:", err)
+					return err
+				}
 				// Keep the batch available to the final flush. Requests are seq-idempotent, so
 				// restoring after a lost committed response is safe and avoids dropping the tail.
 				bufMu.Lock()
