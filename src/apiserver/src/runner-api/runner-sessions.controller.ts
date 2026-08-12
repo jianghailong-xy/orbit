@@ -96,7 +96,7 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     // Inline type — nothing validates it, and `agentId` is exactly what a model copies out of an
     // Orbit URL when told to "run this under that agent".
-    @Body(new PublicIdPipe(['agentId']))
+    @Body(PublicIdPipe.forFields('agentId'))
     dto: { prompt: string; agentId?: string; agentName?: string; title?: string; model?: string },
   ) {
     if (isHeadlessCaller(parentSessionId)) {

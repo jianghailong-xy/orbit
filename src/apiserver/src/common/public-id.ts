@@ -29,13 +29,26 @@ import { toUuid } from '@orbit/shared';
  * the distinction can't be got wrong by reaching for the wrong pipe:
  *   `@Param('id', PublicIdPipe)`                     — required; an empty segment is a 400
  *   `@Query('agentId', PublicIdPipe)`                — optional; absent stays absent
- *   `@Body(new PublicIdPipe(['agentId'])) dto: T`    — for bodies class-validator never sees
+ *   `@Body(PublicIdPipe.forFields('agentId')) dto: T`    — for bodies class-validator never sees
  * DTO *classes* declare it as a field decorator instead: `@IsPublicId()`.
  */
 @Injectable()
 export class PublicIdPipe implements PipeTransform<unknown, unknown> {
-  /** Body field names to normalize. Omitted for a scalar param/query. */
-  constructor(private readonly fields?: readonly string[]) {}
+  /** Body field names to normalize; unset for a scalar param/query.
+   *
+   *  Deliberately NOT a constructor parameter. `@Param('id', PublicIdPipe)` hands Nest the
+   *  CLASS, and Nest instantiates it through the DI container — a constructor arg there is a
+   *  dependency it must resolve, so a `string[]` parameter makes every route using the class
+   *  form fail at boot with "can't resolve dependencies of the PublicIdPipe (?)". Keeping the
+   *  constructor empty is what lets one class serve both forms. */
+  private fields?: readonly string[];
+
+  /** Body form: `@Body(PublicIdPipe.forFields('agentId'))`. */
+  static forFields(...fields: string[]): PublicIdPipe {
+    const pipe = new PublicIdPipe();
+    pipe.fields = fields;
+    return pipe;
+  }
 
   transform(value: unknown, metadata?: ArgumentMetadata): unknown {
     if (this.fields) return this.normalizeFields(value);

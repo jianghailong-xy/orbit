@@ -112,6 +112,19 @@ for (const controller of CONTROLLERS) {
   });
 }
 
+// Those routes pass the CLASS, not an instance, so Nest builds the pipe through its DI
+// container at boot — and anything the constructor declares becomes a dependency it has to
+// resolve. A `string[]` parameter there took the whole apiserver down with "Nest can't resolve
+// dependencies of the PublicIdPipe (?) ... argument Array at index [0]", which every unit test
+// here sailed past because they all say `new PublicIdPipe()` themselves. Hence: no constructor
+// arguments, and the body form is a static factory instead.
+test('PublicIdPipe is constructible by Nest with no injectable dependencies', () => {
+  assert.equal(PublicIdPipe.length, 0, 'constructor takes an argument Nest would try to inject');
+  const declared = Reflect.getMetadata('design:paramtypes', PublicIdPipe) as unknown[] | undefined;
+  assert.deepEqual(declared ?? [], [], 'constructor declares injectable parameter types');
+  assert.ok(new PublicIdPipe() instanceof PublicIdPipe);
+});
+
 // ── The rule itself ───────────────────────────────────────────────────────────────────────────
 const UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
 const B62 = uuidToBase62(UUID);
@@ -179,7 +192,7 @@ test('IsPublicId still rejects a body id that is neither spelling', async () => 
 // a free-form idempotency key that must survive byte-for-byte or a retry stops deduping. Several
 // ride the runner protocol, where a wrong 400 breaks runners that are already installed.
 test('PublicIdPipe normalizes only the fields it was given', () => {
-  const pipe = new PublicIdPipe(['agentId', 'taskId']);
+  const pipe = PublicIdPipe.forFields('agentId', 'taskId');
   const body = pipe.transform({
     prompt: 'go',
     agentId: B62,
@@ -199,7 +212,7 @@ test('PublicIdPipe normalizes only the fields it was given', () => {
 });
 
 test('PublicIdPipe refuses an undecodable id and ignores absent ones', () => {
-  const pipe = new PublicIdPipe(['agentId']);
+  const pipe = PublicIdPipe.forFields('agentId');
   assert.deepEqual(pipe.transform({ prompt: 'go' }), { prompt: 'go' });
   assert.deepEqual(pipe.transform({ prompt: 'go', agentId: '' }), { prompt: 'go', agentId: '' });
   assert.throws(() => pipe.transform({ agentId: 'no-pe' }), { message: 'invalid agentId' });

@@ -72,7 +72,7 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(new PublicIdPipe(['agentId', 'assignedRunnerId', 'taskId'])) dto: CreateSessionDto,
+    @Body(PublicIdPipe.forFields('agentId', 'assignedRunnerId', 'taskId')) dto: CreateSessionDto,
   ) {
     return this.sessions.create(user.userId, dto);
   }
