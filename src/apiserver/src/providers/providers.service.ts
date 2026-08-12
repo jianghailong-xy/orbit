@@ -198,12 +198,23 @@ export class ProvidersService {
       Authorization: `Bearer ${dto.apiKey}`,
     };
     if (!isOpenAIDialect) headers['anthropic-version'] = '2023-06-01';
+    // A subscription OAuth token (sk-ant-oat…, what `claude` stores after a browser login) is only
+    // served for requests that identify as Claude Code, which the CLI does through its system
+    // prompt. Without it Anthropic turns such a token away with a 429 whose message is the literal
+    // string "Error" — so a key that drives sessions perfectly well failed the probe. Send what the
+    // runtime sends, so the probe is no stricter than the session it is standing in for.
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    };
+    if (!isOpenAIDialect) body.system = "You are Claude Code, Anthropic's official CLI for Claude.";
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',
         redirect: 'manual',
         headers,
-        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+        body: JSON.stringify(body),
         signal: AbortSignal.timeout(8000),
       });
       if (resp.ok) return { ok: true, status: resp.status, message: 'Connected' };
@@ -213,8 +224,14 @@ export class ProvidersService {
       if (resp.status === 404) {
         return { ok: false, status: resp.status, message: 'Endpoint not found — check the Base URL' };
       }
+      // Keep the status next to the vendor's own words: a body can carry a message as unhelpful as
+      // "Error", and alone it reads like the form itself broke rather than the endpoint answering.
       const detail = this.extractErr(await resp.text().catch(() => ''));
-      return { ok: false, status: resp.status, message: detail || `Endpoint returned HTTP ${resp.status}` };
+      return {
+        ok: false,
+        status: resp.status,
+        message: detail ? `HTTP ${resp.status} — ${detail}` : `Endpoint returned HTTP ${resp.status}`,
+      };
     } catch (e) {
       const timedOut = e instanceof Error && e.name === 'TimeoutError';
       return { ok: false, message: timedOut ? 'Timed out reaching the endpoint' : 'Could not reach the endpoint' };
