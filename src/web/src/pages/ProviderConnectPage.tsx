@@ -6,7 +6,12 @@ import { Button, Input, InputNumber, Select, Space, Spin, Switch } from 'antd';
 import { api } from '../api';
 import { presetModelsQuery, providersQuery, type PresetCatalogEntry } from '../lib/queries';
 import { PROVIDER_PRESETS, providerPreset, type ProviderPreset } from '@orbit/shared';
-import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
+import {
+  PROVIDERS_BASE,
+  PROVIDERS_LIST_KEY,
+  suggestProviderName,
+  type ProviderRow,
+} from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { runtimeSummary } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
@@ -53,10 +58,12 @@ export function ProviderPickPage() {
 export function ProviderConnectPage() {
   const { slug, id } = useParams();
 
+  // Read on both paths: editing needs the row itself, and connecting needs to know which vendors
+  // are already set up — the form seeds its name from that. Same cached list the providers page
+  // fills, so arriving from there costs nothing.
   const providers = useQuery({
     queryKey: PROVIDERS_LIST_KEY,
     queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
-    enabled: !!id,
   });
   // A vendor's list is refreshed server-side, so the form asks for the current one rather than
   // seeding from the copy compiled into this bundle — otherwise the page that promises new models
@@ -64,7 +71,7 @@ export function ProviderConnectPage() {
   // mount); a failed fetch falls through to the shipped list.
   const presetModels = useQuery(presetModelsQuery());
 
-  if (presetModels.isPending) {
+  if (presetModels.isPending || providers.isPending) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
         <Spin />
@@ -72,15 +79,14 @@ export function ProviderConnectPage() {
     );
   }
 
+  const rows = providers.data ?? [];
+  // The other providers this one shares a vendor with. Custom endpoints have no vendor and name
+  // themselves anyway, so they are nobody's sibling.
+  const siblingsOf = (presetSlug: string | null | undefined, selfId?: string) =>
+    presetSlug ? rows.filter((p) => p.presetSlug === presetSlug && p.id !== selfId) : [];
+
   if (id) {
-    if (providers.isPending) {
-      return (
-        <div style={{ padding: 48, textAlign: 'center' }}>
-          <Spin />
-        </div>
-      );
-    }
-    const row = providers.data?.find((p) => p.id === id);
+    const row = rows.find((p) => p.id === id);
     if (!row) {
       return (
         <div className="provider-form">
@@ -100,13 +106,21 @@ export function ProviderConnectPage() {
         editing={row}
         preset={rowPreset}
         catalog={rowPreset && presetModels.data?.[rowPreset.slug]}
+        siblings={siblingsOf(row.presetSlug, row.id)}
       />
     );
   }
 
   const preset = PROVIDER_PRESETS.find((p) => p.slug === slug);
   if (!preset && slug !== 'custom') return <Navigate to="/providers/new" replace />;
-  return <ProviderForm key={slug} preset={preset} catalog={preset && presetModels.data?.[preset.slug]} />;
+  return (
+    <ProviderForm
+      key={slug}
+      preset={preset}
+      catalog={preset && presetModels.data?.[preset.slug]}
+      siblings={siblingsOf(preset?.slug)}
+    />
+  );
 }
 
 /**
@@ -117,11 +131,14 @@ function ProviderForm({
   preset,
   catalog,
   editing,
+  siblings = [],
 }: {
   preset?: ProviderPreset;
   /** What the preset offers as the server resolves it today; falls back to the shipped catalogue. */
   catalog?: PresetCatalogEntry;
   editing?: ProviderRow;
+  /** The user's other providers from this same vendor — what makes the name worth asking about. */
+  siblings?: ProviderRow[];
 }) {
   const message = useToast();
   const qc = useQueryClient();
@@ -134,8 +151,15 @@ function ProviderForm({
   // bundle was built with, or the form would probe the key against a model the session won't use.
   const presetDefault = catalog?.defaultModel ?? preset?.defaultModel;
 
+  // A vendor already connected once has its name asked for up front rather than left in Advanced:
+  // from the second key on, the name is the only thing telling the two apart in the model picker.
+  const named = isCustom || siblings.length > 0;
+
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
-  const [label, setLabel] = useState(editing?.label ?? preset?.label ?? '');
+  const [label, setLabel] = useState(
+    editing?.label ??
+      (preset ? suggestProviderName(preset.label, siblings.map((s) => s.label)) : ''),
+  );
   const [baseUrl, setBaseUrl] = useState(editing?.baseUrl ?? preset?.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
   // The stored key once it's been read back, so a revealed-but-untouched field still counts as
@@ -351,43 +375,60 @@ function ProviderForm({
       )}
 
       {/* A custom provider's dialect, endpoint and name are decisions only the user can make, so
-          they lead the walkthrough. A preset already knows all three. */}
-      {isCustom && (
-        <>
-          <Step num={1} title={editing ? 'Name' : 'Name this provider'} hideNum={!!editing}>
-            <Input placeholder="e.g. My provider" value={label} onChange={(e) => setLabel(e.target.value)} />
-          </Step>
-
-          <Step num={2} title="Endpoint" hideNum={!!editing}>
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-              <Select<'claude' | 'codex' | 'kimi'>
-                value={runtime}
-                onChange={(v) => {
-                  setRuntime(v);
-                  setProbeError(null);
-                }}
-                style={{ width: '100%' }}
-                options={[
-                  { value: 'claude', label: 'Anthropic-compatible (Claude)' },
-                  { value: 'codex', label: 'OpenAI-compatible (Codex)' },
-                ]}
-              />
-              <Input
-                placeholder="https://api.example.com/anthropic"
-                value={baseUrl}
-                onChange={(e) => {
-                  setBaseUrl(e.target.value);
-                  setProbeError(null);
-                }}
-              />
-            </Space>
+          they lead the walkthrough. A preset already knows all three — until a second key for the
+          same vendor makes the name a decision again. */}
+      {named && (
+        <Step
+          num={1}
+          title={editing ? 'Name' : 'Name this provider'}
+          hideNum={!isCustom || !!editing}
+        >
+          <Input
+            placeholder="e.g. My provider"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+          {preset && (
             <div className="ps-hint">
-              {runtime === 'codex'
-                ? 'The API dialect this endpoint speaks, and its base URL (e.g. up to /v1).'
-                : 'The API dialect this endpoint speaks, and its base URL (the one the vendor documents for Claude Code).'}
+              {siblings.length === 1
+                ? `You already have one ${preset.label} key`
+                : `You already have ${siblings.length} ${preset.label} keys`}{' '}
+              — the name is what tells them apart when picking a model.
             </div>
-          </Step>
-        </>
+          )}
+        </Step>
+      )}
+
+      {isCustom && (
+        <Step num={2} title="Endpoint" hideNum={!!editing}>
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Select<'claude' | 'codex' | 'kimi'>
+              value={runtime}
+              onChange={(v) => {
+                setRuntime(v);
+                setProbeError(null);
+              }}
+              style={{ width: '100%' }}
+              options={[
+                { value: 'claude', label: 'Anthropic-compatible (Claude)' },
+                { value: 'codex', label: 'OpenAI-compatible (Codex)' },
+              ]}
+            />
+            <Input
+              placeholder="https://api.example.com/anthropic"
+              value={baseUrl}
+              onChange={(e) => {
+                setBaseUrl(e.target.value);
+                setProbeError(null);
+              }}
+            />
+          </Space>
+          <div className="ps-hint">
+            {runtime === 'codex'
+              ? 'The API dialect this endpoint speaks, and its base URL (e.g. up to /v1).'
+              : 'The API dialect this endpoint speaks, and its base URL (the one the vendor documents for Claude Code).'}
+          </div>
+        </Step>
       )}
 
       <Step
@@ -447,9 +488,12 @@ function ProviderForm({
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
               {preset && (
                 <>
-                  <Field label="Name">
-                    <Input value={label} onChange={(e) => setLabel(e.target.value)} />
-                  </Field>
+                  {/* Only when it isn't already a step of its own above. */}
+                  {!named && (
+                    <Field label="Name">
+                      <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+                    </Field>
+                  )}
                   <Field label="Endpoint">
                     <Input
                       value={baseUrl}
