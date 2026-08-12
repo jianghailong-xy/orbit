@@ -150,6 +150,26 @@ func isAPIError(s string) bool {
 	return strings.HasPrefix(strings.TrimSpace(s), "API Error")
 }
 
+// isResumeCarrierResult reports whether a `result` closes a turn claude invented for itself
+// rather than one Orbit fed it.
+//
+// A `--resume` with a queued `<task-notification>` to hand over — a background shell that was
+// still running when the previous process died — wraps it in a synthetic carrier turn of its
+// own: the meta prompt "Continue from where you left off." answered locally with "No response
+// requested." That turn ends with a `result` like any other, but no fed message asked for it,
+// so completing a turn on it retires the message the user has just sent before the model has
+// even read it (and puts every later result one turn out of step).
+//
+// The carrier is the one result that produced nothing at all: no API round trip (numTurns 0)
+// and not a word on the wire. A slash command claude resolves client-side (`/help`) is also
+// numTurns 0, but it streams its answer as assistant text and repeats it in `result`, and it
+// IS a real turn that must be acked — hence both text checks. Errors are excluded outright: a
+// failed turn reports no work either, and must still reach the control plane.
+func isResumeCarrierResult(r ExecResult, streamedText string) bool {
+	return r.Subtype == "success" && r.Status == stSucceeded &&
+		r.NumTurns == 0 && r.Result == "" && streamedText == ""
+}
+
 // isAuthError reports whether a result/assistant text carries a sign-in failure — this
 // machine's stored credentials being gone, expired or rejected ("Failed to authenticate:
 // OAuth session expired and could not be refreshed"). It arrives the same way an API error

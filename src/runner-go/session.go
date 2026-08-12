@@ -1528,6 +1528,22 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		if msg["type"] == "result" {
 			r := resultFrom(msg, procCtx)
+			// Recorded before the carrier check below: the id claude runs the conversation
+			// under is session-level, and a resume can report it on a result that belongs to
+			// no turn of ours.
+			if r.ClaudeSessionID != "" {
+				job.RuntimeSessionID = r.ClaudeSessionID
+				writeSessionMeta(scratchDir, job, execDir)
+			}
+			// Claude's own synthetic resume turn (see isResumeCarrierResult) ends here too.
+			// Nothing was asked and nothing was produced, so publish no turn_end — the clients
+			// read one as "the turn is over" and would paint the session idle in the middle of
+			// the reply the user is waiting for — and leave `pending` untouched: the message
+			// that was fed is still unanswered, and the result of the work it actually starts
+			// is what acks it.
+			if isResumeCarrierResult(r, lastAssistantText) {
+				continue
+			}
 			turnStatus := stSucceeded
 			if r.Subtype == "error_during_execution" {
 				turnStatus = stInterrupted
@@ -1544,10 +1560,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				turnStatus = stFailed
 			}
 			lastAssistantText = ""
-			if r.ClaudeSessionID != "" {
-				job.RuntimeSessionID = r.ClaudeSessionID
-				writeSessionMeta(scratchDir, job, execDir)
-			}
 			emit(evTurnEnd, withContextWindow(map[string]interface{}{
 				"subtype":       r.Subtype,
 				"numTurns":      r.NumTurns,

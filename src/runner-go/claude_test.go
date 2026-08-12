@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // The context gauge reads the latest top-level assistant message's usage. Claude's
 // input_tokens EXCLUDES cached tokens (cache_read/creation are counted separately), so
@@ -35,6 +38,46 @@ func TestContextTokensFromAssistant(t *testing.T) {
 	noUsage := map[string]interface{}{"type": "assistant", "message": map[string]interface{}{}}
 	if got := contextTokensFromAssistant(noUsage); got != 0 {
 		t.Fatalf("no usage = %d, want 0", got)
+	}
+}
+
+// Every shape below was captured off the wire from `claude -p --input-format stream-json`.
+// Only the carrier — claude's own "Continue from where you left off." turn, emitted on a
+// --resume that has a background-shell task-notification to hand over — may be dropped;
+// dropping any of the others strands the fed message unacked.
+func TestIsResumeCarrierResult(t *testing.T) {
+	live, cancelled := context.Background(), func() context.Context {
+		c, cancel := context.WithCancel(context.Background())
+		cancel()
+		return c
+	}()
+	msg := func(subtype string, numTurns int, result string, isErr bool) map[string]interface{} {
+		return map[string]interface{}{
+			"type": "result", "subtype": subtype, "is_error": isErr,
+			"num_turns": float64(numTurns), "result": result,
+		}
+	}
+	cases := []struct {
+		name    string
+		msg     map[string]interface{}
+		ctx     context.Context
+		text    string
+		carrier bool
+	}{
+		{"resume carrier", msg("success", 0, "", false), live, "", true},
+		{"real turn", msg("success", 1, "OK", false), live, "OK", false},
+		// A client-side slash answer costs no API turn, but it IS the answer to a fed message.
+		{"local slash answer", msg("success", 0, "/help isn't available in this environment.", false),
+			live, "/help isn't available in this environment.", false},
+		// A turn interrupted before its first token reports no work either — still a real turn.
+		{"interrupted", msg("error_during_execution", 0, "", false), live, "", false},
+		{"failed", msg("success", 0, "", true), live, "", false},
+		{"cancelled", msg("success", 0, "", false), cancelled, "", false},
+	}
+	for _, c := range cases {
+		if got := isResumeCarrierResult(resultFrom(c.msg, c.ctx), c.text); got != c.carrier {
+			t.Errorf("%s: isResumeCarrierResult = %v, want %v", c.name, got, c.carrier)
+		}
 	}
 }
 
