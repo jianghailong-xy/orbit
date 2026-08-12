@@ -23,12 +23,10 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { PlanUsage } from '@orbit/shared';
 import { api } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
 import { providersQuery } from '../lib/queries';
 import type { Runner } from '../components/TasksSidePanel';
-import { planUsageRows, planUsageSnapshots } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import {
   defaultModelForProvider,
@@ -59,45 +57,6 @@ const fmtTime = (d?: string | null): string =>
         minute: '2-digit',
       })
     : '—';
-
-// Per-runner provider plan usage for the account(s) this runner is logged into.
-function PlanUsageSection({ usage }: { usage: PlanUsage }) {
-  const sections = planUsageSnapshots(usage)
-    .map((s) => ({ ...s, rows: planUsageRows(s.usage) }))
-    .filter((s) => s.rows.length > 0);
-  if (sections.length === 0) return null;
-  return (
-    <>
-      {sections.map(({ key: sectionKey, title, note, usage: u, rows }) => (
-        <section className="rd-section" key={sectionKey}>
-          <div className="rd-section-title">{title}</div>
-          <div className="rd-usage">
-            {rows.map(({ key, label, groupLabel, window, percent, nearLimit }) => {
-              return (
-                <div className="rd-usage-row" key={key}>
-                  {groupLabel && <div className="rd-usage-label">{groupLabel}</div>}
-                  <div className="rd-usage-head">
-                    <span className="rd-usage-label">{label}</span>
-                    <span className="rd-usage-pct">{percent}%</span>
-                  </div>
-                  <div className={`runner-util rd-usage-bar ${nearLimit ? 'full' : ''}`}>
-                    <span className="runner-util-fill" style={{ width: `${percent}%` }} />
-                  </div>
-                  {window.resetsAt && (
-                    <div className="rd-usage-reset">Resets {fmtTime(window.resetsAt)}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="rd-usage-note">
-            {note} · updated {fmtTime(u.fetchedAt)}
-          </div>
-        </section>
-      ))}
-    </>
-  );
-}
 
 // Runner detail / settings page. Clicking a runner lands here (not the chat
 // console) — you manage the runner and the agents that run under it. The live
@@ -503,8 +462,6 @@ export function RunnerDetailPage() {
           <RdField label="Enrolled" value={fmtTime(runner.enrolledAt)} />
         </div>
       </section>
-
-      {runner.planUsage && <PlanUsageSection usage={runner.planUsage} />}
 
       <section className="rd-section">
         <div className="rd-section-head">
