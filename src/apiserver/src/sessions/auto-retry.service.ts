@@ -8,9 +8,16 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 
 const SWEEP_INTERVAL_MS = 30_000;
+// How long a session armed by the reaper waits for its runner to come back. Covers the
+// ordinary reasons a runner drops mid-turn — a restart, a self-update's drain, a deploy, a
+// brief partition — all of which resolve in low single-digit minutes. Past this the machine
+// is not coming back on its own, and a session silently waiting on it forever is worse than
+// one that says so: it disarms and the transcript's own note becomes the honest state again.
+const MAX_OFFLINE_WAIT_MS = 30 * 60_000;
 // How long to wait after each *dispatch* failure — the resume itself not going through, which
 // is about this deployment (runner gone, session raced elsewhere) rather than about the
 // provider. The provider-side waits are decided when the retry is armed: a quota's own reset
@@ -27,16 +34,18 @@ const MAX_PER_SWEEP = 50;
 /**
  * Re-sends messages that a self-healing failure killed, once it is likely to work.
  *
- * Two failures qualify, and they arrive the same way — as the entire reply: the account's
- * provider quota running out, and the provider being briefly unable to answer ("API Error: 529
- * … overloaded_error"). Neither says anything about the work, and both succeed on a plain
- * re-send of the same message.
+ * Three failures qualify. Two arrive as the entire reply: the account's provider quota running
+ * out, and the provider being briefly unable to answer ("API Error: 529 … overloaded_error").
+ * The third arrives as no reply at all — the runner went away mid-turn and the reaper finalized
+ * the session as 'runner offline'. None of the three says anything about the work, and all
+ * three succeed on a plain re-send of the same message.
  *
- * `Session.retryAt` is armed on event ingestion (runner-api.controller) the moment such a reply
- * lands. This service is the other half: it waits for that moment, confirms the provider is
- * actually available, and re-sends. It exists as its own sweeper rather than as another branch
- * of the reaper because the reaper's job is ending things that are stuck — this one starts
- * things that are merely waiting, and must not inherit "finalize it" as a fallback behaviour.
+ * `Session.retryAt` is armed on event ingestion (runner-api.controller) for the first two, and
+ * by the reaper for the third. This service is the other half: it waits for that moment,
+ * confirms the thing that failed is actually available again — the provider's quota, or the
+ * runner itself — and re-sends. It exists as its own sweeper rather than as another branch of
+ * the reaper because the reaper's job is ending things that are stuck — this one starts things
+ * that are merely waiting, and must not inherit "finalize it" as a fallback behaviour.
  *
  * Single-replica, like the reaper: two of these would double-send. The armed row is claimed
  * with a conditional update before the resume, so a concurrent user message or a second
@@ -96,7 +105,20 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAttempts: true,
         assignedRunnerId: true,
         status: true,
-        assignedRunner: { select: { planUsage: true } },
+        // When the reaper gave up on this session — the clock MAX_OFFLINE_WAIT_MS runs on.
+        finishedAt: true,
+        // The rest of what deriveSessionCapabilities reads, so the runner-liveness question
+        // is answered by the same function that gates resume() rather than by a fourth
+        // hand-rolled heartbeat comparison that can drift from it.
+        endReason: true,
+        completedAt: true,
+        deletedAt: true,
+        cancelRequestedAt: true,
+        startedAt: true,
+        runtimeSessionId: true,
+        assignedRunner: {
+          select: { planUsage: true, status: true, lastHeartbeatAt: true },
+        },
       },
     });
     if (due.length === 0) return;
@@ -109,6 +131,28 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       try {
         const quotaKey = `${session.assignedRunnerId ?? 'none'}:${session.provider}`;
         if ((released.get(quotaKey) ?? 0) >= PER_QUOTA_PER_SWEEP) continue;
+
+        // Is the runner back? Asked before the quota, because a resume into an absent runner
+        // cannot succeed for any provider reason — resume() itself refuses one (RUNNER_OFFLINE)
+        // and that refusal would land in the catch below and spend an attempt on a session
+        // whose only problem is that a machine is still rebooting. A deferral, not a failure:
+        // re-armed for the next sweep with the attempt count untouched, which is what turns
+        // this into "waiting for the runner" instead of five backoffs and a give-up.
+        const capabilities = deriveSessionCapabilities(session, now.getTime());
+        if (capabilities.resumeBlockedReason === 'RUNNER_OFFLINE') {
+          const waited = session.finishedAt ? now.getTime() - session.finishedAt.getTime() : 0;
+          if (waited > MAX_OFFLINE_WAIT_MS) {
+            await this.disarm(session.id, session.status, 'runner never came back');
+          } else {
+            await this.rearm(
+              session.id,
+              session.status,
+              new Date(now.getTime() + SWEEP_INTERVAL_MS),
+              attempts,
+            );
+          }
+          continue;
+        }
 
         // The authoritative answer to "is the account able to run at all", checked as late as
         // possible: for a quota retry the reset time it was armed with came from the runtime's

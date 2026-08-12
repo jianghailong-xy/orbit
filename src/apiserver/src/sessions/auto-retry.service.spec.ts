@@ -88,11 +88,25 @@ function row(over: SessionRow = {}): SessionRow {
     retryAt: PAST,
     retryAttempts: 0,
     assignedRunnerId: 'runner-1',
-    assignedRunner: { planUsage: null },
+    // A started session on a runner that is currently answering heartbeats — the shape
+    // deriveSessionCapabilities needs to reach its runner-liveness branch at all. Left
+    // incomplete these rows stop at NOT_STARTED, which silently skips that branch and
+    // would let the runner-offline deferral pass every test without ever running.
+    startedAt: PAST,
+    runtimeSessionId: 'runtime-1',
+    finishedAt: null,
+    endReason: null,
+    completedAt: null,
+    deletedAt: null,
+    cancelRequestedAt: null,
+    assignedRunner: { planUsage: null, status: 'ONLINE', lastHeartbeatAt: NOW },
     status: RunStatus.AWAITING_INPUT,
     ...over,
   };
 }
+
+/** The same runner, three missed heartbeats ago — what a restart or a drain looks like. */
+const offlineRunner = { planUsage: null, status: 'ONLINE', lastHeartbeatAt: PAST };
 
 test('re-sends the last user message once the quota is back', async () => {
   const { service, resumed } = makeService([row()]);
@@ -146,6 +160,50 @@ test('defers without spending an attempt while the snapshot still reports the qu
   assert.deepEqual(resumed, [], 'must not burn a turn against a quota known to be spent');
   assert.equal(rows[0].retryAttempts, 0, 'a deferral is not a failed attempt');
   assert.deepEqual(rows[0].retryAt, new Date(FUTURE), 're-armed for the reported reset');
+});
+
+// The reaper arms these: it finalized the session as 'runner offline' mid-turn. Waiting for
+// that runner is the whole retry, so it must not look like the five-strikes dispatch backoff —
+// a runner that takes four minutes to come back would otherwise exhaust the attempts and hand
+// the session to the user having never once tried it.
+test('waits for an offline runner without spending an attempt', async () => {
+  const { service, resumed, rows } = makeService([
+    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST, assignedRunner: offlineRunner }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'resume() would only refuse it as RUNNER_OFFLINE');
+  assert.equal(rows[0].retryAttempts, 0, 'still rebooting is not a failed attempt');
+  assert.deepEqual(
+    rows[0].retryAt,
+    new Date(NOW.getTime() + 30_000),
+    're-armed for the next sweep, which is what makes this a wait rather than a backoff',
+  );
+});
+
+test('re-sends as soon as the runner is answering heartbeats again', async () => {
+  const { service, resumed } = makeService([
+    row({ status: RunStatus.FAILED, cancelRequestedAt: PAST, finishedAt: PAST }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(
+    resumed,
+    [{ id: 'session-1', content: 'the original message' }],
+    'the runner came back, so the turn it killed goes out again on its own',
+  );
+});
+
+test('gives up on a runner that never comes back', async () => {
+  const { service, resumed, rows } = makeService([
+    row({
+      status: RunStatus.FAILED,
+      cancelRequestedAt: PAST,
+      assignedRunner: offlineRunner,
+      finishedAt: new Date('2026-08-03T15:50:00Z'),
+    }),
+  ]);
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, []);
+  assert.equal(rows[0].retryAt, null, 'a machine down this long is not coming back on its own');
 });
 
 test('releases one session per (runner, provider) per sweep', async () => {

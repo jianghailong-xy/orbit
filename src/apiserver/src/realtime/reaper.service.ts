@@ -146,6 +146,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             await this.forceFinalize(s.id, s.assignedRunnerId, s.taskId, 'runner offline', {
               expectedStatuses: [RunStatus.RUNNING],
               onlyIfNotCancelling: true,
+              // Losing the runner says nothing about the work — the same message succeeds on
+              // a plain re-send — so this is the one finalize here that auto-retry can undo
+              // by itself. A task-bound session is deliberately excluded: reclaimStalledTask
+              // just put its task back in the actionable pool, and the task scheduler picking
+              // it up again IS its retry. Arming here too would race that with a second one.
+              armRetry: !s.taskId,
             });
           }
           continue;
@@ -239,6 +245,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       expectedStatuses?: RunStatus[];
       /** Non-cancel decisions must not overwrite an end/cancel that won the race. */
       onlyIfNotCancelling?: boolean;
+      /** Hand this session to AutoRetryService instead of leaving it for the user to
+       *  re-send by hand. Only for a finalize that says nothing about the work itself. */
+      armRetry?: boolean;
     } = {},
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
@@ -256,6 +265,10 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         data: {
           status,
           ...(failed ? { error: reason } : {}),
+          // Due immediately: AutoRetryService's own sweep is what waits for the runner to
+          // come back, so arming for "now" makes the first sweep after this the first check
+          // rather than a fixed delay guessing when the runner returns.
+          ...(opts.armRetry ? { retryAt: new Date() } : {}),
           finishedAt: new Date(),
           cancelRequestedAt: new Date(),
         },
