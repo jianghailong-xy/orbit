@@ -3629,9 +3629,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   // compose draft reflects the local pick.
   const shownAgentId: string | undefined = selected ? (selected.agent?.id ?? undefined) : agentId;
   // The agent can't be switched once the session exists (live or terminal), nor when the
-  // view is locked to one agent. In those cases it's read-only info, so we surface it as a
-  // static pill in the controls row (see composer-pill-static) instead of a Select; otherwise
-  // it stays a Select.
+  // view is locked to one agent. In those cases the Select is dropped from the controls row
+  // entirely — the agent is already named in the header and the sidebar.
   const agentReadOnly = !!selected || !!lockedAgentId;
   const shownAgentName =
     agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
@@ -5017,13 +5016,6 @@ export function AgentView({ runner }: { runner: Runner }) {
             </span>
           </Tooltip>
           <span className="composer-pill-spacer" />
-          {agentReadOnly && shownAgentName && (
-            <Tooltip title="Agent" open={hoverTipOpen}>
-              <span className="composer-pill composer-pill-static composer-pill-agent">
-                <span className="composer-pill-static-label">{shownAgentName}</span>
-              </span>
-            </Tooltip>
-          )}
           <Tooltip
             title={
               !shownProviderCapabilitiesResolved

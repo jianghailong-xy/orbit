@@ -3722,21 +3722,6 @@ body {
 .composer-pill:hover {
   background: var(--bg-hover);
 }
-/* Read-only agent identity, rendered as a static pill in the controls row (left of Model)
-   when the agent can't be switched. No chevron and no hover so it reads as fixed context. */
-.composer-pill-static {
-  cursor: default;
-}
-.composer-pill-static:hover {
-  background: transparent;
-}
-.composer-pill-static-label {
-  padding: 0 8px 0 2px;
-  line-height: 24px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--text-2);
-}
 /* Pushes Model + Effort to the right edge of the pill row, leaving Mode on the left. */
 .composer-pill-spacer {
   flex: 1 1 auto;
@@ -3836,11 +3821,6 @@ body {
   }
   .composer-pill-agent .ant-select {
     min-width: 0;
-  }
-  .composer-pill-static-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 /* Popover body: one gauge per subscription window (reuses .runner-util for the bar). */
