@@ -70,8 +70,11 @@ describe('naming a provider whose vendor is already connected', () => {
     expect(html).toContain('value="Anthropic (Claude)"');
   });
 
-  it('leaves an only key of its vendor as it was', () => {
+  it('still offers the name when editing the only key of its vendor', () => {
     const html = render('/providers/p1', [row({})]);
+    // Renaming is what an edit form is for — it must not depend on owning a second key.
+    expect(html).toContain('value="Anthropic (Claude)"');
+    // Nothing to tell apart, so nothing is claimed about other keys.
     expect(html).not.toContain('You already have');
   });
 });

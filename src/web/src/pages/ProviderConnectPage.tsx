@@ -151,9 +151,12 @@ function ProviderForm({
   // bundle was built with, or the form would probe the key against a model the session won't use.
   const presetDefault = catalog?.defaultModel ?? preset?.defaultModel;
 
-  // A vendor already connected once has its name asked for up front rather than left in Advanced:
-  // from the second key on, the name is the only thing telling the two apart in the model picker.
-  const named = isCustom || siblings.length > 0;
+  // Where the name lives: a step of its own, or Advanced. Connecting a vendor for the first time is
+  // a walkthrough the preset can answer by itself, so it stays out of the way there — but editing
+  // is a settings form, not a walkthrough, and renaming a provider is one of the few things it is
+  // for. From the second key of a vendor on, the name is also the only thing telling them apart in
+  // the model picker, so it leads the connect flow too.
+  const named = isCustom || !!editing || siblings.length > 0;
 
   const [advOpen, setAdvOpen] = useState(isCustom && !editing);
   const [label, setLabel] = useState(
@@ -388,7 +391,7 @@ function ProviderForm({
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />
-          {preset && (
+          {preset && siblings.length > 0 && (
             <div className="ps-hint">
               {siblings.length === 1
                 ? `You already have one ${preset.label} key`
