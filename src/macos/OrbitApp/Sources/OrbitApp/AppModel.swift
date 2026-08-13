@@ -158,6 +158,13 @@ final class AppModel {
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
     private var lastSnapshot: [Session]?
+    /// Sessions this device is filing right now (complete / trash). Filing drops the row out of Open,
+    /// which the snapshot diff would otherwise read as the run finishing and announce with a "Session
+    /// finished" banner — on top of the action's own toast, so one tap reported itself twice. Marked
+    /// BEFORE the request, since the control-plane event for the filing can bring a snapshot in while
+    /// it is still in flight; cleared once the action's own refresh has been applied. Purge needs no
+    /// entry: it only acts on trashed rows, which are not in the Open snapshot the diff reads.
+    private var locallyFiled: Set<String> = []
     /// The last badge string written to the OS (dock tile / app icon). Both writes cross a process
     /// boundary, so an unchanged snapshot skips them — `didWriteBadge` keeps the FIRST snapshot after
     /// launch/sign-in writing even when it matches the initial value, since a badge set by a silent
@@ -687,7 +694,14 @@ final class AppModel {
         // the session whose console is on screen — its own stream already shows the change.
         if notify, let prev = lastSnapshot {
             for event in SessionDelta.diff(previous: prev, current: list,
-                                           focusedSessionID: focusedConsoleSessionID) {
+                                           focusedSessionID: focusedConsoleSessionID,
+                                           filedLocally: locallyFiled) {
+                #if os(iOS)
+                // The server already pushes approvals to this device over APNs, in every app state
+                // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
+                // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
+                if case .needsApproval = event { continue }
+                #endif
                 notifications.post(Notifications.content(for: event))
             }
         }
@@ -933,7 +947,9 @@ final class AppModel {
             errorText = "This session can't be completed right now."
             return
         }
+        locallyFiled.insert(id)
         Task { @MainActor in
+            defer { locallyFiled.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
@@ -1067,7 +1083,9 @@ final class AppModel {
             return
         }
         let name = toastSessionTitle(id)
+        locallyFiled.insert(id)
         Task { @MainActor in
+            defer { locallyFiled.remove(id) }
             do { try await api.completeSession(id) }
             catch {
                 showToast("Could not complete session", sessionID: id, sessionTitle: name,
@@ -1106,7 +1124,9 @@ final class AppModel {
     func deleteSession(_ id: String) {
         guard let api else { return }
         let name = toastSessionTitle(id)
+        locallyFiled.insert(id)
         Task { @MainActor in
+            defer { locallyFiled.remove(id) }
             do { try await api.deleteSession(id) }
             catch {
                 showToast("Could not move to Trash", sessionID: id, sessionTitle: name,
