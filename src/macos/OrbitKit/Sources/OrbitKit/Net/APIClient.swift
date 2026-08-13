@@ -224,6 +224,24 @@ public final class APIClient: @unchecked Sendable {
     public func enableShare(_ id: String) async throws -> ShareInfo { try await postEmpty("sessions/\(id)/share") }
     public func disableShare(_ id: String) async throws { try await deleteRaw("sessions/\(id)/share") }
 
+    /// Turn off / put back the retry a spent quota or a transient provider error armed on this
+    /// session. Arming is automatic when one of those kills a turn; the POST exists so the card's
+    /// switch is a switch and not a one-way trapdoor, and carries the instant because the server
+    /// dropped its copy when the retry was cancelled (the caller re-derives it — see
+    /// `AutoRetryLogic.State.rearmAt`).
+    public func cancelAutoRetry(sessionID: String) async throws {
+        try await deleteRaw("sessions/\(sessionID)/auto-retry")
+    }
+    public func armAutoRetry(sessionID: String, at: Date) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/auto-retry",
+                              body: ArmAutoRetryRequest(retryAt: Self.isoOut.string(from: at)))
+    }
+    private static let isoOut: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     // MARK: approvals
 
     public func approvals(sessionID: String, status: String = "PENDING") async throws -> [ApprovalInfo] {

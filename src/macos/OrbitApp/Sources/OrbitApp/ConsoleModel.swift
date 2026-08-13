@@ -574,7 +574,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry: return true   // the agent still owes a reply
         }
     }
 
@@ -1049,6 +1049,38 @@ final class ConsoleModel {
         }
     }
 
+    // MARK: auto-retry (the quota / provider-error card)
+
+    /// When the retry armed by a spent quota or a transient provider error fires, or nil when
+    /// nothing is armed. Read off the worktree bar's `SessionDetail` snapshot — one GET /sessions/:id
+    /// already serves both, and a second poll for the same document would be the same request twice.
+    var armedRetryAt: Date? { worktree.detail?.retryAt.flatMap(RelativeTime.parse) }
+    /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
+    var retryAttempts: Int { worktree.detail?.retryAttempts ?? 0 }
+
+    /// Re-read the armed retry. Called when an auto-retry card appears: the server arms the retry as
+    /// the failing turn settles, and a session that just went terminal is exactly the one the
+    /// worktree poll stops fetching (see `WorktreeModel.startPolling`), so without this the card
+    /// would show the state from before the failure.
+    func refreshRetryState() async { await worktree.loadDetail() }
+
+    /// Turn the pending auto-retry off, or put it back at `at`. The server dropped its copy of the
+    /// instant when the retry was cancelled, so re-arming carries one the card re-derived from the
+    /// same reply the server read it off (`AutoRetryLogic.State.rearmAt`).
+    func setAutoRetry(armedAt at: Date?) async {
+        do {
+            if let at {
+                try await api.armAutoRetry(sessionID: sessionID, at: at)
+            } else {
+                try await api.cancelAutoRetry(sessionID: sessionID)
+            }
+        } catch {
+            statusMessage = "Couldn't change auto-retry — \(error)"
+        }
+        // Refetch either way: the card renders the server's answer, not the click.
+        await worktree.loadDetail()
+    }
+
     /// POST the turn, replaying it through a transient failure — the gateway answering 503 while the
     /// apiserver restarts, a mobile connection dropped mid-request. Safe to replay because the
     /// request carries a `clientTurnId` the server is idempotent on: a retry either queues the
@@ -1363,7 +1395,7 @@ final class ConsoleModel {
         let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
         catch {
-            statusMessage = "Approval failed"
+            statusMessage = "Approval failed — \(error)"
             await refreshApprovals()
         }
     }

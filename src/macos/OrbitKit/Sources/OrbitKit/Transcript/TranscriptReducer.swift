@@ -78,6 +78,14 @@ public struct TranscriptReducer: Sendable, Codable {
     /// rebuilt from replayed tool_use events and excluded from the persisted keys below, so
     /// snapshots written before it existed still decode.
     private var bgLaunch: [String: (command: String, description: String?)] = [:]
+    /// Engine stderr already given an error row, keyed on the line minus its leading timestamp (the
+    /// runtimes that log at all stamp every line, so raw text is unique per occurrence and nothing
+    /// would ever fold). A repeat bumps that row's count instead of taking a row of its own: codex
+    /// re-reports the same line on every request for the rest of a conversation whose history lost a
+    /// tool result — 217 identical red lines in one observed session (web parity: `engineStderr`).
+    /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
+    /// before it existed still decode; a rehydrated session simply starts folding afresh.
+    private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
 
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
@@ -112,7 +120,8 @@ public struct TranscriptReducer: Sendable, Codable {
         case .backgroundTask:   upsertBackground(ev)
         case .backgroundOutput: applyBackgroundOutput(ev)
         case .status, .result:  applyStatus(ev)
-        case .system, .unknown: break          // lifecycle noise — no transcript item
+        case .system:           appendEngineStderr(ev)
+        case .unknown:          break          // lifecycle noise — no transcript item
         }
     }
 
@@ -244,21 +253,37 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func finalizeAssistant(_ full: String, seq: Int, turnId: String?) {
-        // A sign-in failure arrives as an ordinary assistant reply. Raise it as a remedy card
-        // instead of prose the reader can only stare at (web parity: `isAuthErrorText` → authError).
+        // Three failures arrive as an ordinary assistant reply — an expired sign-in, a spent quota
+        // or an unreachable provider, and an outright API error — with a `success` result, so
+        // nothing upstream treats the turn as failed. Rendered verbatim they read as the agent
+        // answering "API Error: 529". Raise each as the row that says what it is instead: a remedy
+        // the user can act on, a pause that fixes itself, or a plain error line (web parity: the
+        // `assistant` case's classification ladder, in this same order — the specific readings
+        // come first, and an API error we cannot place is one a re-send would reproduce).
+        //
         // Classify the text the turn actually ends with: an `assistant` event carrying no text of
         // its own finalizes whatever streamed into the open bubble.
         var streamed = ""
         if let i = openAssistant, case .assistant(let b) = state.items[i] { streamed = b.streamingText }
         let settled = full.isEmpty ? streamed : full
         if EngineAuth.isAuthErrorText(settled) {
-            // Drop the streaming bubble that was carrying the same text — it is always the tail
-            // while open, so removing it can't disturb another open block's index.
-            if let i = openAssistant, i == state.items.count - 1, case .assistant = state.items[i] {
-                state.items.remove(at: i)
-            }
-            openAssistant = nil
+            dropOpenAssistant()
             appendAuthError(settled)
+            return
+        }
+        if EngineErrors.isUsageLimitErrorText(settled) {
+            dropOpenAssistant()
+            appendAutoRetry(settled, variant: .quota, seq: seq)
+            return
+        }
+        if EngineErrors.isRetryableApiErrorText(settled) {
+            dropOpenAssistant()
+            appendAutoRetry(settled, variant: .apiError, seq: seq)
+            return
+        }
+        if EngineErrors.isApiErrorText(settled) {
+            dropOpenAssistant()
+            state.items.append(.error(id: nextID(), message: settled))
             return
         }
         if let i = openAssistant, case .assistant(var b) = state.items[i] {
@@ -269,6 +294,15 @@ public struct TranscriptReducer: Sendable, Codable {
             state.items[i] = .assistant(b)
         } else {
             state.items.append(.assistant(AssistantBubble(id: nextID(), text: full, streamingText: "", seq: seq, turnId: turnId)))
+        }
+        openAssistant = nil
+    }
+
+    /// Drop the streaming bubble that was carrying the text just reclassified as a failure — it is
+    /// always the tail while open, so removing it can't disturb another open block's index.
+    private mutating func dropOpenAssistant() {
+        if let i = openAssistant, i == state.items.count - 1, case .assistant = state.items[i] {
+            state.items.remove(at: i)
         }
         openAssistant = nil
     }
@@ -398,6 +432,7 @@ public struct TranscriptReducer: Sendable, Codable {
 
     private mutating func appendUser(_ ev: RunEvent) {
         flushStreaming()
+        markOutageOver()          // the session went on — whatever was waiting on a retry no longer is
         let cid = str(ev, "clientTurnId")
         let body = str(ev, "text") ?? str(ev, "content") ?? ""
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
@@ -455,6 +490,64 @@ public struct TranscriptReducer: Sendable, Codable {
         // so it earns the same card instead of a bare error line (web parity).
         if EngineAuth.isAuthErrorText(msg) { appendAuthError(msg); return }
         state.items.append(.error(id: nextID(), message: msg))
+    }
+
+    /// Surface an engine's stderr as an error row. A runtime's only account of why it failed to come
+    /// up arrives there — "--dangerously-skip-permissions cannot be used with root/sudo privileges",
+    /// "No conversation found with session ID: …" — and it is reported on a `system` event, which
+    /// carries no other transcript row. Dropped, the turn reads as a silent blank: the user sends
+    /// again, the engine fails the same way, and nothing on screen ever says why (web parity:
+    /// Transcript's `system` case). Everything else on a `system` event stays lifecycle noise.
+    private mutating func appendEngineStderr(_ ev: RunEvent) {
+        guard let raw = str(ev, "stderr") else { return }
+        let line = EngineStderr.clean(raw)
+        guard !line.isEmpty, !EngineStderr.isBenign(line) else { return }
+        let key = EngineStderr.foldKey(line)
+        if let seen = stderrSeen[key], let i = state.items.firstIndex(where: { $0.id == seen.id }) {
+            let count = seen.count + 1
+            stderrSeen[key] = (id: seen.id, line: seen.line, count: count)
+            state.items[i] = .error(id: seen.id, message: "\(seen.line) ×\(count)")
+            return
+        }
+        let id = nextID()
+        stderrSeen[key] = (id: id, line: line, count: 1)
+        state.items.append(.error(id: id, message: line))
+    }
+
+    /// A failure that fixes itself, raised as a card carrying the pending retry rather than a bare
+    /// error line: nothing is being asked of the reader, and the message will go out again on its
+    /// own (web parity: `autoRetry`).
+    private mutating func appendAutoRetry(_ message: String, variant: AutoRetryNotice.Variant, seq: Int) {
+        markOutageOver()
+        // A quota is usually spent on the message that just went out, which puts that bubble
+        // directly above the card — quoting it there is the same sentence twice, and it is the
+        // tallest thing in the card. A textless bubble (image-only turn) is not what a retry would
+        // re-send, so it doesn't count as the message being above.
+        var afterUserMsg = false
+        if case .user(let b)? = state.items.last,
+           !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            afterUserMsg = true
+        }
+        state.items.append(.autoRetry(AutoRetryNotice(id: nextID(), message: message, variant: variant,
+                                                      seq: seq, afterUserMsg: afterUserMsg)))
+    }
+
+    /// The outage the newest card describes is over — decided by the next user message, whoever
+    /// sent it: the retry firing, the user retrying by hand, and the user typing something else all
+    /// land as one. Without this a session that recovered would keep the card of the outage it
+    /// recovered from and — since the armed retry is cleared once it fires — render it as "nothing
+    /// pending", i.e. as if the retry had been switched off.
+    ///
+    /// Found by scanning back rather than remembered, so a reducer rehydrated from a snapshot (which
+    /// carries the items but no cursor) still settles the card it restored.
+    private mutating func markOutageOver() {
+        for i in state.items.indices.reversed() {
+            guard case .autoRetry(var n) = state.items[i] else { continue }
+            if n.stale { return }        // the newest is already history; so is everything above it
+            n.stale = true
+            state.items[i] = .autoRetry(n)
+            return
+        }
     }
 
     /// A sign-in failure is reported once per dispatch, so a session picked up again reports the
@@ -608,5 +701,39 @@ public struct TranscriptReducer: Sendable, Codable {
                   let bytes = Data(base64Encoded: b64) else { return nil }
             return bytes
         }
+    }
+}
+
+/// Readying an engine's raw stderr line for the transcript — the native half of the web
+/// transcript's `stripAnsi` / `LEADING_TIMESTAMP` / `isBenignEngineStderr`.
+private enum EngineStderr {
+    // A pattern that fails to compile leaves the text untouched rather than dropping the line: a
+    // stderr shown with its escape codes still says why the turn failed.
+    private static let ansi = try? NSRegularExpression(pattern: "\u{1B}\\[[0-9;?]*[ -/]*[@-~]")
+    private static let leadingTimestamp = try? NSRegularExpression(pattern: "^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z?\\s*")
+
+    /// Trimmed and stripped of ANSI colour codes. The runner strips them at the source now
+    /// (runner-go/ansi.go), but every event stored before that still carries them, and the ESC byte
+    /// is invisible in a SwiftUI `Text` — what would show is literal "[31m" garbage.
+    static func clean(_ raw: String) -> String {
+        strip(ansi, from: raw).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The key two occurrences of one line fold on: the line minus its leading ISO-8601 timestamp.
+    static func foldKey(_ line: String) -> String { strip(leadingTimestamp, from: line) }
+
+    /// Does this line say nothing about the session? Claude Code prints "⚠ claude.ai connectors are
+    /// disabled because ANTHROPIC_API_KEY or another auth source is set …" on every start when an
+    /// auth token is in its environment — which is exactly how a configured provider (DeepSeek, …)
+    /// borrows the claude runtime. Its advice would break the very provider the user picked, and an
+    /// error row on every such session opened on what looked like a failed turn.
+    ///
+    /// Deliberately one known line rather than a "warnings aren't errors" rule: the reason stderr is
+    /// surfaced at all is that a runtime's only account of why it failed to come up arrives there.
+    static func isBenign(_ line: String) -> Bool { line.contains("claude.ai connectors are disabled") }
+
+    private static func strip(_ re: NSRegularExpression?, from s: String) -> String {
+        guard let re else { return s }
+        return re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
     }
 }

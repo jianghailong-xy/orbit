@@ -17,6 +17,10 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
     /// it as ordinary assistant text (or an `error` event, when the engine never got to spawn), but
     /// the fix is a human action — so the transcript offers the sign-in instead of a diagnosis.
     case authError(id: String, message: String)
+    /// A failure that fixes itself — a spent quota, or the provider briefly unable to answer. Also
+    /// plain assistant text, but neither an error to act on nor a reply: a pause, with a retry the
+    /// server has already armed.
+    case autoRetry(AutoRetryNotice)
 
     public var id: String {
         switch self {
@@ -27,7 +31,41 @@ public enum TranscriptItem: Identifiable, Equatable, Sendable, Codable {
         case .interrupt(let id, _): return id
         case .error(let id, _): return id
         case .authError(let id, _): return id
+        case .autoRetry(let n): return n.id
         }
+    }
+}
+
+/// The transcript's record of one self-healing outage. What the *card* then shows depends on the
+/// session's live retry state (see `AutoRetryLogic`), which is not transcript history and so is
+/// read from the session detail at render time.
+public struct AutoRetryNotice: Equatable, Sendable, Codable, Identifiable {
+    /// Which self-healing failure this is. They differ only in wording and in how long the server
+    /// keeps trying; everything else about the card is identical.
+    public enum Variant: String, Equatable, Sendable, Codable { case quota, apiError }
+
+    public let id: String
+    /// The runtime's own sentence, verbatim.
+    public let message: String
+    public let variant: Variant
+    public let seq: Int
+    /// This outage is over: the session went on afterwards (any user message, whoever sent it —
+    /// the retry firing, a manual retry, or the user typing something else). Only the newest card
+    /// describes a live situation; the ones above it are history and must not show a countdown or
+    /// offer to disarm a retry that belongs to a later failure.
+    public var stale: Bool
+    /// The user bubble the retry would re-send sits directly above this card, so quoting it inside
+    /// the card would be the same sentence twice.
+    public var afterUserMsg: Bool
+
+    public init(id: String, message: String, variant: Variant, seq: Int,
+                stale: Bool = false, afterUserMsg: Bool = false) {
+        self.id = id
+        self.message = message
+        self.variant = variant
+        self.seq = seq
+        self.stale = stale
+        self.afterUserMsg = afterUserMsg
     }
 }
 

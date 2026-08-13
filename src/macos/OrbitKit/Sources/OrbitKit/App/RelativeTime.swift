@@ -44,8 +44,9 @@ public enum RelativeTime {
     }()
 
     /// ISO-8601 from the runner — try with then without fractional seconds (some payloads omit it).
-    /// Internal (not private) so recency sorting (`RecentsLogic`) parses timestamps the same way.
-    static func parse(_ iso: String) -> Date? {
+    /// Shared (not private) so recency sorting (`RecentsLogic`) and the app-side models that read a
+    /// timestamp off a DTO (the auto-retry card's `retryAt`) parse them all the same way.
+    public static func parse(_ iso: String) -> Date? {
         iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
     }
 }

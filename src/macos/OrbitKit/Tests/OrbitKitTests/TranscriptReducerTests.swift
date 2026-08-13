@@ -893,6 +893,145 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(card?.resultTruncated, false)
         XCTAssertEqual(card?.resultSeq, 4)
     }
+
+    /// An engine that dies on startup says why only on stderr, carried by a `system` event. Dropping
+    /// it left the turn a silent blank — the user re-sends, it fails identically, and nothing on
+    /// screen ever says why (observed: seven "继续编辑" bubbles against seven swallowed
+    /// "--dangerously-skip-permissions cannot be used with root/sudo privileges" lines).
+    func testEngineStderrBecomesAnErrorRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("继续编辑")])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("--dangerously-skip-permissions cannot be used with root/sudo privileges\n")])))
+        XCTAssertEqual(r.state.items.count, 2)
+        guard case .error(_, let message)? = r.state.items.last else {
+            return XCTFail("expected an error row, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(message, "--dangerously-skip-permissions cannot be used with root/sudo privileges")
+    }
+
+    /// A `system` event with no stderr is lifecycle noise and still earns no row.
+    func testSystemEventWithoutStderrStaysSilent() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object(["subtype": .string("thinking_tokens")])))
+        XCTAssertTrue(r.state.items.isEmpty)
+    }
+
+    /// Colour codes are stripped: events stored before the runner started stripping at the source
+    /// still carry them, and the ESC byte would show as literal "[31m" garbage.
+    func testEngineStderrIsStrippedOfAnsi() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("\u{1B}[31mError: Session ID abc is already in use.\u{1B}[0m\n")])))
+        guard case .error(_, let message)? = r.state.items.last else { return XCTFail("expected an error row") }
+        XCTAssertEqual(message, "Error: Session ID abc is already in use.")
+    }
+
+    /// The one line that says nothing about the session: Claude Code warns about connectors on every
+    /// start when an auth token is in its environment — which is how every configured provider
+    /// (DeepSeek, …) borrows the claude runtime, so each of those sessions would open on a red row.
+    func testBenignConnectorWarningIsNotAnError() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set")])))
+        XCTAssertTrue(r.state.items.isEmpty)
+    }
+
+    /// A repeat folds into the first row as a count — an engine re-reporting one line per request
+    /// would otherwise fill the transcript with identical rows. Folded on the line minus its leading
+    /// timestamp, since the runtimes that log at all stamp every line.
+    func testRepeatedEngineStderrFoldsIntoOneRow() {
+        var r = TranscriptReducer()
+        for (i, ts) in ["2026-08-12T17:24:09.394Z", "2026-08-12T17:24:12.214Z", "2026-08-12T17:24:15.774Z"].enumerated() {
+            r.apply(RunEvent(seq: i + 1, type: .system,
+                             payload: .object(["stderr": .string("\(ts) custom tool call output is missing")])))
+        }
+        XCTAssertEqual(r.state.items.count, 1, "three occurrences of one line take one row")
+        guard case .error(_, let message)? = r.state.items.first else { return XCTFail("expected an error row") }
+        XCTAssertEqual(message, "2026-08-12T17:24:09.394Z custom tool call output is missing ×3")
+    }
+
+    /// An API error arrives as an ordinary assistant reply with a `success` result, so a transcript
+    /// that trusts the event type renders the agent apparently answering "API Error: 400". One we
+    /// cannot place stays a plain error line — a re-send would reproduce it.
+    func testApiErrorReplyBecomesAnErrorRowNotABubble() {
+        var r = TranscriptReducer()
+        let text = "API Error: 400 {\"type\":\"invalid_request_error\",\"message\":\"prompt is too long\"}"
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string(text)])))
+        XCTAssertEqual(r.state.items.count, 1)
+        guard case .error(_, let message)? = r.state.items.first else {
+            return XCTFail("expected an error row, got \(String(describing: r.state.items.first))")
+        }
+        XCTAssertEqual(message, text)
+    }
+
+    /// The text that streamed in as a reply must not survive alongside the row that reclassifies it,
+    /// or the failure shows twice — once as prose, once as the error.
+    func testStreamedApiErrorLeavesNoAssistantBubbleBehind() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("API Error: 529 ")])))
+        r.apply(RunEvent(seq: 0, type: .textDelta, payload: .object(["delta": .string("Overloaded")])))
+        // The durable `assistant` event carries no text of its own — it finalizes what streamed.
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object(["text": .string("")])))
+        XCTAssertEqual(r.state.items.count, 1)
+        guard case .autoRetry(let n)? = r.state.items.first else {
+            return XCTFail("expected an auto-retry card, got \(String(describing: r.state.items.first))")
+        }
+        XCTAssertEqual(n.variant, .apiError)
+        XCTAssertEqual(n.message, "API Error: 529 Overloaded")
+    }
+
+    /// A spent quota and an overloaded provider both fix themselves — they earn the card carrying
+    /// the pending retry, not a bare error line the reader can only stare at.
+    func testSelfHealingFailuresBecomeAutoRetryCards() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("keep going")])))
+        r.apply(RunEvent(seq: 2, type: .assistant, payload: .object([
+            "text": .string("You've hit your session limit · resets 6:20pm (Europe/Berlin)")])))
+        guard case .autoRetry(let n)? = r.state.items.last else { return XCTFail("expected a quota card") }
+        XCTAssertEqual(n.variant, .quota)
+        XCTAssertFalse(n.stale)
+        XCTAssertTrue(n.afterUserMsg, "the message it would re-send is the line directly above")
+    }
+
+    /// The next user message — the retry firing, a manual retry, or the user typing something else —
+    /// settles the outage. Without this the card of a failure the session recovered from would keep
+    /// its countdown, and (the armed retry being cleared once it fires) read as "switched off".
+    func testNextUserMessageSettlesTheLiveCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object([
+            "text": .string("API Error: 529 Overloaded")])))
+        r.apply(RunEvent(seq: 2, type: .user, payload: .object(["text": .string("keep going")])))
+        guard case .autoRetry(let n)? = r.state.items.first else { return XCTFail("expected a card") }
+        XCTAssertTrue(n.stale, "the session went on — this outage is over")
+    }
+
+    /// Only the newest card describes a live situation. A second outage stales the first, so two
+    /// countdowns for one armed retry can never be on screen at once.
+    func testASecondOutageStalesTheFirstCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object([
+            "text": .string("API Error: 529 Overloaded")])))
+        r.apply(RunEvent(seq: 2, type: .user, payload: .object(["text": .string("again")])))
+        r.apply(RunEvent(seq: 3, type: .assistant, payload: .object([
+            "text": .string("API Error: 503 Service Unavailable")])))
+        let cards = r.state.items.compactMap { item -> AutoRetryNotice? in
+            if case .autoRetry(let n) = item { return n }
+            return nil
+        }
+        XCTAssertEqual(cards.count, 2)
+        XCTAssertTrue(cards[0].stale)
+        XCTAssertFalse(cards[1].stale, "the newest card is the live one")
+    }
+
+    /// A reply that merely quotes a limit is an ordinary reply — rendering it as the provider
+    /// refusing to answer would replace it with a card saying the opposite of what it says.
+    func testAReplyAboutAQuotaStaysAReply() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .assistant, payload: .object([
+            "text": .string("I checked: the run died because the account had hit your usage limit.")])))
+        XCTAssertNotNil(r.state.items.first?.asAssistant, "expected a normal assistant bubble")
+    }
 }
 
 // Test-only convenience accessors (kept out of the library surface).

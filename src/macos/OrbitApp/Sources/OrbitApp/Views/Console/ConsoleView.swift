@@ -850,6 +850,15 @@ struct TranscriptItemView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange).textSelection(.enabled)
             }
+        case .autoRetry(let notice):
+            if let console {
+                AutoRetryCardView(console: console, notice: notice)
+            } else {
+                // Same as above: with no session to read the armed retry off, or to retry through,
+                // what's left is the runtime's own sentence.
+                Label(notice.message, systemImage: "clock.fill")
+                    .foregroundStyle(.secondary).textSelection(.enabled)
+            }
         }
     }
 }

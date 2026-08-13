@@ -409,6 +409,14 @@ public struct RenameSessionRequest: Codable, Sendable {
     public init(title: String) { self.title = title }
 }
 
+/// POST /sessions/:id/auto-retry — put back a retry the user switched off. The instant comes from
+/// the caller because cancelling cleared the only copy the server had; it must be in the future and
+/// within the server's arm-ahead cap.
+public struct ArmAutoRetryRequest: Codable, Sendable {
+    public let retryAt: String
+    public init(retryAt: String) { self.retryAt = retryAt }
+}
+
 /// POST /sessions/:id/turns — send a user message or raw shell command.
 public struct SessionTurnRequest: Codable, Sendable {
     public let clientTurnId: String   // client UUID, idempotency key
@@ -630,6 +638,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// returns it (Prisma `include`, no `select`), so the Share sheet reads it to seed its
     /// create-vs-revoke state. The shared page lives at `<baseURL>/s/<shareToken>`.
     public let shareToken: String?
+    /// When the retry armed by a spent quota / transient provider error fires (ISO-8601), or nil
+    /// when nothing is armed. Drives the auto-retry card's countdown — see `AutoRetryLogic`.
+    public let retryAt: String?
+    /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
+    public let retryAttempts: Int?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -667,6 +680,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         commitError = try values.decodeIfPresent(String.self, forKey: .commitError)
         agent = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .agent)
         shareToken = try values.decodeIfPresent(String.self, forKey: .shareToken)
+        retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
+        retryAttempts = try values.decodeIfPresent(Int.self, forKey: .retryAttempts)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -678,7 +693,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
-                agent: SessionDetailAgent? = nil, shareToken: String? = nil) {
+                agent: SessionDetailAgent? = nil, shareToken: String? = nil,
+                retryAt: String? = nil, retryAttempts: Int? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -700,6 +716,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.commitError = commitError
         self.agent = agent
         self.shareToken = shareToken
+        self.retryAt = retryAt
+        self.retryAttempts = retryAttempts
     }
 }
 
