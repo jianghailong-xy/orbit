@@ -32,7 +32,7 @@ function harness(row: Record<string, unknown>) {
   return {
     api: new RunnerApiController(
       prisma as never,
-      {} as never,
+      { notifySessionQueued: () => {} } as never,
       {} as never,
       {} as never,
       {} as never,

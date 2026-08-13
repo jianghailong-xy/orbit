@@ -162,6 +162,7 @@ for (const tc of [
       mergeOperationId: OPERATION_ID,
       mergeOperationOwner: OPERATION_OWNER,
     },
+    opFields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
   },
   {
     name: 'commit',
@@ -171,26 +172,31 @@ for (const tc of [
       commitOperationId: OPERATION_ID,
       commitOperationOwner: OPERATION_OWNER,
     },
+    opFields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
   },
 ] as const) {
-  test(`live resume cannot clear a ${tc.name} epoch claimed after its fast snapshot`, async () => {
+  test(`live resume queues behind — and cannot clear — a ${tc.name} epoch claimed after its fast snapshot`, async () => {
     const h = makeService(tc.fast, tc.locked);
 
-    await assert.rejects(
-      () =>
-        h.service.resume(OWNER_ID, SESSION_ID, {
-          clientTurnId: 'client-2',
-          content: 'resolve this in the session',
-        }),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === 'wait for the pending worktree operation to finish',
-    );
+    // The fast read showed a settled receipt, so "Resolve in session" was offered; under the
+    // row lock createTurn sees a freshly-claimed operation instead. It must neither erase that
+    // epoch nor reject the message — the turn enqueues PENDING behind the running operation.
+    const result = await h.service.resume(OWNER_ID, SESSION_ID, {
+      clientTurnId: 'client-2',
+      content: 'resolve this in the session',
+    });
 
+    assert.deepEqual(result, { turnId: 'turn-2', seq: 2 });
     assert.equal(h.lockCalls.length, 1);
     assert.deepEqual(h.outerUpdates, []);
-    assert.deepEqual(h.lockedUpdates, []);
-    assert.equal(h.turnCreates(), 0);
-    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+    assert.equal(h.turnCreates(), 1);
+    assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
+    // Queued for a slot, and the claimed epoch is left untouched so it still completes.
+    assert.equal(h.lockedUpdates.length, 1);
+    const data = (h.lockedUpdates[0] as { data: Record<string, unknown> }).data;
+    assert.equal(data.status, RunStatus.PENDING);
+    for (const field of tc.opFields) {
+      assert.equal(data[field], undefined, `${field} must not be cleared`);
+    }
   });
 }

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { SessionsService } from './sessions.service';
 
@@ -125,6 +124,7 @@ for (const tc of [
       mergeOperationId: '66666666-6666-4666-8666-666666666666',
       mergeOperationOwner: '55555555-5555-4555-8555-555555555555',
     },
+    opFields: ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner'],
   },
   {
     name: 'commit',
@@ -133,27 +133,32 @@ for (const tc of [
       commitOperationId: '66666666-6666-4666-8666-666666666666',
       commitOperationOwner: '55555555-5555-4555-8555-555555555555',
     },
+    opFields: ['commitStatus', 'commitOperationId', 'commitOperationOwner'],
   },
 ] as const) {
-  test(`a new turn cannot overlap a runner-claimed ${tc.name}`, async () => {
+  test(`a new turn queues behind a runner-claimed ${tc.name} instead of being rejected`, async () => {
     const h = makeService(RunStatus.AWAITING_INPUT, {
       sessionOverrides: tc.sessionOverrides,
     });
 
-    await assert.rejects(
-      () =>
-        h.service.createTurn(h.session.ownerId, h.session.id, {
-          clientTurnId: 'client-1',
-          content: 'follow up',
-        }),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === 'wait for the pending worktree operation to finish',
-    );
+    const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+    });
 
-    assert.deepEqual(h.statusWrites, []);
-    assert.equal(h.attachmentValidations(), 0);
-    assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
+    // Accepted and parked for a slot — the claim fence holds it until the op settles.
+    assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2 });
+    assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
+    assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
+    // The executing operation is left pending (not superseded), so it still completes.
+    assert.equal(h.updateWrites.length, 1);
+    for (const field of tc.opFields) {
+      assert.equal(
+        h.updateWrites[0]?.data[field],
+        undefined,
+        `${field} must not be cleared while the operation is still executing`,
+      );
+    }
   });
 }
 

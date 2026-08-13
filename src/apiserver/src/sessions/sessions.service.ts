@@ -2209,25 +2209,25 @@ export class SessionsService {
         };
       }
       // Heartbeat delivery is the server-side linearization point for manual git
-      // mutations. A modern UUID-bearing unclaimed request may be superseded by
-      // this turn. Claimed attempts and ambiguous legacy NULL/NULL attempts must
-      // finish (or be operationally reconciled) so Git cannot overlap the turn.
-      if (
-        pendingWorktreeOperationMayBeExecuting(
-          session.mergeStatus,
-          session.mergeOperationId,
-          session.mergeOperationOwner,
-          session.mergeRequestedAt,
-        ) ||
-        pendingWorktreeOperationMayBeExecuting(
-          session.commitStatus,
-          session.commitOperationId,
-          session.commitOperationOwner,
-          session.commitRequestedAt,
-        )
-      ) {
-        throw new ConflictException('wait for the pending worktree operation to finish');
-      }
+      // mutations. A modern UUID-bearing unclaimed request (or a stale/orphaned one)
+      // may be superseded by this turn — the merge/commit clears below drop it. A
+      // claimed operation is instead still mutating the checkout, so the turn cannot
+      // overtake it: it enqueues as PENDING and the claim fence (trySessionClaim)
+      // keeps it out of a runner slot until the merge/commit result flips the status
+      // off 'pending', at which point the worktree is free and the turn runs. This is
+      // what lets a user send while "Merging…"/"Committing…" instead of being bounced.
+      const mergeExecuting = pendingWorktreeOperationMayBeExecuting(
+        session.mergeStatus,
+        session.mergeOperationId,
+        session.mergeOperationOwner,
+        session.mergeRequestedAt,
+      );
+      const commitExecuting = pendingWorktreeOperationMayBeExecuting(
+        session.commitStatus,
+        session.commitOperationId,
+        session.commitOperationOwner,
+        session.commitRequestedAt,
+      );
       // Check attachments only after the idempotency lookup: on a retry of a successful
       // request they are already linked to this same turn and must not make the retry fail.
       // For a genuinely new request validation still precedes the turn insert.
@@ -2253,7 +2253,7 @@ export class SessionsService {
           // their back would be a second, unasked-for turn) or from the sweeper itself
           // (the retry has now fired). Both routes into a new turn pass through here.
           retryAt: null,
-          ...(session.mergeStatus === 'pending'
+          ...(session.mergeStatus === 'pending' && !mergeExecuting
             ? {
                 mergeStatus: null,
                 mergeOperationId: null,
@@ -2261,7 +2261,7 @@ export class SessionsService {
                 mergeError: null,
               }
             : {}),
-          ...(session.commitStatus === 'pending'
+          ...(session.commitStatus === 'pending' && !commitExecuting
             ? {
                 commitStatus: null,
                 commitOperationId: null,

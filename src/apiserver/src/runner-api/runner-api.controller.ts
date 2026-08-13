@@ -2605,6 +2605,11 @@ export class RunnerApiController {
         },
       });
     });
+    // The checkout is free again. A message the user sent while this merge executed is
+    // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
+    // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
+    // still pending and a successor process re-runs it.
+    if (!released) this.queue.notifySessionQueued();
     return { ok: true };
   }
 
@@ -2700,6 +2705,9 @@ export class RunnerApiController {
         },
       });
     });
+    // Mirror mergeResult: release a message queued behind this commit now that the
+    // checkout is free, rather than waiting for the queue's periodic poll.
+    if (!released) this.queue.notifySessionQueued();
     return { ok: true };
   }
 

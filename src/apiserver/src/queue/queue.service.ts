@@ -8,6 +8,7 @@ import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
+import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 
 /**
@@ -131,6 +132,27 @@ export class QueueService {
                 WHERE ba."batch_id" = s."batch_id"
                   AND ba."status" = 'RUNNING'
               ) < s."batch_max_concurrent"
+            )
+            -- A message may be queued behind a merge/commit still executing on this
+            -- session's checkout (createTurn enqueues it PENDING rather than rejecting).
+            -- Don't hand it a slot until that git operation settles off 'pending', or the
+            -- turn would run concurrently with the mutation. Mirrors, in SQL, the staleness
+            -- bound of pendingWorktreeOperationMayBeExecuting: a dead owner past the margin
+            -- stops fencing so a crashed operation can't wedge the turn forever (a live
+            -- runner also fails it via failAbandonedWorktreeOperations).
+            AND NOT (
+              s."merge_status" = 'pending'
+              AND (
+                s."merge_requested_at" IS NULL
+                OR s."merge_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
+              )
+            )
+            AND NOT (
+              s."commit_status" = 'pending'
+              AND (
+                s."commit_requested_at" IS NULL
+                OR s."commit_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
+              )
             )
           ORDER BY s."created_at" ASC
           FOR UPDATE NOWAIT
