@@ -189,7 +189,11 @@ export class AgentsService {
       where: {
         id: agent.runnerId,
         ownerId,
-        NOT: { repoCleanupStatus: 'pending' },
+        // Null-safe on purpose. `NOT (status = 'pending')` evaluates to NULL — not true — for a
+        // runner that has never been asked, which is every runner's initial state, so the plain
+        // NOT matched no rows and the very first repair on a machine silently did nothing while
+        // this endpoint still answered 200 and the UI sat on "Cleaning up…" forever.
+        OR: [{ repoCleanupStatus: null }, { repoCleanupStatus: { not: 'pending' } }],
       },
       data: {
         repoCleanupStatus: 'pending',
