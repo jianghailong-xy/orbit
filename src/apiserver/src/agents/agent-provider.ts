@@ -30,9 +30,16 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
 /**
  * The last interactive session's provider for each of `agentIds` (absent = never ran one).
  *
- * Task-launched runs are excluded on purpose: a task that pins a provider (Task.provider) is
- * stating what *that* job needs, and letting it move the project's default would make one pinned
- * job silently re-point the human's next session — the same coupling this replaced.
+ * Only sessions a *person* started count. Two kinds are excluded, for the same reason:
+ *
+ *  • Task-launched runs — a task that pins a provider (Task.provider) is stating what *that* job
+ *    needs, and letting it move the project's default would make one pinned job silently re-point
+ *    the human's next session.
+ *  • Agent-spawned children (`parent_session_id`) — a session opened through MCP `session_create`
+ *    picks its provider for the job it was spawned to do (a throwaway "run this on OpenCode to
+ *    reproduce the startup path" test is the common case). Counting those let one scripted probe
+ *    re-point the project default, which is what put OpenCode in front of a human who had never
+ *    chosen it.
  *
  * Written as a LATERAL per id rather than the obvious `DISTINCT ON (agent_id) … ORDER BY
  * created_at DESC`: Postgres has no skip scan, so that form reads *every* session belonging to
@@ -55,7 +62,7 @@ export async function lastProviderByAgent(
     CROSS JOIN LATERAL (
       SELECT provider, provider_builtin
       FROM "session"
-      WHERE agent_id = a.id AND task_id IS NULL
+      WHERE agent_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
       ORDER BY created_at DESC
       LIMIT 1
     ) s

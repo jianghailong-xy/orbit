@@ -39,6 +39,15 @@ test('task-launched runs are excluded, so a pinned job cannot re-point the proje
   assert.match(seen.sql ?? '', /task_id IS NULL/);
 });
 
+test('agent-spawned children are excluded, so a scripted probe cannot re-point the project', async () => {
+  // An MCP `session_create` child picks its provider for the job it was spawned to do — e.g. a
+  // throwaway "reproduce this on OpenCode" run. Counting it put OpenCode in front of a human who
+  // had never chosen it, which is the same coupling `task_id IS NULL` already guards against.
+  const { prisma, seen } = prismaStub();
+  await lastProviderByAgent(prisma, ['a1']);
+  assert.match(seen.sql ?? '', /parent_session_id IS NULL/);
+});
+
 test('duplicate and empty ids collapse, and an empty list never hits the database', async () => {
   const { prisma, seen } = prismaStub();
   await lastProviderByAgent(prisma, ['a1', 'a1', null, undefined]);
