@@ -474,43 +474,48 @@ struct NewSessionView: View {
     var body: some View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
-                VStack(spacing: 10) {
-                    // The mark is the provider's, so it re-colours when the provider row below is
-                    // switched — "who is running this" reads from the colour before the text.
-                    AgentAvatar(provider: draft.provider, size: 64,
-                                brandKey: currentProviderChoice.brandKey)
-                        .padding(.bottom, 6)
-                    // The agent identity is the hero — a cold launch lands here, so the screen answers
-                    // "which agent am I about to task?" at a glance. Tapping opens the switcher.
-                    Button { showSwitcher = true } label: {
-                        HStack(spacing: 6) {
-                            Text(agent.name).font(.title2.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
-                            Image(systemName: "chevron.down").font(.footnote.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                VStack(spacing: 18) {
+                    // Identity cluster — avatar, agent name, provider — reads as one unit: the mark's
+                    // colour, the agent it's under, and who runs it, top to bottom.
+                    VStack(spacing: 12) {
+                        // The mark is the provider's, so it re-colours when the provider row below is
+                        // switched — "who is running this" reads from the colour before the text.
+                        AgentAvatar(provider: draft.provider, size: 64,
+                                    brandKey: currentProviderChoice.brandKey)
+                        // The agent identity is the hero — a cold launch lands here, so the screen
+                        // answers "which agent am I about to task?" at a glance. A bare bold title
+                        // (not a boxed pill) so it reads as the hero it is; the chevron carries the
+                        // tap-to-switch affordance, matching the web new-session hero.
+                        Button { showSwitcher = true } label: {
+                            HStack(spacing: 6) {
+                                Text(agent.name).font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                                Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .contentShape(Rectangle())
                         }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.05),
-                                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    // Agent answers "where it runs"; this answers "who runs it". Separate controls
-                    // because they're separate decisions — and the agent name must stay tappable.
-                    Button { showProviderPicker = true } label: {
-                        HStack(spacing: 5) {
-                            Text(currentProviderChoice.label)
-                                .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
-                            Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                        // Agent answers "where it runs"; this answers "who runs it". Separate control
+                        // because they're separate decisions — and the agent name must stay tappable.
+                        Button { showProviderPicker = true } label: {
+                            HStack(spacing: 5) {
+                                Text(currentProviderChoice.label)
+                                    .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
+                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 11).padding(.vertical, 5)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                            .contentShape(Rectangle())
                         }
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Color.primary.opacity(0.05),
-                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    Text(heroSubtitle).font(.orbitListSubtitle).foregroundStyle(.secondary)
-                    Text("Send a task to get started.").font(.subheadline).foregroundStyle(.tertiary)
+                    // Helper: the call to action, then the one config detail the composer footer
+                    // doesn't already carry (who's paying) — muted so it stays reference, not noise.
+                    VStack(spacing: 4) {
+                        Text("Send a task to get started.").font(.callout).foregroundStyle(.secondary)
+                        Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
@@ -604,19 +609,17 @@ struct NewSessionView: View {
                                        catalog: draft.modelCatalog)
     }
 
-    /// "New session · <model> · <effort> · <who pays>" — surfaces the config the draft will start
-    /// with (mirrors the composer footer) so the model/effort are visible up front, not just the
-    /// agent name. The funding source rides here too: it's the one thing that separates an engine
-    /// from a configured provider, and it belongs next to the model it applies to.
+    /// "<model> · <who pays>" — the config not already visible below. The composer footer owns the
+    /// model, effort and permission mode, so this no longer restates effort or prefixes a redundant
+    /// "New session"; it keeps the full model name (the footer truncates it) beside the funding
+    /// source — the one thing that separates an engine from a configured provider.
     private var heroSubtitle: String {
         let model = draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
-        var parts = ["New session", model]
-        if draft.effort != .default { parts.append(draft.effort.label) }
-        parts.append(currentProviderChoice.kind == .engine ? "runner login" : "your API key")
-        return parts.joined(separator: " · ")
+        let funding = currentProviderChoice.kind == .engine ? "runner login" : "your API key"
+        return "\(model) · \(funding)"
     }
 }
 
