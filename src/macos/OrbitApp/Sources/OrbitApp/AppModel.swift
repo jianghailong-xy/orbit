@@ -551,9 +551,14 @@ final class AppModel {
     ///   • the session left Open — the row has to disappear, which membership alone decides;
     ///   • the row isn't loaded — a session created elsewhere can't be built from the slim summary
     ///     (no preview line, tags, runner or background count), and prepending a half-populated row
-    ///     would render worse than the ~½s wait for the real snapshot.
+    ///     would render worse than the ~½s wait for the real snapshot;
+    ///   • the run just reached a terminal status — whether that is an outcome or a failure the
+    ///     server is about to retry is decided by `retryAt`, which the summary doesn't carry, so
+    ///     folding the status in alone would announce a failure that undoes itself a minute later.
+    ///     Once per session ended, against a per-turn event: the refetch costs nothing here.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         if let lifecycle = summary.effectiveLifecycleState, lifecycle != .open { return false }
+        if summary.effectiveRunStatus.isTerminal { return false }
         guard let index = sessions.firstIndex(where: { $0.id == summary.id }) else { return false }
         let merged = sessions[index].applying(summary)
         guard merged != sessions[index] else { return true }   // nothing user-visible changed

@@ -230,6 +230,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// (idle / task-done / user-ended — shown as dormant) apart from a hard cancel/orphan.
     public let error: String?
     public let endReason: String?
+    /// When the server will re-send the message a self-healing failure killed — a spent quota, a
+    /// 529, a runner that vanished mid-turn — or nil when nothing is armed. What makes a FAILED
+    /// row not yet an outcome: the run continues on its own when this fires, so `isSettled` (and
+    /// therefore whether the failure is worth a notification) reads it. Absent from older servers,
+    /// where every failure stays immediately final. See `AutoRetryService`.
+    public let retryAt: String?
     /// The owning agent, nested by the list/detail payloads (the flat `agentId` is NOT sent
     /// there, so per-agent grouping reads `agent.id`).
     public let agent: SessionAgentRef?
@@ -297,6 +303,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         engineTurnActive = try values.decodeIfPresent(Bool.self, forKey: .engineTurnActive)
         error = try values.decodeIfPresent(String.self, forKey: .error)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
     }
@@ -315,7 +322,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
-                tags: [SessionTag]? = nil) {
+                tags: [SessionTag]? = nil, retryAt: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -343,6 +350,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.engineTurnActive = engineTurnActive
         self.error = error
         self.endReason = endReason
+        self.retryAt = retryAt
         self.agent = agent
         self.pinnedAt = pinnedAt
         self.createdAt = createdAt

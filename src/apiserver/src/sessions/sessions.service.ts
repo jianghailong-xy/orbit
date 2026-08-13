@@ -1282,6 +1282,7 @@ export class SessionsService {
       taskTitle: string | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
+      retryAt: Date | null;
       queuedReason: string | null;
       queuedActive: number | null;
       queuedLimit: number | null;
@@ -1298,6 +1299,11 @@ export class SessionsService {
         s.end_reason      AS "endReason",
         s.cancel_requested_at AS "cancelRequestedAt",
         s.runtime_session_id AS "runtimeSessionId",
+        -- When the auto-retry will re-send the message that a self-healing failure killed, or
+        -- NULL when nothing is armed. On the list because a FAILED row with a retry pending is
+        -- not an outcome yet: the clients read this to keep from announcing a failure the
+        -- server is about to undo (see AutoRetryService, and SessionDelta on the native side).
+        s.retry_at        AS "retryAt",
         COALESCE(s.completed_at, s.archived_at) AS "completedAt",
         COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
         s.deleted_at      AS "deletedAt",
@@ -1401,6 +1407,7 @@ export class SessionsService {
         endReason: r.endReason,
         cancelRequestedAt: r.cancelRequestedAt,
         runtimeSessionId: r.runtimeSessionId,
+        retryAt: r.retryAt,
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,

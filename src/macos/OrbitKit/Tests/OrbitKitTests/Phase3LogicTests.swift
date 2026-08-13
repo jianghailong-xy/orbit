@@ -3,9 +3,11 @@ import XCTest
 
 final class Phase3LogicTests: XCTestCase {
 
-    private func session(_ id: String, _ status: RunStatus, approvals: Int = 0, title: String? = nil) -> Session {
+    private func session(_ id: String, _ status: RunStatus, approvals: Int = 0, title: String? = nil,
+                         retryAt: String? = nil) -> Session {
         Session(id: id, title: title ?? id, status: status, agentId: nil, assignedRunnerId: nil,
-                pendingApprovals: approvals, branch: nil, updatedAt: nil, agent: nil)
+                pendingApprovals: approvals, branch: nil, updatedAt: nil, agent: nil,
+                retryAt: retryAt)
     }
 
     // MARK: deep links
@@ -78,6 +80,22 @@ final class Phase3LogicTests: XCTestCase {
         let cur = [session("a", .failed)]
         XCTAssertEqual(SessionDelta.diff(previous: prev, current: cur),
                        [.finished(sessionID: "a", title: "a", status: .failed)])
+    }
+
+    func testFailureWithRetryArmedIsNotAnOutcome() {
+        let armed = session("a", .failed, retryAt: "2026-08-13T10:05:00Z")
+        // The quota reset / provider recovery re-sends the same message on its own, so the run
+        // isn't over — and the failure is not the user's news yet.
+        XCTAssertTrue(SessionDelta.diff(previous: [session("a", .running)], current: [armed]).isEmpty)
+        // Nor is the retry firing and the session going live again.
+        XCTAssertTrue(SessionDelta.diff(previous: [armed], current: [session("a", .running)]).isEmpty)
+        // Giving up moves no status — the row stays FAILED and only the armed retry clears. That
+        // is the transition the user has to hear about, and it was the one nothing announced.
+        XCTAssertEqual(SessionDelta.diff(previous: [armed], current: [session("a", .failed)]),
+                       [.finished(sessionID: "a", title: "a", status: .failed)])
+        // Settled on both sides: nothing new to say.
+        XCTAssertTrue(SessionDelta.diff(previous: [session("a", .failed)],
+                                        current: [session("a", .failed)]).isEmpty)
     }
 
     // MARK: notification content + intent
