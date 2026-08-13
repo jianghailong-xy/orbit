@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { PROVIDER_PRESETS } from '@orbit/shared';
-import { presetDefaultModel, withPreset } from './preset-overlay';
+import { followsRuntimeCatalog, presetDefaultModel, withPreset } from './preset-overlay';
 
 const anthropic = PROVIDER_PRESETS.find((p) => p.slug === 'anthropic')!;
 
@@ -59,6 +59,15 @@ test('preset-overlay', async (t) => {
     });
     assert.deepEqual(row.models, stored);
     assert.equal(row.defaultModel, 'retired-1');
+  });
+
+  await t.test('followsRuntimeCatalog: only a vendor on the runtime CLI’s own endpoint', () => {
+    assert.equal(followsRuntimeCatalog({ presetSlug: 'anthropic', followsPreset: true, defaultModel: null }), true);
+    // Took the list over → its stored models are the space, whatever the vendor is.
+    assert.equal(followsRuntimeCatalog({ presetSlug: 'anthropic', followsPreset: false, defaultModel: null }), false);
+    // A third-party Anthropic-compatible vendor keeps a maintained list.
+    assert.equal(followsRuntimeCatalog({ presetSlug: 'deepseek', followsPreset: true, defaultModel: null }), false);
+    assert.equal(followsRuntimeCatalog({ defaultModel: 'mine' }), false);
   });
 
   await t.test('presetDefaultModel: what dispatch resolves with', () => {

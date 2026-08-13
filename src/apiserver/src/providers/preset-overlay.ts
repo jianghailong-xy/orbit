@@ -55,6 +55,17 @@ export function withPreset<T extends PresetBackedRow>(row: T): T {
 }
 
 /**
+ * Whether this row's model space is the runtime CLI's own — the vendor IS that CLI's endpoint
+ * (Anthropic for `claude`, OpenAI for `codex`), so the runner's live probe describes it and the
+ * preset's `models`/`defaultModel` are only the fallback for a runner that hasn't reported one.
+ * The pickers already resolve these rows off the runner's catalogue (web `modelOptionsForProvider`,
+ * Swift `AgentDefaults.models(for:catalog:configured:)`); this is what lets dispatch agree.
+ */
+export function followsRuntimeCatalog(row: PresetBackedRow): boolean {
+  return governing(row)?.modelsFromRuntime === true;
+}
+
+/**
  * Whether this row's model space contains `model` — what a provider switch on a live session asks
  * before deciding whether the session keeps the model it is running or restarts on the new
  * provider's default.

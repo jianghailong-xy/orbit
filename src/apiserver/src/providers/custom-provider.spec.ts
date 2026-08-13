@@ -243,6 +243,55 @@ test('custom-provider', async (t) => {
     assert.equal(picked.model, 'claude-haiku-4-5-20251001');
   });
 
+  await t.test("a vendor on the runtime CLI's own endpoint follows the runner's live catalogue", () => {
+    // The preset's list is a fallback for these rows, not a catalogue — so a model-less session
+    // must dispatch (and materialize) the newest model the installed CLI reports, exactly as the
+    // pickers already show it. Otherwise a BYOK Anthropic provider keeps starting on the shipped
+    // fallback long after its successor landed.
+    const anthropic = () =>
+      row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-8' });
+    const catalogue = { claude: [{ value: 'claude-opus-6', label: 'Opus 6' }] };
+    const fromCatalogue = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: anthropic(),
+      sessionModel: null,
+      modelCatalog: catalogue,
+    });
+    assert.equal(fromCatalogue.model, 'claude-opus-6');
+    // The runtime's own reported default outranks the catalogue, as in the pickers.
+    const fromRuntime = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: anthropic(),
+      sessionModel: null,
+      runtimeDefaultModels: { claude: 'claude-sonnet-5' },
+      modelCatalog: catalogue,
+    });
+    assert.equal(fromRuntime.model, 'claude-sonnet-5');
+    // An explicit session pick still wins over both.
+    const picked = resolveProviderExec({
+      declaredProvider: 'anthropic',
+      customRow: anthropic(),
+      sessionModel: 'claude-haiku-4-5-20251001',
+      runtimeDefaultModels: { claude: 'claude-sonnet-5' },
+      modelCatalog: catalogue,
+    });
+    assert.equal(picked.model, 'claude-haiku-4-5-20251001');
+  });
+
+  await t.test('a third-party vendor keeps its own default despite the runner catalogue', () => {
+    // The runner probes its own Claude CLI, which says nothing about what DeepSeek serves: reading
+    // that catalogue here would dispatch a claude model id at an endpoint that has never heard of
+    // it. Only the vendors whose endpoint IS that CLI's follow it.
+    const exec = resolveProviderExec({
+      declaredProvider: 'deepseek',
+      customRow: row({ presetSlug: 'deepseek', followsPreset: true, defaultModel: null }),
+      sessionModel: null,
+      runtimeDefaultModels: { claude: 'claude-opus-6' },
+      modelCatalog: { claude: [{ value: 'claude-opus-6', label: 'Opus 6' }] },
+    });
+    assert.equal(exec.model, providerPreset('deepseek')!.defaultModel);
+  });
+
   await t.test('custom provider preserves a legacy Agent pin until claim materializes it', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',

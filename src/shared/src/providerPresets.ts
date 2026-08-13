@@ -86,12 +86,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: 'Anthropic (Claude)',
     runtime: 'claude',
     baseUrl: 'https://api.anthropic.com',
+    // Fallback only (modelsFromRuntime below): the runner's probe of the installed CLI leads.
+    // It still has to name the current generation — this is what a runner with no catalogue yet
+    // dispatches with, and DEFAULT_MODEL_BY_PROVIDER already puts the built-in engine on Opus 5.
     models: [
-      { value: 'claude-opus-4-8', label: 'Claude Opus 4.8', contextWindow: 200_000 },
+      { value: 'claude-opus-5', label: 'Claude Opus 5', contextWindow: 200_000 },
       { value: 'claude-sonnet-5', label: 'Claude Sonnet 5', contextWindow: 200_000 },
       { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200_000 },
     ],
-    defaultModel: 'claude-opus-4-8',
+    defaultModel: 'claude-opus-5',
     modelsFromRuntime: true,
     brand: { mono: 'A', from: '#d97757', to: '#c15f3c' },
     keyUrl: 'https://console.anthropic.com/settings/keys',

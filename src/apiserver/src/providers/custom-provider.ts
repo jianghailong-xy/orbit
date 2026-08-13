@@ -1,6 +1,6 @@
 import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
-import { presetDefaultModel } from './preset-overlay';
+import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import { firstRuntimeCatalogModel, savedRuntimeDefaultModel } from '../common/runtime-model';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
@@ -109,8 +109,9 @@ export function resolveProviderExec(args: {
    * written by an old API replica during the 0079 rolling deployment. Defaults to true for
    * non-persisted/direct callers. */
   usesRuntimeDefaultModel?: boolean;
-  /** Effective default reported by built-in runtimes on the assigned runner. Ignored for a custom
-   * provider, whose ModelProvider row remains authoritative. */
+  /** Effective default reported by built-in runtimes on the assigned runner. A custom provider's
+   * ModelProvider row remains authoritative — except for a vendor that IS the runtime CLI's own
+   * endpoint, whose model space this describes (see runtimeCatalogDefault). */
   runtimeDefaultModels?: unknown;
   /**
    * Legacy per-Agent pin. New clients never write this field, but a model-less Session created
@@ -119,7 +120,8 @@ export function resolveProviderExec(args: {
    */
   agentModel?: string | null;
   /** Runtime-reported catalog on the assigned runner; its first model is the final dynamic
-   * fallback before the shared static default. Ignored for configured providers. */
+   * fallback before the shared static default. Ignored for configured providers, except those on
+   * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
   agentEnv?: Record<string, string> | null;
 }): { provider: AgentProvider; model: string; env?: Record<string, string> } {
@@ -132,6 +134,7 @@ export function resolveProviderExec(args: {
     // by old replicas; current clients put their choice directly on Session.model.
     const model =
       firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
+      runtimeCatalogDefault(customRow, runtime, args) ||
       presetDefaultModel(customRow) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
     return {
@@ -167,6 +170,31 @@ export function resolveProviderExec(args: {
     model: modelForProvider(provider, explicitSessionModel ?? inheritedModel),
     env,
   };
+}
+
+/**
+ * The default for a provider whose vendor IS the runtime CLI's own endpoint: what that CLI reports
+ * on the assigned runner, so a model-less session runs the newest model it offers the day it ships.
+ *
+ * The preset's `models`/`defaultModel` are a shipped fallback for those vendors, not a catalogue —
+ * without this, dispatch materializes that fallback onto the session and a BYOK Anthropic provider
+ * keeps starting on last generation's Opus while every picker already offers the new one. Precedence
+ * mirrors the clients exactly (web `defaultModelForProvider`, Swift `effectiveDefaultModel`):
+ * runtime-reported default, then the first row of its catalogue.
+ *
+ * Undefined for everyone else — the runner probes its own CLI, which says nothing about what a
+ * third-party vendor (DeepSeek, Moonshot, GLM…) serves.
+ */
+function runtimeCatalogDefault(
+  row: ModelProviderRow,
+  runtime: AgentProvider,
+  args: { runtimeDefaultModels?: unknown; modelCatalog?: unknown },
+): string | undefined {
+  if (!followsRuntimeCatalog(row)) return undefined;
+  return firstNonBlank(
+    savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
+    firstRuntimeCatalogModel(args.modelCatalog, runtime),
+  );
 }
 
 function firstNonBlank(...values: Array<string | null | undefined>): string | undefined {
