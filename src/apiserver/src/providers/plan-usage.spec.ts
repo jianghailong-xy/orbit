@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { parseSubscriptionUsage, probesSubscriptionUsage } from './plan-usage';
+import { parseSubscriptionUsage, probesSubscriptionUsage, usageErrorMessage } from './plan-usage';
 
 const OAT = 'sk-ant-oat01-abcdef';
 
@@ -67,4 +67,14 @@ test('a payload carrying no window we understand reads as no quota, not an empty
   assert.equal(parseSubscriptionUsage({ something_else: 1 }, 'now'), null);
   assert.equal(parseSubscriptionUsage(null, 'now'), null);
   assert.equal(parseSubscriptionUsage('nope', 'now'), null);
+});
+
+test("a refusal is reported in the endpoint's own words", () => {
+  assert.equal(
+    usageErrorMessage('{"type":"error","error":{"type":"permission_error","message":"OAuth token does not meet scope requirement user:profile"}}'),
+    'OAuth token does not meet scope requirement user:profile',
+  );
+  // A body we can't read leaves the status to speak for itself rather than inventing a reason.
+  assert.equal(usageErrorMessage('<html>429</html>'), '');
+  assert.equal(usageErrorMessage(''), '');
 });

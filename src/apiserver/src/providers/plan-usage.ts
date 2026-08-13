@@ -37,6 +37,12 @@ export interface UsageProbeRow {
  * Whether this row's credential can answer the subscription usage endpoint: an Anthropic-dialect
  * runtime, pointed at Anthropic itself, holding a subscription token. Anything else is skipped
  * silently — there is no quota to show, not a failure to report.
+ *
+ * A provider configured with an API key is never asked. The endpoint reports the windows of a
+ * *subscription*; an API key is metered per token and has no 5-hour or weekly window to report, so
+ * the request could only ever be refused. The credential itself is the test — `sk-ant-api…` is a
+ * key, `sk-ant-oat…` is a subscription token — because a ModelProvider row holds one field for
+ * both (the connect form asks for "your API key", which is what all but one vendor issues).
  */
 export function probesSubscriptionUsage(row: UsageProbeRow, apiKey: string): boolean {
   if (row.runtime === AgentProvider.CODEX || row.runtime === AgentProvider.KIMI) return false;
@@ -46,6 +52,25 @@ export function probesSubscriptionUsage(row: UsageProbeRow, apiKey: string): boo
   } catch {
     return false;
   }
+}
+
+/**
+ * The message the endpoint sent with a refusal, for the log line that reports it.
+ *
+ * `HTTP 403` alone sends whoever reads it looking for the wrong thing — this endpoint's usual
+ * refusal is a *scope* problem ("OAuth token does not meet scope requirement user:profile"), and
+ * its 429 reads as rate limiting when it is nothing of the sort. Mirrors what the connect form's
+ * probe already does with a vendor's error body (ProvidersService.testConnection).
+ */
+export function usageErrorMessage(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } | string; message?: string };
+    const message = (typeof parsed.error === 'object' ? parsed.error?.message : parsed.error) ?? parsed.message;
+    if (typeof message === 'string' && message.trim()) return message.trim().slice(0, 200);
+  } catch {
+    /* non-JSON body → status alone */
+  }
+  return '';
 }
 
 interface RawWindow {

@@ -6,17 +6,29 @@ import {
   OAUTH_USAGE_URL,
   parseSubscriptionUsage,
   probesSubscriptionUsage,
+  usageErrorMessage,
 } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
 
 /** How long a good snapshot is served before the next read refreshes it. Matches the cadence a
  *  runner polls its own login at, which is what the same gauge shows for a built-in engine. */
 const FRESH_MS = 2 * 60 * 1000;
-/** A failing credential is retried far more slowly: the usual causes (a token minted without the
- *  `user:profile` scope, a revoked key) do not fix themselves, and each attempt is a request to
- *  Anthropic on the user's behalf. */
+/** A credential that failed for a reason outside itself (the endpoint was unreachable, or answered
+ *  with a server error) is retried, just far more slowly. */
 const RETRY_MS = 10 * 60 * 1000;
+/** A credential the endpoint *refused* is never asked again. 401/403 is a property of the
+ *  credential — the wrong kind of token, or one minted without the `user:profile` scope — so no
+ *  number of retries can change the answer, and each one is a request to Anthropic on the user's
+ *  behalf. Saving a new key re-enables it: the cache is keyed by the stored ciphertext. */
+const NEVER = Number.POSITIVE_INFINITY;
 const FETCH_TIMEOUT_MS = 8000;
+
+/** Why a fetch did not produce a snapshot, and whether asking again could ever help. */
+interface UsageFailure {
+  message: string;
+  /** True when the endpoint refused the credential itself. */
+  refused: boolean;
+}
 
 interface Entry {
   usage: PlanUsageSnapshot | null;
@@ -46,7 +58,8 @@ export interface UsageProviderRow {
  *
  * Everything here is best-effort: a provider that cannot answer (not Anthropic, a metered API key,
  * a token without the profile scope) simply has no quota to show, which is what the clients
- * rendered before any of this existed.
+ * rendered before any of this existed. A provider configured with an API key is never asked at all
+ * — see probesSubscriptionUsage — and one the endpoint refuses is asked exactly once.
  */
 @Injectable()
 export class ProviderPlanUsageService {
@@ -70,6 +83,10 @@ export class ProviderPlanUsageService {
   refresh(row: UsageProviderRow): Promise<void> {
     const existing = this.inFlight.get(row.id);
     if (existing) return existing;
+    const cached = this.cache.get(row.id);
+    // Refused with this exact credential: asking again would send the same token to the same
+    // endpoint for the same answer.
+    if (cached?.keyEnc === row.apiKeyEnc && cached.refreshAt === NEVER) return Promise.resolve();
     // Never rejects: callers fire this behind a response and would otherwise leave an unhandled
     // rejection behind.
     const run = this.fetchInto(row)
@@ -91,15 +108,20 @@ export class ProviderPlanUsageService {
     if (!probesSubscriptionUsage(row, apiKey)) return;
     const previous = this.cache.get(row.id);
     const result = await this.fetchUsage(apiKey);
-    if (typeof result === 'string') {
+    if (result && 'message' in result) {
       // Keep the last good numbers through a blip, exactly as the runner probe does; only the
-      // retry clock moves.
-      if (previous?.failure !== result) this.log.warn(`provider ${row.id} usage unavailable: ${result}`);
+      // retry clock moves — or stops, when the credential itself was refused.
+      if (previous?.failure !== result.message) {
+        this.log.warn(
+          `provider ${row.id} usage unavailable: ${result.message}` +
+            (result.refused ? ' — not asking again with this key' : ''),
+        );
+      }
       this.cache.set(row.id, {
         usage: previous?.usage ?? null,
         keyEnc: row.apiKeyEnc,
-        refreshAt: Date.now() + RETRY_MS,
-        failure: result,
+        refreshAt: result.refused ? NEVER : Date.now() + RETRY_MS,
+        failure: result.message,
       });
       return;
     }
@@ -115,8 +137,8 @@ export class ProviderPlanUsageService {
     if (JSON.stringify(previous?.usage ?? null) !== JSON.stringify(result)) this.publish(row);
   }
 
-  /** The snapshot, or a short reason string when the endpoint could not be read. */
-  private async fetchUsage(apiKey: string): Promise<PlanUsageSnapshot | null | string> {
+  /** The snapshot, or why there isn't one. */
+  private async fetchUsage(apiKey: string): Promise<PlanUsageSnapshot | null | UsageFailure> {
     let resp: Response;
     try {
       resp = await fetch(OAUTH_USAGE_URL, {
@@ -129,18 +151,22 @@ export class ProviderPlanUsageService {
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
     } catch (e) {
-      return (e as Error).name === 'TimeoutError' ? 'timed out' : 'could not reach the endpoint';
+      const timedOut = (e as Error).name === 'TimeoutError';
+      return { message: timedOut ? 'timed out' : 'could not reach the endpoint', refused: false };
     }
     if (!resp.ok) {
-      // 403 here is the common one and it is not a broken key: a token minted by
-      // `claude setup-token` carries inference scope only, while the usage endpoint wants
-      // `user:profile` — which the browser login flow grants.
-      return `HTTP ${resp.status}`;
+      // Carry the endpoint's own words: the usual refusal here is a scope problem, and reading
+      // `HTTP 403` alone sends you looking for a broken key instead.
+      const detail = usageErrorMessage(await resp.text().catch(() => ''));
+      return {
+        message: `HTTP ${resp.status}${detail ? ` — ${detail}` : ''}`,
+        refused: resp.status === 401 || resp.status === 403,
+      };
     }
     try {
       return parseSubscriptionUsage(await resp.json(), new Date().toISOString());
     } catch {
-      return 'unreadable response';
+      return { message: 'unreadable response', refused: false };
     }
   }
 
