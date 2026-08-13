@@ -475,47 +475,54 @@ struct NewSessionView: View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
-                    // Identity cluster — avatar, agent name, provider — reads as one unit: the mark's
-                    // colour, the agent it's under, and who runs it, top to bottom.
-                    VStack(spacing: 12) {
-                        // The mark is the provider's, so it re-colours when the provider row below is
-                        // switched — "who is running this" reads from the colour before the text.
-                        AgentAvatar(provider: draft.provider, size: 64,
-                                    brandKey: currentProviderChoice.brandKey)
-                        // The agent identity is the hero — a cold launch lands here, so the screen
-                        // answers "which agent am I about to task?" at a glance. A bare bold title
-                        // (not a boxed pill) so it reads as the hero it is; the chevron carries the
-                        // tap-to-switch affordance, matching the web new-session hero.
-                        Button { showSwitcher = true } label: {
-                            HStack(spacing: 6) {
-                                Text(agent.name).font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                    // Who runs this session is the hero — the native port of web's
+                    // `NewSessionProviderHero`: the vendor's own mark, then its name as the one
+                    // tappable identity. Which *agent* is being tasked rides in the navigation bar
+                    // instead (see `agentSwitcher`): it's a different decision, made less often, and
+                    // stacking both as centre-stage controls is what made this screen read cluttered.
+                    VStack(spacing: 14) {
+                        ProviderMark(provider: draft.provider, size: 68,
+                                     brandKey: currentProviderChoice.brandKey,
+                                     label: currentProviderChoice.label)
+                        Button { showProviderPicker = true } label: {
+                            HStack(spacing: 7) {
+                                Text(currentProviderChoice.label)
+                                    .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        // Agent answers "where it runs"; this answers "who runs it". Separate control
-                        // because they're separate decisions — and the agent name must stay tappable.
-                        Button { showProviderPicker = true } label: {
-                            HStack(spacing: 5) {
-                                Text(currentProviderChoice.label)
-                                    .font(.subheadline.weight(.semibold)).foregroundStyle(.primary).lineLimit(1)
-                                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                        .accessibilityLabel("Provider: \(currentProviderChoice.label). Switch")
+                    }
+                    VStack(spacing: 5) {
+                        // The pick is sticky, so it can point at an engine this machine can no
+                        // longer run — and the session would only fail minutes later, at the runner.
+                        // Say so here, and make the line the route to the fix (web parity).
+                        if let blocker = currentProviderChoice.unavailable {
+                            Button {
+                                if let rid = agent.runnerId { app.route(to: .runner(rid)) }
+                            } label: {
+                                Text("\(blocker) on this runner · Fix it")
+                                    .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
+                                    .multilineTextAlignment(.center)
                             }
-                            .padding(.horizontal, 11).padding(.vertical, 5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            .disabled(agent.runnerId == nil)
+                        } else {
+                            Text("Send a task to get started.")
+                                .font(.callout).foregroundStyle(.secondary)
+                            Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
                         }
-                        .buttonStyle(.plain)
                     }
-                    // Helper: the call to action, then the one config detail the composer footer
-                    // doesn't already carry (who's paying) — muted so it stays reference, not noise.
-                    VStack(spacing: 4) {
-                        Text("Send a task to get started.").font(.callout).foregroundStyle(.secondary)
-                        Text(heroSubtitle).font(.footnote).foregroundStyle(.tertiary).lineLimit(1)
-                    }
+                    #if os(macOS)
+                    // macOS renders this inline in the Agents detail pane, which has no navigation
+                    // bar to host the agent switcher, so it stays in the layout — demoted to a quiet
+                    // pill under the hero rather than competing with it.
+                    agentSwitcher
+                        .padding(.top, 2)
+                    #endif
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
@@ -555,6 +562,15 @@ struct NewSessionView: View {
             }
             ComposerView(console: draft, autoFocus: true)
         }
+        #if os(iOS)
+        // The agent is *where* the session runs — a standing context, not a per-session choice, so
+        // it belongs in the navigation bar's title slot rather than centre stage. Replacing the
+        // plain title with this button keeps the same information in the same place while making it
+        // the switcher (the hero below now belongs to the provider).
+        .toolbar {
+            ToolbarItem(placement: .principal) { agentSwitcher }
+        }
+        #endif
         .task { await draft.prepareDraft() }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
@@ -595,6 +611,25 @@ struct NewSessionView: View {
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
         }
+    }
+
+    /// "Which agent am I about to task", as a compact switcher. Sits in the navigation bar on iOS
+    /// (title slot) and under the hero on macOS, which has no bar here — one definition so the two
+    /// don't drift. The mark is the agent's own provider, which is usually the one on the hero but
+    /// won't be once a draft switches provider without saving it as the agent's default.
+    private var agentSwitcher: some View {
+        Button { showSwitcher = true } label: {
+            HStack(spacing: 6) {
+                ProviderMark(provider: agent.defaultProvider, size: 19)
+                Text(agent.name)
+                    .font(.headline).foregroundStyle(.primary).lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Agent: \(agent.name). Switch")
     }
 
     /// Engines first, then this account's configured providers. Built from the draft's own
