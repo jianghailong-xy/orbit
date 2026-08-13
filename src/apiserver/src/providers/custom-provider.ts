@@ -1,7 +1,16 @@
-import { AgentProvider, DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from '@orbit/shared';
+import {
+  AgentProvider,
+  DEFAULT_MODEL_BY_PROVIDER,
+  isRetiredModel,
+  modelForProvider,
+} from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
-import { firstRuntimeCatalogModel, savedRuntimeDefaultModel } from '../common/runtime-model';
+import {
+  firstRuntimeCatalogModel,
+  runtimeCatalogModels,
+  savedRuntimeDefaultModel,
+} from '../common/runtime-model';
 
 // Built-in, first-class providers ship their own runtime CLI. Any other `provider` value is
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
@@ -124,16 +133,26 @@ export function resolveProviderExec(args: {
    * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
   agentEnv?: Record<string, string> | null;
-}): { provider: AgentProvider; model: string; env?: Record<string, string> } {
+}): {
+  provider: AgentProvider;
+  model: string;
+  env?: Record<string, string>;
+  /** The session's own model was dropped because the Runtime no longer offers it. The claim path
+   *  re-materializes on this, so the row stops naming a model the session isn't running. */
+  retiredPin?: boolean;
+} {
   const { customRow, sessionModel, agentModel, agentEnv } = args;
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = execRuntime(args);
+    const pin = firstNonBlank(sessionModel);
+    const retired = retiredPin(customRow, runtime, args, pin);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
     // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
     const model =
-      firstNonBlank(sessionModel, legacyInheritance ? agentModel : undefined) ||
+      (retired ? undefined : pin) ||
+      firstNonBlank(legacyInheritance ? agentModel : undefined) ||
       runtimeCatalogDefault(customRow, runtime, args) ||
       presetDefaultModel(customRow) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
@@ -144,6 +163,7 @@ export function resolveProviderExec(args: {
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
       env: { ...(agentEnv ?? {}), ...injectedEnv(customRow, model) },
+      ...(retired ? { retiredPin: true } : {}),
     };
   }
   // Built-in (or stale/disabled custom slug → treat as claude). The runtime authenticates itself:
@@ -151,7 +171,9 @@ export function resolveProviderExec(args: {
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
   const env = agentEnv ?? undefined;
-  const explicitSessionModel = firstNonBlank(sessionModel);
+  const pin = firstNonBlank(sessionModel);
+  const retired = retiredPin(null, provider, args, pin);
+  const explicitSessionModel = retired ? undefined : pin;
   // An explicit per-session selection retains the historical safety behavior: a clearly
   // cross-provider id is coerced straight to the static provider default. During a rolling
   // deployment, old replicas can still create a model-less Session that expects Agent.model;
@@ -169,6 +191,7 @@ export function resolveProviderExec(args: {
     provider,
     model: modelForProvider(provider, explicitSessionModel ?? inheritedModel),
     env,
+    ...(retired ? { retiredPin: true } : {}),
   };
 }
 
@@ -194,6 +217,37 @@ function runtimeCatalogDefault(
   return firstNonBlank(
     savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
     firstRuntimeCatalogModel(args.modelCatalog, runtime),
+  );
+}
+
+/**
+ * Whether the Runtime has retired the session's own model — if so it is dropped, and the session
+ * falls through to the provider's current default exactly as a model-less one would.
+ *
+ * A pin only survives because the model still exists. When it stops being offered, honouring it
+ * keeps the session a generation behind forever, and the pickers (which draw the same catalogue)
+ * would have to render a dead id nobody can select back. The claim path re-materializes what
+ * dispatch resolved, so the row stops carrying the retired value too.
+ *
+ * Judged only against a runtime CLI's own catalogue — a built-in runtime, or a vendor whose
+ * endpoint IS that CLI's. A configured third-party keeps its pin: its list is a document we mirror
+ * (models.dev) or one the user maintains, and neither retires an id reliably enough to overrule a
+ * deliberate choice. OpenCode is out too: it owns model selection, and the ids it reports are a
+ * slice of a multi-provider space rather than the whole of it.
+ */
+function retiredPin(
+  row: ModelProviderRow | null,
+  runtime: AgentProvider,
+  args: { runtimeDefaultModels?: unknown; modelCatalog?: unknown },
+  model: string | undefined,
+): boolean {
+  if (!model) return false;
+  if (runtime === AgentProvider.OPENCODE) return false;
+  if (row && !followsRuntimeCatalog(row)) return false;
+  return isRetiredModel(
+    model,
+    runtimeCatalogModels(args.modelCatalog, runtime),
+    savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
   );
 }
 

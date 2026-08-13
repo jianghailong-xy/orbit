@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  isRetiredModel,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
@@ -242,15 +243,58 @@ export const defaultModelForProvider = (
   );
 };
 
+/**
+ * A stored model the provider still offers, or undefined once the runtime has retired it — the
+ * picker then falls through to the provider's current default instead of rendering a dead id
+ * nobody can select back. Mirrors the server's `livePin` (apiserver providers/custom-provider.ts)
+ * so what the pill shows is what dispatch runs, including which pins are left alone: OpenCode owns
+ * its own selection, a configured third-party's list is a document rather than a live probe, and
+ * an id the Runtime itself reports (`opus`, `opusplan`, a gateway id) is current by definition.
+ */
+export const livePinnedModel = (
+  model: string | null | undefined,
+  provider?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
+  runtimeDefaultModels?: RuntimeDefaultModels,
+): string | null | undefined => {
+  if (!model) return model;
+  const custom = configuredProvider(provider, configured);
+  if (!custom && provider === AgentProvider.OPENCODE) return model;
+  if (custom && !custom.modelsFromRuntime) return model;
+  const runtime = custom
+    ? custom.runtime === AgentProvider.CODEX
+      ? AgentProvider.CODEX
+      : AgentProvider.CLAUDE
+    : runtimeForProvider(provider, configured);
+  return isRetiredModel(
+    model,
+    catalogOptionsForProvider(runtime, modelCatalog),
+    runtimeDefaultModels?.[runtime],
+  )
+    ? undefined
+    : model;
+};
+
 /** Match the server's session dispatch precedence without treating OpenCode's empty sentinel as
- * missing: a session override wins, then its owning agent, then the provider-managed default. */
+ * missing: a session override wins, then its owning agent, then the provider-managed default.
+ * A retired pin on either drops out, exactly as it does at dispatch. */
 export const effectiveSessionModel = (
   provider: string,
   sessionModel?: string | null,
   agentModel?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
-): string => sessionModel ?? agentModel ?? defaultModelForProvider(provider, modelCatalog, configured);
+  runtimeDefaultModels?: RuntimeDefaultModels,
+): string => {
+  const live = (model?: string | null) =>
+    livePinnedModel(model, provider, modelCatalog, configured, runtimeDefaultModels);
+  return (
+    live(sessionModel) ??
+    live(agentModel) ??
+    defaultModelForProvider(provider, modelCatalog, configured, runtimeDefaultModels)
+  );
+};
 
 /** Match the server's session dispatch precedence for reasoning effort. Empty is explicit. */
 export const effectiveSessionEffort = (

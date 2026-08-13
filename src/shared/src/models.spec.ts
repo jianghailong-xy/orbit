@@ -1,6 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider } from './enums';
-import { DEFAULT_MODEL_BY_PROVIDER, modelForProvider } from './models';
+import { DEFAULT_MODEL_BY_PROVIDER, isRetiredModel, modelForProvider } from './models';
+
+describe('isRetiredModel', () => {
+  const catalogue = [{ value: 'claude-opus-5' }, { value: 'claude-sonnet-5' }];
+
+  it('retires an id the provider no longer offers', () => {
+    expect(isRetiredModel('claude-opus-4-8', catalogue)).toBe(true);
+    expect(isRetiredModel('claude-opus-5', catalogue)).toBe(false);
+    // Whitespace is not a difference — the same normalization the resolvers apply.
+    expect(isRetiredModel('  claude-sonnet-5 ', catalogue)).toBe(false);
+  });
+
+  it('never retires against an unknown or empty catalogue', () => {
+    // A runner that has not reported one yet says nothing about what the provider offers;
+    // reading silence as "offers nothing" would blank every pin the moment one goes offline.
+    expect(isRetiredModel('claude-opus-4-8', undefined)).toBe(false);
+    expect(isRetiredModel('claude-opus-4-8', null)).toBe(false);
+    expect(isRetiredModel('claude-opus-4-8', [])).toBe(false);
+  });
+
+  it('keeps a blank model — OpenCode picking for itself is a choice, not a stale id', () => {
+    expect(isRetiredModel('', catalogue)).toBe(false);
+    expect(isRetiredModel(null, catalogue)).toBe(false);
+    expect(isRetiredModel(undefined, catalogue)).toBe(false);
+  });
+
+  it('keeps what the Runtime itself reports, catalogued or not', () => {
+    // claude's settings.json names aliases (`opus`, `opusplan`, `best`) and gateway ids that the
+    // quick-pick catalogue never lists. The runtime vouching for it is what makes it current.
+    expect(isRetiredModel('opus', catalogue, 'opus')).toBe(false);
+    expect(isRetiredModel('claude-opus-5[1m]', catalogue, 'claude-opus-5[1m]')).toBe(false);
+    // …but only the one it actually reports.
+    expect(isRetiredModel('opusplan', catalogue, 'opus')).toBe(true);
+  });
+});
 
 describe('modelForProvider', () => {
   it('keeps a matching override for each provider', () => {

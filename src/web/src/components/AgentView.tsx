@@ -77,6 +77,7 @@ import {
   effectiveSessionEffort,
   effectiveSessionModel,
   effortOptionsForProvider,
+  livePinnedModel,
   modelOptionsForProvider,
   normalizeEffortForProvider,
   providerIdentityResolved,
@@ -1670,6 +1671,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     detailForSelected?.agent?.model ?? selected?.agent?.model ?? selectedAgentFromList?.model,
     runner.modelCatalog,
     configuredProviders,
+    runner.runtimeDefaultModels,
   );
   const effectiveSelectedEffort = effectiveSessionEffort(
     selected?.effort,
@@ -1678,10 +1680,24 @@ export function AgentView({ runner }: { runner: Runner }) {
 
   // Same fallback chain as the permission mode above: a session that never stored a model of its
   // own runs the owning agent's model, so the picker must show that — not the provider default.
+  // A pin the runtime has retired drops out of the chain (livePinnedModel), so a session left on
+  // last generation's model seeds the current default instead of an id that is no longer offered.
   const selectedModelDefault = selected
-    ? selected.model ??
-      detailForSelected?.agent?.model ??
-      agentsForRunner.find((a) => a.id === selected.agent?.id)?.model ??
+    ? livePinnedModel(
+        selected.model,
+        shownProvider,
+        runner.modelCatalog,
+        configuredProviders,
+        runner.runtimeDefaultModels,
+      ) ??
+      livePinnedModel(
+        detailForSelected?.agent?.model ??
+          agentsForRunner.find((a) => a.id === selected.agent?.id)?.model,
+        shownProvider,
+        runner.modelCatalog,
+        configuredProviders,
+        runner.runtimeDefaultModels,
+      ) ??
       defaultModelForProvider(
         shownProvider,
         runner.modelCatalog,
@@ -1854,8 +1870,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     // belongs to the provider being switched away from — is what the effort must be legal for.
     const selectedModel = draftProvider
       ? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders)
-      : (pickedAgent?.model ??
-        defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
+      : (livePinnedModel(
+          pickedAgent?.model,
+          provider,
+          runner.modelCatalog,
+          configuredProviders,
+          runner.runtimeDefaultModels,
+        ) ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
     setEffort(normalizeEffortForProvider(provider, candidate, selectedModel, runner.modelCatalog));
   }, [
     selectedId,
@@ -3545,16 +3566,14 @@ export function AgentView({ runner }: { runner: Runner }) {
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
   const selectedAgent = agentsForRunner.find((a) => a.id === selected?.agent?.id);
-  const effectiveModel =
-    selected?.model ??
-    detailForSelected?.agent?.model ??
-    selectedAgent?.model ??
-    defaultModelForProvider(
-      shownProvider,
-      runner.modelCatalog,
-      configuredProviders,
-      runner.runtimeDefaultModels,
-    );
+  const effectiveModel = effectiveSessionModel(
+    shownProvider,
+    selected?.model,
+    detailForSelected?.agent?.model ?? selectedAgent?.model,
+    runner.modelCatalog,
+    configuredProviders,
+    runner.runtimeDefaultModels,
+  );
   const effectiveEffort =
     selected?.effort ?? detailForSelected?.agent?.effort ?? selectedAgent?.effort ?? '';
   const shownModel: string = live ? effectiveModel : model;

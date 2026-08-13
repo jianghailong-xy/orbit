@@ -97,7 +97,8 @@ test('first claim uses the runner runtime default and materializes it on the ses
   const claimed = await build(queue);
   assert.equal(claimed.agent.model, 'gpt-runtime-default');
   assert.deepEqual(modelWrites, ['gpt-runtime-default']);
-  assert.match(materializeQueries[0], /"model" IS NULL OR btrim\("model"\) = ''/);
+  // Compare-and-set against the exact value resolution ran on, so a concurrent PATCH wins.
+  assert.match(materializeQueries[0], /"model" IS NOT DISTINCT FROM /);
 });
 
 test('a whitespace-only session model is also materialized on first claim', async () => {
@@ -109,10 +110,20 @@ test('a whitespace-only session model is also materialized on first claim', asyn
 });
 
 test('an explicit session model wins and is not rewritten during claim', async () => {
-  const { queue, modelWrites } = harness('gpt-session');
+  const { queue, modelWrites } = harness('gpt-catalog');
   const claimed = await build(queue);
-  assert.equal(claimed.agent.model, 'gpt-session');
+  assert.equal(claimed.agent.model, 'gpt-catalog');
   assert.deepEqual(modelWrites, []);
+});
+
+test('a session model the runtime retired is re-materialized to what it now runs', async () => {
+  // The row still names last generation's model; the runner no longer offers it. Dispatch moves
+  // to the current default AND rewrites the row, so the pickers stop showing a dead id.
+  const { queue, modelWrites, materializeQueries } = harness('gpt-retired');
+  const claimed = await build(queue);
+  assert.equal(claimed.agent.model, 'gpt-runtime-default');
+  assert.deepEqual(modelWrites, ['gpt-runtime-default']);
+  assert.match(materializeQueries[0], /"model" IS NOT DISTINCT FROM /);
 });
 
 test('a legacy Agent model is bridged once and materialized for rolling compatibility', async () => {
@@ -126,11 +137,13 @@ test('a legacy Agent model is bridged once and materialized for rolling compatib
 });
 
 test('a concurrent Session model PATCH wins a failed materialization CAS', async () => {
+  // The winner is a catalogued model: an id the runner does not offer would retire on re-resolve
+  // like any other, which is a different test.
   const { queue, modelWrites, winnerReads } = harness(null, {
-    casWinnerModel: 'gpt-user-choice',
+    casWinnerModel: 'gpt-catalog',
   });
   const claimed = await build(queue);
-  assert.equal(claimed.agent.model, 'gpt-user-choice');
+  assert.equal(claimed.agent.model, 'gpt-catalog');
   assert.deepEqual(modelWrites, ['gpt-runtime-default']);
   assert.equal(winnerReads(), 1);
 });

@@ -288,17 +288,20 @@ export class QueueService {
         agentEnv: agent?.env as Record<string, string> | null,
       });
     let exec = resolveExec(session.model);
-    // Snapshot an inherited default on the session at its first claim. Later Runtime heartbeat
-    // changes must not silently switch an already-established conversation on reclaim/resume.
-    if (session.model === null || session.model.trim() === '') {
-      // A user may PATCH an explicit session model after this snapshot was read. Match every form
-      // the resolver treats as unset, but keep the predicate in the UPDATE so materialization is a
-      // compare-and-set instead of overwriting that concurrent choice.
+    // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
+    // has since retired. Later Runtime heartbeat changes must not silently switch an
+    // already-established conversation on reclaim/resume — only a model that is no longer offered
+    // at all moves, and then the row must stop naming it or the pickers would keep showing a dead
+    // id the session isn't running.
+    if (session.model === null || session.model.trim() === '' || exec.retiredPin) {
+      // A user may PATCH an explicit session model after this snapshot was read. Compare against
+      // the exact value that resolution ran on, so materialization is a compare-and-set instead of
+      // overwriting that concurrent choice.
       const materialized = await this.prisma.$executeRaw`
         UPDATE "session"
         SET "model" = ${exec.model}
         WHERE "id" = ${session.id}::uuid
-          AND ("model" IS NULL OR btrim("model") = '')
+          AND "model" IS NOT DISTINCT FROM ${session.model}
       `;
       if (materialized === 0) {
         // A concurrent Session config PATCH won the CAS. Dispatch must use that explicit choice,

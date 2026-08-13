@@ -13,6 +13,36 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   [AgentProvider.OPENCODE]: '',
 };
 
+/**
+ * Whether a stored model id has been retired — the provider still runs, but no longer offers this
+ * model, so keeping it pinned means a session quietly stays a generation behind forever. A retired
+ * id yields to the provider's current default everywhere: the pickers show that default rather than
+ * a dead id nobody can act on, and dispatch runs it, so the two can never disagree.
+ *
+ * `offered` is the same list the picker draws (the runner's live catalogue for a built-in runtime
+ * or a vendor on its own endpoint; a configured third-party's own models otherwise) — callers pass
+ * the list for the model's own space, never another provider's.
+ *
+ * Three deliberate escapes, each protecting an id that is legitimately absent from that list:
+ *  - a blank model — OpenCode's "you pick" sentinel is a choice, not a stale value;
+ *  - an unknown/empty list — a runner that hasn't reported a catalogue yet can't retire anything,
+ *    and treating silence as "offers nothing" would wipe every pin the moment one goes offline;
+ *  - the Runtime's own reported default — `claude`'s settings.json may name an alias (`opus`,
+ *    `opusplan`, `best`) or a gateway id that the quick-pick catalogue never lists. The runtime
+ *    vouching for it is exactly what makes it current.
+ */
+export function isRetiredModel(
+  model: string | null | undefined,
+  offered: ReadonlyArray<{ value?: unknown }> | null | undefined,
+  runtimeDefault?: string | null,
+): boolean {
+  const id = model?.trim();
+  if (!id) return false;
+  if (!offered || offered.length === 0) return false;
+  if (id === runtimeDefault?.trim()) return false;
+  return !offered.some((row) => row && row.value === id);
+}
+
 /** Resolve the model to run for a provider, guarding against a cross-provider mismatch.
  *
  *  A per-session or Runtime-derived value normally wins, but a model whose id clearly belongs to a

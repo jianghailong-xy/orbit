@@ -1045,12 +1045,14 @@ export class RunnerApiController {
           agentEnv: agent?.env as Record<string, string> | null,
         });
       let exec = resolveExec(s.model);
-      if (s.model === null || s.model.trim() === '') {
+      // Same materialization as the claim path: an unset model is snapshotted, and one the runtime
+      // has retired is refreshed to what this session now actually runs.
+      if (s.model === null || s.model.trim() === '' || exec.retiredPin) {
         const materialized = await this.prisma.$executeRaw`
           UPDATE "session"
           SET "model" = ${exec.model}
           WHERE "id" = ${s.id}::uuid
-            AND ("model" IS NULL OR btrim("model") = '')
+            AND "model" IS NOT DISTINCT FROM ${s.model}
         `;
         if (materialized === 0) {
           // A simultaneous Session config edit owns the value. Return that winner to the runner

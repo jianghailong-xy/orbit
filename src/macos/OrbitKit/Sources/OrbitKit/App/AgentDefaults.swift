@@ -216,6 +216,28 @@ public enum AgentDefaults {
         return defaultModel(for: runtime, catalog: catalog, configured: configured)
     }
 
+    /// A stored model the provider still offers, or nil once the Runtime has retired it — the
+    /// caller then re-resolves the current default instead of showing a dead id nobody can select
+    /// back. Mirrors web's `livePinnedModel` and the server's `retiredPin`, including which pins
+    /// are deliberately left alone: OpenCode owns its own selection, a configured third-party's
+    /// list is a document rather than a live probe, an unreported catalog can retire nothing, and
+    /// an id the Runtime itself names (`opus`, `opusplan`, a gateway id) is current by definition.
+    public static func livePin(_ model: String?, provider: String, catalog: RunnerModelCatalog?,
+                               configured: [ConfiguredProvider]?,
+                               runtimeDefaults: [String: String]?) -> String? {
+        guard let model else { return nil }
+        // OpenCode's "you pick" sentinel is a choice, not a stale value.
+        if model.isEmpty { return model }
+        let custom = configuredProvider(provider, in: configured)
+        if custom == nil, provider == "opencode" { return model }
+        if let custom, custom.modelsFromRuntime != true { return model }
+        let key = custom.map { runtimeCatalogKey(for: $0) } ?? runtime(for: provider,
+                                                                      configured: configured)
+        guard let offered = catalog?.models(for: key), !offered.isEmpty else { return model }
+        if let reported = runtimeDefaults?[key], reported == model { return model }
+        return offered.contains { $0.id == model } ? model : nil
+    }
+
     /// Resolve a persisted built-in/configured provider identity to the local runtime that
     /// executes it. Missing configured providers retain the server's historical Claude fallback.
     public static func runtime(for provider: String,

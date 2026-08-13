@@ -653,7 +653,13 @@ final class ConsoleModel {
             configuredProviders = providers
             configuredProvidersLoaded = true
         }
-        if s.model == nil, modelSelectionRevision.isPristine {
+        // A stored model the Runtime has since retired is no longer something this session can
+        // run — the server drops it at dispatch too — so re-resolve it exactly like a model-less
+        // session rather than leaving a dead id on the pill. Mirrors web's livePinnedModel.
+        let storedPin = AgentDefaults.livePin(
+            s.model, provider: provider, catalog: modelCatalog, configured: configuredProviders,
+            runtimeDefaults: sessionRunner?.runtimeDefaultModels)
+        if storedPin == nil, modelSelectionRevision.isPristine {
             modelID = AgentDefaults.refreshedDefaultModel(
                 currentModel: modelID, for: provider, catalog: modelCatalog,
                 configured: configuredProviders,

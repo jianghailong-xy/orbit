@@ -9,6 +9,7 @@ import {
   effectiveSessionModel,
   effortOptionsForProvider,
   KIMI_MODEL_OPTIONS,
+  livePinnedModel,
   mergedProviderOptions,
   modelOptionsForProvider,
   normalizeEffortForProvider,
@@ -190,6 +191,66 @@ describe('Runtime-reported default models', () => {
 
     expect(modelOptionsForProvider('custom-codex', null, configured)).toEqual([]);
     expect(defaultModelForProvider('custom-codex', null, configured)).toBe('gpt-5.6-sol');
+  });
+});
+
+describe('Retired models', () => {
+  const catalog: RunnerModelCatalog = {
+    claude: [
+      { value: 'claude-opus-6', label: 'Opus 6' },
+      { value: 'claude-sonnet-5', label: 'Sonnet 5' },
+    ],
+  };
+  const byok: ConfiguredProvider[] = [
+    {
+      slug: 'anthropic',
+      label: 'Anthropic (Claude)',
+      runtime: 'claude',
+      models: [{ value: 'claude-opus-5', label: 'Claude Opus 5' }],
+      defaultModel: 'claude-opus-5',
+      modelsFromRuntime: true,
+    },
+    {
+      slug: 'deepseek',
+      label: 'DeepSeek',
+      runtime: 'claude',
+      models: [{ value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' }],
+      defaultModel: 'deepseek-v4-pro',
+    },
+  ];
+
+  it('drops a pin the runtime no longer offers, on the engine and on its own vendor', () => {
+    expect(livePinnedModel('claude-opus-5', 'claude', catalog)).toBeUndefined();
+    expect(livePinnedModel('claude-opus-6', 'claude', catalog)).toBe('claude-opus-6');
+    // A BYOK vendor on the CLI's own endpoint is judged against the same catalog.
+    expect(livePinnedModel('claude-opus-5', 'anthropic', catalog, byok)).toBeUndefined();
+  });
+
+  it('leaves alone every pin the catalog cannot speak for', () => {
+    // No catalog reported → nothing can be retired.
+    expect(livePinnedModel('claude-opus-5', 'claude', undefined)).toBe('claude-opus-5');
+    expect(livePinnedModel('claude-opus-5', 'claude', {})).toBe('claude-opus-5');
+    // The Runtime's own reported default (an alias, a gateway id) is current by definition.
+    expect(livePinnedModel('opus', 'claude', catalog, undefined, { claude: 'opus' })).toBe('opus');
+    // A third-party vendor keeps its own list; the runner's Claude probe says nothing about it.
+    expect(livePinnedModel('deepseek-v3', 'deepseek', catalog, byok)).toBe('deepseek-v3');
+    // OpenCode owns model selection.
+    expect(livePinnedModel('anthropic/claude-sonnet-4', 'opencode', catalog)).toBe(
+      'anthropic/claude-sonnet-4',
+    );
+    // A blank model is OpenCode's "you pick" sentinel, not a stale id.
+    expect(livePinnedModel('', 'opencode', catalog)).toBe('');
+  });
+
+  it('falls through a retired session pin AND a retired agent pin to the current default', () => {
+    // The reported symptom: session and agent both left on last generation's Opus.
+    expect(
+      effectiveSessionModel('claude', 'claude-opus-5', 'claude-opus-5', catalog, undefined, {}),
+    ).toBe('claude-opus-6');
+    // A live agent pin still wins over the provider default.
+    expect(
+      effectiveSessionModel('claude', 'claude-opus-5', 'claude-sonnet-5', catalog, undefined, {}),
+    ).toBe('claude-sonnet-5');
   });
 });
 

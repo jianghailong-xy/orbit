@@ -59,7 +59,7 @@ test('custom-provider', async (t) => {
       agentModel: null,
       modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
     };
-    assert.equal(resolveProviderExec({ ...base, sessionModel: 'gpt-session' }).model, 'gpt-session');
+    assert.equal(resolveProviderExec({ ...base, sessionModel: 'gpt-catalog' }).model, 'gpt-catalog');
     assert.equal(resolveProviderExec({ ...base, sessionModel: null }).model, 'gpt-runtime');
     assert.equal(
       resolveProviderExec({
@@ -117,15 +117,66 @@ test('custom-provider', async (t) => {
     });
     assert.equal(legacy.model, 'gpt-5.6-sol');
 
-    // Explicit session values keep the old coercion contract instead of silently choosing a
-    // different catalog entry than the user asked for.
+    // A cross-runtime session value is not a model this runtime ever offered, so it retires like
+    // any other absent id and lands on the catalog the runner actually reports.
     const explicit = resolveProviderExec({
       declaredProvider: AgentProvider.CODEX,
       customRow: null,
       sessionModel: 'claude-opus-5',
       modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
     });
-    assert.equal(explicit.model, 'gpt-5.6-sol');
+    assert.equal(explicit.model, 'gpt-catalog');
+    // With no catalog to judge against, the old static coercion still stands.
+    assert.equal(
+      resolveProviderExec({
+        declaredProvider: AgentProvider.CODEX,
+        customRow: null,
+        sessionModel: 'claude-opus-5',
+      }).model,
+      'gpt-5.6-sol',
+    );
+  });
+
+  await t.test('a session model the runtime no longer offers yields to its current default', () => {
+    const base = {
+      declaredProvider: AgentProvider.CLAUDE,
+      customRow: null,
+      modelCatalog: { claude: [{ value: 'claude-opus-6', label: 'Opus 6' }] },
+    };
+    // The reported symptom: a session pinned to last generation's Opus keeps running it forever.
+    const retired = resolveProviderExec({ ...base, sessionModel: 'claude-opus-5' });
+    assert.equal(retired.model, 'claude-opus-6');
+    // Flagged so claim rewrites the row — otherwise the pickers keep showing a model nothing runs.
+    assert.equal(retired.retiredPin, true);
+
+    // A model the catalog still lists is untouched, and says so.
+    const live = resolveProviderExec({ ...base, sessionModel: 'claude-opus-6' });
+    assert.equal(live.model, 'claude-opus-6');
+    assert.equal(live.retiredPin, undefined);
+
+    // An alias/gateway id the Runtime itself reports is current by definition, catalog or not —
+    // this is `claude`'s settings.json naming `opus`, `opusplan` or `best`.
+    assert.equal(
+      resolveProviderExec({ ...base, sessionModel: 'opus', runtimeDefaultModels: { claude: 'opus' } })
+        .model,
+      'opus',
+    );
+    // A runner that has reported no catalog can retire nothing.
+    assert.equal(
+      resolveProviderExec({ ...base, modelCatalog: {}, sessionModel: 'claude-opus-5' }).model,
+      'claude-opus-5',
+    );
+    // OpenCode owns model selection and reports a slice of a multi-provider space, so its pins
+    // are never judged against that list.
+    assert.equal(
+      resolveProviderExec({
+        declaredProvider: AgentProvider.OPENCODE,
+        customRow: null,
+        sessionModel: 'anthropic/claude-sonnet-4-5',
+        modelCatalog: { opencode: [{ value: 'openai/gpt-5', label: 'GPT-5' }] },
+      }).model,
+      'anthropic/claude-sonnet-4-5',
+    );
   });
 
   await t.test('configured providers ignore runner runtime/catalog defaults', () => {
@@ -250,7 +301,12 @@ test('custom-provider', async (t) => {
     // fallback long after its successor landed.
     const anthropic = () =>
       row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-8' });
-    const catalogue = { claude: [{ value: 'claude-opus-6', label: 'Opus 6' }] };
+    const catalogue = {
+      claude: [
+        { value: 'claude-opus-6', label: 'Opus 6' },
+        { value: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
+      ],
+    };
     const fromCatalogue = resolveProviderExec({
       declaredProvider: 'anthropic',
       customRow: anthropic(),

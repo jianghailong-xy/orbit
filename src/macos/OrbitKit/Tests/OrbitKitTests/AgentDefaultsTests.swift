@@ -273,6 +273,47 @@ final class AgentDefaultsTests: XCTestCase {
                                                   configured: [deepseek]), "deepseek-v4-pro")
     }
 
+    // MARK: retired pins — a stored model the Runtime no longer offers
+
+    func testLivePinDropsAModelTheRuntimeNoLongerOffers() {
+        // The reported symptom: a session left on last generation's Opus. The catalog no longer
+        // lists it, so the pill must re-resolve rather than show an id nobody can select back.
+        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", provider: "claude",
+                                           catalog: liveClaudeCatalog, configured: nil,
+                                           runtimeDefaults: nil))
+        XCTAssertEqual(AgentDefaults.livePin("claude-opus-5", provider: "claude",
+                                             catalog: liveClaudeCatalog, configured: nil,
+                                             runtimeDefaults: nil), "claude-opus-5")
+        // A BYOK vendor on the CLI's own endpoint is judged against the same catalog.
+        XCTAssertNil(AgentDefaults.livePin("claude-opus-4-8", provider: "anthropic",
+                                           catalog: liveClaudeCatalog, configured: [anthropicKey],
+                                           runtimeDefaults: nil))
+    }
+
+    func testLivePinKeepsEveryPinTheCatalogCannotSpeakFor() {
+        // No catalog reported → nothing can be retired.
+        XCTAssertEqual(AgentDefaults.livePin("claude-opus-4-8", provider: "claude", catalog: nil,
+                                             configured: nil, runtimeDefaults: nil),
+                       "claude-opus-4-8")
+        // The Runtime's own reported default (an alias, a gateway id) is current by definition.
+        XCTAssertEqual(AgentDefaults.livePin("opus", provider: "claude", catalog: liveClaudeCatalog,
+                                             configured: nil, runtimeDefaults: ["claude": "opus"]),
+                       "opus")
+        // A third-party vendor keeps its own list — the runner's Claude probe says nothing about it.
+        XCTAssertEqual(AgentDefaults.livePin("deepseek-v3", provider: "deepseek",
+                                             catalog: liveClaudeCatalog, configured: [deepseek],
+                                             runtimeDefaults: nil), "deepseek-v3")
+        // OpenCode owns model selection, and its empty sentinel is a choice.
+        XCTAssertEqual(AgentDefaults.livePin("anthropic/claude-sonnet-4", provider: "opencode",
+                                             catalog: liveClaudeCatalog, configured: nil,
+                                             runtimeDefaults: nil), "anthropic/claude-sonnet-4")
+        XCTAssertEqual(AgentDefaults.livePin("", provider: "opencode", catalog: liveClaudeCatalog,
+                                             configured: nil, runtimeDefaults: nil), "")
+        // A model-less session stays model-less.
+        XCTAssertNil(AgentDefaults.livePin(nil, provider: "claude", catalog: liveClaudeCatalog,
+                                           configured: nil, runtimeDefaults: nil))
+    }
+
     func testEffectiveDefaultModelUsesRuntimeThenCatalogThenStatic() {
         let catalog = RunnerModelCatalog(
             claude: [RunnerModelInfo(value: "claude-fable-5", label: "Fable 5", priority: nil,
