@@ -19,9 +19,11 @@ async function capturedClaimCapability(
       }
       return 0;
     },
-    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      sql = strings.join('?');
-      values = bound;
+    // The claim composes shared cap fragments, so it hands $queryRaw one Prisma.Sql rather
+    // than a tagged template: literal segments in `strings`, bound parameters in `values`.
+    $queryRaw: async (statement: { strings: readonly string[]; values: unknown[] }) => {
+      sql = statement.strings.join('?');
+      values = statement.values;
       return [];
     },
   };

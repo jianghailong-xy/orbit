@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -33,6 +35,12 @@ import {
 } from '@orbit/shared';
 import { agentProviderSeed } from '../agents/agent-provider';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  batchActiveTurns,
+  runnerActiveTurns,
+  treeActiveTurns,
+  treeCeiling,
+} from '../common/session-tree-sql';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
@@ -40,7 +48,12 @@ import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } 
 import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming';
 import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
 import { notNoiseSql } from '../common/system-noise';
-import { statusAfterTurnEnqueued } from '../common/session-scheduling';
+import {
+  SERVICE_TOKEN_CONCURRENCY,
+  SPAWN_TREE_OUTSTANDING,
+  UNSETTLED_SESSION_STATUSES,
+  statusAfterTurnEnqueued,
+} from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
 import {
   normalizeBuiltinPermissionMode,
@@ -179,7 +192,14 @@ export class SessionsService {
   async create(
     ownerId: string,
     dto: CreateSessionDto,
-    opts?: { source?: string; batch?: { id: string; maxConcurrent: number }; parentSessionId?: string },
+    opts?: {
+      source?: string;
+      batch?: { id: string; maxConcurrent: number };
+      /** Spawn-tree membership. Independent of `batch`: a tree is open-ended and
+       *  server-capped, a batch run is a closed set with a user-chosen cap. */
+      tree?: { rootSessionId: string; depth: number };
+      parentSessionId?: string;
+    },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
@@ -355,6 +375,8 @@ export class SessionsService {
         source: dto.taskId ? 'user' : (opts?.source ?? 'user'),
         batchId: opts?.batch?.id ?? null,
         batchMaxConcurrent: opts?.batch?.maxConcurrent ?? null,
+        rootSessionId: opts?.tree?.rootSessionId ?? null,
+        spawnDepth: opts?.tree?.depth ?? 0,
         parentSessionId: opts?.parentSessionId ?? null,
         creatorId: ownerId,
         ownerId,
@@ -422,21 +444,45 @@ export class SessionsService {
   }
 
   // ── L3 orchestration: an in-session agent spawning/managing OTHER sessions ──
-  // The runner-token session_* tools are the only callers. Depth caps recursion; the
-  // shared-batch cap bounds fan-out so a rogue orchestrator can't storm the queue.
-  // There is deliberately NO cap on how many children one parent may spawn over its
-  // lifetime: a long-lived dispatcher session spawns one child per incoming message,
-  // so any lifetime quota is exhausted by normal use and wedges it permanently.
-  // Depth counts spawn links, not sessions: a root is depth 0, its child is 1, and its
-  // grandchild is 2. This lets a dispatcher-created work session delegate one real sub-task
-  // while still preventing unbounded recursive orchestration.
-  private static readonly MAX_SPAWN_DEPTH = 2;
-  private static readonly CHILD_CONCURRENCY = 3;
+  // The runner-token session_* tools are the only callers. Resource containment is
+  // SPAWN_TREE_OUTSTANDING (how much unfinished work a tree may hold) and the tree
+  // concurrency cap (how fast it drains) — both counted on the tree, both self-releasing.
+  //
+  // Depth is not one of those. It bounded resources only by proxy, and a bad one: a
+  // 5-deep tree of three sessions costs nothing, while a 1-deep fan-out of five hundred
+  // costs everything, so measuring depth penalised decomposition and waved through the
+  // shape that actually hurts. What depth genuinely bounds is *context fidelity*.
+  // session_create hands the child a self-contained brief and no prior context, so every
+  // level is one more lossy re-encoding of the original intent by an LLM — a telephone
+  // game whose error compounds with each hop. Five is where a brief stops resembling what
+  // the user asked for, not where the machine runs out of room.
+  //
+  // Read from the row (spawn_depth), so a corrupt or cyclic parent chain cannot be walked
+  // into — the reason the old bounded walk existed, and why it could never report a depth
+  // past the cap it was guarding with.
+  private static readonly MAX_SPAWN_DEPTH = 5;
+
+  /** Rolling window for {@link SPAWN_TREE_RATE}. */
+  private static readonly SPAWN_RATE_WINDOW_MS = 60 * 60_000;
+  /**
+   * How many sessions one tree may start per hour.
+   *
+   * The outstanding cap bounds how *large* a tree gets; this bounds how *fast* it churns.
+   * They catch different failures. A loop in agent space — A spawns B, B messages A back
+   * with session_send, A spawns again — never trips the outstanding cap if each child
+   * finishes quickly, and never trips the depth guard at all because it stays one level
+   * deep. It just burns tokens forever. Depth was supposed to prevent recursion and cannot
+   * see this shape; a rate can.
+   *
+   * Far above deliberate use: a dispatcher spawning one child per incoming human message
+   * lives in the single digits per hour.
+   */
+  private static readonly SPAWN_TREE_RATE = 60;
 
   /**
    * Spawn a child session from a parent session's agent (orbit mcp `session_create`). The
    * parent's agent must have orchestration enabled; the child is attributed to the parent
-   * (parentSessionId) and joins the parent's batch so fan-out stays concurrency-capped.
+   * (parentSessionId) and joins the parent's spawn tree so fan-out stays concurrency-capped.
    * Enforces the depth guard. Returns a compact handle to poll via get().
    */
   async spawnFromSession(
@@ -466,18 +512,68 @@ export class SessionsService {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     const parent = await this.prisma.session.findFirst({
       where: { id: parentSessionId, ownerId },
-      select: { id: true, batchId: true, agent: { select: { enableOrchestration: true } } },
+      select: {
+        id: true,
+        rootSessionId: true,
+        spawnDepth: true,
+        agent: { select: { enableOrchestration: true } },
+      },
     });
     if (!parent) throw new NotFoundException('parent session not found');
     if (!parent.agent?.enableOrchestration) {
       throw new ForbiddenException('orchestration is not enabled for this agent');
     }
-    if ((await this.spawnDepth(parentSessionId)) >= SessionsService.MAX_SPAWN_DEPTH) {
+    if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
     }
-    // Children share a batch (rooted at the parent's own id) so the claim queue caps how many
-    // run concurrently, on top of the runner's own max_concurrent.
-    const batchId = parent.batchId ?? parentSessionId;
+    // The whole tree shares one id — rooted at the session it grew from — so the claim queue
+    // caps how many of it run concurrently, on top of the runner's own max_concurrent. Per
+    // parent instead would multiply level by level (3 -> 9 -> 27) and be sidestepped by
+    // inserting another intermediate session.
+    const rootSessionId = parent.rootSessionId ?? parentSessionId;
+    // Admission control, separate from the tree's concurrency cap: that one paces how fast the
+    // tree drains, this one refuses to let it grow further. The refusal is the point — it is
+    // the only backpressure the calling agent ever sees. Queuing silently instead would leave
+    // it believing the work was dispatched while the backlog grows without bound.
+    //
+    // Unsettled, not open: a child parked at AWAITING_INPUT has already handed back its result
+    // (that is precisely when session_create(wait) returns), and it parks there indefinitely.
+    // Charging for it would make this quota monotonic and wedge the tree for good.
+    const outstanding = await this.prisma.session.count({
+      where: { rootSessionId, status: { in: UNSETTLED_SESSION_STATUSES } },
+    });
+    if (outstanding >= SPAWN_TREE_OUTSTANDING) {
+      throw new HttpException(
+        `this run already has ${outstanding} unfinished sessions (limit ${SPAWN_TREE_OUTSTANDING}); ` +
+          `wait for some to finish before starting more`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    // And how fast it may churn. A tree whose children finish quickly can stay far under the
+    // outstanding cap while spawning forever — the shape a session_send loop back to the
+    // parent produces, which no depth guard can see because it never gets deeper than one.
+    const startedThisHour = await this.prisma.session.count({
+      where: {
+        rootSessionId,
+        createdAt: { gt: new Date(Date.now() - SessionsService.SPAWN_RATE_WINDOW_MS) },
+      },
+    });
+    if (startedThisHour >= SessionsService.SPAWN_TREE_RATE) {
+      throw new HttpException(
+        `this run has started ${startedThisHour} sessions in the past hour ` +
+          `(limit ${SessionsService.SPAWN_TREE_RATE}); it is looping rather than making progress`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    // A root joins its own tree the first time it spawns; before that it belongs to no tree
+    // and must not be counted against one. Nothing else writes this column on the parent, so
+    // an unconditional write of the same value is idempotent under concurrent spawns.
+    if (!parent.rootSessionId) {
+      await this.prisma.session.update({
+        where: { id: parentSessionId },
+        data: { rootSessionId },
+      });
+    }
     // Resolve an @-mentioned agent name to its id (owner-scoped). An explicit agentId wins.
     const agentId =
       dto.agentId ?? (dto.agentName ? await this.resolveAgentByName(ownerId, dto.agentName) : undefined);
@@ -495,7 +591,7 @@ export class SessionsService {
         // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
         parentSessionId,
-        batch: { id: batchId, maxConcurrent: SessionsService.CHILD_CONCURRENCY },
+        tree: { rootSessionId, depth: parent.spawnDepth + 1 },
       },
     );
     // Surface the target agent's name + provider so the web/native transcript can render a
@@ -549,23 +645,6 @@ export class SessionsService {
     return matches[0].id;
   }
 
-  /** Number of parent links above `sessionId` (a root is depth 0). The bounded walk stops at
-   *  the cap, so a cyclic/corrupt chain can never loop forever. */
-  private async spawnDepth(sessionId: string): Promise<number> {
-    let depth = 0;
-    let cur: string | null = sessionId;
-    while (cur && depth < SessionsService.MAX_SPAWN_DEPTH) {
-      const row: { parentSessionId: string | null } | null = await this.prisma.session.findUnique({
-        where: { id: cur },
-        select: { parentSessionId: true },
-      });
-      if (!row) break;
-      cur = row.parentSessionId;
-      if (cur) depth++;
-    }
-    return depth;
-  }
-
   /**
    * Headless callers (a launchd/cron bridge) authenticate with no session context: there is no
    * calling session to bind a signed credential to. Their reach is therefore capped at the
@@ -613,7 +692,7 @@ export class SessionsService {
     const created = await this.create(
       ownerId,
       { prompt: dto.prompt, title: dto.title, agentId: agent.id, model: dto.model, effort },
-      { batch: { id: scope.tokenId, maxConcurrent: SessionsService.CHILD_CONCURRENCY } },
+      { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY } },
     );
     return {
       id: created.id,
@@ -1203,6 +1282,9 @@ export class SessionsService {
       taskTitle: string | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
+      queuedReason: string | null;
+      queuedActive: number | null;
+      queuedLimit: number | null;
     };
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
@@ -1248,11 +1330,54 @@ export class SessionsService {
         r.status AS "runnerStatus",
         r.last_heartbeat_at AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
-        t.title   AS "taskTitle"
+        t.title   AS "taskTitle",
+        q.reason  AS "queuedReason",
+        q.active  AS "queuedActive",
+        q."limit" AS "queuedLimit"
       FROM session s
       LEFT JOIN agent a  ON a.id = s.agent_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
       LEFT JOIN task t   ON t.id = s.task_id
+      -- Which gate is holding a queued session, and against what numbers. "Waiting for a free
+      -- slot" was true of every PENDING row and explained none of them: the runner could be
+      -- idle while the session's own run was full, and nothing said so. Every count and
+      -- ceiling here is the SAME fragment the claim decides with (session-tree-sql.ts) — a
+      -- second copy would drift, and confidently naming the wrong gate is worse than naming
+      -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
+      LEFT JOIN LATERAL (
+        SELECT reason, active, "limit" FROM (
+          SELECT
+            CASE
+              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
+                THEN 'runner_at_capacity'
+              WHEN s.root_session_id IS NOT NULL
+                   AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}
+                THEN 'tree_at_capacity'
+              WHEN s.batch_id IS NOT NULL
+                   AND ${batchActiveTurns('s')} >= s.batch_max_concurrent
+                THEN 'batch_at_capacity'
+            END AS reason,
+            ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
+            r.max_concurrent AS runner_limit,
+            ${treeActiveTurns('s')} AS tree_active,
+            ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
+            ${batchActiveTurns('s')} AS batch_active,
+            s.batch_max_concurrent AS batch_limit
+        ) g,
+        LATERAL (
+          SELECT
+            CASE g.reason
+              WHEN 'runner_at_capacity' THEN g.runner_active
+              WHEN 'tree_at_capacity'   THEN g.tree_active
+              WHEN 'batch_at_capacity'  THEN g.batch_active
+            END AS active,
+            CASE g.reason
+              WHEN 'runner_at_capacity' THEN g.runner_limit
+              WHEN 'tree_at_capacity'   THEN g.tree_limit
+              WHEN 'batch_at_capacity'  THEN g.batch_limit
+            END AS "limit"
+        ) n
+      ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
         ${runnerFilter}
         ${agentFilter}
@@ -1307,6 +1432,10 @@ export class SessionsService {
           : null,
         taskId: r.taskId,
         taskTitle: r.taskTitle,
+        // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
+        queuedReason: r.queuedReason,
+        queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
+        queuedLimit: r.queuedLimit == null ? null : Number(r.queuedLimit),
       }),
     );
     // A turn blocked on a permission prompt keeps the session generating, so the list can't tell

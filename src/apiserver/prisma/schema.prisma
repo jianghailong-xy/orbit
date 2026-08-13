@@ -432,6 +432,15 @@ model Session {
   parentSessionId      String?   @map("parent_session_id") @db.Uuid
   parent               Session?  @relation("SessionSpawn", fields: [parentSessionId], references: [id], onDelete: SetNull)
   children             Session[] @relation("SessionSpawn")
+  // The spawn tree this session belongs to, named by the session it grew from — a root points
+  // at itself once it has spawned anything. null = not part of any tree. This is what the claim
+  // queue's tree cap groups on, and what makes "the tree" one indexed read instead of a walk up
+  // parentSessionId. Deliberately NOT batchId: a batch run is a closed set with a user-chosen
+  // cap, a tree is open-ended with a server-owned one.
+  rootSessionId        String?   @map("root_session_id") @db.Uuid
+  // Parent links above this session: a root is 0, its child 1. Written at creation so the depth
+  // guard is a read rather than one query per level.
+  spawnDepth           Int       @default(0) @map("spawn_depth")
   // Batch-run grouping: when a session is dispatched as part of a "批量运行" batch,
   // these tag it with that batch's id and the batch's own concurrency cap. The claim
   // queue gates live sessions per batch on batchMaxConcurrent — independent of, and on
@@ -658,6 +667,8 @@ model Session {
   @@index([agentId, createdAt(sort: Desc)])
   @@index([batchId, status])
   @@index([parentSessionId])
+  // The claim queue's tree cap: a tree's active turns.
+  @@index([rootSessionId, status])
   @@index([ownerId])
   @@index([ownerId, status, taskId], map: "session_owner_status_task_idx")
   @@index([status])

@@ -666,6 +666,10 @@ export interface ClaimedSession {
   /** Whether this session's agent may orchestrate other sessions (Agent.enableOrchestration).
    *  Injected as ORBIT_ALLOW_ORCHESTRATION so `orbit mcp` conditionally exposes session_* tools. */
   allowOrchestration?: boolean;
+  /** How many spawn links sit above this session (a root is 0), injected as
+   *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
+   *  nested wait always finishes inside the wait that is waiting on it. */
+  spawnDepth?: number;
   /** Signed, runner/session-bound proof persisted in the runner's private per-session
    *  credential store. Required alongside ORBIT_SESSION_ID for orchestration calls. */
   orchestrationToken?: string;

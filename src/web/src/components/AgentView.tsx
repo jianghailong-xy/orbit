@@ -182,6 +182,7 @@ import {
 import {
   PENDING_SLOT_LABEL,
   PENDING_SLOT_TITLE,
+  type QueuedGate,
   pendingSlotDescription,
   runnerSlotUsage,
 } from '../lib/runnerSlots';
@@ -1877,7 +1878,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   );
   const activeSlots =
     typeof runner.activeSessions === 'number' ? runner.activeSessions : slotUsage.active;
-  const slotWaitDescription = pendingSlotDescription(activeSlots, runner.maxConcurrent);
+  // The gate comes from the selected session's own row: only the server can tell whether the
+  // runner, this run, or the batch is what is holding it.
+  const slotWaitDescription = pendingSlotDescription(
+    activeSlots,
+    runner.maxConcurrent,
+    (selectedSession ?? selected) as QueuedGate | null,
+  );
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({

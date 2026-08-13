@@ -895,7 +895,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		tools = append(tools,
 			map[string]interface{}{
 				"name":        "session_create",
-				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent.",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status; poll session_get for its result. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
 				"inputSchema": obj(map[string]interface{}{
 					"prompt":    promptDesc,
 					"agentId":   map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it (by id); defaults to the current agent."},
@@ -1018,6 +1018,42 @@ func toolResult(text string, isErr bool) map[string]interface{} {
 // parent's tool call before handing back the last known state (~3s * 200 = ~10 min).
 const sessionWaitInterval = 3 * time.Second
 const maxSessionWaitPolls = 200
+
+// envSpawnDepth carries how many spawn links sit above this session (a root is 0).
+const envSpawnDepth = "ORBIT_SPAWN_DEPTH"
+
+// A wait may not outlast the wait that is waiting on it. Every level used to get the same
+// full budget, so the arithmetic could not work: a parent's 10 minutes has to cover its
+// child's ENTIRE execution, and the child's own wait alone could spend all 10 — the outer
+// call then times out and reports a still-PENDING grandchild as though the work were merely
+// slow, which is indistinguishable from real progress.
+//
+// Halving per level makes the nested budget a strict fraction of the enclosing one
+// (10min > 5min > 2.5min …), so the inner wait always resolves first and the outer one
+// returns a settled answer. The floor keeps the deepest level long enough to be useful; it
+// stays well under one interval of its parent's remaining budget at every supported depth.
+const minSessionWaitPolls = 10
+
+func sessionWaitPolls(depth int) int {
+	polls := maxSessionWaitPolls
+	for i := 0; i < depth && polls > minSessionWaitPolls; i++ {
+		polls /= 2
+	}
+	if polls < minSessionWaitPolls {
+		return minSessionWaitPolls
+	}
+	return polls
+}
+
+// spawnDepthFromEnv reads this session's depth. Absent or unparseable means depth 0 — an
+// older server that does not send it, where the previous single-budget behaviour applies.
+func spawnDepthFromEnv() int {
+	d, err := strconv.Atoi(strings.TrimSpace(os.Getenv(envSpawnDepth)))
+	if err != nil || d < 0 {
+		return 0
+	}
+	return d
+}
 
 // waitForSession blocks until the freshly-created child session settles — i.e. leaves
 // PENDING/RUNNING (reaching AWAITING_INPUT once its first turn produced a result, or a

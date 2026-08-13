@@ -4,8 +4,14 @@ import { QueueService } from './queue.service';
 
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
 
+// The claim composes shared cap fragments, so it passes $queryRaw one Prisma.Sql rather than a
+// tagged template. `strings` are its literal segments and `values` its bound parameters.
 function sql(call: unknown[] | undefined): string {
-  return ((call?.[0] as readonly string[] | undefined) ?? []).join('?');
+  return ((call?.[0] as { strings?: readonly string[] } | undefined)?.strings ?? []).join('?');
+}
+
+function params(call: unknown[] | undefined): unknown[] {
+  return (call?.[0] as { values?: unknown[] } | undefined)?.values ?? [];
 }
 
 test('queue claims v5-tagged terminal handoffs only for a capable runner', async () => {
@@ -32,6 +38,6 @@ test('queue claims v5-tagged terminal handoffs only for a capable runner', async
       /substring\(s\."inbox_lease_owner"::text, 15, 1\) IS DISTINCT FROM '5'/,
     );
   }
-  assert.equal(queryCalls[0].slice(1).includes(false), true);
-  assert.equal(queryCalls[1].slice(1).includes(true), true);
+  assert.equal(params(queryCalls[0]).includes(false), true);
+  assert.equal(params(queryCalls[1]).includes(true), true);
 });

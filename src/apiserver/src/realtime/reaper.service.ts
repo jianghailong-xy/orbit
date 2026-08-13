@@ -37,6 +37,13 @@ const DYNAMIC_RUNTIME_STARTUP_GRACE_MS = 2 * 60_000;
 const CODEX_SHARED_STATE_STARTUP_GRACE_MS = 25 * 60_000;
 
 const LIVE: RunStatus[] = [RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED];
+// What one sweep reads. Wider than LIVE by PENDING, and only so the cancel-grace branch can
+// reach a queued session: claim requires `cancel_requested_at IS NULL`, so a cancel that lands
+// on a PENDING row takes it out of the queue for good, and with LIVE alone nothing would ever
+// finalize it — it sits at "Waiting for a free slot" with no owner. Every other branch below
+// is guarded on its own status and skips these rows. LIVE stays as it was: it is also
+// forceFinalize's default expected-status set, which must not silently widen to PENDING.
+const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
 
 /**
  * Background sweeper for interactive sessions (Route B). Without it, a session
@@ -88,7 +95,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private async sweep(): Promise<void> {
     const now = Date.now();
     const sessions = await this.prisma.session.findMany({
-      where: { status: { in: LIVE } },
+      where: { status: { in: SWEPT } },
       select: {
         id: true,
         taskId: true,
@@ -115,13 +122,24 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         const cancelAt = s.cancelRequestedAt?.getTime() ?? 0;
         if (cancelAt && now - cancelAt > CANCEL_GRACE_MS) {
           const graceful = gracefulEndStatus(s.endReason);
+          // A session still PENDING never reached a runner: no work could have failed, and
+          // there is no process that could have honored the cancel. It settles CANCELLED —
+          // the same terminal state transitionEnd gives a cancel that lands while the
+          // session is still queued — rather than FAILED with a "not honored" error blaming
+          // a runner that was never handed it.
+          const queued = !graceful && s.status === RunStatus.PENDING;
+          const status = graceful ?? (queued ? RunStatus.CANCELLED : undefined);
           await this.forceFinalize(
             s.id,
             s.assignedRunnerId,
             s.taskId,
-            graceful ? `${s.endReason} end not honored` : 'cancel not honored',
             graceful
-              ? { status: graceful, expectedStatuses: [s.status] }
+              ? `${s.endReason} end not honored`
+              : queued
+                ? 'cancelled while queued'
+                : 'cancel not honored',
+            status
+              ? { status, expectedStatuses: [s.status] }
               : { expectedStatuses: [s.status] },
           );
           continue;

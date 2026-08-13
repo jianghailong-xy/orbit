@@ -643,7 +643,8 @@ func waitForSessionRaw(t *Transport, ctx cliOrchestrationContext, created json.R
 	if json.Unmarshal(created, &handle) != nil || handle.ID == "" {
 		return created, nil
 	}
-	for i := 0; i < maxSessionWaitPolls; i++ {
+	polls := sessionWaitPolls(spawnDepthFromEnv())
+	for i := 0; i < polls; i++ {
 		time.Sleep(sessionWaitInterval)
 		raw, err := t.getSession(ctx.sessionID, ctx.token, handle.ID)
 		if err != nil {

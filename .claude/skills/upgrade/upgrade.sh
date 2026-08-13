@@ -59,17 +59,40 @@ else
   exit 1
 fi
 
-# Serialize upgrades — only one upgrade.sh may run against this deployment at a
-# time. flock -n grabs the lock non-blocking; if another upgrade already holds
-# it, fail fast instead of queueing a redundant rebuild. fd 9 is released
-# automatically when the script exits (normally or via set -e), so no stale lock.
-LOCK_FILE="/tmp/orbit-upgrade.lock"
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
-  echo "error: another upgrade is already in progress (lock: $LOCK_FILE)" >&2
-  echo "       wait for it to finish, or check: docker compose ps" >&2
-  exit 1
+# Serialize upgrades — only one upgrade.sh may run against this deployment at a time, so a
+# second invocation fails fast instead of queueing a redundant rebuild.
+#
+# mkdir, not flock: flock ships with util-linux and does not exist on macOS, where `flock -n 9`
+# failed with "command not found". `if ! flock` cannot tell that apart from "someone holds the
+# lock", so the script refused EVERY upgrade on a Mac with a message saying another upgrade was
+# running — a lock that blocked exactly the machine it was supposed to protect. mkdir is atomic
+# on any POSIX filesystem and needs no external command.
+#
+# What flock gave for free was release-on-death: the kernel drops the lock when the holder dies.
+# mkdir cannot, so the holder's pid goes in the directory and a lock whose holder is gone counts
+# as stale and is taken over. Without that, one Ctrl-C during a long build would wedge every
+# future upgrade — a worse failure than the one being fixed.
+LOCK_DIR="/tmp/orbit-upgrade.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  LOCK_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
+    echo "error: another upgrade is already in progress (pid $LOCK_PID, lock: $LOCK_DIR)" >&2
+    echo "       wait for it to finish, or check: docker compose ps" >&2
+    exit 1
+  fi
+  echo "warning: taking over a stale upgrade lock (holder ${LOCK_PID:-unknown} is gone)" >&2
+  # Re-create rather than just proceeding, so two processes finding the same stale lock still
+  # resolve to one winner.
+  rm -rf "$LOCK_DIR"
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "error: another upgrade claimed the stale lock first" >&2
+    exit 1
+  fi
 fi
+# Only now that the lock is ours: an early exit above must never delete someone else's. Covers
+# set -e and a Ctrl-C mid-build as well as a normal finish.
+trap 'rm -rf "$LOCK_DIR"' EXIT
+echo "$$" >"$LOCK_DIR/pid"
 
 # The image is built from the WORKING TREE, not from HEAD: `docker compose build` copies whatever
 # is on disk. Uncommitted edits therefore ship into production while existing in no commit — the

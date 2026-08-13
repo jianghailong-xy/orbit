@@ -977,7 +977,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 // way sees the same configured environment.
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
-	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID",
+	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
 		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt:
 		return true
 	default:
@@ -1165,6 +1165,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
 		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
+		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()

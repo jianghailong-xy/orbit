@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +10,12 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
+import {
+  batchActiveTurns,
+  runnerActiveTurns,
+  treeActiveTurns,
+  treeCeiling,
+} from '../common/session-tree-sql';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 
 /**
@@ -85,7 +92,11 @@ export class QueueService {
         // claim OpenCode as Claude during a rolling control-plane deploy. This transaction-
         // local capability is the positive signal that lets only the new, capable path pass.
         await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true)`;
-        return tx.$queryRaw<Array<{ id: string }>>`
+        // Prisma.sql rather than a bare tagged template so the cap fragments below are the
+        // SAME SQL the session list uses to explain a queued row. Written twice they drift,
+        // and a UI that names the wrong gate is worse than one that names none.
+        const runnerId = Prisma.sql`${runner.id}::uuid`;
+        return tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         UPDATE "session" SET
           status = 'RUNNING',
           error = CASE
@@ -99,7 +110,7 @@ export class QueueService {
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
             AND s."cancel_requested_at" IS NULL
-            AND s."assigned_runner_id" = ${runner.id}::uuid
+            AND s."assigned_runner_id" = ${runnerId}
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
             -- rows to a pre-0.1.82 process during a rolling release.
@@ -108,7 +119,7 @@ export class QueueService {
               OR COALESCE(s.provider, 'claude') <> 'opencode'
             )
             -- A runner may only ever drive sessions owned by its own owner.
-            AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
+            AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})
             -- A terminal revive uses a reserved predecessor owner until a runner
             -- explicitly capable of local supervisor handoff claims it. Older
             -- runners stay online but leave this row queued for an upgrade.
@@ -118,20 +129,21 @@ export class QueueService {
             )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
-            AND (
-              SELECT count(*) FROM "session" active
-              WHERE active."assigned_runner_id" = ${runner.id}::uuid
-                AND active."status" = 'RUNNING'
-            ) < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runner.id}::uuid)
-            -- Batch-run cap, independent of the runner cap above. It has the same
-            -- active-turn semantics: only a sibling currently RUNNING consumes capacity.
+            AND ${runnerActiveTurns(runnerId)}
+                  < (SELECT r."max_concurrent" FROM "runner" r WHERE r.id = ${runnerId})
+            -- Batch-run cap, independent of the runner cap above: a closed set the user
+            -- dispatched together, with the cap they chose for it.
             AND (
               s."batch_id" IS NULL
-              OR (
-                SELECT count(*) FROM "session" ba
-                WHERE ba."batch_id" = s."batch_id"
-                  AND ba."status" = 'RUNNING'
-              ) < s."batch_max_concurrent"
+              OR ${batchActiveTurns('s')} < s."batch_max_concurrent"
+            )
+            -- Spawn-tree cap, independent of both caps above. Where a batch run is closed and
+            -- user-capped, a tree grows on its own and is capped by the server. See
+            -- session-tree-sql.ts for why the ceiling is a share of the runner and why a
+            -- supervisor is exempt from the count.
+            AND (
+              s."root_session_id" IS NULL
+              OR ${treeActiveTurns('s')} < ${treeCeiling(runnerId)}
             )
             -- A message may be queued behind a merge/commit still executing on this
             -- session's checkout (createTurn enqueues it PENDING rather than rejecting).
@@ -159,12 +171,27 @@ export class QueueService {
                 OR s."commit_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
               )
             )
-          ORDER BY s."created_at" ASC
+          -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
+          -- runner idle while work waits; ordering gives the same protection without that —
+          -- the tree already holding the most active turns is picked last, so one tree may use
+          -- the whole machine while nothing else wants it and yields the next slot the moment
+          -- something does. A session in no tree counts 0 and therefore sorts ahead of every
+          -- contended tree, which is what keeps ordinary work from queueing behind orchestration.
+          --
+          -- This only decides who takes the NEXT free slot; it cannot reclaim one already held,
+          -- and turns are long, so convergence is slow by construction. Preemption is the thing
+          -- that would fix that, and is deliberately not attempted here.
+          ORDER BY (
+              SELECT count(*) FROM "session" busy
+              WHERE busy."root_session_id" = s."root_session_id"
+                AND busy."status" = 'RUNNING'
+            ) ASC,
+            s."created_at" ASC
           FOR UPDATE NOWAIT
           LIMIT 1
         )
         RETURNING id
-      `;
+      `);
       });
       if (rows.length === 0) return null;
       return this.buildSession(rows[0].id);
@@ -335,6 +362,9 @@ export class QueueService {
       // Mirror the agent's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
       // and `orbit mcp` exposes the session_* tools only for enabled agents.
       allowOrchestration: agent?.enableOrchestration ?? false,
+      // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
+      // cannot outlast the one waiting on it.
+      spawnDepth: session.spawnDepth,
       agent: {
         provider,
         // Resolved above: a per-session override, Runtime default/catalog value (coerced for
