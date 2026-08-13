@@ -206,7 +206,12 @@ test('an explicit model wins over the carried one', async () => {
   assert.equal(updated().model, 'glm-5-air');
 });
 
-test('a switch re-clamps a permission mode the new model cannot run', async () => {
+// The Claude allow-list polices built-in models only. A configured provider's model space is the
+// vendor's (GLM here), so the CLI is the one that decides whether it can run Auto — clamping on
+// this side would downgrade a mode the runtime accepts. See normalizeBuiltinPermissionMode's
+// `customProvider`, and note the clamp judges the provider being switched TO, not the one the
+// session is leaving.
+test('a switch to a configured provider leaves Auto alone — its models are the vendor\'s', async () => {
   const { service, updated } = harness(
     { provider: 'claude', providerBuiltin: true, model: 'claude-opus-5', permissionMode: 'auto' },
     [
@@ -223,6 +228,24 @@ test('a switch re-clamps a permission mode the new model cannot run', async () =
   await service.updateConfig(ownerId, id, { provider: 'zhipu' });
 
   assert.equal(updated().model, 'glm-5');
+  assert.equal(updated().permissionMode, 'auto');
+});
+
+// The clamp itself still has to fire where the allow-list does apply: a built-in target, on a
+// model Claude Code rejects Auto for.
+test('a switch to the built-in engine re-clamps Auto for a model it cannot run', async () => {
+  const { service, updated } = harness(
+    { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5', permissionMode: 'auto' },
+    [providerRow({ slug: 'anthropic' })],
+  );
+
+  await service.updateConfig(ownerId, id, {
+    provider: 'claude',
+    model: 'claude-haiku-4-5-20251001',
+  });
+
+  assert.equal(updated().providerBuiltin, true);
+  assert.equal(updated().model, 'claude-haiku-4-5-20251001');
   assert.equal(updated().permissionMode, 'default');
 });
 
