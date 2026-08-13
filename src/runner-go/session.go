@@ -19,7 +19,12 @@ import (
 	"time"
 )
 
-const maxRespawns = 5
+const maxRespawns = 3
+
+// Wait between crash respawns, escalating with the attempt number (5s, 10s, 15s at the
+// cap of 3). Long enough to outlast a transient hiccup, short enough not to park the
+// user's turn behind a dead engine.
+const crashRespawnBackoff = 5 * time.Second
 
 // Consecutive 500s on the same event batch before it is given up as unacceptable. Retries cap at
 // idempotentRetryMaxDelay, so this is roughly a minute of a server that keeps throwing — far
@@ -800,7 +805,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if !pool.isActive(live) {
 			continue
 		}
-		// Unexpected crash — resume up to maxRespawns times with a small back-off.
+		// Unexpected crash — resume up to maxRespawns times, waiting between attempts.
 		respawns++
 		if respawns > maxRespawns {
 			status = stFailed
@@ -808,7 +813,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		}
 		emit(evSystem, map[string]interface{}{"subtype": "resumed", "attempt": respawns})
 		logln(fmt.Sprintf("interactive run %s — %s exited unexpectedly; resuming (attempt %d)", job.SessionID, runtimeProvider(job), respawns))
-		time.Sleep(time.Duration(respawns) * time.Second)
+		select {
+		case <-sessionCtx.Done():
+		case <-shutdownCtx.Done():
+		case <-time.After(time.Duration(respawns) * crashRespawnBackoff):
+		}
 	}
 	if ctx.Err() != nil && !terminalAckSettled {
 		status = stCancelled
@@ -1035,6 +1044,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	a := job.Agent
 	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
 	var reloadRequested atomic.Bool
+	// Set by the stdout reader on the first stream-json message. A process that exits
+	// without ever producing one never got past its own startup, so its exit is a
+	// refusal, not a crash (see startupRefusal).
+	var sawOutput atomic.Bool
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
 	args := []string{
@@ -1478,6 +1491,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		if json.Unmarshal([]byte(line), &msg) != nil {
 			continue
 		}
+		sawOutput.Store(true)
 		handleMessage(msg, emit, bg)
 		if msg["type"] == "assistant" {
 			if txt := assistantText(msg); txt != "" {
@@ -1572,7 +1586,23 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	if shutdownCtx.Err() != nil {
 		return stCancelled, true, false // graceful drain -> caller detaches without finalizing
 	}
+	// A clean exit with nothing on stdout is a startup refusal (bad flags, a resume
+	// target that can't be rebuilt, running --dangerously-skip-permissions as root):
+	// the same spawn with the same arguments refuses the same way, so respawning just
+	// burns retries on a deterministic error. Fail the session instead.
+	if cmd.ProcessState != nil && startupRefusal(cmd.ProcessState.ExitCode(), sawOutput.Load()) {
+		return stFailed, true, false
+	}
 	return stFailed, false, false // unexpected exit -> respawn with --resume
+}
+
+// startupRefusal reports whether a process exit was a startup refusal rather than a
+// crash: the CLI exited on its own (exitCode >= 0 — ProcessState.ExitCode returns -1
+// when a signal killed it) without ever producing a stream-json message on stdout, i.e.
+// it died inside its own startup, where a respawn with the same arguments fails the
+// same way.
+func startupRefusal(exitCode int, sawOutput bool) bool {
+	return !sawOutput && exitCode >= 0
 }
 
 // writeUpload saves a non-image/-PDF attachment into the session's uploads dir, which lives

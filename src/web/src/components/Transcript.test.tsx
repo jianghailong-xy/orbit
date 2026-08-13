@@ -307,6 +307,31 @@ describe('engine stderr', () => {
     expect(html).toContain('bubblewrap');
     expect(html).not.toContain('chat-error-repeat');
   });
+
+  // A retry loop prints the same refusal once per attempt — e.g. six identical
+  // root/sudo refusals, one per respawn. Each attempt is its own error row: the fold is
+  // per engine run, and a `resumed` event starts a new run.
+  it('gives a re-logged line its own row after a resume (one error per retry)', () => {
+    const resumed = (seq: number, attempt: number): RunEvent => ({
+      seq,
+      type: 'system',
+      payload: { subtype: 'resumed', attempt },
+    });
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT)),
+          resumed(2, 1),
+          stderrEvent(3, codexLine('2026-08-12T15:32:38.753979Z', MISSING_OUTPUT)),
+          resumed(4, 2),
+          stderrEvent(5, codexLine('2026-08-12T15:33:47.965544Z', MISSING_OUTPUT)),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-error"').length - 1).toBe(3);
+    expect(html).not.toContain('chat-error-repeat');
+  });
 });
 
 describe('transcript Markdown links', () => {

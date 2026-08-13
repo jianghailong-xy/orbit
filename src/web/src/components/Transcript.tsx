@@ -472,6 +472,10 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const line = stripAnsi(String(p.stderr)).trim();
           if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
         }
+        // A `resumed` begins a new engine run: a retry loop prints the same refusal per
+        // attempt, and each attempt's failure is its own error row. The fold is per run,
+        // not per session — reset it so the next identical line starts a new row.
+        if (p.subtype === 'resumed') stderrSeen.clear();
         break;
       default:
         break;
