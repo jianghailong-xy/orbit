@@ -48,6 +48,9 @@ function makeService(
   const realtime = {
     publishSessionCreated: () => undefined,
     publishSessionUpdated: () => undefined,
+    // A user-started session moves the project's provider default, so create() wakes every
+    // client's agent list too. Stubbed here only so the call lands somewhere.
+    publishAgentChanged: () => undefined,
   } as never;
   return { service: new SessionsService(prisma, queue, realtime), creates, providerQueries };
 }

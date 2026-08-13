@@ -1,0 +1,16 @@
+-- "How big is this session's context right now" had no answer on the session row. The four token
+-- sums beside it are lifetime accruals (sum_cache_read on a long-lived session reaches hundreds of
+-- millions), and the per-model `usage` rows are the same accruals split by model — so a caller
+-- deciding when to rotate a long-running session before it hits the window was left estimating
+-- from turn count, which is wrong by an order of magnitude the moment a turn returns a large
+-- tool_result.
+--
+-- The measurement already existed: the runner puts it on every turn_end event for the clients'
+-- context gauge (the latest top-level assistant message's own input + cache read + cache write +
+-- output). This column is that same value denormalized onto the row, so `orbit session get` can
+-- answer it without replaying the transcript.
+--
+-- Nullable rather than defaulted to 0: "no runtime has reported one" (an older runner, a session
+-- that never ran a turn) is not the same claim as "the context is empty", and a rotation policy
+-- reading the second when the first is true would rotate nothing.
+ALTER TABLE "session" ADD COLUMN "context_tokens" INTEGER;

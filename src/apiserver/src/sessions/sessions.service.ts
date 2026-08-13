@@ -55,6 +55,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import { truncatePayload } from './truncate-payload';
+import { signedOutEngineRefusal } from './engine-signin-preflight';
 import {
   deriveSessionCapabilities,
   withSessionCapabilities,
@@ -201,6 +202,9 @@ export class SessionsService {
     // client's Mode pill — a stale pill that the next resume writes back, silently
     // downgrading a session that was really running the agent's mode.
     let agentPermissionMode: string | undefined;
+    // The agent's own environment, which may carry the provider credential that makes the
+    // runner's engine sign-in irrelevant — see the sign-in preflight below.
+    let agentEnv: unknown;
     if (!assignedRunnerId && dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
@@ -209,6 +213,7 @@ export class SessionsService {
           enableWorktree: true,
           permissionMode: true,
           enabled: true,
+          env: true,
         },
       });
       if (!agent) throw new ForbiddenException('agent not found');
@@ -223,15 +228,17 @@ export class SessionsService {
       assignedRunnerId = agent.runnerId ?? undefined;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
+      agentEnv = agent.env;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, permissionMode: true, enabled: true },
+        select: { enableWorktree: true, permissionMode: true, enabled: true, env: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
       if (agent.enabled === false) throw new ForbiddenException('agent is disabled');
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
+      agentEnv = agent.env;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
@@ -305,6 +312,23 @@ export class SessionsService {
     const runtime = borrowedRuntime
       ? normalizeRuntimeProvider(borrowedRuntime)
       : normalizeRuntimeProvider(provider, providerBuiltin);
+    // Refuse now if the machine this is bound for cannot start it at all, rather than creating a
+    // session (and, on the runner, a git checkout) that dies a second later with the same message.
+    // Only for a runtime signed out on an online runner — see signedOutEngineRefusal for
+    // everything this deliberately lets through.
+    const targetRunner = await this.prisma.runner.findFirst({
+      where: { id: assignedRunnerId, ownerId },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true },
+    });
+    const refusal =
+      targetRunner &&
+      signedOutEngineRefusal({
+        runtime,
+        bringsOwnCredentials: borrowedRuntime != null,
+        agentEnv,
+        runner: targetRunner,
+      });
+    if (refusal) throw new ConflictException(refusal);
     const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {
@@ -671,12 +695,23 @@ export class SessionsService {
         lastTurnAt: true,
         numTurns: true,
         costUsd: true,
+        // How full the context window is right now (see Session.contextTokens). A headless caller
+        // driving a long-lived session rotates it before it reaches the window, and turn count is
+        // a poor stand-in: one turn returning a large tool_result moves this further than a
+        // hundred short ones.
+        contextTokens: true,
         lastAssistantText: true,
         lastUserText: true,
         lastToolUse: true,
         result: true,
         error: true,
         endReason: true,
+        // When a self-healing failure — a spent quota, a provider that was overloaded — is due to
+        // be re-sent, and how many attempts it has already cost. The moment is the same one the
+        // sweeper acts on, so a caller that schedules its own work around this session backs off
+        // to a time Orbit already computed rather than parsing it back out of `error`.
+        retryAt: true,
+        retryAttempts: true,
         branch: true,
         changedFiles: true,
         isolationStatus: true,

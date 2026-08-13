@@ -475,6 +475,15 @@ model Session {
   sumCacheWrite        Int       @default(0) @map("sum_cache_write")
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
+  // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
+  // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
+  // turn_end event that already carries it for the clients' context gauge. Deliberately not
+  // derivable from the four sums above — those accrue over the session's whole life, so the only
+  // thing they say about the current window is that it is smaller. A long-lived session has to
+  // rotate before it reaches the window (compaction is lossy), and this is the measurement that
+  // decision needs. null until a runtime reports one: never-run sessions, and runtimes that
+  // don't report it yet (kimi).
+  contextTokens        Int?      @map("context_tokens")
   lastTurnAt           DateTime? @map("last_turn_at")
   cancelRequestedAt    DateTime? @map("cancel_requested_at")
   startedAt            DateTime? @map("started_at")

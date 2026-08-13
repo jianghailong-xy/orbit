@@ -34,7 +34,12 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
     },
   } as never;
   const queue = { notifySessionQueued: () => undefined } as never;
-  const realtime = { publishSessionCreated: () => undefined } as never;
+  const realtime = {
+    publishSessionCreated: () => undefined,
+    // create() also refreshes the agent list — a user-started session moves the project's
+    // provider default.
+    publishAgentChanged: () => undefined,
+  } as never;
   const service = new SessionsService(prisma, queue, realtime);
 
   try {

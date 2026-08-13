@@ -200,6 +200,30 @@ function parseSupervisedSessionId(value: string): string {
   return value.toLowerCase();
 }
 
+/**
+ * Did this run fail without ever producing anything? Every reason a session dies between getting
+ * its checkout and its first turn — the engine isn't installed, isn't signed in, or the account's
+ * quota is spent — lands here with no turns and an empty diff, and its branch holds nothing but
+ * the fork point it started from.
+ *
+ * Such a run's checkout is a full second copy of the repo standing in for no work at all, and one
+ * signed-out runtime makes that the shape of every session started while it lasts: an overnight
+ * expiry left a headless caller minting a hundred of them, 1.5GB, for work that never started.
+ *
+ * Deliberately narrow. Zero turns is not on its own enough — a shell-first session can have
+ * changed files before any turn ran — and neither is failure: a run that failed on its tenth turn
+ * has work on its branch and a checkout someone may still resume into. Only both together, and
+ * only when the runner reports nothing changed, mean there is provably nothing to keep. The branch
+ * is left alone either way, so a resume re-creates the checkout from it (setupWorktree).
+ */
+function producedNothingBeforeFailing(
+  numTurns: number,
+  status: RunStatus,
+  dto: RunFinalizeRequest,
+): boolean {
+  return status === RunStatus.FAILED && numTurns === 0 && !dto.changedFiles?.length;
+}
+
 @Controller('runner')
 export class RunnerApiController {
   constructor(
@@ -2193,6 +2217,15 @@ export class RunnerApiController {
         }
         frontier = { seq: e.seq, tool };
       }
+      // Current context-window occupancy (Session.contextTokens), denormalized off the turn_end
+      // event that already carries it for the clients' gauge. Highest seq in the batch wins, and
+      // only a positive number counts: a runtime that doesn't report it sends 0, which must leave
+      // the last known value standing rather than blanking it mid-session.
+      const contextTokens = durable.reduce<{ seq: number; tokens: number } | null>((acc, e) => {
+        const tokens = (e.payload as { contextTokens?: unknown } | null)?.contextTokens;
+        if (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens <= 0) return acc;
+        return !acc || e.seq > acc.seq ? { seq: e.seq, tokens: Math.round(tokens) } : acc;
+      }, null);
       // A reply that is only the provider saying it cannot answer right now — the account's
       // quota spent, or the API overloaded — is the failure that fixes itself: the same
       // message succeeds once the window rolls over or the far side recovers. Arm a retry for
@@ -2207,12 +2240,13 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
-      if (lastAssistant || frontier || engineTurnActive !== undefined) {
+      if (lastAssistant || frontier || contextTokens || engineTurnActive !== undefined) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
             ...(frontier ? { lastToolUse: frontier.tool } : {}),
+            ...(contextTokens ? { contextTokens: contextTokens.tokens } : {}),
             ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
             // undefined = nothing in this batch either asked or answered; keep the stored
             // message rather than writing null over it.
@@ -2400,7 +2434,20 @@ export class RunnerApiController {
         (current.completedAt ?? current.archivedAt) == null &&
         current.deletedAt == null &&
         current.endReason !== SessionEndReason.COMPLETED &&
-        current.endReason !== SessionEndReason.DELETED;
+        current.endReason !== SessionEndReason.DELETED &&
+        !producedNothingBeforeFailing(current.numTurns, effectiveStatus, dto);
+      // A run the provider's quota killed before it could speak: claude/codex refuse at startup and
+      // that refusal is the process's last words, not an assistant reply, so it never passes the
+      // event path that arms the retry (retryPlanFor) — the only record of when work can resume was
+      // prose inside `error`. Arm the same retry from it, so `retryAt` answers "when does this come
+      // back" for every quota failure rather than only the ones that got far enough to talk. Never
+      // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
+      const quotaRetryAt =
+        effectiveStatus === RunStatus.FAILED &&
+        current.retryAt == null &&
+        isUsageLimitErrorText(dto.error)
+          ? await this.quotaRetryAt(tx, runner.id, current.provider, dto.error!)
+          : null;
 
       // Only a LIVE session is finalized (updateMany count); duplicate/late completion
       // is a safe no-op but still returns the result derived from this locked snapshot.
@@ -2440,6 +2487,7 @@ export class RunnerApiController {
           // can't stay stuck on "Running Agent…".
           runningBgShells: [],
           runningSubagents: [],
+          ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
         },
       });
       if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout };
@@ -2917,38 +2965,52 @@ export class RunnerApiController {
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    const now = new Date();
-    const [session, runner] = await Promise.all([
-      tx.session.findUnique({
-        where: { id: sessionId },
-        select: { provider: true, taskId: true, retryAttempts: true },
-      }),
-      quotaSpent
-        ? tx.runner.findUnique({ where: { id: runnerId }, select: { planUsage: true } })
-        : null,
-    ]);
+    const session = await tx.session.findUnique({
+      where: { id: sessionId },
+      select: { provider: true, taskId: true, retryAttempts: true },
+    });
     if (!session) return {};
     if (!quotaSpent) {
       if (session.taskId) return {};
-      return { retryAt: apiErrorRetryAt(session.retryAttempts, now) };
+      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     }
-    // When the quota comes back, from two sources in this order. The runtime's own sentence is
-    // available on the spot but is prose ("resets 6:20pm (Europe/Berlin)") and Codex's phrasing
-    // pins no time zone at all; the runner's quota snapshot is machine-readable but refreshes on
-    // its own cadence, so it can still be describing the pre-limit world at this instant. Text
-    // first for immediacy, snapshot as the fallback — and the sweeper re-checks the snapshot
-    // before it fires, so a wrong-but-early guess costs a deferral, never a wasted turn.
-    //
-    // The jitter is not cosmetic: a quota is an *account*-wide fact, so every session that hit
-    // it comes due at the same instant, and releasing them together would reproduce the outage
-    // against the freshly reset window.
-    const at =
-      parseQuotaResetAt(text, now) ??
-      planUsageBlockedUntil(runner?.planUsage as PlanUsage | null, session.provider, now);
+    const at = await this.quotaRetryAt(tx, runnerId, session.provider, text);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.
-    if (!at) return {};
-    return { retryAt: new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) };
+    return at ? { retryAt: at } : {};
+  }
+
+  /**
+   * When a quota-killed run may be re-sent, from two sources in this order. The runtime's own
+   * sentence is available on the spot but is prose ("resets 6:20pm (Europe/Berlin)") and Codex's
+   * phrasing pins no time zone at all; the runner's quota snapshot is machine-readable but
+   * refreshes on its own cadence, so it can still be describing the pre-limit world at this
+   * instant. Text first for immediacy, snapshot as the fallback — and the sweeper re-checks the
+   * snapshot before it fires, so a wrong-but-early guess costs a deferral, never a wasted turn.
+   * null when neither can name a moment.
+   *
+   * The jitter is not cosmetic: a quota is an *account*-wide fact, so every session that hit it
+   * comes due at the same instant, and releasing them together would reproduce the outage against
+   * the freshly reset window.
+   *
+   * `text` is whichever words carried the refusal — the assistant reply that ingestion saw, or the
+   * terminal `error` of a run that never got to speak.
+   */
+  private async quotaRetryAt(
+    tx: Prisma.TransactionClient,
+    runnerId: string,
+    provider: string,
+    text: string,
+  ): Promise<Date | null> {
+    const now = new Date();
+    const runner = await tx.runner.findUnique({
+      where: { id: runnerId },
+      select: { planUsage: true },
+    });
+    const at =
+      parseQuotaResetAt(text, now) ??
+      planUsageBlockedUntil(runner?.planUsage as PlanUsage | null, provider, now);
+    return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 
   private async assertSessionOwnership(sessionId: string, runnerId: string) {

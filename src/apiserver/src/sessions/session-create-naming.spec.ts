@@ -77,6 +77,9 @@ function makeService(enableWorktree = true) {
   const realtime = {
     publishSessionCreated: () => realtimeEvents.push('created'),
     publishSessionUpdated: () => realtimeEvents.push('updated'),
+    // Not part of what this spec watches (see realtimeEvents): create() also refreshes the agent
+    // list, because a user-started session moves the project's provider default.
+    publishAgentChanged: () => undefined,
   } as never;
 
   return {

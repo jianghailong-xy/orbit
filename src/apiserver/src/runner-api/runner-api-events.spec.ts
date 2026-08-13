@@ -210,6 +210,56 @@ function previewUpdate(calls: { update: any[] }) {
 }
 
 /**
+ * How full the context window is (Session.contextTokens) — the measurement a caller rotating a
+ * long-lived session needs, denormalized off the turn_end event that already carries it for the
+ * clients' gauge. The lifetime token sums cannot answer this: they only grow.
+ */
+test('the latest turn_end sets the session context size', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T01:22:21.000Z',
+        turnId: 'turn-1',
+        payload: { subtype: 'success', numTurns: 1, contextTokens: 94_500 },
+      },
+      {
+        seq: 2,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T01:31:02.000Z',
+        turnId: 'turn-2',
+        payload: { subtype: 'success', numTurns: 2, contextTokens: 109_879 },
+      },
+    ],
+  });
+
+  assert.equal(previewUpdate(calls).contextTokens, 109_879, 'the last one wins');
+});
+
+test('a runtime that reports no context size leaves the stored one standing', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 3,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T01:40:00.000Z',
+        turnId: 'turn-3',
+        // Kimi (and any runner too old to report it) sends the turn end without the field; the
+        // Codex/OpenCode payloads send 0 when their usage was missing. Neither means "empty".
+        payload: { subtype: 'success', numTurns: 3, contextTokens: 0 },
+      },
+    ],
+  });
+
+  assert.equal('contextTokens' in previewUpdate(calls), false);
+});
+
+/**
  * A turn interrupted before the agent said anything must keep the message you sent as the list's
  * preview. The interrupt and the turn end are frontier events but not *answers*, so they must not
  * write null over `lastUserText` — doing so left the row with no preview at all.
