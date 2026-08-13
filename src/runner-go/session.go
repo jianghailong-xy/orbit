@@ -1497,7 +1497,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// tokens (input + cache + output). Carried into each turn_end event so the clients'
 	// context gauge updates live and, via event replay, on session reopen. Persists
 	// across turns within this process — the latest value is always the current context.
+	// A long turn is many minutes from its turn_end, so ctxPing also reports it mid-turn.
 	var contextTokens int
+	var ctxPing contextPinger
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
@@ -1515,6 +1517,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 			if ct := contextTokensFromAssistant(msg); ct > 0 {
 				contextTokens = ct
+				ctxPing.ping(emit, ct)
 			}
 		}
 		if msg["type"] == "result" {

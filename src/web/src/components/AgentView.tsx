@@ -344,19 +344,25 @@ function ContextWindowIndicator({
   configured?: ConfiguredProvider[];
 }) {
   const windowTokens = contextWindowFor(model, modelCatalog, configured);
-  const pct = Math.min(100, Math.round((tokens / windowTokens) * 100));
+  // Until the engine reports occupancy there is no reading at all — a fresh session, or a first
+  // turn still running. "0%" would be a claim that the window is empty when it is in fact filling;
+  // "—" says the gauge is waiting for its first number.
+  const known = tokens > 0;
+  const pct = known ? Math.min(100, Math.round((tokens / windowTokens) * 100)) : 0;
   const pop = (
     <div className="cu-pop">
       <div className="cu-row">
         <div className="cu-head">
           <span className="cu-label">Context window</span>
-          <span className="cu-pct">{pct}%</span>
+          <span className="cu-pct">{known ? `${pct}%` : '—'}</span>
         </div>
         <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
           <span className="runner-util-fill" style={{ width: `${pct}%` }} />
         </div>
         <div className="cu-reset">
-          {fmtTokens(tokens)} / {fmtTokens(windowTokens)} tokens
+          {known
+            ? `${fmtTokens(tokens)} / ${fmtTokens(windowTokens)} tokens`
+            : `Not reported yet · ${fmtTokens(windowTokens)} window`}
         </div>
       </div>
     </div>
@@ -364,9 +370,12 @@ function ContextWindowIndicator({
   const tier = pct >= 90 ? 'danger' : pct >= 75 ? 'warn' : 'neutral';
   return (
     <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
-      <span className="composer-pill composer-usage" aria-label={`Context window ${pct}%`}>
+      <span
+        className="composer-pill composer-usage"
+        aria-label={known ? `Context window ${pct}%` : 'Context window not reported yet'}
+      >
         <ContextRing pct={pct} tier={tier} />
-        <span className="composer-usage-pct">{pct}%</span>
+        <span className="composer-usage-pct">{known ? `${pct}%` : '—'}</span>
       </span>
     </Popover>
   );
@@ -5307,7 +5316,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           </Tooltip>
           {shownPlanUsage && <PlanUsageIndicator usage={shownPlanUsage} />}
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
-              0%. Rightmost pill, to the right of plan usage. */}
+              "—". Rightmost pill, to the right of plan usage. */}
           {!(shownProvider === 'opencode' && shownModel === '') && (
             <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} configured={configuredProviders} />
           )}

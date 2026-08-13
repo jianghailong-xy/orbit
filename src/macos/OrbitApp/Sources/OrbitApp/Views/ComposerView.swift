@@ -918,7 +918,12 @@ private struct ContextWindowIndicator: View {
     private var window: Int {
         AgentDefaults.contextWindow(for: model, catalog: modelCatalog, configured: configured)
     }
-    private var pct: Int { window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0 }
+    /// No reading until the engine reports occupancy — a fresh session, or a first turn still
+    /// running. "0%" would claim the window is empty when it is in fact filling (web parity).
+    private var known: Bool { tokens > 0 }
+    private var pct: Int {
+        known && window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0
+    }
 
     var body: some View {
         Button { showDetail.toggle() } label: {
@@ -926,12 +931,14 @@ private struct ContextWindowIndicator: View {
                 UsageRing(percent: pct).frame(width: 14, height: 14)
                 // See PlanUsageIndicator: pin the pill to its ideal width so a tight footer never
                 // wraps the "%" onto a second line.
-                Text("\(pct)%").foregroundStyle(.secondary).fixedSize()
+                Text(known ? "\(pct)%" : "—").foregroundStyle(.secondary).fixedSize()
             }
         }
         .buttonStyle(.plain)
-        .help("Context window \(pct)% · \(fmtTokens(tokens)) / \(fmtTokens(window))")
-        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct))
+        .help(known
+              ? "Context window \(pct)% · \(fmtTokens(tokens)) / \(fmtTokens(window))"
+              : "Context window not reported yet · \(fmtTokens(window)) window")
+        .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct, known: known))
     }
 }
 
@@ -942,16 +949,19 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     let tokens: Int
     let window: Int
     let pct: Int
+    let known: Bool
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text("\(pct)%").monospacedDigit()
+                Text(known ? "\(pct)%" : "—").monospacedDigit()
             }
             UsageBar(percent: pct).frame(height: 4)
-            Text("\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens")
+            Text(known
+                 ? "\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens"
+                 : "Not reported yet · \(fmtTokens(window)) window")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

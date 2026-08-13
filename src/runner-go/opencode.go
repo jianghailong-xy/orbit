@@ -487,6 +487,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
+	// Occupancy accumulates over the turn's steps but only ships with turn_end; report it as it
+	// moves so a long turn's gauge isn't stuck at its pre-turn reading.
+	var ctxPing contextPinger
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -498,6 +501,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 			continue
 		}
 		handleOpenCodeEvent(event, emit, &result)
+		ctxPing.ping(emit, result.ContextTokens)
 	}
 	waitErr := waitSessionProcessTree(cmd)
 	stderrWG.Wait()

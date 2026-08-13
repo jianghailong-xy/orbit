@@ -304,6 +304,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	asyncWg.Add(1)
 	go func() {
 		defer asyncWg.Done()
+		// app-server reports token usage mid-turn (thread/tokenUsage/updated), but the figure
+		// only leaves the runner on turn_end — report it to the clients' gauge as it moves.
+		var ctxPing contextPinger
 		for {
 			select {
 			case <-workerCtx.Done():
@@ -316,6 +319,13 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir})
 				}, onRateLimits)
+				activeMu.Lock()
+				tokens := 0
+				if active != nil {
+					tokens = active.result.ContextTokens
+				}
+				activeMu.Unlock()
+				ctxPing.ping(emit, tokens)
 			}
 		}
 	}()

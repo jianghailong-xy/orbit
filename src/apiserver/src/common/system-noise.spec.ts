@@ -48,6 +48,19 @@ test('keeps a subtype-less system event that carries codex stderr', () => {
   );
 });
 
+test("keeps the runner's mid-turn context ping — the clients' gauge is its only consumer", () => {
+  // context_ping.go emits this while a turn runs, so a long first turn's gauge isn't stuck at 0
+  // until turn_end. Dropped here it would never reach the clients, which read `contextTokens` off
+  // whatever event carries it.
+  assert.equal(
+    isNoiseSystemEvent({
+      type: RunEventType.SYSTEM,
+      payload: { subtype: 'context', contextTokens: 128_400 },
+    }),
+    false,
+  );
+});
+
 test('keeps any future system event that carries a field of its own', () => {
   assert.equal(
     isNoiseSystemEvent({ type: RunEventType.SYSTEM, payload: { subtype: 'something_new', detail: 42 } }),
