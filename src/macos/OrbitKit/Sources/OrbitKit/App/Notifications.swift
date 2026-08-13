@@ -15,17 +15,17 @@ public enum NotificationEvent: Equatable, Sendable {
 
 public enum SessionDelta {
     /// Diff two Open-list snapshots into notification events. Skips the `focusedSessionID`
-    /// (the user is already looking at it) and anything in `filedLocally` — a session this device
-    /// just completed / trashed / purged leaves the Open list because the user filed it, which is
-    /// not a run finishing and already has the action's own toast to report it. The caller should
-    /// prime the first snapshot WITHOUT notifying (otherwise every pre-existing pending session
-    /// would ping on launch).
+    /// (the user is already looking at it) and anything in `filed` — a session that left the Open
+    /// list because somebody completed or trashed it, here or on another device, which is not a run
+    /// finishing and reports the user's own action back to them. The caller should prime the first
+    /// snapshot WITHOUT notifying (otherwise every pre-existing pending session would ping on
+    /// launch).
     public static func diff(previous: [Session], current: [Session],
                             focusedSessionID: String? = nil,
-                            filedLocally: Set<String> = []) -> [NotificationEvent] {
+                            filed: Set<String> = []) -> [NotificationEvent] {
         let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let curByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let silent = filedLocally.union([focusedSessionID].compactMap { $0 })
+        let silent = filed.union([focusedSessionID].compactMap { $0 })
         var events: [NotificationEvent] = []
 
         for s in current where !silent.contains(s.id) {
@@ -46,6 +46,17 @@ public enum SessionDelta {
         }
         return events
     }
+
+    /// Whether a `session.ended` control event is worth announcing. That event fires whenever a row
+    /// leaves Open, and only the reaper's `task_done` — a task that ran to success, which the server
+    /// files for you — is the run finishing on its own. Everything else is somebody completing or
+    /// trashing the session by hand, on this device or another.
+    ///
+    /// An unrecognised reason (or none) counts as filed too, because the field is only trustworthy
+    /// in this direction: completing a session that had already ended forwards whatever `endReason`
+    /// it was carrying rather than `completed` (see `transitionEnd` in sessions.service.ts), so
+    /// "not task_done" is the only read of it that holds.
+    public static func announcesFinish(endReason: String?) -> Bool { endReason == "task_done" }
 
     private static func isTerminal(_ s: RunStatus) -> Bool {
         switch s {
@@ -82,7 +93,10 @@ public enum Notifications {
     public static let actionDeny = "DENY"
     public static let actionReply = "REPLY"
 
-    static let keySession = "sessionID"
+    /// `userInfo` key naming the session an alert is about — set by both the locally posted
+    /// notifications below and the server's APNs payload, so the delivery layer can tell which
+    /// session a push (from either source) belongs to.
+    public static let keySession = "sessionID"
     static let keyKind = "kind"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {

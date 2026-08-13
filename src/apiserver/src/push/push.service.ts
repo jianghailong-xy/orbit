@@ -85,7 +85,15 @@ export class PushService {
       if (!ids.includes(sessionId)) return;
       const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
       if (tokens.length === 0) return;
+      const alreadyFlagged = this.badgeState.get(session.ownerId)?.sessions.has(sessionId) ?? false;
       this.badgeState.set(session.ownerId, { badge: ids.length, sessions: new Set(ids) });
+      // A turn asking permission for several tools at once creates an approval apiece, and each one
+      // lands here. The badge counts sessions, so it hasn't moved, and the app coalesces them into a
+      // single "N pending" row — only the alerts didn't coalesce, so a parallel tool call rang the
+      // phone once per tool. Alert on the session's 0 → pending edge, which is the transition the
+      // clients notify on too (SessionDelta.diff). Per-replica and lost on restart: the worst case
+      // is the extra banner we have today.
+      if (alreadyFlagged) return;
       const badge = ids.length;
 
       const auth = this.authToken();

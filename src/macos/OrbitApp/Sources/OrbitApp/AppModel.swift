@@ -158,13 +158,19 @@ final class AppModel {
     private var apiGeneration = 0
     private var pollTask: Task<Void, Never>?
     private var lastSnapshot: [Session]?
-    /// Sessions this device is filing right now (complete / trash). Filing drops the row out of Open,
-    /// which the snapshot diff would otherwise read as the run finishing and announce with a "Session
-    /// finished" banner — on top of the action's own toast, so one tap reported itself twice. Marked
-    /// BEFORE the request, since the control-plane event for the filing can bring a snapshot in while
-    /// it is still in flight; cleared once the action's own refresh has been applied. Purge needs no
-    /// entry: it only acts on trashed rows, which are not in the Open snapshot the diff reads.
-    private var locallyFiled: Set<String> = []
+    /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
+    /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
+    /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
+    /// the user's own action back to them, and on this device landing on top of the action's own
+    /// toast so one tap arrived twice. Two ways in:
+    ///   • a row action here, marked BEFORE the request since the filing's own control event can
+    ///     bring a snapshot in while it is still in flight (purge needs no entry — it only acts on
+    ///     trashed rows, which the Open snapshot never held);
+    ///   • a `session.ended` event whose reason isn't `task_done` (see `apply`), which is how a
+    ///     completion on web or another client stays quiet here.
+    /// Entries are released in `applySessionSnapshot` the moment a snapshot without the row lands:
+    /// from then on the row isn't in `lastSnapshot` either, so no later diff can announce it.
+    private var filedSessions: Set<String> = []
     /// The last badge string written to the OS (dock tile / app icon). Both writes cross a process
     /// boundary, so an unchanged snapshot skips them — `didWriteBadge` keeps the FIRST snapshot after
     /// launch/sign-in writing even when it matches the initial value, since a badge set by a silent
@@ -523,8 +529,18 @@ final class AppModel {
                 return
             }
             scheduleControlRefresh()
-        // session.ended (the row leaves Open), session.error / background.task (fields the payload
-        // doesn't carry), tag.changed, and anything a newer server adds.
+        // The row is leaving Open, and this event carries the one field that says why. Membership
+        // still decides the list, so the refresh runs either way — but a departure the server
+        // attributes to a hand filing is marked first, so the snapshot it brings back doesn't read
+        // the row's absence as a run finishing (`SessionDelta.announcesFinish`). Without this, a
+        // session completed in a browser announced itself as finished on every other client.
+        case .sessionEnded:
+            if !SessionDelta.announcesFinish(endReason: ev.payload(ControlSessionEnded.self)?.endReason) {
+                filedSessions.insert(ev.sessionId)
+            }
+            scheduleControlRefresh()
+        // session.error / background.task (fields the payload doesn't carry), tag.changed, and
+        // anything a newer server adds.
         default:
             scheduleControlRefresh()
         }
@@ -669,6 +685,9 @@ final class AppModel {
             sessionDetails.store(loaded)
         }
         consoleRegistry?.focus(id, agentID: id.flatMap { agentID(for: $0) })
+        // The delivery layer needs the same focus the diff uses, for the alerts it doesn't author:
+        // a server push about the session on screen shouldn't interrupt it (see `willPresent`).
+        notifications.focusedSessionID = id
     }
 
     func loadSessions() async {
@@ -695,7 +714,7 @@ final class AppModel {
         if notify, let prev = lastSnapshot {
             for event in SessionDelta.diff(previous: prev, current: list,
                                            focusedSessionID: focusedConsoleSessionID,
-                                           filedLocally: locallyFiled) {
+                                           filed: filedSessions) {
                 #if os(iOS)
                 // The server already pushes approvals to this device over APNs, in every app state
                 // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
@@ -704,6 +723,14 @@ final class AppModel {
                 #endif
                 notifications.post(Notifications.content(for: event))
             }
+        }
+        // A filing has done its silencing once a snapshot without the row lands: `lastSnapshot` no
+        // longer holds it either, so nothing later can read its absence as a finish. Releasing here
+        // (rather than only where the mark was made) is what keeps the set from growing on filings
+        // that arrive as events, which have no completion of their own to clean up after.
+        if !filedSessions.isEmpty {
+            let present = Set(list.map(\.id))
+            filedSessions.formIntersection(present)
         }
         lastSnapshot = list
         // Only cached cold-route records are reconciled; the Open list itself remains the
@@ -947,9 +974,9 @@ final class AppModel {
             errorText = "This session can't be completed right now."
             return
         }
-        locallyFiled.insert(id)
+        filedSessions.insert(id)
         Task { @MainActor in
-            defer { locallyFiled.remove(id) }
+            defer { filedSessions.remove(id) }
             do {
                 try await api.completeSession(id)
             } catch {
@@ -1083,9 +1110,9 @@ final class AppModel {
             return
         }
         let name = toastSessionTitle(id)
-        locallyFiled.insert(id)
+        filedSessions.insert(id)
         Task { @MainActor in
-            defer { locallyFiled.remove(id) }
+            defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
                 showToast("Could not complete session", sessionID: id, sessionTitle: name,
@@ -1124,9 +1151,9 @@ final class AppModel {
     func deleteSession(_ id: String) {
         guard let api else { return }
         let name = toastSessionTitle(id)
-        locallyFiled.insert(id)
+        filedSessions.insert(id)
         Task { @MainActor in
-            defer { locallyFiled.remove(id) }
+            defer { filedSessions.remove(id) }
             do { try await api.deleteSession(id) }
             catch {
                 showToast("Could not move to Trash", sessionID: id, sessionTitle: name,
