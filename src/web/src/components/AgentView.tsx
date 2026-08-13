@@ -837,7 +837,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const drafts = useRef<Map<string, string>>(new Map());
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
-  const [mode, setMode] = useState('Default');
+  const [mode, setMode] = useState('Auto');
   const [model, setModel] = useState(DEFAULT_MODEL);
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
@@ -1758,18 +1758,20 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (decision.apply && modelSeed) setModel(modelSeed);
   }, [modelContextKey, modelSeed]);
 
-  const pickedModeSeed = pickedAgent
-    ? PERMISSION_TO_MODE[
-        pickedProviderCapabilitiesResolved
-          ? clampPermissionModeForModel(
-              pickedAgent.permissionMode ?? 'dontAsk',
-              pickedModelDefault ?? DEFAULT_MODEL,
-              pickedProvider,
-              configuredProviders,
-            )
-          : (pickedAgent.permissionMode ?? 'dontAsk')
-      ] ?? 'Default'
-    : null;
+  // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
+  // than inheriting the picked agent's stored mode, which still governs task-launched runs
+  // server-side. Clamp when the effective provider/model can't run Auto, as elsewhere.
+  const pickedModeSeed =
+    PERMISSION_TO_MODE[
+      pickedProviderCapabilitiesResolved
+        ? clampPermissionModeForModel(
+            'auto',
+            pickedModelDefault ?? DEFAULT_MODEL,
+            pickedProvider,
+            configuredProviders,
+          )
+        : 'auto'
+    ] ?? 'Default';
   const modeSeed = selectedId
     ? !live && selected
       ? PERMISSION_TO_MODE[
@@ -2485,9 +2487,9 @@ export function AgentView({ runner }: { runner: Runner }) {
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
       });
-      // Only an *edited* Mode is worth remembering on the agent: the untouched seed is the agent's
-      // own mode, possibly clamped for this provider (Auto -> Default on a model that can't run
-      // it), and writing that back would erase the agent's real default.
+      // Only an *edited* Mode is worth remembering on the agent: the untouched seed is the Auto
+      // default, possibly clamped for this provider (Auto -> Default on a model that can't run
+      // it), and writing that back would erase the agent's real stored mode.
       return {
         id: created.id,
         created: true,
@@ -2514,10 +2516,10 @@ export function AgentView({ runner }: { runner: Runner }) {
       // carries its own binding, and the agent's default keeps meaning "what this project starts
       // on", including for the runs nobody is watching.
       //
-      // The Mode pick is different: without a write-back it lived on that one session only, so the
-      // next new session here — and every task-launched run, which inherits agent.permissionMode
-      // server-side — fell back to the agent's old mode. Best-effort: a failed PATCH costs a
-      // remembered default, never a wrong dispatch.
+      // The Mode pick is different: without a write-back it lived on that one session only, and
+      // every task-launched run inherits agent.permissionMode server-side, so an edited pick is
+      // written back for those (new sessions themselves always default to Auto). Best-effort: a
+      // failed PATCH costs a remembered default, never a wrong dispatch.
       if (created && sentMode && agentId) {
         const patchedAgentId = agentId;
         qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
