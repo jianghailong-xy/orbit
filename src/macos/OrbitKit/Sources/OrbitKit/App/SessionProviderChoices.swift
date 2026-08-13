@@ -69,6 +69,43 @@ public enum SessionProviderChoices {
         return engines + byok
     }
 
+    /// The providers a session that already exists may be moved to: the ones that borrow the same
+    /// runtime CLI it was started on.
+    ///
+    /// That is the whole rule, and the session's own history imposes it — the transcript, the
+    /// resume id and the wire protocol belong to the CLI that started the conversation, so
+    /// claude→codex is a new session rather than a setting. Two Anthropic accounts, or an account
+    /// and a compatible endpoint, are the same CLI with different credentials: the engine re-spawns
+    /// and the conversation carries over. The backend enforces the same rule
+    /// (SessionsService.resolveProviderSwitch); this keeps the picker from offering a rejected move.
+    ///
+    /// The running provider always leads the list, even when it is no longer configured — it is what
+    /// the pill has to display. Mirrors web's `sameRuntimeChoices`; keep the two in sync.
+    public static func sameRuntime(_ provider: String,
+                                   in choices: [ProviderChoice],
+                                   configured: [ConfiguredProvider],
+                                   catalog: RunnerModelCatalog? = nil) -> [ProviderChoice] {
+        let runtime = executingRuntime(provider, configured: configured)
+        let movable = choices.filter {
+            $0.slug != provider && executingRuntime($0.slug, configured: configured) == runtime
+        }
+        let current = choices.first { $0.slug == provider }
+            ?? self.current(provider, in: choices, configured: configured, catalog: catalog)
+        return [current] + movable
+    }
+
+    /// The built-in runtime that actually executes an identity, mirroring the server's
+    /// `execRuntime`. Deliberately not `AgentDefaults.runtime(for:)`, which answers "claude" for
+    /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
+    /// an OpenCode session every Claude provider on the account.
+    static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
+        if let custom = configured.first(where: { $0.slug == provider }) {
+            let borrowed = custom.runtime ?? ""
+            return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
+        }
+        return ["codex", "kimi", "opencode"].contains(provider) ? provider : "claude"
+    }
+
     /// The entry to show as current. An agent set to `opencode`, or pointing at a provider that has
     /// since been removed or disabled, resolves to nothing above — both still have to render
     /// truthfully rather than silently reading as Claude, so they get a synthesized entry.

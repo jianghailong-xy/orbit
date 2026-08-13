@@ -75,4 +75,72 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(current.label, "gone-away")
         XCTAssertEqual(current.kind, .byok)
     }
+
+    // MARK: - sameRuntime (the composer's Provider menu)
+
+    private let anthropic = ConfiguredProvider(
+        slug: "anthropic", label: "Anthropic (Claude)", runtime: "claude",
+        models: [], defaultModel: "claude-opus-5", presetSlug: "anthropic")
+
+    private let anthropic2 = ConfiguredProvider(
+        slug: "anthropic-2", label: "Work account", runtime: "claude",
+        models: [], defaultModel: "claude-opus-5", presetSlug: "anthropic")
+
+    private let moonshot = ConfiguredProvider(
+        slug: "moonshot", label: "Kimi (Moonshot)", runtime: "kimi",
+        models: [ConfiguredProviderModel(value: "kimi-k3", label: "Kimi K3")],
+        defaultModel: "kimi-k3", presetSlug: "moonshot")
+
+    func testSameRuntimeOffersTheSecondAnthropicAccountAndTheEngine() {
+        let configured = [anthropic, anthropic2, deepseek, moonshot]
+        let choices = SessionProviderChoices.sameRuntime(
+            "anthropic", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured)
+        XCTAssertEqual(choices.first?.slug, "anthropic")
+        XCTAssertEqual(choices.map(\.slug).sorted(),
+                       ["anthropic", "anthropic-2", "claude", "deepseek"])
+    }
+
+    func testSameRuntimeNeverCrossesToAnotherRuntime() {
+        let configured = [anthropic, anthropic2, deepseek, moonshot]
+        let slugs = SessionProviderChoices.sameRuntime(
+            "claude", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured).map(\.slug)
+        XCTAssertFalse(slugs.contains("codex"))
+        XCTAssertFalse(slugs.contains("kimi"))
+        XCTAssertFalse(slugs.contains("moonshot"))
+    }
+
+    func testSameRuntimeGroupsKimiWithTheProvidersThatBorrowIt() {
+        let configured = [anthropic, moonshot]
+        let slugs = SessionProviderChoices.sameRuntime(
+            "kimi", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured).map(\.slug).sorted()
+        XCTAssertEqual(slugs, ["kimi", "moonshot"])
+    }
+
+    /// OpenCode is its own runtime. Resolving it through AgentDefaults.runtime(for:) would answer
+    /// "claude" and offer every Anthropic provider on the account — see `executingRuntime`.
+    func testSameRuntimeLeavesOpenCodeAlone() {
+        let configured = [anthropic, anthropic2]
+        let choices = SessionProviderChoices.sameRuntime(
+            "opencode", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured)
+        XCTAssertEqual(choices.map(\.slug), ["opencode"])
+    }
+
+    func testSameRuntimeLeavesALoneProviderAloneSoTheMenuCanBeHidden() {
+        XCTAssertEqual(
+            SessionProviderChoices.sameRuntime("claude", in: SessionProviderChoices.choices(configured: []),
+                                               configured: []).count,
+            1)
+    }
+
+    func testSameRuntimeStillShowsASessionWhoseProviderWasRemoved() {
+        let choices = SessionProviderChoices.sameRuntime(
+            "gone-away", in: SessionProviderChoices.choices(configured: [anthropic]),
+            configured: [anthropic])
+        XCTAssertEqual(choices.first?.slug, "gone-away")
+        XCTAssertTrue(choices.contains { $0.slug == "anthropic" })
+    }
 }

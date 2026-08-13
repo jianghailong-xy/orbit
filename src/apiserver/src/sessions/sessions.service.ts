@@ -126,6 +126,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
+interface ResolvedProviderSwitch {
+  /** The identity the session should dispatch under: the requested one, or the current one when
+   *  nothing was asked for. */
+  provider: string;
+  providerBuiltin: boolean;
+  /** The configured row behind it, already scoped to the session's owner. Null for a built-in
+   *  engine, and for a slug whose row was deleted or disabled. */
+  customRow: Awaited<ReturnType<Prisma.TransactionClient['modelProvider']['findFirst']>>;
+  changed: boolean;
+  keepsModel: boolean;
+}
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -3025,10 +3038,15 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      // A revive may also move the session to another provider on the same runtime. Unlike a live
+      // switch there is no process to reload: the row goes PENDING and the claim below resolves
+      // the environment from it, which is also why a model the new provider doesn't serve is
+      // simply cleared — claim re-resolves an unset model against the provider it is claiming for.
+      const next = await this.resolveProviderSwitch(tx, current, dto.provider);
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(
-              normalizeRuntimeProvider(current.provider, current.providerBuiltin),
+              normalizeRuntimeProvider(next.provider, next.providerBuiltin),
               dto.effort,
             )
           : undefined;
@@ -3064,9 +3082,16 @@ export class SessionsService {
           // As in createTurn: a new message — the user's or the sweeper's own — disarms the
           // auto-retry. This is the route the sweeper itself takes for a terminal session.
           retryAt: null,
-          ...(dto.model !== undefined ? { model: dto.model } : {}),
+          ...(dto.model !== undefined
+            ? { model: dto.model }
+            : next.keepsModel
+              ? {}
+              : { model: null }),
           ...(dto.permissionMode !== undefined ? { permissionMode: dto.permissionMode } : {}),
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
+          ...(next.changed
+            ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
+            : {}),
           ...(opts?.batch !== undefined
             ? {
                 batchId: opts.batch?.id ?? null,
@@ -3113,6 +3138,89 @@ export class SessionsService {
   }
 
   /**
+   * Resolve a requested provider change against the one a session is already on.
+   *
+   * A switch re-points the session at another identity — a second account with the same vendor,
+   * or a different endpoint — without moving it to another CLI. The runtime has to match on both
+   * sides: the transcript, the resume id and the wire protocol all belong to the CLI that started
+   * the session, so claude→codex is not a setting but a different session. Same runtime,
+   * different credentials IS a setting — the engine re-spawns with the new environment and
+   * --resume, and the conversation carries over.
+   *
+   * `keepsModel` answers the other half. Each provider owns its model space: a vendor whose own
+   * CLI reports the models (Anthropic on claude, OpenAI on codex) shares one space with the
+   * built-in engine, so the session keeps the model it is running; a provider that maintains its
+   * own list keeps it only when that list has it. False means the caller must let the model
+   * re-resolve against the new provider rather than carry an id it does not serve.
+   *
+   * Caller holds the Session row lock — both call sites (updateConfig, resume) decide and persist
+   * under it, so a concurrent switch cannot interleave with a model write.
+   */
+  private async resolveProviderSwitch(
+    tx: Prisma.TransactionClient,
+    session: {
+      ownerId: string;
+      provider: string;
+      providerBuiltin: boolean;
+      model: string | null;
+    },
+    requested: string | undefined,
+  ): Promise<ResolvedProviderSwitch> {
+    const declared = session.provider;
+    const currentRow = isBuiltinProvider(declared, session.providerBuiltin)
+      ? null
+      : await tx.modelProvider.findFirst({
+          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        });
+    if (requested === undefined || requested === declared) {
+      return {
+        provider: declared,
+        providerBuiltin: session.providerBuiltin,
+        customRow: currentRow,
+        changed: false,
+        keepsModel: true,
+      };
+    }
+    // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
+    // session moved onto the built-in `kimi` slug keeps the discriminator that slug means.
+    const providerBuiltin = Object.values(AgentProvider).includes(requested as AgentProvider);
+    const targetRow = providerBuiltin
+      ? null
+      : await tx.modelProvider.findFirst({
+          where: {
+            slug: requested,
+            enabled: true,
+            OR: [{ ownerId: null }, { ownerId: session.ownerId }],
+          },
+        });
+    if (!providerBuiltin && !targetRow) {
+      throw new BadRequestException('provider not available');
+    }
+    const from = execRuntime({
+      declaredProvider: declared,
+      declaredProviderBuiltin: session.providerBuiltin,
+      customRow: currentRow,
+    });
+    const to = execRuntime({
+      declaredProvider: requested,
+      declaredProviderBuiltin: providerBuiltin,
+      customRow: targetRow,
+    });
+    if (from !== to) {
+      throw new BadRequestException(
+        `a ${from} session cannot switch to a provider that runs on ${to}`,
+      );
+    }
+    return {
+      provider: requested,
+      providerBuiltin,
+      customRow: targetRow,
+      changed: true,
+      keepsModel: !targetRow || ownsModel(targetRow, session.model ?? ''),
+    };
+  }
+
+  /**
    * Change the model / permission mode / effort / provider of an already-started session. The live
    * runtime process was spawned with the old model/permission-mode flags, so we
    * persist the new values and enqueue a `reload` control turn: the runner tears the
@@ -3151,71 +3259,12 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status)) {
         throw new ConflictException('the session has ended');
       }
-      const declared = session.provider ?? null;
-      const customRow = isBuiltinProvider(declared, session.providerBuiltin)
-        ? null
-        : await tx.modelProvider.findFirst({
-            where: {
-              slug: declared!,
-              OR: [{ ownerId: null }, { ownerId: session.ownerId }],
-            },
-          });
-      // A provider switch re-points the session at another identity — a second account with the
-      // same vendor, or a different endpoint — without moving it to another CLI. The runtime has
-      // to match on both sides: the transcript, the resume id and the wire protocol all belong to
-      // the CLI that started the session, so claude→codex is not a config change but a different
-      // session. Same runtime, different credentials IS one — the engine re-spawns with the new
-      // environment and --resume, and the conversation carries over.
-      let provider = declared;
-      let providerBuiltin = session.providerBuiltin;
-      let providerRow = customRow;
-      if (dto.provider !== undefined && dto.provider !== declared) {
-        // Mirrors create(): membership of the enum, deliberately not isBuiltinProvider(), so a
-        // session moved onto the built-in `kimi` slug keeps the discriminator that slug means.
-        providerBuiltin = Object.values(AgentProvider).includes(dto.provider as AgentProvider);
-        providerRow = providerBuiltin
-          ? null
-          : await tx.modelProvider.findFirst({
-              where: {
-                slug: dto.provider,
-                enabled: true,
-                OR: [{ ownerId: null }, { ownerId: session.ownerId }],
-              },
-            });
-        if (!providerBuiltin && !providerRow) {
-          throw new BadRequestException('provider not available');
-        }
-        const from = execRuntime({
-          declaredProvider: declared,
-          declaredProviderBuiltin: session.providerBuiltin,
-          customRow,
-        });
-        const to = execRuntime({
-          declaredProvider: dto.provider,
-          declaredProviderBuiltin: providerBuiltin,
-          customRow: providerRow,
-        });
-        if (from !== to) {
-          throw new BadRequestException(
-            `a ${from} session cannot switch to a provider that runs on ${to}`,
-          );
-        }
-        provider = dto.provider;
-      }
-      const providerChanged = provider !== declared;
-      // Each provider owns its model space. A vendor whose own CLI reports the models (Anthropic
-      // on claude, OpenAI on codex) shares one space with the built-in engine, so the session
-      // keeps the model it is running; a provider that maintains its own list keeps it only when
-      // that list has it, and otherwise restarts at the new provider's default.
-      const carriedModel =
-        providerChanged && providerRow && !ownsModel(providerRow, session.model ?? '')
-          ? null
-          : session.model;
+      const next = await this.resolveProviderSwitch(tx, session, dto.provider);
       const exec = resolveProviderExec({
-        declaredProvider: provider,
-        declaredProviderBuiltin: providerBuiltin,
-        customRow: providerRow,
-        sessionModel: dto.model ?? carriedModel,
+        declaredProvider: next.provider,
+        declaredProviderBuiltin: next.providerBuiltin,
+        customRow: next.customRow,
+        sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
         agentModel: session.agent?.model,
@@ -3246,7 +3295,9 @@ export class SessionsService {
           model: exec.model,
           permissionMode: normalizedPermissionMode,
           ...(dto.effort !== undefined ? { effort: normalizedEffort } : {}),
-          ...(providerChanged ? { provider, providerBuiltin } : {}),
+          ...(next.changed
+            ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
+            : {}),
         },
       });
 
@@ -3267,7 +3318,7 @@ export class SessionsService {
           // The identity only. It tells the runner its process environment is stale — the
           // credential behind it is resolved when the inbox delivers this turn, so a decrypted
           // provider key never lands in conversation_turn.
-          provider: providerChanged ? provider : undefined,
+          provider: next.changed ? next.provider : undefined,
         }),
         clientTurnId: randomUUID(),
       });

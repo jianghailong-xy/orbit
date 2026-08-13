@@ -278,6 +278,25 @@ struct ComposerView: View {
                     Text(name).foregroundStyle(.secondary).lineLimit(1).layoutPriority(-1)
                 }
 
+                // Only when there is somewhere to go: a second account with the same vendor, or
+                // another endpoint on the same CLI. One entry means no switch is possible, and the
+                // menu is left out rather than shown inert.
+                if console.providerSwitchChoices.count > 1 {
+                    Menu {
+                        ForEach(console.providerSwitchChoices) { choice in
+                            Button {
+                                Task { await console.selectProvider(choice.slug) }
+                            } label: {
+                                menuItemLabel(choice.label, selected: choice.slug == console.provider)
+                            }
+                        }
+                    } label: {
+                        menuLabel(AgentDefaults.providerName(console.provider,
+                                                             configured: console.configuredProviders))
+                    }
+                    .footerMenuChrome()
+                }
+
                 Menu {
                     ForEach(modelMenuItems) { m in
                         Button {

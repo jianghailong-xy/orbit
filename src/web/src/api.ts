@@ -392,7 +392,7 @@ export const listQueuedTurns = (sessionId: string) =>
 export const resumeSession = (
   sessionId: string,
   content: string,
-  config?: { model?: string; permissionMode?: string; effort?: string },
+  config?: { model?: string; permissionMode?: string; effort?: string; provider?: string },
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
 ) =>

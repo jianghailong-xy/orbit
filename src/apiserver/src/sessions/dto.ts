@@ -50,6 +50,10 @@ export interface SessionResumeDto extends SessionTurnDto {
   model?: string;
   permissionMode?: string;
   effort?: string;
+  /** Revive on another provider identity that runs on the SAME built-in runtime — same rule and
+   *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
+   *  session is claimed afresh, and the claim resolves the environment from the row. */
+  provider?: string;
 }
 
 export interface MergeToMainDto {

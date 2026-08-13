@@ -1614,11 +1614,25 @@ export function AgentView({ runner }: { runner: Runner }) {
   const pickedProvider: string =
     draftProvider ?? pickedAgent?.lastProvider ?? pickedAgent?.provider ?? 'claude';
 
-  // The provider this composer talks to: a live session's own, else the one picked for the draft.
-  // Declared here (not next to its other consumers) because the `/` autocomplete memo below
-  // needs it.
+  // A provider switch made on an ENDED session, scoped to that session for the same reason the
+  // draft pick is scoped to its agent. There is nothing to PATCH while a session is ended, so
+  // this rides along with the resume that revives it — the same route Model/Mode/Effort take.
+  const [endedProviderPick, setEndedProviderPick] = useState<{
+    sessionId: string;
+    provider: string;
+  } | null>(null);
+  // Gated on `live` rather than cleared: once the resume lands the session is live and carries
+  // the new provider itself, so the pick simply stops applying — and a later switch through the
+  // live pill can't be shadowed by this stale one.
+  const pendingResumeProvider =
+    selected && !live && endedProviderPick?.sessionId === selected.id
+      ? endedProviderPick?.provider
+      : null;
+  // The provider this composer talks to: a live session's own, an ended session's pending pick,
+  // else the one picked for the draft. Declared here (not next to its other consumers) because
+  // the `/` autocomplete memo below needs it.
   const shownProvider: string = selected
-    ? (selected.provider ?? detailForSelected?.provider ?? 'claude')
+    ? (pendingResumeProvider ?? selected.provider ?? detailForSelected?.provider ?? 'claude')
     : pickedProvider;
   const shownProviderCapabilitiesResolved = providerIdentityResolved(
     shownProvider,
@@ -2425,11 +2439,15 @@ export function AgentView({ runner }: { runner: Runner }) {
         }
         if (disposition === 'RESUME') {
           // The pills were seeded from this session's stored config, so an untouched
-          // send keeps it and an edited Mode/Model/Effort is re-applied on resume.
+          // send keeps it and an edited Mode/Model/Effort/Provider is re-applied on resume.
           // A `!cmd` revives via a shell turn: claude --resumes (context restored) and the
           // runner runs the command, buffering its output for the next message.
           const provider =
-            fresh.provider ?? selected.provider ?? detailForSelected?.provider ?? 'claude';
+            pendingResumeProvider ??
+            fresh.provider ??
+            selected.provider ??
+            detailForSelected?.provider ??
+            'claude';
           const wireEffort = normalizeEffortForProvider(
             provider,
             effort,
@@ -2440,7 +2458,12 @@ export function AgentView({ runner }: { runner: Runner }) {
             selected.id,
             content,
             // Keep '' so choosing Default explicitly clears a stale stored variant.
-            { model, permissionMode: MODE_TO_PERMISSION[mode], effort: wireEffort },
+            {
+              model,
+              permissionMode: MODE_TO_PERMISSION[mode],
+              effort: wireEffort,
+              ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+            },
             attachmentIds,
             shell ? 'shell' : undefined,
           );
@@ -3545,14 +3568,15 @@ export function AgentView({ runner }: { runner: Runner }) {
         ...catalogModelOptions,
       ];
   const shownPlanUsage = sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
-  // Where this session could move without changing CLI. Only for a session that is still open:
-  // a draft picks its provider in the hero above (which offers every runtime, not one), and an
-  // ended session has no config to change — a PATCH would be refused. A single entry means there
-  // is nowhere to go, and the pill stays out of the composer entirely — the common case, one
-  // Claude sign-in and no configured providers.
+  // Where this session could move without changing CLI. Offered on the two routes that actually
+  // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
+  // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
+  // session that can't be resumed would start a NEW session on send, where the agent decides. A
+  // single entry means there is nowhere to go, and the pill stays out of the composer entirely —
+  // the common case, one Claude sign-in and no configured providers.
   const providerSwitchChoices = useMemo(
     () =>
-      live
+      live || resumable
         ? sameRuntimeChoices(
             shownProvider,
             providerChoicesForRunner,
@@ -3563,6 +3587,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         : [],
     [
       live,
+      resumable,
       shownProvider,
       providerChoicesForRunner,
       configuredProviders,
@@ -5106,18 +5131,35 @@ export function AgentView({ runner }: { runner: Runner }) {
                         );
                     const drop =
                       shownMode === 'Auto' && !supportsAuto(nextModel, v, configuredProviders);
+                    const currentEffort = live ? effectiveEffort : effort;
                     const nextEffort = normalizeEffortForProvider(
                       v,
-                      effectiveEffort,
+                      currentEffort,
                       nextModel,
                       runner.modelCatalog,
                     );
-                    configMut.mutate({
-                      provider: v,
-                      ...(nextModel !== shownModel ? { model: nextModel } : {}),
-                      ...(drop ? { permissionMode: 'default' } : {}),
-                      ...(nextEffort !== effectiveEffort ? { effort: nextEffort } : {}),
-                    });
+                    if (live) {
+                      configMut.mutate({
+                        provider: v,
+                        ...(nextModel !== shownModel ? { model: nextModel } : {}),
+                        ...(drop ? { permissionMode: 'default' } : {}),
+                        ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
+                      });
+                      return;
+                    }
+                    // Ended: hold the pick until the resume carries it, and move the pills that
+                    // depend on it now — marking their seeds dirty, exactly as a manual Model or
+                    // Mode edit does, so the seeding effect doesn't put the old values back.
+                    setEndedProviderPick({ sessionId: selected!.id, provider: v });
+                    if (nextModel !== shownModel) {
+                      modelSeedState.current = dirtyContextSeed(modelContextKey);
+                      setModel(nextModel);
+                    }
+                    if (drop) {
+                      modeSeedState.current = dirtyContextSeed(modelContextKey);
+                      setMode('Default');
+                    }
+                    if (nextEffort !== currentEffort) setEffort(nextEffort);
                   }}
                   options={providerSwitchChoices.map((choice) => ({
                     value: choice.slug,

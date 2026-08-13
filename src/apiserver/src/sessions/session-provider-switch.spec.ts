@@ -260,3 +260,127 @@ test('a provider-only patch is a real update, not "nothing to update"', async ()
 
   await assert.rejects(() => service.updateConfig(ownerId, id, {}), /nothing to update/);
 });
+
+/** The same switch, taken at revive time. There is no live process to reload: the row goes
+ *  PENDING and the claim resolves the environment from it. */
+function resumeHarness(session: Record<string, unknown>, providers: ProviderRow[] = []) {
+  const now = new Date();
+  const row = {
+    id,
+    ownerId,
+    status: RunStatus.SUCCEEDED,
+    startedAt: now,
+    numTurns: 2,
+    runtimeSessionId: '55555555-5555-4555-8555-555555555555',
+    assignedRunnerId: 'runner-1',
+    assignedRunner: { id: 'runner-1', status: 'ONLINE', lastHeartbeatAt: now },
+    cancelRequestedAt: null,
+    archivedAt: null,
+    completedAt: null,
+    deletedAt: null,
+    providerBuiltin: true,
+    mergeStatus: null,
+    mergeOperationId: null,
+    mergeOperationOwner: null,
+    commitStatus: null,
+    commitOperationId: null,
+    commitOperationOwner: null,
+    ...session,
+  };
+  const updates: Array<{ data: Record<string, unknown> }> = [];
+  const sessionDelegate = {
+    findFirst: async () => row,
+    findUniqueOrThrow: async () => row,
+    update: async (args: { data: Record<string, unknown> }) => {
+      updates.push(args);
+      return row;
+    },
+  };
+  const conversationTurnDelegate = {
+    findUnique: async () => null,
+    findFirst: async () => ({ seq: 4 }),
+    create: async ({ data }: { data: { seq: number } }) => ({ id: 'revive-turn', ...data }),
+  };
+  const prisma = {
+    session: sessionDelegate,
+    conversationTurn: conversationTurnDelegate,
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $queryRaw: async () => [{ id }],
+        $executeRaw: async () => 1,
+        session: sessionDelegate,
+        conversationTurn: conversationTurnDelegate,
+        modelProvider: {
+          findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
+            providers.find(
+              (p) => p.slug === where.slug && (where.enabled === undefined || p.enabled),
+            ) ?? null,
+        },
+      }),
+  } as never;
+  const service = new SessionsService(prisma, { notifySessionQueued: () => undefined } as never, {
+    publishSessionCreated: () => undefined,
+  } as never);
+  return { service, updates };
+}
+
+const revive = { clientTurnId: 'revive-1', content: 'carry on, on the other account' };
+
+test('an ended session can be revived on another provider of the same runtime', async () => {
+  const { service, updates } = resumeHarness(
+    { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5' },
+    [providerRow({ slug: 'anthropic' }), providerRow({ slug: 'anthropic-2' })],
+  );
+
+  await service.resume(ownerId, id, { ...revive, provider: 'anthropic-2' });
+
+  const data = updates[0].data;
+  assert.equal(data.status, RunStatus.PENDING);
+  assert.equal(data.provider, 'anthropic-2');
+  assert.equal(data.providerBuiltin, false);
+  // Both share the runtime's model space, so the revived session keeps what it was running.
+  assert.equal('model' in data, false);
+});
+
+test('a revive onto a provider with its own model list clears the model for the claim', async () => {
+  const { service, updates } = resumeHarness(
+    { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5' },
+    [
+      providerRow({ slug: 'anthropic' }),
+      providerRow({
+        slug: 'zhipu',
+        presetSlug: null,
+        followsPreset: false,
+        models: [{ value: 'glm-5', label: 'GLM-5' }],
+        defaultModel: 'glm-5',
+      }),
+    ],
+  );
+
+  await service.resume(ownerId, id, { ...revive, provider: 'zhipu' });
+
+  // Null, not glm-5: an unset model is what makes the claim resolve it against the provider it
+  // is claiming for, using the runner's live catalogue rather than a guess made here.
+  assert.equal(updates[0].data.model, null);
+});
+
+test('a revive cannot cross runtimes either', async () => {
+  const { service } = resumeHarness({ provider: 'claude', model: 'claude-opus-5' });
+
+  await assert.rejects(
+    () => service.resume(ownerId, id, { ...revive, provider: 'codex' }),
+    /claude session cannot switch to a provider that runs on codex/,
+  );
+});
+
+test('a revive without a provider leaves the session on the one it ended with', async () => {
+  const { service, updates } = resumeHarness(
+    { provider: 'anthropic', providerBuiltin: false, model: 'claude-opus-5' },
+    [providerRow({ slug: 'anthropic' })],
+  );
+
+  await service.resume(ownerId, id, revive);
+
+  assert.equal('provider' in updates[0].data, false);
+  assert.equal('model' in updates[0].data, false);
+});

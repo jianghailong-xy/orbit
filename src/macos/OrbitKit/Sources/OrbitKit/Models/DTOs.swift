@@ -731,9 +731,13 @@ public struct ResumeRequest: Codable, Sendable {
     /// session drops staged images — the durable `user` event then reconciles the optimistic
     /// bubble away, so the image vanishes and the runner never receives it.
     public let attachmentIds: [String]?
+    /// Revive on another provider identity running on the SAME runtime CLI (a second account with
+    /// the same vendor, say). Cross-runtime is rejected server-side. Sent only when the user picked
+    /// one while the session was ended; nil keeps whatever it ended on.
+    public let provider: String?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                attachmentIds: [String]? = nil) {
+                attachmentIds: [String]? = nil, provider: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
@@ -741,6 +745,7 @@ public struct ResumeRequest: Codable, Sendable {
         self.permissionMode = permissionMode
         self.effort = effort
         self.attachmentIds = attachmentIds
+        self.provider = provider
     }
 }
 
@@ -749,10 +754,16 @@ public struct ConfigUpdateRequest: Codable, Sendable {
     public let model: String?
     public let permissionMode: String?
     public let effort: String?
-    public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil) {
+    /// Re-point a live session at another provider identity on the SAME runtime CLI. The runner
+    /// re-spawns with the new environment and --resume, so the conversation carries over.
+    /// Cross-runtime is rejected server-side.
+    public let provider: String?
+    public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
+                provider: String? = nil) {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
+        self.provider = provider
     }
 }
 

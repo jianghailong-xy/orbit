@@ -63,6 +63,11 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
+    /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
+    /// Nil unless the user picked one here: the session's own provider must never be re-asserted
+    /// from a console whose context has not loaded yet.
+    private(set) var pendingResumeProvider: String?
     var isDraft: Bool { draftAgent != nil }
     /// Draft only: fired with the freshly created session so the caller can open its live console.
     var onSessionCreated: ((Session) -> Void)?
@@ -697,6 +702,60 @@ final class ConsoleModel {
         return changedPermissionMode
     }
 
+    /// Where this session could move without changing CLI, for the composer's Provider menu.
+    /// Offered on the two routes that actually carry a provider: a live session's config PATCH and
+    /// the resume that revives an ended one. A draft picks in the new-session hero instead (which
+    /// offers every runtime, not one), and `availability` excludes an ended session that cannot be
+    /// revived at all — `canSend` already folds "terminal and not resumable" into `.blocked`. One
+    /// entry means there is nowhere to go, and the composer omits the menu entirely — the common
+    /// case of a single sign-in and no configured providers.
+    var providerSwitchChoices: [ProviderChoice] {
+        guard !isDraft, isLive || availability != .blocked else { return [] }
+        return SessionProviderChoices.sameRuntime(
+            provider,
+            in: SessionProviderChoices.choices(configured: configuredProviders, catalog: modelCatalog),
+            configured: configuredProviders,
+            catalog: modelCatalog)
+    }
+
+    /// Move an existing session to another provider on the same runtime. The model comes along only
+    /// when the new provider offers it (two Anthropic accounts share the runtime's model space; an
+    /// endpoint with a list of its own does not), and mode/effort are re-clamped to what that pair
+    /// accepts — the same follow-on a model change makes. Live pushes it now; ended holds it for
+    /// the resume.
+    func selectProvider(_ slug: String) async {
+        guard !isDraft, slug != provider else { return }
+        let offersCurrent = AgentDefaults
+            .models(for: slug, catalog: modelCatalog, configured: configuredProviders)
+            .contains { $0.id == modelID }
+        let nextModel = offersCurrent
+            ? modelID
+            : AgentDefaults.defaultModel(for: slug, catalog: modelCatalog,
+                                         configured: configuredProviders)
+        let nextMode = providerCapabilitiesResolved
+            ? AgentDefaults.clampPermissionMode(permissionMode, for: nextModel, provider: slug,
+                                                configured: configuredProviders)
+            : permissionMode
+        let nextEffort = AgentDefaults.normalizedEffort(effort, for: slug, model: nextModel,
+                                                        catalog: modelCatalog)
+        provider = slug
+        if nextModel != modelID {
+            modelID = nextModel
+            modelSelectionRevision.markUserEdit()
+        }
+        permissionMode = nextMode
+        effort = nextEffort
+        guard isLive else {
+            pendingResumeProvider = slug
+            return
+        }
+        // Cleared, not left behind: a live switch is already persisted, and a pick still sitting
+        // here would silently re-assert itself on some later resume of this same console.
+        pendingResumeProvider = nil
+        await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
+                          effort: nextEffort.rawValue, provider: slug)
+    }
+
     /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
     /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
     /// default, and the mode/effort pills are re-clamped to what that provider accepts. The seed is
@@ -752,15 +811,20 @@ final class ConsoleModel {
     /// by the next resume. Pass only the field that changed (effort uses its raw value so
     /// Default sends "" to clear it). No-op when the value equals the synced server config —
     /// that filters the programmatic adopt in `loadContext` from re-spawning the session.
-    func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil) async {
+    func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
+                     provider: String? = nil) async {
         guard isLive else { return }
-        let changed = (model.map { $0 != syncedConfig?.model } ?? false)
+        // A provider only ever arrives from an explicit pick — `loadContext`'s adopt never sets one
+        // — so it needs no comparison against the synced pair to prove it isn't an echo.
+        let changed = provider != nil
+            || (model.map { $0 != syncedConfig?.model } ?? false)
             || (permissionMode.map { $0 != syncedConfig?.permissionMode } ?? false)
             || (effort.map { $0 != syncedConfig?.effort } ?? false)
         guard changed else { return }
         do {
             try await api.updateConfig(sessionID: sessionID,
-                ConfigUpdateRequest(model: model, permissionMode: permissionMode, effort: effort))
+                ConfigUpdateRequest(model: model, permissionMode: permissionMode, effort: effort,
+                                    provider: provider))
             let baseline = syncedConfig ?? (model: modelID,
                                              permissionMode: self.permissionMode.rawValue,
                                              effort: self.effort.rawValue)
@@ -989,7 +1053,8 @@ final class ConsoleModel {
                                           // Resume config is authoritative. Keep the empty string
                                           // so Default clears a stale server-side model variant.
                                           effort: effort.rawValue,
-                                          attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds)
+                                          attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                                          provider: pendingResumeProvider)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds)
         return try await retryingTransientFailures { () async throws -> TurnAccepted in
