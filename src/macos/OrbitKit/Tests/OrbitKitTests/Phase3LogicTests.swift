@@ -48,6 +48,19 @@ final class Phase3LogicTests: XCTestCase {
                        [.finished(sessionID: "a", title: "a", status: nil)])
     }
 
+    func testLocallyFiledSessionIsSkipped() {
+        let prev = [session("a", .running)]
+        // Completing / trashing 'a' on this device drops it from Open — the row action's own toast
+        // reports that, so the diff must not also announce it as a finished run.
+        XCTAssertTrue(SessionDelta.diff(previous: prev, current: [], filedLocally: ["a"]).isEmpty)
+        XCTAssertTrue(SessionDelta.diff(previous: prev, current: [session("a", .succeeded)],
+                                        filedLocally: ["a"]).isEmpty)
+        // Another session leaving Open in the same snapshot still notifies.
+        XCTAssertEqual(SessionDelta.diff(previous: prev + [session("b", .running)], current: [],
+                                         filedLocally: ["a"]),
+                       [.finished(sessionID: "b", title: "b", status: nil)])
+    }
+
     func testFinishedWithTerminalStatusInSnapshot() {
         let prev = [session("a", .running)]
         let cur = [session("a", .failed)]

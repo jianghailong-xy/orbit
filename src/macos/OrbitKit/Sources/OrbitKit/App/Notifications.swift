@@ -15,15 +15,20 @@ public enum NotificationEvent: Equatable, Sendable {
 
 public enum SessionDelta {
     /// Diff two Open-list snapshots into notification events. Skips the `focusedSessionID`
-    /// (the user is already looking at it). The caller should prime the first snapshot WITHOUT
-    /// notifying (otherwise every pre-existing pending session would ping on launch).
+    /// (the user is already looking at it) and anything in `filedLocally` — a session this device
+    /// just completed / trashed / purged leaves the Open list because the user filed it, which is
+    /// not a run finishing and already has the action's own toast to report it. The caller should
+    /// prime the first snapshot WITHOUT notifying (otherwise every pre-existing pending session
+    /// would ping on launch).
     public static func diff(previous: [Session], current: [Session],
-                            focusedSessionID: String? = nil) -> [NotificationEvent] {
+                            focusedSessionID: String? = nil,
+                            filedLocally: Set<String> = []) -> [NotificationEvent] {
         let prevByID = Dictionary(previous.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let curByID = Dictionary(current.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let silent = filedLocally.union([focusedSessionID].compactMap { $0 })
         var events: [NotificationEvent] = []
 
-        for s in current where s.id != focusedSessionID {
+        for s in current where !silent.contains(s.id) {
             let before = prevByID[s.id]?.pendingApprovals ?? 0
             let after = s.pendingApprovals ?? 0
             if before == 0 && after > 0 {
@@ -36,7 +41,7 @@ public enum SessionDelta {
             }
         }
         // Sessions that were live and dropped out of Open → finished (status unknown).
-        for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && p.id != focusedSessionID {
+        for p in previous where p.effectiveRunStatus.isLive && curByID[p.id] == nil && !silent.contains(p.id) {
             events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
         }
         return events
