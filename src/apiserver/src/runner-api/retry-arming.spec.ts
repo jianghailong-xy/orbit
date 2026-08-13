@@ -12,6 +12,8 @@ const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const OVERLOADED =
   'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}';
 const QUOTA = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
+const RATE_LIMITED =
+  "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.";
 
 type RetryPlan = { retryAt?: Date | null; retryAttempts?: number };
 
@@ -61,6 +63,17 @@ test('walks further out as the streak grows', async () => {
   const plan = await planFor({ retryAttempts: 1 }, OVERLOADED);
 
   assert.ok(plan.retryAt!.getTime() - before >= API_ERROR_RETRY_BACKOFF_MS[1]);
+});
+
+test('arms the API key rate limit even though its status is mid-sentence', async () => {
+  const before = Date.now();
+  const plan = await planFor({ retryAttempts: 0 }, RATE_LIMITED);
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
 });
 
 test('hands back once the steps are spent instead of retrying forever', async () => {

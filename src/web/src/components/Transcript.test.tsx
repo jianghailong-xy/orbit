@@ -76,6 +76,17 @@ describe('transient provider error card', () => {
     expect(html).not.toContain('chat-error');
   });
 
+  it('turns the API key rate-limit wrapper into the same card', () => {
+    const html = render(
+      "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.",
+    );
+
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain('rate limit');
+    expect(html).not.toContain('chat-error');
+  });
+
   it('leaves an error a re-send would reproduce as a plain error line', () => {
     const html = render(TOO_LONG);
 

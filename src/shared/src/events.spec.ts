@@ -111,6 +111,12 @@ describe('isRetryableApiErrorText', () => {
   // The status wins over anything the body happens to say: a 400 is a 400.
   it('does not let body wording override the status', () => {
     expect(isRetryableApiErrorText('API Error: 400 the request timed out earlier')).toBe(false);
+    // The wrapper shape is equally authoritative.
+    expect(
+      isRetryableApiErrorText(
+        'API Error: Request rejected (400) · Output blocked by content filtering policy',
+      ),
+    ).toBe(false);
   });
 
   it('does not retry what it cannot place', () => {
@@ -128,6 +134,12 @@ describe('isRetryableApiErrorText', () => {
     ['API Error: 402 Insufficient Balance', false],
     ['API Error: an image in the conversation could not be processed and was removed.', false],
     ['API Error: 529 Overloaded. This is a server-side issue, usually temporary — try again', true],
+    // The account rate limit (an API key) in the runtime's wrapper shape, where the status sits
+    // mid-sentence instead of leading — it is the same 429.
+    [
+      "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.",
+      true,
+    ],
     ['API Error: Overloaded', true],
     ['API Error: 500 Internal server error. This is a server-side issue, usually temporary', true],
     // The same failure without a status: the runtime prints one only when it got a response.

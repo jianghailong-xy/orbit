@@ -106,8 +106,13 @@ export function isRetryableApiErrorText(text: string | null | undefined): boolea
   if (!isApiErrorText(text)) return false;
   const lower = text!.toLowerCase();
   // The status, when there is one, is authoritative: a 400 whose message happens to contain
-  // the word "timeout" is still a 400.
-  const status = lower.match(/^\s*api error:?\s*(\d{3})\b/);
+  // the word "timeout" is still a 400. It arrives in two shapes — the raw dump the runtime
+  // prints when it has a response to read ("API Error: 429 …"), and its friendlier wrapper
+  // for a request the API turned away ("API Error: Request rejected (429) · This request
+  // would exceed your account's rate limit. Please try again later.").
+  const status =
+    lower.match(/^\s*api error:?\s*(\d{3})\b/) ??
+    lower.match(/^\s*api error:?\s*request rejected \((\d{3})\)/);
   if (status) return RETRYABLE_API_ERROR_STATUSES.has(Number(status[1]));
   return RETRYABLE_API_ERROR_MARKERS.some((marker) => lower.includes(marker));
 }
