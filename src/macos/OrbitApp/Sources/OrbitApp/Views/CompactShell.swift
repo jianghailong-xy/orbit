@@ -970,6 +970,7 @@ private struct AgentComposePush: View {
                                    defaultModel: agents.effectiveDefaultModel(for: agent),
                                    configuredProviders: agents.configuredProviders,
                                    configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                                   modelCatalog: agents.modelCatalog(for: agent.runnerId),
                                    defaultEffort: model.user?.preferences?.defaultEffort) { session in
                         model.registerCreatedAgentSession(session)
                         created = session

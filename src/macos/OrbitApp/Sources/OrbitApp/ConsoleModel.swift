@@ -209,7 +209,8 @@ final class ConsoleModel {
     /// settings.
     init(draftFor agent: Agent, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
-         configuredProvidersLoaded: Bool = false, baseURL: URL, tokenStore: TokenStore,
+         configuredProvidersLoaded: Bool = false,
+         modelCatalog: RunnerModelCatalog? = nil, baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
         self.agentID = agent.id
@@ -228,6 +229,11 @@ final class ConsoleModel {
         self.provider = agent.defaultProvider
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
+        // The parent's cached runner snapshot — the same one `defaultModel` was resolved from. It
+        // NAMES that id as well, so seeding it here is what keeps the first frame from rendering a
+        // label the catalogue is about to replace: a runtime-led BYOK row falls back to its preset
+        // list ("Claude Opus 5") until the catalogue lands and settles on "Opus 5".
+        self.modelCatalog = modelCatalog
         self.modelID = defaultModel
         let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
         self.permissionMode = providerCapabilitiesResolved

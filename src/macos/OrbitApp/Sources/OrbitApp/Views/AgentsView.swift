@@ -414,6 +414,7 @@ struct AgentConsoleDetail: View {
                            defaultModel: agents.effectiveDefaultModel(for: agent),
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
+                           modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
             }
@@ -446,6 +447,9 @@ struct NewSessionView: View {
     /// a custom model alias before the draft's first asynchronous refresh.
     let configuredProviders: [ConfiguredProvider]
     let configuredProvidersLoaded: Bool
+    /// The owning runner's cached model catalogue — what `defaultModel` was resolved from, and what
+    /// NAMES it. Passed in so the first frame reads the same label the picker will settle on.
+    let modelCatalog: RunnerModelCatalog?
     /// The account's synced default reasoning effort (`user.preferences.defaultEffort`), used to
     /// seed the effort pill so a value picked on web/another device carries here. Optional because
     /// a restored-token launch primes `user` asynchronously — the seed below reacts to it arriving.
@@ -458,17 +462,20 @@ struct NewSessionView: View {
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
+         modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
         self.defaultModel = defaultModel
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
+        self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
-            configuredProvidersLoaded: configuredProvidersLoaded, onCreated: onCreated))
+            configuredProvidersLoaded: configuredProvidersLoaded,
+            modelCatalog: modelCatalog, onCreated: onCreated))
     }
 
     var body: some View {
