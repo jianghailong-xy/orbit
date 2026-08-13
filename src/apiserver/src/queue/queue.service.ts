@@ -140,15 +140,20 @@ export class QueueService {
             -- bound of pendingWorktreeOperationMayBeExecuting: a dead owner past the margin
             -- stops fencing so a crashed operation can't wedge the turn forever (a live
             -- runner also fails it via failAbandonedWorktreeOperations).
+            -- NULL-safe equality: plain "= 'pending'" is SQL NULL (not false) for the
+            -- common case of a session that has never had a merge/commit, and NOT(NULL)
+            -- is NULL too — which a WHERE clause treats as non-matching, excluding the
+            -- row from every claim forever. IS NOT DISTINCT FROM always yields a real
+            -- boolean.
             AND NOT (
-              s."merge_status" = 'pending'
+              s."merge_status" IS NOT DISTINCT FROM 'pending'
               AND (
                 s."merge_requested_at" IS NULL
                 OR s."merge_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
               )
             )
             AND NOT (
-              s."commit_status" = 'pending'
+              s."commit_status" IS NOT DISTINCT FROM 'pending'
               AND (
                 s."commit_requested_at" IS NULL
                 OR s."commit_requested_at" > now() - (${WORKTREE_OPERATION_STALE_MS} * interval '1 millisecond')
