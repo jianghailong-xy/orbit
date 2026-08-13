@@ -419,3 +419,30 @@ describe('runtime authentication help', () => {
     expect(html).not.toContain('opencode auth login');
   });
 });
+
+describe('shared-checkout notice', () => {
+  const NOTICE =
+    'This turn left 1 file modified in the shared checkout /root/orbit, outside this session’s worktree: src/a.ts.';
+
+  it('renders a runner notice as a calm note, not an error', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[{ seq: 1, type: 'system', payload: { notice: NOTICE, noticeKind: 'shared-checkout-dirty' } }]}
+      />,
+    );
+
+    expect(html).toContain('chat-notice');
+    expect(html).toContain('/root/orbit');
+    expect(html).not.toContain('chat-error');
+  });
+
+  // The same event type still carries engine stderr, which must keep reading as a failure.
+  it('leaves stderr on the error path', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[{ seq: 1, type: 'system', payload: { stderr: 'No conversation found with session ID: x' } }]} />,
+    );
+
+    expect(html).toContain('chat-error');
+    expect(html).not.toContain('chat-notice');
+  });
+});

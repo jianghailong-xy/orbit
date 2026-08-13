@@ -424,6 +424,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// run_event held the message. Keep the last one so finalize can carry it.
 	var lastErrMu sync.Mutex
 	lastErrorMessage := ""
+	// Baseline for the shared-checkout warning below, taken before this session runs anything
+	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
+	sharedDirt := watchSharedCheckout(job.WT)
 	emit := func(eventType string, payload map[string]interface{}) {
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
@@ -517,6 +520,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// a queued follow-up is immediately ready; every other authoritative status
 	// releases this generation's permit (AWAITING_INPUT also starts the warm TTL).
 	completeTurn := func(req TurnCompleteRequest, providerContexts ...context.Context) error {
+		// Say it while the author is still here. Emitted before anything terminal below: a failed
+		// turn seals event admission on its way out, and events posted after the session goes
+		// terminal are persisted but no longer broadcast — the notice would exist and nobody
+		// would see it. Every runtime's turn ends through this one function, so this covers all
+		// of them; non-isolated sessions have no watch and skip it entirely.
+		if paths := sharedDirt.newlyDirty(); len(paths) > 0 {
+			emit(evSystem, map[string]interface{}{
+				"notice":     sharedCheckoutNotice(job.WT.RepoDir, effectiveBranch(job.WT), paths),
+				"noticeKind": "shared-checkout-dirty",
+				"paths":      paths,
+			})
+		}
 		completionCtx := turnAckCtx
 		cancelCompletion := func() {}
 		// A failed turn ends the Session (see /turn-complete), task-bound or not: the

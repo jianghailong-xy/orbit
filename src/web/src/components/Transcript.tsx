@@ -244,6 +244,10 @@ type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
 type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+/** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
+ *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
+ *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
+type NoticeNode = { kind: 'notice'; seq: number; message: string };
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
 // card but the most recent one — the armed retry is a single value on the session, so an older
@@ -265,6 +269,7 @@ type Node =
   | MarkerNode
   | ErrorNode
   | AuthErrorNode
+  | NoticeNode
   | AutoRetryNode;
 
 // The RFC3339 stamp a tracing-style logger opens each stderr line with ("2026-08-12T15:31:40.112363Z
@@ -460,6 +465,11 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         break;
       }
       case 'system':
+        // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
+        if (p.notice) {
+          into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
+          break;
+        }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
         // an error so the user sees why the turn failed instead of a silent blank turn.
         // Except for the lines that are noise from Orbit's own env injection.
@@ -610,6 +620,12 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         <div className="chat-error" data-seq={node.seq}>
           ✖ {node.message}
           {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+        </div>
+      );
+    case 'notice':
+      return (
+        <div className="chat-notice" data-seq={node.seq}>
+          ⚠ {node.message}
         </div>
       );
     case 'authError':

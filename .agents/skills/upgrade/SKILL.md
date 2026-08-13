@@ -13,12 +13,15 @@ Database migrations are not a separate step: the apiserver container runs `prism
 
 1. Check the current branch, worktree status, and Compose availability. If `--pull` is requested, do not overwrite or discard local changes; stop if a fast-forward pull is unsafe.
 
+   The helper refuses to build when tracked files are modified: images are built from the working tree, not from `HEAD`, so uncommitted edits reach production while existing in no commit and are silently reverted by the next clean rebuild. Commit or stash first; pass `--allow-dirty` only when deliberately deploying an uncommitted change.
+
 2. Choose flags from the request:
 
    - `--pull`: run `git pull --ff-only` before building.
    - `--pull-base`: pull the pinned `postgres` and `gateway` images and recreate the full stack. This is the only mode that may restart postgres; use it only when explicitly requested.
    - `--no-cache`: rebuild local images without Docker layer cache.
    - `--prune`: prune dangling images after a successful upgrade.
+   - `--allow-dirty`: build despite uncommitted changes (they exist in no commit).
 
 3. State which services may be recreated. When the chosen flags match the user's request, run:
 

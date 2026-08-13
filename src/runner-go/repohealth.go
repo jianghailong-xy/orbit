@@ -121,6 +121,74 @@ func scanRepoHealth(dirs []agentWorkDir) []RepoHealthReport {
 	return out
 }
 
+// sharedCheckoutWatch notices when an isolated session leaves changes in the checkout its worktree
+// forked from, instead of in its own.
+//
+// Nothing prevents that, and the ways in are mundane: the Bash tool's working directory persists
+// between calls, so one legitimate `cd <workDir>` (to build an image, to read a file with the
+// toolchain that only exists there) silently redirects every later relative-path write. The agent
+// then commits on its branch and sees nothing wrong, while the edit sits in the shared checkout —
+// where it blocks other sessions' merges, is absent from every branch, and gets baked into the
+// next image built from that directory. Telling the author at turn boundaries is the only moment
+// anyone can still connect the change to what made it.
+//
+// Reported once per appearance: the baseline is refreshed after each report, so a path that
+// somebody else left dirty, or that this session was already told about, stays quiet.
+type sharedCheckoutWatch struct {
+	mu   sync.Mutex
+	root string
+	seen map[string]bool
+}
+
+// watchSharedCheckout starts watching the repo root a worktree forked from. Nil for a session that
+// isn't isolated: the shared directory IS its workspace, so writing there is the normal case and a
+// warning would be noise.
+func watchSharedCheckout(wt *Worktree) *sharedCheckoutWatch {
+	if wt == nil || wt.RepoDir == "" {
+		return nil
+	}
+	w := &sharedCheckoutWatch{root: wt.RepoDir, seen: map[string]bool{}}
+	for _, p := range inspectRepoRoot(w.root).Paths {
+		w.seen[p] = true // whatever was already dirty is somebody else's business
+	}
+	return w
+}
+
+// newlyDirty returns the shared checkout's paths that have gone dirty since the last call, and
+// folds them into the baseline so the next call stays quiet about them.
+func (w *sharedCheckoutWatch) newlyDirty() []string {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var fresh []string
+	current := map[string]bool{}
+	for _, p := range inspectRepoRoot(w.root).Paths {
+		current[p] = true
+		if !w.seen[p] {
+			fresh = append(fresh, p)
+		}
+	}
+	w.seen = current // also forgets paths that were cleaned up, so a re-dirtied one reports again
+	sort.Strings(fresh)
+	return fresh
+}
+
+// sharedCheckoutNotice is the transcript line for newly-dirtied paths: what happened, why it isn't
+// where the author thinks it is, and where to look.
+func sharedCheckoutNotice(root, branch string, paths []string) string {
+	where := "this session's branch"
+	if branch != "" {
+		where = branch
+	}
+	return fmt.Sprintf(
+		"This turn left %s modified in the shared checkout %s, outside this session's worktree: %s. "+
+			"Those edits are not on %s, so they won't be merged from here — and a deploy built from that "+
+			"directory would ship them. Re-apply them in the worktree if they belong to this session.",
+		plural(len(paths), "file"), root, namePaths(paths), where)
+}
+
 // repoCleanupOutcome is what a "Clean up checkout" request reports back: whether the checkout is
 // usable again, and where the content it was holding went.
 type repoCleanupOutcome struct {

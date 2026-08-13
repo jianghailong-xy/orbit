@@ -4802,6 +4802,15 @@ body {
   opacity: 0.7;
 }
 
+/* A heads-up from the runner about a turn that otherwise succeeded (e.g. edits left in the
+   machine's shared checkout). Amber and quiet — read it, don't panic. */
+.chat-notice {
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 6px 0;
+}
+
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as
    part of the conversation rather than as chrome. */
 .chat-authfix {

@@ -28,6 +28,14 @@ Run the script from anywhere (it `cd`s to the repo root itself):
 
 It will, in order:
 
+0. **Refuse to build from a dirty checkout.** The image is built from the working
+   tree, not from `HEAD` — `docker compose build` copies whatever is on disk — so
+   uncommitted edits ship into production while existing in no commit. That has
+   happened here: a hotfix that lived only in this checkout served production for
+   hours, invisible to every branch and one clean rebuild away from silently
+   reverting. Modified tracked files abort the upgrade; untracked files only warn
+   (they are additive, not a silent divergence from HEAD). `--allow-dirty`
+   proceeds anyway, loudly.
 1. `docker compose build apiserver web` — rebuild from the current source.
 2. `docker compose up -d --wait apiserver web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
@@ -51,6 +59,9 @@ applied — this is the only path that may recreate (restart) `postgres`.
   cache (use when a dependency change isn't being picked up).
 - `--prune` — `docker image prune -f` after a successful upgrade to reclaim
   space from the now-dangling old image layers.
+- `--allow-dirty` — build even though the checkout has uncommitted changes. Use
+  when you deliberately want to test an uncommitted change in the deployment, and
+  remember the change exists in no commit: the next clean rebuild reverts it.
 
 ```bash
 .claude/skills/upgrade/upgrade.sh --pull --prune

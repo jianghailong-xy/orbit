@@ -7,15 +7,19 @@ GIT_PULL=0
 NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
+ALLOW_DIRTY=0
 
 usage() {
   cat <<'EOF'
-Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune]
+Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
 
   --pull       git pull --ff-only before building
   --pull-base  refresh postgres and gateway base images; may restart postgres
   --no-cache   rebuild apiserver/web images without Docker layer cache
   --prune      prune dangling images after a successful upgrade
+  --allow-dirty
+               build anyway when the checkout has uncommitted changes (they are
+               baked into the image and exist in no commit)
   -h, --help   show this help
 EOF
 }
@@ -26,6 +30,7 @@ while [ $# -gt 0 ]; do
     --pull-base) PULL_BASE=1 ;;
     --no-cache) NO_CACHE=1 ;;
     --prune) PRUNE=1 ;;
+    --allow-dirty) ALLOW_DIRTY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -51,6 +56,33 @@ if ! flock -n 9; then
   echo "error: another upgrade is already in progress (lock: $LOCK_FILE)" >&2
   echo "       wait for it to finish, or check: docker compose ps" >&2
   exit 1
+fi
+
+# The image is built from the WORKING TREE, not from HEAD: `docker compose build` copies whatever
+# is on disk. Uncommitted edits therefore ship into production while existing in no commit — the
+# running deployment can't be reproduced from git, and the next clean rebuild reverts them with no
+# warning. That is not hypothetical: a hotfix that lived only in this checkout served production
+# for hours, invisible to every branch. Refuse by default; --allow-dirty is the deliberate escape.
+DIRTY="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null || true)"
+if [ -n "$DIRTY" ]; then
+  if [ "$ALLOW_DIRTY" -eq 0 ]; then
+    echo "error: uncommitted changes in $REPO_ROOT — they would be baked into the image:" >&2
+    echo "$DIRTY" | sed 's/^/       /' >&2
+    echo "" >&2
+    echo "       Commit or stash them so what runs matches a commit, or pass --allow-dirty to" >&2
+    echo "       deploy them anyway (the next clean rebuild will silently revert them)." >&2
+    exit 1
+  fi
+  echo "!!  --allow-dirty: building uncommitted changes into the image. They exist in no commit," >&2
+  echo "!!  so the next clean rebuild reverts them. Commit them if they are meant to stay:" >&2
+  echo "$DIRTY" | sed 's/^/!!    /' >&2
+fi
+# Untracked files ride along too (minus .dockerignore), but they are additive and usually scratch,
+# so they warn rather than block — a stray file is not a silent divergence from HEAD.
+UNTRACKED="$(git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null | head -10 || true)"
+if [ -n "$UNTRACKED" ]; then
+  echo "warning: untracked files are in the build context and in no commit:" >&2
+  echo "$UNTRACKED" | sed 's/^/         /' >&2
 fi
 
 if [ "$GIT_PULL" -eq 1 ]; then

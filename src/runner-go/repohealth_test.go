@@ -129,3 +129,52 @@ func TestCleanupRepoRootCleanIsNoop(t *testing.T) {
 		t.Fatalf("clean checkout = %+v, want done with no rescue branch", out)
 	}
 }
+
+// The nudge exists to reach the author while they're still on the turn that caused it. It must
+// blame only what THIS session added — the shared checkout usually already has somebody else's
+// edits in it — and must not repeat itself once said.
+func TestSharedCheckoutWatchReportsOnlyNewDirt(t *testing.T) {
+	repo := initRepo(t)
+	commitFile(t, repo, "theirs.txt", "v1\n", "add theirs")
+	commitFile(t, repo, "ours.txt", "v1\n", "add ours")
+	// Somebody else was already mid-edit when this session started.
+	if err := os.WriteFile(filepath.Join(repo, "theirs.txt"), []byte("their wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w := watchSharedCheckout(&Worktree{RepoDir: repo, Branch: "orbit/feat"})
+	if got := w.newlyDirty(); got != nil {
+		t.Fatalf("pre-existing dirt must not be blamed on this session, got %v", got)
+	}
+
+	// This session's turn writes into the shared checkout by accident.
+	if err := os.WriteFile(filepath.Join(repo, "ours.txt"), []byte("stray edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := w.newlyDirty()
+	if len(got) != 1 || got[0] != "ours.txt" {
+		t.Fatalf("newlyDirty = %v, want [ours.txt]", got)
+	}
+	if again := w.newlyDirty(); again != nil {
+		t.Errorf("already-reported dirt must stay quiet, got %v", again)
+	}
+
+	notice := sharedCheckoutNotice(repo, "orbit/feat", got)
+	for _, want := range []string{"ours.txt", repo, "orbit/feat", "worktree"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice should mention %q: %s", want, notice)
+		}
+	}
+}
+
+// A session that isn't isolated works in the shared directory by design — warning about its own
+// normal edits would be pure noise, so there is nothing to watch.
+func TestSharedCheckoutWatchNilWhenNotIsolated(t *testing.T) {
+	if w := watchSharedCheckout(nil); w != nil {
+		t.Fatal("a non-isolated session must have no watch")
+	}
+	var none *sharedCheckoutWatch
+	if got := none.newlyDirty(); got != nil {
+		t.Fatalf("nil watch must be inert, got %v", got)
+	}
+}
