@@ -58,8 +58,10 @@ import {
   LoginCommand,
   LoginResult,
   OrchestrationCredentialResponse,
+  RepoCleanupCommand,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
+  RunnerRepoCleanupResult,
   SessionCommitResultRequest,
   RunFinalizeRequest,
   RunFinalizeResponse,
@@ -105,6 +107,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import {
   isTerminalResumeHandoffOwner,
@@ -123,6 +126,9 @@ const LOGIN_RELAY_TIMEOUT_MS = 11 * 60_000;
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
+// The checkout repair is seconds of local git, so this window only has to cover a runner that
+// went away between the click and picking the request up.
+const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 const LONG_POLL_MS = 25_000;
 const DEVICE_TTL_MS = 10 * 60 * 1000;
 const DEVICE_POLL_INTERVAL_S = 3;
@@ -431,6 +437,13 @@ export class RunnerApiController {
           dto?.runtimeDefaultModels == null
             ? undefined
             : (sanitizeRuntimeDefaultModels(dto.runtimeDefaultModels) as Prisma.InputJsonValue),
+        // State of the shared checkouts this machine's agents work in, so the UI can warn once
+        // that a wedged checkout is blocking every merge here. Omitted by older runners (keep the
+        // last snapshot); sanitized in as well as out, since it drives a claim about a machine.
+        repoHealth:
+          dto?.repos == null
+            ? undefined
+            : ((sanitizeRunnerRepoHealth(dto.repos) ?? []) as unknown as Prisma.InputJsonValue),
       },
     });
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
@@ -553,6 +566,7 @@ export class RunnerApiController {
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
+    let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -584,6 +598,7 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
+      repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -599,7 +614,75 @@ export class RunnerApiController {
       loginRequest,
       installRequest,
       agentDirs,
+      repoCleanupRequest,
     };
+  }
+
+  /**
+   * The checkout repair this runner should run, if one is in flight.
+   *
+   * `pending` is re-delivered every heartbeat until the runner reports an outcome — the repair is
+   * idempotent (a clean checkout is a no-op) and short, so redelivery is cheaper than a claim
+   * protocol. An abandoned request is swept on the same principle as the sign-in/install relays:
+   * past the window nothing is running it, and leaving it pending would block the next attempt.
+   */
+  private async drainRepoCleanupRequest(runnerId: string): Promise<RepoCleanupCommand | undefined> {
+    const r = await this.prisma.runner.findUnique({
+      where: { id: runnerId },
+      select: { repoCleanupStatus: true, repoCleanupRoot: true, repoCleanupAt: true },
+    });
+    if (r?.repoCleanupStatus !== 'pending' || !r.repoCleanupRoot) return undefined;
+    const started = r.repoCleanupAt?.getTime() ?? 0;
+    if (started && Date.now() - started > REPO_CLEANUP_TIMEOUT_MS) {
+      await this.prisma.runner.update({
+        where: { id: runnerId },
+        data: {
+          repoCleanupStatus: 'failed',
+          repoCleanupMessage: 'Clean-up timed out — the runner never picked it up. Try again.',
+        },
+      });
+      return undefined;
+    }
+    return { root: r.repoCleanupRoot, requestedAt: r.repoCleanupAt?.toISOString() ?? '' };
+  }
+
+  /**
+   * Runner → control plane: how the checkout repair went.
+   *
+   * The reported state also corrects the stored health snapshot for that root, so the warning
+   * clears the moment the repair lands instead of lingering until the runner's next scan (a minute
+   * of a banner insisting merges are blocked when they aren't).
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('repo-cleanup-result')
+  @HttpCode(200)
+  async repoCleanupResult(
+    @CurrentRunner() runner: { id: string },
+    @Body() body: RunnerRepoCleanupResult,
+  ) {
+    const status = body?.status;
+    if (status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown repo cleanup status');
+    }
+    const current = await this.prisma.runner.findUnique({
+      where: { id: runner.id },
+      select: { repoHealth: true },
+    });
+    const reports = readRunnerRepoHealth(current?.repoHealth);
+    const repaired =
+      body.root && body.state
+        ? reports.map((r) => (r.root === body.root ? { ...r, state: body.state!, paths: [] } : r))
+        : reports;
+    await this.prisma.runner.update({
+      where: { id: runner.id },
+      data: {
+        repoCleanupStatus: status,
+        repoCleanupBranch: body.rescueBranch ?? null,
+        repoCleanupMessage: body.message ?? null,
+        repoHealth: repaired as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return { ok: true };
   }
 
   /**

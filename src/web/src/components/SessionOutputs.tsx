@@ -3,6 +3,7 @@ import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RunnerRepoHealth } from '@orbit/shared';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
@@ -60,6 +61,9 @@ export function SessionOutputs({
   onAdopt,
   adopting,
   turnActive,
+  repoHealth,
+  onCleanUpRepo,
+  cleaningRepo,
 }: {
   detail?: SessionDetail | null;
   /** Fallback for older runners that don't report `worktreeDirty`: true once the session has
@@ -94,6 +98,14 @@ export function SessionOutputs({
    *  re-points the session to that branch so Merge/diff act on the real work. */
   onAdopt?: () => void;
   adopting?: boolean;
+  /** Heartbeat-reported state of the shared checkout this session's agent works in. Null when the
+   *  runner is older than the report or the workDir isn't a git repo — both read as "unknown", so
+   *  nothing is shown. A half-finished merge left in there blocks every merge on the machine, which
+   *  is worth saying once here rather than as N identical per-session failures. */
+  repoHealth?: RunnerRepoHealth | null;
+  /** Provided by the parent (owns the mutation); enables the notice's one-click repair. */
+  onCleanUpRepo?: () => void;
+  cleaningRepo?: boolean;
 }) {
   const message = useToast();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
@@ -104,34 +116,49 @@ export function SessionOutputs({
     void copyText(text).then((ok) => (ok ? message.success('Copied') : message.error('Copy failed')));
   };
 
+  // The machine's shared checkout is wedged (half-finished merge/rebase someone left in the dir
+  // every session forks from): every merge on this runner fails until it's cleared, so say it once,
+  // above the bar, instead of letting each session render its own red "merge failed".
+  const wedge = isBlockingRepoState(repoHealth?.state) ? (
+    <RepoWedgeNotice health={repoHealth!} onCleanUp={onCleanUpRepo} busy={cleaningRepo} />
+  ) : null;
+
   const iso = detail?.isolationStatus;
-  if (!iso) return null;
+  if (!iso) return wedge;
 
   // Non-git: ran in the shared workDir (no isolation). Offer the one-click enable.
   if (iso === 'shared-nogit') {
     return (
-      <div className="wt-bar wt-bar-nogit">
-        <div className="wt-row">
-          <span className="wt-warn">⚠ Shared workDir — not isolated</span>
-          <span className="wt-spacer" />
-          {onEnableIsolation && (
-            <button type="button" className="wt-enable" disabled={enabling} onClick={onEnableIsolation}>
-              {enabling ? 'Enabling…' : 'Enable isolation'}
-            </button>
-          )}
+      <>
+        {wedge}
+        <div className="wt-bar wt-bar-nogit">
+          <div className="wt-row">
+            <span className="wt-warn">⚠ Shared workDir — not isolated</span>
+            <span className="wt-spacer" />
+            {onEnableIsolation && (
+              <button type="button" className="wt-enable" disabled={enabling} onClick={onEnableIsolation}>
+                {enabling ? 'Enabling…' : 'Enable isolation'}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
-  if (iso !== 'worktree' || !detail?.branch) return null;
+  if (iso !== 'worktree' || !detail?.branch) return wedge;
 
   const branch = detail.branch;
-  // Faithful by-hand equivalent of the runner's rebase merge: replay the branch onto the target,
-  // then fast-forward the target to it — a linear history, no merge commit. Copyable fallback below.
-  const manualMergeCmd = `git rebase ${detail.mergeTarget || 'main'} ${branch} && git checkout ${detail.mergeTarget || 'main'} && git merge --ff-only ${branch}`;
+  const mergeTargetName = detail.mergeTarget || 'main';
+  // By-hand equivalent of the runner's rebase merge, as two commands because they run in two
+  // places: Orbit's layout has the branch checked out in the session's worktree and the target in
+  // the machine's checkout, and git refuses to check either out twice. (The old one-liner
+  // `git rebase <target> <branch> && git checkout <target> && …` assumed one checkout held both,
+  // so it aborted on the very layout it was printed under.)
+  const manualRebaseCmd = `git rebase ${mergeTargetName}`;
+  const manualFfCmd = `git merge --ff-only ${branch}`;
   const files = detail.changedFiles ?? [];
   // A worktree with no diff has nothing actionable or informative to show — hide the bar entirely.
-  if (files.length === 0) return null;
+  if (files.length === 0) return wedge;
   const add = files.reduce((s, f) => s + Math.max(0, f.additions), 0);
   const del = files.reduce((s, f) => s + Math.max(0, f.deletions), 0);
   // Clicking the bar opens the review drawer (its tree is the file browser now — no separate
@@ -165,6 +192,7 @@ export function SessionOutputs({
 
   return (
     <>
+    {wedge}
     <div className="wt-bar">
       {/* Clicking the row opens the review drawer (whose tree is the file browser); the
           branch-copy and action buttons stop propagation so they don't trigger it. */}
@@ -230,19 +258,30 @@ export function SessionOutputs({
             <span className="wt-merge-err" title={detail.commitError ?? undefined}>
               {detail.commitError || 'Commit failed — try again.'}
             </span>
-          ) : (
+          ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
               <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-                {detail.mergeStatus === 'conflict'
-                  ? 'Merge conflict — aborted, working tree left clean. Resolve manually:'
-                  : detail.mergeError || 'Merge failed. Merge manually:'}
+                Merge conflict — aborted, working tree left clean. Resolve in the session above, or
+                by hand:
               </span>
               <span className="wt-merge-or">
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualMergeCmd)}>
-                  {manualMergeCmd}
+                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd)}>
+                  {manualRebaseCmd}
                 </code>
+                <span className="wt-merge-where"> in the session’s worktree, then </span>
+                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd)}>
+                  {manualFfCmd}
+                </code>
+                <span className="wt-merge-where"> in the repo</span>
               </span>
             </div>
+          ) : (
+            // A precondition failure, not a conflict: no git command run here would help, and the
+            // old copyable rebase actively misled (it can't run against a checkout it can't have).
+            // The runner's message names what is in the way — that IS the next step.
+            <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
+              {detail.mergeError || 'Merge failed — nothing was changed.'}
+            </span>
           )}
         </div>
       )}
@@ -257,6 +296,72 @@ export function SessionOutputs({
         onClose={() => setOpenFile(null)}
       />
     </>
+  );
+}
+
+/** Checkout states that block every merge into that checkout until someone resolves them. A
+ *  merely dirty checkout is not one: git refuses only the files a fast-forward would overwrite,
+ *  so merges keep working around a stray edit, and warning about it would be noise. */
+const BLOCKING_REPO_STATES = new Set(['unmerged', 'merge', 'rebase', 'cherry-pick', 'revert']);
+
+export function isBlockingRepoState(state?: string | null): boolean {
+  return !!state && BLOCKING_REPO_STATES.has(state);
+}
+
+/** How each blocking state reads to someone who never touched that checkout. */
+const REPO_STATE_LABEL: Record<string, string> = {
+  unmerged: 'an unresolved merge',
+  merge: 'an unfinished merge',
+  rebase: 'an unfinished rebase',
+  'cherry-pick': 'an unfinished cherry-pick',
+  revert: 'an unfinished revert',
+};
+
+/**
+ * The machine-level warning above the worktree bar.
+ *
+ * Sessions are isolated in their own worktrees, but they all fork from — and merge back into —
+ * one shared checkout, and nothing stops an agent from stepping into it (that's where the
+ * toolchain lives) or from popping a repo-global stash there. When that leaves a half-finished
+ * merge behind, every session's "Merge to main" on the machine fails with what reads like its own
+ * problem. This says it once, names the checkout, and offers the repair.
+ */
+function RepoWedgeNotice({
+  health,
+  onCleanUp,
+  busy,
+}: {
+  health: RunnerRepoHealth;
+  onCleanUp?: () => void;
+  busy?: boolean;
+}) {
+  const what = REPO_STATE_LABEL[health.state] ?? 'a half-finished git operation';
+  const paths = health.paths ?? [];
+  const shown = paths.slice(0, 3);
+  return (
+    <div className="wt-bar wt-bar-wedged">
+      <div className="wt-row">
+        <span className="wt-warn">
+          ⚠ This machine’s checkout is stuck in {what} — merges are blocked for every session here,
+          not just this one.
+        </span>
+        <span className="wt-spacer" />
+        {onCleanUp && (
+          <button type="button" className="wt-enable" disabled={busy} onClick={onCleanUp}>
+            {busy ? 'Cleaning up…' : 'Clean up checkout'}
+          </button>
+        )}
+      </div>
+      <div className="wt-row wt-wedge-detail">
+        <code className="wt-wedge-root">{health.root}</code>
+        {shown.length > 0 && (
+          <span className="wt-wedge-files">
+            {shown.join(', ')}
+            {paths.length > shown.length ? ` (+${paths.length - shown.length} more)` : ''}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

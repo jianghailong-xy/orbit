@@ -286,6 +286,9 @@ export interface RunnerHeartbeatRequest {
    *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
    *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
   agentDirProbes?: AgentDirProbe[];
+  /** State of the shared checkouts this machine's agents work in. Absent on older runners,
+   *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
+  repos?: RunnerRepoHealth[];
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
@@ -306,6 +309,49 @@ export interface AgentDirProbe {
 export interface AgentDirTarget {
   agentId: string;
   workDir: string;
+}
+
+/** One shared checkout's working-tree state on a runner. Session worktrees are isolated; the
+ *  checkout they all fork from and merge back into is not — agents step into it for builds, and
+ *  `git stash` is repo-global — so a half-finished merge left there blocks every merge on the
+ *  machine. Reported each heartbeat so the UI can say that once, instead of letting every session
+ *  fail separately with what looks like its own problem. */
+export interface RunnerRepoHealth {
+  /** Absolute path of the repo root (`git rev-parse --show-toplevel`). */
+  root: string;
+  /** The checkout's current branch; absent when HEAD is detached (normal mid-rebase). */
+  branch?: string;
+  /** 'clean' | 'dirty' | 'unmerged' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'. Anything
+   *  past 'dirty' is a half-finished operation that blocks merges into this checkout — a merely
+   *  dirty checkout still fast-forwards fine (git refuses only the files it would overwrite). */
+  state: string;
+  /** The tracked files in the way, conflicted ones first (capped by the runner). */
+  paths?: string[];
+  /** Agents whose workDir sits in this checkout, so the UI can attach the warning to the agent
+   *  on screen without re-deriving repo roots from paths. */
+  agentIds?: string[];
+}
+
+/** Control plane → runner: repair the shared checkout at `root` — save whatever it is holding to
+ *  an `orbit/rescue-*` branch, then return it to HEAD. Redelivered every heartbeat until the
+ *  runner reports an outcome. The runner re-validates `root` against its own agents' workDirs. */
+export interface RepoCleanupCommand {
+  root: string;
+  /** When the user asked, echoed back for log correlation. */
+  requestedAt?: string;
+}
+
+/** Runner → control plane: how the repair went, and where the checkout's old content lives now. */
+export interface RunnerRepoCleanupResult {
+  root: string;
+  status: 'done' | 'failed';
+  /** The checkout's state afterwards (same vocabulary as RunnerRepoHealth.state), so the stored
+   *  snapshot is corrected immediately instead of waiting for the runner's next scan. */
+  state?: string;
+  /** Branch holding the working tree exactly as it was before the repair; absent when there was
+   *  nothing to keep. Orbit never deletes it. */
+  rescueBranch?: string;
+  message?: string;
 }
 
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
@@ -373,6 +419,9 @@ export interface RunnerHeartbeatResponse {
    *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
    *  probes nothing and the form simply shows no path status). */
   agentDirs?: AgentDirTarget[];
+  /** A checkout repair the user started after seeing it reported wedged. Absent on older control
+   *  planes, and whenever no repair is in flight for this runner. */
+  repoCleanupRequest?: RepoCleanupCommand;
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */

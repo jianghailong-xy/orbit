@@ -124,6 +124,7 @@ import {
   createInteractiveSession,
   decideApproval,
   deleteSession,
+  cleanUpAgentRepo,
   enableAgentIsolation,
   getBackgroundShells,
   getSession,
@@ -1640,6 +1641,14 @@ export function AgentView({ runner }: { runner: Runner }) {
     agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
     'dontAsk';
   const selectedAgentFromList = agentsForRunner.find((a) => a.id === selected?.agent?.id);
+  // Which agent this console is about: the open session's, else the one a new session would use.
+  // Its heartbeat-reported checkout drives the "this machine is wedged" notice above the bar.
+  const consoleAgentId: string | undefined = selected?.agent?.id ?? agentId;
+  const consoleAgentRepoHealth =
+    (agentsForRunner.find((a) => a.id === consoleAgentId)?.repoHealth as
+      | { root: string; state: string; paths?: string[]; branch?: string }
+      | null
+      | undefined) ?? null;
   const effectiveSelectedModel = effectiveSessionModel(
     shownProvider,
     selected?.model,
@@ -2873,6 +2882,27 @@ export function AgentView({ runner }: { runner: Runner }) {
       // Swallow a rejected enable (onError already toasts) so confirm() closes cleanly
       // instead of leaving an unhandled promise rejection.
       onOk: () => enableIsoMut.mutateAsync(agentId).catch(() => {}),
+    });
+  // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
+  // every session's merge there). Async like the others: the runner does it on its next heartbeat,
+  // and refetching agents is what clears the warning, since repoHealth rides that payload.
+  const repoCleanupMut = useMutation({
+    mutationFn: (agentId: string) => cleanUpAgentRepo(agentId),
+    onSuccess: () => {
+      message.success('Cleaning up the checkout — the runner picks this up on its next heartbeat.');
+      void qc.invalidateQueries({ queryKey: agentsQuery().queryKey });
+    },
+    onError: (e: Error) => message.error(e.message),
+  });
+  const askCleanUpRepo = (agentId: string, root: string) =>
+    modal.confirm({
+      title: 'Clean up this checkout?',
+      content:
+        `Orbit will save everything ${root} currently holds — uncommitted edits, conflict markers,` +
+        ' untracked files — to a new orbit/rescue-… branch, then return the checkout to its last' +
+        ' commit so merges work again. Nothing is discarded, and the rescue branch is never deleted.',
+      okText: 'Save and clean up',
+      onOk: () => repoCleanupMut.mutateAsync(agentId).catch(() => {}),
     });
   // Merge this session's worktree branch into main on the runner that ran it. Async: the
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
@@ -4660,6 +4690,15 @@ export function AgentView({ runner }: { runner: Runner }) {
                     id: selectedId,
                     title: selectedSession?.title ?? 'Untitled session',
                   })
+              : undefined
+          }
+          // The shared checkout behind this console. Attached to the agent (not the session):
+          // it's the machine's state, and every session here fails the same way when it's stuck.
+          repoHealth={consoleAgentRepoHealth}
+          cleaningRepo={repoCleanupMut.isPending}
+          onCleanUpRepo={
+            consoleAgentId && consoleAgentRepoHealth
+              ? () => askCleanUpRepo(consoleAgentId, consoleAgentRepoHealth.root)
               : undefined
           }
         />

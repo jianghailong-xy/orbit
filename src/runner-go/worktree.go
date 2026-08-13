@@ -994,26 +994,32 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
 	}
 
-	// Bring the local target up to date with origin before deciding how to advance it (see the
-	// function comment): a target that lagged origin/<target> would replay the branch onto a stale
-	// base and conflict on lines already reconciled upstream.
-	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
-		return *out
-	}
-
 	// Decide how we'll advance the target after the rebase. If the repo root has the target checked
-	// out (usual for main), we fast-forward it in place and must guard a clean tree. Otherwise the
-	// target must not be checked out in any worktree, so we can move its ref directly.
+	// out (usual for main), we fast-forward it in place. Otherwise the target must not be checked
+	// out in any worktree, so we can move its ref directly.
+	//
+	// A merely *dirty* root is deliberately NOT a precondition failure: `git merge --ff-only`
+	// refuses precisely when the fast-forward would overwrite a locally-modified file and lets
+	// unrelated edits through untouched, so a blanket "anything uncommitted" gate only converted one
+	// stray file in the machine's shared checkout into a total merge outage for every session on it.
+	// A half-finished merge/rebase is different — nothing can fast-forward into that checkout until
+	// it's resolved — and git only says so after we've rebased and pushed, in wording that reads as
+	// this branch's fault. Name it up front instead, before touching the network.
 	ffAtRoot := false
 	if cur, _ := git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD"); cur == target {
 		ffAtRoot = true
-		// Block on modified tracked files (a fast-forward could clobber them); untracked files are
-		// fine — git refuses only if the fast-forward would overwrite one (caught below).
-		if st, _ := git(repoRoot, "status", "--porcelain", "--untracked-files=no"); st != "" {
-			return mergeOutcome{Status: "error", Message: fmt.Sprintf("%s has uncommitted changes — commit/stash, or merge manually", target)}
+		if st := inspectRepoRoot(repoRoot); st.Blocked() {
+			return mergeOutcome{Status: "error", Message: st.BlockedMessage(target)}
 		}
 	} else if branchWorktree(repoRoot, target) != "" {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("%q is checked out in another worktree — merge it there or pick another branch", target)}
+	}
+
+	// Bring the local target up to date with origin before rebasing onto it (see the function
+	// comment): a target that lagged origin/<target> would replay the branch onto a stale base and
+	// conflict on lines already reconciled upstream.
+	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
+		return *out
 	}
 
 	return rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot)
@@ -1052,6 +1058,9 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	}()
 
 	pushToOrigin := originTracks(repoRoot, target)
+	// Whether origin already accepted the rebased commits. It decides what a failure to advance the
+	// LOCAL target means: the work is upstream either way, and only this machine's checkout lags.
+	pushed := false
 
 	// Replay the temp branch onto target and, when origin tracks target, push the result so
 	// origin/<target> advances in lockstep. A push that origin rejects (it moved under us) is
@@ -1067,6 +1076,18 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 			_, _ = git(tmp, "rebase", "--abort")
 			return mergeOutcome{Status: "conflict", Message: clip(msg, 1000)}
 		}
+		// The local fast-forward at the end writes exactly the paths this replay changed, and git
+		// refuses it if any of them is modified in that checkout. Finding that out AFTER the push
+		// would strand the merge half-done — the work on origin, the local target behind — so check
+		// it here, while nothing has moved yet. Only an overlap counts: unrelated edits in the
+		// shared checkout are none of this merge's business.
+		if ffAtRoot {
+			if clash := ffClash(repoRoot, tmp, target); len(clash) > 0 {
+				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
+					"this branch and this machine's %s checkout both change %s — that edit is uncommitted in %s, so the merge would overwrite it. Commit or set it aside, then retry.",
+					target, namePaths(clash), target), 1000)}
+			}
+		}
 		if !pushToOrigin {
 			break // local-only target (or no origin): nothing to push.
 		}
@@ -1074,6 +1095,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		// the reconcile, so origin is an ancestor of the rebased tip unless it just moved).
 		out, err := git(tmp, "push", "origin", "HEAD:refs/heads/"+target)
 		if err == nil {
+			pushed = true
 			break
 		}
 		combined := strings.TrimSpace(out + "\n" + gitStderr(err))
@@ -1092,9 +1114,19 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	}
 
 	// Advance target to the rebased commits — a strict fast-forward (target is now an ancestor).
+	// Git declines this one when the fast-forward would overwrite a file someone left modified in
+	// that checkout; say which checkout is in the way (and, when origin already took the commits,
+	// that only this machine lags) rather than surfacing git's bare "your local changes…".
 	if ffAtRoot {
 		if out, err := git(repoRoot, "merge", "--ff-only", tmpBranch); err != nil {
-			return mergeOutcome{Status: "error", Message: clip(strings.TrimSpace(out+"\n"+gitStderr(err)), 1000)}
+			detail := strings.TrimSpace(out + "\n" + gitStderr(err))
+			if pushed {
+				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
+					"pushed to origin/%s — but this machine's %s checkout could not fast-forward: %s",
+					target, target, detail), 1000)}
+			}
+			return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
+				"this machine's %s checkout could not fast-forward: %s", target, detail), 1000)}
 		}
 	} else if _, err := git(repoRoot, "branch", "-f", target, tmpBranch); err != nil {
 		return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not advance %s: %s", target, gitStderr(err)), 1000)}
@@ -1103,6 +1135,37 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	sha, _ := git(repoRoot, "rev-parse", target)
 	logln(fmt.Sprintf("rebased %s onto %s (%s) for session %s", source, target, shortSha(sha), sessionID))
 	return mergeOutcome{Status: "merged", MergedSha: sha, SourceSha: sourceSha}
+}
+
+// ffClash returns the paths that both the rebased result (in worktree `tmp`) and the target's
+// checkout have changed — i.e. the files the final fast-forward would overwrite, which is the only
+// reason git declines it. Empty means the checkout can be dirty all it likes and the merge lands.
+func ffClash(repoRoot, tmp, target string) []string {
+	changed, err := git(tmp, "diff", "--name-only", target+"..HEAD")
+	if err != nil {
+		return nil // can't tell → let the fast-forward itself be the judge
+	}
+	dirty := map[string]bool{}
+	for _, p := range inspectRepoRoot(repoRoot).Paths {
+		dirty[p] = true
+	}
+	var clash []string
+	for _, p := range splitLines(changed) {
+		if dirty[p] {
+			clash = append(clash, p)
+		}
+	}
+	return clash
+}
+
+// namePaths renders a short, readable file list for an error message.
+func namePaths(paths []string) string {
+	shown := paths[:min(len(paths), 3)]
+	out := strings.Join(shown, ", ")
+	if len(paths) > len(shown) {
+		out += fmt.Sprintf(" (+%d more)", len(paths)-len(shown))
+	}
+	return out
 }
 
 // mergePushAttempts bounds how many times a merge re-syncs and re-pushes when a concurrent push to
@@ -1159,13 +1222,13 @@ func reconcileTargetWithOrigin(repoRoot, target string) *mergeOutcome {
 	// origin so the branch replays onto the up-to-date tip.
 	if _, err := git(repoRoot, "merge-base", "--is-ancestor", target, remoteRef); err == nil {
 		if cur, _ := git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD"); cur == target {
-			// Target is checked out at the repo root: fast-forward in place, guarding a clean tree
-			// (an ff could clobber modified tracked files).
-			if st, _ := git(repoRoot, "status", "--porcelain", "--untracked-files=no"); st != "" {
-				return &mergeOutcome{Status: "error", Message: fmt.Sprintf("%s has uncommitted changes — commit/stash, or merge manually", target)}
-			}
+			// Target is checked out at the repo root: fast-forward in place. Git refuses on its own
+			// when the sync would overwrite a locally-modified file, so unrelated edits in that
+			// shared checkout no longer block the sync (see mergeToMain's precondition comment).
 			if out, err := git(repoRoot, "merge", "--ff-only", remoteRef); err != nil {
-				return &mergeOutcome{Status: "error", Message: clip(strings.TrimSpace(out+"\n"+gitStderr(err)), 1000)}
+				return &mergeOutcome{Status: "error", Message: clip(fmt.Sprintf(
+					"could not sync the local %s checkout with origin/%s: %s",
+					target, target, strings.TrimSpace(out+"\n"+gitStderr(err))), 1000)}
 			}
 		} else if branchWorktree(repoRoot, target) != "" {
 			return &mergeOutcome{Status: "error", Message: fmt.Sprintf("%q is checked out in another worktree — can't sync it with origin", target)}
@@ -1199,6 +1262,161 @@ func branchWorktree(repoRoot, branch string) string {
 		}
 	}
 	return ""
+}
+
+// Working-tree states inspectRepoRoot classifies a checkout into. The first two are ordinary
+// (merges still fast-forward into a dirty checkout — git only refuses on the files it would
+// overwrite); the rest are half-finished operations that block every merge into that checkout
+// until someone resolves them.
+const (
+	repoStateClean      = "clean"
+	repoStateDirty      = "dirty"
+	repoStateUnmerged   = "unmerged"
+	repoStateMerge      = "merge"
+	repoStateRebase     = "rebase"
+	repoStateCherryPick = "cherry-pick"
+	repoStateRevert     = "revert"
+)
+
+// repoStatePathCap bounds the reported file list: enough to recognize what's in the way, small
+// enough to ride along on every heartbeat.
+const repoStatePathCap = 20
+
+// repoRootState is the health of the shared checkout each agent's workDir sits in — the one every
+// isolated session forks from and the one Orbit fast-forwards into. Worktree isolation covers the
+// session's files, not this checkout: agents step into it for builds (the toolchain lives there),
+// release/upgrade flows commit in it, and `git stash` is repo-global, so it drifts out from under
+// Orbit with nothing watching. Used as the merge precondition's classifier and reported on the
+// heartbeat so the control plane can say so before a merge fails.
+type repoRootState struct {
+	// State is one of the repoState* constants. "unmerged" without an operation in flight is the
+	// classic wedge: a `git stash pop` that conflicted records no MERGE_HEAD, so even
+	// `git merge --abort` refuses and every later fast-forward fails.
+	State string
+	// Paths are the tracked files in the way — conflicted ones first — capped at repoStatePathCap.
+	Paths []string
+	// Branch is the checkout's current branch; "" when HEAD is detached (normal mid-rebase).
+	Branch string
+}
+
+// Blocked reports whether the checkout is mid-operation, i.e. nothing can fast-forward into it
+// until it's resolved. A merely dirty checkout is NOT blocked.
+func (s repoRootState) Blocked() bool {
+	switch s.State {
+	case repoStateUnmerged, repoStateMerge, repoStateRebase, repoStateCherryPick, repoStateRevert:
+		return true
+	}
+	return false
+}
+
+// BlockedMessage explains a Blocked() checkout in the merge bar's voice: name the machine's shared
+// checkout as the culprit, since the user is looking at one session's branch and every other
+// session on this runner is failing the same way for the same reason.
+func (s repoRootState) BlockedMessage(target string) string {
+	what := "a half-finished git operation"
+	switch s.State {
+	case repoStateUnmerged:
+		what = "an unresolved merge"
+	case repoStateMerge:
+		what = "an unfinished merge"
+	case repoStateRebase:
+		what = "an unfinished rebase"
+	case repoStateCherryPick:
+		what = "an unfinished cherry-pick"
+	case repoStateRevert:
+		what = "an unfinished revert"
+	}
+	files := ""
+	if n := len(s.Paths); n > 0 {
+		shown := s.Paths[:min(n, 3)]
+		files = " on " + strings.Join(shown, ", ")
+		if n > len(shown) {
+			files += fmt.Sprintf(" (+%d more)", n-len(shown))
+		}
+	}
+	return fmt.Sprintf(
+		"this machine's %s checkout is stuck in %s%s — that blocks every merge on this runner, not just this branch",
+		target, what, files)
+}
+
+// inspectRepoRoot classifies dir's working tree (see repoRootState). Best-effort and read-only:
+// anything git won't answer reports clean, so a probe failure never invents a blocked merge.
+//
+// Paths come from `git diff --name-only` rather than `git status --porcelain` on purpose: git()
+// trims its output, which eats the porcelain status column's leading space and shifts every
+// fixed-offset parse by one on the first line.
+func inspectRepoRoot(dir string) repoRootState {
+	// Tracked changes vs HEAD, staged or not. Untracked files are excluded by construction — they
+	// never block a fast-forward unless it would create that exact path, which git catches itself.
+	changed, err := git(dir, "diff", "--name-only", "HEAD")
+	if err != nil {
+		return repoRootState{State: repoStateClean}
+	}
+	branch, _ := git(dir, "symbolic-ref", "--quiet", "--short", "HEAD")
+	// Conflict stages live in the index, so this one compares index↔worktree: passing HEAD here
+	// reports them as ordinary modifications and the filter matches nothing.
+	unmerged, _ := git(dir, "diff", "--name-only", "--diff-filter=U")
+	conflicted := splitLines(unmerged)
+	isConflicted := make(map[string]bool, len(conflicted))
+	for _, p := range conflicted {
+		isConflicted[p] = true
+	}
+	var modified []string
+	for _, p := range splitLines(changed) {
+		if !isConflicted[p] {
+			modified = append(modified, p)
+		}
+	}
+	paths := append(conflicted, modified...)
+	if len(paths) > repoStatePathCap {
+		paths = paths[:repoStatePathCap]
+	}
+	state := repoStateClean
+	switch {
+	case gitPathExists(dir, "rebase-merge"), gitPathExists(dir, "rebase-apply"):
+		state = repoStateRebase
+	case gitPathExists(dir, "MERGE_HEAD"):
+		state = repoStateMerge
+	case gitPathExists(dir, "CHERRY_PICK_HEAD"):
+		state = repoStateCherryPick
+	case gitPathExists(dir, "REVERT_HEAD"):
+		state = repoStateRevert
+	case len(conflicted) > 0:
+		state = repoStateUnmerged
+	case len(modified) > 0:
+		state = repoStateDirty
+	}
+	return repoRootState{State: state, Paths: paths, Branch: branch}
+}
+
+// splitLines turns git's newline-separated path output into a slice, dropping the empty string
+// an absent/whitespace-only result would otherwise contribute.
+func splitLines(out string) []string {
+	if strings.TrimSpace(out) == "" {
+		return nil
+	}
+	var lines []string
+	for _, ln := range strings.Split(out, "\n") {
+		if ln = strings.TrimSpace(ln); ln != "" {
+			lines = append(lines, ln)
+		}
+	}
+	return lines
+}
+
+// gitPathExists reports whether a per-worktree git control file (MERGE_HEAD, rebase-merge, …)
+// exists. Resolved through `rev-parse --git-path` rather than dir/.git/<name> so it stays correct
+// inside a linked worktree, where those files live under .git/worktrees/<id>/.
+func gitPathExists(dir, name string) bool {
+	p, err := git(dir, "rev-parse", "--git-path", name)
+	if err != nil || p == "" {
+		return false
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(dir, p)
+	}
+	_, statErr := os.Stat(p)
+	return statErr == nil
 }
 
 // commitOutcome is what commitWorktree reports: "committed" advanced the branch, "nochange"

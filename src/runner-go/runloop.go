@@ -490,6 +490,16 @@ func runLoop(cfg *RunnerConfig) bool {
 		}
 		return roots
 	}
+	// The same dirs, for the shared-checkout health scan the heartbeat carries. Read fresh each
+	// scan so an agent added after startup is covered without a restart.
+	repoHealth := &repoHealthProbe{dirs: func() []agentWorkDir {
+		dirs := []agentWorkDir{{Dir: cfg.WorkDir}}
+		for _, a := range agentSnapshot() {
+			dirs = append(dirs, agentWorkDir{AgentID: a.ID, Dir: a.WorkDir})
+		}
+		return dirs
+	}}
+	go repoHealth.run(loopCtx)
 	var assetMu sync.Mutex
 	var hbCommands, hbSkills []SlashCommandInfo
 	refreshHeartbeatAssets := func() {
@@ -712,6 +722,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              engineHealth.snapshotNow(),
 				AgentDirProbes:       agentDirs.snapshot(),
+				Repos:                repoHealth.snapshotNow(),
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
@@ -997,6 +1008,29 @@ func runLoop(cfg *RunnerConfig) bool {
 				} else {
 					install.start(ir.Engine, report, engineHealth.refresh)
 				}
+			}
+			// Repair a shared checkout the user saw reported as wedged. Runs here, on the
+			// heartbeat's own goroutine, because it's short and must not overlap the next one:
+			// the request is redelivered until we report, and a second repair racing the first
+			// would rescue the tree the first one already cleared. Only paths this runner's
+			// agents actually work in are accepted — the control plane names the root, but the
+			// machine decides what it will rewrite.
+			if rc := resp.RepoCleanupRequest; rc != nil && rc.Root != "" {
+				out := cleanupRepoRoot(rc.Root, func(root string) bool {
+					for _, r := range scanRepoHealth(repoHealth.dirs()) {
+						if r.Root == root {
+							return true
+						}
+					}
+					return false
+				})
+				if err := t.repoCleanupResult(RepoCleanupResultRequest{
+					Root: rc.Root, Status: out.Status, State: out.State,
+					RescueBranch: out.RescueBranch, Message: out.Message,
+				}); err != nil {
+					logln("repo-cleanup-result POST failed:", err)
+				}
+				repoHealth.refresh() // report the repaired state on the next heartbeat, not in a minute
 			}
 		})
 	}()

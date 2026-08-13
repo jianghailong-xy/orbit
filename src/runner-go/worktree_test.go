@@ -943,3 +943,181 @@ func TestEffectiveBranchShaMissingWorktree(t *testing.T) {
 		t.Fatalf("empty worktree sha = %q, want empty", got)
 	}
 }
+
+// TestMergeToMainDirtyRootUnrelatedFileStillMerges pins the narrowed precondition: one stray
+// uncommitted file in the machine's shared checkout used to fail EVERY session's merge with
+// "main has uncommitted changes". Git only refuses a fast-forward over the files it would
+// overwrite, so an unrelated edit must merge — and survive.
+func TestMergeToMainDirtyRootUnrelatedFileStillMerges(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	commitFile(t, repo, "unrelated.txt", "committed\n", "add unrelated")
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+
+	// Somebody left an edit in the shared checkout, on a file this merge doesn't touch.
+	if err := os.WriteFile(filepath.Join(repo, "unrelated.txt"), []byte("local edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s-dirty-ok"})
+	if out.Status != "merged" {
+		t.Fatalf("expected merged despite an unrelated dirty file, got %q (%s)", out.Status, out.Message)
+	}
+	if _, err := git(repo, "cat-file", "-e", "main:feat.txt"); err != nil {
+		t.Errorf("main should carry the merged work: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(repo, "unrelated.txt"))
+	if err != nil || string(got) != "local edit\n" {
+		t.Errorf("the bystander's edit must survive the merge, got %q (%v)", string(got), err)
+	}
+}
+
+// TestMergeToMainDirtyRootOverlappingFileErrors: when the dirty file IS one the fast-forward would
+// overwrite, git refuses and we surface it — naming the checkout, not the branch. Nothing moves.
+func TestMergeToMainDirtyRootOverlappingFileErrors(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "base.txt", "feature edit\n", "feat edits base")
+	mustGit(t, repo, "checkout", "main")
+	mainBefore := mustGit(t, repo, "rev-parse", "main")
+
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("uncommitted local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s-dirty-clash"})
+	if out.Status != "error" {
+		t.Fatalf("expected error when the ff would clobber a local edit, got %q (%s)", out.Status, out.Message)
+	}
+	// The message has to name the file both sides touched: "main has uncommitted changes" sent
+	// people looking at their own branch for a problem that was somebody else's edit.
+	for _, want := range []string{"checkout", "base.txt"} {
+		if !strings.Contains(out.Message, want) {
+			t.Errorf("error should mention %q, got: %s", want, out.Message)
+		}
+	}
+	if mainAfter, _ := git(repo, "rev-parse", "main"); mainAfter != mainBefore {
+		t.Errorf("main must not move when the ff is refused: %s → %s", mainBefore, mainAfter)
+	}
+	got, _ := os.ReadFile(filepath.Join(repo, "base.txt"))
+	if string(got) != "uncommitted local\n" {
+		t.Errorf("the local edit must be left alone, got %q", string(got))
+	}
+}
+
+// TestMergeToMainWedgedRootNamesTheCheckout reproduces the outage this came from: a `git stash pop`
+// that conflicted in the shared checkout leaves conflict stages with NO MERGE_HEAD, so every later
+// merge fails. The message must blame the machine's checkout (and say it blocks every merge), and
+// we must fail before staging a rebase worktree.
+func TestMergeToMainWedgedRootNamesTheCheckout(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	commitFile(t, repo, "shared.txt", "v1\n", "add shared")
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "feat.txt", "feature\n", "feat work")
+	mustGit(t, repo, "checkout", "main")
+
+	// A stash taken against the old content, then applied after main deleted the file: DU conflict.
+	if err := os.WriteFile(filepath.Join(repo, "shared.txt"), []byte("stashed wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, repo, "stash", "push", "-m", "someone else's wip")
+	mustGit(t, repo, "rm", "-q", "shared.txt")
+	mustGit(t, repo, "commit", "-m", "refactor: drop shared.txt")
+	_, _ = git(repo, "stash", "pop") // conflicts on purpose
+	if st := inspectRepoRoot(repo); st.State != repoStateUnmerged {
+		t.Fatalf("setup: expected an unmerged checkout, got %q (%v)", st.State, st.Paths)
+	}
+	mainBefore := mustGit(t, repo, "rev-parse", "main")
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s-wedged"})
+	if out.Status != "error" {
+		t.Fatalf("expected error on a wedged checkout, got %q (%s)", out.Status, out.Message)
+	}
+	for _, want := range []string{"unresolved merge", "every merge on this runner", "shared.txt"} {
+		if !strings.Contains(out.Message, want) {
+			t.Errorf("message should contain %q, got: %s", want, out.Message)
+		}
+	}
+	if mainAfter, _ := git(repo, "rev-parse", "main"); mainAfter != mainBefore {
+		t.Errorf("main must not move: %s → %s", mainBefore, mainAfter)
+	}
+	if branchExists(repo, "orbit/_rebase-s-wedged") {
+		t.Error("must fail before staging the rebase worktree")
+	}
+}
+
+// TestInspectRepoRootClassifies covers the ordinary states plus the precedence rule: an operation
+// in flight outranks the conflict stages it produced.
+func TestInspectRepoRootClassifies(t *testing.T) {
+	repo := initRepo(t)
+	if st := inspectRepoRoot(repo); st.State != repoStateClean || st.Branch != "main" {
+		t.Errorf("fresh repo = %+v, want clean on main", st)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := inspectRepoRoot(repo)
+	if st.State != repoStateDirty || len(st.Paths) != 1 || st.Paths[0] != "base.txt" {
+		t.Errorf("edited tree = %+v, want dirty on base.txt", st)
+	}
+	if st.Blocked() {
+		t.Error("a merely dirty checkout must not read as blocked — merges still fast-forward into it")
+	}
+
+	// A conflicted real merge: MERGE_HEAD exists, so it classifies as an unfinished merge rather
+	// than bare unmerged stages.
+	mustGit(t, repo, "checkout", "--", "base.txt")
+	mustGit(t, repo, "checkout", "-b", "side")
+	commitFile(t, repo, "base.txt", "side\n", "side edit")
+	mustGit(t, repo, "checkout", "main")
+	commitFile(t, repo, "base.txt", "mainline\n", "main edit")
+	_, _ = git(repo, "merge", "side") // conflicts on purpose
+	st = inspectRepoRoot(repo)
+	if st.State != repoStateMerge {
+		t.Fatalf("mid-merge = %+v, want %q", st, repoStateMerge)
+	}
+	if !st.Blocked() || !strings.Contains(st.BlockedMessage("main"), "unfinished merge") {
+		t.Errorf("mid-merge should be blocked and say so: %+v / %s", st, st.BlockedMessage("main"))
+	}
+}
+
+// The overlap has to be caught BEFORE the push. Otherwise the branch lands on origin while the
+// local fast-forward is refused, and the user is told the merge failed by a machine that has
+// already published it. Reproduces the real case: someone left an edit in the shared checkout on
+// a file this branch also changes.
+func TestMergeToMainOverlappingDirtyRootFailsBeforePushing(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	bare := addOriginBare(t, repo)
+	originBefore := mustGit(t, bare, "rev-parse", "main")
+
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "base.txt", "branch edit\n", "branch edits base")
+	mustGit(t, repo, "checkout", "main")
+	// Somebody else's uncommitted edit, on the same file — believed committed on their own branch.
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("someone else's wip\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s-clash-push"})
+	if out.Status != "error" {
+		t.Fatalf("expected error, got %q (%s)", out.Status, out.Message)
+	}
+	if originAfter, _ := git(bare, "rev-parse", "main"); originAfter != originBefore {
+		t.Errorf("origin must not advance when the local ff can't follow: %s → %s", originBefore, originAfter)
+	}
+	if !strings.Contains(out.Message, "base.txt") {
+		t.Errorf("message should name the contended file, got: %s", out.Message)
+	}
+	got, _ := os.ReadFile(filepath.Join(repo, "base.txt"))
+	if string(got) != "someone else's wip\n" {
+		t.Errorf("the bystander's edit must be untouched, got %q", string(got))
+	}
+}

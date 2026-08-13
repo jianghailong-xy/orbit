@@ -3174,6 +3174,31 @@ body {
   opacity: 0.55;
   cursor: default;
 }
+/* The machine's shared checkout is mid-merge/rebase: every session's merge here is blocked, so
+   this sits above the per-session bar wearing the same amber as the other "fix this first" state. */
+.wt-bar-wedged {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.wt-wedge-detail {
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  min-width: 0;
+}
+.wt-wedge-root {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  flex: none;
+}
+.wt-wedge-files {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Connective text between the two halves of the by-hand merge recipe (they run in two dirs). */
+.wt-merge-where {
+  color: var(--text-3, var(--text-2));
+}
 .agent-header-count {
   font-size: 13px;
   color: var(--text-2);

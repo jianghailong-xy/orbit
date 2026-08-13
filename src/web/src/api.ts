@@ -736,3 +736,12 @@ export const refreshSessionDiff = (idOrPublicId: string) =>
  *  commit) on the agent's next run, after which sessions isolate on their own branch. */
 export const enableAgentIsolation = (agentId: string) =>
   api(`/agents/${agentId}`, { method: 'PATCH', body: { autoInitGit: true } });
+
+/** Ask this agent's runner to clean up the shared checkout it works in: the runner saves whatever
+ *  the checkout is holding onto an `orbit/rescue-*` branch, then returns it to HEAD. Queued for
+ *  the runner's next heartbeat; the outcome arrives on the agent's `repoCleanup`. */
+export const cleanUpAgentRepo = (agentId: string) =>
+  api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
+    `/agents/${agentId}/repo-cleanup`,
+    { method: 'POST' },
+  );

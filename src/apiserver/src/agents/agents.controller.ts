@@ -50,4 +50,12 @@ export class AgentsController {
   remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.agents.remove(user.userId, id);
   }
+
+  /** Ask this agent's runner to clean up the shared checkout it works in (rescue what's there
+   *  onto a branch, then return it to HEAD). Queued for the next heartbeat; the outcome lands on
+   *  the agent's repoCleanup fields. */
+  @Post(':id/repo-cleanup')
+  cleanUpRepo(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.agents.requestRepoCleanup(user.userId, id);
+  }
 }

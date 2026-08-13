@@ -81,6 +81,10 @@ type HeartbeatRequest struct {
 	// has at each agent working directory. Omitted until the first scan completes, so the
 	// control plane keeps its last snapshot instead of hearing a false "missing".
 	AgentDirProbes []AgentDirProbe `json:"agentDirProbes,omitempty"`
+	// Repos is the state of the shared checkouts this machine's agents work in (see
+	// RepoHealthReport). Nil until the first scan completes — an omitted field leaves the
+	// server's last snapshot alone rather than claiming every checkout is clean.
+	Repos []RepoHealthReport `json:"repos,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is
@@ -244,6 +248,32 @@ type HeartbeatResponse struct {
 	// Agent working directories to stat before the next heartbeat; answered via
 	// HeartbeatRequest.AgentDirProbes. Absent on older control planes → nothing to probe.
 	AgentDirs []AgentDirTarget `json:"agentDirs,omitempty"`
+	// A "clean up this checkout" the user asked for after seeing it reported wedged. Nil on older
+	// control planes and whenever no repair is in flight. Redelivered until we report an outcome.
+	RepoCleanupRequest *RepoCleanupCommand `json:"repoCleanupRequest,omitempty"`
+}
+
+// RepoCleanupCommand mirrors @orbit/shared: repair the shared checkout at Root — rescue whatever
+// it holds onto a branch, then return it to HEAD (see cleanupRepoRoot). Root is named by the
+// control plane from what this runner itself reported, and re-validated here against the agents'
+// workDirs before anything is rewritten.
+type RepoCleanupCommand struct {
+	Root string `json:"root"`
+	// RequestedAt is the moment the user clicked, echoed back so a repeat of the same request is
+	// recognizable in logs.
+	RequestedAt string `json:"requestedAt,omitempty"`
+}
+
+// RepoCleanupResultRequest mirrors @orbit/shared RunnerRepoCleanupResult: the outcome of a
+// RepoCleanupCommand, POSTed back so the UI can drop the warning and point at the rescue branch.
+type RepoCleanupResultRequest struct {
+	Root   string `json:"root"`
+	Status string `json:"status"` // "done" | "failed"
+	// State is the checkout's state afterwards (a repoState* value), so the stored health snapshot
+	// can be corrected immediately instead of waiting for the next scan.
+	State        string `json:"state,omitempty"`
+	RescueBranch string `json:"rescueBranch,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
 // InstallCommand mirrors @orbit/shared: install one engine's CLI on this machine. Redelivered

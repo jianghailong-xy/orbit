@@ -1,7 +1,17 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByAgent, withProviderSeed } from './agent-provider';
+import {
+  isBlockingRepoState,
+  readRunnerRepoHealth,
+  repoHealthForAgent,
+} from '../common/runner-repo-health';
 import { CreateAgentDto, UpdateAgentDto } from './dto';
 
 // The `orbit mcp` server is injected into every session, but under DONT_ASK its tools
@@ -63,6 +73,57 @@ export class AgentsService {
     return withProviderSeed([agent], new Map())[0];
   }
 
+  /** What the read paths include about an agent's machine: identity for grouping/routing, plus
+   *  the checkout-health snapshot its heartbeat carries (resolved per agent by withRepoHealth). */
+  private static readonly RUNNER_INCLUDE = {
+    runner: {
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        repoHealth: true,
+        repoCleanupStatus: true,
+        repoCleanupBranch: true,
+        repoCleanupMessage: true,
+      },
+    },
+  } as const;
+
+  /**
+   * Attach the state of the shared checkout this agent's sessions run in.
+   *
+   * The runner reports every checkout on the machine; an agent only cares about its own, so this
+   * resolves the one entry and drops the rest rather than shipping the whole column with each
+   * agent. Null when the runner is older than the report, has no runner, or the workDir isn't a
+   * git repo — all of which the UI reads as "unknown", never as "clean".
+   */
+  private withRepoHealth<T extends { id: string; runner?: { repoHealth?: unknown } | null }>(
+    agent: T,
+  ) {
+    if (!agent.runner) return { ...agent, repoHealth: null, repoCleanup: null };
+    const {
+      repoHealth: reported,
+      repoCleanupStatus,
+      repoCleanupBranch,
+      repoCleanupMessage,
+      ...runner
+    } = agent.runner as Record<string, unknown> & { repoHealth?: unknown };
+    return {
+      ...agent,
+      runner,
+      repoHealth: repoHealthForAgent(readRunnerRepoHealth(reported), agent.id),
+      // The repair relay's last word, so the UI can hold "Cleaning up…" and then name the rescue
+      // branch instead of silently dropping the warning.
+      repoCleanup: repoCleanupStatus
+        ? {
+            status: repoCleanupStatus as string,
+            branch: (repoCleanupBranch as string | null) ?? null,
+            message: (repoCleanupMessage as string | null) ?? null,
+          }
+        : null,
+    };
+  }
+
   async list(ownerId: string) {
     const agents = await this.prisma.agent.findMany({
       where: { ownerId, deletedAt: null },
@@ -70,10 +131,11 @@ export class AgentsService {
       // creation time, so newly added agents append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       // Expose the machine an agent belongs to so the UI can group/route by runner.
-      include: { runner: { select: { id: true, name: true, displayName: true } } },
+      include: AgentsService.RUNNER_INCLUDE,
     });
     // One indexed query for the whole list — the provider each project last ran on.
-    return withProviderSeed(agents, await lastProviderByAgent(this.prisma, agents.map((a) => a.id)));
+    const seeded = withProviderSeed(agents, await lastProviderByAgent(this.prisma, agents.map((a) => a.id)));
+    return seeded.map((agent) => this.withRepoHealth(agent));
   }
 
   /**
@@ -98,10 +160,46 @@ export class AgentsService {
   async get(ownerId: string, id: string) {
     const agent = await this.prisma.agent.findFirst({
       where: { id, ownerId, deletedAt: null },
-      include: { runner: { select: { id: true, name: true, displayName: true } } },
+      include: AgentsService.RUNNER_INCLUDE,
     });
     if (!agent) throw new NotFoundException('agent not found');
-    return withProviderSeed([agent], await lastProviderByAgent(this.prisma, [agent.id]))[0];
+    const seeded = withProviderSeed([agent], await lastProviderByAgent(this.prisma, [agent.id]))[0];
+    return this.withRepoHealth(seeded);
+  }
+
+  /**
+   * Queue "clean up the checkout this agent works in" for its runner's next heartbeat.
+   *
+   * Only offered for a checkout the runner itself reported as wedged: the repair rewrites a
+   * directory shared by every session on that machine, so the trigger is a state we observed, not
+   * a path a client asked for. Re-clicking while one is pending is a no-op rather than a second
+   * repair — the first is already redelivered until the runner answers.
+   */
+  async requestRepoCleanup(ownerId: string, id: string) {
+    const agent = await this.get(ownerId, id);
+    const health = agent.repoHealth;
+    if (!health) throw new BadRequestException('this agent has no reported checkout');
+    if (!isBlockingRepoState(health.state)) {
+      throw new BadRequestException(`${health.root} is not stuck (${health.state}) — nothing to clean up`);
+    }
+    if (!agent.runnerId) throw new BadRequestException('this agent is not bound to a runner');
+    await this.prisma.runner.updateMany({
+      // Owner-scoped even though `get` already proved the agent is ours: the runner is a separate
+      // row, and a write keyed only by id would be a cross-tenant write if the two ever disagreed.
+      where: {
+        id: agent.runnerId,
+        ownerId,
+        NOT: { repoCleanupStatus: 'pending' },
+      },
+      data: {
+        repoCleanupStatus: 'pending',
+        repoCleanupRoot: health.root,
+        repoCleanupBranch: null,
+        repoCleanupMessage: null,
+        repoCleanupAt: new Date(),
+      },
+    });
+    return this.get(ownerId, id);
   }
 
   async update(ownerId: string, id: string, dto: UpdateAgentDto) {
