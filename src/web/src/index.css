@@ -7542,6 +7542,45 @@ body {
   color: var(--success);
   font-weight: 500;
 }
+/* The provider name in the keys table: when the endpoint column is hidden on narrow
+   screens the name gets the leftover width, so a long custom label ellipsizes instead
+   of stretching the table past the viewport. */
+.prov-cell-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+/* A long custom base URL is the one cell that can't ellipsize (a truncated URL reads as a
+   different one), so it wraps at any character instead of setting the column's width. */
+.prov-endpoint {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+/* The enabled state's mobile stand-in, inside the provider cell: same signal as the tag,
+   in the width of a punctuation mark. */
+.prov-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.prov-dot.on {
+  background: var(--success-solid);
+}
+@media (max-width: 640px) {
+  /* With the endpoint and models columns hidden, the remaining cells only need half the
+     gutter — and that padding is what still pushed the table a few pixels past a phone.
+     Mirrors AntD's own selectors so this outranks their default cell padding. */
+  .provider-keys .ant-table-thead > tr > th.ant-table-cell,
+  .provider-keys .ant-table-tbody > tr > td.ant-table-cell {
+    padding-inline: 10px;
+  }
+}
+
 .provider-card .pc-logo {
   position: relative;
   flex: none;

@@ -1,11 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { Button, Popconfirm, Space, Table, Tag, type TableColumnsType } from 'antd';
 import { api } from '../api';
 import { providersQuery } from '../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ProviderGallery, ProviderTile } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
+import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 
 /**
@@ -21,6 +23,7 @@ export function ProvidersPage() {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
 
   const deleteMut = useMutation({
@@ -42,42 +45,77 @@ export function ProvidersPage() {
       // The dispatch slug is the server's to generate and nobody's to read, so the row shows the
       // vendor: its logo (by preset, not by the row's identifier) and the name it was given.
       render: (_, p) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <ProviderTile slug={p.presetSlug ?? p.slug} label={p.label} size={32} />
-          <div style={{ fontWeight: 600 }}>{p.label}</div>
+          <div className="prov-cell-name">{p.label}</div>
+          {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
+              outrun a phone's width on their own. */}
+          {isMobile && (
+            <span
+              className={`prov-dot${p.enabled ? ' on' : ''}`}
+              title={p.enabled ? 'Enabled' : 'Disabled'}
+            />
+          )}
         </div>
       ),
     },
     {
       title: 'Models',
       key: 'models',
+      width: 70,
+      // A model count is the weakest signal here — what the row is, whether it's on, and its
+      // controls all outrank it — so it waits for a window wide enough for the whole table.
+      responsive: ['md'],
       render: (_, p) => (p.models?.length ? `${p.models.length}` : '—'),
     },
     {
       title: 'Endpoint',
       dataIndex: 'baseUrl',
       key: 'baseUrl',
-      render: (u: string) => <code style={{ fontSize: 12, color: 'var(--text-3)' }}>{u}</code>,
+      width: 200,
+      // The widest column and the least needed on a phone: the endpoint is one tap away on the
+      // edit page, and its long URL is exactly what pushes the table past the viewport.
+      responsive: ['md'],
+      render: (u: string) => <code className="prov-endpoint">{u}</code>,
     },
     {
       title: 'Enabled',
       dataIndex: 'enabled',
       key: 'enabled',
+      width: 100,
+      responsive: ['md'],
       render: (on: boolean) => <Tag color={on ? 'green' : 'default'}>{on ? 'Enabled' : 'Disabled'}</Tag>,
     },
     {
       title: '',
       key: 'actions',
       align: 'right',
+      width: isMobile ? 88 : 170,
       render: (_, p) => (
-        <Space>
-          <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
-            Edit
-          </Button>
-          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
-            <Button size="small" danger>
-              Delete
+        <Space size={isMobile ? 4 : 8}>
+          {/* Icon-only on narrow screens: the labelled pair is what pushes the table past a
+              phone's viewport once the wide columns are hidden. */}
+          {isMobile ? (
+            <Button
+              size="small"
+              type="text"
+              icon={<EditOutlined />}
+              aria-label={`Edit ${p.label}`}
+              onClick={() => navigate(`/providers/${p.id}`)}
+            />
+          ) : (
+            <Button size="small" onClick={() => navigate(`/providers/${p.id}`)}>
+              Edit
             </Button>
+          )}
+          <Popconfirm title={`Delete ${p.label}?`} onConfirm={() => deleteMut.mutate(p.id)}>
+            {isMobile ? (
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label={`Delete ${p.label}`} />
+            ) : (
+              <Button size="small" danger>
+                Delete
+              </Button>
+            )}
           </Popconfirm>
         </Space>
       ),
@@ -114,6 +152,8 @@ export function ProvidersPage() {
       {providers.isLoading ? (
         <Table
           rowKey="id"
+          className="provider-keys"
+          tableLayout="fixed"
           style={{ marginTop: 12 }}
           loading
           dataSource={[]}
@@ -130,6 +170,8 @@ export function ProvidersPage() {
         <>
           <Table
             rowKey="id"
+            className="provider-keys"
+            tableLayout="fixed"
             style={{ marginTop: 12 }}
             dataSource={providers.data ?? []}
             columns={columns}
