@@ -230,3 +230,31 @@ test('heartbeat drains manual worktree operations only with capability and proce
     });
   }
 });
+
+test('a draining runner is claimed no git work but still gets the abandoned sweep', async () => {
+  const h = harness([], {
+    merge: [{ sessionId: SESSION_A }],
+    commit: [{ sessionId: SESSION_B }],
+  });
+
+  const response = await h.controller.heartbeat(
+    { id: RUNNER_ID, version: null },
+    {
+      status: RunnerStatus.ONLINE,
+      idleCapacity: 0,
+      leaseOwner: OWNER,
+      draining: true,
+    },
+    SESSION_WORKTREE_OPS_V1,
+  );
+
+  // Claiming for a process that is about to be replaced pins the session to a dead
+  // epoch — the exact state the staleness backstop then has to clean up minutes later.
+  assert.deepEqual(h.mergeDrainCalls, []);
+  assert.deepEqual(h.commitDrainCalls, []);
+  assert.deepEqual(response.mergeRequests, []);
+  assert.deepEqual(response.commitRequests, []);
+  // The sweep is about *other* epochs' abandoned claims, so draining must not skip it:
+  // this heartbeat is often the first one after the successor took over.
+  assert.deepEqual(h.abandonedSweeps, [[RUNNER_ID, OWNER]]);
+});

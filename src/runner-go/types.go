@@ -53,6 +53,10 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// Draining marks a process that keeps heartbeating (so the reaper spares its
+	// sessions) but no longer dispatches heartbeat-delivered git work. The control
+	// plane stops claiming merge/commit requests for it; they wait for the successor.
+	Draining bool `json:"draining,omitempty"`
 	// Slash assets discovered on this machine, surfaced to the web composer for
 	// `/` autocomplete. Empty slices are omitted so quiet heartbeats stay small.
 	Commands []SlashCommandInfo `json:"commands,omitempty"`
@@ -289,8 +293,10 @@ type MergeCommand struct {
 type MergeResultRequest struct {
 	OperationID string `json:"operationId,omitempty"`
 	LeaseOwner  string `json:"leaseOwner,omitempty"`
-	Status      string `json:"status"` // "merged" | "conflict" | "error"
-	MergedSha   string `json:"mergedSha,omitempty"`
+	// "released" is not an outcome: this process drained before touching the repo, so the
+	// request goes back to unclaimed and the successor performs it.
+	Status    string `json:"status"` // "merged" | "conflict" | "error" | "released"
+	MergedSha string `json:"mergedSha,omitempty"`
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
@@ -325,8 +331,10 @@ type ArtifactResultRequest struct {
 type CommitResultRequest struct {
 	OperationID string `json:"operationId,omitempty"`
 	LeaseOwner  string `json:"leaseOwner,omitempty"`
-	Status      string `json:"status"` // "committed" | "nochange" | "error"
-	Message     string `json:"message,omitempty"`
+	// "released" is not an outcome: this process drained before touching the repo, so the
+	// request goes back to unclaimed and the successor performs it.
+	Status  string `json:"status"` // "committed" | "nochange" | "error" | "released"
+	Message string `json:"message,omitempty"`
 }
 
 // DiffResultRequest mirrors @orbit/shared SessionDiffResultRequest: a freshly recomputed live

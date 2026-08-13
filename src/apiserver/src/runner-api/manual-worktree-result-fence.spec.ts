@@ -337,3 +337,79 @@ test('commit result status is allowlisted before opening a transaction', async (
     });
   }
 });
+
+test('a released commit hands the claim back without recording an outcome', async () => {
+  const h = harness(commitRow());
+
+  await h.api.commitResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION,
+    leaseOwner: NEW_OWNER,
+    status: 'released',
+  });
+
+  // Back to the state the user's click produced: still pending, nobody executing. The
+  // successor process claims it on its next heartbeat and actually commits.
+  assert.equal(h.writes.length, 1);
+  assert.deepEqual(h.writes[0]?.data, { commitOperationOwner: null });
+});
+
+test('a released merge hands the claim back without recording an outcome', async () => {
+  const h = harness(mergeRow());
+
+  await h.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION,
+    leaseOwner: NEW_OWNER,
+    status: 'released',
+  });
+
+  assert.equal(h.writes.length, 1);
+  assert.deepEqual(h.writes[0]?.data, { mergeOperationOwner: null });
+});
+
+test('release is fenced exactly like an outcome', async (t) => {
+  await t.test('a superseded operation cannot be released', async () => {
+    const h = harness(commitRow({ commitOperationId: NEW_OPERATION }));
+
+    await assert.rejects(
+      () =>
+        h.api.commitResult({ id: RUNNER_ID }, SESSION_ID, {
+          operationId: OLD_OPERATION,
+          leaseOwner: NEW_OWNER,
+          status: 'released',
+        }),
+      ConflictException,
+    );
+    assert.deepEqual(h.writes, []);
+  });
+
+  await t.test('another process cannot release our claim', async () => {
+    const h = harness(commitRow({ commitOperationOwner: NEW_OWNER }));
+
+    await assert.rejects(
+      () =>
+        h.api.commitResult({ id: RUNNER_ID }, SESSION_ID, {
+          operationId: NEW_OPERATION,
+          leaseOwner: OLD_OWNER,
+          status: 'released',
+        }),
+      ConflictException,
+    );
+    assert.deepEqual(h.writes, []);
+  });
+
+  await t.test('a legacy request has no claim to release', async (tt) => {
+    for (const call of ['commitResult', 'mergeResult'] as const) {
+      await tt.test(call, async () => {
+        const h = harness(call === 'commitResult' ? commitRow() : mergeRow());
+
+        await assert.rejects(
+          () => h.api[call]({ id: RUNNER_ID }, SESSION_ID, { status: 'released' }),
+          BadRequestException,
+        );
+
+        assert.equal(h.transactionCalls(), 0);
+        assert.deepEqual(h.writes, []);
+      });
+    }
+  });
+});

@@ -344,6 +344,54 @@ type manualWorktreeOperationKey struct {
 	leaseOwner  string
 }
 
+// unstartedWorktreeCommands picks the merge/commit commands a draining process must hand
+// back instead of strand. The server claims heartbeat-delivered git work before it returns
+// the response, so a drain beginning mid-cycle leaves commands owned by an epoch that will
+// never run them: pending, fencing takeover/messages/resume for their session until the
+// staleness backstop expires minutes later. A released command is simply unclaimed again,
+// so the successor process performs it.
+//
+// Excluded: commands this process is already executing or whose local outcome it still owes
+// the server (`started`), and legacy commands that carry no claim to give back. Handing back
+// half-applied git work so another process can repeat it is exactly what the owner fence
+// exists to prevent.
+func unstartedWorktreeCommands(
+	resp *HeartbeatResponse,
+	processOwner string,
+	started func(manualWorktreeOperationKey) bool,
+) []worktreeCommandRelease {
+	if resp == nil {
+		return nil
+	}
+	var out []worktreeCommandRelease
+	add := func(kind, sessionID, operationID, leaseOwner string) {
+		if operationID == "" || leaseOwner == "" {
+			return
+		}
+		if !manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner) {
+			return
+		}
+		key := manualWorktreeOperationKey{
+			kind: kind, sessionID: sessionID,
+			operationID: operationID, leaseOwner: leaseOwner,
+		}
+		if started(key) {
+			return
+		}
+		out = append(out, worktreeCommandRelease(key))
+	}
+	for _, m := range resp.MergeRequests {
+		add("merge", m.SessionID, m.OperationID, m.LeaseOwner)
+	}
+	for _, c := range resp.CommitRequests {
+		add("commit", c.SessionID, c.OperationID, c.LeaseOwner)
+	}
+	return out
+}
+
+// worktreeCommandRelease is one claimed-but-unexecuted git command to hand back.
+type worktreeCommandRelease manualWorktreeOperationKey
+
 // runLoop returns true only when it drained because a newer runner release was
 // published. The caller performs the existing atomic self-update after all live
 // sessions have detached; SIGINT/SIGTERM continue to return false and exit.
@@ -637,7 +685,8 @@ func runLoop(cfg *RunnerConfig) bool {
 			if idle < 0 {
 				idle = 0
 			}
-			if loopCtx.Err() != nil {
+			draining := loopCtx.Err() != nil
+			if draining {
 				idle = 0 // draining: keep heartbeating (so the reaper spares our sessions)
 				// but advertise no capacity so the server routes no new work here
 			}
@@ -650,8 +699,8 @@ func runLoop(cfg *RunnerConfig) bool {
 			modelSnapshotMu.Unlock()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", IdleCapacity: idle, Version: version,
-				LeaseOwner: t.leaseOwner,
-				Commands:   cmds, Skills: skills,
+				LeaseOwner: t.leaseOwner, Draining: draining,
+				Commands: cmds, Skills: skills,
 				PlanUsage:            combinePlanUsage(claudeUsageProbe.snapshot(), codexUsageProbe.snapshot()),
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
@@ -685,6 +734,34 @@ func runLoop(cfg *RunnerConfig) bool {
 				}
 			}
 			if loopCtx.Err() != nil {
+				// Drain began after the server claimed this cycle's git commands, so nothing
+				// below will run them and this process image is about to be replaced. Hand
+				// each one back rather than strand it under a dead epoch.
+				startedLocally := func(key manualWorktreeOperationKey) bool {
+					mergeMu.Lock()
+					defer mergeMu.Unlock()
+					if key.kind == "merge" {
+						_, owed := mergeOutcomes[key]
+						return mergingNow[key.sessionID] || owed
+					}
+					_, owed := commitOutcomes[key]
+					return committingNow[key.sessionID] || owed
+				}
+				for _, r := range unstartedWorktreeCommands(resp, t.leaseOwner, startedLocally) {
+					var err error
+					if r.kind == "merge" {
+						err = t.mergeResult(r.sessionID, MergeResultRequest{
+							OperationID: r.operationID, LeaseOwner: r.leaseOwner, Status: "released",
+						})
+					} else {
+						err = t.commitResult(r.sessionID, CommitResultRequest{
+							OperationID: r.operationID, LeaseOwner: r.leaseOwner, Status: "released",
+						})
+					}
+					if err != nil {
+						logln("releasing claimed "+r.kind+" for", r.sessionID+":", err)
+					}
+				}
 				return
 			}
 			// Honor "merge to main" requests: merge each session's branch into main on

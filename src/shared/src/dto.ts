@@ -258,6 +258,11 @@ export interface RunnerHeartbeatRequest {
   /** Every session currently registered in this process's local supervisor pool,
    *  including cold sessions that do not poll an inbox. */
   supervisedSessionIds?: string[];
+  /** This process has begun draining (self-update or shutdown) and will not execute
+   *  heartbeat-delivered Git operations any more. The control plane must not claim
+   *  merge/commit requests for it: a claim it cannot run would fence the session
+   *  until the staleness backstop expires. Absent on older runners. */
+  draining?: boolean;
   /** Runtime slash commands discovered by the runner, optionally scoped by provider/agent. */
   commands?: SlashCommandInfo[];
   /** Runtime skills discovered by the runner, optionally scoped by provider/agent. */
@@ -917,13 +922,15 @@ export interface WorktreesRemovableResponse {
  * Runner → control plane: the outcome of a {@link MergeCommand}. `merged` advanced main
  * (mergedSha is the new HEAD); `conflict` means the merge was aborted cleanly; `error`
  * means a precondition failed (workDir not on a clean main, branch missing, …). `message`
- * carries git's stderr / the precondition for the UI.
+ * carries git's stderr / the precondition for the UI. `released` is the one status that is
+ * not an outcome: the runner drained before touching the repo, so the request goes back to
+ * unclaimed and the successor process performs it.
  */
 export interface SessionMergeResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'merged' | 'conflict' | 'error';
+  status: 'merged' | 'conflict' | 'error' | 'released';
   mergedSha?: string;
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
@@ -935,12 +942,14 @@ export interface SessionMergeResultRequest {
  * Runner → control plane: the outcome of a {@link CommitCommand}. `committed` advanced the
  * branch (the worktree is now clean); `nochange` means there was nothing to commit; `error`
  * means the commit failed (no worktree, git error). `message` carries git's stderr.
+ * `released` is the one status that is not an outcome: the runner drained before touching
+ * the repo, so the request goes back to unclaimed and the successor process performs it.
  */
 export interface SessionCommitResultRequest {
   /** Absent only for an in-flight command issued by a pre-fence control plane. */
   operationId?: string;
   leaseOwner?: string;
-  status: 'committed' | 'nochange' | 'error';
+  status: 'committed' | 'nochange' | 'error' | 'released';
   message?: string;
 }
 

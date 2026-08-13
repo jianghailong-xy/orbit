@@ -539,8 +539,14 @@ export class RunnerApiController {
         // A claimed request whose owning process died between claim and result would
         // otherwise stay pending forever, fencing takeover/messages/resume for its session.
         await this.realtime.failAbandonedWorktreeOperations(runner.id, heartbeatLeaseOwner);
-        mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
-        commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
+        // A draining process still heartbeats (so the reaper spares its sessions) but no
+        // longer dispatches git work. Claiming for it would pin the session to an epoch
+        // that is about to be replaced, which is what the staleness backstop then has to
+        // clean up minutes later — the successor process claims these instead.
+        if (!dto?.draining) {
+          mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
+          commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
+        }
       }
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
       loginRequest = await this.drainLoginRequest(runner.id);
@@ -2318,7 +2324,8 @@ export class RunnerApiController {
 
   /** Outcome of a heartbeat-delivered MergeCommand — persist it so the worktree status bar
    *  can show merged ✓ / conflict / error. mergedAt + cleared error on success; the message
-   *  (git stderr / failed precondition) is kept for conflict/error. */
+   *  (git stderr / failed precondition) is kept for conflict/error. `released` is not an
+   *  outcome: a runner that drained before touching the repo hands the claim back. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/merge-result')
   async mergeResult(
@@ -2326,13 +2333,24 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionMergeResultRequest,
   ) {
-    if (dto?.status !== 'merged' && dto?.status !== 'conflict' && dto?.status !== 'error') {
+    if (
+      dto?.status !== 'merged' &&
+      dto?.status !== 'conflict' &&
+      dto?.status !== 'error' &&
+      dto?.status !== 'released'
+    ) {
       throw new BadRequestException('invalid merge result status');
     }
     const operationId = parseLeaseGeneration(dto?.operationId, 'operationId');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
     if (!!operationId !== !!leaseOwner) {
       throw new BadRequestException('operationId and leaseOwner must be provided together');
+    }
+    const released = dto.status === 'released';
+    // Handing a claim back is only meaningful for the owner-bearing protocol: a legacy
+    // request has no recorded owner to clear.
+    if (released && !operationId) {
+      throw new BadRequestException('released requires the claimed operation');
     }
     const merged = dto.status === 'merged';
     await this.prisma.$transaction(async (tx) => {
@@ -2375,6 +2393,15 @@ export class RunnerApiController {
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('merge operation is no longer current');
       }
+      if (released) {
+        // Back to the state the click produced: still pending, nobody executing. The
+        // request survives the restart and the successor process claims it.
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { mergeOperationOwner: null },
+        });
+        return;
+      }
       await tx.session.update({
         where: { id: sessionId },
         data: {
@@ -2400,7 +2427,9 @@ export class RunnerApiController {
   /** Outcome of a heartbeat-delivered CommitCommand — persist it so the worktree status bar
    *  can flip from Commit to Merge. On success the worktree is clean (worktreeDirty=false),
    *  so the bar shows Merge without waiting for the next live-diff heartbeat; 'nochange' is
-   *  also clean. An error keeps the Commit button (commitError carries git's message). */
+   *  also clean. An error keeps the Commit button (commitError carries git's message).
+   *  `released` is not an outcome: a runner that drained before touching the repo hands
+   *  the claim back. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/commit-result')
   async commitResult(
@@ -2408,13 +2437,22 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionCommitResultRequest,
   ) {
-    if (dto?.status !== 'committed' && dto?.status !== 'nochange' && dto?.status !== 'error') {
+    if (
+      dto?.status !== 'committed' &&
+      dto?.status !== 'nochange' &&
+      dto?.status !== 'error' &&
+      dto?.status !== 'released'
+    ) {
       throw new BadRequestException('invalid commit result status');
     }
     const operationId = parseLeaseGeneration(dto?.operationId, 'operationId');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner, 'leaseOwner');
     if (!!operationId !== !!leaseOwner) {
       throw new BadRequestException('operationId and leaseOwner must be provided together');
+    }
+    const released = dto.status === 'released';
+    if (released && !operationId) {
+      throw new BadRequestException('released requires the claimed operation');
     }
     const clean = dto.status === 'committed' || dto.status === 'nochange';
     await this.prisma.$transaction(async (tx) => {
@@ -2459,6 +2497,15 @@ export class RunnerApiController {
           (current.status === RunStatus.AWAITING_INPUT && current.inboxLeaseOwner === leaseOwner));
       if (!legacyAttempt && !modernAttempt) {
         throw new ConflictException('commit operation is no longer current');
+      }
+      if (released) {
+        // Back to the state the click produced: still pending, nobody executing. The
+        // request survives the restart and the successor process claims it.
+        await tx.session.update({
+          where: { id: sessionId },
+          data: { commitOperationOwner: null },
+        });
+        return;
       }
       await tx.session.update({
         where: { id: sessionId },

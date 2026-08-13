@@ -19,10 +19,14 @@ export function isTerminalResumeHandoffOwner(owner: string | null | undefined): 
  * `merge_requested_at`/`commit_requested_at`, which heartbeat delivery restamps at
  * claim time, so it measures time since the owning process last advanced the
  * operation. Execution is seconds of git work and a live owner is redelivered
- * every heartbeat; ten minutes also clears any restart window in which an old
- * process could still be finishing an operation while its successor comes up.
+ * every heartbeat; five minutes also clears the longest window in which an old
+ * process could still be finishing an operation while its successor comes up —
+ * the runner's whole drain envelope (`shutdownSupervisorTimeout`) is under three
+ * minutes, and it joins outstanding heartbeat work before replacing its image.
+ * This is only a backstop: a draining runner neither claims new operations nor
+ * keeps the ones it will not execute (it releases them back to unclaimed).
  */
-export const WORKTREE_OPERATION_STALE_MS = 10 * 60_000;
+export const WORKTREE_OPERATION_STALE_MS = 5 * 60_000;
 
 /**
  * Whether a pending heartbeat-delivered Git operation may already have local

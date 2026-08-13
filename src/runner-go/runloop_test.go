@@ -727,3 +727,37 @@ func TestCommitAdmissionRejectPostsExactErrorReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestUnstartedWorktreeCommands(t *testing.T) {
+	const owner = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	const foreign = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	const op = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+	resp := &HeartbeatResponse{
+		MergeRequests: []MergeCommand{
+			{SessionID: "merge-fresh", OperationID: op, LeaseOwner: owner},
+			{SessionID: "merge-running", OperationID: op, LeaseOwner: owner},
+			{SessionID: "merge-foreign", OperationID: op, LeaseOwner: foreign},
+			{SessionID: "merge-legacy"},
+		},
+		CommitRequests: []CommitCommand{
+			{SessionID: "commit-fresh", OperationID: op, LeaseOwner: owner},
+			{SessionID: "commit-running", OperationID: op, LeaseOwner: owner},
+		},
+	}
+	// The commands this process picked up on an earlier cycle: releasing one would let
+	// the successor repeat git work that may already be half applied.
+	running := map[string]bool{"merge-running": true, "commit-running": true}
+
+	got := unstartedWorktreeCommands(resp, owner, func(key manualWorktreeOperationKey) bool {
+		return running[key.sessionID]
+	})
+
+	want := []worktreeCommandRelease{
+		{kind: "merge", sessionID: "merge-fresh", operationID: op, leaseOwner: owner},
+		{kind: "commit", sessionID: "commit-fresh", operationID: op, leaseOwner: owner},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unstartedWorktreeCommands = %+v, want %+v", got, want)
+	}
+}
