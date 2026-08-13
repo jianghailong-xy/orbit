@@ -195,18 +195,28 @@ export class SessionsService {
           runnerId: true,
           enableWorktree: true,
           permissionMode: true,
+          enabled: true,
         },
       });
       if (!agent) throw new ForbiddenException('agent not found');
+      // Every way a session gets started — composer, task run, orchestrated spawn — funnels
+      // through here, so this one check is what makes "disabled" mean anything. Kept separate
+      // from the not-found path: the agent exists and its config is intact, which is exactly
+      // what the caller needs to hear to know it can be switched back on.
+      //
+      // Tested against `false` rather than falsiness: the column is non-nullable with a
+      // default, so a real row is always a boolean, and only an explicit "off" should refuse.
+      if (agent.enabled === false) throw new ForbiddenException('agent is disabled');
       assignedRunnerId = agent.runnerId ?? undefined;
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     } else if (dto.agentId) {
       const agent = await this.prisma.agent.findFirst({
         where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, permissionMode: true },
+        select: { enableWorktree: true, permissionMode: true, enabled: true },
       });
       if (!agent) throw new ForbiddenException('agent not found');
+      if (agent.enabled === false) throw new ForbiddenException('agent is disabled');
       enableWorktree = agent.enableWorktree;
       agentPermissionMode = agent.permissionMode;
     }

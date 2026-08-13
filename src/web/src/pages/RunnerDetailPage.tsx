@@ -178,7 +178,17 @@ export function RunnerDetailPage() {
   const setEnabledMut = useMutation({
     mutationFn: (v: { id: string; enabled: boolean }) =>
       api(`/agents/${v.id}`, { method: 'PATCH', body: { enabled: v.enabled } }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agents'] }),
+    // Say what it did: disabling now actually refuses work, and a greyed row alone doesn't
+    // tell you that. Running sessions are deliberately left alone — this parks the agent
+    // rather than killing what it is already doing.
+    onSuccess: (_d, v) => {
+      message.success(
+        v.enabled
+          ? 'Agent enabled.'
+          : 'Agent disabled — new sessions and task runs are refused. Running sessions continue.',
+      );
+      void qc.invalidateQueries({ queryKey: ['agents'] });
+    },
     onError: (e: Error) => message.error(e.message || 'Update failed'),
   });
   const duplicateMut = useMutation({
@@ -474,7 +484,11 @@ export function RunnerDetailPage() {
 
   // One agent row — shown on its own, or kept as the header above the in-place editor.
   // The whole row is the way into the config: it is what people aim at, and the settings it
-  // displays are the ones the editor holds. Chat stays an explicit button beside it.
+  // displays are the ones the editor holds. There is deliberately no console button here —
+  // the sidebar lists every agent and opens its console in one click, and this page exists to
+  // manage the machine, not to talk to it. A second, smaller target for a different
+  // destination on the same row only made the row harder to aim at; the console stays
+  // reachable from the row menu.
   const agentRow = (a: Agent) => {
     // What this project last ran on — the same default a new session here would inherit.
     const lastProvider = a.lastProvider ?? a.provider ?? 'claude';
@@ -505,16 +519,6 @@ export function RunnerDetailPage() {
           {a.enableWorktree ? ' · isolated' : ''}
         </div>
       </div>
-      <Button
-        size="small"
-        icon={<MessageOutlined />}
-        onClick={(e) => {
-          e.stopPropagation();
-          navigate(`/agents/${encodeId(a.id)}`);
-        }}
-      >
-        Chat
-      </Button>
       <Dropdown
         trigger={['click']}
         placement="bottomRight"
@@ -525,6 +529,12 @@ export function RunnerDetailPage() {
               icon: <EditOutlined />,
               label: isOpen ? 'Close editor' : 'Configure',
               onClick: () => (isOpen ? closeForm() : switchTo(() => openEdit(a))),
+            },
+            {
+              key: 'console',
+              icon: <MessageOutlined />,
+              label: 'Open console',
+              onClick: () => navigate(`/agents/${encodeId(a.id)}`),
             },
             {
               key: 'enabled',
