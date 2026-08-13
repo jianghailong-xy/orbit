@@ -20,8 +20,10 @@ func TestRuntimeModelRefreshCadence(t *testing.T) {
 	if got := time.Duration(runtimeDefaultRefreshHeartbeatTicks) * heartbeatInterval; got != 5*time.Minute {
 		t.Fatalf("runtime default refresh cadence = %s, want 5m", got)
 	}
-	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != time.Hour {
-		t.Fatalf("model catalog refresh cadence = %s, want 1h", got)
+	// Daily, not hourly: each pass execs the engine once per tier alias, and the catalog it
+	// re-reads only moves when the CLI is upgraded.
+	if got := time.Duration(modelCatalogRefreshHeartbeatTicks) * heartbeatInterval; got != 24*time.Hour {
+		t.Fatalf("model catalog refresh cadence = %s, want 24h", got)
 	}
 }
 

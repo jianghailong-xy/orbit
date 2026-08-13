@@ -3,12 +3,19 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as jwt from 'jsonwebtoken';
 import { RunStatus } from '@prisma/client';
+import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { badgeDiff, BadgeState } from './badge-diff';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
 const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent badge sync
+/** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
+const ENGINE_LABELS: Record<LoginEngine, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  kimi: 'Kimi Code',
+};
 
 /**
  * Sends "needs your reply" pushes to a user's registered iOS devices via APNs, using token-based
@@ -98,6 +105,54 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', auth);
     } catch (err) {
       this.log.warn(`push notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Tell a runner's owner that one of its engines just lost its sign-in. Edge-triggered by the
+   * heartbeat (the engine reported `yes` and now reports `no`), so one sign-out is one alert
+   * rather than one per beat for as long as it lasts.
+   *
+   * Worth its own push because nothing else tells them: the engine's stored credential can be
+   * cleared while no session is running (a failed OAuth refresh does exactly this), and the
+   * runner keeps heartbeating perfectly well without it. Today the first sign is a session
+   * refusing to start, which can be hours later.
+   *
+   * No badge: that count means "sessions needing your reply" and this isn't one. Fire-and-forget,
+   * like notifyApprovalRequest — a slow APNs round-trip must never hold up a heartbeat.
+   */
+  async notifyEngineSignedOut(runnerId: string, engine: LoginEngine): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const runner = await this.prisma.runner.findUnique({
+        where: { id: runnerId },
+        select: { name: true, displayName: true, ownerId: true },
+      });
+      if (!runner) return;
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: runner.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: runner.displayName || runner.name || 'Orbit',
+            body: `${ENGINE_LABELS[engine]} signed out — sessions on this runner won't start until you sign in again.`,
+          },
+          sound: 'default',
+          'thread-id': `runner-${runnerId}`,
+        },
+        // No sessionID: the clients route a tap by that key and correctly ignore payloads
+        // without one (see OrbitKit Notifications), which is what we want — this alert is
+        // about the machine, not any one session.
+        runnerID: runnerId,
+        engine,
+        kind: 'engine-signed-out',
+      });
+
+      await this.deliver(tokens, body, 'alert', '10', auth);
+    } catch (err) {
+      this.log.warn(`engine sign-out notify failed: ${(err as Error).message}`);
     }
   }
 

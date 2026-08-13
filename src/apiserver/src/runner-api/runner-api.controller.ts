@@ -410,6 +410,20 @@ export class RunnerApiController {
           ),
         ]
       : [];
+    const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
+    // Read the engine health this heartbeat is about to overwrite, but only when the incoming
+    // report actually claims a signed-out engine — otherwise there is no transition to find and
+    // every beat would pay for the lookup.
+    const priorEngines = reportedEngines?.some((e) => e.installed && e.auth === 'no')
+      ? sanitizeRunnerEngines(
+          (
+            await this.prisma.runner.findUnique({
+              where: { id: runner.id },
+              select: { engines: true },
+            })
+          )?.engines,
+        )
+      : null;
     const updated = await this.prisma.runner.update({
       where: { id: runner.id },
       data: {
@@ -428,9 +442,9 @@ export class RunnerApiController {
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
         engines:
-          dto?.engines == null
+          reportedEngines == null
             ? undefined
-            : ((sanitizeRunnerEngines(dto.engines) ?? []) as unknown as Prisma.InputJsonValue),
+            : (reportedEngines as unknown as Prisma.InputJsonValue),
         // Runtime-owned default snapshot. Omission means an older runner and preserves the
         // previous value; an explicit {} clears stale values so catalog/static fallback applies.
         runtimeDefaultModels:
@@ -446,6 +460,18 @@ export class RunnerApiController {
             : ((sanitizeRunnerRepoHealth(dto.repos) ?? []) as unknown as Prisma.InputJsonValue),
       },
     });
+    // An engine that was signed in and now isn't: tell the owner while it is still news, rather
+    // than letting them find out from the next session that refuses to start. Only the yes -> no
+    // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
+    // and an engine that was already signed out was reported last beat too.
+    if (priorEngines) {
+      for (const current of reportedEngines ?? []) {
+        if (!current.installed || current.auth !== 'no') continue;
+        if (!isLoginEngine(current.engine)) continue;
+        if (priorEngines.find((was) => was.engine === current.engine)?.auth !== 'yes') continue;
+        void this.push.notifyEngineSignedOut(runner.id, current.engine);
+      }
+    }
     // A finished install stops being news the moment the probe confirms it: clear the slot so the
     // row goes back to speaking from engine health (which then says "signed out", with the sign-in
     // that actually comes next) rather than sitting on a terminal status nobody has to act on.

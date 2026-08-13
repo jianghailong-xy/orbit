@@ -17,8 +17,11 @@ import (
 const (
 	heartbeatInterval                   = 30 * time.Second
 	selfUpdateCheckInterval             = 10 * time.Minute
-	runtimeDefaultRefreshHeartbeatTicks = 10  // ~5 minutes
-	modelCatalogRefreshHeartbeatTicks   = 120 // ~60 minutes
+	runtimeDefaultRefreshHeartbeatTicks = 10 // ~5 minutes
+	// Refreshed once at startup and daily after that. Each pass spawns one `claude -p
+	// "/model <alias>"` per tier alias, so an hourly cadence was launching the engine
+	// four times an hour purely to re-read a list that changes on CLI releases.
+	modelCatalogRefreshHeartbeatTicks = 2880 // ~24 hours
 )
 
 // On shutdown the runner stops claiming, signals each session to drain, and waits up

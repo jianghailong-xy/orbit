@@ -22,8 +22,11 @@ import (
 
 const (
 	planUsageURL = "https://api.anthropic.com/api/oauth/usage"
-	// While the runner has ≥1 active session, refresh at most this often.
-	planUsageActiveInterval = 2 * time.Minute
+	// While the runner has ≥1 active session, refresh at most this often. Kept well
+	// clear of a per-minute cadence on purpose: several busy runners behind one egress
+	// IP have tripped Anthropic's edge rate limit, and a 429 here costs more than a
+	// stale percent — it's the same host the engine's own token refresh has to reach.
+	planUsageActiveInterval = 5 * time.Minute
 	// Idle runners still need occasional refreshes: rolling windows can reset while
 	// no session is active, and the UI would otherwise keep showing a stale percent.
 	planUsageIdleInterval = 10 * time.Minute
