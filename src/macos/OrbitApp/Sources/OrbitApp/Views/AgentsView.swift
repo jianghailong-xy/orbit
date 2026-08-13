@@ -609,17 +609,15 @@ struct NewSessionView: View {
                                        catalog: draft.modelCatalog)
     }
 
-    /// "<model> · <who pays>" — the config not already visible below. The composer footer owns the
-    /// model, effort and permission mode, so this no longer restates effort or prefixes a redundant
-    /// "New session"; it keeps the full model name (the footer truncates it) beside the funding
-    /// source — the one thing that separates an engine from a configured provider.
+    /// The full model name (the composer footer only carries a truncated one). No funding label:
+    /// for a configured provider it's a constant the user already set and isn't actionable here, so
+    /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
+    /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
     private var heroSubtitle: String {
-        let model = draft.providerCapabilitiesResolved
+        draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
-        let funding = currentProviderChoice.kind == .engine ? "runner login" : "your API key"
-        return "\(model) · \(funding)"
     }
 }
 

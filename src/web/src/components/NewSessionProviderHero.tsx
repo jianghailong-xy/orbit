@@ -177,8 +177,9 @@ export function NewSessionProviderHero({
           <>
             {current.modelLabel}
             <span className="np-dot">·</span>
-            {current.kind === 'engine' ? 'runner login' : 'your API key'}
-            <span className="np-dot">·</span>
+            {/* No funding label in the healthy state: for a configured provider it's a constant the
+                user already set, and it isn't actionable here. The credential earns a line only when
+                it's broken — the `unavailable` branch above ("… · Fix it"). */}
             <Link to="/providers">Manage</Link>
           </>
         )}

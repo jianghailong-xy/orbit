@@ -54,12 +54,14 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('np-chev');
   });
 
-  it('says which model it will run and whose money it spends', () => {
-    expect(markup('claude')).toContain('runner login');
+  it('names the model it will run, without a funding label in the healthy state', () => {
+    // The credential (subscription vs your key) is a constant the user already set and isn't
+    // actionable here, so the healthy summary names only the model. Funding resurfaces solely as
+    // the `unavailable` warning (covered below).
     expect(markup('claude')).toContain('Claude Opus 5');
-    // A BYOK provider must not read as a subscription.
-    expect(markup('deepseek')).toContain('your API key');
+    expect(markup('claude')).not.toContain('runner login');
     expect(markup('deepseek')).toContain('DeepSeek V4 Pro');
+    expect(markup('deepseek')).not.toContain('your API key');
   });
 
   it('drops the chevron when there is nothing to pick', () => {
