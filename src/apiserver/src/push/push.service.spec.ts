@@ -63,6 +63,39 @@ test('approval push is suppressed when completion wins the race', async () => {
   assert.equal(deliveries, 0);
 });
 
+test('a second approval on an already-flagged session does not alert again', async () => {
+  const bodies: string[] = [];
+  const prisma = {
+    session: {
+      findFirst: async () => ({ title: 'Session', ownerId: 'owner-1' }),
+    },
+    deviceToken: {
+      findMany: async () => [{ token: 'device', environment: 'sandbox' }],
+    },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).needsYouSessions = async () => ['s-1'];
+  // The fixture key isn't a real ES256 key, so signing a provider JWT would throw.
+  (service as any).authToken = () => 'auth-token';
+  (service as any).deliver = async (_t: unknown, body: string) => {
+    bodies.push(body);
+  };
+
+  // Parallel tool calls in one turn: an approval apiece, all on the same session.
+  await service.notifyApprovalRequest('s-1', 'Bash');
+  await service.notifyApprovalRequest('s-1', 'Write');
+  await service.notifyApprovalRequest('s-1', 'Edit');
+
+  assert.equal(bodies.length, 1);
+  assert.match(bodies[0], /Needs your reply · Bash/);
+
+  // A different session needing you is its own interruption and still alerts.
+  (service as any).needsYouSessions = async () => ['s-1', 's-2'];
+  await service.notifyApprovalRequest('s-2', 'Bash');
+  assert.equal(bodies.length, 2);
+  assert.equal(JSON.parse(bodies[1]).aps.badge, 2);
+});
+
 test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
   const calls: any[] = [];
   const prisma = {

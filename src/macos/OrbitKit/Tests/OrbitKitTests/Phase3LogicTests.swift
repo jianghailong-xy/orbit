@@ -48,17 +48,29 @@ final class Phase3LogicTests: XCTestCase {
                        [.finished(sessionID: "a", title: "a", status: nil)])
     }
 
-    func testLocallyFiledSessionIsSkipped() {
+    func testFiledSessionIsSkipped() {
         let prev = [session("a", .running)]
-        // Completing / trashing 'a' on this device drops it from Open — the row action's own toast
-        // reports that, so the diff must not also announce it as a finished run.
-        XCTAssertTrue(SessionDelta.diff(previous: prev, current: [], filedLocally: ["a"]).isEmpty)
+        // Completing / trashing 'a' — here or on another client — drops it from Open. That is the
+        // user's own action, not a run finishing, so the diff must not announce it.
+        XCTAssertTrue(SessionDelta.diff(previous: prev, current: [], filed: ["a"]).isEmpty)
         XCTAssertTrue(SessionDelta.diff(previous: prev, current: [session("a", .succeeded)],
-                                        filedLocally: ["a"]).isEmpty)
+                                        filed: ["a"]).isEmpty)
         // Another session leaving Open in the same snapshot still notifies.
         XCTAssertEqual(SessionDelta.diff(previous: prev + [session("b", .running)], current: [],
-                                         filedLocally: ["a"]),
+                                         filed: ["a"]),
                        [.finished(sessionID: "b", title: "b", status: nil)])
+    }
+
+    func testOnlyTaskDoneAnnouncesFinish() {
+        // The reaper files a successful task's session for you — the one departure from Open that
+        // really is the work finishing.
+        XCTAssertTrue(SessionDelta.announcesFinish(endReason: "task_done"))
+        // Every hand filing, and every reason the client doesn't know (completing a session that
+        // had already ended forwards its old endReason), reads as filed.
+        for reason in ["completed", "deleted", "cancelled", "ended", "task_cancelled", "idle"] {
+            XCTAssertFalse(SessionDelta.announcesFinish(endReason: reason), reason)
+        }
+        XCTAssertFalse(SessionDelta.announcesFinish(endReason: nil))
     }
 
     func testFinishedWithTerminalStatusInSnapshot() {

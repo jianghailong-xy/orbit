@@ -10,6 +10,13 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Fired (on the main actor) when the user acts on a notification.
     var onIntent: ((AppIntent) -> Void)?
 
+    /// The session whose console is on screen, kept current by `AppModel.syncConsoleFocus`. The
+    /// notification *logic* already skips this session (`SessionDelta.diff`'s `focusedSessionID`) —
+    /// but the server's APNs approval push can't know what you are looking at, so on iOS an approval
+    /// for the open session arrived as a full-width banner and a sound over the very screen already
+    /// showing its card. `willPresent` consults this to keep those quiet.
+    var focusedSessionID: String?
+
     // UNUserNotificationCenter requires a real .app bundle (a bundle identifier). Under
     // `swift run` the binary is unbundled and even *touching* the center throws — so every call
     // is gated on a bundle being present. The app runs fine for dev without it (no banners);
@@ -85,10 +92,16 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         await MainActor.run { self.onIntent?(intent) }
     }
 
-    /// Show banners even when Orbit is the foreground app.
+    /// Show banners even when Orbit is the foreground app — except for the session already filling
+    /// the screen, whose alert would land on top of the card it is announcing. That one is still
+    /// *delivered* (`.list`), so it sits in Notification Center for as long as it's unanswered and
+    /// the badge still counts it; only the interruption is dropped.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        let session = notification.request.content.userInfo[Notifications.keySession] as? String
+        let focused = await MainActor.run { self.focusedSessionID }
+        if let session, session == focused { return [.list] }
+        return [.banner, .sound, .list]
     }
 }
