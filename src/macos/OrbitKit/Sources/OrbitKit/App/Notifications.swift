@@ -34,8 +34,12 @@ public enum SessionDelta {
             if before == 0 && after > 0 {
                 events.append(.needsApproval(sessionID: s.id, title: s.title ?? "Session", count: after))
             }
-            if let prev = prevByID[s.id], prev.effectiveRunStatus.isLive,
-               isTerminal(s.effectiveRunStatus) {
+            // Settling, not merely reaching a terminal status: a failure the server has armed a
+            // retry for is an interruption it is about to undo by itself. `prev.retryAt` is what
+            // carries the give-up, which moves no status at all — the row stays FAILED and only the
+            // armed retry clearing turns it into the outcome worth announcing.
+            if let prev = prevByID[s.id], prev.effectiveRunStatus.isLive || prev.retryAt != nil,
+               isSettled(s) {
                 events.append(.finished(sessionID: s.id, title: s.title ?? "Session",
                                         status: s.effectiveRunStatus))
             }
@@ -58,11 +62,13 @@ public enum SessionDelta {
     /// "not task_done" is the only read of it that holds.
     public static func announcesFinish(endReason: String?) -> Bool { endReason == "task_done" }
 
-    private static func isTerminal(_ s: RunStatus) -> Bool {
-        switch s {
-        case .succeeded, .failed, .cancelled: return true
-        default: return false
-        }
+    /// The run is over AND nothing is going to restart it — the only reading of a row that is an
+    /// outcome. A quota-killed or 529'd turn settles as FAILED with `retryAt` armed, and the server
+    /// re-sends the same message when the provider is back (`AutoRetryService`), so announcing that
+    /// reports a failure the user never had. An older server sends no `retryAt` at all, which reads
+    /// as "nothing armed" and keeps the pre-retry behaviour.
+    private static func isSettled(_ s: Session) -> Bool {
+        s.effectiveRunStatus.isTerminal && s.retryAt == nil
     }
 }
 

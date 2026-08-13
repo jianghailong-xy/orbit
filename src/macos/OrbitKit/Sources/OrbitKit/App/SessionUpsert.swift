@@ -102,6 +102,7 @@ public extension Session {
                 pinnedAt: pinnedAt,
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
-                tags: tags)
+                tags: tags,
+                retryAt: retryAt)
     }
 }
