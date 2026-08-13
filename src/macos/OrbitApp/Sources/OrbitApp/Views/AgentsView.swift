@@ -594,7 +594,8 @@ struct NewSessionView: View {
     /// snapshot so the list matches the model space the pills are already resolving against.
     private var providerChoices: [ProviderChoice] {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog)
+                                       catalog: draft.modelCatalog,
+                                       engines: draft.runnerEngines)
     }
 
     private var currentProviderChoice: ProviderChoice {

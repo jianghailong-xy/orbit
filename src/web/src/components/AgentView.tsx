@@ -5161,10 +5161,19 @@ export function AgentView({ runner }: { runner: Runner }) {
                     }
                     if (nextEffort !== currentEffort) setEffort(nextEffort);
                   }}
-                  options={providerSwitchChoices.map((choice) => ({
-                    value: choice.slug,
-                    label: choice.label,
-                  }))}
+                  options={providerSwitchChoices.map((choice) => {
+                    // Carry the reason on the greyed row itself, where it answers the question
+                    // being asked ("why can't I pick Claude?"), the way the Mode pill carries
+                    // Auto's constraint. Fixing it lives on the Providers page, not here. The
+                    // running provider is exempt: it is the closed pill's own label, and a
+                    // parenthetical there would sit in the footer of every turn.
+                    const blocked = !!choice.unavailable && choice.slug !== shownProvider;
+                    return {
+                      value: choice.slug,
+                      label: blocked ? `${choice.label} (${choice.unavailable})` : choice.label,
+                      disabled: blocked,
+                    };
+                  })}
                   disabled={!configEditable}
                   popupMatchSelectWidth={false}
                 />

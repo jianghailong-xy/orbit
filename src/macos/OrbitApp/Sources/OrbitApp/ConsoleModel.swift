@@ -126,6 +126,10 @@ final class ConsoleModel {
     private(set) var runnerName: String?
     private(set) var planUsage: PlanUsageSnapshot?
     private(set) var modelCatalog: RunnerModelCatalog?
+    /// What the session's runner last reported about each engine CLI it can host. A provider
+    /// choice is a claim about that machine, so the picker greys out what it says can't run there.
+    /// Nil until the runner read lands (and from an older server), which claims nothing.
+    private(set) var runnerEngines: [RunnerEngineHealth]?
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime) — this
     /// session's provider may be one, so the composer's model menu/pill and the context gauge
     /// merge them in. Loaded with the footer context; left empty by an older server without
@@ -628,9 +632,11 @@ final class ConsoleModel {
                 runnerName = r.displayName?.isEmpty == false ? r.displayName : r.name
                 planUsage = r.planUsage?.snapshot(for: provider)
                 modelCatalog = r.modelCatalog
+                runnerEngines = r.engines
             } else {
                 planUsage = nil
                 modelCatalog = nil
+                runnerEngines = nil
             }
         }
         // Configured providers own a separate model space/default. Best-effort: a transient failure
@@ -713,7 +719,8 @@ final class ConsoleModel {
         guard !isDraft, isLive || availability != .blocked else { return [] }
         return SessionProviderChoices.sameRuntime(
             provider,
-            in: SessionProviderChoices.choices(configured: configuredProviders, catalog: modelCatalog),
+            in: SessionProviderChoices.choices(configured: configuredProviders,
+                                               catalog: modelCatalog, engines: runnerEngines),
             configured: configuredProviders,
             catalog: modelCatalog)
     }
@@ -725,6 +732,9 @@ final class ConsoleModel {
     /// the resume.
     func selectProvider(_ slug: String) async {
         guard !isDraft, slug != provider else { return }
+        // The menu greys these out; refuse here too, so a stale render can't move a session onto
+        // a CLI this runner can't start.
+        guard providerSwitchChoices.first(where: { $0.slug == slug })?.unavailable == nil else { return }
         let offersCurrent = AgentDefaults
             .models(for: slug, catalog: modelCatalog, configured: configuredProviders)
             .contains { $0.id == modelID }
@@ -1163,9 +1173,11 @@ final class ConsoleModel {
                 modelCatalog = r.modelCatalog
                 runtimeDefaults = r.runtimeDefaultModels
                 runnerSnapshotLoaded = true
+                runnerEngines = r.engines
             } else {
                 planUsage = nil
                 modelCatalog = nil
+                runnerEngines = nil
             }
         }
         if let providers = try? await api.providers() {

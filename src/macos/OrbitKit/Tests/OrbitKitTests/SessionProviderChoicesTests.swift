@@ -96,9 +96,20 @@ final class SessionProviderChoicesTests: XCTestCase {
         let choices = SessionProviderChoices.sameRuntime(
             "anthropic", in: SessionProviderChoices.choices(configured: configured),
             configured: configured)
-        XCTAssertEqual(choices.first?.slug, "anthropic")
-        XCTAssertEqual(choices.map(\.slug).sorted(),
-                       ["anthropic", "anthropic-2", "claude", "deepseek"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "anthropic", "anthropic-2", "deepseek"])
+    }
+
+    /// The menu is the same short list every time it opens; rotating the running one to the top
+    /// moved every other row under the cursor depending on which session you were in.
+    func testSameRuntimeOrdersTheSameWhicheverProviderIsRunning() {
+        let configured = [anthropic, anthropic2, deepseek, moonshot]
+        let all = SessionProviderChoices.choices(configured: configured)
+        let order = ["claude", "anthropic", "anthropic-2", "deepseek"]
+        for from in order {
+            XCTAssertEqual(
+                SessionProviderChoices.sameRuntime(from, in: all, configured: configured).map(\.slug),
+                order, "running on \(from)")
+        }
     }
 
     func testSameRuntimeNeverCrossesToAnotherRuntime() {
@@ -142,5 +153,86 @@ final class SessionProviderChoicesTests: XCTestCase {
             configured: [anthropic])
         XCTAssertEqual(choices.first?.slug, "gone-away")
         XCTAssertTrue(choices.contains { $0.slug == "anthropic" })
+    }
+
+    // MARK: - Engine health (web parity: listed with a reason, never hidden)
+
+    private func health(_ engine: String, installed: Bool, auth: String) -> RunnerEngineHealth {
+        RunnerEngineHealth(engine: engine, installed: installed, auth: auth)
+    }
+
+    func testKeepsAnEngineTheRunnerDoesNotHaveInstalledWithTheReason() {
+        let choices = SessionProviderChoices.choices(
+            configured: [deepseek], engines: [
+                health("claude", installed: true, auth: "yes"),
+                health("codex", installed: false, auth: "unknown"),
+                health("kimi", installed: false, auth: "unknown"),
+            ])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek"])
+        XCTAssertEqual(choices.first { $0.slug == "kimi" }?.unavailable, "Not installed")
+        XCTAssertEqual(choices.first { $0.slug == "kimi" }?.fixEngine, "kimi")
+        XCTAssertNil(choices.first { $0.slug == "claude" }?.unavailable)
+    }
+
+    func testSaysNotInstalledRatherThanSignedOutForAMissingCLI() {
+        let choices = SessionProviderChoices.choices(
+            configured: [], engines: [health("kimi", installed: false, auth: "no")])
+        XCTAssertEqual(choices.first { $0.slug == "kimi" }?.unavailable, "Not installed")
+    }
+
+    func testKeepsAnInstalledButSignedOutEngineWithTheReason() {
+        let choices = SessionProviderChoices.choices(
+            configured: [], engines: [
+                health("claude", installed: true, auth: "no"),
+                health("kimi", installed: true, auth: "unknown"),
+            ])
+        XCTAssertEqual(choices.first { $0.slug == "claude" }?.unavailable, "Not signed in")
+        // `unknown` is a CLI that wouldn't answer, not a "no" — it stays runnable.
+        XCTAssertNil(choices.first { $0.slug == "kimi" }?.unavailable)
+    }
+
+    func testBlocksAConfiguredProviderWhoseBorrowedCLIIsMissing() {
+        let choices = SessionProviderChoices.choices(
+            configured: [moonshot, deepseek], engines: [
+                health("claude", installed: true, auth: "yes"),
+                health("kimi", installed: false, auth: "unknown"),
+            ])
+        let row = choices.first { $0.slug == "moonshot" }
+        XCTAssertEqual(row?.unavailable, "Not installed")
+        // Its own slug has no row on the Providers page; the install lives on the engine it borrows.
+        XCTAssertEqual(row?.fixEngine, "kimi")
+        XCTAssertNil(choices.first { $0.slug == "deepseek" }?.unavailable)
+    }
+
+    func testAConfiguredProviderOnASignedOutCLIStaysRunnable() {
+        // Its pasted key is the credential, so the engine's own sign-in does not apply.
+        let choices = SessionProviderChoices.choices(
+            configured: [moonshot], engines: [health("kimi", installed: true, auth: "no")])
+        XCTAssertEqual(choices.first { $0.slug == "kimi" }?.unavailable, "Not signed in")
+        XCTAssertNil(choices.first { $0.slug == "moonshot" }?.unavailable)
+    }
+
+    func testAnEngineTheRunnerHasClaimedNothingAboutStaysRunnable() {
+        XCTAssertTrue(SessionProviderChoices.choices(configured: [], engines: nil)
+            .allSatisfy { $0.unavailable == nil })
+        let partial = SessionProviderChoices.choices(
+            configured: [], engines: [health("claude", installed: false, auth: "no")])
+        XCTAssertEqual(partial.map(\.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(partial.filter { $0.unavailable != nil }.count, 1)
+    }
+
+    /// The composer's menu greys these out rather than dropping them — the bug that started this:
+    /// every production runner reports claude installed-but-signed-out, and hiding the row read as
+    /// "Orbit lost my Claude".
+    func testSameRuntimeKeepsABlockedTargetSoTheMenuCanExplainIt() {
+        let rows = [anthropic, anthropic2]
+        let choices = SessionProviderChoices.sameRuntime(
+            "anthropic",
+            in: SessionProviderChoices.choices(
+                configured: rows, engines: [health("claude", installed: true, auth: "no")]),
+            configured: rows)
+        XCTAssertEqual(choices.map(\.slug), ["claude", "anthropic", "anthropic-2"])
+        XCTAssertEqual(choices.first { $0.slug == "claude" }?.unavailable, "Not signed in")
+        XCTAssertNil(choices.first { $0.slug == "anthropic-2" }?.unavailable)
     }
 }

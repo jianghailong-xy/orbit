@@ -241,10 +241,17 @@ describe('sameRuntimeChoices', () => {
       providerChoices(configured, catalog),
       configured,
     );
-    expect(choices[0].slug).toBe('anthropic');
-    expect(choices.map((c) => c.slug).sort()).toEqual(
-      ['anthropic', 'anthropic-2', 'claude', 'deepseek'].sort(),
-    );
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2', 'deepseek']);
+  });
+
+  it('orders the same way whichever provider is running', () => {
+    // The menu is the same short list every time it opens; rotating the running one to the top
+    // moved every other row under the cursor depending on which session you were in.
+    const all = providerChoices(configured, catalog);
+    const order = ['claude', 'anthropic', 'anthropic-2', 'deepseek'];
+    for (const from of order) {
+      expect(sameRuntimeChoices(from, all, configured).map((c) => c.slug)).toEqual(order);
+    }
   });
 
   it('never offers another runtime — codex and kimi are a different session', () => {
@@ -259,21 +266,22 @@ describe('sameRuntimeChoices', () => {
     expect(sameRuntimeChoices('opencode', providerChoices([], catalog), [])).toHaveLength(1);
   });
 
-  it('drops a target this machine cannot run', () => {
+  it('keeps a target this machine cannot run, with its reason', () => {
     // The engine is installed but signed out, so it cannot host a session; the BYOK rows on the
-    // same CLI can, because the key they carry is the credential.
+    // same CLI can, because the key they carry is the credential. Every runner in production
+    // reports exactly this pair, and hiding the engine read as "Orbit lost my Claude".
     const rows = [anthropic, anthropic2];
     const choices = sameRuntimeChoices(
       'anthropic',
       providerChoices(rows, catalog, undefined, [{ engine: 'claude', installed: true, auth: 'no' }]),
       rows,
     );
-    expect(choices.map((c) => c.slug)).toEqual(['anthropic', 'anthropic-2']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2']);
+    expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBe('Not signed in');
+    expect(choices.find((c) => c.slug === 'anthropic-2')?.unavailable).toBeUndefined();
   });
 
-  it('keeps the running provider even when nothing on that CLI can run', () => {
-    // No claude CLI on the machine: every row on it is blocked, including the one in use. The
-    // session still has to render what it is, so the current entry survives alone.
+  it('still names every same-runtime option when nothing on that CLI can run', () => {
     const rows = [anthropic, anthropic2];
     const choices = sameRuntimeChoices(
       'anthropic',
@@ -282,7 +290,8 @@ describe('sameRuntimeChoices', () => {
       ]),
       rows,
     );
-    expect(choices.map((c) => c.slug)).toEqual(['anthropic']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2']);
+    expect(choices.every((c) => c.unavailable === 'Not installed')).toBe(true);
   });
 
   it('still shows a session whose provider was removed as its current entry', () => {

@@ -284,11 +284,20 @@ struct ComposerView: View {
                 if console.providerSwitchChoices.count > 1 {
                     Menu {
                         ForEach(console.providerSwitchChoices) { choice in
+                            // A choice this runner can't run stays listed and carries its reason
+                            // (web parity): hiding it turns "not signed in on this machine" into
+                            // "Orbit lost my provider". The running one is exempt — it is the
+                            // closed menu's own label, and a parenthetical would live in the
+                            // footer of every turn.
+                            let blocked = choice.unavailable != nil && choice.slug != console.provider
                             Button {
                                 Task { await console.selectProvider(choice.slug) }
                             } label: {
-                                menuItemLabel(choice.label, selected: choice.slug == console.provider)
+                                menuItemLabel(
+                                    blocked ? "\(choice.label) (\(choice.unavailable ?? ""))" : choice.label,
+                                    selected: choice.slug == console.provider)
                             }
+                            .disabled(blocked)
                         }
                     } label: {
                         menuLabel(AgentDefaults.providerName(console.provider,

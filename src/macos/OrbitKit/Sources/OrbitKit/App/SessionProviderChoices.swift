@@ -18,14 +18,27 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// The model this choice runs with unless something overrides it, already resolved to a label —
     /// so "switching provider changes your model" is visible before the tap.
     public let modelLabel: String
+    /// Why this choice can't run on the runner the session is on, or nil when it can. Set for an
+    /// engine whose CLI that machine doesn't have, or has but says it isn't signed into. The row
+    /// stays listed and carries the reason rather than disappearing: hiding it turns "not signed
+    /// in on this runner" into "Orbit lost my provider", which is the one question the picker
+    /// exists to answer.
+    public let unavailable: String?
+    /// Which engine row on the Providers page fixes `unavailable`. That is the CLI this choice
+    /// runs on, which for a BYOK provider is not its own slug — a Moonshot row is fixed on the
+    /// Kimi engine row. Set whenever `unavailable` is.
+    public let fixEngine: String?
     public var id: String { slug }
 
-    public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String) {
+    public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
+                unavailable: String? = nil, fixEngine: String? = nil) {
         self.slug = slug
         self.label = label
         self.kind = kind
         self.brandKey = brandKey
         self.modelLabel = modelLabel
+        self.unavailable = unavailable
+        self.fixEngine = fixEngine
     }
 }
 
@@ -42,31 +55,64 @@ public enum SessionProviderChoices {
         "claude": "anthropic", "codex": "openai", "kimi": "moonshot",
     ]
 
+    /// Why an engine can't run a session on that machine, or nil when it can. Missing outranks
+    /// signed out — a CLI that isn't installed has nothing to sign into. Only the CLI's own "no"
+    /// counts for auth: `unknown` is an engine that wouldn't answer, which is not evidence enough
+    /// to take the choice away. Mirrors web's `engineBlocker`.
+    static func engineBlocker(_ health: RunnerEngineHealth?) -> String? {
+        guard let health else { return nil }
+        if health.installed == false { return "Not installed" }
+        if health.auth == "no" { return "Not signed in" }
+        return nil
+    }
+
+    /// The same question for a configured provider, which runs by borrowing an engine's CLI (a
+    /// Moonshot row spawns the Kimi CLI with its key in the environment). The binary has to be
+    /// there, so a missing one blocks it exactly as it blocks the engine. Sign-in doesn't apply:
+    /// the pasted key is the credential, and a signed-out CLI runs this provider fine.
+    static func byokBlocker(_ health: RunnerEngineHealth?) -> String? {
+        health?.installed == false ? "Not installed" : nil
+    }
+
     /// The picker's contents. Engines always come first and are always all three: they are what a
     /// user with nothing configured can still run, so the list is never empty.
+    ///
+    /// `engines` is the health the runner last reported, because every choice here is a claim about
+    /// someone else's machine. A runner that has reported nothing claims nothing, so all three stay
+    /// runnable — as does any engine missing from a partial report.
     public static func choices(configured: [ConfiguredProvider],
-                               catalog: RunnerModelCatalog? = nil) -> [ProviderChoice] {
-        let engines = engineSlugs.map { slug in
-            ProviderChoice(
+                               catalog: RunnerModelCatalog? = nil,
+                               engines: [RunnerEngineHealth]? = nil) -> [ProviderChoice] {
+        let health = { (engine: String) in engines?.first { $0.engine == engine } }
+        let engineChoices = engineSlugs.map { slug in
+            let blocker = engineBlocker(health(slug))
+            return ProviderChoice(
                 slug: slug,
                 label: AgentDefaults.providerName(slug, configured: configured),
                 kind: .engine,
                 brandKey: enginePreset[slug],
-                modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog))
+                modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog),
+                unavailable: blocker,
+                fixEngine: blocker == nil ? nil : slug)
         }
         // A configured row shadowing a built-in slug would give two entries that dispatch the same
         // identity; the engine entry above already covers it.
         let byok = configured
             .filter { !engineSlugs.contains($0.slug) }
-            .map { provider in
-                ProviderChoice(
+            .map { provider -> ProviderChoice in
+                // Judged through the engine it borrows, since that CLI is what actually runs it.
+                let runtime = executingRuntime(provider.slug, configured: configured)
+                let blocker = byokBlocker(health(runtime))
+                return ProviderChoice(
                     slug: provider.slug,
                     label: provider.label,
                     kind: .byok,
                     brandKey: provider.presetSlug,
-                    modelLabel: modelLabel(for: provider.slug, configured: configured, catalog: catalog))
+                    modelLabel: modelLabel(for: provider.slug, configured: configured, catalog: catalog),
+                    unavailable: blocker,
+                    fixEngine: blocker == nil ? nil : runtime)
             }
-        return engines + byok
+        return engineChoices + byok
     }
 
     /// The providers a session that already exists may be moved to: the ones that borrow the same
@@ -79,19 +125,25 @@ public enum SessionProviderChoices {
     /// and the conversation carries over. The backend enforces the same rule
     /// (SessionsService.resolveProviderSwitch); this keeps the picker from offering a rejected move.
     ///
-    /// The running provider always leads the list, even when it is no longer configured — it is what
-    /// the pill has to display. Mirrors web's `sameRuntimeChoices`; keep the two in sync.
+    /// Order is `choices`' own — engines, then configured providers as the API returned them — and
+    /// is deliberately NOT rotated to put the current one first. This menu is the same short list
+    /// every time it opens, so its rows should sit where they sat last time; re-ordering per
+    /// selection made two sessions on one runtime disagree about where "DeepSeek" lives, and made
+    /// the new-session sheet disagree with both. The current row is marked by the tick, not by
+    /// position. The one exception is a provider absent from `choices` — removed, disabled, or
+    /// `opencode`, which is never offered — which has no natural position and so leads.
+    ///
+    /// Mirrors web's `sameRuntimeChoices`; keep the two in sync.
     public static func sameRuntime(_ provider: String,
                                    in choices: [ProviderChoice],
                                    configured: [ConfiguredProvider],
                                    catalog: RunnerModelCatalog? = nil) -> [ProviderChoice] {
         let runtime = executingRuntime(provider, configured: configured)
-        let movable = choices.filter {
-            $0.slug != provider && executingRuntime($0.slug, configured: configured) == runtime
+        let sameRuntime = choices.filter {
+            executingRuntime($0.slug, configured: configured) == runtime
         }
-        let current = choices.first { $0.slug == provider }
-            ?? self.current(provider, in: choices, configured: configured, catalog: catalog)
-        return [current] + movable
+        if sameRuntime.contains(where: { $0.slug == provider }) { return sameRuntime }
+        return [current(provider, in: choices, configured: configured, catalog: catalog)] + sameRuntime
     }
 
     /// The built-in runtime that actually executes an identity, mirroring the server's

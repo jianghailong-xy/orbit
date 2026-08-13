@@ -116,7 +116,10 @@ struct ProviderSwitchSheet: View {
                         AgentAvatar(provider: choice.slug, size: 28, brandKey: choice.brandKey)
                         Text(choice.label).foregroundStyle(.primary).lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(choice.modelLabel)
+                        // The reason replaces the model on a row that can't run: which model it
+                        // would pick is moot until the CLI is installed or signed into, and the
+                        // reason is the only thing here the user can act on.
+                        Text(choice.unavailable ?? choice.modelLabel)
                             .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                         if choice.slug == currentSlug {
                             Image(systemName: "checkmark")
@@ -126,6 +129,10 @@ struct ProviderSwitchSheet: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // Listed but not pickable, exactly as on web: taking the row away would leave
+                // "why is Claude missing?" unanswerable, and offering it would start a session
+                // that fails at spawn. The fix lives on the Providers page either way.
+                .disabled(choice.unavailable != nil && choice.slug != currentSlug)
             }
         } header: {
             Text(title)

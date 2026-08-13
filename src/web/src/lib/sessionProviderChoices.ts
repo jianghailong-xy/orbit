@@ -188,10 +188,20 @@ export function providerChoices(
  * `--resume` and the conversation carries over. The backend enforces the same rule
  * (SessionsService.updateConfig); this is what keeps the picker from offering a rejected move.
  *
- * The running provider is always included, even when it is unavailable or no longer configured —
- * it is what the pill has to display. Everything else that can't run here is dropped rather than
- * greyed: unlike the New Session picker, this list is only worth showing when it holds somewhere
- * to go.
+ * A choice this machine can't currently run stays listed, carrying its reason, for the same
+ * reason the New Session picker keeps it: a user who has signed into Claude somewhere, or pays
+ * for it, must be able to see WHY it isn't on offer. Dropping the row turns "not signed in on
+ * this runner" into "Orbit lost my provider". The composer greys it out instead — the caller
+ * reads `unavailable`.
+ *
+ * Order is `choices`' own — engines, then configured providers as the API returned them — and is
+ * deliberately NOT rotated to put the current one first. This menu is the same short list every
+ * time it opens, so its rows should sit where they sat last time; re-ordering per selection made
+ * two sessions on one runtime disagree about where "DeepSeek" lives, and made the New Session
+ * picker disagree with both. The current row is marked by the tick, not by position.
+ *
+ * The one exception is a provider that isn't in `choices` at all — removed, disabled, or
+ * `opencode`, which is never offered. That has no natural position, so it leads.
  */
 export function sameRuntimeChoices(
   provider: string,
@@ -201,16 +211,14 @@ export function sameRuntimeChoices(
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): ProviderChoice[] {
   const runtime = runtimeForProvider(provider, configured);
-  const movable = choices.filter(
-    (choice) =>
-      choice.slug !== provider &&
-      !choice.unavailable &&
-      runtimeForProvider(choice.slug, configured) === runtime,
+  const sameRuntime = choices.filter(
+    (choice) => runtimeForProvider(choice.slug, configured) === runtime,
   );
-  const current =
-    choices.find((choice) => choice.slug === provider) ??
-    currentProviderChoice(provider, choices, modelCatalog, configured, runtimeDefaultModels);
-  return [current, ...movable];
+  if (sameRuntime.some((choice) => choice.slug === provider)) return sameRuntime;
+  return [
+    currentProviderChoice(provider, choices, modelCatalog, configured, runtimeDefaultModels),
+    ...sameRuntime,
+  ];
 }
 
 /**
