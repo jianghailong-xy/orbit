@@ -360,6 +360,16 @@ export class SessionsService {
     // Push the new session to the owner's control-plane stream (GET /api/events) so other
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
+    // A session a person started *is* the project's new provider default — the derivation reads
+    // exactly these rows (agents/agent-provider.ts) — so every client's cached agent payload just
+    // went stale. Nothing else announced that: `session.created` refreshes session lists, not the
+    // agent list, so a native client kept seeding New Session from whatever ran before until the
+    // app was relaunched. Web only hid the bug by refetching agents on window focus.
+    // Gated on the same rows the derivation reads, so a task run or an agent-spawned child — which
+    // deliberately cannot move the default — doesn't wake every client for nothing.
+    if (session.agentId && !session.taskId && !session.parentSessionId) {
+      this.realtime.publishAgentChanged(session.id, session.agentId);
+    }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
     // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
     if (!hasExplicitTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
