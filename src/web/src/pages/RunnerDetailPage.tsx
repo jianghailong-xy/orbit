@@ -1,12 +1,19 @@
 import {
   ArrowLeftOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  CopyOutlined,
   DeleteOutlined,
+  DownOutlined,
   EditOutlined,
   MessageOutlined,
+  MinusCircleOutlined,
   MoreOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
   RobotOutlined,
   ThunderboltOutlined,
+  WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,10 +36,7 @@ import { providersQuery } from '../lib/queries';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
-import {
-  defaultModelForProvider,
-  mergedProviderOptions,
-} from '../lib/agentDefaults';
+import { defaultModelForProvider, mergedProviderOptions } from '../lib/agentDefaults';
 
 interface Agent {
   id: string;
@@ -47,6 +51,17 @@ interface Agent {
   enabled?: boolean;
   enableWorktree?: boolean;
   enableOrchestration?: boolean;
+  /** Defaults a new session under this agent inherits. `effort: null` = inherit the account default. */
+  permissionMode?: string | null;
+  effort?: string | null;
+  /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). All null =
+   *  never probed — an older runner, or one that hasn't reported since this agent was added. */
+  workDirExists?: boolean | null;
+  workDirIsGit?: boolean | null;
+  workDirProbedAt?: string | null;
+  /** The runner `git init`s a non-git workDir on the next run (set by the in-session
+   *  "Enable isolation" action), which changes what a non-git path means here. */
+  autoInitGit?: boolean;
 }
 
 const fmtTime = (d?: string | null): string =>
@@ -127,6 +142,12 @@ export function RunnerDetailPage() {
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
   const [fEnableOrchestration, setFEnableOrchestration] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
+  // The long tail (orchestration / env / instructions) stays folded until asked for, and
+  // edits are tracked so Cancel can't discard them silently.
+  const [advOpen, setAdvOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  // The runner's read-only diagnostics — folded away so the agent list owns the first screen.
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -148,8 +169,36 @@ export function RunnerDetailPage() {
       void qc.invalidateQueries({ queryKey: ['agents'] });
       setFormOpen(false);
       setEditing(null);
+      setDirty(false);
     },
     onError: (e: Error) => message.error(e.message || 'Save failed'),
+  });
+  // Enable/disable is a one-field PATCH from the row menu, so it doesn't drag the whole
+  // editor open just to park an agent.
+  const setEnabledMut = useMutation({
+    mutationFn: (v: { id: string; enabled: boolean }) =>
+      api(`/agents/${v.id}`, { method: 'PATCH', body: { enabled: v.enabled } }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agents'] }),
+    onError: (e: Error) => message.error(e.message || 'Update failed'),
+  });
+  const duplicateMut = useMutation({
+    mutationFn: (a: Agent) =>
+      api('/agents', {
+        method: 'POST',
+        body: {
+          name: `${a.name} copy`,
+          appendSystemPrompt: a.appendSystemPrompt ?? undefined,
+          workDir: a.workDir ?? undefined,
+          enableWorktree: a.enableWorktree ?? false,
+          enableOrchestration: a.enableOrchestration ?? false,
+          permissionMode: a.permissionMode ?? undefined,
+          effort: a.effort ?? null,
+          env: a.env ?? {},
+          runnerId,
+        },
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agents'] }),
+    onError: (e: Error) => message.error(e.message || 'Duplicate failed'),
   });
   const removeAgentMut = useMutation({
     mutationFn: (id: string) => api(`/agents/${id}`, { method: 'DELETE' }),
@@ -157,45 +206,113 @@ export function RunnerDetailPage() {
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
 
-  const openCreate = () => {
-    setEditing(null);
-    setFName('');
-    setFAppend('');
-    setFWorkDir('');
-    setFEnableWorktree(false);
-    setFEnableOrchestration(false);
-    setFEnv([]);
-    setFormOpen(true);
-  };
-  const openEdit = (a: Agent) => {
+  // Shared reset for both entry points — every field the form owns is set here, so a stale
+  // value from the previous agent can never leak into the next one.
+  const resetForm = (a: Agent | null) => {
     setEditing(a);
-    setFName(a.name);
-    setFAppend(a.appendSystemPrompt ?? '');
-    setFWorkDir(a.workDir ?? '');
-    setFEnableWorktree(a.enableWorktree ?? false);
-    setFEnableOrchestration(a.enableOrchestration ?? false);
-    setFEnv(Object.entries(a.env ?? {}).map(([key, value]) => ({ key, value })));
+    setFName(a?.name ?? '');
+    setFAppend(a?.appendSystemPrompt ?? '');
+    setFWorkDir(a?.workDir ?? '');
+    setFEnableWorktree(a?.enableWorktree ?? false);
+    setFEnableOrchestration(a?.enableOrchestration ?? false);
+    setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
+    setAdvOpen(false);
+    setDirty(false);
     setFormOpen(true);
   };
+  const openCreate = () => resetForm(null);
+  const openEdit = (a: Agent) => resetForm(a);
   const submitAgent = () => {
     if (fName.trim()) saveMut.mutate();
   };
-  const closeForm = () => {
+  const discard = () => {
     setFormOpen(false);
     setEditing(null);
+    setDirty(false);
   };
+  // Closing over unsaved edits asks first; an untouched form closes straight away.
+  const closeForm = () => {
+    if (!dirty) return discard();
+    modal.confirm({
+      title: 'Discard unsaved changes?',
+      content: "This agent's edits haven't been saved yet.",
+      okText: 'Discard',
+      okButtonProps: { danger: true },
+      cancelText: 'Keep editing',
+      autoFocusButton: 'cancel',
+      onOk: discard,
+    });
+  };
+  // Switching to another agent (or to the create form) goes through the same guard.
+  const switchTo = (open: () => void) => {
+    if (!dirty) return open();
+    modal.confirm({
+      title: 'Discard unsaved changes?',
+      content: "This agent's edits haven't been saved yet.",
+      okText: 'Discard',
+      okButtonProps: { danger: true },
+      cancelText: 'Keep editing',
+      autoFocusButton: 'cancel',
+      onOk: open,
+    });
+  };
+
+  // A configured provider shows its own label; fall back to the raw slug if it's since been
+  // removed/disabled (so nothing silently mislabels it as Claude).
+  const providerLabelFor = (slug: string) =>
+    mergedProviderOptions(configuredProviders).find((p) => p.value === slug)?.label ?? slug;
 
   // In-place agent editor — rendered as a card in the list (top for create, in
   // the row itself for edit) instead of a modal, so the runner + agent list stay
   // in view while you edit.
-  const agentForm = (mode: 'create' | 'edit') => (
+  const agentForm = (mode: 'create' | 'edit') => {
+    // The same derivation the row's subtitle uses — what a new session here would start on.
+    const formProvider = editing?.lastProvider ?? editing?.provider ?? 'claude';
+    const formModel = defaultModelForProvider(
+      formProvider,
+      runner?.modelCatalog,
+      configuredProviders,
+      runner?.runtimeDefaultModels,
+    );
+    // Folded away, the disclosure still has to say whether anything is hidden behind it.
+    const advCount = (fEnv.length ? 1 : 0) + (fAppend.trim() ? 1 : 0);
+    // What the runner last found at this path. It answers for the *saved* path, so an edited
+    // field says so instead of showing a verdict about a directory that is no longer named
+    // here — a stale ✓ against a typo would be worse than no answer at all.
+    const pathHint = (() => {
+      if (!editing || !fWorkDir.trim()) return null;
+      if (fWorkDir.trim() !== (editing.workDir ?? '').trim()) {
+        return { tone: 'muted', text: 'Checked on the runner within a minute of saving.' };
+      }
+      if (!editing.workDirProbedAt) return null;
+      if (editing.workDirExists === false) {
+        return { tone: 'warn', text: `No such directory on ${runner?.displayName || runner?.name}.` };
+      }
+      if (editing.workDirExists && editing.workDirIsGit === false) {
+        // Only a problem if isolation is on: that's the setting with a git precondition.
+        if (!fEnableWorktree) return { tone: 'muted', text: 'Found · not a git repository.' };
+        return editing.autoInitGit
+          ? { tone: 'muted', text: 'Found · not a git repository yet — the next run initializes one.' }
+          : {
+              tone: 'warn',
+              text: 'Found, but not a git repository — sessions will share it instead of isolating.',
+            };
+      }
+      if (editing.workDirIsGit) return { tone: 'ok', text: 'Found · git repository.' };
+      return null;
+    })();
+    return (
     <div className={`rd-agent-form${mode === 'create' ? ' rd-agent-form-new' : ''}`}>
+      <div className="rd-form-section">Essentials</div>
       <div className="rd-form-grid">
         <div className="rd-form-field">
           <div className="rd-form-label">Name</div>
           <Input
             value={fName}
-            onChange={(e) => setFName(e.target.value)}
+            onChange={(e) => {
+              setFName(e.target.value);
+              setDirty(true);
+            }}
             onPressEnter={submitAgent}
             placeholder="e.g. tea-cli builder"
             maxLength={60}
@@ -206,76 +323,141 @@ export function RunnerDetailPage() {
           <div className="rd-form-label">Working directory</div>
           <Input
             value={fWorkDir}
-            onChange={(e) => setFWorkDir(e.target.value)}
+            onChange={(e) => {
+              setFWorkDir(e.target.value);
+              setDirty(true);
+            }}
             placeholder="/path/to/project on the runner (optional)"
           />
+          {pathHint && (
+            <div className={`rd-path-hint rd-path-${pathHint.tone}`}>
+              {pathHint.tone === 'ok' ? (
+                <CheckCircleOutlined />
+              ) : pathHint.tone === 'warn' ? (
+                <WarningOutlined />
+              ) : (
+                <ClockCircleOutlined />
+              )}
+              {pathHint.text}
+            </div>
+          )}
         </div>
       </div>
-      <div className="rd-form-field">
-        <div className="rd-form-label">Worktree isolation</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Switch checked={fEnableWorktree} onChange={setFEnableWorktree} />
-          <span style={{ fontSize: 12, opacity: 0.65 }}>
-            Run each session in its own git worktree. Off → sessions run directly in the working
-            directory with no isolation.
-          </span>
-        </div>
+      <SettingRow
+        label="Worktree isolation"
+        desc="Each session runs in its own git worktree. Off → sessions run directly in the working directory, sharing it."
+        checked={fEnableWorktree}
+        onChange={(v) => {
+          setFEnableWorktree(v);
+          setDirty(true);
+        }}
+      />
+
+      {/* Sits beside isolation rather than under Advanced: both answer "what is this agent
+          allowed to do", and this is the one with a security consequence — an agent that can
+          drive other sessions shouldn't be a setting you have to go looking for. */}
+      <SettingRow
+        label="Session orchestration"
+        desc="Let this agent's sessions spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator agents."
+        checked={fEnableOrchestration}
+        onChange={(v) => {
+          setFEnableOrchestration(v);
+          setDirty(true);
+        }}
+      />
+
+      {/* Model is not an agent field: it resolves from the runtime/provider this project last
+          ran on. Stated read-only because the row displays it — otherwise it reads as a setting
+          someone forgot to make editable. Mode and effort are deliberately not here: they are
+          per-session choices, made in the session where the context for them is. */}
+      <div className="rd-form-derived">
+        Model <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this
+        runner. Pick a different one from the session composer.
       </div>
-      <div className="rd-form-field">
-        <div className="rd-form-label">Session orchestration</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Switch checked={fEnableOrchestration} onChange={setFEnableOrchestration} />
-          <span style={{ fontSize: 12, opacity: 0.65 }}>
-            Let this agent's sessions spawn and manage other sessions via the orbit MCP session
-            tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator
-            agents.
-          </span>
-        </div>
+
+      <div
+        className={`rd-adv-toggle${advOpen ? ' open' : ''}`}
+        onClick={() => setAdvOpen(!advOpen)}
+      >
+        <DownOutlined className="rd-adv-caret" /> Advanced
+        {advCount > 0 && !advOpen && <span className="rd-adv-badge">{advCount} configured</span>}
       </div>
-      <div className="rd-form-field">
-        <div className="rd-form-label">Environment variables</div>
-        {fEnv.map((row, i) => (
-          <div className="rd-env-row" key={i}>
-            <Input
-              value={row.key}
-              onChange={(e) =>
-                setFEnv(fEnv.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)))
-              }
-              placeholder="KEY"
-            />
-            <Input
-              value={row.value}
-              onChange={(e) =>
-                setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
-              }
-              placeholder="value"
-            />
+      {advOpen && (
+        <div className="rd-adv-body">
+          <div className="rd-form-field">
+            <div className="rd-form-label">Environment variables</div>
+            {fEnv.map((row, i) => (
+              <div className="rd-env-row" key={i}>
+                <Input
+                  value={row.key}
+                  onChange={(e) => {
+                    setFEnv(fEnv.map((r, j) => (j === i ? { ...r, key: e.target.value } : r)));
+                    setDirty(true);
+                  }}
+                  placeholder="KEY"
+                />
+                {/* These commonly hold tokens, so the value is masked until asked for. */}
+                <Input.Password
+                  value={row.value}
+                  onChange={(e) => {
+                    setFEnv(fEnv.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)));
+                    setDirty(true);
+                  }}
+                  placeholder="value"
+                />
+                <Button
+                  type="text"
+                  title="Remove"
+                  icon={<DeleteOutlined />}
+                  onClick={() => {
+                    setFEnv(fEnv.filter((_, j) => j !== i));
+                    setDirty(true);
+                  }}
+                />
+              </div>
+            ))}
             <Button
-              type="text"
-              icon={<DeleteOutlined />}
-              onClick={() => setFEnv(fEnv.filter((_, j) => j !== i))}
+              type="dashed"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                setFEnv([...fEnv, { key: '', value: '' }]);
+                setDirty(true);
+              }}
+              block
+            >
+              Add variable
+            </Button>
+          </div>
+          <div className="rd-form-field">
+            <div className="rd-form-label">Instructions</div>
+            <Input.TextArea
+              value={fAppend}
+              onChange={(e) => {
+                setFAppend(e.target.value);
+                setDirty(true);
+              }}
+              rows={4}
+              placeholder="Added to this agent's system prompt on every run (optional)"
             />
           </div>
-        ))}
-        <Button
-          type="dashed"
-          icon={<PlusOutlined />}
-          onClick={() => setFEnv([...fEnv, { key: '', value: '' }])}
-          block
-        >
-          Add variable
-        </Button>
-      </div>
-      <div className="rd-form-field">
-        <div className="rd-form-label">Instructions</div>
-        <Input.TextArea
-          value={fAppend}
-          onChange={(e) => setFAppend(e.target.value)}
-          rows={4}
-          placeholder="Added to this agent's system prompt on every run (optional)"
-        />
-      </div>
+        </div>
+      )}
       <div className="rd-form-actions">
+        {mode === 'edit' && editing && (
+          <Button
+            type="text"
+            className="rd-quiet-btn"
+            icon={editing.enabled === false ? <PlayCircleOutlined /> : <MinusCircleOutlined />}
+            loading={setEnabledMut.isPending}
+            onClick={() =>
+              setEnabledMut.mutate({ id: editing.id, enabled: editing.enabled === false })
+            }
+          >
+            {editing.enabled === false ? 'Enable agent' : 'Disable agent'}
+          </Button>
+        )}
+        <div style={{ flex: 1 }} />
+        {dirty && <span className="rd-dirty-note">Unsaved changes</span>}
         <Button onClick={closeForm}>Cancel</Button>
         <Button
           type="primary"
@@ -287,10 +469,12 @@ export function RunnerDetailPage() {
         </Button>
       </div>
     </div>
-  );
+    );
+  };
 
-  // One agent row — shown on its own, or kept as the header above the in-place
-  // editor. While this row is being edited, the pencil toggles the editor closed.
+  // One agent row — shown on its own, or kept as the header above the in-place editor.
+  // The whole row is the way into the config: it is what people aim at, and the settings it
+  // displays are the ones the editor holds. Chat stays an explicit button beside it.
   const agentRow = (a: Agent) => {
     // What this project last ran on — the same default a new session here would inherit.
     const lastProvider = a.lastProvider ?? a.provider ?? 'claude';
@@ -300,13 +484,13 @@ export function RunnerDetailPage() {
       configuredProviders,
       runner?.runtimeDefaultModels,
     );
-    // A configured provider shows its own label; fall back to the raw slug if it's since been
-    // removed/disabled (so the row never silently mislabels it as Claude).
-    const providerLabel =
-      mergedProviderOptions(configuredProviders).find((p) => p.value === lastProvider)?.label ??
-      lastProvider;
+    const isOpen = formOpen && editing?.id === a.id;
     return (
-    <div key={a.id} className="rd-agent-row">
+    <div
+      key={a.id}
+      className={`rd-agent-row${isOpen ? ' is-open' : ''}${a.enabled === false ? ' is-disabled' : ''}`}
+      onClick={() => (isOpen ? closeForm() : switchTo(() => openEdit(a)))}
+    >
       <span className="rd-agent-ico">
         <RobotOutlined />
       </span>
@@ -316,14 +500,18 @@ export function RunnerDetailPage() {
           {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
         </div>
         <div className="rd-agent-meta">
-          {providerLabel} · {effectiveModel}
+          {providerLabelFor(lastProvider)} · {effectiveModel}
           {a.workDir ? ` · ${a.workDir}` : ''}
+          {a.enableWorktree ? ' · isolated' : ''}
         </div>
       </div>
       <Button
         size="small"
         icon={<MessageOutlined />}
-        onClick={() => navigate(`/agents/${encodeId(a.id)}`)}
+        onClick={(e) => {
+          e.stopPropagation();
+          navigate(`/agents/${encodeId(a.id)}`);
+        }}
       >
         Chat
       </Button>
@@ -335,8 +523,20 @@ export function RunnerDetailPage() {
             {
               key: 'edit',
               icon: <EditOutlined />,
-              label: editing?.id === a.id ? 'Close editor' : 'Edit',
-              onClick: () => (editing?.id === a.id ? closeForm() : openEdit(a)),
+              label: isOpen ? 'Close editor' : 'Configure',
+              onClick: () => (isOpen ? closeForm() : switchTo(() => openEdit(a))),
+            },
+            {
+              key: 'enabled',
+              icon: a.enabled === false ? <PlayCircleOutlined /> : <MinusCircleOutlined />,
+              label: a.enabled === false ? 'Enable' : 'Disable',
+              onClick: () => setEnabledMut.mutate({ id: a.id, enabled: a.enabled === false }),
+            },
+            {
+              key: 'duplicate',
+              icon: <CopyOutlined />,
+              label: 'Duplicate',
+              onClick: () => duplicateMut.mutate(a),
             },
             { type: 'divider' },
             {
@@ -348,7 +548,7 @@ export function RunnerDetailPage() {
                 modal.confirm({
                   title: `Delete agent “${a.name}”?`,
                   content:
-                    'This removes the agent from your list. Its sessions and tasks are kept and stay linked to it.',
+                    'The agent leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
                   okText: 'Delete',
                   okButtonProps: { danger: true },
                   cancelText: 'Cancel',
@@ -359,8 +559,16 @@ export function RunnerDetailPage() {
           ],
         }}
       >
-        <Button size="small" type="text" icon={<MoreOutlined />} title="Actions" />
+        <Button
+          size="small"
+          type="text"
+          icon={<MoreOutlined />}
+          title="Actions"
+          onClick={(e) => e.stopPropagation()}
+        />
       </Dropdown>
+      {/* A quiet affordance: it only shows on hover, or while this row's editor is open. */}
+      <DownOutlined className="rd-row-caret" />
     </div>
     );
   };
@@ -440,18 +648,33 @@ export function RunnerDetailPage() {
         <h1 className="page-title" style={{ margin: 0 }}>
           {runner.displayName || runner.name}
         </h1>
-        <span className="rd-sub">
-          {runner.online ? 'Online' : 'Offline'}
-          {typeof runner.maxConcurrent === 'number' ? ` · ${runner.maxConcurrent} slots` : ''}
-        </span>
         <div style={{ flex: 1 }} />
         <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: kebab }}>
           <Button icon={<MoreOutlined />}>Actions</Button>
         </Dropdown>
       </div>
 
-      <section className="rd-section">
-        <div className="rd-section-title">Overview</div>
+      {/* The machine's read-only diagnostics are reference material, not the job: they ride on
+          one line under the title so the agent list — the thing this page is for — starts above
+          the fold. The full grid is one click away. */}
+      <div className="rd-metaline">
+        <span className={runner.online ? 'rd-meta-ok' : undefined}>
+          {runner.online ? 'Online' : 'Offline'}
+        </span>
+        {typeof runner.maxConcurrent === 'number' && <span>{runner.maxConcurrent} slots</span>}
+        {typeof runner.activeSessions === 'number' && runner.activeSessions > 0 && (
+          <span>{runner.activeSessions} running</span>
+        )}
+        {runner.version && <span>v{runner.version}</span>}
+        {runner.hostname && <span>{runner.hostname}</span>}
+        <span
+          className={`rd-details-toggle${detailsOpen ? ' open' : ''}`}
+          onClick={() => setDetailsOpen(!detailsOpen)}
+        >
+          Details <DownOutlined className="rd-details-caret" />
+        </span>
+      </div>
+      {detailsOpen && (
         <div className="rd-overview">
           <RdField label="Status" value={runner.online ? 'Online' : 'Offline'} />
           <RdField label="Machine name" value={runner.name} />
@@ -462,7 +685,7 @@ export function RunnerDetailPage() {
           <RdField label="Last heartbeat" value={fmtTime(runner.lastHeartbeatAt)} />
           <RdField label="Enrolled" value={fmtTime(runner.enrolledAt)} />
         </div>
-      </section>
+      )}
 
       {/* What software this machine runs and whether it's current — the same class of fact as the
           runner version in Overview above, which is why updating them lives here and not on the
@@ -472,11 +695,16 @@ export function RunnerDetailPage() {
       <section className="rd-section">
         <div className="rd-section-head">
           <div className="rd-section-title">Agents</div>
-          {!formOpen && (
-            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-              Add agent
-            </Button>
-          )}
+          {/* Kept in place while the create form is open — disabled rather than removed, so the
+              header doesn't reflow out from under the pointer. */}
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            disabled={formOpen && !editing}
+            onClick={() => switchTo(openCreate)}
+          >
+            Add agent
+          </Button>
         </div>
         {agentsQ.isLoading ? (
           <div style={{ padding: 24, textAlign: 'center' }}>
@@ -564,6 +792,31 @@ function RdField({ label, value }: { label: string; value: string }) {
     <div className="rd-field">
       <div className="rd-field-label">{label}</div>
       <div className="rd-field-value">{value}</div>
+    </div>
+  );
+}
+
+/** A toggle laid out as a settings row: name and explanation on the left, control right-aligned.
+ *  The old inline form put a wall of description text beside the switch, which read heavier than
+ *  the labels of the fields above it. */
+function SettingRow({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="rd-set-row">
+      <div className="rd-set-main">
+        <div className="rd-set-label">{label}</div>
+        <div className="rd-set-desc">{desc}</div>
+      </div>
+      <Switch checked={checked} onChange={onChange} />
     </div>
   );
 }

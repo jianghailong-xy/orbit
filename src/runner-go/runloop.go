@@ -656,6 +656,12 @@ func runLoop(cfg *RunnerConfig) bool {
 	telemetry := newHeartbeatTelemetryProbe(heartbeatTelemetryTimeout, nil)
 	go telemetry.run(loopCtx)
 
+	// Agent working-directory state for the web's config form, on the same cached, off-path
+	// footing: the control plane names the directories in its heartbeat response, we stat them
+	// in the background, and the answer rides the next heartbeat.
+	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
+	go agentDirs.run(loopCtx)
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -705,10 +711,17 @@ func runLoop(cfg *RunnerConfig) bool {
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              engineHealth.snapshotNow(),
+				AgentDirProbes:       agentDirs.snapshot(),
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
 				return
+			}
+			// Scan the directories this response named, ready for the next heartbeat. An older
+			// control plane sends none, which parks the scanner rather than clearing what it
+			// last found.
+			if resp.AgentDirs != nil {
+				agentDirs.trigger(resp.AgentDirs)
 			}
 			// Adopt the control plane's authoritative max-concurrent (the editable DB
 			// value). 0 means an older server that doesn't report it — keep current.
@@ -1264,6 +1277,7 @@ func runLoop(cfg *RunnerConfig) bool {
 	close(hbStop)
 	<-hbDone
 	telemetry.wait()
+	agentDirs.wait()
 	login.stop()
 	// An installer already running is joined, not killed: a half-applied `curl | bash` is worse
 	// than one that finishes while the runner shuts down.

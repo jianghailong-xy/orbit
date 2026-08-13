@@ -282,6 +282,30 @@ export interface RunnerHeartbeatRequest {
    *  AWAITING_INPUT session whose runtime is warm or has gone cold. Absent from older
    *  runners (the bar then waits for the first turn-complete as before). */
   sessions?: SessionLiveState[];
+  /** What the runner found at each agent working directory it was asked about last heartbeat
+   *  (see RunnerHeartbeatResponse.agentDirs). Absent on older runners, which leaves the stored
+   *  snapshot alone — "never probed" and "probed, missing" have to stay distinguishable. */
+  agentDirProbes?: AgentDirProbe[];
+}
+
+/** What the runner saw at one agent's working directory. Reported from the runner's own disk,
+ *  so it answers the question the config form asks: does this path exist on that machine, and
+ *  can it be worktree-isolated as-is? */
+export interface AgentDirProbe {
+  agentId: string;
+  /** The path resolves to a directory on the runner. */
+  exists: boolean;
+  /** That directory is inside a git work tree — the precondition for worktree isolation.
+   *  Only meaningful when `exists`. */
+  isGitRepo: boolean;
+}
+
+/** Control plane → runner: the agent working directories to stat before the next heartbeat.
+ *  Sent every heartbeat (the set changes whenever an agent is added or its path edited), so
+ *  the runner never has to track the agent list itself. */
+export interface AgentDirTarget {
+  agentId: string;
+  workDir: string;
 }
 
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
@@ -345,6 +369,10 @@ export interface RunnerHeartbeatResponse {
   /** An engine install the user started from the web. Absent on older control planes, and
    *  whenever no install is in flight for this runner. */
   installRequest?: InstallCommand;
+  /** Agent working directories to stat before the next heartbeat, answered via
+   *  RunnerHeartbeatRequest.agentDirProbes. Absent on older control planes (the runner then
+   *  probes nothing and the form simply shows no path status). */
+  agentDirs?: AgentDirTarget[];
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */

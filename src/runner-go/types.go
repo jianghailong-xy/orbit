@@ -77,6 +77,25 @@ type HeartbeatRequest struct {
 	// Sessions carries each running session's live worktree diff so the web status bar
 	// appears mid-turn, not just at turn-complete. Empty when no isolated session runs.
 	Sessions []SessionLiveState `json:"sessions,omitempty"`
+	// AgentDirProbes answers the previous heartbeat's AgentDirs: what this machine actually
+	// has at each agent working directory. Omitted until the first scan completes, so the
+	// control plane keeps its last snapshot instead of hearing a false "missing".
+	AgentDirProbes []AgentDirProbe `json:"agentDirProbes,omitempty"`
+}
+
+// AgentDirProbe is what the runner found at one agent's working directory: whether the path is
+// a directory on this machine, and whether it sits inside a git work tree (the precondition for
+// per-session worktree isolation). Mirrors @orbit/shared AgentDirProbe.
+type AgentDirProbe struct {
+	AgentID   string `json:"agentId"`
+	Exists    bool   `json:"exists"`
+	IsGitRepo bool   `json:"isGitRepo"`
+}
+
+// AgentDirTarget is one directory the control plane asked this runner to stat.
+type AgentDirTarget struct {
+	AgentID string `json:"agentId"`
+	WorkDir string `json:"workDir"`
 }
 
 // EngineHealthReport mirrors @orbit/shared RunnerEngineHealth: one coding-engine CLI's state on
@@ -222,6 +241,9 @@ type HeartbeatResponse struct {
 	// An engine CLI the user asked to install from the web. Nil on older control planes, and
 	// whenever no install is in flight for this runner.
 	InstallRequest *InstallCommand `json:"installRequest,omitempty"`
+	// Agent working directories to stat before the next heartbeat; answered via
+	// HeartbeatRequest.AgentDirProbes. Absent on older control planes → nothing to probe.
+	AgentDirs []AgentDirTarget `json:"agentDirs,omitempty"`
 }
 
 // InstallCommand mirrors @orbit/shared: install one engine's CLI on this machine. Redelivered

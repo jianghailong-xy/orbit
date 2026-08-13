@@ -361,6 +361,14 @@ model Agent {
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
   // (main, else master). Agent-scoped so a chosen target sticks across all the agent's sessions.
   defaultMergeTarget  String?   @map("default_merge_target")
+  // What the runner last saw at `workDir` on its own disk, refreshed each heartbeat. The config
+  // form reads these to say whether the path is actually there and whether it can be worktree-
+  // isolated, instead of letting a typo surface only when a session finally fails to start.
+  // All three NULL = never probed (no runner report yet, or one too old to send it), which must
+  // stay distinct from "probed, and it isn't there".
+  workDirExists       Boolean?  @map("work_dir_exists")
+  workDirIsGit        Boolean?  @map("work_dir_is_git")
+  workDirProbedAt     DateTime? @map("work_dir_probed_at")
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")

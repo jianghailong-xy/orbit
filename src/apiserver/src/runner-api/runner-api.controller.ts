@@ -524,12 +524,35 @@ export class RunnerApiController {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
       }
     }
+    // Record what the runner found at each agent's working directory, so the config form can
+    // report a bad path at edit time. Scoped to this runner's own agents: a probe names an
+    // agent id, and only the machine that runs it can say anything about its disk.
+    if (dto?.agentDirProbes?.length) {
+      try {
+        await Promise.all(
+          dto.agentDirProbes.slice(0, 200).map((p) =>
+            this.prisma.agent.updateMany({
+              where: { id: p.agentId, runnerId: runner.id, deletedAt: null },
+              data: {
+                workDirExists: p.exists,
+                // Only meaningful when the directory is there; a missing path reports neither.
+                workDirIsGit: p.exists ? p.isGitRepo : null,
+                workDirProbedAt: new Date(),
+              },
+            }),
+          ),
+        );
+      } catch {
+        // Advisory telemetry — never fail the heartbeat (that would read as offline).
+      }
+    }
     let cancelSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
     let artifactRequests: RunnerHeartbeatResponse['artifactRequests'] = [];
     let loginRequest: RunnerHeartbeatResponse['loginRequest'];
     let installRequest: RunnerHeartbeatResponse['installRequest'];
+    let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -551,6 +574,16 @@ export class RunnerApiController {
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
+      // The directories to stat before the next heartbeat. Sent every cycle rather than on
+      // change, so an edited path is picked up without any invalidation to get wrong, and the
+      // runner never has to hold an agent list of its own.
+      agentDirs = (
+        await this.prisma.agent.findMany({
+          where: { runnerId: runner.id, deletedAt: null, workDir: { not: null } },
+          select: { id: true, workDir: true },
+          take: 200,
+        })
+      ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
@@ -565,6 +598,7 @@ export class RunnerApiController {
       artifactRequests,
       loginRequest,
       installRequest,
+      agentDirs,
     };
   }
 
