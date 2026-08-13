@@ -3280,7 +3280,7 @@ export class SessionsService {
         exec.provider,
         exec.model,
         requestedPermissionMode,
-        customRow?.enabled === true,
+        next.customRow?.enabled === true,
       );
       const normalizedEffort =
         dto.effort !== undefined
