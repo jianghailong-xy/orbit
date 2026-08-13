@@ -8360,6 +8360,12 @@ body {
 .np-row-model.np-fix {
   color: var(--brand);
 }
+/* The same row in the composer's Provider pill, where the option is one string rather than three
+   elements: dim it as unavailable, but leave it selectable — choosing it opens the sign-in it
+   names, so greying it out would take away the only thing it is there to offer. */
+.ant-select-item-option.composer-provider-fix .ant-select-item-option-content {
+  color: var(--text-3);
+}
 .np-row.on {
   background: var(--brand-tint);
   color: var(--text-1);

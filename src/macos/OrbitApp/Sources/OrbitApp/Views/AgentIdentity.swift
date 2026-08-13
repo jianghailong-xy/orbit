@@ -70,6 +70,9 @@ struct ProviderSwitchSheet: View {
     let currentSlug: String
     let agentName: String
     let onSelect: (String) -> Void
+    /// Where to send a row this machine can't run: the runner whose Engines section holds its
+    /// install / Sign in. Nil leaves such a row inert, which is all an unknown runner allows.
+    var onFixRunner: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
 
     private var engines: [ProviderChoice] { choices.filter { $0.kind == .engine } }
@@ -110,17 +113,27 @@ struct ProviderSwitchSheet: View {
                     // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
                     // never tears down through a view the switch has already rebuilt.
                     dismiss()
-                    if choice.slug != currentSlug { onSelect(choice.slug) }
+                    // A row this machine can't run isn't a pick — it's a request for the sign-in
+                    // (or install) that would make it one, so go where that lives instead.
+                    if choice.unavailable != nil, choice.slug != currentSlug {
+                        onFixRunner?()
+                    } else if choice.slug != currentSlug {
+                        onSelect(choice.slug)
+                    }
                 } label: {
                     HStack(spacing: 12) {
                         AgentAvatar(provider: choice.slug, size: 28, brandKey: choice.brandKey)
                         Text(choice.label).foregroundStyle(.primary).lineLimit(1)
                         Spacer(minLength: 8)
                         // The reason replaces the model on a row that can't run: which model it
-                        // would pick is moot until the CLI is installed or signed into, and the
-                        // reason is the only thing here the user can act on.
-                        Text(choice.unavailable ?? choice.modelLabel)
-                            .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                        // would pick is moot until the CLI is installed or signed into. It also
+                        // doubles as the row's call to action, so it takes the accent the way
+                        // web's does rather than sitting in the model column's grey.
+                        Text(choice.unavailable.map { "\($0), sign in →" } ?? choice.modelLabel)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(choice.unavailable == nil ? AnyShapeStyle(.secondary)
+                                                                       : AnyShapeStyle(Color.accentColor))
+                            .lineLimit(1)
                         if choice.slug == currentSlug {
                             Image(systemName: "checkmark")
                                 .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
@@ -129,10 +142,6 @@ struct ProviderSwitchSheet: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // Listed but not pickable, exactly as on web: taking the row away would leave
-                // "why is Claude missing?" unanswerable, and offering it would start a session
-                // that fails at spawn. The fix lives on the Providers page either way.
-                .disabled(choice.unavailable != nil && choice.slug != currentSlug)
             }
         } header: {
             Text(title)
