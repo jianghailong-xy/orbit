@@ -203,6 +203,76 @@ final class AgentDefaultsTests: XCTestCase {
             runtimeDefaults: ["codex": "runner-codex-default"]), "gpt-5.6-sol")
     }
 
+    // MARK: modelsFromRuntime — a BYOK provider on the runtime CLI's own endpoint (Anthropic key)
+
+    /// The stored `models`/`defaultModel` are the preset fallback the server ships; the runner's
+    /// live probe leads. Mirrors the Anthropic preset (stale Opus 4.8 default) so the picker must
+    /// resolve to the same live catalog as the built-in Claude engine, not this list.
+    private let anthropicKey = ConfiguredProvider(
+        slug: "anthropic", label: "Anthropic (Claude)", runtime: "claude",
+        models: [
+            ConfiguredProviderModel(value: "claude-opus-4-8", label: "Claude Opus 4.8"),
+            ConfiguredProviderModel(value: "claude-sonnet-5", label: "Claude Sonnet 5"),
+            ConfiguredProviderModel(value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5"),
+        ],
+        defaultModel: "claude-opus-4-8", modelsFromRuntime: true)
+
+    private let liveClaudeCatalog = RunnerModelCatalog(
+        claude: [
+            RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", priority: nil,
+                            contextWindow: nil, reasoningLevels: nil,
+                            defaultReasoningLevel: nil, serviceTiers: nil),
+            RunnerModelInfo(value: "claude-sonnet-5", label: "Sonnet 5", priority: nil,
+                            contextWindow: nil, reasoningLevels: nil,
+                            defaultReasoningLevel: nil, serviceTiers: nil),
+        ],
+        codex: nil)
+
+    func testModelsFromRuntimeProviderFollowsLiveCatalog() {
+        // The BYOK Claude provider's picker follows the runner catalog, matching the built-in engine
+        // exactly — not the stale preset list it was seeded with.
+        let models = AgentDefaults.models(for: "anthropic", catalog: liveClaudeCatalog,
+                                          configured: [anthropicKey])
+        XCTAssertEqual(models.map(\.id), ["claude-opus-5", "claude-sonnet-5"])
+        XCTAssertEqual(models, AgentDefaults.models(for: "claude", catalog: liveClaudeCatalog,
+                                                    configured: [anthropicKey]))
+        // Its default follows the catalog's first model too, not the stale preset default.
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "anthropic", catalog: liveClaudeCatalog,
+                                                  configured: [anthropicKey]), "claude-opus-5")
+
+        // With no catalog (offline, or the runner's probe hasn't landed) it falls back to the
+        // stored preset list and default.
+        XCTAssertEqual(
+            AgentDefaults.models(for: "anthropic", catalog: nil, configured: [anthropicKey]).map(\.id),
+            ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"])
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "anthropic", catalog: nil,
+                                                  configured: [anthropicKey]), "claude-opus-4-8")
+    }
+
+    func testModelsFromRuntimeProviderPrefersHeartbeatDefault() {
+        // effectiveDefaultModel precedence: heartbeat default → live catalog first → preset default.
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
+            runtimeDefaults: ["claude": "claude-sonnet-5"]), "claude-sonnet-5")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "anthropic", catalog: liveClaudeCatalog, configured: [anthropicKey],
+            runtimeDefaults: [:]), "claude-opus-5")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "anthropic", catalog: nil, configured: [anthropicKey],
+            runtimeDefaults: nil), "claude-opus-4-8")
+    }
+
+    /// A third-party Anthropic-compatible vendor (DeepSeek) is NOT modelsFromRuntime: the runner's
+    /// Claude probe says nothing about what DeepSeek serves, so it keeps its own maintained list.
+    func testThirdPartyClaudeVendorKeepsOwnListDespiteCatalog() {
+        XCTAssertEqual(
+            AgentDefaults.models(for: "deepseek", catalog: liveClaudeCatalog,
+                                 configured: [deepseek]).map(\.id),
+            ["deepseek-v4-pro", "deepseek-v4-lite"])
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "deepseek", catalog: liveClaudeCatalog,
+                                                  configured: [deepseek]), "deepseek-v4-pro")
+    }
+
     func testEffectiveDefaultModelUsesRuntimeThenCatalogThenStatic() {
         let catalog = RunnerModelCatalog(
             claude: [RunnerModelInfo(value: "claude-fable-5", label: "Fable 5", priority: nil,

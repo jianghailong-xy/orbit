@@ -86,6 +86,15 @@ public enum AgentDefaults {
         configured?.first { $0.slug == slug }
     }
 
+    /// The built-in runtime whose live catalog describes a `modelsFromRuntime` provider — the vendor
+    /// IS that CLI's own endpoint (Anthropic→claude, OpenAI→codex), so the runner's probe of the
+    /// installed CLI leads and the stored `models` list is only the fallback. Read under this key,
+    /// never the slug, so an OpenAI provider reads Codex models and can't land in Claude's namespace.
+    /// Mirrors web's `custom.runtime === CODEX ? CODEX : CLAUDE`.
+    private static func runtimeCatalogKey(for custom: ConfiguredProvider) -> String {
+        custom.runtime == "codex" ? "codex" : "claude"
+    }
+
     /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
     /// model's context window and thinking levels). Its managed default is the one static fallback,
     /// for a runner whose CLI predates that probe.
@@ -128,6 +137,14 @@ public enum AgentDefaults {
     public static func models(for provider: String, catalog: RunnerModelCatalog?,
                               configured: [ConfiguredProvider]?) -> [ModelOption] {
         if let custom = configuredProvider(provider, in: configured) {
+            // …except when the vendor IS the runtime CLI's own endpoint (Anthropic for claude,
+            // OpenAI for codex): the runner's probe of the installed CLI is more current than any
+            // list we ship, so it leads and the stored `models` is only the fallback. Mirrors web's
+            // modelOptionsForProvider.
+            if custom.modelsFromRuntime == true,
+               let live = catalog?.models(for: runtimeCatalogKey(for: custom)) {
+                return live
+            }
             let options = custom.models
                 .filter { !$0.value.isEmpty && !$0.label.isEmpty }
                 .map { ModelOption(id: $0.value, name: $0.label) }
@@ -159,6 +176,12 @@ public enum AgentDefaults {
     public static func defaultModel(for provider: String, catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
         if let custom = configuredProvider(provider, in: configured) {
+            // For a vendor the runtime CLI speaks to natively, what that CLI reports as its first
+            // model beats the id we shipped in the preset — same precedence as the option list.
+            if custom.modelsFromRuntime == true,
+               let live = catalog?.models(for: runtimeCatalogKey(for: custom))?.first?.id {
+                return live
+            }
             if let def = custom.defaultModel, !def.isEmpty { return def }
             if let first = custom.models.first(where: { !$0.value.isEmpty && !$0.label.isEmpty }) {
                 return first.value
@@ -174,7 +197,15 @@ public enum AgentDefaults {
     public static func effectiveDefaultModel(for provider: String, catalog: RunnerModelCatalog?,
                                              configured: [ConfiguredProvider]?,
                                              runtimeDefaults: [String: String]?) -> String {
-        if configuredProvider(provider, in: configured) != nil {
+        if let custom = configuredProvider(provider, in: configured) {
+            // A vendor on the runtime CLI's own endpoint follows what that CLI reports as its
+            // default — the same value the built-in engine seeds: the heartbeat-reported default
+            // first, then (in defaultModel below) its live catalog. Mirrors web's
+            // defaultModelForProvider.
+            if custom.modelsFromRuntime == true,
+               let saved = runtimeDefaults?[runtimeCatalogKey(for: custom)], !saved.isEmpty {
+                return saved
+            }
             return defaultModel(for: provider, catalog: catalog, configured: configured)
         }
         // A removed/disabled custom identity executes through the historical Claude fallback.

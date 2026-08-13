@@ -32,16 +32,22 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// new-session picker gets its mark. Nil for a self-maintained custom endpoint (which falls
     /// back to the neutral glyph). Optional so an older server's payload still decodes.
     public let presetSlug: String?
+    /// True when this vendor's endpoint is the runtime CLI's own (Anthropic for claude, OpenAI for
+    /// codex): the runner's live catalogue describes it, so `models` is only a fallback and the
+    /// pickers follow the borrowed runtime's catalog instead. Optional so an older server's payload
+    /// still decodes. Mirrors web's `ConfiguredProvider.modelsFromRuntime`.
+    public let modelsFromRuntime: Bool?
     public var id: String { slug }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
-                presetSlug: String? = nil) {
+                presetSlug: String? = nil, modelsFromRuntime: Bool? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
         self.models = models
         self.defaultModel = defaultModel
         self.presetSlug = presetSlug
+        self.modelsFromRuntime = modelsFromRuntime
     }
 }

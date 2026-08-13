@@ -155,6 +155,8 @@ final class ModelsCodableTests: XCTestCase {
         // endpoint has none and falls back to the neutral glyph.
         XCTAssertEqual(list[0].presetSlug, "deepseek")
         XCTAssertNil(list[1].presetSlug)
+        // A third-party vendor keeps its own list; the flag is absent (→ nil, treated as false).
+        XCTAssertNil(list[0].modelsFromRuntime)
     }
 
     /// A server that predates `presetSlug` must still decode — the field is additive.
@@ -162,6 +164,18 @@ final class ModelsCodableTests: XCTestCase {
         let json = #"[{"slug":"deepseek","label":"DeepSeek","models":[],"defaultModel":null}]"#
         let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
         XCTAssertNil(list[0].presetSlug)
+    }
+
+    /// An Anthropic/OpenAI BYOK row carries `modelsFromRuntime:true`, telling the pickers to follow
+    /// the borrowed runtime's live catalog instead of the shipped fallback `models`.
+    func testConfiguredProviderDecodesModelsFromRuntime() throws {
+        let json = #"""
+        [{"slug":"anthropic","label":"Anthropic (Claude)","runtime":"claude",
+          "models":[{"value":"claude-opus-4-8","label":"Claude Opus 4.8"}],
+          "defaultModel":"claude-opus-4-8","presetSlug":"anthropic","modelsFromRuntime":true}]
+        """#
+        let list = try JSONDecoder().decode([ConfiguredProvider].self, from: Data(json.utf8))
+        XCTAssertEqual(list[0].modelsFromRuntime, true)
     }
 
     func testLoginResponseDecodes() throws {
