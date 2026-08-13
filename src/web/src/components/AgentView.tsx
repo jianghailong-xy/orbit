@@ -5113,6 +5113,17 @@ export function AgentView({ runner }: { runner: Runner }) {
                   suffixIcon={null}
                   value={shownProvider}
                   onChange={(v) => {
+                    // A provider this runner can't run isn't a switch — it's a request for the
+                    // sign-in (or install) that would make it one. Go straight to that engine's
+                    // row on the Providers page, as the New Session picker's row does. The Select
+                    // is controlled, so the pill keeps showing the provider still in use.
+                    const picked = providerSwitchChoices.find((c) => c.slug === v);
+                    if (picked?.unavailable) {
+                      navigate(
+                        `/providers?runner=${encodeId(runner.id)}&engine=${picked.fixEngine ?? picked.slug}`,
+                      );
+                      return;
+                    }
                     // Each provider owns its model space, so carry the running model only when
                     // the new one offers it (two Anthropic accounts do; a third-party endpoint
                     // with its own list does not) and otherwise take that provider's default.
@@ -5162,16 +5173,21 @@ export function AgentView({ runner }: { runner: Runner }) {
                     if (nextEffort !== currentEffort) setEffort(nextEffort);
                   }}
                   options={providerSwitchChoices.map((choice) => {
-                    // Carry the reason on the greyed row itself, where it answers the question
-                    // being asked ("why can't I pick Claude?"), the way the Mode pill carries
-                    // Auto's constraint. Fixing it lives on the Providers page, not here. The
-                    // running provider is exempt: it is the closed pill's own label, and a
+                    // Carry the reason on the row itself, where it answers the question being
+                    // asked ("why can't I pick Claude?"). It stays selectable rather than greyed
+                    // because picking it does something useful — it goes where the fix is (see
+                    // onChange), which is the New Session picker's behaviour for the same row.
+                    // The running provider is exempt: it is the closed pill's own label, and a
                     // parenthetical there would sit in the footer of every turn.
                     const blocked = !!choice.unavailable && choice.slug !== shownProvider;
                     return {
                       value: choice.slug,
-                      label: blocked ? `${choice.label} (${choice.unavailable})` : choice.label,
-                      disabled: blocked,
+                      label: blocked
+                        ? `${choice.label} — ${choice.unavailable}, sign in →`
+                        : choice.label,
+                      // Distinguishable at a glance from a provider that is ready to run, without
+                      // being inert: the identity is dimmed, the call to action is not.
+                      className: blocked ? 'composer-provider-fix' : undefined,
                     };
                   })}
                   disabled={!configEditable}

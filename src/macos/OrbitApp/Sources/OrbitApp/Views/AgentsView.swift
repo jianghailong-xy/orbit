@@ -588,10 +588,12 @@ struct NewSessionView: View {
             }
         }
         .sheet(isPresented: $showProviderPicker) {
-            ProviderSwitchSheet(choices: providerChoices, currentSlug: draft.provider,
-                                agentName: agent.name) { slug in
-                draft.pickDraftProvider(slug)
-            }
+            // The draft's own runnerID is only set for a live session, so take the agent's — it is
+            // the machine this draft would run on, and the one whose Engines section fixes a row.
+            ProviderSwitchSheet(
+                choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
+                onSelect: { slug in draft.pickDraftProvider(slug) },
+                onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
         }
     }
 

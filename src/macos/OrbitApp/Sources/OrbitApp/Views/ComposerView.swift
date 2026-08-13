@@ -291,13 +291,21 @@ struct ComposerView: View {
                             // footer of every turn.
                             let blocked = choice.unavailable != nil && choice.slug != console.provider
                             Button {
-                                Task { await console.selectProvider(choice.slug) }
+                                // Picking a blocked row isn't a switch — it's a request for the
+                                // sign-in that would make it one, so go to that runner's Engines
+                                // section rather than doing nothing.
+                                if blocked {
+                                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                } else {
+                                    Task { await console.selectProvider(choice.slug) }
+                                }
                             } label: {
                                 menuItemLabel(
-                                    blocked ? "\(choice.label) (\(choice.unavailable ?? ""))" : choice.label,
+                                    blocked
+                                        ? "\(choice.label) — \(choice.unavailable ?? ""), sign in →"
+                                        : choice.label,
                                     selected: choice.slug == console.provider)
                             }
-                            .disabled(blocked)
                         }
                     } label: {
                         menuLabel(AgentDefaults.providerName(console.provider,

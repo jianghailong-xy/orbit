@@ -279,6 +279,8 @@ describe('sameRuntimeChoices', () => {
     expect(choices.map((c) => c.slug)).toEqual(['claude', 'anthropic', 'anthropic-2']);
     expect(choices.find((c) => c.slug === 'claude')?.unavailable).toBe('Not signed in');
     expect(choices.find((c) => c.slug === 'anthropic-2')?.unavailable).toBeUndefined();
+    // The composer links this row at the engine that fixes it, so the slug has to survive.
+    expect(choices.find((c) => c.slug === 'claude')?.fixEngine).toBe('claude');
   });
 
   it('still names every same-runtime option when nothing on that CLI can run', () => {
