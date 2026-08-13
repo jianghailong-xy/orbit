@@ -17,6 +17,9 @@ function harness(row: Record<string, unknown> = {}) {
       },
       findUnique: async () => row,
     },
+    // The heartbeat also lists this runner's agents (the workDir probe targets). It shares one
+    // try/catch with the relays, so a missing stub here would swallow them instead of failing.
+    agent: { findMany: async () => [] },
   } as never;
   const realtime = {
     drainCancellations: async () => [],

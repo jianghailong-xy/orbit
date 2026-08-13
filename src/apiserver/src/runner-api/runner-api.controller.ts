@@ -588,9 +588,12 @@ export class RunnerApiController {
       artifactRequests = await this.realtime.drainArtifactRequests(runner.id);
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
+      repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
-      // runner never has to hold an agent list of its own.
+      // runner never has to hold an agent list of its own. Last of the block on purpose: it is
+      // the only entry here that is a plain listing rather than a one-slot relay, and everything
+      // after a throw in this try is skipped until the next heartbeat.
       agentDirs = (
         await this.prisma.agent.findMany({
           where: { runnerId: runner.id, deletedAt: null, workDir: { not: null } },
@@ -598,7 +601,6 @@ export class RunnerApiController {
           take: 200,
         })
       ).map((a) => ({ agentId: a.id, workDir: a.workDir as string }));
-      repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
     } catch {
       // A transient DB hiccup shouldn't fail the heartbeat; all arrive next cycle.
     }
