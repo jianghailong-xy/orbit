@@ -18,11 +18,14 @@ interface FailureHistory {
 }
 
 interface Options {
-  /** Agent provider for every task's assignee. */
+  /** The provider every task's assignee derives — its last interactive session's. */
   provider?: string;
   /** `planUsage` the assignees' runner reports. */
   planUsage?: unknown;
 }
+
+/** Every task in these fixtures is assigned to the same agent. */
+const AGENT_ID = 'agent-1';
 
 type GroupByArgs = {
   where: {
@@ -45,13 +48,25 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
   const taskIds = [...readyTaskIds, ...history.map((h) => h.taskId)];
   const executed: string[] = [];
   const prisma = {
-    $queryRaw: async () =>
-      taskIds.map((id) => ({
-        id,
-        ownerId: 'owner-1',
-        provider: options.provider ?? 'codex',
-        runnerId: 'runner-1',
-      })),
+    // Two raw queries reach this stub. The READY-task scan arrives as a tagged template (an
+    // array of string parts); lastProviderByAgent — which the sweep now derives each task's
+    // provider through, the column being gone — passes a Prisma.sql object. Telling them apart
+    // by shape is what lets a test still say "these tasks run on codex" in one place.
+    $queryRaw: async (q: unknown) =>
+      Array.isArray(q)
+        ? taskIds.map((id) => ({
+            id,
+            ownerId: 'owner-1',
+            agentId: AGENT_ID,
+            runnerId: 'runner-1',
+          }))
+        : [
+            {
+              agent_id: AGENT_ID,
+              provider: options.provider ?? 'codex',
+              provider_builtin: true,
+            },
+          ],
     runner: {
       findMany: async () => [{ id: 'runner-1', planUsage: options.planUsage ?? null }],
     },

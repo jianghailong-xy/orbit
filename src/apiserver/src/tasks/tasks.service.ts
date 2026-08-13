@@ -18,6 +18,7 @@ import {
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
+import { DEFAULT_AGENT_PROVIDER, lastProviderByAgent } from '../agents/agent-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -2143,20 +2144,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // turn, and loading all of them (plus every one of their dependency edges) once a minute
     // only to discard them dwarfs the dispatch it exists to do.
     const rows = await this.prisma.$queryRaw<
-      { id: string; ownerId: string; provider: string; runnerId: string | null }[]
+      { id: string; ownerId: string; agentId: string; runnerId: string | null }[]
     >`
-      SELECT t.id, t.owner_id AS "ownerId", a.provider, a.runner_id AS "runnerId"
+      SELECT t.id, t.owner_id AS "ownerId", a.id AS "agentId", a.runner_id AS "runnerId"
       FROM task t
       LEFT JOIN agent a ON a.id = t.assignee_id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
+    // The provider is no longer a column on the agent (migration 0088) — it is derived from the
+    // project's last interactive session. One batched lookup for the whole sweep rather than a
+    // correlated subquery per row, and going through the shared helper is what keeps this gate's
+    // notion of "which provider will this run use" identical to the one dispatch itself applies.
+    // Only the READY tasks reach here, so this stays proportional to the work, like the filter above.
+    const seeds = await lastProviderByAgent(
+      this.prisma,
+      rows.map((row) => row.agentId),
+    );
     // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
     // can only match (the predicate requires an assignee with a runner), so assignee is never
     // null here — unlike the Prisma `select` this replaced, which typed it as nullable.
     const ready = rows.map((row) => ({
       id: row.id,
       ownerId: row.ownerId,
-      assignee: { provider: row.provider, runnerId: row.runnerId },
+      assignee: {
+        provider: (seeds.get(row.agentId) ?? DEFAULT_AGENT_PROVIDER).provider,
+        runnerId: row.runnerId,
+      },
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.

@@ -74,6 +74,7 @@ import {
   WorktreesRemovableResponse,
   gracefulEndStatus,
 } from '@orbit/shared';
+import { lastProviderByAgent, withProviderSeed } from '../agents/agent-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -344,12 +345,18 @@ export class RunnerApiController {
       select: {
         id: true,
         name: true,
-        provider: true,
         agentKey: true,
         workDir: true,
       },
       orderBy: { name: 'asc' },
     });
+    // `orbit status` prints a provider per agent, and the column is gone (migration 0088), so
+    // derive it the same way every other agent payload does rather than dropping the field —
+    // a runner in the field reads it (RunnerAgent.Provider) and would just print nothing.
+    const seeded = withProviderSeed(
+      agents,
+      await lastProviderByAgent(this.prisma, agents.map((a) => a.id)),
+    );
     return {
       id: runner.id,
       name: runner.name,
@@ -359,7 +366,7 @@ export class RunnerApiController {
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,
-      agents: agents.map((a) => ({
+      agents: seeded.map((a) => ({
         id: a.id,
         name: a.name,
         provider: a.provider,
