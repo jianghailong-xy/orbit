@@ -583,3 +583,32 @@ func TestEngineOutputProgress(t *testing.T) {
 		t.Fatal("the tail dropped the line that names the cause")
 	}
 }
+
+// The arrow needs both ends. On a loaded machine a 300MB CLI can miss the version probe's own
+// ceiling, and that machine — the one whose updates then time out — is exactly where this message
+// has to be readable. Observed live as "→ 2.1.229: `claude update` was still running…", a target
+// version arriving from nowhere.
+func TestUpdateEngineMessageSurvivesAnUnreadableInstalledVersion(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	// A binary that refuses to answer --version, which is what engineVersion returning "" means.
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+
+	rec, _ := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: "echo boom >&2; exit 1", latestURL: feed.URL,
+	}, dir, nil)
+
+	if strings.Contains(rec.Message, "→") {
+		t.Fatalf("message = %q, want no half-drawn arrow when the installed version is unknown", rec.Message)
+	}
+	if !strings.Contains(rec.Message, "fetching 2.1.229") {
+		t.Fatalf("message = %q, want it to still name the version it was reaching for", rec.Message)
+	}
+}

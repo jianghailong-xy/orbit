@@ -698,8 +698,8 @@ export function RunnerDetailPage() {
       )}
 
       {/* What software this machine runs and whether it's current — the same class of fact as the
-          runner version in Overview above, which is why updating them lives here and not on the
-          Providers page. */}
+          runner version on the meta line above, which is why updating them lives here and not on
+          the Providers page. */}
       <RunnerEnginesSection runner={runner} />
 
       <section className="rd-section">

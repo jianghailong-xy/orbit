@@ -307,9 +307,17 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	}
 	// Named in every message from here down. A failure that says which version it was reaching for
 	// is a failure someone can act on; the same failure without it is a shrug.
+	//
+	// The arrow needs both ends. `before` is empty whenever `<engine> --version` didn't answer —
+	// which is not rare on the machine that needs this message most: a loaded box where a 300MB
+	// CLI can't start inside the version probe's own ceiling is exactly the box whose updates
+	// time out. Reported as "→ 2.1.229" it reads like a version that came from nowhere.
 	step := ""
-	if latest != "" {
+	switch {
+	case latest != "" && firstNonEmpty(versionNumber(before), before) != "":
 		step = firstNonEmpty(versionNumber(before), before) + " → " + latest + ": "
+	case latest != "":
+		step = "fetching " + latest + ": "
 	}
 	cmdCtx, cancel := context.WithTimeout(ctx, engineUpdateTimeout)
 	defer cancel()
