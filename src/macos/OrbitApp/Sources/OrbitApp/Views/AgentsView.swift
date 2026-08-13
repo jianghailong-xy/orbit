@@ -615,12 +615,11 @@ struct NewSessionView: View {
 
     /// "Which agent am I about to task", as a compact switcher. Sits in the navigation bar on iOS
     /// (title slot) and under the hero on macOS, which has no bar here — one definition so the two
-    /// don't drift. The mark is the agent's own provider, which is usually the one on the hero but
-    /// won't be once a draft switches provider without saving it as the agent's default.
+    /// don't drift. Name and chevron only: the brand mark is the hero's job, and repeating it here
+    /// in miniature said nothing the screen wasn't already saying.
     private var agentSwitcher: some View {
         Button { showSwitcher = true } label: {
             HStack(spacing: 6) {
-                ProviderMark(provider: agent.defaultProvider, size: 19)
                 Text(agent.name)
                     .font(.headline).foregroundStyle(.primary).lineLimit(1)
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
