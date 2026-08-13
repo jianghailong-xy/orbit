@@ -235,6 +235,24 @@ public enum AgentDefaults {
         providers.contains { $0.id == provider }
     }
 
+    /// The quota to show for a session running on `provider` (mirrors web's `sessionPlanUsage`).
+    ///
+    /// Quota belongs to the credential the session actually spends, so the lookup follows the same
+    /// order dispatch does: a configured provider bills its own key and reports against that
+    /// account, while a built-in engine runs on the runner's own login and reports through the
+    /// heartbeat. A configured slug therefore never falls back to the runner's numbers — those are
+    /// a different subscription — and simply has no gauge when its credential has no quota to
+    /// report. A configured row that shadows a built-in slug is not what dispatch runs, so its
+    /// credential is not the one being spent either.
+    public static func planUsage(for provider: String, runner: PlanUsage?,
+                                 configured: [ConfiguredProvider]?) -> PlanUsageSnapshot? {
+        if !isBuiltInProvider(provider),
+           let custom = configuredProvider(provider, in: configured) {
+            return custom.planUsage
+        }
+        return runner?.snapshot(for: provider)
+    }
+
     /// Re-resolve an already-rendered seed from freshly fetched Runtime data. A failed runner read
     /// keeps the current value. Likewise, an unavailable providers response cannot safely replace
     /// a custom provider's cached seed with the built-in Claude fallback.

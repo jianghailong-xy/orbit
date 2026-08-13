@@ -124,7 +124,15 @@ final class ConsoleModel {
     /// credentials expired). Loaded with the footer context.
     private(set) var runnerID: String?
     private(set) var runnerName: String?
-    private(set) var planUsage: PlanUsageSnapshot?
+    /// What the runner's own engine logins report, verbatim. Kept whole rather than resolved on
+    /// arrival so the gauge follows a provider switch made after the fetch — see `planUsage`.
+    private(set) var runnerPlanUsage: PlanUsage?
+    /// The quota for the credential *this* session spends: the configured provider's own, or the
+    /// runner login's for a built-in engine (web parity — see `AgentDefaults.planUsage`).
+    var planUsage: PlanUsageSnapshot? {
+        AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
+                                configured: configuredProviders)
+    }
     private(set) var modelCatalog: RunnerModelCatalog?
     /// What the session's runner last reported about each engine CLI it can host. A provider
     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
@@ -630,11 +638,11 @@ final class ConsoleModel {
                 sessionRunner = r
                 runnerSnapshotLoaded = true
                 runnerName = r.displayName?.isEmpty == false ? r.displayName : r.name
-                planUsage = r.planUsage?.snapshot(for: provider)
+                runnerPlanUsage = r.planUsage
                 modelCatalog = r.modelCatalog
                 runnerEngines = r.engines
             } else {
-                planUsage = nil
+                runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
             }
@@ -1201,13 +1209,13 @@ final class ConsoleModel {
         var runnerSnapshotLoaded = false
         if let rid = draftAgent?.runnerId, let rows = try? await api.runners() {
             if let r = rows.first(where: { $0.id == rid }) {
-                planUsage = r.planUsage?.snapshot(for: provider)
+                runnerPlanUsage = r.planUsage
                 modelCatalog = r.modelCatalog
                 runtimeDefaults = r.runtimeDefaultModels
                 runnerSnapshotLoaded = true
                 runnerEngines = r.engines
             } else {
-                planUsage = nil
+                runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
             }

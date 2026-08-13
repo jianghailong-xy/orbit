@@ -331,6 +331,31 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(flatKimi.snapshots.first?.0, "Kimi quota")
     }
 
+    /// A session on a configured (BYOK) provider spends that row's credential, so the gauge shows
+    /// that row's quota — never the runner login's Claude numbers (web's `sessionPlanUsage`).
+    func testSessionPlanUsageFollowsTheCredentialSpent() {
+        let runner = PlanUsage(fiveHour: .init(utilization: 100), sevenDay: .init(utilization: 80))
+        let byok = ConfiguredProvider(slug: "anthropic-2", label: "Anthropic (Claude)",
+                                      runtime: "claude",
+                                      planUsage: .init(provider: "claude",
+                                                       fiveHour: .init(utilization: 9)))
+        let metered = ConfiguredProvider(slug: "deepseek", label: "DeepSeek", runtime: "claude")
+        let configured = [byok, metered]
+
+        // Built-in Claude runs on the runner's own login.
+        XCTAssertEqual(AgentDefaults.planUsage(for: "claude", runner: runner,
+                                               configured: configured)?.primaryPercent, 100)
+        // A configured Anthropic account reports its own subscription.
+        XCTAssertEqual(AgentDefaults.planUsage(for: "anthropic-2", runner: runner,
+                                               configured: configured)?.primaryPercent, 9)
+        // A metered key has no window at all — no gauge, rather than the runner's.
+        XCTAssertNil(AgentDefaults.planUsage(for: "deepseek", runner: runner,
+                                             configured: configured))
+        // A slug no longer configured is the same: nothing to report.
+        XCTAssertNil(AgentDefaults.planUsage(for: "removed", runner: runner,
+                                             configured: configured))
+    }
+
     func testMakeTurn() {
         let msg = ComposerLogic.makeTurn(clientTurnId: "c1", text: "hi", shell: false, attachmentIds: [])
         XCTAssertEqual(msg.kind, "message")

@@ -248,7 +248,7 @@ struct ComposerView: View {
             .animation(.easeOut(duration: 0.15), value: boxFocused)
 
             // Footer controls, laid out like the web composer: permission mode on the left,
-            // then the agent identity · model · effort · plan-usage cluster on the right. Each
+            // then the provider · model · effort · plan-usage cluster on the right. Each
             // control is a borderless "text · chevron" menu (web parity, like the reference
             // composer's "Auto") rather than a macOS bordered popup button. A change on a live
             // session is pushed immediately in the menu action (applyConfig → PATCH /config);
@@ -271,12 +271,9 @@ struct ComposerView: View {
 
                 Spacer()
 
-                if let name = console.agentName {
-                    // Secondary metadata: yield space before the model/effort controls and usage
-                    // gauges when the footer is tight on a narrow iPhone, so the name truncates
-                    // rather than pushing a control or the "%" pill onto a second line.
-                    Text(name).foregroundStyle(.secondary).lineLimit(1).layoutPriority(-1)
-                }
+                // No agent name here (web parity): the agent can't be picked from the footer on any
+                // client, and it is already named where the choice is made — the navigation bar's
+                // switcher on iOS, the Agents sidebar/hero on macOS.
 
                 // Only when there is somewhere to go: a second account with the same vendor, or
                 // another endpoint on the same CLI. One entry means no switch is possible, and the

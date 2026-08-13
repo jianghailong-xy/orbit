@@ -37,11 +37,16 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
     /// pickers follow the borrowed runtime's catalog instead. Optional so an older server's payload
     /// still decodes. Mirrors web's `ConfiguredProvider.modelsFromRuntime`.
     public let modelsFromRuntime: Bool?
+    /// Subscription quota for *this row's credential*, when it has one to report (an Anthropic
+    /// endpoint reached with a subscription token). Nil for a metered API key or a third-party
+    /// endpoint, neither of which has a 5-hour/weekly window at all. Served by GET /providers.
+    public let planUsage: PlanUsageSnapshot?
     public var id: String { slug }
 
     public init(slug: String, label: String, runtime: String? = nil,
                 models: [ConfiguredProviderModel] = [], defaultModel: String? = nil,
-                presetSlug: String? = nil, modelsFromRuntime: Bool? = nil) {
+                presetSlug: String? = nil, modelsFromRuntime: Bool? = nil,
+                planUsage: PlanUsageSnapshot? = nil) {
         self.slug = slug
         self.label = label
         self.runtime = runtime
@@ -49,5 +54,6 @@ public struct ConfiguredProvider: Codable, Equatable, Sendable, Identifiable {
         self.defaultModel = defaultModel
         self.presetSlug = presetSlug
         self.modelsFromRuntime = modelsFromRuntime
+        self.planUsage = planUsage
     }
 }
