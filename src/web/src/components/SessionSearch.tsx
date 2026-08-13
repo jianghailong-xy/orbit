@@ -140,6 +140,18 @@ export function SessionSearch() {
     [navigate],
   );
 
+  // The search field is the palette's only control, so focus leaving it means the palette is dead
+  // weight — close it. That is also what makes one Esc enough: a keyboard extension (Vimium and
+  // friends) treats the first Esc as "leave insert mode", blurs the field and swallows the key
+  // with stopImmediatePropagation, which beats even the window-capture listener above and left the
+  // palette sitting there until a second press. A click on the palette's own chrome carries a
+  // relatedTarget — AntD's modal wrap is tabindex="-1" and takes the focus — so it doesn't count,
+  // and neither does the field going quiet because the whole window moved to another app.
+  const onInputBlur = (e: React.FocusEvent<HTMLInputElement>): void => {
+    if (e.relatedTarget || !document.hasFocus()) return;
+    setOpen(false);
+  };
+
   const onInputKey = (e: React.KeyboardEvent<HTMLInputElement>): void => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -187,6 +199,7 @@ export function SessionSearch() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onInputKey}
+          onBlur={onInputBlur}
           placeholder="Search sessions…"
           spellCheck={false}
           autoComplete="off"
