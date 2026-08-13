@@ -38,20 +38,43 @@ struct ToolApprovalCard: View {
             if let summary {
                 Text(summary).font(.orbitMono).foregroundStyle(.secondary).lineLimit(3)
             }
-            HStack {
-                Button("Allow") { Task { await console.decide(approval, behavior: .allow) } }
-                    .buttonStyle(.borderedProminent)
-                if let rule = rememberRule {
-                    Button("Allow & remember \(Approvals.rememberLabel(rule))") {
-                        Task { await console.decide(approval, behavior: .allow, remember: true) }
-                    }
+            // A row when it fits (macOS/wide), else a full-width stack (iPhone): three buttons
+            // can't share a phone row without the long "remember …" label crushing the others,
+            // so fall back to the action-sheet layout — web ApprovalPanel's @media(max-width:600px).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    allowButton
+                    if let rule = rememberRule { rememberButton(rule) }
+                    denyButton
                 }
-                Button("Deny", role: .destructive) { Task { await console.decide(approval, behavior: .deny) } }
-                Spacer()
+                VStack(spacing: 8) {
+                    allowButton.frame(maxWidth: .infinity)
+                    if let rule = rememberRule { rememberButton(rule).frame(maxWidth: .infinity) }
+                    denyButton.frame(maxWidth: .infinity)
+                }
             }
         }
         .padding(10)
         .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var allowButton: some View {
+        Button("Allow") { Task { await console.decide(approval, behavior: .allow) } }
+            .buttonStyle(.borderedProminent)
+    }
+    // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
+    // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
+    private func rememberButton(_ rule: PermissionRule) -> some View {
+        Button {
+            Task { await console.decide(approval, behavior: .allow, remember: true) }
+        } label: {
+            Text("Allow & remember ") + Text(Approvals.rememberLabel(rule)).font(.orbitMono)
+        }
+        .buttonStyle(.bordered)
+    }
+    private var denyButton: some View {
+        Button("Deny", role: .destructive) { Task { await console.decide(approval, behavior: .deny) } }
+            .buttonStyle(.bordered)
     }
 }
 
@@ -166,6 +189,7 @@ struct PlanCard: View {
                 Button("Approve") { Task { await console.decide(approval, behavior: .allow) } }
                     .buttonStyle(.borderedProminent)
                 Button("Keep planning", role: .cancel) { Task { await console.decide(approval, behavior: .deny) } }
+                    .buttonStyle(.bordered)
                 Spacer()
             }
         }
