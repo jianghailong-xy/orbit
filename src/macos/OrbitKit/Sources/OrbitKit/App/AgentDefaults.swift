@@ -327,6 +327,21 @@ public enum AgentDefaults {
             ?? friendlyName(id, catalog: catalog)
     }
 
+    /// The name a picker shows for `id` when the session runs on `provider`: the label from that
+    /// provider's OWN option list, which is what web renders (its Select paints the matching
+    /// option's label — see `defaultModelLabel`). The distinction matters for a row whose vendor is
+    /// the runtime CLI's own endpoint: its list is the runner's live catalogue, which calls the id
+    /// "Opus 5", while the preset's shipped fallback list names it "Claude Opus 5". Resolving by id
+    /// alone let that fallback label win and made the closed pill disagree with the menu it opens.
+    /// A model the list doesn't offer — a Runtime default not yet in the catalogue — keeps the
+    /// id-based lookup.
+    public static func friendlyName(_ id: String, for provider: String,
+                                    catalog: RunnerModelCatalog?,
+                                    configured: [ConfiguredProvider]?) -> String {
+        models(for: provider, catalog: catalog, configured: configured).first { $0.id == id }?.name
+            ?? friendlyName(id, catalog: catalog, configured: configured)
+    }
+
     /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
     /// tops out at `xhigh` and adds `minimal`. Kimi's and OpenCode's levels are model-defined, so
     /// their static lists are only the fallback for a model the catalog does not report.

@@ -651,7 +651,8 @@ struct NewSessionView: View {
     /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
-            ? AgentDefaults.friendlyName(draft.modelID, catalog: draft.modelCatalog,
+            ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
+                                         catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
     }

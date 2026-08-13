@@ -181,6 +181,7 @@ public enum SessionProviderChoices {
                            catalog: RunnerModelCatalog?) -> String {
         let model = AgentDefaults.defaultModel(for: provider, catalog: catalog, configured: configured)
         guard !model.isEmpty else { return "Managed by the provider" }
-        return AgentDefaults.friendlyName(model, catalog: catalog, configured: configured)
+        return AgentDefaults.friendlyName(model, for: provider, catalog: catalog,
+                                          configured: configured)
     }
 }

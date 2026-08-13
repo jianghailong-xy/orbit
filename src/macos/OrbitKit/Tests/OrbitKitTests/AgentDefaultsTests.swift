@@ -249,6 +249,34 @@ final class AgentDefaultsTests: XCTestCase {
                                                   configured: [anthropicKey]), "claude-opus-4-8")
     }
 
+    /// Both lists can name the same id, differently: the server's preset fallback ships
+    /// "Claude Opus 5" while the CLI's own catalogue reports "Opus 5". The pill must read what the
+    /// menu it opens offers — the live catalogue for a runtime-led row (web parity).
+    func testFriendlyNameFollowsTheProvidersOwnOptionList() {
+        let anthropicOpus5 = ConfiguredProvider(
+            slug: "anthropic", label: "Anthropic (Claude)", runtime: "claude",
+            models: [ConfiguredProviderModel(value: "claude-opus-5", label: "Claude Opus 5")],
+            defaultModel: "claude-opus-5", modelsFromRuntime: true)
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "anthropic",
+                                                  catalog: liveClaudeCatalog,
+                                                  configured: [anthropicOpus5]), "Opus 5")
+        // The built-in engine has always read the catalogue; the BYOK row now agrees with it.
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "claude",
+                                                  catalog: liveClaudeCatalog,
+                                                  configured: [anthropicOpus5]), "Opus 5")
+        // No catalogue yet: the row's own list is all there is, so its label stands.
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5", for: "anthropic", catalog: nil,
+                                                  configured: [anthropicOpus5]), "Claude Opus 5")
+        // A third-party vendor is not runtime-led — only its row knows what its endpoint serves.
+        XCTAssertEqual(AgentDefaults.friendlyName("deepseek-v4-pro", for: "deepseek",
+                                                  catalog: liveClaudeCatalog,
+                                                  configured: [deepseek]), "DeepSeek V4 Pro")
+        // A model the list doesn't offer keeps the id-based lookup rather than rendering raw.
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-sonnet-5", for: "deepseek",
+                                                  catalog: liveClaudeCatalog,
+                                                  configured: [deepseek]), "Sonnet 5")
+    }
+
     func testModelsFromRuntimeProviderPrefersHeartbeatDefault() {
         // effectiveDefaultModel precedence: heartbeat default → live catalog first → preset default.
         XCTAssertEqual(AgentDefaults.effectiveDefaultModel(

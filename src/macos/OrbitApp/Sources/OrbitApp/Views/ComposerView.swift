@@ -337,7 +337,8 @@ struct ComposerView: View {
                         !console.providerCapabilitiesResolved && console.isDraft
                             ? "Runtime default"
                             : AgentDefaults.friendlyName(
-                                console.modelID, catalog: console.modelCatalog,
+                                console.modelID, for: console.provider,
+                                catalog: console.modelCatalog,
                                 configured: console.configuredProviders))
                 }
                 .footerMenuChrome()
