@@ -71,6 +71,14 @@ export interface PermissionSemantics {
   honored: boolean;
   /** Why, whenever the guarantee is not the plain reading of the mode. */
   note?: string;
+  /**
+   * `note` compressed to a clause that fits on a picker row, e.g. "not enforced here, everything
+   * is allowed". Present exactly when `honored` is false. Carried here rather than rebuilt from
+   * `honored`/`unapproved` at each render site: a caller that re-derives the wording is a caller
+   * that can disagree with this table, which is how a Codex session came to be told it needed a
+   * newer Claude model.
+   */
+  shortNote?: string;
 }
 
 /**

@@ -51,16 +51,17 @@ func TestClassifyCodexApprovalAndDecisionVocabulary(t *testing.T) {
 	}
 }
 
-// Only the modes whose whole point is being consulted turn approvals on. Don't Ask stays on
-// "never" until Codex is handed an allowlist: it is the agent default, and fail-closed with no
+// Only the modes whose whole point is being consulted turn approvals on. Auto is one of them on
+// Codex too — "on-request" is its name for letting the model decide when to ask. Don't Ask stays
+// on "never" until Codex is handed an allowlist: it is the agent default, and fail-closed with no
 // allowlist would deny every command in a task-launched run.
 func TestCodexApprovalPolicyPerMode(t *testing.T) {
 	for mode, want := range map[string]string{
 		"default":           "untrusted",
 		"acceptEdits":       "untrusted",
 		"plan":              "untrusted",
+		"auto":              "on-request",
 		"dontAsk":           "never",
-		"auto":              "never",
 		"bypassPermissions": "never",
 		"":                  "never",
 	} {

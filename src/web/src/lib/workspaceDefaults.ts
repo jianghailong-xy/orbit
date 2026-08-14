@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  autoAvailable,
   isRetiredModel,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
@@ -447,30 +448,19 @@ export const MODE_OPTIONS = [
   { value: 'bypassPermissions', label: 'Bypass' },
 ];
 
-// Auto mode needs a recent model; claude rejects --permission-mode auto on Haiku.
-export const AUTO_CAPABLE_MODELS = new Set([
-  'claude-opus-5',
-  'claude-fable-5',
-  'claude-sonnet-5',
-  'kimi-code/kimi-for-coding',
-]);
+/** Whether Auto exists on the runtime behind a persisted provider identity. Resolves the slug and
+ *  defers to the shared table the server normalizes with, so the picker and dispatch cannot
+ *  disagree about which sessions can have it. */
 export const supportsAuto = (
   model: string,
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
-): boolean => {
-  const runtime = runtimeForProvider(provider, configured);
-  // Kimi exposes Auto as a runtime-wide mode, so locally configured model aliases support it too.
-  // Codex has no Auto mode; Claude exposes it only for the known capable model families.
-  // Kimi and OpenCode expose Auto as a runtime-wide mode, independent of the chosen model.
-  if (runtime === 'kimi' || runtime === 'opencode') return true;
-  if (runtime === 'codex') return false;
-  // A configured provider's model space is vendor-defined (e.g. DeepSeek), so the static Claude
-  // allow-list can't police it; the CLI decides for itself (it accepts Auto for models it
-  // doesn't recognize as unsupported).
-  if (configuredProvider(provider, configured)) return true;
-  return AUTO_CAPABLE_MODELS.has(model);
-};
+): boolean =>
+  autoAvailable(
+    runtimeForProvider(provider, configured),
+    model,
+    !!configuredProvider(provider, configured),
+  );
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,

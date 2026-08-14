@@ -31,9 +31,11 @@ test('unsupported built-in models safely downgrade Auto permission mode', () => 
     ),
     PermissionMode.DEFAULT,
   );
+  // Codex keeps Auto: the runner starts it with approvalPolicy "on-request", Codex's name for
+  // letting the model decide when to ask. Only Claude gates Auto per model.
   assert.equal(
-    normalizeBuiltinPermissionMode(AgentProvider.CODEX, 'claude-opus-5', PermissionMode.AUTO),
-    PermissionMode.DEFAULT,
+    normalizeBuiltinPermissionMode(AgentProvider.CODEX, 'gpt-5.6-sol', PermissionMode.AUTO),
+    PermissionMode.AUTO,
   );
   assert.equal(
     normalizeBuiltinPermissionMode(
@@ -77,10 +79,10 @@ test('configured providers keep Auto on the Claude runtime regardless of model i
     normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'deepseek-v4', PermissionMode.AUTO),
     PermissionMode.DEFAULT,
   );
-  // Codex has no Auto even through a configured provider.
+  // A configured provider on the Codex runtime keeps Auto for the same reason built-in Codex does.
   assert.equal(
     normalizeBuiltinPermissionMode(AgentProvider.CODEX, 'deepseek-v4', PermissionMode.AUTO, true),
-    PermissionMode.DEFAULT,
+    PermissionMode.AUTO,
   );
 });
 

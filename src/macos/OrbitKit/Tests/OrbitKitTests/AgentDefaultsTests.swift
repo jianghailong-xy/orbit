@@ -125,10 +125,16 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertFalse(AgentDefaults.supportsAuto("claude-haiku-4-5"))
         XCTAssertFalse(AgentDefaults.supportsAuto("gpt-5.6-sol"))
         XCTAssertFalse(AgentDefaults.supportsAuto("custom-model"))
+        // Only Claude gates Auto per model. Codex has it as `on-request`, so the same model id
+        // that is refused on the Claude runtime is accepted on its own.
+        XCTAssertTrue(AgentDefaults.supportsAuto("gpt-5.6-sol", provider: "codex"))
+        XCTAssertTrue(AgentDefaults.supportsAuto("", provider: "opencode"))
 
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-haiku-4-5"),
                        .default)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol"), .default)
+        XCTAssertEqual(
+            AgentDefaults.clampPermissionMode(.auto, for: "gpt-5.6-sol", provider: "codex"), .auto)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "claude-opus-5"), .auto)
         XCTAssertEqual(AgentDefaults.clampPermissionMode(.plan, for: "gpt-5.6-sol"), .plan)
 

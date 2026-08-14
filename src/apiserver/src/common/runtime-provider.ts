@@ -1,16 +1,5 @@
-import { AgentProvider, PermissionMode } from '@orbit/shared';
+import { AgentProvider, PermissionMode, autoAvailable } from '@orbit/shared';
 import { runtimeCatalogReasoningLevels } from './runtime-model';
-
-// Keep this conservative Claude allow-list aligned with the clients. Claude Code rejects Auto
-// for unsupported models (notably Haiku). Kimi's and OpenCode's Auto are runtime-wide modes and
-// therefore do not depend on the configured default-model alias; Codex does not expose Auto at all.
-// A configured provider's model space is vendor-defined (e.g. DeepSeek), so the allow-list does
-// not apply there — see normalizeBuiltinPermissionMode.
-const AUTO_CAPABLE_CLAUDE_MODELS = new Set([
-  'claude-opus-5',
-  'claude-fable-5',
-  'claude-sonnet-5',
-]);
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
 // model-defined and open-ended) must degrade to runtime Default rather than make these fail.
@@ -43,6 +32,12 @@ export function initializesRuntimeDynamically(provider?: string | null): boolean
 }
 
 /** Prevent a runner from receiving a model/permission combination its built-in CLI rejects.
+ *
+ * This is the ONE place the constraint is enforced. The pickers only describe it (via
+ * derivePermissionSemantics, off the same table), because a client-side gate is not a boundary:
+ * an account default, an MCP-created session and an older client all reach dispatch without
+ * passing through one. Same division as modelForProvider.
+ *
  * `customProvider` is true when the model came from an enabled configured ModelProvider row; its
  * model space is vendor-defined, so the static Claude allow-list cannot police it and the CLI
  * decides for itself (it accepts Auto for any model it doesn't recognize as unsupported). */
@@ -52,17 +47,8 @@ export function normalizeBuiltinPermissionMode(
   permissionMode: PermissionMode,
   customProvider = false,
 ): PermissionMode {
-  if (
-    permissionMode !== PermissionMode.AUTO ||
-    provider === AgentProvider.KIMI ||
-    provider === AgentProvider.OPENCODE
-  ) {
-    return permissionMode;
-  }
-  if (provider === AgentProvider.CODEX || (!customProvider && !AUTO_CAPABLE_CLAUDE_MODELS.has(model))) {
-    return PermissionMode.DEFAULT;
-  }
-  return permissionMode;
+  if (permissionMode !== PermissionMode.AUTO) return permissionMode;
+  return autoAvailable(provider, model, customProvider) ? permissionMode : PermissionMode.DEFAULT;
 }
 
 /**

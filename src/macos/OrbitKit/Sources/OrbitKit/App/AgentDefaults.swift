@@ -484,25 +484,23 @@ public enum AgentDefaults {
 
     public static let permissionModes = PermissionMode.allCases
 
-    /// Claude's Auto mode is model-specific. Codex does not expose it, while Kimi exposes Auto as
-    /// a runtime-wide permission mode (including arbitrary locally configured model aliases).
+    /// Claude's Auto mode is model-specific. Every other runtime has it runtime-wide, for any
+    /// model — Codex spells it `on-request` ("the model decides when to ask the user for
+    /// approval"), Kimi and OpenCode expose it as a plain mode.
+    /// Mirrors `AUTO_CAPABLE_CLAUDE_MODELS` in shared/permissionSemantics.ts.
     public static let autoCapableModels: Set<String> = [
         "claude-opus-5",
         "claude-fable-5",
         "claude-sonnet-5",
-        "kimi-code/kimi-for-coding",
     ]
 
     public static func supportsAuto(_ model: String, provider: String = "claude",
                                     configured: [ConfiguredProvider]? = nil) -> Bool {
-        switch runtime(for: provider, configured: configured) {
-        case "kimi":  return true
-        case "codex": return false
+        guard runtime(for: provider, configured: configured) == "claude" else { return true }
         // A configured provider's model space is vendor-defined (e.g. DeepSeek), so the static
         // Claude allow-list can't police it; the CLI decides for itself.
-        default:      return configuredProvider(provider, in: configured) != nil
-                          || autoCapableModels.contains(model)
-        }
+        return configuredProvider(provider, in: configured) != nil
+            || autoCapableModels.contains(model)
     }
 
     /// Prevent the UI from carrying a model/mode pair that the runtime will reject. The backend

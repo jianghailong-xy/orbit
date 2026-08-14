@@ -29,6 +29,8 @@ describe('Claude model capabilities', () => {
     expect(supportsAuto('claude-fable-5', 'claude')).toBe(true);
     expect(supportsAuto('claude-sonnet-5', 'claude')).toBe(true);
     expect(supportsAuto('claude-haiku-4-5', 'claude')).toBe(false);
+    // Claude is the only runtime that gates Auto per model; built-in Codex has it for any model.
+    expect(supportsAuto('gpt-5.6-sol', 'codex')).toBe(true);
   });
 
   it('clamps Auto when the effective Runtime default cannot run it', () => {
@@ -173,7 +175,8 @@ describe('Runtime-reported default models', () => {
 
     // Kimi's Auto is a runtime-wide mode, so it holds for this vendor's model ids too.
     expect(supportsAuto('kimi-k2.7-code', 'moonshot', configured)).toBe(true);
-    expect(supportsAuto('claude-opus-5', 'local-codex', configured)).toBe(false);
+    // So is Codex's — `on-request` is its name for letting the model decide when to ask.
+    expect(supportsAuto('gpt-5.6-sol', 'local-codex', configured)).toBe(true);
     // A configured provider on the Claude runtime owns its model space: the static Claude
     // allow-list can't cover vendor ids (e.g. DeepSeek), so the CLI decides for itself.
     expect(supportsAuto('deepseek-v4', 'deepseek', configured)).toBe(true);

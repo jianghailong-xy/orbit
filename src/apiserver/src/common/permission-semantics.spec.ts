@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   AgentProvider,
   PermissionMode,
+  autoAvailable,
   derivePermissionSemantics,
   runtimeApprovalSupport,
 } from '@orbit/shared';
@@ -55,6 +56,51 @@ test('the deliberately-permissive modes are honored everywhere, including Codex'
         { u: 'allow', h: true },
         `${provider}/${mode}`,
       );
+    }
+  }
+});
+
+test('Auto exists on every runtime; only Claude gates it per model', () => {
+  // Codex has it as `on-request` ("the model decides when to ask"), Kimi and OpenCode
+  // runtime-wide. It used to be refused on Codex, which is why a Codex session was told to
+  // switch to a newer Claude model to get a mode its own CLI has had all along.
+  assert.equal(autoAvailable(AgentProvider.CODEX, 'gpt-5.6-sol'), true);
+  assert.equal(autoAvailable(AgentProvider.KIMI, 'any-local-alias'), true);
+  assert.equal(autoAvailable(AgentProvider.OPENCODE, ''), true);
+  assert.equal(autoAvailable(AgentProvider.CLAUDE, 'claude-opus-5'), true);
+  assert.equal(autoAvailable(AgentProvider.CLAUDE, 'claude-haiku-4-5'), false);
+  // A configured provider's model space is vendor-defined; the CLI decides for itself.
+  assert.equal(autoAvailable(AgentProvider.CLAUDE, 'deepseek-v4', true), true);
+});
+
+test('Auto on a Claude model without it is disclosed, not hidden', () => {
+  const degraded = derivePermissionSemantics(
+    AgentProvider.CLAUDE,
+    PermissionMode.AUTO,
+    'claude-haiku-4-5',
+  );
+  // It degrades toward asking (the server runs it as Default), so the guarantee is stronger
+  // than the mode's plain reading rather than weaker — and it is stated either way.
+  assert.deepEqual({ u: degraded.unapproved, h: degraded.honored }, { u: 'ask', h: false });
+  assert.match(degraded.shortNote ?? '', /runs as Default/);
+  // Omitting the model means "already normalized for dispatch" and must not invent a caveat.
+  assert.equal(derivePermissionSemantics(AgentProvider.CLAUDE, PermissionMode.AUTO).honored, true);
+});
+
+test('a caveat is carried as data exactly when the mode is not honored', () => {
+  // The picker renders `shortNote` verbatim instead of rebuilding the wording from
+  // honored/unapproved. That is only safe if the table always supplies one — the missing pair
+  // here is precisely how a greyed Auto option came to state a reason the gate did not use.
+  for (const provider of Object.values(AgentProvider)) {
+    for (const mode of Object.values(PermissionMode)) {
+      for (const model of ['claude-opus-5', 'claude-haiku-4-5']) {
+        const semantics = derivePermissionSemantics(provider, mode, model);
+        assert.equal(
+          semantics.shortNote !== undefined,
+          !semantics.honored,
+          `${provider}/${mode}/${model}: shortNote must accompany an unhonored mode, and only one`,
+        );
+      }
     }
   }
 });

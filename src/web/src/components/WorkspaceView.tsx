@@ -3777,11 +3777,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownModel,
     runner.modelCatalog,
   );
-  // Auto is offered only on models that support it (see supportsAuto); the option
-  // is greyed out otherwise so an unsupported model can't pick a mode claude rejects.
-  const autoOk =
-    !shownProviderCapabilitiesResolved ||
-    supportsAuto(shownModel, shownProvider, configuredProviders);
   // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
   // shared table the server stamps onto the session payload, so the picker cannot drift from it.
   //
@@ -3792,9 +3787,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const permissionSemanticsFor = useCallback(
     (label: string) =>
       shownProviderIsBuiltin
-        ? derivePermissionSemantics(shownProvider, MODE_TO_PERMISSION[label])
+        ? derivePermissionSemantics(shownProvider, MODE_TO_PERMISSION[label], shownModel)
         : undefined,
-    [shownProvider, shownProviderIsBuiltin],
+    [shownProvider, shownProviderIsBuiltin, shownModel],
   );
   const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode & Effort can be changed any time on a live session (the runner must be
@@ -5194,27 +5189,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 }}
                 options={MODE_OPTIONS.map((m) => {
-                  // A mode this engine cannot honor is still selectable — it is the user's stored
-                  // intent, and it starts being enforced the moment the session moves to an engine
-                  // that can. It just must not read as a guarantee it isn't: say so on the option,
-                  // where the choice is made, exactly as the Auto constraint does below.
-                  const semantics = permissionSemanticsFor(m);
-                  const unenforced =
-                    semantics && !semantics.honored
-                      ? semantics.unapproved === 'allow'
-                        ? ' — not enforced here, everything is allowed'
-                        : ' — not enforced here, unapproved actions are denied'
-                      : '';
-                  return {
-                    value: m,
-                    // Carry the Auto-mode constraint on the greyed option itself, where it's
-                    // actionable, instead of in a row-wide paragraph.
-                    label:
-                      m === 'Auto' && !autoOk
-                        ? 'Auto (needs Opus 5, Fable 5, or Sonnet 5)'
-                        : `${m}${unenforced}`,
-                    disabled: m === 'Auto' && !autoOk,
-                  };
+                  // Every mode is offered on every engine, and none is ever disabled. A mode this
+                  // engine cannot honor is still the user's stored intent, and it starts being
+                  // enforced the moment the session moves to an engine that can — it just must not
+                  // read as a guarantee it isn't, so the option carries the caveat. The wording
+                  // comes from the shared table rather than being rebuilt here: a picker that
+                  // re-derives it is a picker that can contradict what dispatch will do.
+                  const shortNote = permissionSemanticsFor(m)?.shortNote;
+                  return { value: m, label: shortNote ? `${m} — ${shortNote}` : m };
                 })}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}

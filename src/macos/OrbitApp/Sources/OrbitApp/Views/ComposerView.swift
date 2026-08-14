@@ -68,13 +68,11 @@ struct ComposerView: View {
         #endif
     }
 
-    private var permissionModeMenuItems: [PermissionMode] {
-        AgentDefaults.permissionModes.filter {
-            $0 != .auto || !console.providerCapabilitiesResolved || AgentDefaults.supportsAuto(
-                console.modelID, provider: console.provider,
-                configured: console.configuredProviders)
-        }
-    }
+    /// Every mode, on every engine. A mode this engine cannot honor is still the user's stored
+    /// intent and starts applying the moment the session moves to one that can; the server
+    /// degrades it toward asking in the meantime (normalizeBuiltinPermissionMode). Dropping the
+    /// row here also made the menu disagree with web, which offers it.
+    private var permissionModeMenuItems: [PermissionMode] { AgentDefaults.permissionModes }
 
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
     /// is incompatible. This mirrors the model picker's preservation of non-catalog values.

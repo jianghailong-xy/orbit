@@ -889,18 +889,14 @@ struct AgentFormContent: View {
         return options.contains(current) ? options : [current] + options
     }
 
-    /// Agents no longer store a model default. Resolve the model this Runtime will provide so the
-    /// permission picker never offers Auto for an incompatible model.
+    /// Agents no longer store a model default. Resolve the model this Runtime will provide, which
+    /// is what the stored mode is clamped against below.
     private var effectiveModel: String {
         agents.effectiveDefaultModel(for: provider, runnerId: agent.runnerId)
     }
 
-    private var permissionModeOptions: [PermissionMode] {
-        AgentDefaults.permissionModes.filter {
-            $0 != .auto || !providerResolved || AgentDefaults.supportsAuto(
-                effectiveModel, provider: provider, configured: agents.configuredProviders)
-        }
-    }
+    /// Every mode, on every engine — see ComposerView.permissionModeMenuItems.
+    private var permissionModeOptions: [PermissionMode] { AgentDefaults.permissionModes }
 
     private var providerResolved: Bool {
         AgentDefaults.isBuiltInProvider(provider) || agents.configuredProvidersLoaded

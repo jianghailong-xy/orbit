@@ -652,6 +652,10 @@ func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
 // then routes to the same approval card Claude and Kimi use.
 //
+// Auto maps to `on-request`, which Codex documents as "the model decides when to ask the user for
+// approval" — that is what Auto is, so the mode means the same thing here as on Claude rather
+// than being a Claude-only feature. Its requests reach the same card `untrusted` already uses.
+//
 // dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
 // pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
 // deny every command in the mode agents default to, breaking task-launched runs wholesale. Codex
@@ -662,6 +666,8 @@ func codexApprovalPolicy(permissionMode string) string {
 	switch permissionMode {
 	case "default", "acceptEdits", "plan":
 		return "untrusted"
+	case "auto":
+		return "on-request"
 	default:
 		return "never"
 	}
