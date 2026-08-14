@@ -5621,10 +5621,13 @@ body {
 .chat-tool-group:not(.is-open) .chat-tool-row:hover {
   background: var(--bg-sunken);
 }
-.chat-tool-group-active {
+.chat-tool-group-lead {
   color: var(--text-3);
 }
-.chat-tool-group-active .mono {
+.chat-tool-group-lead.is-failed {
+  color: var(--error);
+}
+.chat-tool-group-lead .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }

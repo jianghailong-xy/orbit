@@ -1592,21 +1592,24 @@ function Thinking({ text, seq }: { text: string; seq?: number }) {
 // ── tool calls ──────────────────────────────────────────────────────────────
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
-// result. Failed calls open by default so an error is never hidden behind a fold.
+// result.
 function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
   // distinct "Shell" card, not Claude's Bash tool — see describeTool's isShell branch.
   const isShell = node.id.startsWith('shell-');
   const exp = useContext(ExportCtx);
   // A plan or a question to the user is the point of the turn — open it by
-  // default; errors also auto-open; a result carrying an image (a screenshot the
-  // workspace produced for the user) opens so the picture shows without a click. A
-  // static export opens every card (nothing can be un-folded after the fact).
+  // default; a result carrying an image (a screenshot the workspace produced for the
+  // user) opens so the picture shows without a click. A static export opens every card
+  // (nothing can be un-folded after the fact).
+  // A failure used to open too. It is the loudest thing a call can do and the least
+  // proportionate to unfold: the input is what has the lines (a heredoc clamps at
+  // sixteen), the reason is four — and the agent, not the reader, is the first responder
+  // to a failed step. The red mark on the folded row says it happened; the click says why.
   // Deliberately keyed on the *preview* result: images are never clipped, so this
   // can't depend on the refetch below (which is itself gated on being open).
   const defaultOpen =
     !!exp ||
-    !!node.result?.isError ||
     node.name === 'ExitPlanMode' ||
     node.name === 'AskUserQuestion' ||
     isShell ||
@@ -1683,14 +1686,21 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
       </div>
       {hasDetail && open && (
         <div className="chat-tool-detail">
+          {/* A failed call is opened to find out why, and the input is rarely the answer — a
+              heredoc alone clamps to sixteen lines, which is enough to push the reason off the
+              bottom of the card. Put the error first when there is one; everywhere else the
+              call still reads input-then-output. */}
+          {node.result?.isError && (
+            <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
+          )}
           {body && <div className="chat-tool-body">{body}</div>}
           {node.children.length > 0 && (
             <div className="chat-subagent">
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
-          {node.result && (
-            <ToolResult seq={node.seq} content={resultContent} isError={node.result.isError} compact markdown={isSubWorkspace} />
+          {node.result && !node.result.isError && (
+            <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
         </div>
       )}
@@ -1702,20 +1712,22 @@ type ToolGroupSummary = {
   title: string;
   summary: string;
   breakdown?: string;
-  active?: string;
-  activeMono?: boolean;
+  lead?: { label: 'Running' | 'Failed'; text: string; mono: boolean };
   icon: ReactNode;
   tone: Tone;
   status: 'running' | 'error' | 'pending' | 'ok';
-  urgent: boolean;
 };
 
 function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
   const exp = useContext(ExportCtx);
   const summary = useMemo(() => summarizeToolGroup(nodes, live), [nodes, live]);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? (!!exp || summary.urgent);
-  const toggle = () => setManualOpen((prev) => !(prev ?? (!!exp || summary.urgent)));
+  // Nothing auto-opens but a static export. A failure used to force the group open, which
+  // unfolded the failed call too (ToolView opens on error) — one wrong command turned into a
+  // screenful of clamped heredoc with the reason buried under it. The row says which call failed
+  // instead, in the same slot that names the running one.
+  const open = manualOpen ?? !!exp;
+  const toggle = () => setManualOpen((prev) => !(prev ?? !!exp));
   return (
     <div
       data-seq={nodes[0].seq}
@@ -1727,14 +1739,14 @@ function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
         <span className="chat-tool-name">{summary.title}</span>
         <span
           className="chat-tool-summary"
-          title={summary.active ? `${summary.summary} · Running: ${summary.active}` : summary.summary}
+          title={summary.lead ? `${summary.summary} · ${summary.lead.label}: ${summary.lead.text}` : summary.summary}
         >
           {summary.summary}
-          {summary.active && (
-            <span className="chat-tool-group-active">
+          {summary.lead && (
+            <span className={`chat-tool-group-lead${summary.lead.label === 'Failed' ? ' is-failed' : ''}`}>
               {' '}
-              · Running:{' '}
-              <span className={summary.activeMono ? 'mono' : undefined}>{summary.active}</span>
+              · {summary.lead.label}:{' '}
+              <span className={summary.lead.mono ? 'mono' : undefined}>{summary.lead.text}</span>
             </span>
           )}
         </span>
@@ -1768,36 +1780,39 @@ function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary
   if (failed) parts.push(`${failed} failed`);
   if (pending) parts.push(`${pending} pending`);
   if (succeeded) parts.push(`${succeeded} succeeded`);
-  // A single call only earns a slot on the folded row while it is still in flight, where it reads
-  // as progress. Once the group has settled, "the last call" is an arbitrary anchor that doesn't
-  // stand for the group (a 31-step group tends to end on some small `ls`), so the row goes to the
-  // counts and the per-kind breakdown instead. Point at the oldest unfinished call, so parallel
-  // calls settling can't make the label jump backwards.
-  const active = running ? activeToolSummary(described[nodes.findIndex((node) => !node.result)]) : undefined;
+  // One call earns a slot on the folded row, and only when it is the reason someone would look:
+  // the one still in flight (progress), or — once nothing is running — the one that failed. Any
+  // other call is an arbitrary anchor that doesn't stand for the group (a 31-step group tends to
+  // end on some small `ls`), so the row goes to the counts and the per-kind breakdown instead.
+  // Running points at the *oldest* unfinished call, so parallel calls settling can't make the
+  // label jump backwards; failed points at the first failure, which is usually the cause of any
+  // that follow.
+  const leadIndex = running
+    ? nodes.findIndex((node) => !node.result)
+    : failed
+      ? nodes.findIndex((node) => !!node.result?.isError)
+      : -1;
+  const leadText = leadIndex >= 0 ? leadToolSummary(described[leadIndex]) : undefined;
+  const lead: ToolGroupSummary['lead'] = leadText
+    ? { label: running ? 'Running' : 'Failed', ...leadText }
+    : undefined;
   const first = described[0];
   const status: ToolGroupSummary['status'] = running ? 'running' : failed ? 'error' : pending ? 'pending' : 'ok';
   return {
     title,
     summary: parts.join(' · '),
     breakdown: sameKind ? undefined : entries.map(([label, count]) => `${label} × ${count}`).join(' · '),
-    active: active?.text,
-    activeMono: active?.mono,
+    lead,
     icon: sameKind ? first?.icon : <ToolOutlined />,
     tone: sameKind ? (first?.tone ?? 'default') : 'default',
     status,
-    // Auto-open on failure only. Opening because a call is *running* guarantees a collapse the
-    // moment it lands — the condition is transient, so every group is destined to snap from
-    // "header + N rows" back to one line, at the live edge, while the reader is mid-sentence.
-    // A failure doesn't un-happen, so that branch opens once and stays. What a running group has
-    // to say now fits its folded row anyway: the counts plus `Running: <the call in flight>`.
-    urgent: failed > 0,
   };
 }
 
-// What the group's in-flight call is doing, in the same words its expanded row uses: the
+// What the call the row names is doing, in the same words its expanded row uses: the
 // tool's own description when it has one (`desc.summary` already falls back to the raw
 // command for shells that ship without one), never a second, command-shaped language.
-function activeToolSummary(desc: ToolDesc): { text: string; mono: boolean } | undefined {
+function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | undefined {
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };

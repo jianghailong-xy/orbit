@@ -1,7 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { AutoRetryCtx, type AutoRetryHelp, AuthErrorCtx, MD, type RunEvent, Transcript } from './Transcript';
+import {
+  AutoRetryCtx,
+  type AutoRetryHelp,
+  AuthErrorCtx,
+  ExportCtx,
+  MD,
+  type RunEvent,
+  Transcript,
+} from './Transcript';
 
 const AUTH_FAILED =
   'Failed to authenticate: Codex is installed on this runner but not signed in — sign in from here, or run `codex login` on that machine.';
@@ -461,7 +469,9 @@ describe('tool group folded row', () => {
     expect(settledHtml).toContain('3 succeeded');
   });
 
-  it('still opens itself when a call in the group failed', () => {
+  // Forcing a failed group open unfolds the failed call with it (ToolView opens on error), so one
+  // bad command became a screenful of clamped heredoc. Name the failure on the row instead.
+  it('names the failed call on the row rather than unfolding the group', () => {
     const html = renderToStaticMarkup(
       <Transcript
         events={[
@@ -475,8 +485,97 @@ describe('tool group folded row', () => {
       />,
     );
 
-    expect(html).toContain('chat-tool-group-detail');
+    expect(html).not.toContain('chat-tool-group-detail');
     expect(html).toContain('1 failed');
+    expect(html).toContain('· Failed: ');
+    expect(html).toContain('Build runner');
+    // The command that failed stays behind the fold, error included.
+    expect(html).not.toContain('go build');
+    expect(html).not.toContain('boom');
+  });
+
+  // The first failure is usually what caused the ones after it.
+  it('names the first failure when several calls failed', () => {
+    const bad = (seq: number, toolUseId: string) => ({
+      seq,
+      type: 'tool_result',
+      payload: { toolUseId, content: 'boom', isError: true },
+    });
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          call(1, 't1', 'Generate the client', 'prisma generate'),
+          bad(2, 't1'),
+          call(3, 't2', 'Build runner', 'go build ./...'),
+          bad(4, 't2'),
+          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
+          done(6, 't3'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('· Failed: ');
+    expect(html).toContain('Generate the client');
+    expect(html).not.toContain('Build runner');
+  });
+});
+
+// A failed call is opened to find out why. The input is clamped at sixteen lines, which is enough
+// to push the reason off the bottom of the card — so the error goes first.
+describe('failed tool call body', () => {
+  const failed = [
+    {
+      seq: 1,
+      type: 'tool_use',
+      payload: { id: 't1', name: 'Bash', input: { command: 'cat >> spec.ts', description: 'Append the tests' } },
+    },
+    {
+      seq: 2,
+      type: 'tool_result',
+      payload: { toolUseId: 't1', content: 'No such file or directory', isError: true },
+    },
+  ];
+
+  // The red mark on the row says it failed; unfolding sixteen clamped lines of heredoc to say
+  // the same thing is the disproportionate part.
+  it('stays folded, like every other settled call', () => {
+    const html = renderToStaticMarkup(<Transcript events={failed} />);
+
+    expect(html).toContain('Append the tests');
+    expect(html).toContain('chat-tool-status err');
+    expect(html).not.toContain('chat-tool-detail');
+    expect(html).not.toContain('No such file or directory');
+  });
+
+  it('puts the error above the command that produced it once opened', () => {
+    const html = renderToStaticMarkup(
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript events={failed} />
+      </ExportCtx.Provider>,
+    );
+
+    expect(html.indexOf('No such file or directory')).toBeLessThan(html.indexOf('cat &gt;&gt; spec.ts'));
+  });
+
+  // A successful call keeps the old order. Only an export opens one without a click, so that is
+  // what this renders through.
+  it('leaves a successful call reading input-then-output', () => {
+    const html = renderToStaticMarkup(
+      <ExportCtx.Provider value={'html' as never}>
+        <Transcript
+          events={[
+            {
+              seq: 1,
+              type: 'tool_use',
+              payload: { id: 't1', name: 'Bash', input: { command: 'go build ./...', description: 'Build runner' } },
+            },
+            { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: 'compiled cleanly' } },
+          ]}
+        />
+      </ExportCtx.Provider>,
+    );
+
+    expect(html.indexOf('go build')).toBeLessThan(html.indexOf('compiled cleanly'));
   });
 });
 
