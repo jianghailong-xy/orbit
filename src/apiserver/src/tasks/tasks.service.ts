@@ -2265,8 +2265,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // A verification of a verification has nothing left to check, and a foreman's output is a
     // diagnosis rather than a unit of work with an acceptance criterion.
     if (!task || task.isForeman || task.verifiesTaskId) return;
-    if (!task.list?.verifyOnDone) return;
     if (!task.assignee?.runnerId) return;
+    // Did anything actually run? `numTurns > 0` and not "has a SUCCEEDED session": at the moment
+    // an agent writes DONE its own session is still RUNNING, so success is not yet recorded —
+    // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on
+    // every one of them, and a comment claiming acceptance had passed.
+    const executed = await this.prisma.session.count({
+      where: { taskId, numTurns: { gt: 0 } },
+    });
+    const unevidenced = executed === 0;
+    // The opt-in governs checking work that demonstrably happened — that is the expensive case,
+    // because it doubles a list's runs. A completion with no execution behind it is neither
+    // expensive nor ambiguous: it is 1.3% of this deployment's DONE tasks (8 of 621), and there
+    // is no run to double. Requiring opt-in for it would mean the one case nobody would decline
+    // is the one that needs asking for.
+    if (!unevidenced && !task.list?.verifyOnDone) return;
     const already = await this.prisma.task.count({ where: { verifiesTaskId: taskId } });
     if (already >= MAX_VERIFICATIONS_PER_TASK) {
       this.logger.log(
@@ -2277,7 +2290,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const verification = await this.prisma.task.create({
       data: {
         title: `[VERIFY] ${task.title}`.slice(0, 200),
-        description: this.buildVerificationBrief(task.title, taskId),
+        description: this.buildVerificationBrief(task.title, taskId, unevidenced),
         ownerId,
         listId: task.listId,
         assigneeId: task.assignee.id,
@@ -2306,9 +2319,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * run already lands on, so a rejected task rejoins the normal flow instead of needing one of
    * its own.
    */
-  private buildVerificationBrief(title: string, taskId: string): string {
+  private buildVerificationBrief(title: string, taskId: string, unevidenced = false): string {
     return (
       `任务「${title}」（id: ${taskId}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
+      (unevidenced
+        ? `⚠️ 系统已先行检查：该任务**没有任何一次运行执行过哪怕一个 turn**。也就是说，这个"完成"背后没有执行记录支撑。` +
+          `请以此为前提核实——若你也找不到完成的实证，直接判定不通过。\n\n`
+        : '') +
       `这是一次性的验收任务，不要替它把活干了，也不要长时间运行或轮询。\n\n` +
       `请按以下顺序核实：\n` +
       `1. 先问「有没有干过的证据」：用 task_get 读该任务的运行记录与评论。若它根本没有成功执行过、` +

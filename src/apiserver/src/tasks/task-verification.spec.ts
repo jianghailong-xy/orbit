@@ -10,6 +10,14 @@ interface Subject {
   verifyOnDone?: boolean;
   assigned?: boolean;
   priorVerifications?: number;
+  /**
+   * The subject's sessions. Defaults to the shape a normal completion actually has at the moment
+   * DONE is written: the agent's own session is still RUNNING — success is not recorded until
+   * after — but its turns already are. A stub that skipped this could not tell `numTurns > 0`
+   * from `status = SUCCEEDED`, and the latter would call all 613 evidenced completions
+   * unevidenced.
+   */
+  sessions?: Array<{ status: string; numTurns: number }>;
 }
 
 /**
@@ -43,6 +51,18 @@ function makeService(subject: Subject = {}) {
       },
     },
     taskDependency: { findMany: async () => [] },
+    // Honours the caller's filter rather than returning a fixed number: which question the
+    // dispatcher asks of the session table is the contract under test.
+    session: {
+      count: async ({ where }: { where: Record<string, any> }) => {
+        const all = subject.sessions ?? [{ status: 'RUNNING', numTurns: 7 }];
+        return all.filter((s) => {
+          if (where.numTurns?.gt !== undefined && !(s.numTurns > where.numTurns.gt)) return false;
+          if (where.status !== undefined && s.status !== where.status) return false;
+          return true;
+        }).length;
+      },
+    },
   } as never;
   const service = new TasksService(prisma, {} as never, {
     publishForUser() {},
@@ -146,4 +166,70 @@ test('the verification does not auto-run — the DONE dispatched it, not a prere
   await f.fileFor();
 
   assert.equal(f.created[0].autoRunWhenReady, false);
+});
+
+// The opt-in governs checking work that demonstrably happened, which is the expensive case. A
+// completion with nothing behind it is neither expensive nor ambiguous, and requiring opt-in for
+// it would mean the one case nobody would decline is the one that has to be asked for.
+test('a completion with no executed run is verified even without the opt-in', async () => {
+  const f = makeService({ verifyOnDone: false, sessions: [] });
+
+  await f.fileFor();
+
+  assert.equal(f.created.length, 1);
+});
+
+test('that verifier is told up front that nothing ran', async () => {
+  const f = makeService({ verifyOnDone: false, sessions: [] });
+
+  await f.fileFor();
+
+  // Handing it the system's own finding keeps it from re-deriving it, and makes the verdict
+  // unambiguous when it cannot find evidence either.
+  assert.match(f.created[0].description, /没有任何一次运行执行过哪怕一个 turn/);
+});
+
+test('an evidenced completion still needs the opt-in', async () => {
+  // Otherwise every DONE in the deployment files a run — 613 of 621 have execution behind them.
+  const f = makeService({ verifyOnDone: false, sessions: [{ status: 'SUCCEEDED', numTurns: 4 }] });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('an evidenced completion in an opted-in list is verified without that warning', async () => {
+  const f = makeService({ verifyOnDone: true, sessions: [{ status: 'SUCCEEDED', numTurns: 4 }] });
+
+  await f.fileFor();
+
+  assert.equal(f.created.length, 1);
+  assert.ok(!f.created[0].description.includes('没有任何一次运行'), f.created[0].description);
+});
+
+test('the cap still applies to an unevidenced completion', async () => {
+  // Bypassing the opt-in must not also bypass the loop guard.
+  const f = makeService({
+    verifyOnDone: false,
+    sessions: [],
+    priorVerifications: MAX_VERIFICATIONS_PER_TASK,
+  });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('evidence is turns executed, not a session that already succeeded', async () => {
+  // The discriminating case, and the normal one: an agent writes DONE from inside its own run, so
+  // that run is RUNNING and has turns but is not yet SUCCEEDED. Keying on success would call
+  // every ordinary completion unevidenced and file a verification for all of them.
+  const f = makeService({
+    verifyOnDone: false,
+    sessions: [{ status: 'RUNNING', numTurns: 7 }],
+  });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
 });
