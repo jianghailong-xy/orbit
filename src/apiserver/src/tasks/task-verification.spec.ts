@@ -102,7 +102,8 @@ test('the brief leads with the evidence question, not the content one', async ()
 
   const brief: string = f.created[0].description;
   assert.match(brief, /有没有干过的证据/);
-  assert.match(brief, /不要采信任务评论里的自述/);
+  // The rule, not the sentence that happened to carry it: a self-report is not evidence.
+  assert.match(brief, /自述一律不可采信/);
   // It must not quietly do the work itself — that would launder a failure into a success.
   assert.match(brief, /不要替它把活干了/);
 });
@@ -184,9 +185,25 @@ test('that verifier is told up front that nothing ran', async () => {
 
   await f.fileFor();
 
-  // Handing it the system's own finding keeps it from re-deriving it, and makes the verdict
-  // unambiguous when it cannot find evidence either.
+  // Handing it the system's own finding keeps it from re-deriving it.
   assert.match(f.created[0].description, /没有任何一次运行执行过哪怕一个 turn/);
+});
+
+test('a missing run record raises the bar rather than ending the inquiry', async () => {
+  // The first real verdict this produced rejected a task whose comment carried a byte count and a
+  // SHA-256, having declined to check either — because the brief said an evidence gap "is enough
+  // to fail, no need to look at the content". The verifier followed that exactly. Establishing
+  // the truth was one `sha256sum` away, on the machine it was already running on.
+  const f = makeService({ verifyOnDone: false, sessions: [] });
+
+  await f.fileFor();
+
+  const brief: string = f.created[0].description;
+  assert.match(brief, /不是结论/);
+  assert.match(brief, /必须亲自去验/);
+  assert.match(brief, /不要因为第 1 步存疑就跳过/);
+  // The self-report still cannot be taken at face value — that part was right.
+  assert.match(brief, /自述一律不可采信/);
 });
 
 test('an evidenced completion still needs the opt-in', async () => {
