@@ -121,7 +121,17 @@ func scanAgentDirs(ctx context.Context, targets []AgentDirTarget) []AgentDirProb
 			out = append(out, AgentDirProbe{AgentID: t.AgentID, Exists: false})
 			continue
 		}
-		out = append(out, AgentDirProbe{AgentID: t.AgentID, Exists: true, IsGitRepo: isGitRepo(dir)})
+		probe := AgentDirProbe{AgentID: t.AgentID, Exists: true, IsGitRepo: isGitRepo(dir)}
+		// Same stat pass, one extra syscall: the filesystem this directory lives on. Reported
+		// here rather than as a machine-wide figure because agents on one runner can sit on
+		// different mounts, and a run can only be gated on the disk it will write to. A
+		// platform or filesystem that won't answer leaves both fields nil rather than zero —
+		// "unknown" and "full" must not look alike to the control plane.
+		if free, total, ok := diskUsage(dir); ok {
+			probe.FreeBytes = &free
+			probe.TotalBytes = &total
+		}
+		out = append(out, probe)
 	}
 	return out
 }

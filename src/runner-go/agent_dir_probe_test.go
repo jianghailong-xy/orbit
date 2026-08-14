@@ -126,3 +126,34 @@ func TestAgentDirProbeSnapshotNilUntilFirstScan(t *testing.T) {
 		t.Fatalf("snapshot after empty scan = %#v, want a non-nil empty slice", got)
 	}
 }
+
+func TestScanAgentDirsReportsFilesystemHeadroom(t *testing.T) {
+	root := t.TempDir()
+	got := scanAgentDirs(context.Background(), []AgentDirTarget{
+		{AgentID: "here", WorkDir: root},
+		{AgentID: "missing", WorkDir: filepath.Join(root, "nope")},
+	})
+	if len(got) != 2 {
+		t.Fatalf("want 2 probes, got %d", len(got))
+	}
+
+	// An existing directory answers with its filesystem's figures. Exact values belong to the
+	// machine running the test, so the assertions are the invariants: something is free, the
+	// volume is at least that big, and free never exceeds total.
+	here := got[0]
+	if here.FreeBytes == nil || here.TotalBytes == nil {
+		t.Fatalf("existing dir reported no disk figures: %+v", here)
+	}
+	if *here.TotalBytes == 0 {
+		t.Error("total bytes is zero for a mounted filesystem")
+	}
+	if *here.FreeBytes > *here.TotalBytes {
+		t.Errorf("free %d exceeds total %d", *here.FreeBytes, *here.TotalBytes)
+	}
+
+	// A missing path leaves both nil. Zero would read as "this disk is full" and could gate
+	// every run on the machine — absence has to stay distinguishable from exhaustion.
+	if missing := got[1]; missing.FreeBytes != nil || missing.TotalBytes != nil {
+		t.Errorf("missing dir reported disk figures: %+v", missing)
+	}
+}

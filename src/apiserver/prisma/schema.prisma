@@ -147,6 +147,11 @@ model Runner {
   labels            String[]     @default([])
   status            RunnerStatus @default(OFFLINE)
   maxConcurrent     Int          @default(1) @map("max_concurrent")
+  // Free-space floor, in MB, below which this machine takes no new auto-run work. Null (the
+  // default) leaves the gate off, which is the behaviour every runner had before it existed.
+  // One knob per machine, but evaluated against each workspace's own measured filesystem —
+  // "keep this much headroom wherever you are writing" is the same policy on every mount.
+  minFreeDiskMb     Int?         @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
@@ -388,6 +393,13 @@ model Workspace {
   workDirExists       Boolean?  @map("work_dir_exists")
   workDirIsGit        Boolean?  @map("work_dir_is_git")
   workDirProbedAt     DateTime? @map("work_dir_probed_at")
+  // Headroom on the filesystem this workspace's work dir lives on, from the same heartbeat probe
+  // as the flags above. Per workspace rather than per runner because one machine's workspaces can
+  // sit on different mounts, and a run can only be gated on the disk it will write to. BigInt:
+  // a multi-terabyte volume overflows Int. Null means unknown (old runner, missing path,
+  // platform without an answer) and must never be read as "full".
+  workDirFreeBytes    BigInt?   @map("work_dir_free_bytes")
+  workDirTotalBytes   BigInt?   @map("work_dir_total_bytes")
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")

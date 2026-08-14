@@ -219,6 +219,27 @@ export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
 // the only job here is to stop burning a session a minute while waiting for it.
 export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 
+/**
+ * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
+ * dispatched onto it?
+ *
+ * Fail-open on every kind of missing information — no floor configured, or no reading from the
+ * runner (too old to measure, work dir gone, a platform with no answer). A disk gate that fired
+ * on absent telemetry would stop a fleet precisely because it knew nothing about it, and the
+ * failure it is guarding against (a volume filling up) is one that its own silence cannot
+ * evidence. The gate is only as good as the reading, and no reading means no gate.
+ *
+ * bigint throughout: a multi-terabyte volume's byte count is past Number.MAX_SAFE_INTEGER.
+ */
+export function diskBelowFloor(
+  freeBytes: bigint | null | undefined,
+  minFreeDiskMb: number | null | undefined,
+): boolean {
+  if (freeBytes == null) return false;
+  if (minFreeDiskMb == null || !Number.isFinite(minFreeDiskMb) || minFreeDiskMb <= 0) return false;
+  return freeBytes < BigInt(Math.floor(minFreeDiskMb)) * 1024n * 1024n;
+}
+
 // PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
 // that ceiling even when an owner has tens of thousands of tasks.
@@ -2238,12 +2259,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // sweep proportional to the work: a backlog is overwhelmingly BLOCKED tasks waiting their
     // turn, and loading all of them (plus every one of their dependency edges) once a minute
     // only to discard them dwarfs the dispatch it exists to do.
+    // freeBytes/minFreeDiskMb ride along on the joins this scan already needs, so the disk gate
+    // below costs no extra round trip. They arrive as bigint (BIGINT column) and number.
     const rows = await this.prisma.$queryRaw<
-      { id: string; ownerId: string; workspaceId: string; runnerId: string | null }[]
+      {
+        id: string;
+        ownerId: string;
+        workspaceId: string;
+        runnerId: string | null;
+        freeBytes: bigint | null;
+        minFreeDiskMb: number | null;
+      }[]
     >`
-      SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId"
+      SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
+      LEFT JOIN runner r ON r.id = a.runner_id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
     // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
@@ -2265,6 +2297,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         provider: (seeds.get(row.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
         runnerId: row.runnerId,
       },
+      diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -2285,6 +2318,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       blindTaskIds,
     );
     let quotaHeld = 0;
+    let diskHeld = 0;
     let resumesAt: Date | undefined;
     for (const t of ready) {
       const blockedUntil = t.assignee?.runnerId
@@ -2293,6 +2327,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (blockedUntil) {
         quotaHeld += 1;
         if (!resumesAt || blockedUntil < resumesAt) resumesAt = blockedUntil;
+        continue;
+      }
+      // Disk is checked before the failure backoff for the same reason quota is: it prevents a
+      // doomed run rather than reacting to one. Unlike quota it has no reset time to report —
+      // space comes back when somebody frees it — so the hold simply lifts on the sweep after
+      // the runner's next heartbeat reports headroom again.
+      if (t.diskShort) {
+        diskHeld += 1;
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -2310,6 +2352,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (quotaHeld > 0) {
       this.logger.log(
         `auto-run: ${quotaHeld} ready task(s) held — provider quota exhausted, earliest reset ${resumesAt?.toISOString()}`,
+      );
+    }
+    if (diskHeld > 0) {
+      this.logger.log(
+        `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
       );
     }
   }

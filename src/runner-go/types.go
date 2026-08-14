@@ -94,6 +94,12 @@ type AgentDirProbe struct {
 	AgentID   string `json:"agentId"`
 	Exists    bool   `json:"exists"`
 	IsGitRepo bool   `json:"isGitRepo"`
+	// Free/total bytes of the filesystem holding WorkDir. Per directory, not per machine: one
+	// runner's agents can sit on different mounts, and the only figure that can gate a run is
+	// the one for the filesystem it will actually write to. Omitted when the path is missing or
+	// the platform has no answer — the control plane reads absence as "unknown", never "full".
+	FreeBytes  *uint64 `json:"freeBytes,omitempty"`
+	TotalBytes *uint64 `json:"totalBytes,omitempty"`
 }
 
 // AgentDirTarget is one directory the control plane asked this runner to stat.

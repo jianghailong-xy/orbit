@@ -200,6 +200,20 @@ function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string
   return value.toLowerCase();
 }
 
+/**
+ * A disk figure from a heartbeat, as a value the BigInt column accepts — or null when the
+ * runner reported none.
+ *
+ * Rejecting rather than coercing anything malformed is deliberate: this is advisory telemetry
+ * that a gate then acts on, so a negative or non-finite reading has to become "unknown" (gate
+ * off) instead of a number that could hold a whole fleet. Fractions are floored because a
+ * filesystem cannot have a fraction of a byte free, and BigInt() would throw on one.
+ */
+function toDiskBytes(value: number | undefined): bigint | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
+  return BigInt(Math.floor(value));
+}
+
 function parseSupervisedSessionId(value: string): string {
   if (!SESSION_ID_RE.test(value)) {
     throw new BadRequestException('supervised session IDs must be UUIDs');
@@ -607,6 +621,12 @@ export class RunnerApiController {
                 workDirExists: p.exists,
                 // Only meaningful when the directory is there; a missing path reports neither.
                 workDirIsGit: p.exists ? p.isGitRepo : null,
+                // Written straight through, including back to null when the runner reports no
+                // figure (missing path, platform without an answer, or a binary too old to
+                // measure). Keeping the last known number would be worse than having none: the
+                // disk gate would then hold or release work on a reading nobody stands behind.
+                workDirFreeBytes: toDiskBytes(p.freeBytes),
+                workDirTotalBytes: toDiskBytes(p.totalBytes),
                 workDirProbedAt: new Date(),
               },
             }),

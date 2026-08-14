@@ -23,6 +23,10 @@ interface Options {
   provider?: string;
   /** `planUsage` the assignees' runner reports. */
   planUsage?: unknown;
+  /** Free bytes the assignee workspace's filesystem last reported; null = never measured. */
+  freeBytes?: bigint | null;
+  /** The runner's free-space floor in MB; null = no disk gate. */
+  minFreeDiskMb?: number | null;
 }
 
 /** Every task in these fixtures is assigned to the same workspace. */
@@ -64,6 +68,8 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
             ownerId: 'owner-1',
             workspaceId: AGENT_ID,
             runnerId: 'runner-1',
+            freeBytes: options.freeBytes ?? null,
+            minFreeDiskMb: options.minFreeDiskMb ?? null,
           }))
         : [
             {
@@ -332,6 +338,37 @@ test('a reported healthy quota dispatches at once — a snapshot is positive evi
   );
   await sweep(service);
   assert.deepEqual(executed, ['task-quota-recovered']);
+});
+
+test('a ready task is held when its workspace filesystem is under the runner floor', async () => {
+  const { service, executed } = makeService(['task-on-full-disk'], [], {
+    freeBytes: 200n * 1024n * 1024n,
+    minFreeDiskMb: 1024,
+  });
+  await sweep(service);
+  assert.deepEqual(executed, []);
+});
+
+test('the disk gate lifts as soon as the reported headroom is back', async () => {
+  // No reset time to wait out, unlike quota: space returns when somebody frees it, so the very
+  // next sweep after a heartbeat reports headroom dispatches again.
+  const { service, executed } = makeService(['task-disk-freed'], [], {
+    freeBytes: 40n * 1024n * 1024n * 1024n,
+    minFreeDiskMb: 1024,
+  });
+  await sweep(service);
+  assert.deepEqual(executed, ['task-disk-freed']);
+});
+
+test('a runner that reports no disk figure is not gated on disk', async () => {
+  // The fleet must not stop because a runner is too old to measure. Same fail-open rule the
+  // quota gate follows for an unreported provider.
+  const { service, executed } = makeService(['task-unmeasured'], [], {
+    freeBytes: null,
+    minFreeDiskMb: 1024,
+  });
+  await sweep(service);
+  assert.deepEqual(executed, ['task-unmeasured']);
 });
 
 test('a paused list is filtered out of the candidate scan in SQL', async () => {

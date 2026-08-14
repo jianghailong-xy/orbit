@@ -353,6 +353,17 @@ export interface AgentDirProbe {
   /** That directory is inside a git work tree — the precondition for worktree isolation.
    *  Only meaningful when `exists`. */
   isGitRepo: boolean;
+  /** Free bytes on the filesystem holding this directory, as available to an unprivileged
+   *  writer. Reported per working directory rather than per machine because one runner's
+   *  agents can sit on different mounts, and the only number that can gate a run is the one
+   *  for the filesystem that run will actually write to.
+   *
+   *  Absent when the runner is too old to report it, the path is missing, or the platform has
+   *  no answer (Windows). Absent means "unknown", never "full": a gate must not fire on a
+   *  runner that simply cannot say. */
+  freeBytes?: number;
+  /** Total bytes of that same filesystem, for rendering a used-percentage. Same absence rules. */
+  totalBytes?: number;
 }
 
 /** Control plane → runner: the agent working directories to stat before the next heartbeat.

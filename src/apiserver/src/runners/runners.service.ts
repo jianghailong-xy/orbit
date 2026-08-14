@@ -276,7 +276,11 @@ export class RunnersService {
   async updateRunner(ownerId: string, id: string, dto: UpdateRunnerDto) {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
-    const data: { displayName?: string | null; maxConcurrent?: number } = {};
+    const data: {
+      displayName?: string | null;
+      maxConcurrent?: number;
+      minFreeDiskMb?: number | null;
+    } = {};
     if (dto.displayName !== undefined) {
       const trimmed = dto.displayName.trim();
       data.displayName = trimmed.length ? trimmed : null;
@@ -286,11 +290,22 @@ export class RunnersService {
     if (dto.maxConcurrent !== undefined) {
       data.maxConcurrent = dto.maxConcurrent;
     }
+    // Read by the auto-run sweep against each workspace's own measured filesystem; null clears
+    // the floor. Also effective next sweep — nothing to restart.
+    if (dto.minFreeDiskMb !== undefined) {
+      data.minFreeDiskMb = dto.minFreeDiskMb;
+    }
     // Never echo back tokenHash.
     return this.prisma.runner.update({
       where: { id },
       data,
-      select: { id: true, name: true, displayName: true, maxConcurrent: true },
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        maxConcurrent: true,
+        minFreeDiskMb: true,
+      },
     });
   }
 

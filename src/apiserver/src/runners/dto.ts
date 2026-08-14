@@ -23,6 +23,11 @@ export class UpdateRunnerDto {
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
   // 1 (0 would stall the runner); 64 is a sanity ceiling against a fat-fingered value.
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+  // Free-space floor in MB: below it, the auto-run sweep dispatches nothing onto this machine.
+  // null clears the floor (no gate), and 0 is spelled that way rather than accepted as a
+  // disabling value, so "gate at zero bytes" can never be typed by accident. No ceiling — the
+  // right reserve on a 30TB archive volume is not the right one on a laptop.
+  @IsOptional() @IsInt() @Min(1) minFreeDiskMb?: number | null;
 }
 
 // The requested runner order. The service filters this list against the caller's
