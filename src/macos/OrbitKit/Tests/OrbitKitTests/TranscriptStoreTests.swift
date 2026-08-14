@@ -158,8 +158,8 @@ final class TranscriptStoreTests: XCTestCase {
         // Rewind the stored envelope to the previous schema version.
         let url = dir.appendingPathComponent("sess-A.json")
         let text = try String(contentsOf: url, encoding: .utf8)
-        let downgraded = text.replacingOccurrences(of: #""version":3"#, with: #""version":2"#)
-        XCTAssertNotEqual(downgraded, text, "expected a v3 envelope to rewrite")
+        let downgraded = text.replacingOccurrences(of: #""version":4"#, with: #""version":3"#)
+        XCTAssertNotEqual(downgraded, text, "expected a v4 envelope to rewrite")
         try downgraded.write(to: url, atomically: true, encoding: .utf8)
 
         XCTAssertNil(store.load(sessionID: "sess-A"))
